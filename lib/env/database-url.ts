@@ -78,6 +78,14 @@ export function getDatabaseUrlOrThrow(env: DatabaseEnv | EnvLike = process.env):
     return NOOP_POSTGRES_URL
   }
 
+  // During Next.js build phase, DATABASE_URL is not available at module-import time (it is
+  // only injected at runtime). Return the noop URL so route scanning / page-data collection
+  // can complete without crashing. Prisma will never actually connect with this URL because
+  // API routes are always dynamic (never statically invoked during the build).
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    return NOOP_POSTGRES_URL
+  }
+
   const resolved = resolveDatabaseUrl(env)
   if (resolved) return resolved
 
