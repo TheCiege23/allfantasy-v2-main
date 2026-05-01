@@ -67,3 +67,24 @@ app/player-values/*.txt
 app/player-values/*.csv
 app/player-values/*.json
 !app/player-values/.gitkeep
+
+# Local scratch logs from build/test/dev runs that occasionally land in the
+# repo root and pollute `git status`. None of these are product files; the
+# real outputs go through stdout/stderr and the harness `tasks/` folder.
+build-latest.txt
+build-nolint.out
+build-output-clean.txt
+build-test.txt
+build-wrapper-latest.txt
+chimmy-gate-latest.txt
+draft-vitest-run.txt
+test-out.txt
+test-summary.txt
+spotify-test-results.txt
+spotify-test-results-*.txt
+spotify-final-results.txt
+.tmp/
+
+# Local build and background-task locks; regenerated per session.
+.next-build.lock
+.claude/scheduled_tasks.lock

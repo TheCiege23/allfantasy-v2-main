@@ -83,9 +83,10 @@ const EMPTY_FINALIZE_SUMMARY: FinalizeRosterAssignmentsSummary = {
  */
 export async function finalizeRosterAssignments(
   leagueId: string,
+  draftId?: string,
 ): Promise<FinalizeRosterAssignmentsSummary> {
-  const session = await prisma.draftSession.findUnique({
-    where: { leagueId },
+  const session = await prisma.draftSession.findFirst({
+    where: { leagueId, ...(draftId ? { id: draftId } : {}) },
     include: { picks: { orderBy: { overall: 'asc' } } },
   })
   if (!session || session.status !== 'completed') return EMPTY_FINALIZE_SUMMARY

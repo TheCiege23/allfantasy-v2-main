@@ -238,7 +238,7 @@ export async function syncDraftPicksToRoster(params: {
       missingRosterRows: 0,
     }
   } else {
-    inner = await finalizeRosterAssignments(leagueId)
+    inner = await finalizeRosterAssignments(leagueId, draftId)
   }
 
   const summary: DraftToRosterSyncSummary = {

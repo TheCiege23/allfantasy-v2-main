@@ -130,7 +130,7 @@ describe('syncDraftPicksToRoster', () => {
       expect(r.summary.playersSynced).toBe(30)
       expect(r.summary.alreadySynced).toBe(false)
     }
-    expect(mocks.finalizeRosterAssignments).toHaveBeenCalledWith('L1')
+    expect(mocks.finalizeRosterAssignments).toHaveBeenCalledWith('L1', 'sess1')
   })
 
   it('skips finalize when roster already matches session (alreadySynced)', async () => {

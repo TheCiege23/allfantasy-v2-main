@@ -13,6 +13,10 @@ export const dynamic = 'force-dynamic'
 export async function POST(req: Request, ctx: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   const { leagueId } = await ctx.params
   if (!leagueId) {
     return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
@@ -35,9 +39,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ leagueId: stri
             ? 404
             : result.code === 'NOT_NFL_REDRAFT_CORE'
               ? 422
-              : result.code === 'LIFECYCLE_BLOCKED'
-                ? 423
-                : 400
+              : result.code === 'DRAFT_NOT_COMPLETED'
+                ? 409
+                : result.code === 'LIFECYCLE_BLOCKED'
+                  ? 423
+                  : 400
     return NextResponse.json({ error: result.message, code: result.code }, { status })
   }
 
