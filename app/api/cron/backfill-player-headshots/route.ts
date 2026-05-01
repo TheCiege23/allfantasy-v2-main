@@ -58,7 +58,8 @@ const invalidImageUrlFilters: Prisma.SportsPlayerWhereInput[] = [
   { imageUrl: { startsWith: 'data:' } },
   { imageUrl: { contains: '/teamLogos/', mode: 'insensitive' } },
   { imageUrl: { contains: '/teamLogo/', mode: 'insensitive' } },
-  { imageUrl: { not: { startsWith: 'http', mode: 'insensitive' } } },
+  /** Prisma nested `not` does not accept `mode` on `startsWith`; negate at top level. */
+  { NOT: { imageUrl: { startsWith: 'http', mode: 'insensitive' } } },
 ]
 
 interface CronSummary {
@@ -154,7 +155,7 @@ export async function GET(req: NextRequest) {
     wouldUpdate: 0,
     skippedAlreadyValid: 0,
     noMatch: 0,
-    bySource: { sleeper: 0, clearsports: 0, sportsdb: 0, none: 0 },
+    bySource: { sleeper: 0, clearsports: 0, sportsdb: 0, apisports: 0, sportsplayer: 0, none: 0 },
     byConfidence: { exact: 0, name_team_position: 0, name_only: 0, none: 0 },
     providerErrors: 0,
     durationMs: 0,
