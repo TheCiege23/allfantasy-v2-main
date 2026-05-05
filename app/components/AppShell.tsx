@@ -21,6 +21,10 @@ export type AppShellProps = {
    * When true, center column is transparent and side rails use glass (for `SpecialtyLeagueAtmosphere` behind shell).
    */
   immersive?: boolean
+  /**
+   * Root height: default full viewport. Use a calc when the shell is nested under `GlobalAppShell` (header + mobile tabs).
+   */
+  rootClassName?: string
 }
 
 /**
@@ -36,6 +40,7 @@ export default function AppShell({
   onRightRailExpand,
   rightRailCollapsedHint,
   immersive = false,
+  rootClassName,
 }: AppShellProps) {
   const leftRailClass = immersive
     ? 'border-r border-white/[0.08] bg-[#070b14]/80 backdrop-blur-xl'
@@ -48,7 +53,11 @@ export default function AppShell({
 
   return (
     <div
-      className={cn('flex h-screen w-full overflow-hidden text-[var(--text)]', immersive && 'relative z-[1]')}
+      className={cn(
+        'flex w-full min-h-0 overflow-hidden text-[var(--text)]',
+        rootClassName ?? 'h-screen',
+        immersive && 'relative z-[1]',
+      )}
       style={rootBg}
       data-af-immersive={immersive ? '1' : undefined}
       {...rootProps}
@@ -67,7 +76,8 @@ export default function AppShell({
       {/* Center workspace — grows when right rail is collapsed */}
       <div
         className={cn(
-          'flex min-h-0 min-w-0 w-full flex-col overflow-hidden transition-[flex] duration-200 ease-out',
+          // flex-1 below md so the center column gets height when side rails are display:none
+          'flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden transition-[flex] duration-200 ease-out',
           rightRailCollapsed ? 'md:min-w-0 md:flex-1' : 'md:w-[35%] md:flex-none',
         )}
         style={centerBg}

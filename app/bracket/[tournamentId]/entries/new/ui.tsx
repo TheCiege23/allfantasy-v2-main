@@ -64,13 +64,13 @@ export default function CreateEntryChooser({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-950 to-gray-900 text-white">
-      <div className="p-6 max-w-2xl mx-auto space-y-6">
+    <div className="min-h-0 bg-gradient-to-b from-gray-950 to-gray-900 pb-[calc(6rem+env(safe-area-inset-bottom))] text-white lg:min-h-screen lg:pb-10">
+      <div className="mx-auto max-w-2xl space-y-6 px-4 py-6 sm:p-6">
         <Link
           href="/brackets"
-          className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-white transition"
+          className="inline-flex min-h-[44px] touch-manipulation items-center gap-2 text-sm text-white/60 transition hover:text-white"
         >
-          <ArrowLeft className="h-4 w-4" />
+          <ArrowLeft className="h-4 w-4 shrink-0" />
           Back to Brackets
         </Link>
 
@@ -108,17 +108,17 @@ export default function CreateEntryChooser({
             <p className="text-sm text-gray-400">
               You need to join or create a league before making a bracket entry.
             </p>
-            <div className="flex gap-3 justify-center">
+            <div className="grid grid-cols-1 gap-2.5 sm:flex sm:flex-wrap sm:justify-center sm:gap-3">
               <Link
                 href="/brackets/leagues/new"
-                className="inline-flex items-center gap-2 rounded-lg bg-white text-black px-4 py-2 text-sm font-medium hover:bg-gray-200 transition"
+                className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-lg bg-white px-4 py-3 text-sm font-medium text-black transition hover:bg-gray-200 sm:min-h-0 sm:py-2"
               >
-                <Plus className="h-4 w-4" />
+                <Plus className="h-4 w-4 shrink-0" />
                 Create League
               </Link>
               <Link
                 href="/brackets/join"
-                className="rounded-lg border border-gray-600 px-4 py-2 text-sm hover:bg-gray-800 transition"
+                className="inline-flex min-h-[48px] touch-manipulation items-center justify-center rounded-lg border border-gray-600 px-4 py-3 text-sm transition hover:bg-gray-800 sm:min-h-0 sm:py-2"
               >
                 Join League
               </Link>
@@ -142,7 +142,7 @@ export default function CreateEntryChooser({
                       key={l.id}
                       type="button"
                       onClick={() => setSelectedLeagueId(l.id)}
-                      className={`w-full rounded-xl border p-3 text-left text-sm transition ${
+                      className={`min-h-[52px] w-full touch-manipulation rounded-xl border p-3 text-left text-sm transition ${
                         selectedLeagueId === l.id
                           ? "border-cyan-500 bg-cyan-500/10 text-white"
                           : "border-white/10 bg-white/5 text-white/70 hover:bg-white/10"
@@ -179,7 +179,8 @@ export default function CreateEntryChooser({
             <button
               disabled={!selectedLeagueId || !entryName.trim() || loading}
               onClick={createEntry}
-              className="w-full rounded-xl bg-white text-black py-3 text-sm font-semibold hover:bg-gray-200 disabled:opacity-50 transition"
+              type="button"
+              className="min-h-[52px] w-full touch-manipulation rounded-xl bg-white py-3 text-sm font-semibold text-black transition hover:bg-gray-200 disabled:opacity-50"
             >
               {loading ? (
                 <span className="inline-flex items-center justify-center gap-2">

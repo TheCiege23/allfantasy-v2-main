@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ArrowLeftRight, ClipboardList, Settings } from 'lucide-react'
+import { ArrowLeftRight, ClipboardList, Settings, X, ExternalLink, Activity } from 'lucide-react'
 import { toast } from 'sonner'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
@@ -26,6 +26,7 @@ import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { TeamLineupSwapModal } from '@/components/league/TeamLineupSwapModal'
+import type { SwapCandidate } from '@/components/league/TeamLineupSwapModal'
 import { StartVsComparisonLauncher } from '@/components/app/player-comparison/StartVsComparisonLauncher'
 import {
   applyLineupPick,
@@ -57,6 +58,22 @@ function dispatchRosterLegalityEvent(leagueId: string, result: RosterLegalityFul
 type DbLineupSwapCtx =
   | { kind: 'starter'; index: number; slot: ExpandedStarterSlot }
   | { kind: 'reserve'; section: 'bench' | 'ir' | 'taxi' | 'devy'; playerId: string }
+
+type LineupReplacementCtx =
+  | {
+      kind: 'starter'
+      sourcePlayerId: string
+      slotIndex: number
+      slotLabel: string
+      candidates: SwapCandidate[]
+    }
+  | {
+      kind: 'reserve'
+      sourcePlayerId: string
+      section: 'bench' | 'ir' | 'taxi' | 'devy'
+      slotLabel: string
+      candidates: SwapCandidate[]
+    }
 
 const RESERVE_SWAP_TITLE: Record<'bench' | 'ir' | 'taxi' | 'devy', string> = {
   bench: 'Bench',
@@ -277,6 +294,394 @@ function buildNflRedraftRosterChimmyPrompt(args: {
   ].join('\n')
 }
 
+// ─── Player Detail Bottom Sheet ───────────────────────────────────────────────
+
+function PlayerDetailSheet({
+  playerId,
+  slotLabel,
+  sport,
+  players,
+  week,
+  season,
+  onClose,
+  onViewFullStats,
+  canReplaceInLineup,
+  onOpenReplace,
+}: {
+  playerId: string
+  slotLabel?: string
+  sport: string
+  players: PlayerMap
+  week: number
+  season: number
+  onClose: () => void
+  /** Calls the existing PlayerStatCard opener from LeagueShell. */
+  onViewFullStats: (id: string) => void
+  canReplaceInLineup?: boolean
+  onOpenReplace?: () => void
+}) {
+  const resolved = resolvePlayerName(playerId, players)
+  const pos = resolved.position || '—'
+  const baseline = placeholderBaselineProjection(playerId)
+  const showCrest = isWeatherSensitiveSport(sport)
+
+  // Close on Escape key
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  const statusDot =
+    pos === 'DEF' || pos === 'DST' || pos === 'K'
+      ? null
+      : (
+        <span
+          className="h-2 w-2 rounded-full bg-emerald-400"
+          title="Status (Active — live injury feed coming soon)"
+          aria-label="Active"
+        />
+      )
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px]"
+        onClick={onClose}
+        aria-hidden
+      />
+      {/* Sheet */}
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${resolved.name} player details`}
+        className="fixed bottom-0 left-0 right-0 z-50 mx-auto max-w-lg rounded-t-2xl border-t border-white/[0.1] bg-[#111827] pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl"
+        data-testid="player-detail-sheet"
+      >
+        {/* Drag handle */}
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-white/20" />
+        </div>
+
+        {/* Header */}
+        <div className="flex items-start gap-3 px-5 pb-3 pt-2">
+          <div className="relative shrink-0">
+            <PlayerHeadshot
+              sleeperId={playerId}
+              sport={sport}
+              useResolver={String(sport ?? '').trim().toUpperCase() === 'NFL'}
+              playerName={resolved.name}
+              position={resolved.position}
+              espnId={players[playerId]?.espn_id}
+              nbaId={players[playerId]?.nba_id}
+              team={resolved.team}
+              size={52}
+              variant="round"
+            />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate text-base font-bold text-white">{resolved.name || `Player ${playerId.slice(-4)}`}</h2>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[12px] text-white/55">
+              <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${positionBadgeClass(pos)}`}>{pos}</span>
+              {resolved.team && resolved.team !== 'FA' ? (
+                <span className="flex items-center gap-1">
+                  <TeamLogo teamAbbr={resolved.team} sport={sport} size={14} />
+                  {resolved.team}
+                </span>
+              ) : <span className="text-white/35">Free Agent</span>}
+              {slotLabel ? (
+                <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${slotBadgeClass(slotLabel)}`}>{slotLabel}</span>
+              ) : null}
+              {statusDot}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close player detail"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/[0.12] bg-white/[0.06] text-white/55 hover:bg-white/[0.1] hover:text-white"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* Stats row */}
+        <div className="mx-5 mb-4 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.04]">
+          <div className="flex flex-col items-center gap-0.5 bg-[#111827] px-3 py-3">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-white/35">Proj</span>
+            <span className="text-[18px] font-bold text-white/90">
+              {baseline > 0 ? baseline.toFixed(1) : '—'}
+            </span>
+            {showCrest ? (
+              <span className="text-[9px] text-white/30">via AF</span>
+            ) : null}
+          </div>
+          <div className="flex flex-col items-center gap-0.5 bg-[#111827] px-3 py-3">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-white/35">Pts</span>
+            <span className="text-[18px] font-bold text-white/40">—</span>
+            <span className="text-[9px] text-white/25">live feed</span>
+          </div>
+          <div className="flex flex-col items-center gap-0.5 bg-[#111827] px-3 py-3">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-white/35">Status</span>
+            <span className="flex items-center gap-1 text-[12px] font-semibold text-emerald-300">
+              <Activity className="h-3 w-3" />
+              Active
+            </span>
+            <span className="text-[9px] text-white/25">injury feed</span>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-2 px-5">
+          {canReplaceInLineup ? (
+            <button
+              type="button"
+              onClick={() => onOpenReplace?.()}
+              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-white/[0.14] bg-white/[0.06] py-3 text-[13px] font-bold text-white/90 transition hover:bg-white/[0.12] active:scale-95"
+            >
+              <ArrowLeftRight className="h-4 w-4" aria-hidden />
+              Replace in lineup
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => {
+              onClose()
+              onViewFullStats(playerId)
+            }}
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 py-3 text-[13px] font-bold text-cyan-200 transition hover:bg-cyan-400/20 active:scale-95"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden />
+            Full Stats
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
+function LineupReplacementPickerSheet({
+  open,
+  sourcePlayerId,
+  sourceSlotLabel,
+  sport,
+  players,
+  candidates,
+  saving,
+  locked,
+  lockMessage,
+  autosaveWired,
+  helperError,
+  onClose,
+  onConfirmReplacement,
+}: {
+  open: boolean
+  sourcePlayerId: string | null
+  sourceSlotLabel?: string
+  sport: string
+  players: PlayerMap
+  candidates: SwapCandidate[]
+  saving: boolean
+  locked: boolean
+  lockMessage?: string | null
+  autosaveWired: boolean
+  helperError?: string | null
+  onClose: () => void
+  onConfirmReplacement: (incomingId: string) => Promise<void>
+}) {
+  const [query, setQuery] = useState('')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    setQuery('')
+    setSelectedId(null)
+  }, [open, sourcePlayerId])
+
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return candidates
+    return candidates.filter((c) => {
+      const hay = `${c.name} ${c.position}`.toLowerCase()
+      return hay.includes(q)
+    })
+  }, [candidates, query])
+
+  if (!open || !sourcePlayerId) return null
+
+  const source = resolvePlayerName(sourcePlayerId, players)
+  const confirmDisabled =
+    !selectedId ||
+    saving ||
+    locked ||
+    !autosaveWired ||
+    !candidates.some((c) => c.id === selectedId && c.eligible)
+
+  return (
+    <>
+      <div className="fixed inset-0 z-[70] bg-black/70 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Replace player in lineup"
+        className="fixed bottom-0 left-0 right-0 z-[80] mx-auto max-h-[84dvh] w-full max-w-xl rounded-t-2xl border-t border-white/[0.1] bg-[#0a1228] pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
+      >
+        <div className="flex justify-center pt-3 pb-1">
+          <div className="h-1 w-10 rounded-full bg-white/20" />
+        </div>
+        <div className="flex items-start justify-between gap-3 px-4 pb-3 pt-2">
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-white">Replace in lineup</p>
+            <p className="truncate text-[11px] text-white/50">
+              {source.name} · {source.position || '—'}
+              {sourceSlotLabel ? ` · ${sourceSlotLabel}` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-white/55 hover:bg-white/[0.08] hover:text-white"
+            aria-label="Close replacement picker"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-4 pb-3">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search by player or position"
+            className="w-full rounded-xl border border-white/[0.1] bg-[#040915] px-3 py-2 text-xs text-white placeholder:text-white/35 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+          />
+        </div>
+
+        {locked ? (
+          <p className="px-4 pb-2 text-xs text-amber-200/90">{lockMessage ?? 'Lineup is locked.'}</p>
+        ) : null}
+        {!autosaveWired ? (
+          <p className="px-4 pb-2 text-xs text-white/60">Lineup autosave route is not wired yet.</p>
+        ) : null}
+        {helperError ? <p className="px-4 pb-2 text-xs text-rose-300/90">{helperError}</p> : null}
+
+        <div className="max-h-[46dvh] overflow-y-auto px-2">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-4 text-xs text-white/50">No eligible players match your filter.</p>
+          ) : (
+            <ul className="space-y-1 pb-2">
+              {filtered.map((c) => {
+                const selected = selectedId === c.id
+                const p = players[c.id]
+                const baseline = placeholderBaselineProjection(c.id)
+                const injuryRaw =
+                  (p as Record<string, unknown> | undefined)?.injury_status ??
+                  (p as Record<string, unknown> | undefined)?.status ??
+                  null
+                const status =
+                  typeof injuryRaw === 'string' && injuryRaw.trim().length > 0
+                    ? injuryRaw.trim().toUpperCase()
+                    : 'ACTIVE'
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      disabled={!c.eligible || locked}
+                      onClick={() => setSelectedId(c.id)}
+                      className={[
+                        'w-full rounded-xl border px-3 py-2 text-left transition',
+                        selected
+                          ? 'border-cyan-400/50 bg-cyan-500/10'
+                          : 'border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.06]',
+                        !c.eligible || locked ? 'opacity-40' : '',
+                      ].join(' ')}
+                      data-testid={`lineup-replace-candidate-${c.id}`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="inline-flex min-w-[2.25rem] shrink-0 justify-center rounded-md border border-white/15 bg-white/[0.06] px-1.5 py-0.5 text-[10px] font-bold text-white/70">
+                          {c.badge ?? '—'}
+                        </span>
+                        <PlayerHeadshot
+                          sleeperId={c.id}
+                          sport={sport}
+                          useResolver={String(sport ?? '').trim().toUpperCase() === 'NFL'}
+                          playerName={c.name}
+                          position={c.position}
+                          espnId={players[c.id]?.espn_id}
+                          nbaId={players[c.id]?.nba_id}
+                          team={c.team}
+                          size={28}
+                          variant="round"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-semibold text-white">{c.name}</p>
+                          <p className="flex items-center gap-1 text-[10px] text-white/50">
+                            <span>{c.position || '—'}</span>
+                            <span className="text-white/25">·</span>
+                            {c.team && c.team !== 'FA' ? (
+                              <>
+                                <TeamLogo teamAbbr={c.team} sport={sport} size={14} />
+                                <span>{c.team}</span>
+                              </>
+                            ) : (
+                              <span>FA</span>
+                            )}
+                          </p>
+                        </div>
+                        {!c.eligible ? (
+                          <span className="rounded-md border border-amber-400/35 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">
+                            Ineligible
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-1.5 grid grid-cols-3 gap-2 text-[10px] text-white/55">
+                        <span>Proj: {baseline > 0 ? baseline.toFixed(1) : '—'}</span>
+                        <span>Pts: —</span>
+                        <span>Status: {status}</span>
+                      </div>
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="border-t border-white/[0.08] px-4 pt-3">
+          <button
+            type="button"
+            disabled={confirmDisabled}
+            onClick={() => {
+              if (!selectedId || confirmDisabled) return
+              void onConfirmReplacement(selectedId)
+            }}
+            className={[
+              'w-full rounded-xl border py-2.5 text-sm font-bold transition',
+              confirmDisabled
+                ? 'cursor-not-allowed border-white/[0.1] bg-white/[0.05] text-white/35'
+                : 'border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25',
+            ].join(' ')}
+          >
+            {saving ? 'Saving replacement…' : 'Confirm replacement'}
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 function RosterRow({
   playerId,
   sport,
@@ -297,7 +702,7 @@ function RosterRow({
   sport: string
   players: PlayerMap
   playersLoading: boolean
-  onPlayerClick: (id: string) => void
+  onPlayerClick: (id: string, slotLabel?: string) => void
   slotLabel?: string
   week: number
   season: number
@@ -444,7 +849,7 @@ function RosterRow({
       >
         <button
           type="button"
-          onClick={() => onPlayerClick(playerId)}
+          onClick={() => onPlayerClick(playerId, slotLabel)}
           className="flex w-full items-center gap-2 rounded-t-lg border-0 bg-transparent px-2 py-2 text-left hover:bg-white/[0.04]"
         >
           {rowInner}
@@ -482,7 +887,7 @@ function RosterRow({
   return (
     <button
       type="button"
-      onClick={() => onPlayerClick(playerId)}
+      onClick={() => onPlayerClick(playerId, slotLabel)}
       className={[
         'flex w-full items-center gap-2 rounded-lg border px-2 py-2 text-left transition hover:border-white/[0.08] hover:bg-white/[0.04]',
         rowBorderClass,
@@ -517,7 +922,7 @@ function SkeletonRows() {
 export function TeamTab({
   league,
   userTeam,
-  onPlayerClick,
+  onPlayerClick: onOpenPlayerStats,
   inviteToken,
   sport,
   idpLeagueUi = false,
@@ -571,6 +976,19 @@ export function TeamTab({
   const [draftPickFallback, setDraftPickFallback] = useState<unknown[]>([])
   const [draftPickDetailOpen, setDraftPickDetailOpen] = useState(false)
   const [draftPickDetailLoading, setDraftPickDetailLoading] = useState(false)
+  // Local player detail sheet state
+  const [detailPlayerId, setDetailPlayerId] = useState<string | null>(null)
+  const [detailSlotLabel, setDetailSlotLabel] = useState<string | undefined>(undefined)
+  const handleRowClick = useCallback((playerId: string, slotLabel?: string) => {
+    if (!playerId?.trim()) return
+    setDetailPlayerId(playerId)
+    setDetailSlotLabel(slotLabel)
+  }, [])
+  const [replacementPickerPlayerId, setReplacementPickerPlayerId] = useState<string | null>(null)
+  const [replacementPickerError, setReplacementPickerError] = useState<string | null>(null)
+  const onPlayerClick = useCallback((playerId: string, slotLabel?: string) => {
+    handleRowClick(playerId, slotLabel)
+  }, [handleRowClick])
   const [draftPickDetail, setDraftPickDetail] = useState<{
     pick: { id: string; label: string; status: string } | null
     tradeChain: Array<{ tradeId: string; status: string; createdAt: string; summary: string }>
@@ -852,8 +1270,8 @@ export function TeamTab({
     !weekLock!.locked
 
   const saveLineup = useCallback(
-    async (next: RosterLineupLists) => {
-      if (!dbRosterMeta?.rosterId || !lineupEditable) return
+    async (next: RosterLineupLists): Promise<boolean> => {
+      if (!dbRosterMeta?.rosterId || !lineupEditable) return false
       setSavingLineup(true)
       try {
         const roster = {
@@ -878,17 +1296,124 @@ export function TeamTab({
         const json = (await res.json().catch(() => ({}))) as { error?: string }
         if (!res.ok) {
           toast.error(typeof json.error === 'string' ? json.error : 'Could not save lineup')
-          return
+          return false
         }
         toast.success('Lineup saved')
         setLineupLists(next)
         await load()
         setLegalityBump((n) => n + 1)
+        return true
+      } catch {
+        toast.error('Could not save lineup')
+        return false
       } finally {
         setSavingLineup(false)
       }
     },
     [dbRosterMeta, lineupEditable, players, league.id, week, load],
+  )
+
+  const replacementContextsByPlayer = useMemo(() => {
+    const map = new Map<string, LineupReplacementCtx>()
+    if (!lineupLists || !dbRosterMeta) return map
+
+    dbRosterMeta.starterSlots.forEach((slot, i) => {
+      const sourcePlayerId = lineupLists.starters[i] ?? ''
+      if (!sourcePlayerId) return
+      const candidates = buildSwapCandidates({
+        lists: lineupLists,
+        slot,
+        slotIndex: i,
+        players,
+      })
+      if (candidates.length === 0) return
+      map.set(sourcePlayerId, {
+        kind: 'starter',
+        sourcePlayerId,
+        slotIndex: i,
+        slotLabel: slot.label,
+        candidates,
+      })
+    })
+
+    const reserveDefs: Array<{ section: 'bench' | 'ir' | 'taxi' | 'devy'; ids: string[] }> = [
+      { section: 'bench', ids: lineupLists.bench },
+      { section: 'ir', ids: lineupLists.ir },
+      { section: 'taxi', ids: lineupLists.taxi },
+      { section: 'devy', ids: lineupLists.devy },
+    ]
+
+    for (const def of reserveDefs) {
+      for (const sourcePlayerId of def.ids) {
+        const candidates = buildReserveSwapCandidates({
+          lists: lineupLists,
+          sourcePlayerId,
+          players,
+        })
+        if (candidates.length === 0) continue
+        map.set(sourcePlayerId, {
+          kind: 'reserve',
+          sourcePlayerId,
+          section: def.section,
+          slotLabel: RESERVE_SWAP_TITLE[def.section],
+          candidates,
+        })
+      }
+    }
+
+    return map
+  }, [lineupLists, dbRosterMeta, players])
+
+  const detailReplacementContext = useMemo(() => {
+    if (!detailPlayerId) return null
+    return replacementContextsByPlayer.get(detailPlayerId) ?? null
+  }, [detailPlayerId, replacementContextsByPlayer])
+
+  const replacementPickerContext = useMemo(() => {
+    if (!replacementPickerPlayerId) return null
+    return replacementContextsByPlayer.get(replacementPickerPlayerId) ?? null
+  }, [replacementPickerPlayerId, replacementContextsByPlayer])
+
+  const lineupAutosaveWired = Boolean(dbRosterMeta?.rosterId)
+  const canReplaceFromDetail = Boolean(detailReplacementContext) && lineupEditable
+
+  const handleOpenReplacementPickerFromDetail = useCallback(() => {
+    if (!detailPlayerId || !detailReplacementContext || !lineupEditable) return
+    setReplacementPickerError(null)
+    setReplacementPickerPlayerId(detailPlayerId)
+    setDetailPlayerId(null)
+    setDetailSlotLabel(undefined)
+  }, [detailPlayerId, detailReplacementContext, lineupEditable])
+
+  const handleConfirmReplacement = useCallback(
+    async (incomingId: string) => {
+      if (!replacementPickerPlayerId || !lineupLists) return
+      const ctx = replacementContextsByPlayer.get(replacementPickerPlayerId)
+      if (!ctx) return
+
+      if (!lineupAutosaveWired) {
+        setReplacementPickerError('Lineup autosave route is not wired yet.')
+        return
+      }
+
+      const next =
+        ctx.kind === 'starter'
+          ? applyLineupPick({
+              lists: lineupLists,
+              slotIndex: ctx.slotIndex,
+              incomingId,
+            })
+          : swapPlayersInLists(lineupLists, ctx.sourcePlayerId, incomingId)
+
+      const ok = await saveLineup(next)
+      if (ok) {
+        setReplacementPickerError(null)
+        setReplacementPickerPlayerId(null)
+        return
+      }
+      setReplacementPickerError('Could not save lineup. Please try again.')
+    },
+    [replacementPickerPlayerId, lineupLists, replacementContextsByPlayer, lineupAutosaveWired, saveLineup],
   )
 
   if (!isSleeper && !userTeam) {
@@ -1249,7 +1774,10 @@ export function TeamTab({
           </section>
 
           <section>
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Bench</p>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Bench</p>
+              <div className="h-px flex-1 bg-white/[0.07]" />
+            </div>
             <div className="space-y-1">
               {sleeperParts.bench.map((id) => (
                 <RosterRow
@@ -1270,7 +1798,10 @@ export function TeamTab({
 
           {showTaxiSectionSleeper ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Taxi</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Taxi</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <div className="space-y-1">
                 {sleeperParts.taxi.map((id) => (
                   <RosterRow
@@ -1292,7 +1823,10 @@ export function TeamTab({
 
           {showIrSectionSleeper ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Reserve / IR</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Reserve / IR</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <div className="space-y-1">
                 {sleeperParts.ir.map((id) => (
                   <RosterRow
@@ -1314,7 +1848,10 @@ export function TeamTab({
 
           {payload.roster.picks.length > 0 ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Draft picks</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Draft picks</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <ul className="space-y-1 text-xs text-white/70">
                 {payload.roster.picks.map((p, i) => (
                   <li
@@ -1335,16 +1872,19 @@ export function TeamTab({
           <section>
             <div className="mb-2 flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">Starters</p>
-                <p className="text-[11px] text-white/35">
+                <div className="flex items-center gap-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Starters</p>
+                  <div className="h-px flex-1 bg-white/[0.07]" />
+                </div>
+                <p className="mt-0.5 text-[11px] text-white/35">
                   {lineupEditable
                     ? 'Tap a position badge (starters, bench, IR, taxi, devy) to swap. Lineup saves automatically.'
                     : 'Lineup changes are locked for this view or scoring period.'}
                 </p>
               </div>
-              <div className="flex gap-4 text-[10px] font-semibold uppercase tracking-wide text-white/35">
-                <span className="w-10 text-right">OWN%</span>
-                <span className="w-10 text-right">START%</span>
+              <div className="flex gap-4 text-[10px] font-semibold uppercase tracking-wide text-white/40">
+                <span className="w-10 text-right">PROJ</span>
+                <span className="w-10 text-right">PTS</span>
               </div>
             </div>
             <div className="space-y-1">
@@ -1363,6 +1903,11 @@ export function TeamTab({
                   onSlotClick={
                     lineupEditable
                       ? () => {
+                          const sourcePlayerId = lineupLists.starters[i] ?? ''
+                          if (sourcePlayerId) {
+                            handleRowClick(sourcePlayerId, slot.label)
+                            return
+                          }
                           setSwapCtx({ kind: 'starter', index: i, slot })
                           setSwapOpen(true)
                         }
@@ -1375,7 +1920,10 @@ export function TeamTab({
           </section>
 
           <section>
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Bench</p>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Bench</p>
+              <div className="h-px flex-1 bg-white/[0.07]" />
+            </div>
             <div className="space-y-1">
               {lineupLists.bench.map((id) => (
                 <RosterRow
@@ -1392,8 +1940,7 @@ export function TeamTab({
                   onSlotClick={
                     lineupEditable
                       ? () => {
-                          setSwapCtx({ kind: 'reserve', section: 'bench', playerId: id })
-                          setSwapOpen(true)
+                          handleRowClick(id, 'BN')
                         }
                       : undefined
                   }
@@ -1405,7 +1952,10 @@ export function TeamTab({
 
           {showIrSectionDb ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Injured reserve</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Injured reserve</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <div className="space-y-1">
                 {lineupLists.ir.length > 0 ? (
                   lineupLists.ir.map((id) => (
@@ -1423,8 +1973,7 @@ export function TeamTab({
                       onSlotClick={
                         lineupEditable
                           ? () => {
-                              setSwapCtx({ kind: 'reserve', section: 'ir', playerId: id })
-                              setSwapOpen(true)
+                              handleRowClick(id, 'IR')
                             }
                           : undefined
                       }
@@ -1440,7 +1989,10 @@ export function TeamTab({
 
           {showTaxiSectionDb ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Taxi</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Taxi</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <div className="space-y-1">
                 {lineupLists.taxi.length > 0 ? (
                   lineupLists.taxi.map((id) => (
@@ -1458,8 +2010,7 @@ export function TeamTab({
                       onSlotClick={
                         lineupEditable
                           ? () => {
-                              setSwapCtx({ kind: 'reserve', section: 'taxi', playerId: id })
-                              setSwapOpen(true)
+                              handleRowClick(id, 'TX')
                             }
                           : undefined
                       }
@@ -1475,7 +2026,10 @@ export function TeamTab({
 
           {showDevySectionDb ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Devy</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Devy</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <div className="space-y-1">
                 {lineupLists.devy.length > 0 ? (
                   lineupLists.devy.map((id) => (
@@ -1493,8 +2047,7 @@ export function TeamTab({
                       onSlotClick={
                         lineupEditable
                           ? () => {
-                              setSwapCtx({ kind: 'reserve', section: 'devy', playerId: id })
-                              setSwapOpen(true)
+                              handleRowClick(id, 'DV')
                             }
                           : undefined
                       }
@@ -1590,7 +2143,10 @@ export function TeamTab({
           </section>
 
           <section>
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Bench</p>
+            <div className="mb-2 flex items-center gap-2">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Bench</p>
+              <div className="h-px flex-1 bg-white/[0.07]" />
+            </div>
             <div className="space-y-1">
               {dbParts.bench.map((id) => (
                 <RosterRow
@@ -1611,7 +2167,10 @@ export function TeamTab({
 
           {showIrSectionDb ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">IR</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">IR</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <div className="space-y-1">
                 {dbParts.ir.length > 0 ? (
                   dbParts.ir.map((id) => (
@@ -1637,7 +2196,10 @@ export function TeamTab({
 
           {showTaxiSectionDb ? (
             <section>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-white/35">Taxi</p>
+              <div className="mb-2 flex items-center gap-2">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Taxi</p>
+                <div className="h-px flex-1 bg-white/[0.07]" />
+              </div>
               <div className="space-y-1">
                 {dbParts.taxi.length > 0 ? (
                   dbParts.taxi.map((id) => (
@@ -1668,7 +2230,10 @@ export function TeamTab({
           className="rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-4"
           data-testid="team-tab-draft-picks-section"
         >
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-wide text-white/35">Draft picks</p>
+          <div className="mb-3 flex items-center gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-white/55">Draft picks</p>
+            <div className="h-px flex-1 bg-white/[0.07]" />
+          </div>
           <ul className="space-y-1.5">
             {draftPickRows.map((p) => (
               <li key={p.id}>
@@ -1799,6 +2364,49 @@ export function TeamTab({
             </button>
           </div>
         </div>
+      ) : null}
+
+      {/* Local player detail bottom-sheet */}
+      <LineupReplacementPickerSheet
+        open={replacementPickerPlayerId != null && replacementPickerContext != null}
+        sourcePlayerId={replacementPickerPlayerId}
+        sourceSlotLabel={replacementPickerContext?.slotLabel}
+        sport={resolvedSport}
+        players={players}
+        candidates={replacementPickerContext?.candidates ?? []}
+        saving={savingLineup}
+        locked={!lineupEditable}
+        lockMessage={weekLock?.reason ?? dbRosterMeta?.lineupLockHelp ?? null}
+        autosaveWired={lineupAutosaveWired}
+        helperError={replacementPickerError}
+        onClose={() => {
+          if (savingLineup) return
+          setReplacementPickerError(null)
+          setReplacementPickerPlayerId(null)
+        }}
+        onConfirmReplacement={handleConfirmReplacement}
+      />
+
+      {detailPlayerId ? (
+        <PlayerDetailSheet
+          playerId={detailPlayerId}
+          slotLabel={detailSlotLabel}
+          sport={resolvedSport}
+          players={players}
+          week={week}
+          season={seasonYear}
+          canReplaceInLineup={canReplaceFromDetail}
+          onOpenReplace={handleOpenReplacementPickerFromDetail}
+          onClose={() => {
+            setDetailPlayerId(null)
+            setDetailSlotLabel(undefined)
+          }}
+          onViewFullStats={(id) => {
+            setDetailPlayerId(null)
+            setDetailSlotLabel(undefined)
+            onOpenPlayerStats(id)
+          }}
+        />
       ) : null}
     </div>
   )

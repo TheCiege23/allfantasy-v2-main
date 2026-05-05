@@ -314,7 +314,9 @@
       "Bash(grep -vE \"react/no-unescaped-entities|@next/next/no-img-element|Warning: \\\\`'\\\\`|Warning: \\\\`\\\\\"\\\\`|Warning: Using \\\\`<img>\\\\`\")",
       "WebFetch(domain:support.sleeper.com)",
       "Bash(npx playwright *)",
-      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")"
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(sed -n '2929,2945p' prisma/schema.prisma)",
+      "Bash(sed -n '3927,3945p' prisma/schema.prisma)"
     ]
   }
 }

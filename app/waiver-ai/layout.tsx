@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
+import ProductShellLayout from "@/components/navigation/ProductShellLayout"
 import { buildMetadata } from "@/lib/seo"
 import { getSEOPageConfig } from "@/lib/seo"
 
@@ -12,5 +13,5 @@ export const metadata: Metadata = buildMetadata(
 )
 
 export default function WaiverAILayout({ children }: { children: ReactNode }) {
-  return <>{children}</>
+  return <ProductShellLayout>{children}</ProductShellLayout>
 }

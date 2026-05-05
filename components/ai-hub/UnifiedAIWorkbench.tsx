@@ -485,11 +485,11 @@ export default function UnifiedAIWorkbench() {
 
   return (
     <section
-      className="mb-8 rounded-xl border border-white/10 bg-white/[0.03] p-4 sm:p-5"
+      className="mb-8 rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:p-5"
       data-testid="unified-ai-workbench"
     >
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <div>
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-base font-semibold text-white">Unified AI Interface</h2>
           <p className="text-xs text-white/55">
             Deterministic-first orchestration across tools, with mode control, comparison, and confidence-aware output.
@@ -498,13 +498,13 @@ export default function UnifiedAIWorkbench() {
         <Link
           href="/messages?tab=ai"
           data-testid="unified-ai-chat-open-button"
-          className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
+          className="inline-flex min-h-[44px] w-full touch-manipulation items-center justify-center rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs text-white/80 hover:bg-white/10 sm:w-auto sm:justify-start sm:py-1.5"
         >
           Open AI Chat
         </Link>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-2">
+      <div className="scrollbar-none -mx-1 mb-3 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0 sm:pb-0 [-webkit-overflow-scrolling:touch]">
         {ENTRY_BUTTONS.map((entry) => (
           <button
             key={entry.id}
@@ -517,7 +517,7 @@ export default function UnifiedAIWorkbench() {
               setError(null)
               setSelectedAlternateProvider(null)
             }}
-            className="rounded-lg border border-white/15 bg-white/[0.03] px-3 py-2 text-xs text-white/80 hover:bg-white/10"
+            className="shrink-0 touch-manipulation rounded-lg border border-white/15 bg-white/[0.03] px-3 py-2.5 text-xs font-medium text-white/80 hover:bg-white/10 sm:min-h-0 sm:py-2"
           >
             {entry.label}
           </button>
@@ -531,7 +531,7 @@ export default function UnifiedAIWorkbench() {
             value={sport}
             onChange={(event) => setSport(event.target.value)}
             data-testid="unified-ai-sport-selector"
-            className="mt-1 min-h-[40px] w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-sm text-white"
+            className="mt-1 min-h-[44px] w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-base text-white sm:min-h-[40px] sm:text-sm"
           >
             {SUPPORTED_SPORTS.map((supportedSport) => (
               <option key={supportedSport} value={supportedSport}>
@@ -552,7 +552,7 @@ export default function UnifiedAIWorkbench() {
               setSelectedAlternateProvider(null)
             }}
             data-testid="unified-ai-tool-selector"
-            className="mt-1 min-h-[40px] w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-sm text-white"
+            className="mt-1 min-h-[44px] w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-base text-white sm:min-h-[40px] sm:text-sm"
           >
             {registry.map((tool) => (
               <option key={tool.toolKey} value={tool.toolKey}>
@@ -619,17 +619,17 @@ export default function UnifiedAIWorkbench() {
           onChange={(event) => setPrompt(event.target.value)}
           data-testid="unified-ai-prompt-input"
           placeholder="Explain the decision with evidence and confidence."
-          className="min-h-[88px] w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-sm text-white placeholder:text-white/40"
+          className="min-h-[100px] w-full rounded-lg border border-white/20 bg-white/[0.04] px-3 py-2 text-base text-white placeholder:text-white/40 sm:min-h-[88px] sm:text-sm"
         />
 
-        <div className="mt-2 flex flex-wrap gap-2">
+        <div className="scrollbar-none mt-2 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:overflow-visible sm:pb-0">
           {QUICK_CHIPS.map((chip) => (
             <button
               key={chip.id}
               type="button"
               data-testid={`unified-ai-quick-chip-${chip.id}`}
               onClick={() => setPrompt(chip.prompt)}
-              className="rounded-full border border-white/20 bg-white/[0.03] px-2.5 py-1 text-[11px] text-white/75 hover:bg-white/10"
+              className="shrink-0 touch-manipulation rounded-full border border-white/20 bg-white/[0.03] px-3 py-2 text-[11px] text-white/75 hover:bg-white/10 sm:py-1"
             >
               {chip.label}
             </button>
@@ -637,20 +637,20 @@ export default function UnifiedAIWorkbench() {
           <Link
             href={getChimmyChatHrefWithPrompt(prompt)}
             data-testid="unified-ai-open-chimmy-with-prompt-link"
-            className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1 text-[11px] text-cyan-200 hover:bg-cyan-500/20"
+            className="inline-flex shrink-0 touch-manipulation items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[11px] text-cyan-200 hover:bg-cyan-500/20 sm:py-1"
           >
             Open in Chimmy
           </Link>
         </div>
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="scrollbar-none mt-4 flex gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch] sm:flex-wrap sm:items-center sm:overflow-visible sm:pb-0">
         <button
           type="button"
           onClick={() => void runRequest('run')}
           data-testid="unified-ai-run-button"
           disabled={loading}
-          className="rounded-lg bg-cyan-500/20 px-3 py-2 text-sm font-medium text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-60"
+          className="shrink-0 touch-manipulation rounded-lg bg-cyan-500/20 px-4 py-2.5 text-sm font-medium text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-60 sm:py-2"
         >
           Run AI
         </button>
@@ -659,7 +659,7 @@ export default function UnifiedAIWorkbench() {
           onClick={() => void runRequest('compare')}
           data-testid="unified-ai-compare-button"
           disabled={loading || availableProviderCount < 2}
-          className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-sm text-white/85 hover:bg-white/10 disabled:opacity-60"
+          className="shrink-0 touch-manipulation rounded-lg border border-white/20 bg-white/[0.03] px-4 py-2.5 text-sm text-white/85 hover:bg-white/10 disabled:opacity-60 sm:py-2"
         >
           Compare providers
         </button>
@@ -668,7 +668,7 @@ export default function UnifiedAIWorkbench() {
           onClick={() => void runRequest(lastAction)}
           data-testid="unified-ai-regenerate-button"
           disabled={loading || (!result && !error)}
-          className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-sm text-white/75 hover:bg-white/10 disabled:opacity-50"
+          className="shrink-0 touch-manipulation rounded-lg border border-white/20 bg-white/[0.03] px-4 py-2.5 text-sm text-white/75 hover:bg-white/10 disabled:opacity-50 sm:py-2"
         >
           Regenerate
         </button>
@@ -677,7 +677,7 @@ export default function UnifiedAIWorkbench() {
           onClick={handleCopy}
           data-testid="unified-ai-copy-button"
           disabled={!activeExplanation}
-          className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-sm text-white/75 hover:bg-white/10 disabled:opacity-50"
+          className="shrink-0 touch-manipulation rounded-lg border border-white/20 bg-white/[0.03] px-4 py-2.5 text-sm text-white/75 hover:bg-white/10 disabled:opacity-50 sm:py-2"
         >
           Copy
         </button>
@@ -686,7 +686,7 @@ export default function UnifiedAIWorkbench() {
           onClick={() => void handleSaveResult()}
           data-testid="unified-ai-save-result-button"
           disabled={loading || saveLoading || !result}
-          className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-sm text-white/75 hover:bg-white/10 disabled:opacity-50"
+          className="shrink-0 touch-manipulation rounded-lg border border-white/20 bg-white/[0.03] px-4 py-2.5 text-sm text-white/75 hover:bg-white/10 disabled:opacity-50 sm:py-2"
         >
           {saveLoading ? 'Saving…' : 'Save result'}
         </button>
@@ -701,14 +701,14 @@ export default function UnifiedAIWorkbench() {
             setSelectedAlternateProvider(null)
           }}
           data-testid="unified-ai-back-button"
-          className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-sm text-white/75 hover:bg-white/10"
+          className="shrink-0 touch-manipulation rounded-lg border border-white/20 bg-white/[0.03] px-4 py-2.5 text-sm text-white/75 hover:bg-white/10 sm:py-2"
         >
           Back
         </button>
         <Link
           href="/ai/saved"
           data-testid="unified-ai-open-history-link"
-          className="rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-sm text-white/75 hover:bg-white/10"
+          className="inline-flex shrink-0 touch-manipulation items-center rounded-lg border border-white/20 bg-white/[0.03] px-4 py-2.5 text-sm text-white/75 hover:bg-white/10 sm:py-2"
         >
           Saved recommendations
         </Link>
@@ -735,7 +735,7 @@ export default function UnifiedAIWorkbench() {
         type="button"
         data-testid="unified-ai-mobile-drawer-open-button"
         onClick={() => setMobileResultOpen(true)}
-        className="mt-3 rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs text-white/75 hover:bg-white/10 sm:hidden"
+        className="mt-3 w-full touch-manipulation rounded-lg border border-cyan-500/25 bg-cyan-500/10 py-3 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 sm:hidden"
       >
         Open result drawer
       </button>
@@ -893,16 +893,26 @@ export default function UnifiedAIWorkbench() {
 
       {mobileResultOpen && (
         <div
-          className="fixed inset-x-0 bottom-0 z-50 max-h-[80vh] overflow-y-auto border border-white/15 bg-[#090f1f] p-4 shadow-2xl sm:hidden"
-          data-testid="unified-ai-mobile-drawer"
+          className="fixed inset-0 z-[60] bg-black/55 sm:hidden"
+          role="presentation"
+          onClick={() => setMobileResultOpen(false)}
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div
+            className="absolute inset-x-0 bottom-0 max-h-[88dvh] overflow-y-auto overscroll-contain rounded-t-2xl border border-white/15 bg-[#090f1f] p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl"
+            data-testid="unified-ai-mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="AI result"
+            onClick={(e) => e.stopPropagation()}
+          >
+          <div className="mx-auto mb-2 h-1 w-10 shrink-0 rounded-full bg-white/25" aria-hidden />
+          <div className="mb-3 flex items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-white">AI result</h3>
             <button
               type="button"
               data-testid="unified-ai-mobile-drawer-close-button"
               onClick={() => setMobileResultOpen(false)}
-              className="rounded-md border border-white/20 bg-white/[0.03] px-2 py-1 text-xs text-white/75"
+              className="touch-manipulation rounded-lg border border-white/20 bg-white/[0.03] px-3 py-2 text-xs font-medium text-white/85 min-h-[44px]"
             >
               Close
             </button>
@@ -979,6 +989,7 @@ export default function UnifiedAIWorkbench() {
           ) : (
             <p className="text-xs text-white/60">Run AI to view a result.</p>
           )}
+          </div>
         </div>
       )}
     </section>

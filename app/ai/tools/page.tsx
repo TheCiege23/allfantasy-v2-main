@@ -20,16 +20,16 @@ const AI_TOOL_CARDS = [
 export default function AIToolsPage() {
   return (
     <div className="mode-surface min-h-screen">
-      <div className="mx-auto max-w-4xl px-4 py-8 sm:px-6 sm:py-10">
+      <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 sm:py-10">
         <Link
           href="/ai"
           data-testid="ai-tools-back-link"
-          className="mb-6 inline-flex items-center gap-2 text-sm text-white/60 hover:text-white/90"
+          className="mb-4 inline-flex touch-manipulation items-center gap-2 py-1 text-sm text-white/60 hover:text-white/90 sm:mb-6"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
           Back to AI
         </Link>
-        <h1 className="mb-6 text-2xl font-bold tracking-tight text-white">AI Tools</h1>
+        <h1 className="mb-4 text-xl font-bold tracking-tight text-white sm:mb-6 sm:text-2xl">AI Tools</h1>
         <div className="mb-6">
           <AIQuickActionBar />
         </div>
@@ -37,13 +37,13 @@ export default function AIToolsPage() {
           <Link
             href="/ai/saved"
             data-testid="ai-tools-open-history-link"
-            className="inline-flex items-center rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10"
+            className="inline-flex min-h-[44px] touch-manipulation items-center rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10 sm:min-h-0"
           >
             Open saved recommendations
           </Link>
         </div>
         <UnifiedAIWorkbench />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 lg:grid-cols-3">
           {AI_TOOL_CARDS.map((card) => (
             <AIToolCard
               key={card.id}

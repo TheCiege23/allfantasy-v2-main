@@ -757,40 +757,42 @@ export function DashboardOverview({
             <span className="font-bold text-cyan-400">{userName}</span>
           </h1>
 
-          <div className="mt-4 flex flex-wrap gap-2">
+          <div className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap sm:gap-2">
             <Link
               href="/create-league"
-              className="rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-2 text-sm font-semibold text-black"
+              className="touch-manipulation inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-3 text-sm font-semibold text-black active:opacity-95 sm:w-auto sm:px-5 sm:py-2.5"
             >
               {t('dashboard.overview.createLeague')}
             </Link>
-            <button
-              type="button"
-              onClick={() => setQuickCreateOpen(true)}
-              className="rounded-xl border border-purple-500/30 bg-purple-500/10 px-4 py-2 text-sm font-semibold text-purple-300 transition hover:bg-purple-500/20"
-            >
-              ✨ Quick Create
-            </button>
-            <button
-              type="button"
-              onClick={handleImport}
-              className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-white"
-            >
-              {t('dashboard.overview.import')}
-            </button>
-            <Link
-              href="/find-league"
-              className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-white"
-            >
-              {t('dashboard.overview.findLeague')}
-            </Link>
-            <Link
-              href="/brackets"
-              className="rounded-xl border border-white/20 px-4 py-2 text-sm font-semibold text-white"
-              data-testid="dashboard-brackets-link"
-            >
-              {t('dashboard.overview.brackets')}
-            </Link>
+            <div className="grid grid-cols-2 gap-2 sm:contents">
+              <button
+                type="button"
+                onClick={() => setQuickCreateOpen(true)}
+                className="touch-manipulation inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/10 px-3 py-2.5 text-sm font-semibold text-purple-300 transition hover:bg-purple-500/20 active:bg-purple-500/25 sm:w-auto sm:px-4 sm:py-2"
+              >
+                ✨ Quick Create
+              </button>
+              <button
+                type="button"
+                onClick={handleImport}
+                className="touch-manipulation inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-white/20 px-3 py-2.5 text-sm font-semibold text-white active:bg-white/10 sm:w-auto sm:px-4 sm:py-2"
+              >
+                {t('dashboard.overview.import')}
+              </button>
+              <Link
+                href="/find-league"
+                className="touch-manipulation inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-white/20 px-3 py-2.5 text-sm font-semibold text-white active:bg-white/10 sm:w-auto sm:px-4 sm:py-2"
+              >
+                {t('dashboard.overview.findLeague')}
+              </Link>
+              <Link
+                href="/brackets"
+                className="touch-manipulation inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-white/20 px-3 py-2.5 text-sm font-semibold text-white active:bg-white/10 sm:w-auto sm:px-4 sm:py-2"
+                data-testid="dashboard-brackets-link"
+              >
+                {t('dashboard.overview.brackets')}
+              </Link>
+            </div>
             {/* Dispersal drafts link removed from dashboard overview */}
           </div>
         </section>

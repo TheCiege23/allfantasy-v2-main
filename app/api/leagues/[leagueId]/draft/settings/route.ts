@@ -230,6 +230,24 @@ export async function PATCH(
     }
   }
 
+  // Slice 1 — typed DraftSession flag patch.
+  const sessionFlagsPatch: Record<string, unknown> = {}
+  if (typeof body.thirdRoundReversal === 'boolean') {
+    sessionFlagsPatch.thirdRoundReversal = body.thirdRoundReversal
+  }
+  if (
+    body.onClockTradeTimerBehavior === 'inherit_remaining' ||
+    body.onClockTradeTimerBehavior === 'reset_timer'
+  ) {
+    sessionFlagsPatch.onClockTradeTimerBehavior = body.onClockTradeTimerBehavior
+  }
+  if (typeof body.inDraftPlayerTradesEnabled === 'boolean') {
+    sessionFlagsPatch.inDraftPlayerTradesEnabled = body.inDraftPlayerTradesEnabled
+  }
+  if (typeof body.customRankingsEnabled === 'boolean') {
+    sessionFlagsPatch.customRankingsEnabled = body.customRankingsEnabled
+  }
+
   const sessionVariantPatch: Record<string, unknown> = {}
   if (body.sessionVariant && typeof body.sessionVariant === 'object') {
     const sv = body.sessionVariant
@@ -293,6 +311,7 @@ export async function PATCH(
   const hasUI = Object.keys(uiPatch).length > 0
   const hasSessionVariant = Object.keys(sessionVariantPatch).length > 0
   const hasOrderMode = orderModePatch !== null
+  const hasSessionFlags = Object.keys(sessionFlagsPatch).length > 0
 
   /** Live snake/linear drafts: never accept structural/config/order/sessionVariant mutations from settings PATCH while actively drafting (in_progress). Allow changes when paused. Room modal only sends UI prefs. */
   const draftSessionRow = await prisma.draftSession.findUnique({
@@ -320,7 +339,7 @@ export async function PATCH(
     Object.prototype.hasOwnProperty.call(uiPatch, 'orphanTeamAiManagerEnabled') ||
     Object.prototype.hasOwnProperty.call(uiPatch, 'orphanDrafterMode')
 
-  if (!hasConfig && !hasUI && !hasSessionVariant && !hasOrderMode) {
+  if (!hasConfig && !hasUI && !hasSessionVariant && !hasOrderMode && !hasSessionFlags) {
     const current = await getDraftVariantSettings(leagueId)
     return NextResponse.json({
       ok: true,
@@ -393,6 +412,7 @@ export async function PATCH(
       ...(hasConfig ? { config: configPatch as any } : {}),
       ...(hasUI ? { draftUISettings: uiPatch as any } : {}),
       ...(hasSessionVariant ? { sessionVariant: sessionVariantPatch as any } : {}),
+      ...(hasSessionFlags ? { sessionFlags: sessionFlagsPatch as any } : {}),
     })
     if (orphanManagerSettingTouched) {
       const orphanModeChanged = current.draftUISettings.orphanDrafterMode !== updated.draftUISettings.orphanDrafterMode
@@ -441,6 +461,13 @@ export async function PATCH(
       teams: teamsForResponse,
     })
   } catch (e) {
+    const code = (e as Error & { code?: string })?.code
+    if (code === 'THIRD_ROUND_REVERSAL_LOCKED') {
+      return NextResponse.json(
+        { error: (e as Error).message, code },
+        { status: 409 },
+      )
+    }
     console.error('[draft/settings PATCH]', e)
     return NextResponse.json({ error: (e as Error).message ?? 'Failed to update settings' }, { status: 500 })
   }

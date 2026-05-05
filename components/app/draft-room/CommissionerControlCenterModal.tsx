@@ -20,6 +20,7 @@ import {
 import type { DraftUISettings, TimerMode } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { DEFAULT_TRADE_RULES } from '@/lib/commissioner-ai-draft-manager/types'
 import { DraftImportFlow } from './DraftImportFlow'
+import { DraftSettingsModal } from './DraftSettingsModal'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
@@ -126,6 +127,7 @@ export function CommissionerControlCenterModal({
   >({})
   const [transitionLoading, setTransitionLoading] = useState(false)
   const [transitionMessage, setTransitionMessage] = useState<string | null>(null)
+  const [showDraftSettings, setShowDraftSettings] = useState(false)
 
   useEffect(() => {
     if (commissionerAiDraft?.tradeRules) {
@@ -340,16 +342,29 @@ export function CommissionerControlCenterModal({
           <Settings className="h-5 w-5 text-cyan-400" />
           <h2 className="text-base font-semibold text-white">Commissioner control center</h2>
         </div>
-        <button
-          type="button"
-          onClick={onClose}
-          data-testid="draft-commissioner-close"
-          className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
-          aria-label="Close"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowDraftSettings(true)}
+            data-testid="draft-commissioner-open-draft-settings"
+            className="rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
+          >
+            Draft Settings
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            data-testid="draft-commissioner-close"
+            className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
+            aria-label="Close"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        </div>
       </div>
+      {showDraftSettings ? (
+        <DraftSettingsModal leagueId={leagueId} onClose={() => setShowDraftSettings(false)} />
+      ) : null}
 
       <div className="flex-1 overflow-auto p-4 space-y-6">
         {actionApiError ? (

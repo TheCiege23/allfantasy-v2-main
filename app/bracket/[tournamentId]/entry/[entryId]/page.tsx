@@ -79,20 +79,21 @@ export default async function EntryBracketPage({
   })
 
   return (
-    <div className="mode-surface mode-readable min-h-screen pb-20">
+    <div className="mode-surface mode-readable min-h-screen max-lg:pb-40 pb-24 lg:pb-20">
       <BracketShell>
         <div className="space-y-4">
-          <div className="flex items-center gap-3">
+          <div className="flex min-w-0 items-start gap-2 sm:items-center sm:gap-3">
             <Link
               href={`/brackets/leagues/${entry.leagueId}`}
-              className="inline-flex items-center justify-center w-8 h-8 rounded-full transition"
+              className="mt-0.5 inline-flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-full transition sm:mt-0"
               style={{ background: "color-mix(in srgb, var(--panel2) 88%, transparent)", color: "var(--muted)" }}
               data-testid="bracket-entry-back-button"
+              aria-label="Back to pool"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="h-4 w-4" />
             </Link>
-            <div className="flex flex-col gap-1">
-              <h1 className="text-lg font-bold leading-tight">
+            <div className="min-w-0 flex flex-1 flex-col gap-1">
+              <h1 className="text-base font-bold leading-tight sm:text-lg">
                 {entry.name || "My Bracket"}
               </h1>
               <div className="inline-flex items-center gap-1.5 text-[11px] w-fit rounded-full px-2 py-0.5" style={{ background: "rgba(56,189,248,0.12)", color: "rgba(186,230,253,0.95)" }}>

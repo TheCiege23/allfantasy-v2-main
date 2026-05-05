@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import type { ReactNode } from "react"
+import ProductShellLayout from "@/components/navigation/ProductShellLayout"
 import { buildMetadata, getSEOPageConfig } from "@/lib/seo"
 
 export const metadata: Metadata = buildMetadata(
@@ -12,5 +13,5 @@ export const metadata: Metadata = buildMetadata(
 )
 
 export default function TradeEvaluatorLayout({ children }: { children: ReactNode }) {
-  return <>{children}</>
+  return <ProductShellLayout>{children}</ProductShellLayout>
 }

@@ -91,6 +91,8 @@ export type DraftTopBarProps = {
   onlineCount?: number
   /** `redraft_snake` — show format chips and slightly stronger header chrome (snake redraft live URL). */
   draftRoomPresentation?: 'default' | 'redraft_snake'
+  /** Slice 2 — surface "3RR ON" badge in header meta line when commissioner enabled Third Round Reversal. */
+  thirdRoundReversal?: boolean
 }
 
 const TIMER_COLORS = {
@@ -187,6 +189,7 @@ export function DraftTopBar({
   onToggleAutoPick,
   timerPauseReason = null,
   overnightResumeAtIso = null,
+  thirdRoundReversal = false,
 }: DraftTopBarProps) {
   const { t } = useLanguage()
   const liveRemaining = useDraftCountdownSeconds(
@@ -460,6 +463,18 @@ export function DraftTopBar({
                 <span className="text-white/55">{sport}</span>
                 <span className="text-white/24">·</span>
                 <span>{draftTypeLabel}</span>
+                {thirdRoundReversal ? (
+                  <>
+                    <span className="text-white/24">·</span>
+                    <span
+                      data-testid="draft-topbar-third-round-reversal-badge"
+                      title="Third Round Reversal: rounds 2 and 3 go in the same direction."
+                      className="inline-flex items-center rounded-md border border-cyan-300/35 bg-cyan-500/14 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100"
+                    >
+                      3RR On
+                    </span>
+                  </>
+                ) : null}
                 <span className="text-white/24">·</span>
                 <button
                   type="button"

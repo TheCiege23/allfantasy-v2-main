@@ -149,7 +149,7 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
         aria-hidden
       />
 
-      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-36 pt-6 lg:pt-10">
+      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-44 pt-6 lg:pb-36 lg:pt-10">
         <div className="mb-8 max-w-3xl">
           <p
             className={`mb-1.5 text-[11px] font-bold uppercase tracking-[0.22em] ${sportHue.labelClass} transition-colors duration-500`}
@@ -185,7 +185,7 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
         </div>
       </main>
 
-      <div className="fixed bottom-0 left-0 right-0 z-20 border-t border-cyan-500/10 bg-[#060a18]/92 px-4 py-4 backdrop-blur-2xl shadow-[0_-8px_30px_-10px_rgba(0,0,0,0.6)]">
+      <div className="fixed left-0 right-0 z-30 border-t border-cyan-500/10 bg-[#060a18]/92 px-4 py-3 shadow-[0_-8px_30px_-10px_rgba(0,0,0,0.6)] backdrop-blur-2xl [bottom:calc(5rem+env(safe-area-inset-bottom,0px))] lg:bottom-0 lg:z-20 lg:py-4">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <SecondaryButton onClick={() => router.push('/dashboard')} disabled={submitting}>
             {t('createLeague.v2.cancel')}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Bot, LayoutGrid, Menu, MessageSquare, X } from 'lucide-react'
+import { Bot, LayoutGrid, X } from 'lucide-react'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 import AppShell from '@/app/components/AppShell'
@@ -39,6 +39,36 @@ function toRecord(value: unknown): Record<string, unknown> | null {
 
 function toStringValue(value: unknown, fallback = ''): string {
   return typeof value === 'string' ? value : fallback
+}
+
+/** Primary keys in API payloads are usually strings; coerce so mapping never drops leagues. */
+function toCoercedIdString(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  if (typeof value === 'bigint') return String(value)
+  return ''
+}
+
+function readSessionDeletedLeagueIds(): Set<string> {
+  if (typeof window === 'undefined') return new Set()
+  try {
+    const raw = sessionStorage.getItem('af_dashboard_deleted_leagues')
+    if (!raw) return new Set()
+    const parsed = JSON.parse(raw) as unknown
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === 'string') : [],
+    )
+  } catch {
+    return new Set()
+  }
+}
+
+function mapPayloadLeagues(rawList: unknown, tombstones: Set<string>): DashboardConnectedLeague[] {
+  if (!Array.isArray(rawList)) return []
+  return rawList
+    .map((league) => mapLeague(league))
+    .filter((league): league is DashboardConnectedLeague => Boolean(league))
+    .filter((league) => !tombstones.has(league.id))
 }
 
 function toNumberValue(value: unknown, fallback = 0): number {
@@ -184,10 +214,10 @@ function mapLeague(rawValue: unknown): DashboardConnectedLeague | null {
   const raw = toRecord(rawValue)
   if (!raw) return null
 
-  const sourceLeagueId = toStringValue(raw.id)
+  const sourceLeagueId = toCoercedIdString(raw.id)
   const selectedLeagueId =
-    toStringValue(raw.navigationLeagueId) ||
-    toStringValue(raw.unifiedLeagueId) ||
+    toCoercedIdString(raw.navigationLeagueId) ||
+    toCoercedIdString(raw.unifiedLeagueId) ||
     sourceLeagueId
 
   if (!selectedLeagueId) return null
@@ -195,7 +225,7 @@ function mapLeague(rawValue: unknown): DashboardConnectedLeague | null {
   const sport =
     normalizeToSupportedSport(toStringValue(raw.sport) || toStringValue(raw.sport_type)) ?? DEFAULT_SPORT
   const platform = toStringValue(raw.platform, 'allfantasy')
-  const platformLeagueId = toStringValue(raw.platformLeagueId) || null
+  const platformLeagueId = toCoercedIdString(raw.platformLeagueId) || null
 
   const settings = toRecord(raw.settings) ?? undefined
   const currentWeek = weekFromSettings(raw.settings)
@@ -311,18 +341,7 @@ export function DashboardShell({
    * can't resurrect a just-deleted league on `router.refresh()` or a polling fetch.
    * Persisted in sessionStorage so a hard reload within the same tab still blocks it.
    */
-  const [deletedLeagueIds, setDeletedLeagueIds] = useState<Set<string>>(() => {
-    if (typeof window === 'undefined') return new Set()
-    try {
-      const raw = sessionStorage.getItem('af_dashboard_deleted_leagues')
-      if (!raw) return new Set()
-      const parsed = JSON.parse(raw) as unknown
-      if (!Array.isArray(parsed)) return new Set()
-      return new Set(parsed.filter((id): id is string => typeof id === 'string'))
-    } catch {
-      return new Set()
-    }
-  })
+  const [deletedLeagueIds, setDeletedLeagueIds] = useState<Set<string>>(readSessionDeletedLeagueIds)
   const persistTombstones = useCallback((next: Set<string>) => {
     if (typeof window === 'undefined') return
     try {
@@ -412,6 +431,13 @@ export function DashboardShell({
     [deletedLeagueIds],
   )
 
+  /** Keep My Leagues in sync when RSC refreshes (router.refresh) or tombstones change — useState only runs once. */
+  useEffect(() => {
+    if (initialLeagueList == null) return
+    setLeagues(mapPayloadLeagues(initialLeagueList.leagues, deletedLeagueIds))
+    setLeaguesLoading(false)
+  }, [initialLeagueList, deletedLeagueIds])
+
   useEffect(() => {
     if (initialLeagueList != null) return
     let active = true
@@ -481,6 +507,7 @@ export function DashboardShell({
 
   return (
     <AppShell
+      rootClassName="h-[calc(100dvh-8.5rem)] min-h-0 lg:h-[calc(100dvh-3.5rem)]"
       rootProps={{ 'data-dashboard-user-id': userId }}
       rightRailCollapsed={myLeaguesRail.collapsed}
       onRightRailExpand={() => myLeaguesRail.setCollapsed(false)}
@@ -532,15 +559,15 @@ export function DashboardShell({
           </div>
         ) : null}
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="border-b border-[var(--border)] px-4 py-3 md:hidden" style={{ background: 'var(--panel)' }}>
+          <div className="border-b border-[var(--border)] px-3 py-3 md:hidden" style={{ background: 'var(--panel)' }}>
             <div className="flex items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setMobileLeftOpen(true)}
-                className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white"
+                className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white active:bg-white/[0.08]"
                 aria-label={t('dashboard.shell.openChat')}
               >
-                <Menu className="h-5 w-5" />
+                <Bot className="h-5 w-5" aria-hidden />
               </button>
               <div className="min-w-0 flex-1 text-center">
                 <p className="truncate text-sm font-semibold text-white/85">
@@ -553,10 +580,10 @@ export function DashboardShell({
                 <button
                   type="button"
                   onClick={() => setMobileRightOpen(true)}
-                  className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white"
-                  aria-label={t('dashboard.shell.openAfChat')}
+                  className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white active:bg-white/[0.08]"
+                  aria-label={t('dashboard.shell.openMyLeagues')}
                 >
-                  <MessageSquare className="h-5 w-5" />
+                  <LayoutGrid className="h-5 w-5" aria-hidden />
                 </button>
               </div>
             </div>
@@ -599,36 +626,31 @@ export function DashboardShell({
         </div>
         </div>
 
-      <button
-        type="button"
-        onClick={() => setMobileLeftOpen(true)}
-        className="fixed bottom-4 left-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/[0.08] text-white shadow-[0_10px_30px_rgba(0,0,0,0.35)] md:hidden"
-        aria-label={t('dashboard.shell.openChat')}
-      >
-        <LayoutGrid className="h-5 w-5" />
-      </button>
-
-      <button
-        type="button"
-        onClick={() => setMobileRightOpen(true)}
-        className="fixed bottom-4 right-4 z-40 inline-flex h-12 w-12 items-center justify-center rounded-full bg-cyan-500 text-black shadow-[0_10px_30px_rgba(6,182,212,0.35)] md:hidden"
-        aria-label={t('dashboard.shell.openAfChat')}
-      >
-        <Bot className="h-5 w-5" />
-      </button>
-
       {mobileLeftOpen ? (
-        <div className="fixed inset-0 z-50 bg-black/60 md:hidden">
-          <div className="absolute inset-x-0 bottom-0 flex h-[80vh] flex-col overflow-hidden rounded-t-[24px] border-t border-white/[0.07] bg-[#0a0a1f]">
+        <div
+          className="fixed inset-0 z-50 bg-black/60 md:hidden"
+          role="presentation"
+          onClick={() => setMobileLeftOpen(false)}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 flex max-h-[85dvh] min-h-[50dvh] flex-col overflow-hidden rounded-t-[24px] border-t border-white/[0.07] bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)]"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('dashboard.shell.chat')}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-2">
+              <span className="h-1 w-10 shrink-0 rounded-full bg-white/20" aria-hidden />
+            </div>
             <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
               <p className="text-[10px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.shell.chat')}</p>
               <button
                 type="button"
                 onClick={() => setMobileLeftOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white"
+                className="touch-manipulation inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white"
                 aria-label={t('dashboard.shell.closeChat')}
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">
@@ -650,17 +672,30 @@ export function DashboardShell({
       ) : null}
 
       {mobileRightOpen ? (
-        <div className="fixed inset-0 z-50 bg-black/60 md:hidden">
-          <div className="absolute inset-x-0 bottom-0 flex h-[85vh] flex-col overflow-hidden rounded-t-[24px] border-t border-white/[0.07] bg-[#0a0a1f]">
+        <div
+          className="fixed inset-0 z-50 bg-black/60 md:hidden"
+          role="presentation"
+          onClick={() => setMobileRightOpen(false)}
+        >
+          <div
+            className="absolute inset-x-0 bottom-0 flex max-h-[90dvh] min-h-[50dvh] flex-col overflow-hidden rounded-t-[24px] border-t border-white/[0.07] bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)]"
+            role="dialog"
+            aria-modal="true"
+            aria-label={t('dashboard.right.myLeagues')}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex justify-center pt-2">
+              <span className="h-1 w-10 shrink-0 rounded-full bg-white/20" aria-hidden />
+            </div>
             <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
-              <p className="text-[10px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.shell.afChatLeagues')}</p>
+              <p className="text-[10px] uppercase tracking-[0.08em] text-white/30">{t('dashboard.right.myLeagues')}</p>
               <button
                 type="button"
                 onClick={() => setMobileRightOpen(false)}
-                className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white"
+                className="touch-manipulation inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white"
                 aria-label={t('dashboard.shell.closePanel')}
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
             <div className="min-h-0 flex-1 overflow-hidden">

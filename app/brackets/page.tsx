@@ -157,48 +157,48 @@ export default async function BracketsHomePage() {
             </div>
           ) : (
             <div className="space-y-4 mb-6">
-              <div className="flex gap-3">
+              <div className="grid grid-cols-2 gap-2.5 sm:gap-3 md:grid-cols-3 xl:grid-cols-5">
                 <Link
                   href="/brackets/leagues/new"
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold text-white transition-all"
+                  className="flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-center text-xs font-semibold text-white transition-all sm:text-sm"
                   style={{ background: '#3b82f6', boxShadow: '0 4px 14px rgba(59,130,246,0.25)' }}
                   data-testid="bracket-create-pool-button"
                 >
-                  <Plus className="w-4 h-4" />
-                  Create Pool
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span className="leading-tight">Create Pool</span>
                 </Link>
                 <Link
                   href="/brackets/join"
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold border transition-all"
+                  className="flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold transition-all sm:text-sm"
                   style={{ borderColor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.7)' }}
                   data-testid="bracket-join-pool-button"
                 >
-                  <Users className="w-4 h-4" />
-                  Join Pool
+                  <Users className="h-4 w-4 shrink-0" />
+                  <span className="leading-tight">Join Pool</span>
                 </Link>
                 <Link
                   href="/brackets/world-cup"
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold border transition-all"
+                  className="flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold transition-all sm:text-sm"
                   style={{ borderColor: 'rgba(103,232,249,0.35)', color: 'rgba(207,250,254,0.95)', background: 'rgba(8,145,178,0.12)' }}
                   data-testid="world-cup-bracket-card"
                 >
-                  <Globe2 className="w-4 h-4" />
-                  World Cup
+                  <Globe2 className="h-4 w-4 shrink-0" />
+                  <span className="leading-tight">World Cup</span>
                 </Link>
                 <Link
                   href="/brackets/discover"
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold border transition-all"
+                  className="flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold transition-all sm:text-sm"
                   style={{ borderColor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.7)' }}
                   data-testid="bracket-discover-link"
                 >
-                  Discover leagues
+                  <span className="leading-tight">Discover leagues</span>
                 </Link>
                 <Link
                   href="/creators"
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold border transition-all"
+                  className="col-span-2 flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-xl border px-3 py-2.5 text-center text-xs font-semibold transition-all sm:text-sm md:col-span-1"
                   style={{ borderColor: 'rgba(255,255,255,0.15)', color: 'rgba(255,255,255,0.7)' }}
                 >
-                  Creator leagues
+                  <span className="leading-tight">Creator leagues</span>
                 </Link>
               </div>
 

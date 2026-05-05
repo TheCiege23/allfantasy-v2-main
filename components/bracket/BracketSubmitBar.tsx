@@ -142,7 +142,10 @@ export function BracketSubmitBar({
   }
 
   return (
-    <div className="fixed inset-x-0 bottom-3 z-30 flex justify-center pointer-events-none" data-testid="bracket-submit-bar">
+    <div
+      className="fixed inset-x-0 z-[45] flex justify-center pointer-events-none max-lg:bottom-[calc(5rem+env(safe-area-inset-bottom))] lg:bottom-6"
+      data-testid="bracket-submit-bar"
+    >
       <div className="pointer-events-auto w-full max-w-5xl px-3 sm:px-4">
         <div
           className="rounded-2xl border shadow-lg shadow-black/40 px-3.5 py-2.5 sm:px-4 sm:py-3 flex items-center gap-3 sm:gap-4 bg-[#020617]/95"
@@ -248,7 +251,7 @@ export function BracketSubmitBar({
               type="button"
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[11px] font-semibold shadow-sm disabled:opacity-50"
+              className="inline-flex min-h-[44px] shrink-0 touch-manipulation items-center gap-1.5 rounded-full px-4 py-2 text-[11px] font-semibold shadow-sm disabled:opacity-50 sm:min-h-0 sm:px-3.5 sm:py-1.5"
               style={{
                 background: canSubmit
                   ? "linear-gradient(to right, #f97316, #fb923c)"

@@ -4808,6 +4808,7 @@ export function DraftRoomPageClient({
             onlineCount={onlineCount > 0 ? onlineCount : undefined}
             draftRoomPresentation={presentationVariant}
             onToggleAutoPick={handleToggleAutoPick}
+            thirdRoundReversal={Boolean(session.thirdRoundReversal)}
           />
         </>
       }

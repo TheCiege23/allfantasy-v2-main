@@ -129,7 +129,12 @@ export default function LandingHero() {
         {SUPPORTED_SPORTS.map((sport) => (
           <span
             key={sport}
-            className="rounded-full border border-white/10 bg-white/5 px-3 py-0.5 text-xs font-medium text-white/70"
+            className="rounded-full border px-3 py-0.5 text-xs font-medium"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--border) 100%, transparent)',
+              background: 'color-mix(in srgb, var(--panel2) 78%, transparent)',
+              color: 'var(--muted)',
+            }}
           >
             {SPORT_LABELS[sport] ?? sport}
           </span>

@@ -9,7 +9,11 @@ export default function MessagesPage() {
   const isAuthenticated = status === "authenticated"
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 space-y-5 mode-readable">
+    <main
+      className={`mx-auto w-full max-w-6xl space-y-5 px-4 py-6 sm:px-6 mode-readable ${
+        isAuthenticated ? "pb-24 lg:pb-6" : ""
+      }`}
+    >
       <section className="mode-panel rounded-2xl p-5">
         <h1 className="text-2xl font-semibold mode-text">Messages</h1>
         <p className="mt-1 text-sm mode-muted">

@@ -36,6 +36,17 @@ export interface AuctionVariantSettings {
   minBidIncrement: number
 }
 
+/** Slice 1 — typed draft session flags. 3RR reuses the existing column; soft timer is derived from draftUISettings.timerMode. */
+export type OnClockTradeTimerBehavior = 'inherit_remaining' | 'reset_timer'
+export interface DraftSessionFlags {
+  thirdRoundReversal: boolean
+  /** Derived: true when draftUISettings.timerMode === 'soft_pause'. */
+  softTimerEnabled: boolean
+  onClockTradeTimerBehavior: OnClockTradeTimerBehavior
+  inDraftPlayerTradesEnabled: boolean
+  customRankingsEnabled: boolean
+}
+
 /** Variant-specific settings stored on DraftSession (pre_draft only). */
 export interface SessionVariantSettings {
   keeperConfig?: KeeperVariantSettings | null
@@ -55,6 +66,10 @@ export interface DraftVariantSettings {
   sessionVariant?: SessionVariantSettings | null
   /** True when session exists and status is pre_draft (variant fields editable). */
   sessionPreDraft?: boolean
+  /** Slice 1 — typed flags from DraftSession (always present when session exists). */
+  sessionFlags?: DraftSessionFlags | null
+  /** Current draft session status when present (used by UI to lock 3RR + other pre-draft fields). */
+  sessionStatus?: string | null
 }
 
 const DEFAULT_AUCTION_BUDGET = 200
@@ -105,6 +120,10 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
         devyConfig: true,
         c2cConfig: true,
         auctionBudgetPerTeam: true,
+        thirdRoundReversal: true,
+        onClockTradeTimerBehavior: true,
+        inDraftPlayerTradesEnabled: true,
+        customRankingsEnabled: true,
       },
     }),
   ])
@@ -112,9 +131,21 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
   const leagueSize = league?.leagueSize ?? 12
   let sessionVariant: SessionVariantSettings | null = null
   let sessionPreDraft = false
+  let sessionFlags: DraftSessionFlags | null = null
+  let sessionStatus: string | null = null
 
   if (session) {
     sessionPreDraft = session.status === 'pre_draft'
+    sessionStatus = session.status
+    const onClockBehavior =
+      session.onClockTradeTimerBehavior === 'reset_timer' ? 'reset_timer' : 'inherit_remaining'
+    sessionFlags = {
+      thirdRoundReversal: Boolean(session.thirdRoundReversal),
+      softTimerEnabled: draftUISettings.timerMode === 'soft_pause',
+      onClockTradeTimerBehavior: onClockBehavior,
+      inDraftPlayerTradesEnabled: session.inDraftPlayerTradesEnabled !== false,
+      customRankingsEnabled: session.customRankingsEnabled !== false,
+    }
     const rawKeeper = session.keeperConfig as { maxKeepers?: number; deadline?: string | null; maxKeepersPerPosition?: Record<string, number> } | null
     const rawDevy = session.devyConfig as { enabled?: boolean; devyRounds?: number[] } | null
     const rawC2c = session.c2cConfig as { enabled?: boolean; collegeRounds?: number[] } | null
@@ -144,7 +175,63 @@ export async function getDraftVariantSettings(leagueId: string): Promise<DraftVa
     leagueSize,
     sessionVariant: sessionVariant ?? undefined,
     sessionPreDraft,
+    sessionFlags,
+    sessionStatus,
   }
+}
+
+/**
+ * Slice 1 — Update typed DraftSession flag columns (3 new + reuses existing 3RR).
+ * 3RR change is rejected when status !== 'pre_draft' (the lock window).
+ * Caller is responsible for commissioner authz.
+ */
+export async function updateDraftSessionFlags(
+  leagueId: string,
+  patch: Partial<DraftSessionFlags>,
+): Promise<{ ok: true } | { ok: false; code: 'NO_SESSION' | 'THIRD_ROUND_REVERSAL_LOCKED'; error: string }> {
+  const session = await prisma.draftSession.findUnique({
+    where: { leagueId },
+    select: { id: true, status: true },
+  })
+  if (!session) return { ok: false, code: 'NO_SESSION', error: 'No draft session for league' }
+
+  const data: Record<string, unknown> = {}
+
+  if (patch.thirdRoundReversal !== undefined) {
+    if (session.status !== 'pre_draft') {
+      return {
+        ok: false,
+        code: 'THIRD_ROUND_REVERSAL_LOCKED',
+        error: 'Third Round Reversal can only be changed before the draft starts.',
+      }
+    }
+    data.thirdRoundReversal = Boolean(patch.thirdRoundReversal)
+  }
+
+  if (patch.onClockTradeTimerBehavior !== undefined) {
+    const behavior =
+      patch.onClockTradeTimerBehavior === 'reset_timer' ? 'reset_timer' : 'inherit_remaining'
+    data.onClockTradeTimerBehavior = behavior
+  }
+
+  if (patch.inDraftPlayerTradesEnabled !== undefined) {
+    data.inDraftPlayerTradesEnabled = Boolean(patch.inDraftPlayerTradesEnabled)
+  }
+
+  if (patch.customRankingsEnabled !== undefined) {
+    data.customRankingsEnabled = Boolean(patch.customRankingsEnabled)
+  }
+
+  if (Object.keys(data).length === 0) return { ok: true }
+
+  data.version = { increment: 1 }
+  data.updatedAt = new Date()
+
+  await prisma.draftSession.update({
+    where: { id: session.id },
+    data: data as any,
+  })
+  return { ok: true }
 }
 
 /**
@@ -265,7 +352,11 @@ async function syncConfigToSession(leagueId: string, config: Partial<DraftRoomCo
 }
 
 /**
- * Update full draft variant settings (config + UI + session variant). Commissioner-only enforced by caller.
+ * Update full draft variant settings (config + UI + session variant + Slice 1 typed flags).
+ * Commissioner-only enforced by caller.
+ *
+ * Slice 1 lock: when status !== 'pre_draft', any 3RR change is rejected with code
+ * THIRD_ROUND_REVERSAL_LOCKED. The other typed flags are editable mid-draft.
  */
 export async function updateDraftVariantSettings(
   leagueId: string,
@@ -273,8 +364,32 @@ export async function updateDraftVariantSettings(
     config?: Partial<DraftRoomConfig>
     draftUISettings?: Partial<DraftUISettings>
     sessionVariant?: Partial<SessionVariantSettings>
+    sessionFlags?: Partial<DraftSessionFlags>
   }
 ): Promise<DraftVariantSettings> {
+  if (patch.sessionFlags && Object.keys(patch.sessionFlags).length > 0) {
+    const result = await updateDraftSessionFlags(leagueId, patch.sessionFlags)
+    if (!result.ok) {
+      const err = new Error(result.error) as Error & { code?: string }
+      err.code = result.code
+      throw err
+    }
+  }
+  // Honor the 3RR pre-draft-only lock when 3RR is being patched via config.third_round_reversal too.
+  if (
+    patch.config &&
+    Object.prototype.hasOwnProperty.call(patch.config, 'third_round_reversal')
+  ) {
+    const session = await prisma.draftSession.findUnique({
+      where: { leagueId },
+      select: { status: true },
+    })
+    if (session && session.status !== 'pre_draft') {
+      const err = new Error('Third Round Reversal can only be changed before the draft starts.') as Error & { code?: string }
+      err.code = 'THIRD_ROUND_REVERSAL_LOCKED'
+      throw err
+    }
+  }
   if (patch.config && Object.keys(patch.config).length > 0) {
     await updateDraftConfigForLeague(leagueId, patch.config)
     await syncConfigToSession(leagueId, patch.config)

@@ -563,6 +563,14 @@ export async function buildSessionSnapshot(
     rounds: session.rounds,
     teamCount: session.teamCount,
     thirdRoundReversal: session.thirdRoundReversal,
+    onClockTradeTimerBehavior:
+      (session as { onClockTradeTimerBehavior?: string }).onClockTradeTimerBehavior === 'reset_timer'
+        ? 'reset_timer'
+        : 'inherit_remaining',
+    inDraftPlayerTradesEnabled:
+      (session as { inDraftPlayerTradesEnabled?: boolean }).inDraftPlayerTradesEnabled !== false,
+    customRankingsEnabled:
+      (session as { customRankingsEnabled?: boolean }).customRankingsEnabled !== false,
     timerSeconds: session.timerSeconds,
     timerEndAt: session.timerEndAt?.toISOString() ?? null,
     pausedRemainingSeconds: session.pausedRemainingSeconds,

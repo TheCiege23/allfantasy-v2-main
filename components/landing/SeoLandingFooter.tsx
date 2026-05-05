@@ -26,22 +26,34 @@ export default function SeoLandingFooter() {
           <span>© {new Date().getFullYear()} AllFantasy.ai. All rights reserved.</span>
         </Link>
         <nav className="flex flex-wrap items-center gap-x-6 gap-y-2" aria-label="Footer navigation">
-          <Link href="/privacy" className="text-sm text-white/55 transition-colors hover:text-white">
+          <Link
+            href="/privacy"
+            className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+          >
             Privacy
           </Link>
-          <Link href="/terms" className="text-sm text-white/55 transition-colors hover:text-white">
+          <Link
+            href="/terms"
+            className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+          >
             Terms
           </Link>
-          <Link href="/data-deletion" className="text-sm text-white/55 transition-colors hover:text-white">
+          <Link
+            href="/data-deletion"
+            className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+          >
             {t('landing.footer.dataDeletion')}
           </Link>
           <Link
             href={loginUrlWithIntent('/dashboard')}
-            className="text-sm text-white/55 transition-colors hover:text-white"
+            className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
           >
             {t('common.signIn')}
           </Link>
-          <Link href="/admin" className="text-sm text-white/55 transition-colors hover:text-white">
+          <Link
+            href="/admin"
+            className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+          >
             Admin
           </Link>
         </nav>

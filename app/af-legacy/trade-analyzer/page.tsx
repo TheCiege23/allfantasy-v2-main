@@ -1391,7 +1391,7 @@ export default function LegacyTradeAnalyzerPage() {
         <div className="absolute top-1/3 right-1/4 h-96 w-96 rounded-full bg-purple-500/15 blur-3xl" />
       </div>
 
-      <div className="relative container mx-auto px-4 py-6 sm:py-8">
+      <div className="relative container mx-auto px-4 py-6 pb-24 sm:py-8 lg:pb-8">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
           <Link
             href="/af-legacy?tab=trade"
@@ -1451,7 +1451,7 @@ export default function LegacyTradeAnalyzerPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 mb-4">
+            <div className="mb-4 grid grid-cols-1 gap-2 min-[380px]:grid-cols-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-4">
               {TRADE_GOAL_PRESETS.map((goal) => (
                 <button
                   key={goal.id}
@@ -1531,8 +1531,8 @@ export default function LegacyTradeAnalyzerPage() {
                 <div className="w-6 h-6 rounded-full bg-cyan-500/20 flex items-center justify-center text-xs font-bold text-cyan-300">1</div>
                 <div className="text-sm font-semibold text-white">Enter Your Sleeper Username</div>
               </div>
-              <div className="flex gap-2">
-                <div className="flex-1">
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="min-w-0 flex-1">
                   <Input
                     value={sleeperA}
                     onChange={(v) => {
@@ -1550,7 +1550,7 @@ export default function LegacyTradeAnalyzerPage() {
                 <button
                   onClick={() => fetchUserLeagues(sleeperA)}
                   disabled={!sleeperA.trim() || loadingLeagues}
-                  className="px-4 py-3 rounded-2xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-400/25 text-cyan-200 transition font-medium text-sm disabled:opacity-50"
+                  className="touch-manipulation rounded-2xl border border-cyan-400/25 bg-cyan-500/15 px-4 py-3 text-sm font-medium text-cyan-200 transition hover:bg-cyan-500/25 disabled:opacity-50 min-h-[48px] sm:min-h-0 sm:shrink-0"
                 >
                   {loadingLeagues ? 'Loading...' : 'Load Leagues'}
                 </button>

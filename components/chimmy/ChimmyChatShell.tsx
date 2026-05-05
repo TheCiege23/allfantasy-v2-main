@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useLayoutEffect, useCallback, useMe
 import Link from 'next/link'
 import { Send, Image as ImageIcon, Loader2, X, RefreshCw, Volume2, History, Save } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 import { type ChimmyVoicePreset } from '@/lib/chimmy-interface'
 import {
   getAIThreadStorageKey,
@@ -987,11 +988,15 @@ export default function ChimmyChatShell({
 
   return (
     <div
-      className={`flex flex-col rounded-2xl border border-white/10 bg-black/30 overflow-hidden touch-scroll ${compact ? 'min-h-[400px]' : 'h-fill-dynamic min-h-[420px]'} ${className}`}
+      className={cn(
+        'touch-scroll flex flex-col overflow-hidden rounded-2xl border border-white/10 bg-black/30',
+        compact ? 'min-h-[400px]' : 'h-fill-dynamic min-h-[420px]',
+        className,
+      )}
       data-testid="chimmy-chat-shell"
     >
-      <header className="flex items-center justify-between gap-3 p-3 sm:p-4 border-b border-white/10 bg-white/[0.03]">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+      <header className="flex flex-shrink-0 flex-wrap items-center justify-between gap-2 border-b border-white/10 bg-white/[0.03] p-3 sm:gap-3 sm:p-4">
+        <div className="flex min-w-0 flex-1 basis-[min(100%,280px)] items-center gap-2 sm:gap-3">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/20 to-purple-500/20 border border-white/10 flex items-center justify-center text-lg shrink-0">
             *
           </div>
@@ -1013,7 +1018,7 @@ export default function ChimmyChatShell({
             </button>
           )}
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="-mx-1 flex max-w-full shrink-0 items-center gap-1 overflow-x-auto px-1 scrollbar-none sm:gap-2">
           {/* Save conversation button */}
           <button
             onClick={() => setShowSaveDialog(true)}
@@ -1062,7 +1067,7 @@ export default function ChimmyChatShell({
         </div>
       </header>
 
-      <div className="flex flex-wrap items-end gap-2 px-3 py-2 border-b border-white/10 bg-[#0a1228]/90">
+      <div className="flex flex-shrink-0 flex-wrap items-end gap-2 border-b border-white/10 bg-[#0a1228]/90 px-3 py-2">
         <ChimmyAssistantModeSelector
           enabled={chimmyFeatureFlags.assistantModes}
           value={assistantMode}
@@ -1134,7 +1139,7 @@ export default function ChimmyChatShell({
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
         <InContextMonetizationCard
           title="Chimmy message access"
           featureId="ai_chat"
@@ -1186,7 +1191,7 @@ export default function ChimmyChatShell({
         />
       </div>
 
-      <div className="p-3 sm:p-4 border-t border-white/10 bg-white/[0.03] space-y-2">
+      <div className="flex-shrink-0 space-y-2 border-t border-white/10 bg-white/[0.03] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
         {isTyping && (
           <p className="text-[11px] text-white/55" data-testid="chimmy-loading-state">
             Chimmy is preparing a response...

@@ -13,7 +13,10 @@ import { getHomeInitialSession } from '@/lib/landing/get-home-initial-session'
 const LandingPageClient = dynamic(() => import('@/components/landing/LandingPageClient'), {
   ssr: false,
   loading: () => (
-    <div className="flex min-h-[40vh] items-center justify-center bg-[#110b1e] text-sm text-white/50">
+    <div
+      className="mode-readable flex min-h-[40vh] items-center justify-center text-sm"
+      style={{ background: 'var(--bg)', color: 'var(--muted)' }}
+    >
       Loading…
     </div>
   ),

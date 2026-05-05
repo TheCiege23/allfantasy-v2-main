@@ -600,7 +600,7 @@ function LeagueGate({
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-6">
+      <div className="mx-auto max-w-5xl px-4 pb-24 pt-10 sm:px-6 lg:pb-10">
         {loading ? (
           <div className="grid gap-4 md:grid-cols-2">
             {[1, 2, 3, 4].map((item) => (
@@ -1446,9 +1446,9 @@ export default function WaiverAIPage() {
         <LeagueGate leagues={leagues} loading={leagueLoading} error={leagueError} onSelect={setSelectedLeague} />
       ) : (
         <div className="min-h-screen bg-[#07071a] text-white">
-          <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl sticky top-0 z-20">
-            <div className="mx-auto max-w-[1480px] px-4 py-4 sm:px-6">
-              <div className="flex flex-wrap items-center gap-3">
+          <div className="sticky top-0 z-20 border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl pt-[max(0.25rem,env(safe-area-inset-top))]">
+            <div className="mx-auto max-w-[1480px] px-4 py-3 sm:px-6 sm:py-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="rounded-full border border-green-500/20 bg-green-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-green-300">
@@ -1480,18 +1480,18 @@ export default function WaiverAIPage() {
                   </select>
                 </div>
 
-                <div className="ml-auto flex items-center gap-2">
+                <div className="flex flex-wrap items-stretch gap-2 sm:ml-auto sm:items-center">
                   <button
                     type="button"
                     onClick={() => void refreshWire(selectedLeague, deriveRosterWeakness(roster))}
-                    className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/45 hover:border-white/20 hover:text-white"
+                    className="touch-manipulation min-h-[44px] flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/45 hover:border-white/20 hover:text-white sm:min-h-0 sm:flex-none"
                   >
                     ⟳ Refresh Wire
                   </button>
                   <button
                     type="button"
                     onClick={resetToLeagueGate}
-                    className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/45 hover:border-white/20 hover:text-white"
+                    className="touch-manipulation min-h-[44px] flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-white/45 hover:border-white/20 hover:text-white sm:min-h-0 sm:flex-none"
                   >
                     Change League
                   </button>
@@ -1500,19 +1500,19 @@ export default function WaiverAIPage() {
             </div>
           </div>
 
-          <div className="mx-auto max-w-[1480px] px-4 py-6 sm:px-6">
-            <div className="mb-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_45%),#0a0d1a] p-6">
+          <div className="mx-auto max-w-[1480px] px-4 pb-24 pt-6 sm:px-6 lg:pb-8">
+            <div className="mb-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(16,185,129,0.18),transparent_45%),#0a0d1a] p-4 sm:p-6">
               <div className="max-w-3xl">
                 <div className="text-xs font-bold uppercase tracking-[0.3em] text-green-300/80">League-Gated Analysis</div>
-                <h2 className="mt-3 text-3xl font-black leading-tight">Queue claims, assign drop targets, and run one focused waiver plan.</h2>
+                <h2 className="mt-3 text-2xl font-black leading-tight sm:text-3xl">Queue claims, assign drop targets, and run one focused waiver plan.</h2>
                 <p className="mt-3 text-sm leading-6 text-white/55">
                   The selected league auto-loads your roster on the left and a waiver shortlist in the center. Queue targets on the right and run the main waiver AI against that selected claim set.
                 </p>
               </div>
             </div>
 
-            <div className="grid gap-5 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
-              <div className="min-h-[70vh]">
+            <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)_360px]">
+              <div className="min-h-0 lg:min-h-[70vh]">
                 {rosterLoading ? <LoadingCard /> : <RosterPanel players={roster} myFaab={myFaab} waiverType={selectedLeague.waiverType} onFaabChange={setMyFaab} />}
               </div>
 
@@ -1530,7 +1530,7 @@ export default function WaiverAIPage() {
                 />
               </div>
 
-              <div ref={analysisRef} className="min-h-[70vh]">
+              <div ref={analysisRef} className="min-h-0 lg:min-h-[70vh]">
                 <AnalysisPanel
                   queue={queue}
                   benchPlayers={benchPlayers}

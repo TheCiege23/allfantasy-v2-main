@@ -20,16 +20,17 @@ export function ChimmyChatPageClient(props: {
   const { openComparison } = usePlayerComparisonUI()
 
   return (
-    <main className="mode-surface min-h-screen px-4 py-6 sm:px-6 sm:py-8">
-      <div className="mx-auto max-w-4xl">
+    <main className="mode-surface flex h-[calc(100dvh-8.5rem)] min-h-0 flex-col px-3 py-4 sm:px-6 sm:py-6 lg:h-[calc(100dvh-3.5rem)]">
+      <div className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col">
         <Link
           href="/chimmy"
-          className="mb-4 inline-flex items-center gap-2 text-sm text-white/65 hover:text-white/90"
+          className="mb-3 inline-flex shrink-0 touch-manipulation items-center gap-2 py-1 text-sm text-white/65 hover:text-white/90 sm:mb-4"
           data-testid="chimmy-chat-back-link"
         >
-          <ChevronLeft className="h-4 w-4" />
+          <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
           Back to Chimmy
         </Link>
+        <div className="flex min-h-0 flex-1 flex-col">
         <ChimmyChatShell
           initialPrompt={props.prompt ?? ''}
           leagueId={props.leagueId ?? null}
@@ -60,8 +61,9 @@ export function ChimmyChatPageClient(props: {
             summary: 'Direct chat route',
             sport,
           }}
-          className="min-h-[680px]"
+          className="min-h-0 flex-1 !h-full !min-h-0 max-h-full"
         />
+        </div>
       </div>
     </main>
   )

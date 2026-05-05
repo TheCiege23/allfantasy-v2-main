@@ -32,6 +32,11 @@ export interface DraftSessionSnapshot {
   rounds: number
   teamCount: number
   thirdRoundReversal: boolean
+  /** Slice 1 — typed draft session flags surfaced to client for read-consistency.
+   * Behavior wiring lands in later slices (6 trades, 8 custom rankings). */
+  onClockTradeTimerBehavior: 'inherit_remaining' | 'reset_timer'
+  inDraftPlayerTradesEnabled: boolean
+  customRankingsEnabled: boolean
   timerSeconds: number | null
   timerEndAt: string | null
   pausedRemainingSeconds: number | null

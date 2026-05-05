@@ -69,6 +69,11 @@ export async function GET(req: NextRequest) {
       timerEndsAt: snapshot.timer.timerEndAt ?? snapshot.timerEndAt,
       timerPaused: snapshot.timer.status === 'paused',
       pickOrder,
+      // Slice 1/2 — read-consistency: surface typed draft flags to legacy state shape.
+      thirdRoundReversal: snapshot.thirdRoundReversal,
+      onClockTradeTimerBehavior: snapshot.onClockTradeTimerBehavior,
+      inDraftPlayerTradesEnabled: snapshot.inDraftPlayerTradesEnabled,
+      customRankingsEnabled: snapshot.customRankingsEnabled,
       updatedAt: snapshot.updatedAt,
     }
 

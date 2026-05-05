@@ -14,7 +14,7 @@ function BracketLandingInner() {
 
   return (
     <main
-      className="min-h-screen mode-readable"
+      className="min-h-0 mode-readable pb-[max(1.25rem,env(safe-area-inset-bottom))]"
       style={{ background: 'var(--bg)', color: 'var(--text)' }}
     >
       {/* Hero */}
@@ -34,77 +34,77 @@ function BracketLandingInner() {
             {t('bracket.page.hero.supporting')}
           </p>
 
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="mt-4 grid grid-cols-2 gap-2.5 sm:flex sm:flex-wrap sm:items-center sm:gap-3">
             <Link
               href={isAuthed ? '/brackets/leagues/new' : '/signup?next=/brackets/leagues/new'}
-              className="inline-flex items-center gap-2 rounded-full bg-sky-400 px-4 py-2 text-xs font-semibold text-black shadow-sm hover:bg-sky-300 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full bg-sky-400 px-3 py-2.5 text-center text-xs font-semibold text-black shadow-sm hover:bg-sky-300 sm:min-h-0 sm:px-4 sm:py-2 sm:text-sm"
               data-testid="bracket-landing-create-button"
             >
-              <UserPlus className="h-3.5 w-3.5" />
-              <span>{t('bracket.page.hero.cta.create')}</span>
+              <UserPlus className="h-3.5 w-3.5 shrink-0" />
+              <span className="leading-tight">{t('bracket.page.hero.cta.create')}</span>
             </Link>
             <Link
               href={isAuthed ? '/brackets/join' : '/login?next=/brackets/join'}
-              className="inline-flex items-center gap-2 rounded-full border border-sky-300/80 bg-sky-900/40 px-4 py-2 text-xs font-medium text-sky-100 hover:bg-sky-800/60 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full border border-sky-300/80 bg-sky-900/40 px-3 py-2.5 text-center text-xs font-medium text-sky-100 hover:bg-sky-800/60 sm:min-h-0 sm:px-4 sm:py-2 sm:text-sm"
               data-testid="bracket-landing-join-button"
             >
-              <Trophy className="h-3.5 w-3.5" />
-              <span>{t('bracket.page.hero.cta.join')}</span>
+              <Trophy className="h-3.5 w-3.5 shrink-0" />
+              <span className="leading-tight">{t('bracket.page.hero.cta.join')}</span>
             </Link>
             <Link
               href="/login?next=/brackets"
-              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-2.5 text-center text-xs font-medium text-white/80 hover:bg-white/10 sm:min-h-0 sm:py-2 sm:text-sm"
               data-testid="bracket-landing-signin-button"
             >
-              <LogIn className="h-3.5 w-3.5" />
-              <span>{t('bracket.page.hero.cta.signIn')}</span>
+              <LogIn className="h-3.5 w-3.5 shrink-0" />
+              <span className="leading-tight">{t('bracket.page.hero.cta.signIn')}</span>
             </Link>
             <Link
               href="/brackets"
-              className="inline-flex items-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-900/30 px-3 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-800/60 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full border border-cyan-300/40 bg-cyan-900/30 px-3 py-2.5 text-center text-xs font-medium text-cyan-100 hover:bg-cyan-800/60 sm:min-h-0 sm:py-2 sm:text-sm"
               data-testid="bracket-open-challenge-button"
             >
-              <Trophy className="h-3.5 w-3.5" />
-              <span>Open Challenge</span>
+              <Trophy className="h-3.5 w-3.5 shrink-0" />
+              <span className="leading-tight">Open Challenge</span>
             </Link>
             {!isAuthed && (
               <Link
                 href="/signup?next=/brackets"
-                className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-1.5 text-xs font-medium text-white/80 hover:bg-white/10 sm:text-sm"
+                className="col-span-2 inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full border border-white/20 bg-white/5 px-3 py-2.5 text-center text-xs font-medium text-white/80 hover:bg-white/10 sm:col-span-1 sm:min-h-0 sm:py-2 sm:text-sm"
               >
-                <UserPlus className="h-3.5 w-3.5" />
-                <span>{t('bracket.page.hero.cta.signUp')}</span>
+                <UserPlus className="h-3.5 w-3.5 shrink-0" />
+                <span className="leading-tight">{t('bracket.page.hero.cta.signUp')}</span>
               </Link>
             )}
           </div>
         </div>
 
         {/* Shell links */}
-        <aside className="flex-1 space-y-4 rounded-2xl border border-white/10 bg-black/30 p-5 sm:p-6 mode-panel-soft">
+        <aside className="flex-1 space-y-4 rounded-2xl border border-white/10 bg-black/30 p-4 sm:p-6 mode-panel-soft">
           <h2 className="text-sm font-semibold text-white/80 sm:text-base">
             Product shell links
           </h2>
           <div className="space-y-2 text-xs sm:text-sm">
             <Link
               href="/brackets"
-              className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60"
+              className="flex min-h-[48px] touch-manipulation items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60 active:bg-black/70"
             >
-              <span className="font-medium">{t('bracket.landing.secondaryLink')}</span>
-              <span className="text-[10px] text-white/50">/brackets</span>
+              <span className="min-w-0 font-medium">{t('bracket.landing.secondaryLink')}</span>
+              <span className="hidden shrink-0 font-mono text-[10px] text-white/50 sm:inline">/brackets</span>
             </Link>
             <Link
               href="/brackets/leagues/new"
-              className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60"
+              className="flex min-h-[48px] touch-manipulation items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60 active:bg-black/70"
             >
-              <span className="font-medium">Create a pool</span>
-              <span className="text-[10px] text-white/50">/brackets/leagues/new</span>
+              <span className="min-w-0 font-medium">Create a pool</span>
+              <span className="hidden shrink-0 font-mono text-[10px] text-white/50 sm:inline">/brackets/leagues/new</span>
             </Link>
             <Link
               href="/brackets/join"
-              className="flex items-center justify-between rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60"
+              className="flex min-h-[48px] touch-manipulation items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-3 hover:bg-black/60 active:bg-black/70"
             >
-              <span className="font-medium">Join a pool</span>
-              <span className="text-[10px] text-white/50">/brackets/join</span>
+              <span className="min-w-0 font-medium">Join a pool</span>
+              <span className="hidden shrink-0 font-mono text-[10px] text-white/50 sm:inline">/brackets/join</span>
             </Link>
           </div>
         </aside>
@@ -129,7 +129,7 @@ function BracketLandingInner() {
               </p>
               <Link
                 href={isAuthed ? '/brackets/leagues/new' : '/signup?next=/brackets/leagues/new'}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-sky-400 px-4 py-2 text-xs font-semibold text-black shadow-sm hover:bg-sky-300 sm:text-sm"
+                className="mt-4 inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-full bg-sky-400 px-4 py-3 text-xs font-semibold text-black shadow-sm hover:bg-sky-300 sm:min-h-0 sm:py-2 sm:text-sm"
               >
                 <span>{t('bracket.page.entry.card.create.cta')}</span>
               </Link>
@@ -147,7 +147,7 @@ function BracketLandingInner() {
               </p>
               <Link
                 href={isAuthed ? '/brackets/join' : '/login?next=/brackets/join'}
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full border border-emerald-300/70 bg-emerald-900/40 px-4 py-2 text-xs font-semibold text-emerald-50 hover:bg-emerald-800/60 sm:text-sm"
+                className="mt-4 inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-full border border-emerald-300/70 bg-emerald-900/40 px-4 py-3 text-xs font-semibold text-emerald-50 hover:bg-emerald-800/60 sm:min-h-0 sm:py-2 sm:text-sm"
               >
                 <span>{t('bracket.page.entry.card.join.cta')}</span>
               </Link>
@@ -165,7 +165,7 @@ function BracketLandingInner() {
               </p>
               <Link
                 href="/brackets"
-                className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-full bg-cyan-400 px-4 py-2 text-xs font-semibold text-black shadow-sm hover:bg-cyan-300 sm:text-sm"
+                className="mt-4 inline-flex min-h-[48px] w-full touch-manipulation items-center justify-center gap-2 rounded-full bg-cyan-400 px-4 py-3 text-xs font-semibold text-black shadow-sm hover:bg-cyan-300 sm:min-h-0 sm:py-2 sm:text-sm"
               >
                 <span>{t('bracket.page.entry.card.ai.cta')}</span>
               </Link>
@@ -273,7 +273,7 @@ function BracketLandingInner() {
           <div>
             <Link
               href="/brackets"
-              className="inline-flex items-center gap-2 rounded-full bg-cyan-400 px-5 py-2 text-xs font-semibold text-black shadow-sm hover:bg-cyan-300 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full bg-cyan-400 px-5 py-3 text-xs font-semibold text-black shadow-sm hover:bg-cyan-300 sm:min-h-0 sm:py-2 sm:text-sm"
             >
               <Sparkles className="h-3.5 w-3.5" />
               <span>{t('bracket.page.ai.cta')}</span>
@@ -307,7 +307,7 @@ function BracketLandingInner() {
           <div>
             <Link
               href="/brackets"
-              className="inline-flex items-center gap-2 rounded-full border border-white/40 bg-transparent px-5 py-2 text-xs font-semibold text-white hover:bg-white/10 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full border border-white/40 bg-transparent px-5 py-3 text-xs font-semibold text-white hover:bg-white/10 sm:min-h-0 sm:py-2 sm:text-sm"
             >
               <Trophy className="h-4 w-4" />
               <span>{t('bracket.page.teams.cta')}</span>
@@ -373,14 +373,14 @@ function BracketLandingInner() {
           <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
             <Link
               href={isAuthed ? '/brackets/leagues/new' : '/signup?next=/brackets/leagues/new'}
-              className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-2.5 text-xs font-semibold text-black shadow-sm hover:bg-gray-100 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-xs font-semibold text-black shadow-sm hover:bg-gray-100 sm:min-h-0 sm:py-2.5 sm:text-sm"
             >
               <UserPlus className="h-4 w-4" />
               <span>{t('bracket.page.cta.primary')}</span>
             </Link>
             <Link
               href="/brackets"
-              className="inline-flex items-center justify-center gap-2 rounded-full border border-white/60 bg-transparent px-5 py-2.5 text-xs font-semibold text-white hover:bg-white/10 sm:text-sm"
+              className="inline-flex min-h-[48px] touch-manipulation items-center justify-center gap-2 rounded-full border border-white/60 bg-transparent px-5 py-3 text-xs font-semibold text-white hover:bg-white/10 sm:min-h-0 sm:py-2.5 sm:text-sm"
             >
               <Sparkles className="h-4 w-4" />
               <span>{t('bracket.page.cta.secondary')}</span>
@@ -390,8 +390,8 @@ function BracketLandingInner() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/10/5 py-6 text-center text-xs text-white/40">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-3 px-4">
+      <footer className="border-t border-white/10/5 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] text-center text-xs text-white/40">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-center gap-x-3 gap-y-2 px-4">
           <span>© {new Date().getFullYear()} AllFantasy</span>
           <span className="hidden text-white/30 sm:inline">•</span>
           <Link href="/disclaimer" className="text-white/50 hover:text-white/80">

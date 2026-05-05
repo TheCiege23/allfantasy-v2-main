@@ -787,12 +787,13 @@ export default function MessagesContent() {
   return (
     <div className="flex flex-col gap-4">
       <section className="mode-panel rounded-2xl p-3">
-        <div className="flex gap-2 overflow-x-auto">
+        <div className="scrollbar-none -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [-webkit-overflow-scrolling:touch]">
           {TABS.map((tab) => (
             <button
               key={tab.id}
+              type="button"
               onClick={() => handleSelectTab(tab.id)}
-              className="rounded-lg px-4 py-2 text-sm transition"
+              className="touch-manipulation shrink-0 rounded-lg px-4 py-2.5 text-sm font-medium transition min-h-[44px] sm:min-h-0 sm:py-2"
               style={
                 activeTab === tab.id
                   ? { background: "var(--text)", color: "var(--bg)" }
@@ -806,7 +807,8 @@ export default function MessagesContent() {
       </section>
 
       {activeTab === "ai" && (
-        <section className="mode-panel rounded-2xl p-3 sm:p-4">
+        <section className="mode-panel flex flex-col overflow-hidden rounded-2xl p-2 sm:p-4">
+          <div className="flex h-[min(72dvh,calc(100dvh-13rem))] max-h-[min(85dvh,800px)] min-h-0 w-full flex-col">
           <ChimmyChatShell
             initialPrompt={aiContext.prompt ?? ""}
             clearUrlPromptAfterUse
@@ -824,8 +826,9 @@ export default function MessagesContent() {
             strategyMode={aiContext.strategyMode ?? null}
             source={aiContext.source}
             toolContext={chimmyToolContext}
-            className="min-h-[520px]"
+            className="min-h-0 flex-1 !h-full !min-h-0 max-h-full"
           />
+          </div>
         </section>
       )}
 

@@ -572,7 +572,7 @@ function AssetPanel({
         <button
           type="button"
           onClick={onClear}
-          className="rounded-xl border border-white/10 px-3 py-1.5 text-xs text-white/45 hover:border-white/20 hover:text-white/75"
+          className="touch-manipulation rounded-xl border border-white/10 px-3 py-2 text-xs font-medium text-white/45 hover:border-white/20 hover:text-white/75 min-h-[40px] sm:min-h-0 sm:py-1.5"
         >
           Clear
         </button>
@@ -583,14 +583,14 @@ function AssetPanel({
           value={side.teamName}
           onChange={(event) => onChange({ ...side, teamName: event.target.value })}
           placeholder="Manager / Team name"
-          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:text-sm"
         />
 
         <input
           value={side.record}
           onChange={(event) => onChange({ ...side, record: event.target.value })}
           placeholder="Record / rank (optional)"
-          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none"
+          className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:text-sm"
         />
 
         <label className="flex items-center gap-2 text-sm text-white/70">
@@ -610,7 +610,7 @@ function AssetPanel({
               type="button"
               onClick={() => onChange({ ...side, players: [...side.players, emptyPlayer()] })}
               data-testid={`trade-add-player-${label.toLowerCase().includes("sender") ? "sender" : "receiver"}`}
-              className="text-xs font-semibold"
+              className="touch-manipulation text-xs font-semibold min-h-[40px] px-1 sm:min-h-0"
               style={{ color: accent }}
             >
               + Add Player
@@ -618,7 +618,10 @@ function AssetPanel({
           </div>
 
           {side.players.map((player, index) => (
-            <div key={player.id} className="grid grid-cols-12 gap-2">
+            <div
+              key={player.id}
+              className="flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2 sm:grid sm:grid-cols-12 sm:items-center sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0"
+            >
               <input
                 value={player.name}
                 onChange={(event) => {
@@ -627,7 +630,7 @@ function AssetPanel({
                   onChange({ ...side, players })
                 }}
                 placeholder="Player name"
-                className="col-span-12 sm:col-span-5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-5 sm:text-sm"
               />
               <select
                 value={player.position}
@@ -636,7 +639,7 @@ function AssetPanel({
                   players[index] = { ...players[index], position: event.target.value }
                   onChange({ ...side, players })
                 }}
-                className="col-span-4 sm:col-span-2 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:min-h-0 sm:text-sm"
               >
                 {POSITION_OPTIONS.map((position) => (
                   <option key={position || "blank"} value={position}>
@@ -652,28 +655,30 @@ function AssetPanel({
                   onChange({ ...side, players })
                 }}
                 placeholder="Team"
-                className="col-span-4 sm:col-span-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none"
+                className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:text-sm"
               />
-              <input
-                type="number"
-                min={0}
-                value={player.age}
-                onChange={(event) => {
-                  const players = [...side.players]
-                  players[index] = { ...players[index], age: event.target.value }
-                  onChange({ ...side, players })
-                }}
-                placeholder="Age"
-                className="col-span-3 sm:col-span-2 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-sm text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => onChange({ ...side, players: side.players.filter((_, rowIndex) => rowIndex !== index) })}
-                className="col-span-1 rounded-xl text-lg text-red-300/70 hover:bg-red-500/10 hover:text-red-300"
-                aria-label="Remove player"
-              >
-                ×
-              </button>
+              <div className="flex items-center gap-2 sm:contents">
+                <input
+                  type="number"
+                  min={0}
+                  value={player.age}
+                  onChange={(event) => {
+                    const players = [...side.players]
+                    players[index] = { ...players[index], age: event.target.value }
+                    onChange({ ...side, players })
+                  }}
+                  placeholder="Age"
+                  className="min-h-[44px] w-full min-w-0 flex-1 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:col-span-2 sm:min-h-0 sm:text-sm"
+                />
+                <button
+                  type="button"
+                  onClick={() => onChange({ ...side, players: side.players.filter((_, rowIndex) => rowIndex !== index) })}
+                  className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center rounded-xl text-lg text-red-300/70 hover:bg-red-500/10 hover:text-red-300 sm:col-span-1"
+                  aria-label="Remove player"
+                >
+                  ×
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -685,7 +690,7 @@ function AssetPanel({
               type="button"
               onClick={() => onChange({ ...side, picks: [...side.picks, emptyPick()] })}
               data-testid={`trade-add-pick-${label.toLowerCase().includes("sender") ? "sender" : "receiver"}`}
-              className="text-xs font-semibold"
+              className="touch-manipulation text-xs font-semibold min-h-[40px] px-1 sm:min-h-0"
               style={{ color: accent }}
             >
               + Add Pick
@@ -695,7 +700,10 @@ function AssetPanel({
           {side.picks.length === 0 ? <div className="text-xs italic text-white/25">No picks added</div> : null}
 
           {side.picks.map((pick, index) => (
-            <div key={pick.id} className="grid grid-cols-12 gap-2">
+            <div
+              key={pick.id}
+              className="flex flex-col gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2 sm:grid sm:grid-cols-12 sm:items-center sm:gap-2 sm:border-0 sm:bg-transparent sm:p-0"
+            >
               <select
                 value={pick.year}
                 onChange={(event) => {
@@ -703,7 +711,7 @@ function AssetPanel({
                   picks[index] = { ...picks[index], year: event.target.value }
                   onChange({ ...side, picks })
                 }}
-                className="col-span-4 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-4 sm:min-h-0 sm:text-sm"
               >
                 {PICK_YEAR_OPTIONS.map((year) => (
                   <option key={year} value={year}>
@@ -718,7 +726,7 @@ function AssetPanel({
                   picks[index] = { ...picks[index], round: event.target.value }
                   onChange({ ...side, picks })
                 }}
-                className="col-span-3 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-3 sm:min-h-0 sm:text-sm"
               >
                 {PICK_ROUND_OPTIONS.map((round) => (
                   <option key={round} value={round}>
@@ -733,7 +741,7 @@ function AssetPanel({
                   picks[index] = { ...picks[index], projectedRange: event.target.value as TradePick["projectedRange"] }
                   onChange({ ...side, picks })
                 }}
-                className="col-span-4 rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-2.5 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:col-span-4 sm:min-h-0 sm:text-sm"
               >
                 <option value="early">Early</option>
                 <option value="mid">Mid</option>
@@ -743,7 +751,7 @@ function AssetPanel({
               <button
                 type="button"
                 onClick={() => onChange({ ...side, picks: side.picks.filter((_, rowIndex) => rowIndex !== index) })}
-                className="col-span-1 rounded-xl text-lg text-red-300/70 hover:bg-red-500/10 hover:text-red-300"
+                className="flex h-11 w-11 shrink-0 touch-manipulation items-center justify-center self-end rounded-xl text-lg text-red-300/70 hover:bg-red-500/10 hover:text-red-300 sm:col-span-1 sm:self-center"
                 aria-label="Remove pick"
               >
                 ×
@@ -759,7 +767,7 @@ function AssetPanel({
             min={0}
             value={side.faab}
             onChange={(event) => onChange({ ...side, faab: Number(event.target.value) || 0 })}
-            className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none"
+            className="w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-base text-white placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none sm:text-sm"
           />
         </div>
       </div>
@@ -914,10 +922,10 @@ function TradeHubInner() {
 
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
-      <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div>
-            <div className="flex items-center gap-2">
+      <div className="border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl pt-[max(0.25rem,env(safe-area-inset-top))]">
+        <div className="mx-auto flex max-w-7xl flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.24em] text-cyan-300">
                 AI Trade Analyzer
               </span>
@@ -925,14 +933,14 @@ function TradeHubInner() {
                 PECR
               </span>
             </div>
-            <h1 className="mt-2 text-2xl font-black sm:text-3xl">Trade Hub</h1>
+            <h1 className="mt-2 text-xl font-black sm:text-3xl">Trade Hub</h1>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap gap-2 sm:shrink-0 sm:justify-end">
             <button
               type="button"
               onClick={swapSides}
               data-testid="trade-swap-sides-button"
-              className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
+              className="touch-manipulation min-h-[44px] rounded-xl border border-white/10 px-4 py-2.5 text-xs font-medium text-white/60 hover:border-white/20 hover:text-white sm:min-h-0 sm:py-2"
             >
               Swap sides
             </button>
@@ -940,7 +948,7 @@ function TradeHubInner() {
               type="button"
               onClick={resetTrade}
               data-testid="trade-reset-button"
-              className="rounded-xl border border-white/10 px-3 py-2 text-xs text-white/60 hover:border-white/20 hover:text-white"
+              className="touch-manipulation min-h-[44px] rounded-xl border border-white/10 px-4 py-2.5 text-xs font-medium text-white/60 hover:border-white/20 hover:text-white sm:min-h-0 sm:py-2"
             >
               Reset
             </button>
@@ -948,16 +956,19 @@ function TradeHubInner() {
         </div>
       </div>
 
-      <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6">
-        <Link href="/" className="inline-flex items-center gap-2 text-sm text-white/45 hover:text-white/75">
-          <span>←</span>
+      <div className="mx-auto max-w-7xl px-4 py-6 pb-24 sm:px-6 sm:py-8 lg:pb-10">
+        <Link
+          href="/"
+          className="inline-flex min-h-[44px] touch-manipulation items-center gap-2 py-1 text-sm text-white/45 hover:text-white/75 sm:min-h-0"
+        >
+          <span aria-hidden>←</span>
           <span>Back to Home</span>
         </Link>
 
-        <div className="mt-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%),#0a0d1a] p-6 sm:p-8">
+        <div className="mt-6 rounded-3xl border border-white/8 bg-[radial-gradient(circle_at_top,rgba(6,182,212,0.18),transparent_45%),#0a0d1a] p-4 sm:p-8">
           <div className="max-w-3xl">
             <div className="text-xs font-bold uppercase tracking-[0.3em] text-cyan-300/80">Premium Analysis</div>
-            <h2 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">
+            <h2 className="mt-3 text-2xl font-black leading-tight sm:text-4xl">
               Run the same backend trade engine through a modern visual workspace.
             </h2>
             <p className="mt-4 text-sm leading-6 text-white/60 sm:text-base">
@@ -1000,7 +1011,7 @@ function TradeHubInner() {
                   })
                 }
                 data-testid="trade-evaluator-mini-compare-open"
-                className="inline-flex shrink-0 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-500/12 px-4 py-2 text-sm font-medium text-cyan-100 hover:bg-cyan-500/20"
+                className="inline-flex min-h-[48px] w-full touch-manipulation shrink-0 items-center justify-center rounded-xl border border-cyan-400/35 bg-cyan-500/12 px-4 py-3 text-sm font-medium text-cyan-100 hover:bg-cyan-500/20 sm:w-auto sm:min-h-0 sm:py-2"
               >
                 Compare {miniCompare.a} vs {miniCompare.b}
               </button>
@@ -1024,7 +1035,7 @@ function TradeHubInner() {
               <select
                 value={format}
                 onChange={(event) => setFormat(event.target.value as LeagueFormat)}
-                className="w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"
               >
                 {FORMAT_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1039,7 +1050,7 @@ function TradeHubInner() {
               <select
                 value={qbFormat}
                 onChange={(event) => setQbFormat(event.target.value as QBFormat)}
-                className="w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"
               >
                 {QB_FORMAT_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -1054,7 +1065,7 @@ function TradeHubInner() {
               <select
                 value={sport}
                 onChange={(event) => setSport(normalizeToSupportedSport(event.target.value))}
-                className="w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"
               >
                 {SUPPORTED_SPORTS.map((supportedSport) => (
                   <option key={supportedSport} value={supportedSport}>
@@ -1069,7 +1080,7 @@ function TradeHubInner() {
               <select
                 value={scoring}
                 onChange={(event) => setScoring(event.target.value as ScoringFormat)}
-                className="w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-sm text-white focus:border-cyan-500/40 focus:outline-none"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"
               >
                 {SCORING_OPTIONS.map((option) => (
                   <option key={option} value={option}>
@@ -1085,7 +1096,7 @@ function TradeHubInner() {
                 type="date"
                 value={asOfDate}
                 onChange={(event) => setAsOfDate(event.target.value)}
-                className="w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-sm text-white focus:border-cyan-500/40 focus:outline-none [color-scheme:dark]"
+                className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none [color-scheme:dark] sm:min-h-0 sm:text-sm"
               />
             </label>
           </div>
@@ -1097,7 +1108,7 @@ function TradeHubInner() {
             onClick={() => void evaluate()}
             disabled={!canEvaluate}
             data-testid="trade-evaluate-button"
-            className="w-full max-w-xl rounded-2xl px-6 py-4 text-base font-black tracking-wide text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
+            className="w-full max-w-xl touch-manipulation rounded-2xl px-6 py-4 text-base font-black tracking-wide text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
             style={{
               background: canEvaluate ? "linear-gradient(135deg, #0891b2, #7c3aed)" : "rgba(255,255,255,0.05)",
               boxShadow: canEvaluate ? "0 10px 32px rgba(8,145,178,0.28)" : "none",

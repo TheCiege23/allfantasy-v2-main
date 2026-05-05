@@ -639,7 +639,7 @@ export function AIToolsGrid({
       </div>
 
       {/* Tool card grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 min-[400px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4">
         {toolConfigs.map((config) => (
           <AIToolCard
             key={config.id}

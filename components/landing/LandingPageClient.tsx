@@ -654,7 +654,10 @@ export default function LandingPageClient({
           {copy.badge}
         </div>
 
-        <h1 className="relative z-10 mb-5 max-w-5xl text-[58px] font-black leading-[0.93] tracking-[0.025em] sm:text-[74px] md:text-[92px]">
+        <h1
+          className="relative z-10 mb-5 max-w-5xl text-[58px] font-black leading-[0.93] tracking-[0.025em] sm:text-[74px] md:text-[92px]"
+          style={{ color: 'var(--text)' }}
+        >
           <span className="block">{copy.hero.titleTop}</span>
           <span className="block">
             <GradientWord>{copy.hero.titleBottom}</GradientWord>
@@ -757,7 +760,11 @@ export default function LandingPageClient({
         <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--accent-emerald-strong)' }}>
           {copy.whatIs.eyebrow}
         </p>
-        <h2 id="landing-what-is" className="mb-4 text-[40px] font-black leading-[0.98] tracking-[0.025em] sm:text-[52px] md:text-[62px]">
+        <h2
+          id="landing-what-is"
+          className="mb-4 text-[40px] font-black leading-[0.98] tracking-[0.025em] sm:text-[52px] md:text-[62px]"
+          style={{ color: 'var(--text)' }}
+        >
           <span className="block">{copy.whatIs.titleTop}</span>
           <span className="block">{copy.whatIs.titleBottom}</span>
         </h2>
@@ -803,6 +810,7 @@ export default function LandingPageClient({
           <h2
             id="landing-commissioner"
             className="mb-4 whitespace-pre-line text-[40px] font-black leading-[1.0] tracking-[0.02em] sm:text-[52px] md:text-[62px]"
+            style={{ color: 'var(--text)' }}
           >
             {copy.commissioner.title}
           </h2>
@@ -888,7 +896,11 @@ export default function LandingPageClient({
           <p className="mb-4 text-[11px] font-bold uppercase tracking-[0.14em]" style={{ color: 'var(--accent-emerald-strong)' }}>
             {copy.tools.eyebrow}
           </p>
-          <h2 id="landing-tools" className="mb-4 text-[40px] font-black leading-[0.98] tracking-[0.025em] sm:text-[52px] md:text-[62px]">
+          <h2
+            id="landing-tools"
+            className="mb-4 text-[40px] font-black leading-[0.98] tracking-[0.025em] sm:text-[52px] md:text-[62px]"
+            style={{ color: 'var(--text)' }}
+          >
             <span className="block">{copy.tools.titleTop}</span>
             <span className="block">
               <GradientWord>{copy.tools.titleBottom}</GradientWord>
@@ -966,7 +978,9 @@ export default function LandingPageClient({
           >
             {copy.geoRestrictions.eyebrow}
           </p>
-          <h2 className="mb-2 text-[28px] font-black sm:text-[36px]">{copy.geoRestrictions.title}</h2>
+          <h2 className="mb-2 text-[28px] font-black sm:text-[36px]" style={{ color: 'var(--text)' }}>
+            {copy.geoRestrictions.title}
+          </h2>
           <p className="mx-auto max-w-2xl text-sm leading-6" style={{ color: "var(--muted)" }}>
             {copy.geoRestrictions.subtitle}
           </p>
@@ -1044,7 +1058,11 @@ export default function LandingPageClient({
         />
 
         <div className="relative z-10 mx-auto max-w-3xl">
-          <h2 id="landing-cta" className="mb-4 text-[42px] font-black leading-[1] tracking-[0.025em] sm:text-[56px] md:text-[68px]">
+          <h2
+            id="landing-cta"
+            className="mb-4 text-[42px] font-black leading-[1] tracking-[0.025em] sm:text-[56px] md:text-[68px]"
+            style={{ color: 'var(--text)' }}
+          >
             {copy.cta.title}
           </h2>
           <p className="mx-auto mb-10 max-w-2xl text-[17px] leading-8" style={{ color: 'var(--muted)' }}>
@@ -1142,22 +1160,34 @@ export default function LandingPageClient({
           </Link>
 
           <nav className="flex flex-wrap items-center gap-x-6 gap-y-2" aria-label="Footer navigation">
-            <Link href="/privacy" className="text-sm text-white/55 transition-colors hover:text-white">
+            <Link
+              href="/privacy"
+              className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+            >
               {copy.footer.privacy}
             </Link>
-            <Link href="/terms" className="text-sm text-white/55 transition-colors hover:text-white">
+            <Link
+              href="/terms"
+              className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+            >
               {copy.footer.terms}
             </Link>
-            <Link href="/data-deletion" className="text-sm text-white/55 transition-colors hover:text-white">
+            <Link
+              href="/data-deletion"
+              className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+            >
               {copy.footer.dataDeletion}
             </Link>
             <Link
               href={loginUrlWithIntent('/dashboard')}
-              className="text-sm text-white/55 transition-colors hover:text-white"
+              className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
             >
               {copy.footer.signIn}
             </Link>
-            <Link href="/admin" className="text-sm text-white/55 transition-colors hover:text-white">
+            <Link
+              href="/admin"
+              className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]"
+            >
               {copy.footer.admin}
             </Link>
           </nav>

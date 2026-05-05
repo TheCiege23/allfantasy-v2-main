@@ -35,7 +35,7 @@ export default function MobileBottomTabs() {
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t px-2 py-2 backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-40 border-t px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur lg:hidden"
       style={{
         borderColor: "var(--border)",
         background: "color-mix(in srgb, var(--panel) 92%, transparent)",

@@ -48,24 +48,26 @@ export interface AIQuickActionBarProps {
  */
 export default function AIQuickActionBar({ className = '' }: AIQuickActionBarProps) {
   return (
-    <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      <span className="text-xs font-medium text-white/50">Quick actions</span>
-      {QUICK_ACTIONS.map((action) => {
-        const Icon = action.icon
-        const href = action.href()
-        return (
-          <Link
-            key={action.id}
-            href={href}
-            data-quick-action={action.id}
-            data-testid={`ai-quick-action-${action.id}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 transition hover:border-white/25 hover:bg-white/10 hover:text-white"
-          >
-            <Icon className="h-3.5 w-3.5" />
-            {action.label}
-          </Link>
-        )
-      })}
+    <div className={`flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center ${className}`}>
+      <span className="shrink-0 text-xs font-medium text-white/50">Quick actions</span>
+      <div className="scrollbar-none -mx-1 flex flex-nowrap gap-2 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:pb-0 [-webkit-overflow-scrolling:touch]">
+        {QUICK_ACTIONS.map((action) => {
+          const Icon = action.icon
+          const href = action.href()
+          return (
+            <Link
+              key={action.id}
+              href={href}
+              data-quick-action={action.id}
+              data-testid={`ai-quick-action-${action.id}`}
+              className="inline-flex shrink-0 touch-manipulation items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2.5 text-xs font-medium text-white/80 transition hover:border-white/25 hover:bg-white/10 hover:text-white sm:py-2"
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+              {action.label}
+            </Link>
+          )
+        })}
+      </div>
     </div>
   )
 }

@@ -29,7 +29,8 @@ const TAB_ROUTES: Record<string, string> = {
 };
 
 const FEATURE_ROUTES: Record<string, string> = {
-  trade_analyzer: '/trade-analyzer',
+  /** Interactive Trade Hub (canonical); `/trade-analyzer` is SEO/marketing landing only */
+  trade_analyzer: '/trade-evaluator',
   trade_evaluator: '/trade-evaluator',
   waiver_ai: '/waiver-ai',
   rankings: '/rankings',
