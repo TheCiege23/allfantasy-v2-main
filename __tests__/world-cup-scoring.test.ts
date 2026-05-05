@@ -37,6 +37,33 @@ describe("World Cup scoring", () => {
     expect(normalized?.winnerApiTeamId).toBe(2)
   })
 
+  it("preserves correct picks when a placeholder resolves via slot key", () => {
+    const result = evaluateWorldCupPick(
+      {
+        round: "round_of_32",
+        selectedTeamId: null,
+        selectedTeamName: "Group A Winner",
+        selectedSlotKey: "A1",
+      },
+      {
+        id: "m1",
+        round: "round_of_32",
+        homeSlotKey: "A1",
+        awaySlotKey: "B2",
+        homeTeamId: "arg",
+        awayTeamId: "ned",
+        homeTeamName: "Argentina",
+        awayTeamName: "Netherlands",
+        status: "final",
+        winnerTeamId: "arg",
+        winnerTeamName: "Argentina",
+      },
+      DEFAULT_WORLD_CUP_SCORING
+    )
+
+    expect(result).toEqual({ isCorrect: true, pointsAwarded: 1 })
+  })
+
   it("sorts leaderboard by score, champion alive, then joined date", () => {
     const rows = buildWorldCupLeaderboardRows({
       participants: [

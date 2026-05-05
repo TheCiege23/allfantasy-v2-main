@@ -22,6 +22,7 @@ import {
   worldCupChallengeParamsSchema,
   worldCupInviteParamsSchema,
 } from "../_utils"
+import { runWorldCupDiagnostics } from "@/lib/world-cup/worldCupDiagnosticsService"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -411,6 +412,129 @@ async function recalculateChallenge(request: Request, challengeId: string) {
   return NextResponse.json({ ok: true, leaderboard })
 }
 
+async function adminListChallenges(request: Request) {
+  const user = await getWorldCupApiUser()
+  const isAdmin = Boolean(isAuthorizedRequest(request) || (await getWorldCupAdminState(request, user)))
+  if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const url = new URL(request.url)
+  const search = url.searchParams.get("q") ?? ""
+  const statusFilter = url.searchParams.get("status") ?? ""
+  const limit = Math.min(parseInt(url.searchParams.get("limit") ?? "50", 10), 200)
+
+  const where: Record<string, unknown> = {}
+  if (statusFilter) where.status = statusFilter
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { inviteCode: { contains: search, mode: "insensitive" } },
+    ]
+  }
+
+  const challenges = await (prisma as any).worldCupBracketChallenge.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    select: {
+      id: true,
+      name: true,
+      ownerUserId: true,
+      seasonYear: true,
+      inviteCode: true,
+      visibility: true,
+      status: true,
+      includeThirdPlace: true,
+      lastSyncedAt: true,
+      createdAt: true,
+      updatedAt: true,
+      _count: { select: { participants: true } },
+    },
+  })
+
+  // Attach owner display names
+  const ownerIds = [...new Set(challenges.map((c: any) => c.ownerUserId))]
+  const owners = ownerIds.length
+    ? await (prisma as any).appUser.findMany({
+        where: { id: { in: ownerIds } },
+        select: { id: true, username: true, email: true },
+      })
+    : []
+  const ownerMap = new Map(owners.map((o: any) => [o.id, o]))
+
+  const rows = challenges.map((c: any) => {
+    const owner = ownerMap.get(c.ownerUserId) as any
+    return {
+      ...c,
+      participantCount: c._count?.participants ?? 0,
+      ownerName: owner?.username ?? owner?.email ?? c.ownerUserId,
+    }
+  })
+
+  return NextResponse.json({ ok: true, challenges: rows })
+}
+
+const adminActionSchema = z.object({
+  action: z.enum(["sync", "recalculate", "lock", "unlock", "regenerate_invite", "delete"]),
+  challengeId: z.string().min(1),
+})
+
+async function adminChallengeAction(request: Request) {
+  const user = await getWorldCupApiUser()
+  const isAdmin = Boolean(isAuthorizedRequest(request) || (await getWorldCupAdminState(request, user)))
+  if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const body = await request.json().catch(() => ({}))
+  const parsed = adminActionSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const { action, challengeId } = parsed.data
+  const db = prisma as any
+
+  const challenge = await db.worldCupBracketChallenge.findUnique({ where: { id: challengeId }, select: { id: true, status: true } })
+  if (!challenge) return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
+
+  switch (action) {
+    case "sync": {
+      const result = await syncWorldCupChallenge(challengeId)
+      return NextResponse.json({ ok: true, action, ...result })
+    }
+    case "recalculate": {
+      const leaderboard = await recalculateWorldCupChallenge(challengeId)
+      return NextResponse.json({ ok: true, action, leaderboard })
+    }
+    case "lock": {
+      await db.worldCupBracketChallenge.update({ where: { id: challengeId }, data: { status: "locked" } })
+      return NextResponse.json({ ok: true, action })
+    }
+    case "unlock": {
+      await db.worldCupBracketChallenge.update({ where: { id: challengeId }, data: { status: "open" } })
+      return NextResponse.json({ ok: true, action })
+    }
+    case "regenerate_invite": {
+      const newCode = Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6)
+      await db.worldCupBracketChallenge.update({ where: { id: challengeId }, data: { inviteCode: newCode } })
+      return NextResponse.json({ ok: true, action, inviteCode: newCode })
+    }
+    case "delete": {
+      await db.worldCupBracketChallenge.delete({ where: { id: challengeId } })
+      return NextResponse.json({ ok: true, action })
+    }
+    default:
+      return NextResponse.json({ error: "Unknown action" }, { status: 400 })
+  }
+}
+
+async function adminHealthCheck(request: Request) {
+  const user = await getWorldCupApiUser()
+  const isAdmin = Boolean(isAuthorizedRequest(request) || (await getWorldCupAdminState(request, user)))
+  if (!isAdmin) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const diagnostics = await runWorldCupDiagnostics()
+  return NextResponse.json({ ok: true, diagnostics })
+}
+
 export async function GET(request: Request, context: WorldCupRouteContext) {
   const path = getPath(context)
 
@@ -419,6 +543,8 @@ export async function GET(request: Request, context: WorldCupRouteContext) {
   if (path.length === 1) return getChallenge(request, path[0])
   if (path.length === 2 && path[1] === "leaderboard") return getLeaderboard(request, path[0])
   if (path.length === 2 && path[1] === "picks") return getPicks(path[0])
+  if (path.length === 2 && path[0] === "admin" && path[1] === "challenges") return adminListChallenges(request)
+  if (path.length === 2 && path[0] === "admin" && path[1] === "health") return adminHealthCheck(request)
 
   return notFound()
 }
@@ -433,6 +559,7 @@ export async function POST(request: Request, context: WorldCupRouteContext) {
   if (path.length === 2 && path[1] === "picks") return savePicks(request, path[0])
   if (path.length === 2 && path[1] === "invite") return createInvite(request, path[0])
   if (path.length === 2 && path[1] === "recalculate") return recalculateChallenge(request, path[0])
+  if (path.length === 2 && path[0] === "admin" && path[1] === "action") return adminChallengeAction(request)
 
   return notFound()
 }
