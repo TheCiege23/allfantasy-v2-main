@@ -31,6 +31,44 @@ import type {
 
 export type PostDraftTab = 'summary' | 'teams' | 'roster' | 'replay' | 'recap' | 'share'
 
+/**
+ * Color scheme for letter grades on the post-draft team-grade cards.
+ * A → emerald, B → cyan, C → amber, D → orange, F → rose. Strips off any
+ * +/- modifier so "A+", "A", "A-" all share the same family.
+ */
+function gradeBadgeClasses(grade: string): { wrapper: string; letter: string } {
+  const letter = String(grade ?? '').trim().charAt(0).toUpperCase()
+  switch (letter) {
+    case 'A':
+      return {
+        wrapper: 'border-emerald-400/40 bg-emerald-500/12 shadow-[0_0_20px_rgba(16,185,129,0.18)]',
+        letter: 'text-emerald-200',
+      }
+    case 'B':
+      return {
+        wrapper: 'border-cyan-400/40 bg-cyan-500/12 shadow-[0_0_20px_rgba(34,211,238,0.18)]',
+        letter: 'text-cyan-200',
+      }
+    case 'C':
+      return {
+        wrapper: 'border-amber-400/40 bg-amber-500/12 shadow-[0_0_20px_rgba(245,158,11,0.18)]',
+        letter: 'text-amber-200',
+      }
+    case 'D':
+      return {
+        wrapper: 'border-orange-400/40 bg-orange-500/12 shadow-[0_0_20px_rgba(249,115,22,0.18)]',
+        letter: 'text-orange-200',
+      }
+    case 'F':
+      return {
+        wrapper: 'border-rose-400/45 bg-rose-500/12 shadow-[0_0_22px_rgba(244,63,94,0.22)]',
+        letter: 'text-rose-200',
+      }
+    default:
+      return { wrapper: 'border-white/15 bg-white/[0.04]', letter: 'text-white/70' }
+  }
+}
+
 export type PostDraftViewProps = {
   leagueId: string
   leagueName: string
@@ -812,21 +850,50 @@ export function PostDraftView({
                 <p className="mt-1.5 text-sm text-cyan-100">{activeRecapSections.chimmyDraftDebrief}</p>
               </div>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-team-grades">
-              <p className="text-[10px] uppercase tracking-wider text-white/50">Team grade explanations</p>
-              <ul className="mt-2 space-y-1.5">
-                {activeRecapSections.teamGradeExplanations.length > 0 ? (
-                  activeRecapSections.teamGradeExplanations.map((entry) => (
-                    <li key={entry.rosterId} className="text-xs text-white/85">
-                      <span className="font-semibold text-white">{entry.rank}. {entry.displayName}</span>
-                      <span className="ml-1 text-cyan-200">({entry.grade})</span>
-                      <p className="mt-0.5 text-white/70">{entry.explanation}</p>
-                    </li>
-                  ))
-                ) : (
-                  <li className="text-xs text-white/60">Deterministic team-grade explanations are syncing.</li>
-                )}
-              </ul>
+            <div data-testid="post-draft-recap-card-team-grades" className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#0a1228]/80 to-[#070d1c]/90 p-4">
+              <div className="mb-3 flex items-baseline justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Team Grades</p>
+                <p className="text-[10px] uppercase tracking-wider text-white/35">
+                  {activeRecapSections.teamGradeExplanations.length} {activeRecapSections.teamGradeExplanations.length === 1 ? 'team' : 'teams'}
+                </p>
+              </div>
+              {activeRecapSections.teamGradeExplanations.length > 0 ? (
+                <div className="grid gap-2.5 md:grid-cols-2">
+                  {activeRecapSections.teamGradeExplanations.map((entry) => {
+                    const colors = gradeBadgeClasses(entry.grade)
+                    return (
+                      <div
+                        key={entry.rosterId}
+                        data-testid={`post-draft-team-grade-card-${entry.rosterId}`}
+                        className={`flex items-start gap-3 rounded-xl border p-3 ${colors.wrapper}`}
+                      >
+                        <div
+                          data-testid="post-draft-team-grade-letter"
+                          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/35 text-2xl font-black tabular-nums ${colors.letter}`}
+                        >
+                          {entry.grade}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                              #{entry.rank}
+                            </span>
+                            <span className="truncate text-sm font-bold text-white">{entry.displayName}</span>
+                            <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums text-white/50">
+                              {Math.round(entry.score)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-snug text-white/70">{entry.explanation}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-center text-xs text-white/50">
+                  Deterministic team-grade explanations are syncing.
+                </p>
+              )}
             </div>
             {!recap && !recapLoading && !recapError && (
               <button
