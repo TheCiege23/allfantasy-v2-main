@@ -95,6 +95,60 @@ function applyNonProdConnectionGuardrails(rawUrl: string): string {
   }
 }
 
+function isPostgresUrl(value: string): boolean {
+  return /^postgres(ql)?:\/\//i.test(value);
+}
+
+/** True for Prisma Accelerate / Data Proxy style datasource URLs (not direct Postgres TCP). */
+function isPrismaProtocolUrl(value: string): boolean {
+  return /^prisma(\+postgres)?:\/\//i.test(value.trim());
+}
+
+/**
+ * Prisma validates `schema.prisma` `env("DATABASE_URL")` / `env("DIRECT_URL")` at runtime.
+ * If `.env` sets `DATABASE_URL=prisma://...` (Accelerate) but `resolveDatabaseUrl` picks a
+ * `postgresql://...` value from `POSTGRES_URL` / `POSTGRES_PRISMA_URL`, leaving the old
+ * `DATABASE_URL` in `process.env` can trigger P6001 ("URL must start with prisma://").
+ * When we connect with a direct Postgres URL, align env so validation matches the client.
+ */
+function syncPrismaEnvWithResolvedPostgresUrl(resolvedUrl: string): void {
+  if (!isPostgresUrl(resolvedUrl)) return;
+
+  const prevDb = process.env.DATABASE_URL?.trim() ?? "";
+  if (prevDb && !isPostgresUrl(prevDb)) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn(
+        "[Prisma] Replacing non-postgres DATABASE_URL in process.env with the resolved postgres URL " +
+          "(from lib/env/database-url.ts). Use postgresql:// for direct DB access; prisma:// is only for Accelerate."
+      );
+    }
+  }
+  process.env.DATABASE_URL = resolvedUrl;
+
+  const prevDirect = process.env.DIRECT_URL?.trim() ?? "";
+  if (
+    !prevDirect ||
+    !isPostgresUrl(prevDirect) ||
+    isPrismaProtocolUrl(prevDirect)
+  ) {
+    process.env.DIRECT_URL = resolvedUrl;
+  }
+}
+
+function normalizePrismaEngineForDatabaseUrl(databaseUrl: string): void {
+  if (!isPostgresUrl(databaseUrl)) return;
+
+  const engineType = process.env.PRISMA_CLIENT_ENGINE_TYPE?.trim().toLowerCase();
+  // Direct postgres URLs require the Node query engine. Data Proxy / mistaken env breaks queries.
+  if (
+    engineType === "dataproxy" ||
+    engineType === "data-proxy" ||
+    engineType === "accelerate"
+  ) {
+    process.env.PRISMA_CLIENT_ENGINE_TYPE = "library";
+  }
+}
+
 function createPrismaClient() {
   // Runtime URL: resolveDatabaseUrl() prefers DATABASE_URL / pooler keys before DIRECT_URL (see lib/env/database-url.ts).
   let databaseUrl: string;
@@ -111,15 +165,9 @@ function createPrismaClient() {
     }
   }
 
-  if (!process.env.DATABASE_URL?.trim()) {
-    process.env.DATABASE_URL = databaseUrl;
-  }
+  syncPrismaEnvWithResolvedPostgresUrl(databaseUrl);
 
-  // Schema uses `directUrl = env("DIRECT_URL")`. Some tooling expects it at runtime; mirror the
-  // resolved URL when unset so single-URL Vercel/Neon setups do not fail intermittently.
-  if (!process.env.DIRECT_URL?.trim()) {
-    process.env.DIRECT_URL = databaseUrl;
-  }
+  normalizePrismaEngineForDatabaseUrl(databaseUrl);
 
   const client = new PrismaClient({
     datasourceUrl: databaseUrl,

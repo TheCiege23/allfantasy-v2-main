@@ -12,7 +12,7 @@ export const ROUTES = {
   sportLanding: (slug: SportSlug) => `/sports/${slug}`,
   home: () => '/',
   app: () => '/app',
-  bracket: () => '/bracket',
+  bracket: () => '/brackets',
   afLegacy: () => '/af-legacy',
   chimmy: () => '/chimmy',
 } as const

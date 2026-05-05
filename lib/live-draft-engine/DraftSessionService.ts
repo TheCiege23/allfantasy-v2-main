@@ -848,21 +848,184 @@ export async function setTimerSeconds(
   return true
 }
 
-export async function undoLastPick(leagueId: string): Promise<boolean> {
+/**
+ * Slice 4 — commissioner undo with required reason.
+ * `reason` and `actorUserId` are passed by the route after authz; both are persisted to
+ * `DraftPickAuditLog`. The reason is commissioner-visible only (read endpoint hides it for non-commissioners).
+ * Optional args keep the function backward-compatible for legacy callers; routes always pass them.
+ */
+export async function undoLastPick(
+  leagueId: string,
+  options?: { reason?: string; actorUserId?: string | null },
+): Promise<boolean> {
   const session = await prisma.draftSession.findUnique({
     where: { leagueId },
     include: { picks: { orderBy: { overall: 'desc' }, take: 1 } },
   })
   if (!session || session.picks.length === 0) return false
   const last = session.picks[0]
+  const reason = typeof options?.reason === 'string' ? options.reason.trim() : ''
+  const actorUserId = options?.actorUserId ?? null
   await prisma.$transaction(async (tx) => {
     await tx.draftPick.delete({ where: { id: last.id } })
     await tx.draftSession.update({
       where: { id: session.id },
       data: { version: { increment: 1 }, updatedAt: new Date() },
     })
+    if (actorUserId) {
+      await tx.draftPickAuditLog.create({
+        data: {
+          leagueId,
+          draftSessionId: session.id,
+          overallPickNumber: last.overall,
+          round: last.round,
+          action: 'undo_pick',
+          actorUserId,
+          oldRosterId: last.rosterId ?? null,
+          oldPlayerId: last.playerId ?? null,
+          oldPlayerName: last.playerName ?? null,
+          reason: reason ? reason : null,
+          metadata: {
+            slot: last.slot,
+            position: last.position,
+            team: last.team,
+            source: last.source,
+          },
+        },
+      })
+    }
   })
   return true
+}
+
+/**
+ * Slice 5 — Swap two draft slots' managers.
+ *
+ * Touches `slotOrder` ONLY. Does NOT modify any DraftPick row, does NOT move
+ * players between rosters, does NOT auto-pause, does NOT reset the timer.
+ * Past picks remain tied to their original rosterId; only future control of
+ * each slot transfers. Traded picks are keyed by rosterId (originalRosterId),
+ * so they follow the manager automatically — no separate bookkeeping needed.
+ *
+ * Allowed in pre_draft, in_progress, and paused states. Self-swap rejected.
+ * Atomic: slotOrder update + audit log entry land in the same transaction.
+ */
+export type SwapDraftManagersResult =
+  | { ok: true; fromRosterId: string; toRosterId: string }
+  | {
+      ok: false
+      code: 'NO_SESSION' | 'INVALID_SWAP_SAME_SLOT' | 'SWAP_SLOT_NOT_FOUND' | 'INVALID_STATUS'
+      error: string
+    }
+
+export async function swapDraftManagers(
+  leagueId: string,
+  fromSlot: number,
+  toSlot: number,
+  actorUserId: string,
+): Promise<SwapDraftManagersResult> {
+  if (!Number.isInteger(fromSlot) || !Number.isInteger(toSlot)) {
+    return { ok: false, code: 'SWAP_SLOT_NOT_FOUND', error: 'fromSlot and toSlot must be integers' }
+  }
+  if (fromSlot === toSlot) {
+    return {
+      ok: false,
+      code: 'INVALID_SWAP_SAME_SLOT',
+      error: 'fromSlot and toSlot must be different',
+    }
+  }
+
+  const session = await prisma.draftSession.findUnique({
+    where: { leagueId },
+    select: { id: true, status: true, slotOrder: true, picks: { select: { overall: true } } },
+  })
+  if (!session) return { ok: false, code: 'NO_SESSION', error: 'No draft session for league' }
+  if (
+    session.status !== 'pre_draft' &&
+    session.status !== 'in_progress' &&
+    session.status !== 'paused'
+  ) {
+    return {
+      ok: false,
+      code: 'INVALID_STATUS',
+      error: `Cannot swap managers when draft status is ${session.status}`,
+    }
+  }
+
+  const slotOrder = (Array.isArray(session.slotOrder) ? session.slotOrder : []) as Array<{
+    slot: number
+    rosterId: string
+    displayName: string
+    platformUserId?: string | null
+  }>
+  const fromIndex = slotOrder.findIndex((e) => e.slot === fromSlot)
+  const toIndex = slotOrder.findIndex((e) => e.slot === toSlot)
+  if (fromIndex < 0 || toIndex < 0) {
+    return { ok: false, code: 'SWAP_SLOT_NOT_FOUND', error: 'One or both slots not found in slotOrder' }
+  }
+
+  const fromEntry = slotOrder[fromIndex]
+  const toEntry = slotOrder[toIndex]
+  // Swap rosterId / displayName / platformUserId; keep `slot` numbers fixed.
+  const nextSlotOrder = slotOrder.map((entry) => {
+    if (entry.slot === fromSlot) {
+      return {
+        ...entry,
+        rosterId: toEntry.rosterId,
+        displayName: toEntry.displayName,
+        platformUserId: toEntry.platformUserId ?? null,
+      }
+    }
+    if (entry.slot === toSlot) {
+      return {
+        ...entry,
+        rosterId: fromEntry.rosterId,
+        displayName: fromEntry.displayName,
+        platformUserId: fromEntry.platformUserId ?? null,
+      }
+    }
+    return entry
+  })
+
+  // Effective-from overall is the next unsubmitted overall. Past picks keep their existing rosterId on DraftPick rows.
+  const effectiveFromOverall = session.picks.length + 1
+
+  await prisma.$transaction(async (tx) => {
+    await tx.draftSession.update({
+      where: { id: session.id },
+      data: {
+        slotOrder: nextSlotOrder as unknown as Prisma.InputJsonValue,
+        version: { increment: 1 },
+        updatedAt: new Date(),
+      },
+    })
+    await tx.draftPickAuditLog.create({
+      data: {
+        leagueId,
+        draftSessionId: session.id,
+        // Audit log row uses overallPickNumber to anchor the swap to the next-unmade pick boundary.
+        overallPickNumber: effectiveFromOverall,
+        // Round derived from the next overall (helps post-draft analytics; harmless if the draft hasn't started).
+        round: Math.max(1, Math.ceil(effectiveFromOverall / Math.max(1, slotOrder.length))),
+        action: 'swap_manager',
+        actorUserId,
+        oldRosterId: fromEntry.rosterId,
+        newRosterId: toEntry.rosterId,
+        reason: null,
+        metadata: {
+          fromSlot,
+          toSlot,
+          fromRosterId: fromEntry.rosterId,
+          toRosterId: toEntry.rosterId,
+          fromDisplayName: fromEntry.displayName,
+          toDisplayName: toEntry.displayName,
+          effectiveFromOverall,
+        },
+      },
+    })
+  })
+
+  return { ok: true, fromRosterId: fromEntry.rosterId, toRosterId: toEntry.rosterId }
 }
 
 export async function completeDraftSession(leagueId: string): Promise<boolean> {

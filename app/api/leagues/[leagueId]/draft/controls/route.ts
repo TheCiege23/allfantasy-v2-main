@@ -11,6 +11,7 @@ import {
   resumeDraftSession,
   resetTimer,
   undoLastPick,
+  swapDraftManagers,
   completeDraftSession,
   resetDraftSession,
   buildSessionSnapshot,
@@ -97,6 +98,7 @@ const ALLOWED_ACTIONS = [
   'slow_tick',
   'keeper_tick',
   'reset_draft',
+  'swap_manager',
 ]
 
 type AutoPickCandidate = {
@@ -252,10 +254,53 @@ export async function POST(
       })
     }
     if (action === 'undo_pick') {
-      const ok = await undoLastPick(leagueId)
+      // Slice 4 — required commissioner reason (1-500 chars). Stored in DraftPickAuditLog.
+      const reasonRaw = typeof body.reason === 'string' ? body.reason.trim() : ''
+      if (!reasonRaw) {
+        return NextResponse.json(
+          { error: 'reason required', code: 'UNDO_REASON_REQUIRED' },
+          { status: 400 },
+        )
+      }
+      if (reasonRaw.length > 500) {
+        return NextResponse.json(
+          { error: 'reason must be 500 characters or fewer', code: 'UNDO_REASON_TOO_LONG' },
+          { status: 400 },
+        )
+      }
+      const ok = await undoLastPick(leagueId, { reason: reasonRaw, actorUserId: userId })
       if (!ok) return NextResponse.json({ error: 'No pick to undo' }, { status: 400 })
       const snapshot = await buildSessionSnapshot(leagueId)
       return NextResponse.json({ ok: true, action: 'undo_pick', session: await withViewerSession(leagueId, userId, snapshot) })
+    }
+    if (action === 'swap_manager') {
+      // Slice 5 — swap two slots' managers. Affects future picks only; past DraftPick rows untouched.
+      const fromSlot = Number(body.fromSlot ?? body.from_slot)
+      const toSlot = Number(body.toSlot ?? body.to_slot)
+      if (!Number.isInteger(fromSlot) || !Number.isInteger(toSlot)) {
+        return NextResponse.json(
+          { error: 'fromSlot and toSlot are required integers', code: 'SWAP_SLOT_NOT_FOUND' },
+          { status: 400 },
+        )
+      }
+      const result = await swapDraftManagers(leagueId, fromSlot, toSlot, userId)
+      if (!result.ok) {
+        const status =
+          result.code === 'NO_SESSION'
+            ? 404
+            : result.code === 'INVALID_STATUS'
+              ? 409
+              : 400
+        return NextResponse.json({ error: result.error, code: result.code }, { status })
+      }
+      const snapshot = await buildSessionSnapshot(leagueId)
+      return NextResponse.json({
+        ok: true,
+        action: 'swap_manager',
+        fromRosterId: result.fromRosterId,
+        toRosterId: result.toRosterId,
+        session: await withViewerSession(leagueId, userId, snapshot),
+      })
     }
     if (action === 'force_autopick') {
       const uiSettings = await getDraftUISettingsForLeague(leagueId)

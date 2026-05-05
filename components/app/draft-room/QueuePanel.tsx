@@ -1,11 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { ListOrdered, GripVertical, X, Zap, UserMinus, Play } from 'lucide-react'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { PlayerAvatar } from './PlayerAvatar'
+
+type QueueSortMode = 'queue' | 'name' | 'adp' | 'rank'
 
 export type QueuePanelProps = {
   queue: QueueEntry[]
@@ -59,6 +61,9 @@ export function QueuePanel({
 }: QueuePanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [positionFilter, setPositionFilter] = useState('ALL')
+  const [sortMode, setSortMode] = useState<QueueSortMode>('queue')
 
   const resolveMeta = (entry: QueueEntry) => {
     const fromMap =
@@ -82,6 +87,54 @@ export function QueuePanel({
     return Number.isInteger(value) ? `${value}` : value.toFixed(1)
   }
 
+  const queueWithIndex = useMemo(
+    () => queue.map((entry, queueIndex) => ({ entry, queueIndex })),
+    [queue],
+  )
+
+  const positionOptions = useMemo(() => {
+    const values = new Set<string>()
+    for (const { entry } of queueWithIndex) {
+      const p = String(entry.position ?? '').trim().toUpperCase()
+      if (p) values.add(p)
+    }
+    return ['ALL', ...Array.from(values).sort((a, b) => a.localeCompare(b))]
+  }, [queueWithIndex])
+
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const displayQueue = useMemo(() => {
+    const filtered = queueWithIndex.filter(({ entry }) => {
+      if (positionFilter !== 'ALL' && String(entry.position ?? '').toUpperCase() !== positionFilter) {
+        return false
+      }
+      if (!normalizedQuery) return true
+      const haystack = `${entry.playerName} ${entry.position} ${entry.team ?? ''}`.toLowerCase()
+      return haystack.includes(normalizedQuery)
+    })
+
+    if (sortMode === 'queue') return filtered
+
+    const safeValue = (n: number | null | undefined) => (n == null || !Number.isFinite(n) ? Number.POSITIVE_INFINITY : n)
+    return [...filtered].sort((a, b) => {
+      if (sortMode === 'name') return a.entry.playerName.localeCompare(b.entry.playerName)
+      if (sortMode === 'adp') {
+        const am = resolveMeta(a.entry)
+        const bm = resolveMeta(b.entry)
+        return safeValue(am.adp) - safeValue(bm.adp)
+      }
+      const am = resolveMeta(a.entry)
+      const bm = resolveMeta(b.entry)
+      return safeValue(am.rank) - safeValue(bm.rank)
+    })
+  }, [queueWithIndex, positionFilter, normalizedQuery, sortMode])
+
+  const canReorderVisually =
+    sortMode === 'queue' &&
+    positionFilter === 'ALL' &&
+    normalizedQuery.length === 0
+
+  const showFilteredEmptyState = queue.length > 0 && displayQueue.length === 0
+
   return (
     <section
       className={`flex flex-col overflow-hidden rounded-xl border bg-[#060d1e] ${
@@ -94,6 +147,39 @@ export function QueuePanel({
           <ListOrdered className="h-4 w-4 text-cyan-400" />
           <span className="text-sm font-semibold text-white">Queue</span>
         </div>
+      </div>
+      <div className="grid grid-cols-1 gap-2 border-b border-white/8 p-2.5 sm:grid-cols-3">
+        <input
+          type="search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search queued players"
+          data-testid="draft-queue-search"
+          className="h-10 rounded-lg border border-white/15 bg-[#0b1328] px-3 text-xs text-white placeholder:text-white/45 outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+        />
+        <select
+          value={positionFilter}
+          onChange={(e) => setPositionFilter(e.target.value)}
+          data-testid="draft-queue-position-filter"
+          className="h-10 rounded-lg border border-white/15 bg-[#0b1328] px-3 text-xs text-white outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+        >
+          {positionOptions.map((position) => (
+            <option key={position} value={position}>
+              {position === 'ALL' ? 'All positions' : position}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as QueueSortMode)}
+          data-testid="draft-queue-sort"
+          className="h-10 rounded-lg border border-white/15 bg-[#0b1328] px-3 text-xs text-white outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+        >
+          <option value="queue">Sort: Queue order</option>
+          <option value="adp">Sort: ADP</option>
+          <option value="rank">Sort: Rank</option>
+          <option value="name">Sort: Name</option>
+        </select>
       </div>
       <div className="flex flex-wrap gap-2 border-b border-white/8 p-2.5">
         {onAiReorder && (
@@ -209,31 +295,44 @@ export function QueuePanel({
               </p>
             ) : null}
           </div>
+        ) : showFilteredEmptyState ? (
+          <div className="space-y-1 rounded-xl border border-dashed border-white/15 bg-white/[0.03] px-3 py-5 text-center">
+            <p className="text-[11px] font-semibold text-white/80">No queue matches</p>
+            <p className="text-[10px] text-white/55">Adjust search, position, or sort to see queued players.</p>
+          </div>
         ) : (
           <ul className="space-y-2">
-            {queue.map((entry, index) => {
+            {displayQueue.map(({ entry, queueIndex }, displayIndex) => {
               const meta = resolveMeta(entry)
               const adpText = formatNumber(meta.adp)
               const rankText = formatNumber(meta.rank)
               return (
               <li
-                key={`${entry.playerName}-${entry.playerId ?? index}`}
-                data-testid={`draft-queue-item-${index}`}
-                draggable
-                onDragStart={() => setDragIndex(index)}
+                key={`${entry.playerName}-${entry.playerId ?? queueIndex}`}
+                data-testid={`draft-queue-item-${displayIndex}`}
+                draggable={canReorderVisually}
+                onDragStart={() => {
+                  if (!canReorderVisually) return
+                  setDragIndex(displayIndex)
+                }}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={() => {
-                  if (dragIndex != null && dragIndex !== index) {
-                    onReorder(dragIndex, index)
+                  if (!canReorderVisually) return
+                  if (dragIndex != null && dragIndex !== displayIndex) {
+                    const from = displayQueue[dragIndex]
+                    const to = displayQueue[displayIndex]
+                    if (from && to) {
+                      onReorder(from.queueIndex, to.queueIndex)
+                    }
                     setDragIndex(null)
                   }
                 }}
                 className={`flex items-center justify-between gap-2 rounded-xl border border-white/12 bg-[linear-gradient(180deg,rgba(10,18,40,0.94),rgba(7,14,30,0.98))] px-3 py-2.5 text-[11px] min-h-[58px] ${
-                  dragIndex === index ? 'opacity-60' : 'hover:bg-white/5'
+                  dragIndex === displayIndex ? 'opacity-60' : 'hover:bg-white/5'
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <span className="text-white/40 shrink-0 touch-none" aria-hidden><GripVertical className="h-4 w-4" /></span>
+                  <span className={`shrink-0 touch-none ${canReorderVisually ? 'text-white/40' : 'text-white/20'}`} aria-hidden><GripVertical className="h-4 w-4" /></span>
                   <PlayerAvatar
                     headshotUrl={meta.headshotUrl}
                     teamLogoUrl={meta.teamLogoUrl}
@@ -241,7 +340,7 @@ export function QueuePanel({
                     position={entry.position}
                     displayName={entry.playerName}
                     size={32}
-                    testIdBase={`draft-queue-avatar-${index}`}
+                    testIdBase={`draft-queue-avatar-${displayIndex}`}
                   />
                   <div className="min-w-0">
                     <p className="truncate font-medium text-white">{entry.playerName}</p>
@@ -264,9 +363,14 @@ export function QueuePanel({
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => onReorder(index, Math.max(0, index - 1))}
-                    disabled={index === 0}
-                    data-testid={`draft-queue-move-up-${index}`}
+                    onClick={() => {
+                      if (!canReorderVisually) return
+                      const previous = displayQueue[displayIndex - 1]
+                      if (!previous) return
+                      onReorder(queueIndex, previous.queueIndex)
+                    }}
+                    disabled={!canReorderVisually || displayIndex === 0}
+                    data-testid={`draft-queue-move-up-${displayIndex}`}
                     className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-white/50 hover:bg-white/10 hover:text-white/80 disabled:opacity-40 touch-manipulation"
                     aria-label={`Move ${entry.playerName} up`}
                   >
@@ -274,15 +378,20 @@ export function QueuePanel({
                   </button>
                   <button
                     type="button"
-                    onClick={() => onReorder(index, Math.min(queue.length - 1, index + 1))}
-                    disabled={index === queue.length - 1}
-                    data-testid={`draft-queue-move-down-${index}`}
+                    onClick={() => {
+                      if (!canReorderVisually) return
+                      const next = displayQueue[displayIndex + 1]
+                      if (!next) return
+                      onReorder(queueIndex, next.queueIndex)
+                    }}
+                    disabled={!canReorderVisually || displayIndex === displayQueue.length - 1}
+                    data-testid={`draft-queue-move-down-${displayIndex}`}
                     className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-white/50 hover:bg-white/10 hover:text-white/80 disabled:opacity-40 touch-manipulation"
                     aria-label={`Move ${entry.playerName} down`}
                   >
                     ↓
                   </button>
-                  {canDraft && onDraftFromQueue && index === 0 && (
+                  {canDraft && onDraftFromQueue && queueIndex === 0 && (
                     <button
                       type="button"
                       onClick={() => onDraftFromQueue(entry)}
@@ -294,8 +403,8 @@ export function QueuePanel({
                   )}
                   <button
                     type="button"
-                    onClick={() => onRemove(index)}
-                    data-testid={`draft-queue-remove-${index}`}
+                    onClick={() => onRemove(queueIndex)}
+                    data-testid={`draft-queue-remove-${displayIndex}`}
                     className="min-h-[44px] min-w-[44px] inline-flex items-center justify-center rounded-lg text-white/50 hover:bg-white/10 hover:text-white/80 touch-manipulation"
                     aria-label={`Remove ${entry.playerName} from queue`}
                   >
@@ -306,6 +415,11 @@ export function QueuePanel({
             )})}
           </ul>
         )}
+        {!canReorderVisually && displayQueue.length > 1 ? (
+          <p className="mt-2 text-[10px] text-white/45" data-testid="draft-queue-reorder-disabled-note">
+            Reorder is available when Sort is set to Queue order and no search/filter is active.
+          </p>
+        ) : null}
       </div>
     </section>
   )

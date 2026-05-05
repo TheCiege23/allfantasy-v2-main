@@ -163,6 +163,15 @@ function resolveExecutionMode(settings: Record<string, unknown>): DraftExecution
 }
 
 /**
+ * Slice 3 — single source of truth for "is soft timer active?".
+ * Soft timer = expired clocks do NOT auto-pick; draft waits for a manager / commissioner / NPC action.
+ * Mapped from `timerMode === 'soft_pause'` so we don't duplicate timer state.
+ */
+export function isSoftTimerEnabled(uiSettings: Pick<DraftUISettings, 'timerMode'> | null | undefined): boolean {
+  return uiSettings?.timerMode === 'soft_pause'
+}
+
+/**
  * Get draft UI settings for a league (for draft room and settings panel).
  */
 export async function getDraftUISettingsForLeague(leagueId: string): Promise<DraftUISettings> {

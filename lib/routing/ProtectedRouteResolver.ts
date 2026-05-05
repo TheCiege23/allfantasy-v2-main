@@ -10,10 +10,9 @@ import {
 /** Path prefixes that require an authenticated session. */
 const PROTECTED_PREFIXES = [
   "/dashboard",
-  "/app",
+  "/discover",
   "/leagues",
   "/brackets",
-  "/bracket",
   "/af-legacy",
   "/legacy",
   "/profile",

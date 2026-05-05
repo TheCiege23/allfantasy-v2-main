@@ -7,7 +7,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
-import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { getDraftUISettingsForLeague, isSoftTimerEnabled } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
 import { appendPickToRosterDraftSnapshot } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { computeTimerStateWithPauseWindow } from '@/lib/live-draft-engine/DraftTimerService'
@@ -105,6 +105,10 @@ export async function processExpiredDraftPickForLeague(
     const uiSettings = await getDraftUISettingsForLeague(leagueId)
     if (!uiSettings.autoPickEnabled) {
       return { leagueId, outcome: 'skipped', reason: 'auto_pick_disabled' }
+    }
+    // Slice 3 — Soft timer ON: expired clock does nothing. Draft waits for human / commissioner / NPC trigger.
+    if (isSoftTimerEnabled(uiSettings)) {
+      return { leagueId, outcome: 'skipped', reason: 'soft_timer_enabled' }
     }
 
     await reconcileOvernightDraftTimerForLeague(leagueId, now)

@@ -88,8 +88,57 @@ function isExemptPath(pathname: string): boolean {
 }
 
 /**
- * `/app` marketing shell and duplicate routes are deprecated; dashboard + `/league/*` are canonical.
- * See docs or APP_DEPRECATION_DELETE_LIST in repo notes when removing `app/app/**` files.
+ * Legacy `/web` mirror → canonical fantasy shell.
+ */
+function redirectDeprecatedWebRoutes(request: NextRequest): NextResponse | null {
+  const url = request.nextUrl.clone()
+  const { pathname } = url
+  if (pathname === "/web" || pathname === "/web/" || pathname.startsWith("/web/")) {
+    url.pathname = "/dashboard"
+    return NextResponse.redirect(url)
+  }
+  return null
+}
+
+/**
+ * Singular `/bracket/*` → `/brackets/*` (canonical bracket challenge UI).
+ */
+function redirectDeprecatedBracketSingularRoutes(request: NextRequest): NextResponse | null {
+  const url = request.nextUrl.clone()
+  const { pathname } = url
+
+  if (pathname === "/bracket" || pathname === "/bracket/") {
+    url.pathname = "/brackets"
+    return NextResponse.redirect(url)
+  }
+  if (pathname === "/bracket/home" || pathname.startsWith("/bracket/home/")) {
+    url.pathname = "/brackets"
+    return NextResponse.redirect(url)
+  }
+
+  const entriesNew = pathname.match(/^\/bracket\/([^/]+)\/entries\/new\/?$/)
+  if (entriesNew) {
+    url.pathname = `/brackets/tournament/${entriesNew[1]}`
+    return NextResponse.redirect(url)
+  }
+
+  const entryView = pathname.match(/^\/bracket\/([^/]+)\/entry\/([^/]+)\/?$/)
+  if (entryView) {
+    url.pathname = `/brackets/tournament/${entryView[1]}`
+    return NextResponse.redirect(url)
+  }
+
+  if (pathname.startsWith("/bracket/")) {
+    url.pathname = `/brackets${pathname.slice("/bracket".length)}`
+    return NextResponse.redirect(url)
+  }
+
+  return null
+}
+
+/**
+ * Legacy marketing `/app` entry and a few moved routes. Other `/app/*` pages still live under
+ * `app/app/**` (e.g. `/app/notifications`) — do not blanket-strip `/app` or those URLs 404.
  */
 function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null {
   const url = request.nextUrl.clone()
@@ -100,11 +149,11 @@ function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null 
     return NextResponse.redirect(url)
   }
   if (pathname.startsWith("/app/leagues")) {
-    url.pathname = pathname.slice(4)
+    url.pathname = pathname.replace(/^\/app/, "")
     return NextResponse.redirect(url)
   }
   if (pathname.startsWith("/app/power-rankings")) {
-    url.pathname = pathname.slice(4)
+    url.pathname = pathname.replace(/^\/app/, "")
     return NextResponse.redirect(url)
   }
   const leagueRoot = pathname.match(/^\/app\/league\/([^/]+)$/)
@@ -112,7 +161,19 @@ function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null 
     url.pathname = `/league/${leagueRoot[1]}`
     return NextResponse.redirect(url)
   }
+  if (pathname === "/app/discover" || pathname.startsWith("/app/discover/")) {
+    url.pathname = pathname.replace(/^\/app/, "")
+    return NextResponse.redirect(url)
+  }
   return null
+}
+
+function redirectLegacyMarketingRoutes(request: NextRequest): NextResponse | null {
+  const web = redirectDeprecatedWebRoutes(request)
+  if (web) return web
+  const bracket = redirectDeprecatedBracketSingularRoutes(request)
+  if (bracket) return bracket
+  return redirectDeprecatedAppRoutes(request)
 }
 
 /**
@@ -165,9 +226,22 @@ export async function middleware(request: NextRequest) {
     return hostRedirect
   }
 
-  const appRedirect = redirectDeprecatedAppRoutes(request)
-  if (appRedirect) {
-    return appRedirect
+  const legacyRedirect = redirectLegacyMarketingRoutes(request)
+  if (legacyRedirect) {
+    return legacyRedirect
+  }
+
+  /** Signed-in users should land on the fantasy shell hub, not the marketing homepage. */
+  if (pathname === "/" || pathname === "") {
+    const authSecret = resolveAuthSecret()
+    if (authSecret) {
+      const token = await getToken({ req: request, secret: authSecret })
+      if (token?.sub) {
+        const url = request.nextUrl.clone()
+        url.pathname = "/dashboard"
+        return NextResponse.redirect(url)
+      }
+    }
   }
 
   if (isExemptPath(pathname)) {

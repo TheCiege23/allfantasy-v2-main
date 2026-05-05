@@ -150,6 +150,21 @@ export async function POST(req: Request) {
     data: { userId: user.id, tokenHash, expiresAt },
   })
 
+  if (!process.env.RESEND_API_KEY?.trim()) {
+    console.error(
+      "[password/reset/request] RESEND_API_KEY is not set — password reset emails will not be delivered. Add RESEND_API_KEY (and verify RESEND_FROM domain) in Vercel / .env.local.",
+    )
+    void logPasswordResetAudit({
+      outcome: "email_provider_missing",
+      type: "email",
+      userId: user.id,
+      email,
+      ip,
+      detail: { reason: "RESEND_API_KEY unset" },
+    })
+    return NextResponse.json({ ok: true }, { status: 200 })
+  }
+
   const appBase =
     process.env.NEXTAUTH_URL?.trim() ||
     process.env.APP_BASE_URL?.trim() ||

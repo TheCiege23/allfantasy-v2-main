@@ -1,0 +1,6 @@
+{
+  "/api/shared/quick-ai/route": "app/api/shared/quick-ai/route.js",
+  "/api/shared/wallet/route": "app/api/shared/wallet/route.js",
+  "/api/shared/notifications/route": "app/api/shared/notifications/route.js",
+  "/brackets/world-cup/create/page": "app/brackets/world-cup/create/page.js"
+}

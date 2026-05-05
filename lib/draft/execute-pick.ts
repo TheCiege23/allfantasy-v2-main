@@ -2,7 +2,8 @@ import { prisma } from '@/lib/prisma'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { parseSessionKey } from '@/lib/draft/session-key'
-import { pickInRoundForOverall, roundForOverallPick, slotIndexForOverallPick } from '@/lib/draft/snake'
+import { pickInRoundForOverall, roundForOverallPick } from '@/lib/draft/snake'
+import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { canSubmitPickForRoster } from '@/lib/live-draft-engine/auth'
 import { submitPick } from '@/lib/live-draft-engine/PickSubmissionService'
@@ -81,7 +82,16 @@ export async function executeDraftPick(args: {
     return { ok: false, error: 'Draft already complete', status: 400 }
   }
 
-  const slot = slotIndexForOverallPick(overallPick, numTeams)
+  const thirdRoundReversal = Boolean(
+    (state as { thirdRoundReversal?: boolean | null }).thirdRoundReversal,
+  )
+  const slot =
+    getSlotInRoundForOverall({
+      overall: overallPick,
+      teamCount: numTeams,
+      draftType: 'snake',
+      thirdRoundReversal,
+    }) - 1
   const onClock = pickOrder[slot]?.id
   if (!onClock) {
     return { ok: false, error: 'Invalid slot', status: 500 }
@@ -121,7 +131,14 @@ export async function executeDraftPick(args: {
 
     const done = overallPick >= totalPicks
     const nextOverall = overallPick + 1
-    const nextSlot = done ? slot : slotIndexForOverallPick(nextOverall, numTeams)
+    const nextSlot = done
+      ? slot
+      : getSlotInRoundForOverall({
+          overall: nextOverall,
+          teamCount: numTeams,
+          draftType: 'snake',
+          thirdRoundReversal,
+        }) - 1
     const nextRound = done ? round : roundForOverallPick(nextOverall, numTeams)
     const ends = done ? null : new Date(Date.now() + state.timerSeconds * 1000)
 

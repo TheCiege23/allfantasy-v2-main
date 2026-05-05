@@ -51,7 +51,8 @@
     ".next-dev-triage/types/**/*.ts",
     ".next-dev-3101/types/**/*.ts",
     ".next-dev-local-smoke/types/**/*.ts",
-    ".next-playwright-3310/types/**/*.ts"
+    ".next-playwright-3310/types/**/*.ts",
+    ".next-dev-3010/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

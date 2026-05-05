@@ -95,8 +95,10 @@ export function getToolsForSport(sportSlug: SportSlug | null): ToolHubTool[] {
     '/trade-analyzer': '/trade-evaluator',
     '/waiver-wire': '/waiver-ai',
     '/social-pulse': '/social-pulse',
-    '/matchup-simulator': '/app/simulation-lab',
-    '/brackets': '/bracket',
+    '/matchup-simulator': '/matchup-simulator',
+    '/app/simulation-lab': '/matchup-simulator',
+    '/bracket': '/brackets',
+    '/app/power-rankings': '/power-rankings',
   }
   const hrefSet = new Set(
     sportConfig.toolHrefs.map((h) => {

@@ -119,7 +119,7 @@ export default function ProductDemoSection() {
             </div>
             <div className="mt-4">
               <Link
-                href="/app"
+                href="/dashboard"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-emerald-400 px-4 py-2 text-xs font-semibold text-black shadow-sm hover:bg-emerald-300 sm:text-sm"
               >
                 <PanelsTopLeft className="h-4 w-4" />
@@ -170,7 +170,7 @@ export default function ProductDemoSection() {
             </div>
             <div className="mt-4">
               <Link
-                href="/bracket"
+                href="/brackets"
                 className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-sky-400 px-4 py-2 text-xs font-semibold text-black shadow-sm hover:bg-sky-300 sm:text-sm"
               >
                 <Trophy className="h-4 w-4" />

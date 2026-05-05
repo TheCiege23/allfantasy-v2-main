@@ -42,13 +42,30 @@ function resolveIntentAlias(intent: string | null | undefined): string | null {
   return null
 }
 
-/** Old bookmarks and emails used `/app` and `/app/home`; canonical hub is `/dashboard`. */
+/** Legacy `/app`, `/web`, `/bracket` bookmarks — align with middleware (`middleware.ts`). */
 function remapDeprecatedAppRoutes(safe: string): string {
   const q = safe.indexOf("?")
   const path = q === -1 ? safe : safe.slice(0, q)
   const search = q === -1 ? "" : safe.slice(q)
-  if (path === "/app" || path === "/app/home") {
+  if (path === "/web" || path.startsWith("/web/")) {
     return `/dashboard${search}`
+  }
+  if (path === "/bracket" || path.startsWith("/bracket/")) {
+    const mapped = path.replace(/^\/bracket(\/|$)/, "/brackets$1")
+    return `${mapped}${search}`
+  }
+  if (path === "/app" || path === "/app/" || path === "/app/home") {
+    return `/dashboard${search}`
+  }
+  if (path.startsWith("/app/leagues") || path.startsWith("/app/power-rankings")) {
+    return `${path.replace(/^\/app/, "")}${search}`
+  }
+  if (path === "/app/discover" || path.startsWith("/app/discover/")) {
+    return `${path.replace(/^\/app/, "")}${search}`
+  }
+  if (/^\/app\/league\/[^/]+$/.test(path)) {
+    const id = path.slice("/app/league/".length)
+    return `/league/${id}${search}`
   }
   return safe
 }

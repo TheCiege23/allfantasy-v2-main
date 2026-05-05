@@ -101,7 +101,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Season Strategy', href: '/season-strategy' },
       { label: 'Manager Comparison', href: '/manager-compare' },
       { label: 'Social Pulse', href: '/social-pulse' },
-      { label: 'Sports App', href: '/app' },
+      { label: 'Sports App', href: '/discover/leagues' },
       { label: 'Legacy & Dynasty', href: '/af-legacy' },
     ],
   },
@@ -122,7 +122,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Season Strategy', href: '/season-strategy' },
       { label: 'Social Pulse', href: '/social-pulse' },
       { label: 'Power Rankings', href: '/app/power-rankings' },
-      { label: 'Sports App', href: '/app' },
+      { label: 'Sports App', href: '/discover/leagues' },
     ],
   },
   'fantasy-baseball': {
@@ -140,7 +140,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Waiver Advisor', href: '/waiver-ai' },
       { label: 'Mock Draft', href: '/mock-draft' },
       { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/app' },
+      { label: 'Sports App', href: '/discover/leagues' },
       { label: 'Chimmy AI', href: '/chimmy' },
     ],
   },
@@ -159,7 +159,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Mock Draft', href: '/mock-draft' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
       { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/app' },
+      { label: 'Sports App', href: '/discover/leagues' },
       { label: 'Legacy', href: '/af-legacy' },
     ],
   },
@@ -177,7 +177,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
       { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/app' },
+      { label: 'Sports App', href: '/discover/leagues' },
       { label: 'Chimmy AI', href: '/chimmy' },
     ],
   },
@@ -195,7 +195,7 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Waiver Advisor', href: '/waiver-ai' },
       { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/app' },
+      { label: 'Sports App', href: '/discover/leagues' },
       { label: 'Legacy & Dynasty', href: '/af-legacy' },
     ],
   },
@@ -210,11 +210,11 @@ export const SPORT_CONFIG: Record<SportSlug, SportConfig> = {
       'AllFantasy offers NCAA basketball bracket challenges, pool management, and fantasy league tools. Compete in bracket contests and use AI to stress-test your picks. Fantasy league support for NCAAB.',
     keywords: ['NCAA basketball fantasy', 'bracket challenge', 'March Madness', 'NCAAB fantasy'],
     toolHrefs: [
-      { label: 'Bracket Challenge', href: '/bracket' },
+      { label: 'Bracket Challenge', href: '/brackets' },
       { label: 'Bracket Hub', href: '/brackets' },
       { label: 'Trade Analyzer', href: '/trade-analyzer' },
       { label: 'Season Strategy', href: '/season-strategy' },
-      { label: 'Sports App', href: '/app' },
+      { label: 'Sports App', href: '/discover/leagues' },
     ],
   },
 }
@@ -414,7 +414,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'Matchup Simulator',
     benefitSummary:
       'Simulate seasons, playoffs, and matchups. Use data-driven scenarios for redraft and dynasty.',
-    openToolHref: '/app/simulation-lab',
+    openToolHref: '/matchup-simulator',
     examples: [
       'Season and playoff simulations',
       'Head-to-head and scoring projections',
@@ -431,7 +431,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'NCAA Bracket Challenge',
     benefitSummary:
       'Build bracket pools, track standings, and get AI bracket analysis. March Madness made social and smart.',
-    openToolHref: '/bracket',
+    openToolHref: '/brackets',
     examples: [
       'Create and join bracket pools',
       'AI bracket review and simulation',
@@ -448,7 +448,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'Power Rankings',
     benefitSummary:
       'View power rankings across your leagues. Compare teams and track movement over the season.',
-    openToolHref: '/app/power-rankings',
+    openToolHref: '/power-rankings',
     examples: [
       'League and cross-league power rankings',
       'Sport-specific and multi-sport support',

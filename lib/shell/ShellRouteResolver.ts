@@ -37,6 +37,7 @@ const PRODUCT_PATHS: { prefix: string; product: ProductId }[] = [
   { prefix: "/dashboard", product: "home" },
   { prefix: "/league", product: "webapp" },
   { prefix: "/import", product: "webapp" },
+  { prefix: "/discover", product: "webapp" },
   { prefix: "/app", product: "webapp" },
   { prefix: "/leagues", product: "webapp" },
   { prefix: "/brackets", product: "bracket" },

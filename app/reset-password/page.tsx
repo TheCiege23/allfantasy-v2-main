@@ -1,15 +1,69 @@
 "use client"
 
 import Link from "next/link"
-import { useState, Suspense, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useState, Suspense, useEffect, type CSSProperties, type ReactNode } from "react"
+import { useSearchParams } from "next/navigation"
 import { ArrowLeft, ArrowRight, Loader2, Eye, EyeOff, CheckCircle2, TriangleAlert } from "lucide-react"
 import { AuthStatusHeader, AuthStatusLoadingFallback, AuthStatusShell } from "@/components/auth/AuthStatusShell"
 
 type AuthMode = "checking" | "token" | "none"
 
+const recoveryInputStyle: CSSProperties = {
+  background: "var(--panel2)",
+  color: "var(--text)",
+  borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+}
+
+const recoveryInputClassName =
+  "w-full rounded-[10px] border px-3.5 py-3 text-sm outline-none transition placeholder:[color:var(--muted2)] focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10"
+
+function RecoveryCard({
+  children,
+  danger = false,
+}: {
+  children: ReactNode
+  danger?: boolean
+}) {
+  return (
+    <div
+      className="rounded-[18px] border p-8"
+      style={{
+        boxShadow: "0 24px 80px color-mix(in srgb, var(--text) 10%, transparent)",
+        ...(danger
+          ? {
+              borderColor: "color-mix(in srgb, var(--accent-red) 35%, var(--border))",
+              background: "color-mix(in srgb, var(--accent-red) 8%, var(--panel))",
+            }
+          : {
+              borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+              background: "var(--panel)",
+            }),
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+function RecoveryError({ error }: { error: string | null }) {
+  if (!error) return null
+  return (
+    <div
+      className="mb-4 rounded-xl border border-red-500/25 p-3 text-sm"
+      style={{
+        background: "color-mix(in srgb, var(--accent-red) 10%, transparent)",
+        color: "var(--text)",
+      }}
+    >
+      <div className="flex items-start gap-2">
+        <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
+        <div>{error}</div>
+      </div>
+    </div>
+  )
+}
+
 function ResetPasswordContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const token = searchParams?.get("token") || ""
   const requestedReturnTo = searchParams?.get("returnTo") || ""
@@ -86,12 +140,22 @@ function ResetPasswordContent() {
 
   if (authMode === "checking") {
     return (
-      <AuthStatusShell>
+      <AuthStatusShell navRightHref="/login" navRightLabel="Sign In">
         <div className="w-full max-w-[440px]">
           <AuthStatusHeader title="Loading" subtitle="Checking your reset session…" />
-          <div className="flex justify-center rounded-[18px] border border-violet-400/20 bg-[#16102a] p-12">
-            <Loader2 className="h-10 w-10 animate-spin text-cyan-400" />
-          </div>
+          <RecoveryCard>
+            <div className="flex justify-center py-4">
+              <div
+                className="flex h-14 w-14 items-center justify-center rounded-2xl border"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--accent-cyan) 25%, var(--border))",
+                  background: "color-mix(in srgb, var(--accent-cyan) 10%, transparent)",
+                }}
+              >
+                <Loader2 className="h-7 w-7 animate-spin" style={{ color: "var(--accent-cyan-strong)" }} />
+              </div>
+            </div>
+          </RecoveryCard>
         </div>
       </AuthStatusShell>
     )
@@ -99,28 +163,39 @@ function ResetPasswordContent() {
 
   if (authMode === "none" && !token) {
     return (
-      <AuthStatusShell>
+      <AuthStatusShell navRightHref="/login" navRightLabel="Sign In">
         <div className="w-full max-w-[440px]">
           <AuthStatusHeader
             title="Invalid reset link"
             subtitle="Open the link from your password reset email, or request a new one."
           />
-          <div className="rounded-[18px] border border-red-500/20 bg-[#16102a] p-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-500/20 bg-amber-500/10">
-              <TriangleAlert className="h-7 w-7 text-amber-400" />
+          <RecoveryCard>
+            <div className="text-center">
+              <div
+                className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--accent-amber-strong) 25%, var(--border))",
+                  background: "color-mix(in srgb, var(--accent-amber) 10%, transparent)",
+                }}
+              >
+                <TriangleAlert className="h-7 w-7" style={{ color: "var(--accent-amber-strong)" }} />
+              </div>
+              <h1 className="mt-5 text-2xl font-semibold" style={{ color: "var(--text)" }}>
+                Session required
+              </h1>
+              <p className="mt-3 text-sm leading-6" style={{ color: "var(--muted)" }}>
+                We couldn&apos;t verify a password reset session. Use the link from your email, or request a new reset.
+              </p>
+              <Link
+                href="/forgot-password"
+                className="mt-7 inline-flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90"
+                style={{ color: "var(--on-accent-bg)" }}
+              >
+                <span>Request reset</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
-            <h1 className="mt-5 text-2xl font-semibold text-white">Session required</h1>
-            <p className="mt-3 text-sm leading-6 text-white/60">
-              We couldn&apos;t verify a password reset session. Use the link from your email, or request a new reset.
-            </p>
-            <Link
-              href="/forgot-password"
-              className="mt-7 inline-flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-90"
-            >
-              <span>Request reset</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          </RecoveryCard>
         </div>
       </AuthStatusShell>
     )
@@ -128,39 +203,55 @@ function ResetPasswordContent() {
 
   if (success) {
     return (
-      <AuthStatusShell>
+      <AuthStatusShell navRightHref="/login" navRightLabel="Sign In">
         <div className="w-full max-w-[440px]">
           <AuthStatusHeader
             title="Password reset"
             subtitle="Your password was updated successfully."
           />
-          <div className="rounded-[18px] border border-violet-400/20 bg-[#16102a] p-8 text-center shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
-              <CheckCircle2 className="h-7 w-7 text-emerald-400" />
+          <RecoveryCard>
+            <div className="text-center">
+              <div
+                className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--accent-emerald-strong) 25%, var(--border))",
+                  background: "color-mix(in srgb, var(--accent-emerald) 10%, transparent)",
+                }}
+              >
+                <CheckCircle2 className="h-7 w-7" style={{ color: "var(--accent-emerald-strong)" }} />
+              </div>
+              <h1 className="mt-5 text-2xl font-semibold" style={{ color: "var(--text)" }}>
+                Password reset
+              </h1>
+              <p className="mt-3 text-sm leading-6" style={{ color: "var(--muted)" }}>
+                Your password has been updated. Redirecting to sign in...
+              </p>
+              <Link
+                href={loginHref}
+                className="mt-7 inline-flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90"
+                style={{ color: "var(--on-accent-bg)" }}
+              >
+                <span>Sign In</span>
+                <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
-            <h1 className="mt-5 text-2xl font-semibold text-white">Password reset</h1>
-            <p className="mt-3 text-sm leading-6 text-white/60">
-              Your password has been updated. Redirecting to sign in...
-            </p>
-            <Link
-              href={loginHref}
-              className="mt-7 inline-flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-90"
-            >
-              <span>Sign In</span>
-              <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
+          </RecoveryCard>
         </div>
       </AuthStatusShell>
     )
   }
 
   return (
-    <AuthStatusShell>
+    <AuthStatusShell navRightHref="/login" navRightLabel="Sign In">
       <div className="w-full max-w-[440px]">
         <Link
           href={loginHref}
-          className="mb-6 inline-flex items-center gap-2 rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-4 py-2.5 text-sm font-medium text-white/75 transition hover:border-violet-300/45 hover:bg-[#211a3e] hover:text-white"
+          className="mb-6 inline-flex items-center gap-2 rounded-[10px] border px-4 py-2.5 text-sm font-medium transition hover:opacity-90"
+          style={{
+            borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+            background: "var(--panel2)",
+            color: "var(--muted)",
+          }}
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Back to Sign In</span>
@@ -171,26 +262,25 @@ function ResetPasswordContent() {
           subtitle="Choose a strong new password for your AllFantasy account."
         />
 
-        {error && (
-          <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
-            <div className="flex items-start gap-2">
-              <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
-              <div>{error}</div>
-            </div>
-          </div>
-        )}
+        <RecoveryError error={error} />
 
-        <div className="rounded-[18px] border border-violet-400/20 bg-[#16102a] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+        <RecoveryCard>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-[13px] font-semibold tracking-[0.02em] text-white/60">New password</label>
+              <label
+                className="text-[13px] font-semibold tracking-[0.02em]"
+                style={{ color: "var(--muted)" }}
+              >
+                New password
+              </label>
               <div className="relative mt-1.5">
                 <input
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type={showPassword ? "text" : "password"}
                   autoComplete="new-password"
-                  className="w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 pr-11 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                  className={`${recoveryInputClassName} pr-11`}
+                  style={recoveryInputStyle}
                   placeholder="At least 8 characters"
                   disabled={loading}
                   autoFocus
@@ -198,20 +288,26 @@ function ResetPasswordContent() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/35 transition hover:text-cyan-200"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition [color:var(--muted)] hover:[color:var(--accent-cyan-strong)]"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
             <div>
-              <label className="text-[13px] font-semibold tracking-[0.02em] text-white/60">Confirm password</label>
+              <label
+                className="text-[13px] font-semibold tracking-[0.02em]"
+                style={{ color: "var(--muted)" }}
+              >
+                Confirm password
+              </label>
               <input
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 type="password"
                 autoComplete="new-password"
-                className="mt-1.5 w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                className={`mt-1.5 ${recoveryInputClassName}`}
+                style={recoveryInputStyle}
                 placeholder="Confirm your new password"
                 disabled={loading}
               />
@@ -219,7 +315,8 @@ function ResetPasswordContent() {
             <button
               type="submit"
               disabled={loading || !password || !confirmPassword}
-              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ color: "var(--on-accent-bg)" }}
             >
               {loading ? (
                 <>
@@ -234,7 +331,7 @@ function ResetPasswordContent() {
               )}
             </button>
           </form>
-        </div>
+        </RecoveryCard>
       </div>
     </AuthStatusShell>
   )

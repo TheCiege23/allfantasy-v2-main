@@ -10,6 +10,7 @@ type PasswordResetAuditOutcome =
   | "empty_email"
   | "email_user_not_found"
   | "email_token_created"
+  | "email_provider_missing"
   | "email_send_failed"
   | "email_sent"
 

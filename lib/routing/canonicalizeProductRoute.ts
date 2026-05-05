@@ -35,6 +35,9 @@ export function canonicalizeProductRoute(path: string): string {
 
   if (pathname === "/app" || pathname.startsWith("/app/")) return DASHBOARD
   if (pathname === "/web" || pathname.startsWith("/web/")) return DASHBOARD
+  if (pathname === "/bracket" || pathname.startsWith("/bracket/")) {
+    return pathname.replace(/^\/bracket(\/|$)/, "/brackets$1") + search
+  }
   if (pathname === "/af-legacy" || pathname.startsWith("/af-legacy/")) return DASHBOARD
   if (pathname === "/brackets" || pathname.startsWith("/brackets/")) return DASHBOARD
 

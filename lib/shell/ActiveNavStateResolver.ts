@@ -36,10 +36,11 @@ export function isNavItemActive(pathname: string | null, href: string): boolean 
       pathname.startsWith("/import")
     )
   }
-  if (href === "/app") {
+  if (href === "/discover/leagues") {
     return (
-      pathname === "/app" ||
-      pathname.startsWith("/app/") ||
+      pathname === "/discover/leagues" ||
+      pathname.startsWith("/discover/") ||
+      pathname.startsWith("/sports/") ||
       pathname === "/leagues" ||
       pathname.startsWith("/leagues/")
     )

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSession, signIn } from 'next-auth/react';
+import { useSession } from 'next-auth/react';
 
 interface Artist {
   id: string;
@@ -178,11 +178,10 @@ export const useMusicWidget = (): UseMusicWidgetReturn => {
     }
   }, [session]);
 
-  const connectSpotify = useCallback(async () => {
-    const result = await signIn('spotify', { callbackUrl: '/settings?tab=connected' });
-    if (result?.url && typeof window !== 'undefined') {
-      window.location.assign(result.url);
-    }
+  /** Same OAuth entry as Settings → Connected Accounts (custom `/api/auth/spotify`, not NextAuth `signIn`). */
+  const connectSpotify = useCallback(() => {
+    if (typeof window === 'undefined') return
+    window.location.assign('/api/auth/spotify')
   }, []);
 
   const toTrack = useCallback((value: any): Track => {

@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { getDraftConfigForLeague } from '@/lib/draft-defaults/DraftRoomConfigResolver'
-import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { getDraftUISettingsForLeague, isSoftTimerEnabled } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { submitBestAvailableAutopickForExpiredTimer } from '@/lib/live-draft-engine/autopickBestAvailableSubmit'
 import { getAllowedPositionsAndRosterSize } from '@/lib/live-draft-engine/RosterFitValidation'
 import { filterEntriesByDraftEligiblePositions } from '@/lib/draft-room/draft-pool-eligible-positions'
@@ -274,7 +274,14 @@ export async function runSlowDraftAutomationTick(
       current != null ? resolvePickOwner(current.round, current.slot, slotOrder, tradedPicks) : null
     const onClockRosterId = resolvedOwner?.rosterId ?? current?.rosterId ?? null
 
-    if (uiSettings.autoPickEnabled && timer.status === 'expired' && onClockRosterId) {
+    // Slice 3 — Soft timer ON suppresses the slow-draft tick autopick gate. Same canonical helper as
+    // processExpiredDraftPickForLeague. Pause/skip/notification side-effects below remain untouched.
+    if (
+      uiSettings.autoPickEnabled &&
+      !isSoftTimerEnabled(uiSettings) &&
+      timer.status === 'expired' &&
+      onClockRosterId
+    ) {
       const queuePick = await tryQueueAutoPick(leagueId, onClockRosterId)
       if (queuePick.success && queuePick.playerName) {
         changed = true

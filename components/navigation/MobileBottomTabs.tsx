@@ -13,13 +13,14 @@ type BottomTab = {
 
 const MOBILE_BOTTOM_TABS: BottomTab[] = [
   { href: "/dashboard", label: "Home", icon: Home },
-  { href: "/app", label: "Sports", icon: Volleyball },
+  { href: "/discover/leagues", label: "Sports", icon: Volleyball },
   { href: "/brackets", label: "Bracket", icon: Trophy },
   { href: "/messages", label: "Messages", icon: MessageCircle },
   { href: "/profile", label: "Profile", icon: User },
 ]
 
 const SPORTS_ACTIVE_PREFIXES = [
+  "/discover/",
   "/sports/",
   "/fantasy-football",
   "/fantasy-basketball",

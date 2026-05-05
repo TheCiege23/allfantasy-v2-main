@@ -196,7 +196,7 @@ export const FloatingMusicWidget: React.FC = () => {
                 />
                 <div className="spotify-connect">
                   {!isSpotifyConnected ? (
-                    <button className="spotify-button" onClick={connectSpotify}>
+                    <button type="button" className="spotify-button" onClick={connectSpotify}>
                       Connect Spotify
                     </button>
                   ) : (

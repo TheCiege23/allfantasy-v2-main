@@ -33,6 +33,10 @@ export type DraftTopBarProps = {
   teamCount: number
   rounds: number
   currentManagerOnClock: string | null
+  /** Optional avatar for the on-clock roster from league chrome. */
+  currentManagerAvatarUrl?: string | null
+  /** When true, label on-clock state as "You're on the clock". */
+  isCurrentUserOnClock?: boolean
   pickLabel: string | null
   overallPickNumber: number | null
   timerStatus: 'running' | 'paused' | 'expired' | 'none'
@@ -124,6 +128,17 @@ function translateTimerMode(mode: TimerMode, t: (key: string) => string): string
   return mode.replace(/_/g, ' ')
 }
 
+function resolveDraftFormatLabel(
+  draftType: string,
+  thirdRoundReversal: boolean,
+): string {
+  const norm = draftType.trim().toLowerCase()
+  if (norm === 'auction') return 'Auction'
+  if (norm === 'linear') return 'Linear'
+  if (norm === 'snake') return thirdRoundReversal ? 'Snake + 3RR' : 'Snake'
+  return draftType
+}
+
 function formatTimerSummary(timerSeconds: number | null | undefined): string {
   if (!timerSeconds || timerSeconds <= 0) return 'Untimed picks'
   if (timerSeconds < 60) return `${timerSeconds} Seconds Per Pick`
@@ -147,6 +162,8 @@ export function DraftTopBar({
   teamCount,
   rounds,
   currentManagerOnClock,
+  currentManagerAvatarUrl = null,
+  isCurrentUserOnClock = false,
   pickLabel,
   overallPickNumber,
   timerStatus,
@@ -251,6 +268,7 @@ export function DraftTopBar({
     liveRemaining <= 5
   const statusLabel = translateDraftStatus(draftStatus, t)
   const draftTypeLabel = translateDraftType(draftType, t)
+  const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal)
   const timerModeLabel = translateTimerMode(timerMode, t)
 
   const centerCta = (() => {
@@ -462,7 +480,7 @@ export function DraftTopBar({
                 <span className="text-white/24">·</span>
                 <span className="text-white/55">{sport}</span>
                 <span className="text-white/24">·</span>
-                <span>{draftTypeLabel}</span>
+                <span title={`Draft type: ${draftTypeLabel}`}>{draftFormatLabel}</span>
                 {thirdRoundReversal ? (
                   <>
                     <span className="text-white/24">·</span>
@@ -488,6 +506,27 @@ export function DraftTopBar({
                   <Copy className="h-3.5 w-3.5" />
                 </button>
                 {copyFeedback === 'copied' ? <span className="text-cyan-300">Copied</span> : null}
+              </div>
+              <div
+                className="mt-2 grid grid-cols-2 gap-1.5 rounded-lg border border-white/10 bg-black/20 p-2 text-[10px] text-white/75 md:hidden"
+                data-testid="draft-topbar-mobile-compact"
+              >
+                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
+                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Format</span>
+                  <span className="block font-semibold text-cyan-100">{draftFormatLabel}</span>
+                </div>
+                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
+                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Status</span>
+                  <span className="block font-semibold text-white">{statusLabel}</span>
+                </div>
+                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
+                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Current</span>
+                  <span className="block font-semibold text-white">{pickLabel ?? '—'}</span>
+                </div>
+                <div className="rounded-md border border-white/10 bg-white/[0.04] px-2 py-1">
+                  <span className="block text-[9px] uppercase tracking-[0.14em] text-white/45">Clock</span>
+                  <span className="block font-semibold text-cyan-100">{timerDisplay}</span>
+                </div>
               </div>
               {isCommissioner && onCommissionerOpen ? (
                 <button
@@ -554,6 +593,19 @@ export function DraftTopBar({
                   Reset timer
                 </button>
               ) : null}
+              {onCommissionerOpen ? (
+                <button
+                  type="button"
+                  onClick={onCommissionerOpen}
+                  disabled={commissionerLoading}
+                  data-testid="draft-topbar-assign-pick-open"
+                  className="inline-flex min-h-[40px] items-center gap-1.5 rounded-full border border-violet-400/35 bg-violet-500/12 px-3.5 py-2 text-xs font-semibold text-violet-100 transition duration-150 hover:bg-violet-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-300/45 disabled:opacity-45"
+                  title="Open commissioner tools to assign or edit a pick"
+                >
+                  <LayoutGrid className="h-3.5 w-3.5" />
+                  Assign pick
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -584,7 +636,22 @@ export function DraftTopBar({
                     : 'border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-[#0a1228]/95 shadow-[0_6px_28px_rgba(139,92,246,0.15)] ring-violet-400/10'
                 }`}
               >
-                <User className="h-4 w-4 shrink-0 text-violet-300" />
+                {currentManagerAvatarUrl ? (
+                  <Image
+                    src={currentManagerAvatarUrl}
+                    alt=""
+                    width={22}
+                    height={22}
+                    aria-hidden
+                    className="h-[22px] w-[22px] shrink-0 rounded-full border border-white/20 object-cover"
+                    unoptimized
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none'
+                    }}
+                  />
+                ) : (
+                  <User className="h-4 w-4 shrink-0 text-violet-300" />
+                )}
                 <span
                   className="min-w-0 truncate text-base font-bold text-white sm:text-lg"
                   data-testid="draft-topbar-on-clock-manager"
@@ -592,7 +659,11 @@ export function DraftTopBar({
                   {currentManagerOnClock}
                 </span>
                 <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-violet-200/75">
-                  {isOrphanOnClock ? orphanModeLabel : t('draftRoom.topBar.onTheClock')}
+                  {isOrphanOnClock
+                    ? orphanModeLabel
+                    : isCurrentUserOnClock
+                      ? "You're on the clock"
+                      : t('draftRoom.topBar.onTheClock')}
                 </span>
               </div>
             ) : null}

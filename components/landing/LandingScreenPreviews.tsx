@@ -65,7 +65,7 @@ const PREVIEWS = [
     id: 'playoff-bracket',
     titleKey: 'landing.previews.playoffBracket.title',
     descriptionKey: 'landing.previews.playoffBracket.description',
-    href: '/bracket',
+    href: '/brackets',
     icon: Network,
     snippetKey: 'landing.previews.playoffBracket.snippet',
     image: '/branding/allfantasy-black-white-logo.png',

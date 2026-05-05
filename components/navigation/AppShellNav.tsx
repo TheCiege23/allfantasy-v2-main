@@ -21,7 +21,7 @@ type AppShellNavProps = {
 
 const PRODUCT_TABS = [
   { href: "/brackets", label: "Bracket" },
-  { href: "/app", label: "WebApp" },
+  { href: "/discover/leagues", label: "Sports" },
   { href: "/af-legacy", label: "Legacy" },
 ] as const
 
@@ -29,7 +29,7 @@ const GLOBAL_TABS = [
   { href: "/dashboard", label: "Home" },
   { href: "/profile", label: "Profile" },
   { href: "/brackets", label: "Bracket" },
-  { href: "/app", label: "WebApp" },
+  { href: "/discover/leagues", label: "Sports" },
   { href: "/af-legacy", label: "Legacy" },
   { href: "/messages", label: "Messages" },
   { href: "/wallet", label: "Wallet" },
@@ -129,10 +129,10 @@ export default function AppShellNav({
               </>
             ) : (
               <>
-                  <Link href={loginUrlWithIntent(currentPath || "/app")} className="rounded-lg border px-3 py-1.5 text-sm transition" style={{ borderColor: "var(--border)", color: "var(--text)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)" }}>
+                  <Link href={loginUrlWithIntent(currentPath || "/dashboard")} className="rounded-lg border px-3 py-1.5 text-sm transition" style={{ borderColor: "var(--border)", color: "var(--text)", background: "color-mix(in srgb, var(--panel2) 82%, transparent)" }}>
                   Login
                 </Link>
-                  <Link href={signupUrlWithIntent(currentPath || "/app")} className="rounded-lg px-3 py-1.5 text-sm font-semibold transition" style={{ background: "var(--accent-cyan-strong)", color: "var(--on-accent-bg)" }}>
+                  <Link href={signupUrlWithIntent(currentPath || "/dashboard")} className="rounded-lg px-3 py-1.5 text-sm font-semibold transition" style={{ background: "var(--accent-cyan-strong)", color: "var(--on-accent-bg)" }}>
                   Sign Up
                 </Link>
               </>

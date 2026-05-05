@@ -69,6 +69,99 @@ vi.mock("@/lib/prisma", () => ({
 }))
 
 describe("World Cup cron and admin routes", () => {
+  it("uses LEAGUE_CRON_SECRET fallback when preferred secret is blank", async () => {
+    const { requireCronAuth } = await vi.importActual<typeof import("@/app/api/cron/_auth")>(
+      "@/app/api/cron/_auth"
+    )
+
+    const previous = {
+      BRACKET_CRON_SECRET: process.env.BRACKET_CRON_SECRET,
+      LEAGUE_CRON_SECRET: process.env.LEAGUE_CRON_SECRET,
+      CRON_SECRET: process.env.CRON_SECRET,
+    }
+
+    try {
+      process.env.BRACKET_CRON_SECRET = "   "
+      process.env.LEAGUE_CRON_SECRET = "league-fallback-secret"
+      process.env.CRON_SECRET = ""
+
+      const req = new Request("http://localhost/api/cron/world-cup-sync", {
+        headers: { "x-cron-secret": "league-fallback-secret" },
+      })
+
+      expect(requireCronAuth(req as any, "BRACKET_CRON_SECRET")).toBe(true)
+    } finally {
+      process.env.BRACKET_CRON_SECRET = previous.BRACKET_CRON_SECRET
+      process.env.LEAGUE_CRON_SECRET = previous.LEAGUE_CRON_SECRET
+      process.env.CRON_SECRET = previous.CRON_SECRET
+    }
+  })
+
+  it("falls back to CRON_SECRET when preferred and league secrets are blank", async () => {
+    const { requireCronAuth } = await vi.importActual<typeof import("@/app/api/cron/_auth")>(
+      "@/app/api/cron/_auth"
+    )
+
+    const previous = {
+      BRACKET_CRON_SECRET: process.env.BRACKET_CRON_SECRET,
+      LEAGUE_CRON_SECRET: process.env.LEAGUE_CRON_SECRET,
+      CRON_SECRET: process.env.CRON_SECRET,
+    }
+
+    try {
+      process.env.BRACKET_CRON_SECRET = ""
+      process.env.LEAGUE_CRON_SECRET = "   "
+      process.env.CRON_SECRET = "cron-global-secret"
+
+      const req = new Request("http://localhost/api/cron/world-cup-sync", {
+        headers: { authorization: "Bearer cron-global-secret" },
+      })
+
+      expect(requireCronAuth(req as any, "BRACKET_CRON_SECRET")).toBe(true)
+    } finally {
+      process.env.BRACKET_CRON_SECRET = previous.BRACKET_CRON_SECRET
+      process.env.LEAGUE_CRON_SECRET = previous.LEAGUE_CRON_SECRET
+      process.env.CRON_SECRET = previous.CRON_SECRET
+    }
+  })
+
+  it("rejects when all cron secrets are blank", async () => {
+    const { requireCronAuth } = await vi.importActual<typeof import("@/app/api/cron/_auth")>(
+      "@/app/api/cron/_auth"
+    )
+
+    const previous = {
+      BRACKET_CRON_SECRET: process.env.BRACKET_CRON_SECRET,
+      LEAGUE_CRON_SECRET: process.env.LEAGUE_CRON_SECRET,
+      CRON_SECRET: process.env.CRON_SECRET,
+      BRACKET_ADMIN_SECRET: process.env.BRACKET_ADMIN_SECRET,
+      ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+      IMPORT_WORKER_SECRET: process.env.IMPORT_WORKER_SECRET,
+    }
+
+    try {
+      process.env.BRACKET_CRON_SECRET = "  "
+      process.env.LEAGUE_CRON_SECRET = " "
+      process.env.CRON_SECRET = ""
+      process.env.BRACKET_ADMIN_SECRET = ""
+      process.env.ADMIN_PASSWORD = ""
+      process.env.IMPORT_WORKER_SECRET = ""
+
+      const req = new Request("http://localhost/api/cron/world-cup-sync", {
+        headers: { "x-cron-secret": "anything" },
+      })
+
+      expect(requireCronAuth(req as any, "BRACKET_CRON_SECRET")).toBe(false)
+    } finally {
+      process.env.BRACKET_CRON_SECRET = previous.BRACKET_CRON_SECRET
+      process.env.LEAGUE_CRON_SECRET = previous.LEAGUE_CRON_SECRET
+      process.env.CRON_SECRET = previous.CRON_SECRET
+      process.env.BRACKET_ADMIN_SECRET = previous.BRACKET_ADMIN_SECRET
+      process.env.ADMIN_PASSWORD = previous.ADMIN_PASSWORD
+      process.env.IMPORT_WORKER_SECRET = previous.IMPORT_WORKER_SECRET
+    }
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     vi.resetModules()

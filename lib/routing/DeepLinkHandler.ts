@@ -8,8 +8,10 @@ import { safeRedirectPath } from "./PostAuthIntentRouter"
 /** Allowed path prefixes for deep links (no open redirect; must be internal). */
 const ALLOWED_DEEP_LINK_PREFIXES = [
   "/dashboard",
-  "/app",
+  "/discover",
   "/leagues",
+  "/web",
+  "/app",
   "/bracket",
   "/brackets",
   "/af-legacy",

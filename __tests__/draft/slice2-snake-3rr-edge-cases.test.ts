@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { getSlotInRoundForOverall } from '@/lib/live-draft-engine/DraftOrderService'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 /**
  * Slice 2 — extends the existing pick-order-mechanics + draftOrder coverage
@@ -85,5 +87,21 @@ describe('Slice 2 — 3RR (rounds 2 & 3 go same direction; round 4 returns to fo
         }
       }
     }
+  })
+})
+
+describe('Slice 2 — legacy runtime write path stays 3RR-aware', () => {
+  const executePickSource = readFileSync(
+    resolve(process.cwd(), 'lib/draft/execute-pick.ts'),
+    'utf8',
+  )
+
+  it('uses canonical getSlotInRoundForOverall for on-clock slot resolution', () => {
+    expect(executePickSource).toMatch(/getSlotInRoundForOverall\s*\(\s*\{[\s\S]*overall:\s*overallPick/)
+  })
+
+  it('reads thirdRoundReversal from draft room state in legacy mock flow', () => {
+    expect(executePickSource).toMatch(/state as \{ thirdRoundReversal\?: boolean \| null \}/)
+    expect(executePickSource).toMatch(/thirdRoundReversal/)
   })
 })

@@ -60,6 +60,10 @@ vi.mock('@/lib/draft-room/draft-pool-eligible-positions', () => ({
 
 vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', () => ({
   getDraftUISettingsForLeague: (...args: unknown[]) => mocks.getDraftUISettingsForLeague(...args),
+  // Slice 3 — single source of truth for soft-timer interpretation. Test mocks must
+  // surface this so processExpiredDraftPickForLeague can short-circuit when timerMode === 'soft_pause'.
+  isSoftTimerEnabled: (uiSettings: { timerMode?: string } | null | undefined) =>
+    uiSettings?.timerMode === 'soft_pause',
 }))
 
 vi.mock('@/lib/live-draft-engine/DraftSessionService', async () => {

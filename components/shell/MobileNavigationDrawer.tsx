@@ -40,9 +40,12 @@ export function MobileNavigationDrawer({
 
   if (!open) return null
 
-  const productLinks = SHELL_NAV_ITEMS.filter((item) =>
-    ["/dashboard", "/app", "/brackets", "/af-legacy"].includes(item.href)
-  )
+  const productLinks = [
+    { href: "/discover/leagues", label: "Sports" },
+    ...SHELL_NAV_ITEMS.filter((item) =>
+      ["/dashboard", "/brackets", "/af-legacy"].includes(item.href)
+    ),
+  ]
   const workspaceLinks = SHELL_NAV_ITEMS.filter((item) =>
     ["/tools-hub", "/messages", "/wallet"].includes(item.href)
   )
@@ -91,15 +94,15 @@ export function MobileNavigationDrawer({
               </p>
               <div className="space-y-1">
                 <Link
-                  href="/app/notifications"
+                  href="/messages"
                   onClick={onClose}
                   className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition"
-                  aria-current={isNavItemActive(pathname, "/app/notifications") ? "page" : undefined}
+                  aria-current={isNavItemActive(pathname, "/messages") ? "page" : undefined}
                   style={{
-                    background: isNavItemActive(pathname, "/app/notifications")
+                    background: isNavItemActive(pathname, "/messages")
                       ? "color-mix(in srgb, var(--accent-cyan) 18%, transparent)"
                       : "transparent",
-                    color: isNavItemActive(pathname, "/app/notifications")
+                    color: isNavItemActive(pathname, "/messages")
                       ? "var(--accent-cyan-strong)"
                       : "var(--text)",
                   }}

@@ -2,8 +2,8 @@
  * BracketNavigationController — canonical routes and back links for bracket challenge.
  */
 
-/** Bracket landing (marketing). */
-export const BRACKET_LANDING_PATH = '/bracket'
+/** Bracket landing (marketing + shell entry). */
+export const BRACKET_LANDING_PATH = '/brackets'
 
 /** Brackets app home (authenticated shell). */
 export const BRACKETS_HOME_PATH = '/brackets'
@@ -33,7 +33,9 @@ export function getLeaguePath(leagueId: string): string {
 
 /** Entry bracket (fill picks) — tournament + entry. */
 export function getEntryBracketPath(tournamentId: string, entryId: string): string {
-  return `/bracket/${encodeURIComponent(tournamentId)}/entry/${encodeURIComponent(entryId)}`
+  const tid = encodeURIComponent(tournamentId)
+  const eid = encodeURIComponent(entryId)
+  return `/brackets/tournament/${tid}?entry=${eid}`
 }
 
 /** Sign-in next param for bracket flows. */

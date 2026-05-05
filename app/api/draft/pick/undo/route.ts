@@ -20,6 +20,20 @@ export async function POST(req: Request) {
   if (!sessionId) {
     return NextResponse.json({ error: 'sessionId required' }, { status: 400 })
   }
+  // Slice 4 — undo requires a commissioner reason (1-500 chars, stored in DraftPickAuditLog).
+  const reasonRaw = typeof body?.reason === 'string' ? body.reason.trim() : ''
+  if (!reasonRaw) {
+    return NextResponse.json(
+      { error: 'reason required', code: 'UNDO_REASON_REQUIRED' },
+      { status: 400 },
+    )
+  }
+  if (reasonRaw.length > 500) {
+    return NextResponse.json(
+      { error: 'reason must be 500 characters or fewer', code: 'UNDO_REASON_TOO_LONG' },
+      { status: 400 },
+    )
+  }
 
   let parsed: { mode: 'mock' | 'live'; id: string }
   try {
@@ -75,7 +89,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Commissioner only' }, { status: 403 })
   }
 
-  const undone = await undoLastPick(parsed.id)
+  const undone = await undoLastPick(parsed.id, { reason: reasonRaw, actorUserId: userId })
   if (!undone) {
     return NextResponse.json({ error: 'No picks to undo' }, { status: 400 })
   }

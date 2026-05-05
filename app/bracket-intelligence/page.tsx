@@ -218,7 +218,7 @@ function BracketIntelligenceInner() {
         <div className="mx-auto flex max-w-3xl flex-col items-center justify-center px-4 py-16 text-center text-sm text-white/80">
           <p className="mb-3 font-semibold">{t('bracket.intel.dashboard.missingEntry')}</p>
           <Link
-            href="/bracket"
+            href="/brackets"
             className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-black shadow-sm hover:bg-gray-100"
           >
             {t('bracket.review.backToBracketHub')}

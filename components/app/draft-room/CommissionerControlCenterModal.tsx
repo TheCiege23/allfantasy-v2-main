@@ -21,6 +21,7 @@ import type { DraftUISettings, TimerMode } from '@/lib/draft-defaults/DraftUISet
 import { DEFAULT_TRADE_RULES } from '@/lib/commissioner-ai-draft-manager/types'
 import { DraftImportFlow } from './DraftImportFlow'
 import { DraftSettingsModal } from './DraftSettingsModal'
+import { SwapManagerModal } from './SwapManagerModal'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 
@@ -128,6 +129,13 @@ export function CommissionerControlCenterModal({
   const [transitionLoading, setTransitionLoading] = useState(false)
   const [transitionMessage, setTransitionMessage] = useState<string | null>(null)
   const [showDraftSettings, setShowDraftSettings] = useState(false)
+  // Slice 5 — swap-managers modal state.
+  const [showSwapManager, setShowSwapManager] = useState(false)
+  // Slice 4 — undo-with-reason prompt state.
+  const [undoPromptOpen, setUndoPromptOpen] = useState(false)
+  const [undoReason, setUndoReason] = useState('')
+  const [undoSubmitting, setUndoSubmitting] = useState(false)
+  const [undoError, setUndoError] = useState<string | null>(null)
 
   useEffect(() => {
     if (commissionerAiDraft?.tradeRules) {
@@ -353,6 +361,14 @@ export function CommissionerControlCenterModal({
           </button>
           <button
             type="button"
+            onClick={() => setShowSwapManager(true)}
+            data-testid="draft-commissioner-open-swap-manager"
+            className="rounded border border-white/15 px-2.5 py-1 text-xs font-medium text-white/80 hover:bg-white/10 hover:text-white"
+          >
+            Swap Managers
+          </button>
+          <button
+            type="button"
             onClick={onClose}
             data-testid="draft-commissioner-close"
             className="rounded p-1.5 text-white/60 hover:bg-white/10 hover:text-white"
@@ -364,6 +380,88 @@ export function CommissionerControlCenterModal({
       </div>
       {showDraftSettings ? (
         <DraftSettingsModal leagueId={leagueId} onClose={() => setShowDraftSettings(false)} />
+      ) : null}
+      {showSwapManager ? (
+        <SwapManagerModal
+          leagueId={leagueId}
+          onAction={onAction}
+          onClose={() => setShowSwapManager(false)}
+        />
+      ) : null}
+      {undoPromptOpen ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Undo last pick"
+          data-testid="draft-commissioner-undo-prompt"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-white/12 bg-[#070f21] p-5 shadow-2xl">
+            <h3 className="mb-1 text-base font-semibold text-white">Undo last pick</h3>
+            <p className="mb-3 text-xs text-white/60">
+              A reason is required and will be stored in the commissioner-only audit log.
+            </p>
+            <label className="block text-xs font-medium text-white/70" htmlFor="draft-commissioner-undo-reason">
+              Reason
+            </label>
+            <textarea
+              id="draft-commissioner-undo-reason"
+              data-testid="draft-commissioner-undo-reason"
+              value={undoReason}
+              onChange={(e) => setUndoReason(e.target.value.slice(0, 500))}
+              maxLength={500}
+              rows={3}
+              placeholder="e.g. wrong player picked by accident; pre-arranged correction"
+              className="mt-1 w-full rounded-md border border-white/15 bg-black/30 p-2 text-sm text-white placeholder:text-white/30"
+            />
+            <div className="mt-1 flex items-center justify-between text-[11px] text-white/40">
+              <span>{undoReason.length}/500</span>
+              {undoError ? <span className="text-rose-300" role="alert">{undoError}</span> : null}
+            </div>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setUndoPromptOpen(false)}
+                disabled={undoSubmitting}
+                data-testid="draft-commissioner-undo-cancel"
+                className="rounded-md border border-white/15 px-3 py-1.5 text-sm text-white/80 hover:bg-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={undoSubmitting || undoReason.trim().length === 0}
+                data-testid="draft-commissioner-undo-confirm"
+                onClick={async () => {
+                  const trimmed = undoReason.trim()
+                  if (!trimmed) {
+                    setUndoError('Reason is required.')
+                    return
+                  }
+                  setUndoSubmitting(true)
+                  setUndoError(null)
+                  try {
+                    const result = (await onAction('undo_pick', { reason: trimmed })) as
+                      | { ok?: boolean; error?: string; code?: string }
+                      | undefined
+                    if (result && result.ok === false) {
+                      setUndoError(result.error ?? 'Undo failed')
+                      return
+                    }
+                    setUndoPromptOpen(false)
+                  } catch (err) {
+                    setUndoError(err instanceof Error ? err.message : 'Undo failed')
+                  } finally {
+                    setUndoSubmitting(false)
+                  }
+                }}
+                className="rounded-md bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
+              >
+                {undoSubmitting ? 'Undoing…' : 'Confirm undo'}
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
 
       <div className="flex-1 overflow-auto p-4 space-y-6">
@@ -464,7 +562,11 @@ export function CommissionerControlCenterModal({
                 </button>
                 <button
                   type="button"
-                  onClick={() => run('undo_pick', () => onAction('undo_pick'))}
+                  onClick={() => {
+                    setUndoReason('')
+                    setUndoError(null)
+                    setUndoPromptOpen(true)
+                  }}
                   disabled={loading || actionLoading !== null}
                   data-testid="draft-commissioner-undo"
                   className="inline-flex items-center gap-2 rounded-lg border border-red-400/35 bg-red-500/10 px-3 py-2 text-sm text-red-100 hover:bg-red-500/20 disabled:opacity-50"

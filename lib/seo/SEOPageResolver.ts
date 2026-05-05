@@ -84,7 +84,7 @@ const STATIC_PAGES: Record<string, SEOPageConfig> = {
     title: "NCAA Bracket Challenge – Pools & AI Analysis | AllFantasy",
     description:
       "Create and join bracket pools. AI bracket review and simulation. Live standings and leaderboards.",
-    canonical: BASE + "/bracket",
+    canonical: BASE + "/brackets",
     keywords: ["bracket challenge", "NCAA bracket", "March Madness"],
   },
   leagues: {

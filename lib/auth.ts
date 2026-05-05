@@ -287,6 +287,8 @@ if (googleClientId && googleClientSecret) {
     GoogleProvider({
       clientId: googleClientId,
       clientSecret: googleClientSecret,
+      // Callback URL is always `${NEXTAUTH_URL}/api/auth/callback/google` — must match
+      // "Authorized redirect URIs" in Google Cloud Console (same origin as NEXTAUTH_URL).
     })
   );
 }
@@ -420,6 +422,13 @@ export const authOptions: NextAuthOptions = {
               select: { id: true },
             });
             spotifyLinked = Boolean(spotify?.id);
+            if (!spotifyLinked) {
+              const profileSpotify = await prisma.userProfile.findUnique({
+                where: { userId },
+                select: { spotifyConnectedAt: true },
+              });
+              spotifyLinked = Boolean(profileSpotify?.spotifyConnectedAt);
+            }
           } catch {
             spotifyLinked = false;
           }

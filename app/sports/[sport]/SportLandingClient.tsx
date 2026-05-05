@@ -104,7 +104,7 @@ export default function SportLandingClient({ config }: { config: SportConfig }) 
             />
             <div className="flex flex-wrap gap-3 text-sm">
               <Link
-                href="/bracket"
+                href="/brackets"
                 data-testid="sport-landing-bracket-link"
                 className="inline-flex items-center gap-1 hover:underline"
                 style={{ color: 'var(--muted)' }}

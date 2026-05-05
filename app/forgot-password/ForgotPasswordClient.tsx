@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, type ReactNode } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { ArrowLeft, ArrowRight, Mail, Loader2, CheckCircle2, Phone, Eye, EyeOff, TriangleAlert } from 'lucide-react'
 import { AuthStatusHeader, AuthStatusShell } from '@/components/auth/AuthStatusShell'
@@ -22,6 +22,15 @@ import {
 type Method = 'email' | 'sms'
 type Step = 'choose' | 'request' | 'enter_code' | 'email_link_sent' | 'success'
 
+const recoveryInputStyle: CSSProperties = {
+  background: 'var(--panel2)',
+  color: 'var(--text)',
+  borderColor: 'color-mix(in srgb, var(--border) 100%, transparent)',
+}
+
+const recoveryInputClassName =
+  'w-full rounded-[10px] border px-3.5 py-3 text-sm outline-none transition placeholder:[color:var(--muted2)] focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10'
+
 function RecoveryPage(props: {
   backHref: string
   title: string
@@ -34,7 +43,12 @@ function RecoveryPage(props: {
       <div className="w-full max-w-[440px]">
         <Link
           href={props.backHref}
-          className="mb-6 inline-flex items-center gap-2 rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-4 py-2.5 text-sm font-medium text-white/75 transition hover:border-violet-300/45 hover:bg-[#211a3e] hover:text-white"
+          className="mb-6 inline-flex items-center gap-2 rounded-[10px] border px-4 py-2.5 text-sm font-medium transition hover:opacity-90"
+          style={{
+            borderColor: 'color-mix(in srgb, var(--border) 100%, transparent)',
+            background: 'var(--panel2)',
+            color: 'var(--muted)',
+          }}
         >
           <ArrowLeft className="h-4 w-4" />
           <span>Back to Sign In</span>
@@ -42,7 +56,9 @@ function RecoveryPage(props: {
         <AuthStatusHeader title={props.title} subtitle={props.subtitle} />
         {props.children}
         {props.footer ? (
-          <div className="mt-5 text-center text-sm text-white/55">{props.footer}</div>
+          <div className="mt-5 text-center text-sm" style={{ color: 'var(--muted)' }}>
+            {props.footer}
+          </div>
         ) : null}
       </div>
     </AuthStatusShell>
@@ -58,9 +74,19 @@ function RecoveryCard({
 }) {
   return (
     <div
-      className={`rounded-[18px] border bg-[#16102a] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)] ${
-        danger ? 'border-red-500/20' : 'border-violet-400/20'
-      }`}
+      className="rounded-[18px] border p-8"
+      style={{
+        boxShadow: '0 24px 80px color-mix(in srgb, var(--text) 10%, transparent)',
+        ...(danger
+          ? {
+              borderColor: 'color-mix(in srgb, var(--accent-red) 35%, var(--border))',
+              background: 'color-mix(in srgb, var(--accent-red) 8%, var(--panel))',
+            }
+          : {
+              borderColor: 'color-mix(in srgb, var(--border) 100%, transparent)',
+              background: 'var(--panel)',
+            }),
+      }}
     >
       {children}
     </div>
@@ -70,7 +96,13 @@ function RecoveryCard({
 function RecoveryError({ error }: { error: string | null }) {
   if (!error) return null
   return (
-    <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-sm text-red-200">
+    <div
+      className="mb-4 rounded-xl border border-red-500/25 p-3 text-sm"
+      style={{
+        background: 'color-mix(in srgb, var(--accent-red) 10%, transparent)',
+        color: 'var(--text)',
+      }}
+    >
       <div className="flex items-start gap-2">
         <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0" />
         <div>{error}</div>
@@ -286,7 +318,8 @@ export default function ForgotPasswordClient() {
             Need an account?{' '}
             <Link
               href={`/signup?next=${encodeURIComponent(safeReturnTo)}`}
-              className="font-semibold text-cyan-400 transition hover:opacity-80"
+              className="font-semibold transition hover:opacity-80"
+              style={{ color: 'var(--accent-cyan-strong)' }}
             >
               Sign up
             </Link>
@@ -302,11 +335,20 @@ export default function ForgotPasswordClient() {
               setError(null)
               setCodeVerified(false)
             }}
-            className="rounded-[18px] border border-violet-400/20 bg-[#16102a] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.35)] transition hover:-translate-y-0.5 hover:border-violet-300/35 hover:bg-[#1c1535]"
+            className="rounded-[18px] border p-6 text-center transition hover:-translate-y-0.5 hover:opacity-95"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--border) 100%, transparent)',
+              background: 'var(--panel)',
+              boxShadow: '0 24px 80px color-mix(in srgb, var(--text) 8%, transparent)',
+            }}
           >
-            <Mail className="mx-auto h-8 w-8 text-cyan-400" />
-            <div className="mt-3 text-sm font-semibold text-white">Email</div>
-            <div className="mt-1 text-xs text-white/50">Send a reset link to your email</div>
+            <Mail className="mx-auto h-8 w-8 text-cyan-500" />
+            <div className="mt-3 text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              Email
+            </div>
+            <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+              Send a reset link to your email
+            </div>
           </button>
           <button
             type="button"
@@ -316,11 +358,20 @@ export default function ForgotPasswordClient() {
               setError(null)
               setCodeVerified(false)
             }}
-            className="rounded-[18px] border border-violet-400/20 bg-[#16102a] p-6 text-center shadow-[0_24px_80px_rgba(0,0,0,0.35)] transition hover:-translate-y-0.5 hover:border-violet-300/35 hover:bg-[#1c1535]"
+            className="rounded-[18px] border p-6 text-center transition hover:-translate-y-0.5 hover:opacity-95"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--border) 100%, transparent)',
+              background: 'var(--panel)',
+              boxShadow: '0 24px 80px color-mix(in srgb, var(--text) 8%, transparent)',
+            }}
           >
-            <Phone className="mx-auto h-8 w-8 text-emerald-400" />
-            <div className="mt-3 text-sm font-semibold text-white">SMS</div>
-            <div className="mt-1 text-xs text-white/50">Send a reset code to your phone</div>
+            <Phone className="mx-auto h-8 w-8 text-emerald-500" />
+            <div className="mt-3 text-sm font-semibold" style={{ color: 'var(--text)' }}>
+              SMS
+            </div>
+            <div className="mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+              Send a reset code to your phone
+            </div>
           </button>
         </div>
       </RecoveryPage>
@@ -340,16 +391,20 @@ export default function ForgotPasswordClient() {
               setStep('request')
               setError(null)
             }}
-            className="text-sm text-white/55 transition hover:text-white/80"
+            className="text-sm transition hover:opacity-90"
+            style={{ color: 'var(--muted)' }}
           >
             Send another link
           </button>
         }
       >
         <RecoveryCard>
-          <div className="text-center text-sm leading-6 text-white/70">
-            <p>Open the link in the email to continue. Check your spam folder if you don&apos;t see it.</p>
-            <p className="mt-4 text-xs text-white/45">The link opens AllFantasy so you can set a new password.</p>
+          <div className="text-center text-sm leading-6" style={{ color: 'var(--muted)' }}>
+            <p>Open the link in the email to continue. Check your spam or promotions folder if you don&apos;t see it within a few minutes.</p>
+            <p className="mt-4 text-xs" style={{ color: 'var(--muted2)' }}>
+              Still nothing? Use the exact email you registered with. If you usually sign in with Google or Apple, use that on the login page
+              first — you can set a password in account settings after you&apos;re signed in.
+            </p>
           </div>
         </RecoveryCard>
       </RecoveryPage>
@@ -370,7 +425,8 @@ export default function ForgotPasswordClient() {
               setMethod(null)
               setCodeVerified(false)
             }}
-            className="text-sm text-white/55 transition hover:text-white/80"
+            className="text-sm transition hover:opacity-90"
+            style={{ color: 'var(--muted)' }}
           >
             Use SMS instead
           </button>
@@ -379,7 +435,9 @@ export default function ForgotPasswordClient() {
         <RecoveryCard>
           <form onSubmit={handleRequestEmail} className="space-y-4">
             <div>
-              <label className="text-[13px] font-semibold tracking-[0.02em] text-white/60">Email address</label>
+              <label className="text-[13px] font-semibold tracking-[0.02em]" style={{ color: 'var(--muted)' }}>
+                Email address
+              </label>
               <div className="relative mt-1.5">
                 <input
                   value={email}
@@ -389,21 +447,26 @@ export default function ForgotPasswordClient() {
                   }}
                   type="email"
                   autoComplete="email"
-                  className="w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 pl-10 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                  className={`${recoveryInputClassName} pl-10`}
+                  style={recoveryInputStyle}
                   placeholder="you@example.com"
                   disabled={loading}
                   autoFocus
                 />
-                <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                <Mail
+                  className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                  style={{ color: 'var(--muted2)' }}
+                />
               </div>
               {error ? (
-                <p className="mt-1.5 text-xs text-red-200/90">{error}</p>
+                <p className="mt-1.5 text-xs text-red-600 dark:text-red-300">{error}</p>
               ) : null}
             </div>
             <button
               type="submit"
               disabled={loading || !email.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ color: 'var(--on-accent-bg)' }}
             >
               {loading ? (
                 <>
@@ -438,7 +501,8 @@ export default function ForgotPasswordClient() {
               setError(null)
               setCodeVerified(false)
             }}
-            className="text-sm text-white/55 transition hover:text-white/80"
+            className="text-sm transition hover:opacity-90"
+            style={{ color: 'var(--muted)' }}
           >
             Use email instead
           </button>
@@ -447,7 +511,9 @@ export default function ForgotPasswordClient() {
         <RecoveryCard>
           <form onSubmit={handleRequestSms} className="space-y-4">
             <div>
-              <label className="text-[13px] font-semibold tracking-[0.02em] text-white/60">Phone number</label>
+              <label className="text-[13px] font-semibold tracking-[0.02em]" style={{ color: 'var(--muted)' }}>
+                Phone number
+              </label>
               <div className="relative mt-1.5">
                 <input
                   value={phone}
@@ -457,21 +523,26 @@ export default function ForgotPasswordClient() {
                   }}
                   type="tel"
                   autoComplete="tel"
-                  className="w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 pl-10 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                  className={`${recoveryInputClassName} pl-10`}
+                  style={recoveryInputStyle}
                   placeholder="+1 (555) 123-4567"
                   disabled={loading}
                   autoFocus
                 />
-                <Phone className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+                <Phone
+                  className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2"
+                  style={{ color: 'var(--muted2)' }}
+                />
               </div>
               {error ? (
-                <p className="mt-1.5 text-xs text-red-200/90">{error}</p>
+                <p className="mt-1.5 text-xs text-red-600 dark:text-red-300">{error}</p>
               ) : null}
             </div>
             <button
               type="submit"
               disabled={loading || !phone.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ color: 'var(--on-accent-bg)' }}
             >
               {loading ? (
                 <>
@@ -503,12 +574,15 @@ export default function ForgotPasswordClient() {
           <form onSubmit={handleConfirmCode} className="space-y-4">
             <div>
               <div className="flex items-center justify-between gap-3">
-                <label className="text-[13px] font-semibold tracking-[0.02em] text-white/60">6-digit code</label>
+                <label className="text-[13px] font-semibold tracking-[0.02em]" style={{ color: 'var(--muted)' }}>
+                  6-digit code
+                </label>
                 <button
                   type="button"
                   onClick={handleResendCode}
                   disabled={resendLoading || loading}
-                  className="text-xs font-medium text-cyan-400 transition hover:opacity-80 disabled:opacity-50"
+                  className="text-xs font-medium transition hover:opacity-80 disabled:opacity-50"
+                  style={{ color: 'var(--accent-cyan-strong)' }}
                 >
                   {resendLoading ? 'Sending...' : 'Resend code'}
                 </button>
@@ -522,7 +596,8 @@ export default function ForgotPasswordClient() {
                 type="text"
                 inputMode="numeric"
                 autoComplete="one-time-code"
-                className="mt-1.5 w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                className={`mt-1.5 ${recoveryInputClassName}`}
+                style={recoveryInputStyle}
                 placeholder="000000"
                 disabled={loading}
                 autoFocus
@@ -532,25 +607,35 @@ export default function ForgotPasswordClient() {
                   type="button"
                   onClick={handleVerifyCode}
                   disabled={verifyingCode || loading || code.length !== 6}
-                  className="rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-2 text-xs font-medium text-white/80 transition hover:border-violet-300/45 hover:bg-[#211a3e] disabled:opacity-50"
+                  className="rounded-[10px] border px-3.5 py-2 text-xs font-medium transition hover:opacity-95 disabled:opacity-50"
+                  style={{
+                    borderColor: 'color-mix(in srgb, var(--border) 100%, transparent)',
+                    background: 'var(--panel2)',
+                    color: 'var(--text)',
+                  }}
                 >
                   {verifyingCode ? 'Verifying...' : 'Verify code'}
                 </button>
                 {codeVerified ? (
-                  <span className="text-xs font-medium text-emerald-300">Code verified</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--accent-emerald-strong)' }}>
+                    Code verified
+                  </span>
                 ) : null}
               </div>
             </div>
 
             <div>
-              <label className="text-[13px] font-semibold tracking-[0.02em] text-white/60">New password</label>
+              <label className="text-[13px] font-semibold tracking-[0.02em]" style={{ color: 'var(--muted)' }}>
+                New password
+              </label>
               <div className="relative mt-1.5">
                 <input
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
-                  className="w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 pr-11 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                  className={`${recoveryInputClassName} pr-11`}
+                  style={recoveryInputStyle}
                   placeholder="At least 8 characters, letter and number"
                   disabled={loading}
                   minLength={8}
@@ -558,7 +643,7 @@ export default function ForgotPasswordClient() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/35 transition hover:text-cyan-200"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition [color:var(--muted)] hover:[color:var(--accent-cyan-strong)]"
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
@@ -566,13 +651,16 @@ export default function ForgotPasswordClient() {
             </div>
 
             <div>
-              <label className="text-[13px] font-semibold tracking-[0.02em] text-white/60">Confirm new password</label>
+              <label className="text-[13px] font-semibold tracking-[0.02em]" style={{ color: 'var(--muted)' }}>
+                Confirm new password
+              </label>
               <input
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                className="mt-1.5 w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 text-sm text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                className={`mt-1.5 ${recoveryInputClassName}`}
+                style={recoveryInputStyle}
                 placeholder="Re-enter password"
                 disabled={loading}
                 minLength={8}
@@ -582,7 +670,8 @@ export default function ForgotPasswordClient() {
             <button
               type="submit"
               disabled={loading || !codeVerified || !newPassword || newPassword !== confirmPassword}
-              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              style={{ color: 'var(--on-accent-bg)' }}
             >
               {loading ? (
                 <>
@@ -615,13 +704,16 @@ export default function ForgotPasswordClient() {
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
                 <CheckCircle2 className="h-7 w-7 text-emerald-400" />
               </div>
-              <h1 className="mt-5 text-2xl font-semibold text-white">Password reset</h1>
-              <p className="mt-3 text-sm leading-6 text-white/60">
+              <h1 className="mt-5 text-2xl font-semibold" style={{ color: 'var(--text)' }}>
+                Password reset
+              </h1>
+              <p className="mt-3 text-sm leading-6" style={{ color: 'var(--muted)' }}>
                 Your password has been updated. Redirecting to sign in...
               </p>
               <Link
                 href={loginHref}
-                className="mt-7 inline-flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-3 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:opacity-90"
+                className="mt-7 inline-flex items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90"
+                style={{ color: 'var(--on-accent-bg)' }}
               >
                 <span>Back to Sign In</span>
                 <ArrowRight className="h-4 w-4" />

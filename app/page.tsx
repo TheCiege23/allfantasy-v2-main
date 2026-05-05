@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import dynamic from 'next/dynamic'
 import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
 import { PageJsonLd } from '@/components/seo/JsonLd'
 import { LandingInviteCapture } from '@/components/landing/LandingInviteCapture'
 import { getHomeInitialSession } from '@/lib/landing/get-home-initial-session'
@@ -68,6 +69,9 @@ const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
 
 export default async function HomePage() {
   const initialSession = await getHomeInitialSession()
+  if (initialSession?.user) {
+    redirect('/dashboard')
+  }
 
   return (
     <>

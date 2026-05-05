@@ -223,8 +223,8 @@ test.describe("@db @shell global app shell click audit", () => {
     const mobileHeader = page.locator("header").first()
     await mobileHeader.getByRole("button", { name: "Open menu" }).click()
     await expect(page.getByRole("dialog", { name: "Navigation menu" })).toBeVisible()
-    await page.getByRole("dialog", { name: "Navigation menu" }).locator('a[href="/app"]').click()
-    await expect(page).toHaveURL(/\/app/, { timeout: 15_000 })
+    await page.getByRole("dialog", { name: "Navigation menu" }).locator('a[href="/brackets"]').click()
+    await expect(page).toHaveURL(/\/brackets/, { timeout: 15_000 })
 
     await page.goto("/settings?tab=profile")
     await mobileHeader.getByRole("button", { name: "Open menu" }).click()

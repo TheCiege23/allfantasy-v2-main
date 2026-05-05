@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useEffect } from "react"
+import { useState, useEffect, type CSSProperties } from "react"
 import { signIn } from "next-auth/react"
 import {
   Shield,
@@ -256,20 +256,31 @@ export default function LoginContent() {
     }
   }
 
+  const inputSurfaceStyle: CSSProperties = {
+    background: "var(--panel2)",
+    color: "var(--text)",
+    borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+  }
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#110b1e] text-white">
+    <div
+      className="relative min-h-screen overflow-hidden"
+      style={{ background: "var(--bg)", color: "var(--text)" }}
+    >
       <div
         className="pointer-events-none absolute inset-0"
         style={{
-          background:
-            "radial-gradient(ellipse 55% 45% at 50% 15%, rgba(6,182,212,0.07) 0%, transparent 65%), radial-gradient(ellipse 40% 35% at 70% 80%, rgba(59,130,246,0.05) 0%, transparent 65%), radial-gradient(ellipse 50% 40% at 20% 60%, rgba(139,92,246,0.04) 0%, transparent 65%)",
+          background: `
+            radial-gradient(ellipse 55% 45% at 50% 15%, color-mix(in srgb, var(--accent-cyan) 14%, transparent) 0%, transparent 65%),
+            radial-gradient(ellipse 40% 35% at 70% 80%, color-mix(in srgb, var(--accent-purple) 8%, transparent) 0%, transparent 65%),
+            radial-gradient(ellipse 50% 40% at 20% 60%, color-mix(in srgb, var(--accent-purple) 6%, transparent) 0%, transparent 65%)
+          `,
         }}
       />
       <div
         className="pointer-events-none absolute inset-0 opacity-80"
         style={{
-          backgroundImage:
-            "linear-gradient(rgba(139,92,246,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(139,92,246,0.03) 1px, transparent 1px)",
+          backgroundImage: `linear-gradient(color-mix(in srgb, var(--border) 55%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--border) 55%, transparent) 1px, transparent 1px)`,
           backgroundSize: "52px 52px",
           maskImage: "radial-gradient(ellipse 60% 60% at 50% 30%, black, transparent 80%)",
           WebkitMaskImage:
@@ -277,7 +288,13 @@ export default function LoginContent() {
         }}
       />
 
-      <nav className="relative z-20 flex h-14 items-center justify-between border-b border-violet-400/15 bg-[#110b1e]/90 px-4 backdrop-blur-xl sm:px-8">
+      <nav
+        className="relative z-20 flex h-14 items-center justify-between border-b px-4 backdrop-blur-xl sm:px-8"
+        style={{
+          borderColor: "var(--border)",
+          background: "color-mix(in srgb, var(--bg) 92%, transparent)",
+        }}
+      >
         <Link href="/" className="flex items-center gap-2.5 no-underline">
           <img
             src="https://www.allfantasy.ai/af-crest.png"
@@ -294,7 +311,11 @@ export default function LoginContent() {
         </Link>
         <Link
           href={signupUrlWithIntent(callbackUrl)}
-          className="rounded-[7px] border border-violet-400/30 px-4 py-1.5 text-[13px] font-medium text-white/65 transition hover:border-violet-300/50 hover:text-white"
+          className="rounded-[7px] border px-4 py-1.5 text-[13px] font-medium transition hover:opacity-90"
+          style={{
+            borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+            color: "var(--muted)",
+          }}
         >
           Create Account
         </Link>
@@ -313,11 +334,15 @@ export default function LoginContent() {
                 className="relative h-[60px] w-[60px] object-contain drop-shadow-[0_0_16px_rgba(6,182,212,0.42)]"
               />
             </div>
-            <p className="text-[20px] font-semibold text-white">Welcome back</p>
-            <p className="mt-1 text-sm text-white/60">
+            <p className="text-[20px] font-semibold" style={{ color: "var(--text)" }}>
+              Welcome back
+            </p>
+            <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
               Sign in to access the Sports App, Brackets, and AI Tools.
             </p>
-            <p className="mt-2 text-xs text-white/45">{t("login.afterSignInSubtitle")}</p>
+            <p className="mt-2 text-xs" style={{ color: "var(--muted2)" }}>
+              {t("login.afterSignInSubtitle")}
+            </p>
           </div>
 
           {configError && (
@@ -340,11 +365,22 @@ export default function LoginContent() {
             </div>
           )}
 
-          <div className="rounded-[18px] border border-violet-400/20 bg-[#16102a] p-8 shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+          <div
+            className="rounded-[18px] border p-8"
+            style={{
+              borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+              background: "var(--panel)",
+              boxShadow: "0 24px 80px color-mix(in srgb, var(--text) 10%, transparent)",
+            }}
+          >
             <form onSubmit={handlePasswordLogin} className="space-y-4">
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <label htmlFor="login-identifier" className="text-[13px] font-semibold tracking-[0.02em] text-white/60">
+                  <label
+                    htmlFor="login-identifier"
+                    className="text-[13px] font-semibold tracking-[0.02em]"
+                    style={{ color: "var(--muted)" }}
+                  >
                     Email, username, or phone
                   </label>
                 </div>
@@ -359,13 +395,18 @@ export default function LoginContent() {
                   spellCheck={false}
                   disabled={loading}
                   placeholder="you@example.com, username, or +1 555 123 4567"
-                  className="w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 text-[15px] text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                  className="w-full rounded-[10px] border px-3.5 py-3 text-[15px] outline-none transition placeholder:[color:var(--muted2)] focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10"
+                  style={inputSurfaceStyle}
                 />
               </div>
 
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
-                  <label htmlFor="login-password" className="text-[13px] font-semibold tracking-[0.02em] text-white/60">
+                  <label
+                    htmlFor="login-password"
+                    className="text-[13px] font-semibold tracking-[0.02em]"
+                    style={{ color: "var(--muted)" }}
+                  >
                     {t("common.password")}
                   </label>
                 </div>
@@ -379,13 +420,14 @@ export default function LoginContent() {
                     autoComplete="current-password"
                     disabled={loading}
                     placeholder="Your password"
-                    className="w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 pr-11 text-[15px] text-white outline-none transition placeholder:text-white/35 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-500/10"
+                    className="w-full rounded-[10px] border px-3.5 py-3 pr-11 text-[15px] outline-none transition placeholder:[color:var(--muted2)] focus:border-cyan-500 focus:ring-4 focus:ring-cyan-500/10"
+                    style={inputSurfaceStyle}
                   />
                   <button
                     type="button"
                     aria-label={showPassword ? t("common.hidePassword") : t("common.showPassword")}
                     onClick={() => setShowPassword((value) => !value)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/35 transition hover:text-cyan-200"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition [color:var(--muted)] hover:[color:var(--accent-cyan-strong)]"
                   >
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
@@ -412,7 +454,8 @@ export default function LoginContent() {
               <button
                 type="submit"
                 disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3.5 text-base font-bold text-white transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-2 rounded-[11px] bg-gradient-to-r from-cyan-500 to-blue-500 px-4 py-3.5 text-base font-bold transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+                style={{ color: "var(--on-accent-bg)" }}
               >
                 {loading ? (
                   <>
@@ -428,17 +471,36 @@ export default function LoginContent() {
               </button>
             </form>
 
-            <div className="mt-2 flex items-center justify-center gap-2 text-xs text-white/35">
-              <span className="rounded border border-violet-400/30 bg-[#1c1535] px-2 py-0.5 font-mono text-[11px] font-semibold text-white/55">
+            <div
+              className="mt-2 flex items-center justify-center gap-2 text-xs"
+              style={{ color: "var(--muted2)" }}
+            >
+              <span
+                className="rounded border px-2 py-0.5 font-mono text-[11px] font-semibold"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+                  background: "var(--panel2)",
+                  color: "var(--muted)",
+                }}
+              >
                 Enter
               </span>
-              <span>to sign in</span>
+              <span style={{ color: "var(--muted)" }}>to sign in</span>
             </div>
 
-            <div className="my-6 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/30">
-              <div className="h-px flex-1 bg-violet-400/20" />
+            <div
+              className="my-6 flex items-center gap-3 text-[11px] font-semibold uppercase tracking-[0.08em]"
+              style={{ color: "var(--muted2)" }}
+            >
+              <div
+                className="h-px flex-1"
+                style={{ background: "color-mix(in srgb, var(--border) 80%, transparent)" }}
+              />
               <span>or continue with</span>
-              <div className="h-px flex-1 bg-violet-400/20" />
+              <div
+                className="h-px flex-1"
+                style={{ background: "color-mix(in srgb, var(--border) 80%, transparent)" }}
+              />
             </div>
 
             <div className="space-y-2">
@@ -446,7 +508,12 @@ export default function LoginContent() {
                 type="button"
                 onClick={() => void handleSocialProvider("google")}
                 disabled={socialLoadingProvider !== null}
-                className="flex w-full items-center justify-center gap-2.5 rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-4 py-3 text-sm font-medium text-white transition hover:border-violet-300/45 hover:bg-[#211a3e] disabled:opacity-70"
+                className="flex w-full items-center justify-center gap-2.5 rounded-[10px] border px-4 py-3 text-sm font-medium transition hover:opacity-95 disabled:opacity-70"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+                  background: "var(--panel2)",
+                  color: "var(--text)",
+                }}
               >
                 <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">
                   <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.716v2.259h2.908c1.703-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4" />
@@ -460,7 +527,12 @@ export default function LoginContent() {
                 type="button"
                 onClick={() => void handleSocialProvider("spotify")}
                 disabled={socialLoadingProvider !== null}
-                className="flex w-full items-center justify-center gap-2.5 rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-4 py-3 text-sm font-medium text-white transition hover:border-violet-300/45 hover:bg-[#211a3e] disabled:opacity-70"
+                className="flex w-full items-center justify-center gap-2.5 rounded-[10px] border px-4 py-3 text-sm font-medium transition hover:opacity-95 disabled:opacity-70"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+                  background: "var(--panel2)",
+                  color: "var(--text)",
+                }}
               >
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                   <circle cx="12" cy="12" r="12" fill="#1DB954" />
@@ -477,9 +549,15 @@ export default function LoginContent() {
                   label: "Apple",
                   soonOnly: true,
                   icon: (
-                    <svg className="h-5 w-5" viewBox="0 0 18 18" fill="white" aria-hidden="true">
-                      <path d="M12.71 9.43c-.02-2.14 1.75-3.17 1.83-3.22-1-1.46-2.55-1.66-3.1-1.68-1.33-.13-2.6.78-3.27.78-.67 0-1.7-.76-2.8-.74-1.44.02-2.76.83-3.5 2.12-1.5 2.59-.38 6.43 1.07 8.53.71 1.03 1.56 2.18 2.67 2.14 1.07-.04 1.48-.69 2.77-.69 1.3 0 1.67.69 2.81.67 1.15-.02 1.89-1.05 2.59-2.08.82-1.19 1.16-2.34 1.18-2.4-.03-.01-2.26-.87-2.25-3.43z" />
-                      <path d="M10.6 3.12c.59-.71.99-1.7.88-2.69-.85.03-1.88.57-2.49 1.27-.54.63-1.02 1.63-.89 2.59.94.07 1.9-.47 2.5-1.17z" />
+                    <svg className="h-5 w-5 [color:var(--text)]" viewBox="0 0 18 18" aria-hidden="true">
+                      <path
+                        fill="currentColor"
+                        d="M12.71 9.43c-.02-2.14 1.75-3.17 1.83-3.22-1-1.46-2.55-1.66-3.1-1.68-1.33-.13-2.6.78-3.27.78-.67 0-1.7-.76-2.8-.74-1.44.02-2.76.83-3.5 2.12-1.5 2.59-.38 6.43 1.07 8.53.71 1.03 1.56 2.18 2.67 2.14 1.07-.04 1.48-.69 2.77-.69 1.3 0 1.67.69 2.81.67 1.15-.02 1.89-1.05 2.59-2.08.82-1.19 1.16-2.34 1.18-2.4-.03-.01-2.26-.87-2.25-3.43z"
+                      />
+                      <path
+                        fill="currentColor"
+                        d="M10.6 3.12c.59-.71.99-1.7.88-2.69-.85.03-1.88.57-2.49 1.27-.54.63-1.02 1.63-.89 2.59.94.07 1.9-.47 2.5-1.17z"
+                      />
                     </svg>
                   ),
                 },
@@ -514,8 +592,8 @@ export default function LoginContent() {
                   provider: "x" as const,
                   label: "X / Twitter",
                   icon: (
-                    <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-                      <path fill="white" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.256 5.622 5.908-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                    <svg className="h-5 w-5 [color:var(--text)]" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="currentColor" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.748l7.73-8.835L1.254 2.25H8.08l4.256 5.622 5.908-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                     </svg>
                   ),
                 },
@@ -523,8 +601,8 @@ export default function LoginContent() {
                   provider: "tiktok" as const,
                   label: "TikTok",
                   icon: (
-                    <svg className="h-5 w-5" viewBox="0 0 24 24" aria-hidden="true">
-                      <path fill="white" d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.27 8.27 0 004.84 1.55V6.86a4.85 4.85 0 01-1.07-.17z" />
+                    <svg className="h-5 w-5 [color:var(--text)]" viewBox="0 0 24 24" aria-hidden="true">
+                      <path fill="currentColor" d="M19.59 6.69a4.83 4.83 0 01-3.77-4.25V2h-3.45v13.67a2.89 2.89 0 01-2.88 2.5 2.89 2.89 0 01-2.89-2.89 2.89 2.89 0 012.89-2.89c.28 0 .54.04.79.1V9.01a6.33 6.33 0 00-.79-.05 6.34 6.34 0 00-6.34 6.34 6.34 6.34 0 006.34 6.34 6.34 6.34 0 006.33-6.34V8.75a8.27 8.27 0 004.84 1.55V6.86a4.85 4.85 0 01-1.07-.17z" />
                     </svg>
                   ),
                 },
@@ -539,14 +617,21 @@ export default function LoginContent() {
                       void handleSocialProvider(item.provider)
                     }}
                     disabled={socialLoadingProvider !== null || soonOnly}
-                    className={`relative flex flex-col items-center gap-1 rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-2 py-3 text-white transition hover:border-violet-300/45 hover:bg-[#211a3e] disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-violet-400/30 disabled:hover:bg-[#1c1535]`}
+                    className="relative flex flex-col items-center gap-1 rounded-[10px] border px-2 py-3 transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-50"
+                    style={{
+                      borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+                      background: "var(--panel2)",
+                      color: "var(--text)",
+                    }}
                     title={soonOnly ? `${item.label} — coming soon` : `Continue with ${item.label}`}
                   >
                     <span className="absolute right-1 top-1 rounded border border-amber-400/30 bg-amber-500/15 px-1 text-[8px] font-bold uppercase tracking-[0.04em] text-amber-300">
                       Soon
                     </span>
                     {item.icon}
-                    <span className="text-[10px] text-white/60">{item.label}</span>
+                    <span className="text-[10px]" style={{ color: "var(--muted)" }}>
+                      {item.label}
+                    </span>
                   </button>
                 )
               })}
@@ -580,9 +665,13 @@ export default function LoginContent() {
             )}
           </div>
 
-          <div className="mt-6 text-center text-sm text-white/55">
+          <div className="mt-6 text-center text-sm" style={{ color: "var(--muted)" }}>
             New to AllFantasy?{" "}
-            <Link href={signupUrlWithIntent(callbackUrl)} className="font-semibold text-cyan-400 transition hover:opacity-80">
+            <Link
+              href={signupUrlWithIntent(callbackUrl)}
+              className="font-semibold transition hover:opacity-80"
+              style={{ color: "var(--accent-cyan-strong)" }}
+            >
               Create your free account
             </Link>
           </div>
@@ -596,7 +685,12 @@ export default function LoginContent() {
           setAdminRemaining(null)
           setAdminModalOpen(true)
         }}
-        className="fixed bottom-5 right-5 z-30 flex h-11 w-11 items-center justify-center rounded-full border border-violet-400/15 bg-violet-500/10 text-violet-300/80 backdrop-blur-md transition hover:border-violet-300/35 hover:bg-violet-500/15 hover:text-violet-200"
+        className="fixed bottom-5 right-5 z-30 flex h-11 w-11 items-center justify-center rounded-full border backdrop-blur-md transition hover:opacity-90"
+        style={{
+          borderColor: "color-mix(in srgb, var(--accent-purple) 35%, var(--border))",
+          background: "color-mix(in srgb, var(--accent-purple) 12%, transparent)",
+          color: "var(--muted)",
+        }}
         title="Admin access"
         aria-label="Admin sign in"
       >
@@ -605,30 +699,39 @@ export default function LoginContent() {
 
       {adminModalOpen && (
         <div
-          className="fixed inset-0 z-40 flex items-center justify-center bg-[#07090f]/75 p-4 backdrop-blur-md"
+          className="fixed inset-0 z-40 flex items-center justify-center p-4 backdrop-blur-md"
+          style={{ background: "color-mix(in srgb, var(--bg) 65%, rgba(0,0,0,0.45))" }}
           onClick={(event) => {
             if (event.target === event.currentTarget) {
               setAdminModalOpen(false)
             }
           }}
         >
-          <div className="relative w-full max-w-[340px] rounded-2xl border border-violet-400/30 bg-[#16102a] p-8 shadow-2xl">
+          <div
+            className="relative w-full max-w-[340px] rounded-2xl border p-8 shadow-2xl"
+            style={{
+              borderColor: "color-mix(in srgb, var(--border) 100%, transparent)",
+              background: "var(--panel)",
+              color: "var(--text)",
+            }}
+          >
             <button
               type="button"
               onClick={() => setAdminModalOpen(false)}
-              className="absolute right-3 top-3 p-1 text-white/50 transition hover:text-white"
+              className="absolute right-3 top-3 p-1 transition hover:opacity-90"
+              style={{ color: "var(--muted)" }}
               aria-label="Close"
             >
               <X className="h-5 w-5" />
             </button>
 
             <div className="mb-1 flex items-center gap-2">
-              <Shield className="h-5 w-5 text-violet-300/80" />
-              <h2 className="font-['Bebas_Neue'] text-[22px] tracking-[0.04em] text-white">
+              <Shield className="h-5 w-5" style={{ color: "var(--accent-purple)" }} />
+              <h2 className="font-['Bebas_Neue'] text-[22px] tracking-[0.04em]" style={{ color: "var(--text)" }}>
                 {t("login.admin.signInTitle")}
               </h2>
             </div>
-            <p className="mb-5 text-sm text-white/60">
+            <p className="mb-5 text-sm" style={{ color: "var(--muted)" }}>
               Restricted access. Enter your admin credentials to continue.
             </p>
 
@@ -658,12 +761,13 @@ export default function LoginContent() {
                   placeholder={t("login.admin.placeholder")}
                   disabled={adminLoading}
                   autoFocus
-                  className="w-full rounded-[10px] border border-violet-400/30 bg-[#1c1535] px-3.5 py-3 pr-11 text-[15px] text-white outline-none transition placeholder:text-white/35 focus:border-violet-300/60 focus:ring-4 focus:ring-violet-500/10"
+                  className="w-full rounded-[10px] border px-3.5 py-3 pr-11 text-[15px] outline-none transition placeholder:[color:var(--muted2)] focus:border-violet-500 focus:ring-4 focus:ring-violet-500/10"
+                  style={inputSurfaceStyle}
                 />
                 <button
                   type="button"
                   onClick={() => setShowAdminPassword((value) => !value)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-white/35 transition hover:text-violet-200"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 transition [color:var(--muted)] hover:[color:var(--accent-purple)]"
                   aria-label={showAdminPassword ? t("common.hidePassword") : t("common.showPassword")}
                 >
                   {showAdminPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -673,7 +777,12 @@ export default function LoginContent() {
               <button
                 type="submit"
                 disabled={adminLoading || !adminPassword.trim()}
-                className="w-full rounded-[10px] border border-violet-400/40 bg-violet-500/20 px-4 py-3 text-sm font-semibold text-white transition hover:bg-violet-500/30 disabled:opacity-60"
+                className="w-full rounded-[10px] border px-4 py-3 text-sm font-semibold transition hover:opacity-95 disabled:opacity-60"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--accent-purple) 45%, var(--border))",
+                  background: "color-mix(in srgb, var(--accent-purple) 18%, transparent)",
+                  color: "var(--text)",
+                }}
               >
                 {adminLoading ? (
                   <span className="inline-flex items-center justify-center gap-2">

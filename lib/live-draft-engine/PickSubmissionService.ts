@@ -458,6 +458,12 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
         roundSlot: pick.slot ?? slot,
         playerId: pick.playerId ?? input.playerId ?? null,
         nflTeam: pick.team ?? input.team ?? null,
+        // D.6.3 — pick chat card metadata (forwarded to LeagueChatMessage.metadata).
+        headshotUrl: pick.playerImageUrl ?? input.playerImageUrl ?? null,
+        // D.6.3 — flips the AI badge on the rendered card. Mutually exclusive with commissionerOverride below.
+        aiManager: input.source === 'auto',
+        // Commit T — flips the Commissioner badge on the rendered card.
+        commissionerOverride: input.source === 'commissioner',
       }),
     )
     .catch(() => {})
