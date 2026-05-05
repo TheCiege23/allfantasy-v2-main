@@ -67,18 +67,32 @@ export async function POST(req: Request) {
     }
     const sleeperUserId = sleeperUser.user_id;
 
-    const dailyBulkImport = await consumeDailyLimit({
-      provider: "sleeper",
-      endpoint: `league-import-bulk:${sleeperUserId}`,
-    });
-    if (!dailyBulkImport.success) {
-      return NextResponse.json(
-        {
-          error: "Bulk Sleeper import is limited to once per day for this Sleeper account.",
-          retryAfterSec: dailyBulkImport.retryAfterSec,
-        },
-        { status: 429 },
-      );
+    /**
+     * Per-user rate-limit bypass: TheCiege24 (Sleeper username) skips the
+     * once-per-day cap. Compare both the request input and the Sleeper API
+     * canonical name, case-insensitive, so casing/whitespace can't break it.
+     */
+    const RATE_LIMIT_BYPASS_SLEEPER_USERNAMES = new Set(["theciege24"]);
+    const requestedNameLower = sleeperUsername.toLowerCase();
+    const canonicalNameLower = (sleeperUser.username ?? "").toLowerCase();
+    const isBypassedSleeperUsername =
+      RATE_LIMIT_BYPASS_SLEEPER_USERNAMES.has(requestedNameLower) ||
+      RATE_LIMIT_BYPASS_SLEEPER_USERNAMES.has(canonicalNameLower);
+
+    if (!isBypassedSleeperUsername) {
+      const dailyBulkImport = await consumeDailyLimit({
+        provider: "sleeper",
+        endpoint: `league-import-bulk:${sleeperUserId}`,
+      });
+      if (!dailyBulkImport.success) {
+        return NextResponse.json(
+          {
+            error: "Bulk Sleeper import is limited to once per day for this Sleeper account.",
+            retryAfterSec: dailyBulkImport.retryAfterSec,
+          },
+          { status: 429 },
+        );
+      }
     }
 
     await prisma.userProfile

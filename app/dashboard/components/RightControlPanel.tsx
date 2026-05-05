@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
-import { ChevronRight, LogOut, Plus, Settings, User } from 'lucide-react'
+import { ChevronRight, LogOut, Plus, PlusCircle, Settings, User } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { LeagueListPanel } from './LeagueListPanel'
 import type { RightControlPanelLayoutProps, UserLeague } from '../types'
@@ -61,38 +61,54 @@ export function RightControlPanel({
 
   return (
     <div className="relative flex h-full min-h-0 w-full min-w-0 max-w-full flex-col overflow-x-hidden border-l border-white/[0.07] bg-[#0a0a1f]">
-      {hideLeagueList ? (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" />
-      ) : (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] px-2 py-2">
-            <p className="min-w-0 truncate text-[16px] dashboard-header-bold header-myleagues uppercase tracking-widest">
-              {t('dashboard.right.myLeagues')}
-            </p>
-            <div className="flex shrink-0 items-center gap-1">
-              {onRailCollapse ? (
-                <button
-                  type="button"
-                  onClick={onRailCollapse}
-                  className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-white/80 transition hover:bg-white/[0.08]"
-                  aria-label="Collapse My Leagues"
-                  title="Collapse My Leagues"
-                  data-testid="myleagues-rail-collapse"
-                >
-                  <ChevronRight className="h-4 w-4" aria-hidden />
-                </button>
-              ) : null}
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+        {/* Always-visible header: MY LEAGUES title + Create + Import + (optional) collapse. */}
+        <div className="flex min-w-0 flex-shrink-0 items-center justify-between gap-2 border-b border-white/[0.07] px-2 py-2">
+          <p className="min-w-0 truncate text-[16px] dashboard-header-bold header-myleagues uppercase tracking-widest">
+            {t('dashboard.right.myLeagues')}
+          </p>
+          <div className="flex shrink-0 items-center gap-1">
+            {onRailCollapse ? (
               <button
                 type="button"
-                onClick={onImport}
-                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
-                aria-label={t('dashboard.right.importLeague')}
-                title={t('dashboard.right.importLeague')}
+                onClick={onRailCollapse}
+                className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-white/80 transition hover:bg-white/[0.08]"
+                aria-label="Collapse My Leagues"
+                title="Collapse My Leagues"
+                data-testid="myleagues-rail-collapse"
               >
-                <Plus className="h-4 w-4" />
+                <ChevronRight className="h-4 w-4" aria-hidden />
               </button>
-            </div>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => router.push('/create-league')}
+              data-testid="dashboard-right-create-league"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-500/10 text-cyan-200 transition hover:border-cyan-400/45 hover:bg-cyan-500/20"
+              aria-label="Create League"
+              title="Create League"
+            >
+              <PlusCircle className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onImport}
+              data-testid="dashboard-right-import-league"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-white transition hover:bg-white/[0.08]"
+              aria-label={t('dashboard.right.importLeague')}
+              title={t('dashboard.right.importLeague')}
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           </div>
+        </div>
+        {hideLeagueList ? (
+          <div className="flex flex-1 min-h-0 min-w-0 flex-col items-center justify-start px-3 py-4 text-center">
+            <p className="text-[11px] text-white/35">
+              League list hidden. Use <span className="text-cyan-200">Create</span> or <span className="text-white/70">Import</span> above to add a league.
+            </p>
+          </div>
+        ) : (
           <div className="min-h-0 min-w-0 flex-1 overflow-hidden">
             <LeagueListPanel
               leagues={leagues}
@@ -107,8 +123,8 @@ export function RightControlPanel({
               onLeagueRemoved={onLeagueRemoved}
             />
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Compact AF Chat icon bar (DM / Groups / Chimmy) — retained for future use; replaced by profile footer */}
       {/*
