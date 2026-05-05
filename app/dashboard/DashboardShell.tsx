@@ -1,8 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Bot, LayoutGrid, X } from 'lucide-react'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -16,6 +16,8 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import LanguageToggle from '@/components/i18n/LanguageToggle'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { StartSitLauncher } from '@/components/dashboard/StartSitLauncher'
+import { mergeDashboardActiveLeagueId } from '@/lib/dashboard/dashboard-league-selection'
+import { SelectedLeagueHomePanel } from './components/SelectedLeagueHomePanel'
 
 type DashboardShellProps = {
   userId: string
@@ -267,64 +269,7 @@ function mapLeague(rawValue: unknown): DashboardConnectedLeague | null {
   }
 }
 
-function LeagueCenterContent({
-  leagueId,
-  league,
-  leaguesLoading,
-}: {
-  leagueId: string
-  league: UserLeague | null
-  leaguesLoading: boolean
-}) {
-  const { t } = useLanguage()
-  if (leaguesLoading) {
-    return (
-      <div
-        className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto px-6"
-        style={{ background: 'var(--bg)' }}
-      >
-        <p className="text-sm" style={{ color: 'var(--muted)' }}>
-          {t('dashboard.shell.loadingLeague')}
-        </p>
-      </div>
-    )
-  }
-
-  if (!league) {
-    return (
-      <div
-        className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto px-6 text-center"
-        style={{ background: 'var(--bg)' }}
-      >
-        <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
-          {t('dashboard.shell.leagueNotFound')}
-        </p>
-        <p className="mt-2 text-xs" style={{ color: 'var(--muted2)' }}>
-          {t('dashboard.shell.leagueNotInList')}
-        </p>
-        <p className="mt-1 font-mono text-[10px] text-white/25">{leagueId}</p>
-      </div>
-    )
-  }
-
-  return (
-    <div className="h-full min-h-0 overflow-y-auto [scrollbar-gutter:stable]" style={{ background: 'var(--bg)' }}>
-      <div className="mx-auto w-full max-w-3xl space-y-4 px-6 py-6">
-        <p className="text-[10px] uppercase tracking-widest" style={{ color: 'var(--muted2)' }}>
-          {t('dashboard.shell.leagueWorkspace')}
-        </p>
-        <h1 className="text-2xl font-black" style={{ color: 'var(--text)' }}>
-          {league.name}
-        </h1>
-        <p className="text-sm" style={{ color: 'var(--muted)' }}>
-          {t('dashboard.shell.leagueTabsPlaceholder')}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-export function DashboardShell({
+function DashboardShellInner({
   userId,
   userName,
   userImage = null,
@@ -335,6 +280,7 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const { t } = useLanguage()
   const router = useRouter()
+  const searchParams = useSearchParams()
   /**
    * Session-scoped tombstones: leagueIds that the user just deleted.
    * Filters any subsequent server response so replication lag / race conditions
@@ -383,11 +329,23 @@ export function DashboardShell({
   const [mobileRightOpen, setMobileRightOpen] = useState(false)
   const myLeaguesRail = useMyLeaguesRailCollapse()
 
+  const leagueIdFromUrl = searchParams.get('leagueId')
+  const validLeagueIds = useMemo(() => new Set(leagues.map((l) => l.id)), [leagues])
+  const effectiveActiveLeagueId = useMemo(
+    () =>
+      mergeDashboardActiveLeagueId({
+        leagueIdFromUrl,
+        validLeagueIds,
+        routeActiveLeagueId: activeLeagueId,
+      }),
+    [leagueIdFromUrl, validLeagueIds, activeLeagueId],
+  )
+
   const selectedLeague = useMemo((): UserLeague | null => {
-    if (!activeLeagueId) return null
-    const found = leagues.find((l) => l.id === activeLeagueId)
+    if (!effectiveActiveLeagueId) return null
+    const found = leagues.find((l) => l.id === effectiveActiveLeagueId)
     return found ?? null
-  }, [leagues, activeLeagueId])
+  }, [leagues, effectiveActiveLeagueId])
 
   const commissionerLeagues = useMemo(
     () =>
@@ -397,12 +355,17 @@ export function DashboardShell({
     [leagues]
   )
 
-  /** My Leagues rows use `<Link href={getLeagueListDestinationHref}>` — do not `router.push` here or it overrides tournament (and other) URLs. */
-  const handleSelectLeague = useCallback((league: UserLeague | null) => {
-    if (!league) {
-      router.push('/dashboard')
-    }
-  }, [router])
+  /** Inline `/dashboard?leagueId=` selection — keeps three-panel shell; tournament hubs still navigate from card `href`. */
+  const handleSelectLeague = useCallback(
+    (league: UserLeague | null) => {
+      if (!league) {
+        router.replace('/dashboard', { scroll: false })
+        return
+      }
+      router.replace(`/dashboard?leagueId=${encodeURIComponent(league.id)}`, { scroll: false })
+    },
+    [router],
+  )
 
   useEffect(() => {
     const openMobileLeft = () => {
@@ -481,11 +444,11 @@ export function DashboardShell({
         persistTombstones(next)
         return next
       })
-      if (activeLeagueId === leagueId) {
-        router.push('/dashboard')
+      if (effectiveActiveLeagueId === leagueId) {
+        router.replace('/dashboard', { scroll: false })
       }
     },
-    [activeLeagueId, persistTombstones, router]
+    [effectiveActiveLeagueId, persistTombstones, router]
   )
 
   const handleTriggerImport = () => {
@@ -502,7 +465,7 @@ export function DashboardShell({
     setMobileLeftOpen(true)
   }
 
-  const isLeagueRoute = Boolean(activeLeagueId)
+  const isLeagueRoute = Boolean(effectiveActiveLeagueId)
   const geo = useGeoRestriction()
 
   return (
@@ -515,7 +478,7 @@ export function DashboardShell({
       leftPanel={
         <LeftChatPanel
           selectedLeague={selectedLeague}
-          activeLeagueId={activeLeagueId}
+          activeLeagueId={effectiveActiveLeagueId}
           userId={userId}
           userDisplayName={userName}
           userImage={userImage}
@@ -523,7 +486,7 @@ export function DashboardShell({
           leagues={leagues}
           discordConnected={discordConnected}
           commissionerLeagues={commissionerLeagues}
-          initialOpenChat={activeLeagueId ? 'league' : null}
+          initialOpenChat={effectiveActiveLeagueId ? 'league' : null}
         />
       }
       rightPanel={
@@ -531,7 +494,7 @@ export function DashboardShell({
           leagues={leagues}
           leaguesLoading={leaguesLoading}
           selectedId={selectedLeague?.id ?? null}
-          activeLeagueId={activeLeagueId}
+          activeLeagueId={effectiveActiveLeagueId}
           onSelectLeague={handleSelectLeague}
           userId={userId}
           userName={userName}
@@ -540,6 +503,7 @@ export function DashboardShell({
           onLeaguesRefresh={onLeaguesRefresh}
           onLeagueRemoved={onLeagueRemoved}
           onRailCollapse={() => myLeaguesRail.setCollapsed(true)}
+          inlineDashboardSelect
         />
       }
     >
@@ -608,12 +572,24 @@ export function DashboardShell({
           </div>
 
         <div className="min-h-0 flex-1 overflow-hidden">
-          {isLeagueRoute && activeLeagueId ? (
-            <LeagueCenterContent
-              leagueId={activeLeagueId}
+          {isLeagueRoute && effectiveActiveLeagueId && selectedLeague ? (
+            <SelectedLeagueHomePanel
               league={selectedLeague}
-              leaguesLoading={leaguesLoading}
+              onBackToOverview={() => router.replace('/dashboard', { scroll: false })}
             />
+          ) : isLeagueRoute && effectiveActiveLeagueId && !selectedLeague && !leaguesLoading ? (
+            <div
+              className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto px-6 text-center"
+              style={{ background: 'var(--bg)' }}
+            >
+              <p className="text-sm font-semibold" style={{ color: 'var(--text)' }}>
+                {t('dashboard.shell.leagueNotFound')}
+              </p>
+              <p className="mt-2 text-xs" style={{ color: 'var(--muted2)' }}>
+                {t('dashboard.shell.leagueNotInList')}
+              </p>
+              <p className="mt-1 font-mono text-[10px] text-white/25">{effectiveActiveLeagueId}</p>
+            </div>
           ) : (
             <DashboardOverview
               userName={userName}
@@ -656,7 +632,7 @@ export function DashboardShell({
             <div className="min-h-0 flex-1 overflow-hidden">
               <LeftChatPanel
                 selectedLeague={selectedLeague}
-                activeLeagueId={activeLeagueId}
+                activeLeagueId={effectiveActiveLeagueId}
                 userId={userId}
                 userDisplayName={userName}
                 userImage={userImage}
@@ -664,7 +640,7 @@ export function DashboardShell({
                 leagues={leagues}
                 discordConnected={discordConnected}
                 commissionerLeagues={commissionerLeagues}
-                initialOpenChat={activeLeagueId ? 'league' : null}
+                initialOpenChat={effectiveActiveLeagueId ? 'league' : null}
               />
             </div>
           </div>
@@ -704,7 +680,7 @@ export function DashboardShell({
                   leagues={leagues}
                   leaguesLoading={leaguesLoading}
                   selectedId={selectedLeague?.id ?? null}
-                  activeLeagueId={activeLeagueId}
+                  activeLeagueId={effectiveActiveLeagueId}
                   onSelectLeague={handleSelectLeague}
                   userId={userId}
                   userName={userName}
@@ -715,6 +691,7 @@ export function DashboardShell({
                   onLeaguesRefresh={onLeaguesRefresh}
                   onLeagueRemoved={onLeagueRemoved}
                   onRailCollapse={() => myLeaguesRail.setCollapsed(true)}
+                  inlineDashboardSelect
                 />
               </div>
             </div>
@@ -734,5 +711,22 @@ export function DashboardShell({
       ) : null}
       </>
     </AppShell>
+  )
+}
+
+export function DashboardShell(props: DashboardShellProps) {
+  return (
+    <Suspense
+      fallback={
+        <div
+          className="flex min-h-[50dvh] w-full items-center justify-center text-sm text-white/50"
+          style={{ background: 'var(--bg)' }}
+        >
+          Loading dashboard…
+        </div>
+      }
+    >
+      <DashboardShellInner {...props} />
+    </Suspense>
   )
 }

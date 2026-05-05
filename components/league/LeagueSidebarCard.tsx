@@ -15,6 +15,11 @@ export type LeagueSidebarCardProps = {
   isSelected?: boolean
   isFavorite?: boolean
   onSelect?: (league: UserLeague) => void
+  /**
+   * Dashboard My Leagues: primary click selects inline (updates `?leagueId=`) instead of navigating away.
+   * Tournament hub rows still navigate to `/tournament/[id]`. Middle-/modifier-click follows `href` normally.
+   */
+  inlineDashboardSelect?: boolean
   onFavoriteToggle?: (leagueId: string) => void
   isDragging?: boolean
   isDropTarget?: boolean
@@ -47,6 +52,7 @@ export function LeagueSidebarCard({
   onDelete,
   isDeleting = false,
   compact = false,
+  inlineDashboardSelect = false,
 }: LeagueSidebarCardProps) {
   const formatLabel = buildLeagueFormatLabel({
     format: league.format,
@@ -61,6 +67,8 @@ export function LeagueSidebarCard({
   const sportLabel = (league.sport || 'NFL').toString().toUpperCase()
   const platformLabel = getPlatformLabel(league.platform)
   const destinationHref = getLeagueListDestinationHref(league)
+  const tournamentHubNav = destinationHref.startsWith('/tournament/')
+  const inlineSelectActive = Boolean(inlineDashboardSelect && onSelect && !tournamentHubNav)
 
   return (
     <div
@@ -145,7 +153,15 @@ export function LeagueSidebarCard({
         <Link
           href={destinationHref}
           aria-label={`${league.name} — ${status.label}`}
-          onClick={() => onSelect?.(league)}
+          aria-current={isSelected ? 'page' : undefined}
+          onClick={(e) => {
+            if (inlineSelectActive) {
+              e.preventDefault()
+              onSelect?.(league)
+            } else {
+              onSelect?.(league)
+            }
+          }}
           className={[
             'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 outline-none transition-all duration-150',
             'border-l-2 focus-visible:ring-2 focus-visible:ring-cyan-500/40',

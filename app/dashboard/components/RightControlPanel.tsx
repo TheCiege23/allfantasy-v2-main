@@ -37,6 +37,7 @@ export function RightControlPanel({
   onLeagueRemoved,
   onRailCollapse,
   hideLeagueList = false,
+  inlineDashboardSelect = false,
 }: RightControlPanelLayoutProps) {
   const router = useRouter()
   const { t } = useLanguage()
@@ -117,6 +118,7 @@ export function RightControlPanel({
                 onSelectLeague(league)
                 onAfterLeagueNavigate?.()
               }}
+              inlineDashboardSelect={inlineDashboardSelect}
               compact
               loading={leaguesLoading}
               onLeaguesRefresh={onLeaguesRefresh}

@@ -14,6 +14,8 @@ type LeagueListPanelProps = {
   leagues: UserLeague[]
   selectedId: string | null
   onSelect: (league: UserLeague) => void
+  /** See `LeagueSidebarCard.inlineDashboardSelect` */
+  inlineDashboardSelect?: boolean
   compact?: boolean
   loading?: boolean
   /** Refetch dashboard league list after a successful Sleeper refresh */
@@ -74,6 +76,7 @@ export function LeagueListPanel({
   leagues,
   selectedId,
   onSelect,
+  inlineDashboardSelect = false,
   compact = false,
   loading = false,
   onLeaguesRefresh,
@@ -360,6 +363,7 @@ export function LeagueListPanel({
                     isSelected={league.id === selectedId}
                     isFavorite={favoriteSet.has(league.id)}
                     onSelect={onSelect}
+                    inlineDashboardSelect={inlineDashboardSelect}
                     onFavoriteToggle={handleFavoriteToggle}
                     isDragging={isDragging}
                     isDropTarget={isDropTarget}

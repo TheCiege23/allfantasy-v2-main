@@ -100,6 +100,8 @@ export type RightControlPanelLayoutProps = {
   onRailCollapse?: () => void
   /** Dashboard cleanup — hide the MY LEAGUES list section while keeping the profile footer + gear menu. */
   hideLeagueList?: boolean
+  /** Inline `?leagueId=` selection on primary click — keeps three-panel shell on `/dashboard`. */
+  inlineDashboardSelect?: boolean
 }
 
 export interface DashboardConnectedLeague extends UserLeague {
