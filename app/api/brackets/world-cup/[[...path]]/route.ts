@@ -111,10 +111,16 @@ async function createChallenge(request: Request) {
   })
 
   const challengeId = result.challengeId ?? (result as { id?: string }).id
+  if (!challengeId) {
+    console.error("[world-cup/create] service returned no challengeId", result)
+    return NextResponse.json({ error: "Bracket created but ID could not be determined. Please refresh." }, { status: 500 })
+  }
   return NextResponse.json({
     ok: true,
-    ...result,
+    challengeId,
     id: challengeId,
+    inviteCode: result.inviteCode,
+    inviteUrl: result.inviteUrl,
     challenge: { id: challengeId },
   })
 }
