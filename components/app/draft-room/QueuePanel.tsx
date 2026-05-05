@@ -157,18 +157,36 @@ export function QueuePanel({
           data-testid="draft-queue-search"
           className="h-10 rounded-lg border border-white/15 bg-[#0b1328] px-3 text-xs text-white placeholder:text-white/45 outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
         />
-        <select
-          value={positionFilter}
-          onChange={(e) => setPositionFilter(e.target.value)}
+        {/* Position filter — chip row matches the player pool's position pills
+            so users see consistent affordances across both surfaces. */}
+        <div
+          role="radiogroup"
+          aria-label="Queue position filter"
           data-testid="draft-queue-position-filter"
-          className="h-10 rounded-lg border border-white/15 bg-[#0b1328] px-3 text-xs text-white outline-none transition focus:border-cyan-400/40 focus:ring-2 focus:ring-cyan-500/15"
+          className="flex flex-wrap items-center gap-1"
         >
-          {positionOptions.map((position) => (
-            <option key={position} value={position}>
-              {position === 'ALL' ? 'All positions' : position}
-            </option>
-          ))}
-        </select>
+          {positionOptions.map((position) => {
+            const isActive = positionFilter === position
+            return (
+              <button
+                key={position}
+                type="button"
+                role="radio"
+                aria-checked={isActive}
+                onClick={() => setPositionFilter(position)}
+                data-testid={`draft-queue-position-pill-${position.toLowerCase()}`}
+                data-active={isActive ? 'true' : 'false'}
+                className={`inline-flex h-8 items-center rounded-full border px-2.5 text-[11px] font-semibold uppercase tracking-wider transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 ${
+                  isActive
+                    ? 'border-cyan-400/45 bg-gradient-to-r from-cyan-500/22 to-violet-600/18 text-cyan-50 shadow-[0_0_14px_rgba(34,211,238,0.18)]'
+                    : 'border-white/15 bg-black/20 text-white/65 hover:border-white/28 hover:text-white/90'
+                }`}
+              >
+                {position === 'ALL' ? 'All' : position}
+              </button>
+            )
+          })}
+        </div>
         <select
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as QueueSortMode)}

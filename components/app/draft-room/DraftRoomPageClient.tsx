@@ -5108,6 +5108,9 @@ export function DraftRoomPageClient({
             currentUserRosterId={currentUserRosterId ?? null}
             tradePanelGeneration={tradePanelGeneration}
             initialTradeDraft={tradeInitialDraft}
+            onClockTradeTimerBehavior={
+              session.onClockTradeTimerBehavior === 'reset_timer' ? 'reset_timer' : 'inherit_remaining'
+            }
             onClose={() => setShowTradePanel(false)}
             onTradeAccepted={(updatedSession?: unknown) => {
               if (updatedSession != null)

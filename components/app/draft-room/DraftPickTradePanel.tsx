@@ -83,6 +83,8 @@ export type DraftPickTradePanelProps = {
   } | null
   /** Bump when draft board / traded picks advance so traded UI can invalidate AI caches. */
   draftStateFingerprint?: string
+  /** League rule for the timer when an on-clock pick changes hands mid-draft. */
+  onClockTradeTimerBehavior?: 'inherit_remaining' | 'reset_timer'
 }
 
 export function DraftPickTradePanel({
@@ -100,6 +102,7 @@ export function DraftPickTradePanel({
   tradePanelGeneration = 0,
   initialTradeDraft = null,
   draftStateFingerprint,
+  onClockTradeTimerBehavior = 'inherit_remaining',
 }: DraftPickTradePanelProps) {
   const { canUse } = useEntitlements()
   const tradeAiPremium = canUse('pro_trade_ai')
@@ -624,6 +627,7 @@ export function DraftPickTradePanel({
       lastSuggestionKind={lastSuggestionKind}
       suggestionMeta={suggestionMeta}
       tradeAiPremium={tradeAiPremium}
+      onClockTradeTimerBehavior={onClockTradeTimerBehavior}
     />
   )
 }

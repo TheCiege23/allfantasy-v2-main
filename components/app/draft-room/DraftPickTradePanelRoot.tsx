@@ -169,6 +169,8 @@ export type DraftPickTradePanelRootProps = {
     reasonCode?: string | null
   } | null
   tradeAiPremium: boolean
+  /** League rule for the timer when an on-clock pick changes hands. Surfaces a small banner in the composer. */
+  onClockTradeTimerBehavior?: 'inherit_remaining' | 'reset_timer'
 }
 
 export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
@@ -228,6 +230,7 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
     lastSuggestionKind,
     suggestionMeta,
     tradeAiPremium,
+    onClockTradeTimerBehavior = 'inherit_remaining',
   } = props
 
   const rs = presentationVariant === 'redraft_snake'
@@ -444,6 +447,25 @@ export function DraftPickTradePanelRoot(props: DraftPickTradePanelRootProps) {
                         You give a pick from your draft slot; they give a pick from theirs. Labels use{' '}
                         <span className="font-mono text-white/70">round.slot</span> (e.g. 3.07).
                       </p>
+                      {/* On-clock pick-trade timer rule banner — Slice-1 setting visualized so users
+                          see the rule before submitting a trade involving the active pick. */}
+                      <div
+                        data-testid="trade-builder-onclock-timer-banner"
+                        className={`mt-2 inline-flex max-w-2xl items-center gap-2 rounded-xl border px-3 py-2 text-[12px] ${
+                          onClockTradeTimerBehavior === 'reset_timer'
+                            ? 'border-amber-400/35 bg-amber-500/10 text-amber-100'
+                            : 'border-cyan-400/30 bg-cyan-500/10 text-cyan-100'
+                        }`}
+                      >
+                        <span className="text-[10px] font-bold uppercase tracking-[0.18em] opacity-80">
+                          On-clock rule
+                        </span>
+                        <span>
+                          {onClockTradeTimerBehavior === 'reset_timer'
+                            ? 'Trading the on-the-clock pick resets the timer for the new owner.'
+                            : 'Trading the on-the-clock pick keeps the remaining time — the new owner inherits it.'}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="grid items-stretch gap-6 xl:grid-cols-[1fr_auto_1fr] xl:gap-4">

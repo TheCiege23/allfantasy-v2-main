@@ -19,6 +19,8 @@ import {
   Sparkles,
   Tv,
   User,
+  Volume2,
+  VolumeX,
 } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { formatTimerRemaining } from '@/lib/live-draft-engine/DraftTimerService'
@@ -222,6 +224,71 @@ export function DraftTopBar({
   const menuRef = useRef<HTMLDivElement | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied'>('idle')
+
+  // Audible timer cue. Plays a short beep when the live countdown crosses 10s, 5s,
+  // and the final 3/2/1. Mute persists per-user via localStorage so commissioners
+  // running multi-day drafts can silence it for the night.
+  const [timerMuted, setTimerMuted] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      setTimerMuted(window.localStorage.getItem('af:draft-timer-mute') === '1')
+    } catch {
+      /* ignore storage failures (private mode, etc.) */
+    }
+  }, [])
+  const lastCountdownTickRef = useRef<number | null>(null)
+  useEffect(() => {
+    if (timerMuted || timerStatus !== 'running' || liveRemaining == null) {
+      lastCountdownTickRef.current = liveRemaining ?? null
+      return
+    }
+    const prev = lastCountdownTickRef.current
+    lastCountdownTickRef.current = liveRemaining
+    if (prev == null || prev <= liveRemaining) return
+    const beepThresholds = new Set([10, 5, 3, 2, 1])
+    if (!beepThresholds.has(liveRemaining)) return
+    try {
+      const Ctor =
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).AudioContext ??
+        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!Ctor) return
+      const ctx = new Ctor()
+      const oscillator = ctx.createOscillator()
+      const gain = ctx.createGain()
+      oscillator.connect(gain)
+      gain.connect(ctx.destination)
+      oscillator.type = 'sine'
+      oscillator.frequency.value = liveRemaining <= 3 ? 880 : liveRemaining === 5 ? 700 : 540
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02)
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18)
+      oscillator.start()
+      oscillator.stop(ctx.currentTime + 0.2)
+      oscillator.onended = () => {
+        try {
+          void ctx.close()
+        } catch {
+          /* ignore */
+        }
+      }
+    } catch {
+      /* Browser blocked audio (autoplay gesture not yet given) — silent failure is correct. */
+    }
+  }, [timerMuted, liveRemaining, timerStatus])
+  const handleToggleTimerMute = () => {
+    setTimerMuted((prev) => {
+      const next = !prev
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem('af:draft-timer-mute', next ? '1' : '0')
+        }
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
 
   useEffect(() => {
     if (!menuOpen) return
@@ -754,6 +821,21 @@ export function DraftTopBar({
               aria-hidden
             />
             Auto-pick {autoPickEnabled ? 'On' : 'Off'}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleToggleTimerMute}
+            data-testid="draft-topbar-timer-mute-toggle"
+            aria-pressed={timerMuted}
+            title={timerMuted ? 'Timer beeps muted — click to enable' : 'Mute timer beeps (10s / 5s / final)'}
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-lg border transition duration-150 cursor-pointer ${
+              timerMuted
+                ? 'border-white/14 bg-white/6 text-white/55 hover:border-white/25 hover:bg-white/10'
+                : 'border-cyan-400/30 bg-cyan-500/12 text-cyan-100 shadow-[0_0_10px_rgba(34,211,238,0.12)] hover:bg-cyan-500/18'
+            }`}
+          >
+            {timerMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
           </button>
 
           {onTradesClick ? (
