@@ -71,6 +71,15 @@ const nextConfig = {
     "http://localhost:5000",
   ],
 
+  async redirects() {
+    return [
+      // Alias pages removed from build to stay under Vercel's 2048-route cap.
+      { source: '/march-madness', destination: '/brackets', permanent: false },
+      { source: '/march-madness/join', destination: '/brackets/join', permanent: false },
+      { source: '/wallet/deposit', destination: '/donate', permanent: false },
+    ]
+  },
+
   async headers() {
     return [
       {

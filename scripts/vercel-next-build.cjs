@@ -20,6 +20,14 @@ const routeDirsToDisable = [
   path.join('app', 'bracket-review'),
   path.join('app', 'createor'),
   path.join('app', 'manifest.experimental.webmanifest'),
+  // Dev/test/lab routes — never needed in production (reduce Vercel route budget).
+  path.join('app', 'api', 'dev'),
+  path.join('app', 'api', 'e2e'),
+  path.join('app', 'api', 'lab'),
+  path.join('app', 'api', 'simulation-lab'),
+  // Pure redirect-alias pages — replaced by next.config.js redirects below.
+  path.join('app', 'march-madness'),
+  path.join('app', 'wallet', 'deposit'),
 ]
 
 const movedFiles = []
