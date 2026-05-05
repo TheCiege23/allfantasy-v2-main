@@ -33,8 +33,30 @@ function computeUserRole(
 ): 'commissioner' | 'member' | 'imported' {
   const p = String(platform || '').toLowerCase()
   if (isCommissioner) return 'commissioner'
-  if (p !== 'allfantasy' && p !== 'af') return 'imported'
+  if (p !== 'allfantasy' && p !== 'af' && p !== 'manual') return 'imported'
   return 'member'
+}
+
+/** Dashboard viewer is commissioner/co-commish for this league row (not necessarily `League.userId`). */
+export function resolveViewerLeagueCommissioner(params: {
+  platform: string
+  leagueRowOwnerId: string
+  viewerUserId: string
+  leagueIsCommissionerFlag: boolean
+  membershipRole?: string | null
+  team?: { isCommissioner?: boolean | null; isCoCommissioner?: boolean | null } | null
+}): boolean {
+  const p = String(params.platform || '').toLowerCase()
+  const isRowOwner = params.leagueRowOwnerId === params.viewerUserId
+  if (params.team?.isCommissioner || params.team?.isCoCommissioner) return true
+  if (params.membershipRole === 'COMMISSIONER') return true
+  if (
+    isRowOwner &&
+    (params.leagueIsCommissionerFlag || p === 'manual' || p === 'allfantasy' || p === 'af')
+  ) {
+    return true
+  }
+  return false
 }
 
 export type DashboardLeagueListPayload = {
@@ -54,9 +76,15 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
     (prisma as any).league
       .findMany({
         where: {
-          userId,
           name: { not: null },
           AND: [
+            {
+              OR: [
+                { userId },
+                { redraftMembers: { some: { userId } } },
+                { teams: { some: { claimedByUserId: userId } } },
+              ],
+            },
             {
               OR: [{ leagueVariant: null }, { leagueVariant: { notIn: VARIANT_NOT_IN } }],
             },
@@ -81,6 +109,7 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
         orderBy: [{ season: 'desc' }, { name: 'asc' }],
         select: {
           id: true,
+          userId: true,
           name: true,
           sport: true,
           leagueVariant: true,
@@ -98,6 +127,14 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
           lastSyncedAt: true,
           createdAt: true,
           isCommissioner: true,
+          redraftMembers: {
+            where: { userId },
+            select: { role: true },
+          },
+          teams: {
+            where: { claimedByUserId: userId },
+            select: { isCommissioner: true, isCoCommissioner: true, role: true },
+          },
           rosters: {
             select: {
               id: true,
@@ -217,32 +254,48 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
   }
 
   const normalizedGeneric = genericLeagues.map((lg: any) => {
-    const rosterCount = Array.isArray(lg.rosters) ? lg.rosters.length : 0
+    const {
+      userId: leagueRowOwnerId,
+      redraftMembers: viewerRedraftMembers,
+      teams: viewerTeams,
+      ...lgCore
+    } = lg
+    const rosterCount = Array.isArray(lgCore.rosters) ? lgCore.rosters.length : 0
     const teamCountForFilter =
-      typeof lg.leagueSize === 'number' && lg.leagueSize > 0
-        ? lg.leagueSize
+      typeof lgCore.leagueSize === 'number' && lgCore.leagueSize > 0
+        ? lgCore.leagueSize
         : rosterCount > 0
           ? rosterCount
           : 0
-    const entryFee = extractEntryFeeUsd(lg.settings)
+    const entryFee = extractEntryFeeUsd(lgCore.settings)
     const isPaid = entryFee != null && entryFee > 0
-    const p = String(lg.platform || '').toLowerCase()
-    const isCommissioner = Boolean(lg.isCommissioner) || p === 'allfantasy' || p === 'af'
-    const userRole = computeUserRole(lg.platform, isCommissioner)
+    const memberRow = Array.isArray(viewerRedraftMembers) ? viewerRedraftMembers[0] : undefined
+    const myTeam = Array.isArray(viewerTeams) ? viewerTeams[0] : undefined
+    const membershipRole =
+      typeof memberRow?.role === 'string' ? (memberRow.role as string) : null
+    const isCommissioner = resolveViewerLeagueCommissioner({
+      platform: String(lgCore.platform ?? ''),
+      leagueRowOwnerId: String(leagueRowOwnerId ?? ''),
+      viewerUserId: userId,
+      leagueIsCommissionerFlag: Boolean(lgCore.isCommissioner),
+      membershipRole,
+      team: myTeam ?? null,
+    })
+    const userRole = computeUserRole(lgCore.platform, isCommissioner)
 
     const seasonDisplay = resolveLeagueListSeasonYear({
-      leagueSeason: lg.season,
-      maxRedraftSeason: redraftMaxByLeagueId.get(lg.id) ?? null,
-      maxLeagueHistorySeason: leagueHistoryMaxByLeagueId.get(lg.id) ?? null,
+      leagueSeason: lgCore.season,
+      maxRedraftSeason: redraftMaxByLeagueId.get(lgCore.id) ?? null,
+      maxLeagueHistorySeason: leagueHistoryMaxByLeagueId.get(lgCore.id) ?? null,
     })
 
     return {
-      ...lg,
+      ...lgCore,
       season: seasonDisplay,
-      sport_type: lg.sport ?? DEFAULT_SPORT,
-      league_variant: lg.leagueVariant ?? null,
-      navigationLeagueId: lg.id,
-      unifiedLeagueId: lg.id,
+      sport_type: lgCore.sport ?? DEFAULT_SPORT,
+      league_variant: lgCore.leagueVariant ?? null,
+      navigationLeagueId: lgCore.id,
+      unifiedLeagueId: lgCore.id,
       hasUnifiedRecord: true,
       teamCount: teamCountForFilter,
       isCommissioner,
@@ -353,6 +406,22 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
     const bDate = b.lastSyncedAt ? new Date(b.lastSyncedAt).getTime() : 0
     return bDate - aDate
   })
+
+  if (process.env.NODE_ENV === 'development' && leaguesSorted.length === 0) {
+    console.info('[getDashboardLeagueListForUser] empty dashboard league list (post-filter)', {
+      userIdPrefix: userId.slice(0, 12),
+      rawCounts: {
+        generic: genericLeagues.length,
+        sleeper: sleeperLeagues.length,
+        tournaments: tournaments.length,
+      },
+      passedRealLeague: {
+        generic: normalizedGenericFiltered.length,
+        sleeper: normalizedSleeperFiltered.length,
+        tournament: normalizedTournamentFiltered.length,
+      },
+    })
+  }
 
   return {
     leagues: leaguesSorted,
