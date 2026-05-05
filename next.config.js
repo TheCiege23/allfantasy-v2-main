@@ -77,6 +77,12 @@ const nextConfig = {
       { source: '/march-madness', destination: '/brackets', permanent: false },
       { source: '/march-madness/join', destination: '/brackets/join', permanent: false },
       { source: '/wallet/deposit', destination: '/donate', permanent: false },
+      // /dashboard/brackets/world-cup/* → /brackets/world-cup/* (5 pages collapsed to 2 redirects)
+      { source: '/dashboard/brackets/world-cup', destination: '/brackets/world-cup', permanent: true },
+      { source: '/dashboard/brackets/world-cup/:path*', destination: '/brackets/world-cup/:path*', permanent: true },
+      // /app/tournament/* → /tournament/* (5 pages collapsed to 2 redirects)
+      { source: '/app/tournament', destination: '/tournament', permanent: true },
+      { source: '/app/tournament/:path*', destination: '/tournament/:path*', permanent: true },
     ]
   },
 
