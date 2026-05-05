@@ -28,6 +28,12 @@ const routeDirsToDisable = [
   // Pure redirect-alias pages — replaced by next.config.js redirects below.
   path.join('app', 'march-madness'),
   path.join('app', 'wallet', 'deposit'),
+  // Game modes deferred until launch — keeps Vercel route budget under 2048.
+  // Restore by removing these four lines when zombie/survivor ship to prod users.
+  path.join('app', 'zombie'),
+  path.join('app', 'survivor'),
+  path.join('app', 'api', 'zombie'),
+  path.join('app', 'api', 'survivor'),
 ]
 
 const movedFiles = []
