@@ -29,9 +29,13 @@ const routeDirsToDisable = [
   path.join('app', 'march-madness'),
   path.join('app', 'wallet', 'deposit'),
   // Game modes deferred until launch — keeps Vercel route budget under 2048.
-  // Restore by removing these four lines when zombie/survivor ship to prod users.
-  path.join('app', 'zombie'),
-  path.join('app', 'survivor'),
+  // Disable only the *route-bearing* subdirs; the `components/` subdirs stay
+  // because external code (e.g. CommissionerSettingsModal, components/zombie/*)
+  // imports shared zombie/survivor UI from them. Restore by removing these
+  // entries when zombie/survivor ship to prod users.
+  path.join('app', 'zombie', '[leagueId]'),
+  path.join('app', 'zombie', 'universe'),
+  path.join('app', 'survivor', '[leagueId]'),
   path.join('app', 'api', 'zombie'),
   path.join('app', 'api', 'survivor'),
 ]
