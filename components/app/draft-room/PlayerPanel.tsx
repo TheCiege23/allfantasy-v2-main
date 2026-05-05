@@ -25,6 +25,7 @@ import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { isRookieEligibleForFilter, isVetEligibleForFilter } from '@/lib/draft-room/rookieFilterPredicate'
+import { sleeperPoolStatOptionsFromPositionFilter } from '@/lib/draft-room/sleeperPoolTableLayout'
 
 const PLAYER_ROW_ESTIMATE_HEIGHT = 76
 /** Redraft rows use slightly taller estimate (chips + stats). */
@@ -447,6 +448,12 @@ function PlayerPanelInner({
     return ['All', ...Array.from(teams).sort()]
   }, [players])
 
+  /** Aligns pool sort + Sleeper table columns with the active position pill (IDP / MLB SP / NHL G). */
+  const sleeperStatOpts = useMemo(
+    () => sleeperPoolStatOptionsFromPositionFilter(sport, positionFilter),
+    [sport, positionFilter],
+  )
+
   const scrollRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -534,7 +541,7 @@ function PlayerPanelInner({
     })
     /** D.3 — single sort path covers both toolbar (adp/aiAdp/projected/name) and table-header
      * sorts (bye/pts/avg + rushing/receiving/passing splits). Nulls always sort last; tiebreak is ADP asc then name asc. */
-    list = applyPoolSort(list, { key: sortBy, direction: sortDirection })
+    list = applyPoolSort<PlayerEntry>(list, { key: sortBy, direction: sortDirection }, sport, sleeperStatOpts)
     return list
   }, [
     players,
@@ -555,6 +562,8 @@ function PlayerPanelInner({
     sortBy,
     sortDirection,
     useAiAdp,
+    sport,
+    sleeperStatOpts,
   ])
 
   /** D.7 — true when at least one row in the upstream pool has known years_exp
@@ -613,11 +622,11 @@ function PlayerPanelInner({
    * ('rk', 'player', 'avg', 'pa_int' …); we resolve them through `sortKeyForColumn`. */
   const handleColumnHeaderSort = useCallback(
     (columnKey: string) => {
-      const sortKey = sortKeyForColumn(columnKey)
+      const sortKey = sortKeyForColumn(columnKey, sport)
       if (!sortKey) return
       handleSortChange(sortKey)
     },
-    [handleSortChange],
+    [handleSortChange, sport],
   )
 
   const onCompareTap = useCallback(
@@ -1253,6 +1262,7 @@ function PlayerPanelInner({
                   canNominate={canNominate}
                   useAiAdp={useAiAdp}
                   draftSport={sport}
+                  statColumnOptions={sleeperStatOpts}
                   onDraftRequest={onMakePick}
                   onAddToQueue={onAddToQueue}
                   onNominateRequest={(player) => setPendingNomination(player)}

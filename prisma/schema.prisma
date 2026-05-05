@@ -284,6 +284,29 @@ model SportsPlayerRecord {
   @@map("sports_players")
 }
 
+/// Audit trail for draft enrichment identity failures / low-confidence joins (AI & admin review).
+/// Does not affect draft mechanics — logging only.
+model PlayerIdentityMismatchLog {
+  id                   String   @id @default(cuid())
+  leagueId             String?  @map("league_id")
+  sport                String   @db.VarChar(16)
+  poolPlayerId         String?  @map("pool_player_id") @db.VarChar(128)
+  poolExternalId       String?  @map("pool_external_id") @db.VarChar(128)
+  sportsPlayerRecordId String?  @map("sports_player_record_id") @db.VarChar(128)
+  playerName           String?  @map("player_name") @db.VarChar(256)
+  position             String?  @db.VarChar(64)
+  team                 String?  @db.VarChar(64)
+  attemptedMatchType   String?  @map("attempted_match_type") @db.VarChar(32)
+  confidence           Decimal? @db.Decimal(5, 4)
+  reason               String   @db.VarChar(64)
+  details              Json?
+  createdAt            DateTime @default(now()) @map("created_at")
+
+  @@index([sport, createdAt])
+  @@index([leagueId])
+  @@map("player_identity_mismatch_logs")
+}
+
 model TeamAsset {
   id             String   @id @default(cuid())
   sport          String   @db.VarChar(16)

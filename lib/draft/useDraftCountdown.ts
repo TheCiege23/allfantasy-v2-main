@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { computeDraftCountdownSeconds } from '@/lib/draft/computeDraftCountdownSeconds'
+
 export type DraftCountdownPauseReason = 'commissioner' | 'overnight_window' | null | undefined
 
 export type UseDraftCountdownOpts = {
@@ -60,23 +62,12 @@ export function useDraftCountdownSeconds(
 
   return useMemo(() => {
     void tick
-
-    if (timerStatus === 'paused') return serverRemainingSeconds ?? null
-    if (timerStatus === 'expired') return 0
-    if (timerStatus === 'none') return serverRemainingSeconds ?? null
-    if (timerStatus === 'running' && timerEndAtIso) {
-      const end = new Date(timerEndAtIso).getTime()
-      if (!Number.isFinite(end)) return serverRemainingSeconds ?? null
-      return Math.max(0, Math.ceil((end - Date.now()) / 1000))
-    }
-    if (
-      timerStatus === 'running' &&
-      !timerEndAtIso &&
-      softDeadlineMs.current != null &&
-      Number.isFinite(softDeadlineMs.current)
-    ) {
-      return Math.max(0, Math.ceil((softDeadlineMs.current - Date.now()) / 1000))
-    }
-    return serverRemainingSeconds ?? null
+    return computeDraftCountdownSeconds(
+      timerStatus,
+      timerEndAtIso,
+      serverRemainingSeconds,
+      Date.now(),
+      softDeadlineMs.current,
+    )
   }, [timerStatus, timerEndAtIso, serverRemainingSeconds, tick])
 }

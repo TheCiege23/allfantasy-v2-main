@@ -1,7 +1,15 @@
 /**
  * POST: AI reorder draft queue by roster need and availability.
- * Body: { queue?: QueueEntry[] } (default: load from DB).
- * Returns: { reordered: QueueEntry[], explanation: string }.
+ *
+ * AUDIT:
+ * - **Queue storage**: `DraftQueue.order` JSON array (`sessionId` + `userId`). Active path for GET/PUT queue
+ *   and autopick (`tryQueueAutoPick` reads `DraftQueue.order` via session include).
+ * - **DraftQueueEntry**: Row-based newer UI path — not wired here; this route persists JSON queue only.
+ * - **Autopick**: Consumes persisted `DraftQueue.order` order as-is; no AI inference inside autopick.
+ * - **AF Pro**: `EntitlementResolver` + feature **`pro_draft_ai`**. Persisted AI reorder requires AF Pro +
+ *   **`Roster.settings.aiManageDraftQueueEnabled`** (default false).
+ * - **League UI**: `getDraftUISettingsForLeague().aiQueueReorderEnabled` gates optional OpenAI *explanation*
+ *   copy only (commissioner-facing); does not replace per-user AF Pro + roster flag for persisting reorder.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -14,7 +22,6 @@ import {
   normalizeDraftedNameSet,
   normalizeQueueEntries,
   removeDraftedPlayersFromQueue,
-  reorderQueueByNeed,
 } from '@/lib/draft-queue-engine'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 import { normalizeDraftQueueSizeLimit } from '@/lib/draft-defaults/DraftQueueLimitResolver'
@@ -27,6 +34,12 @@ import {
   withTimeout,
 } from '@/lib/draft-automation-policy'
 import { getCachedAiResult, saveAiResult } from '@/lib/ai/ai-result-cache'
+import { getAiManageDraftQueueEnabled } from '@/lib/live-draft-engine/draftQueueAiPreferences'
+import {
+  planDraftQueueAiReorder,
+  suggestionOnlyExplanation,
+} from '@/lib/live-draft-engine/draftQueueAiReorder'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,13 +63,13 @@ export async function POST(
   let queue: QueueEntry[] = Array.isArray(body.queue) ? body.queue : []
 
   if (queue.length === 0) {
-    const draftSession = await prisma.draftSession.findUnique({
+    const draftSessionProbe = await prisma.draftSession.findUnique({
       where: { leagueId },
       select: { id: true },
     })
-    if (draftSession) {
+    if (draftSessionProbe) {
       const row = await prisma.draftQueue.findUnique({
-        where: { sessionId_userId: { sessionId: draftSession.id, userId } },
+        where: { sessionId_userId: { sessionId: draftSessionProbe.id, userId } },
       })
       const order = (row?.order as unknown as QueueEntry[]) ?? []
       queue = order.filter(Boolean)
@@ -81,6 +94,7 @@ export async function POST(
   if (queue.length < 2) {
     return NextResponse.json({
       reordered: queue,
+      persisted: false,
       explanation: cleanedQueue.removedCount > 0
         ? `Queue has fewer than 2 available players after removing ${cleanedQueue.removedCount} unavailable player${cleanedQueue.removedCount === 1 ? '' : 's'}.`
         : 'Queue has fewer than 2 players; no reorder needed.',
@@ -103,13 +117,49 @@ export async function POST(
   })
   const sport = (league?.sport as string) ?? 'NFL'
 
-  const result = reorderQueueByNeed({
+  const entitlementResolver = new EntitlementResolver()
+  const { hasAccess: hasProDraftAi } = await entitlementResolver.resolveForUser(
+    userId,
+    'pro_draft_ai'
+  )
+
+  const rosterPrefs = await prisma.roster.findUnique({
+    where: { leagueId_platformUserId: { leagueId, platformUserId: userId } },
+    select: { settings: true },
+  })
+  const aiManageDraftQueueEnabled = getAiManageDraftQueueEnabled(rosterPrefs?.settings)
+
+  const plan = planDraftQueueAiReorder({
     queue,
     rosterPositions,
     sport,
+    hasProDraftAiAccess: hasProDraftAi,
+    aiManageDraftQueueEnabled,
   })
 
-  let explanation = result.explanation
+  if (plan.mode === 'persist' && plan.persistOrder) {
+    await prisma.draftQueue.upsert({
+      where: { sessionId_userId: { sessionId: draftSession.id, userId } },
+      create: {
+        sessionId: draftSession.id,
+        userId,
+        order: plan.persistOrder as never,
+      },
+      update: {
+        order: plan.persistOrder as never,
+        updatedAt: new Date(),
+      },
+    })
+  }
+
+  let explanationBase = plan.explanation
+  if (plan.mode === 'suggestion_af_pro_required') {
+    explanationBase = suggestionOnlyExplanation(plan.explanation, 'af_pro')
+  } else if (plan.mode === 'suggestion_ai_manage_disabled') {
+    explanationBase = suggestionOnlyExplanation(plan.explanation, 'ai_manage_disabled')
+  }
+
+  let explanation = explanationBase
   let aiUsed = false
   let reasonCode = 'deterministic_rules_engine'
   const invocation = evaluateAIInvocationPolicy({
@@ -120,9 +170,13 @@ export async function POST(
     providerAvailable: getProviderStatus().anyAi,
   })
 
+  const suggestionLead = plan.suggestionOrder
+
   if (invocation.decision === 'allow_ai') {
-    const lead = result.reordered.slice(0, 4).map((entry) => `${entry.playerName} (${entry.position})`)
-    const needEntries = Object.entries(result.needByPosition ?? {}) as Array<[string, number]>
+    const lead = suggestionLead
+      .slice(0, 4)
+      .map((entry) => `${entry.playerName} (${entry.position})`)
+    const needEntries = Object.entries(plan.needByPosition ?? {}) as Array<[string, number]>
     const needContext = needEntries
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
@@ -132,7 +186,7 @@ export async function POST(
       sport,
       lead,
       needContext,
-      deterministic: result.explanation,
+      deterministic: explanationBase,
     }
 
     const cachedExplanation = await getCachedAiResult({
@@ -160,7 +214,7 @@ export async function POST(
                 `Sport: ${sport}`,
                 `Top queue after deterministic reorder: ${lead.join(', ') || 'none'}`,
                 `Need scores: ${needContext || 'not available'}`,
-                `Deterministic explanation: ${result.explanation}`,
+                `Deterministic explanation: ${explanationBase}`,
                 'Rewrite this as a clear coach-style explanation while preserving the same facts.',
               ].join('\n'),
             },
@@ -197,22 +251,59 @@ export async function POST(
     reasonCode = invocation.reasonCode
   }
 
-  return NextResponse.json({
-    reordered: result.reordered,
+  const execution = buildDraftExecutionMetadata({
+    feature: 'draft_queue_reorder_engine',
+    aiUsed,
+    aiEligible: invocation.canShowAIButton,
+    reasonCode,
+    fallbackToDeterministic: wantsAiExplanation && !aiUsed && invocation.decision !== 'deny_dead_button',
+  })
+
+  const aiMeta = {
+    explanationRequested: wantsAiExplanation,
+    explanationEnabled: uiSettings.aiQueueReorderEnabled,
+    decision: invocation.decision,
+    reasonCode: invocation.reasonCode,
+    afProDraftAi: hasProDraftAi,
+    aiManageDraftQueueEnabled,
+    persistMode: plan.mode,
+  }
+
+  const common = {
     explanation,
     removedUnavailable: cleanedQueue.removedCount,
-    execution: buildDraftExecutionMetadata({
-      feature: 'draft_queue_reorder_engine',
-      aiUsed,
-      aiEligible: invocation.canShowAIButton,
-      reasonCode,
-      fallbackToDeterministic: wantsAiExplanation && !aiUsed && invocation.decision !== 'deny_dead_button',
-    }),
-    ai: {
-      explanationRequested: wantsAiExplanation,
-      explanationEnabled: uiSettings.aiQueueReorderEnabled,
-      decision: invocation.decision,
-      reasonCode: invocation.reasonCode,
-    },
+    execution,
+    ai: aiMeta,
+    suggestion: plan.suggestionOrder,
+  }
+
+  if (plan.mode === 'suggestion_af_pro_required') {
+    return NextResponse.json(
+      {
+        error: 'AF Pro required to persist AI-adjusted draft queue order.',
+        code: 'AF_PRO_REQUIRED',
+        persisted: false,
+        suggestionOnly: true,
+        reordered: plan.displayOrder,
+        ...common,
+      },
+      { status: 403 }
+    )
+  }
+
+  if (plan.mode === 'suggestion_ai_manage_disabled') {
+    return NextResponse.json({
+      persisted: false,
+      mode: 'suggestion_only',
+      message: 'AI queue management is disabled.',
+      reordered: plan.displayOrder,
+      ...common,
+    })
+  }
+
+  return NextResponse.json({
+    persisted: true,
+    reordered: plan.displayOrder,
+    ...common,
   })
 }

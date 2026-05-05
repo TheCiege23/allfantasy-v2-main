@@ -4,6 +4,11 @@ import { trimDraftQueue } from '@/lib/draft-defaults/DraftQueueLimitResolver'
 type RawQueueEntry = QueueEntry & {
   player_name?: string
   player_id?: string | null
+  locked_by_user?: boolean
+  lockedByUser?: boolean
+  is_ai_adjusted?: boolean
+  ai_original_rank?: number | null
+  ai_reason?: string | null
 }
 
 function normalizeName(value: string): string {
@@ -16,11 +21,29 @@ export function normalizeQueueEntries(
 ): QueueEntry[] {
   const normalized = trimDraftQueue(queue, queueSizeLimit).map((e) => {
     const entry = (e ?? {}) as RawQueueEntry
+    const lockedByUser = Boolean(
+      entry.lockedByUser ??
+        entry.locked_by_user ??
+        (entry as { locked?: boolean }).locked
+    )
     return {
       playerName: String(entry.playerName ?? entry.player_name ?? '').trim(),
       position: String(entry.position ?? '').trim(),
       team: entry.team ?? null,
       playerId: entry.playerId ?? entry.player_id ?? null,
+      ...(lockedByUser ? { lockedByUser: true as const } : {}),
+      ...(entry.isAiAdjusted === true || entry.is_ai_adjusted === true
+        ? { isAiAdjusted: true as const }
+        : {}),
+      ...(entry.aiOriginalRank != null || entry.ai_original_rank != null
+        ? {
+            aiOriginalRank:
+              (entry.aiOriginalRank ?? entry.ai_original_rank ?? null) as number | null,
+          }
+        : {}),
+      ...(entry.aiReason != null || entry.ai_reason != null
+        ? { aiReason: (entry.aiReason ?? entry.ai_reason ?? null) as string | null }
+        : {}),
     }
   })
 

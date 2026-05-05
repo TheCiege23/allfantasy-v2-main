@@ -212,6 +212,13 @@ export interface QueueEntry {
   position: string
   team?: string | null
   playerId?: string | null
+  /** User pinned this row; AI reorder must not move it from its slot. */
+  lockedByUser?: boolean
+  /** Populated when queue row was written by AF Pro AI reorder persist path. */
+  isAiAdjusted?: boolean
+  /** 1-based rank before the last AI reorder (persist path). */
+  aiOriginalRank?: number | null
+  aiReason?: string | null
 }
 
 export type DraftEventType =

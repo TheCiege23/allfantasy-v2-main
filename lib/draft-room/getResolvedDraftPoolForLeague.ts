@@ -46,6 +46,12 @@ import { normalizeDraftPoolInjuryStatus } from '@/lib/draft-room/injury-status-n
 import { compareDraftEntriesByStableRank, resolvePreferredAdp } from '@/lib/draft-room/adp-ordering'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { applyPositionAwareProjectionFallbacks, type ProjectionFallbackDiagnostics } from '@/lib/draft-room/position-aware-projection-fallback'
+import {
+  loadSportsPlayerRecordMapsForDraftPool,
+  lookupSportsPlayerRecordAugmentDetailed,
+} from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
+import { logPlayerMismatchEventVoid } from '@/lib/player-identity/playerMismatchLogger'
+import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 
 const DEFAULT_LIMIT = 300
 const DEVY_POOL_LIMIT = 200
@@ -746,7 +752,7 @@ export async function getResolvedDraftPoolForLeague(
   const poolFetchLimit =
     sport === 'NFL'
       ? Math.min(50_000, Math.max(limit * 12, 16_000))
-      : Math.min(Math.max(limit * 4, 800), 2200)
+      : Math.min(Math.max(limit * 8, 1600), 4500)
   const perfPlayerPool = perfStart(`5. getPlayerPoolForLeague (limit=${poolFetchLimit})`)
   const poolRows: SportPoolRow[] = await getPlayerPoolForLeague(leagueId, sport, {
     limit: poolFetchLimit,
@@ -1146,7 +1152,7 @@ export async function getResolvedDraftPoolForLeague(
   const sportsPlayerSleeperIdByLooseTeamKey = new Map<string, string>()
   const sportsPlayerImageByStrictTeamKey = new Map<string, string>()
   const sportsPlayerSleeperIdByStrictTeamKey = new Map<string, string>()
-  if (sport === 'NFL' && rawListFiltered.length > 0) {
+  if (rawListFiltered.length > 0) {
     try {
       /**
        * Bug fix (post-E.1.6): every NFL player has TWO SportsPlayer rows — one
@@ -1164,10 +1170,10 @@ export async function getResolvedDraftPoolForLeague(
        *      filenames (no `https://`) classify as `'null'` and are skipped, so
        *      they can never poison the map.
        */
-      const perfSportsPlayer = perfStart('6. sportsPlayer.findMany (take=10000)')
+      const perfSportsPlayer = perfStart(`6. sportsPlayer.findMany sport=${sport} (take=10000)`)
       const csPlayers = await prisma.sportsPlayer.findMany({
         where: {
-          sport: 'NFL' as any,
+          sport: sport as any,
           OR: [{ imageUrl: { not: null } }, { sleeperId: { not: null } }],
         },
         select: { name: true, position: true, team: true, imageUrl: true, source: true, sleeperId: true },
@@ -1323,6 +1329,18 @@ export async function getResolvedDraftPoolForLeague(
     perfRookie()
   }
 
+  const perfSprMaps = perfStart('11b. sportsPlayerRecord maps (cross-sport stats/images)')
+  const sprRecordMaps = await loadSportsPlayerRecordMapsForDraftPool(
+    leagueId,
+    sport,
+    rawListFiltered.map((r) => ({
+      name: String(r.name ?? r.playerName ?? r.full_name ?? ''),
+      position: String(r.position ?? r.pos ?? ''),
+      team: r.team ?? r.teamAbbr ?? null,
+    })),
+  )
+  perfSprMaps()
+
   const enrichedList = rawListFiltered.map((row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const position = row.position ?? row.pos ?? ''
@@ -1336,6 +1354,97 @@ export async function getResolvedDraftPoolForLeague(
     const strict = `${normalizeKeyPart(name)}|${normalizeKeyPart(position)}|${normalizeKeyPart(team)}`
     const loose = `${normalizeKeyPart(name)}|${normalizeKeyPart(position)}`
     const poolMatch = poolByStrictKey.get(strict) ?? poolByLooseKey.get(loose)
+
+    const poolExternalId = poolMatch?.external_source_id ? String(poolMatch.external_source_id).trim() : null
+    const poolExternalIdAmbiguous = Boolean(
+      poolExternalId &&
+      looksLikeSleeperNumericId(poolExternalId) &&
+      poolRows.filter((p) => String(p.external_source_id ?? '').trim() === poolExternalId)
+        .map((p) => strictIdentityKeyWithTeam(p.full_name ?? '', p.position ?? '', p.team_abbreviation ?? null))
+        .filter(Boolean)
+        .filter((v, i, arr) => arr.indexOf(v) === i).length > 1,
+    )
+    const poolExternalIdForAssign = poolExternalIdAmbiguous ? null : poolExternalId
+
+    /** Prefer resolved pool external id so SPR stats/images join the same row as SportsPlayer / DB pool. */
+    const sprPoolRecordId =
+      String(poolExternalIdForAssign ?? row.playerId ?? row.sleeperId ?? row.id ?? '').trim() || null
+    const sprLookup = lookupSportsPlayerRecordAugmentDetailed(
+      sprRecordMaps,
+      sport,
+      name,
+      position,
+      team,
+      sprPoolRecordId,
+    )
+    const sprAug = sprLookup.augment
+    const sprMeta = sprLookup.meta
+
+    const poolPlayerIdForLog =
+      String(row.playerId ?? row.id ?? row.sleeperId ?? '').trim() || null
+
+    if (!sprAug) {
+      logPlayerMismatchEventVoid({
+        leagueId,
+        sport: String(sport),
+        poolPlayerId: poolPlayerIdForLog,
+        poolExternalId: sprPoolRecordId,
+        sportsPlayerRecordId: null,
+        playerName: name,
+        position,
+        team: team ?? null,
+        attemptedMatchType: sprMeta.matchType,
+        confidence: sprMeta.confidence,
+        reason: 'NO_SPORT_PLAYER_RECORD_MATCH',
+        details: {
+          lookupReason: sprMeta.reason,
+          idLookupAttempted: sprMeta.idLookupAttempted,
+          idLookupHit: sprMeta.idLookupHit,
+        },
+      })
+    } else {
+      if (sprMeta.strictHitAfterIdMiss) {
+        logPlayerMismatchEventVoid({
+          leagueId,
+          sport: String(sport),
+          poolPlayerId: poolPlayerIdForLog,
+          poolExternalId: sprPoolRecordId,
+          sportsPlayerRecordId: null,
+          playerName: name,
+          position,
+          team: team ?? null,
+          attemptedMatchType: 'strict',
+          confidence: sprMeta.confidence,
+          reason: 'ID_DRIFT_STRICT_MATCH_USED',
+          details: {
+            lookupReason: sprMeta.reason,
+            poolExternalDidNotMatchSprById: sprMeta.idLookupAttempted && !sprMeta.idLookupHit,
+          },
+        })
+      }
+      if (
+        sprMeta.confidence < 0.9 &&
+        team != null &&
+        String(team).trim() !== '' &&
+        !isNormalizedFreeAgentTeam(team)
+      ) {
+        logPlayerMismatchEventVoid({
+          leagueId,
+          sport: String(sport),
+          poolPlayerId: poolPlayerIdForLog,
+          poolExternalId: sprPoolRecordId,
+          sportsPlayerRecordId: null,
+          playerName: name,
+          position,
+          team: team ?? null,
+          attemptedMatchType: sprMeta.matchType,
+          confidence: sprMeta.confidence,
+          reason: 'LOW_CONFIDENCE_MATCH',
+          details: { lookupReason: sprMeta.reason },
+        })
+      }
+    }
+
     const promoted = promotedMap.get(`${normalizeDraftPoolNameForDedupe(name)}|${normalizeKeyPart(position)}`)
     const poolAnalyticsKey = `${normalizeDraftPoolNameForDedupe(name)}|${normalizeKeyPart(position)}`
     const analytics = analyticsByKey.get(poolAnalyticsKey)
@@ -1384,7 +1493,7 @@ export async function getResolvedDraftPoolForLeague(
      * If there's no cache hit, leave the upstream URL alone so the runtime PlayerAvatar's
      * classifier still rejects it and falls back to the silhouette. */
     let backfilledHeadshot: string | null = null
-    if (sport === 'NFL' && !inJrAliasConflict) {
+    if (!inJrAliasConflict) {
       /** Phase 2 — image confidence ladder
        *  1. Loose team key  (name + position + team)  — highest confidence when team is known.
        *  2. Name + position match                     — fills gaps when team differs between sources.
@@ -1410,10 +1519,24 @@ export async function getResolvedDraftPoolForLeague(
       averagedAdpStrict.get(adpLookupKey(name ?? '', position ?? '', team ?? null)) ??
       averagedAdpLoose.get(adpLookupKeyLoose(name ?? '', position ?? '')) ??
       null
-    const resolvedAdp = resolvePreferredAdp(row.adp ?? null, averagedAdpHit)
+    const resolvedAdp =
+      resolvePreferredAdp(row.adp ?? null, averagedAdpHit) ??
+      (sprAug?.adp != null && Number.isFinite(Number(sprAug.adp)) && Number(sprAug.adp) > 0
+        ? Number(sprAug.adp)
+        : null)
 
-    const backfilledSleeperId =
-      sport === 'NFL' && !inJrAliasConflict
+    const sprSupplementFppg =
+      sprAug?.fantasyPointsPerGame != null &&
+      Number.isFinite(Number(sprAug.fantasyPointsPerGame)) &&
+      Number(sprAug.fantasyPointsPerGame) > 0 &&
+      (sport !== 'NFL' ||
+        ((analytics?.fantasyPointsPerGame == null || !Number.isFinite(Number(analytics.fantasyPointsPerGame))) &&
+          (resolvedAnalytics?.fantasyPointsPerGame == null ||
+            !Number.isFinite(Number(resolvedAnalytics.fantasyPointsPerGame)))))
+        ? Number(sprAug.fantasyPointsPerGame)
+        : null
+
+    const backfilledSleeperId = !inJrAliasConflict
         ? (() => {
             /** Phase 2 — sleeperId confidence ladder
              *  Same 3-tier structure as the image ladder above.
@@ -1428,17 +1551,10 @@ export async function getResolvedDraftPoolForLeague(
           })()
         : null
 
-    const poolExternalId = poolMatch?.external_source_id ? String(poolMatch.external_source_id).trim() : null
-    const poolExternalIdAmbiguous = Boolean(
-      poolExternalId &&
-      looksLikeSleeperNumericId(poolExternalId) &&
-      poolRows.filter((p) => String(p.external_source_id ?? '').trim() === poolExternalId)
-        .map((p) => strictIdentityKeyWithTeam(p.full_name ?? '', p.position ?? '', p.team_abbreviation ?? null))
-        .filter(Boolean)
-        .filter((v, i, arr) => arr.indexOf(v) === i).length > 1,
-    )
-
-    const poolExternalIdForAssign = poolExternalIdAmbiguous ? null : poolExternalId
+    const sprHeadshotUrl =
+      sprAug?.headshotUrl && classifyAvatarSource(sprAug.headshotUrl) === 'headshot'
+        ? sprAug.headshotUrl
+        : null
 
     const injuryIdCandidates = [
       sourcePlayerId,
@@ -1497,6 +1613,7 @@ export async function getResolvedDraftPoolForLeague(
           adp: resolvedAdp,
           imageUrl:
             backfilledHeadshot ??
+            sprHeadshotUrl ??
             (row as RawRow).imageUrl ??
             (poolMatch as { image_url?: string | null }).image_url ??
             null,
@@ -1513,7 +1630,7 @@ export async function getResolvedDraftPoolForLeague(
           injuryStatus: normalizedInjuryStatus,
           status: dbInjuryHit?.gameStatus ?? row.status ?? null,
           adp: resolvedAdp,
-          imageUrl: backfilledHeadshot ?? (row as RawRow).imageUrl ?? null,
+          imageUrl: backfilledHeadshot ?? sprHeadshotUrl ?? (row as RawRow).imageUrl ?? null,
           sourcePlayerId,
           sourceSleeperId,
         }
@@ -1525,6 +1642,7 @@ export async function getResolvedDraftPoolForLeague(
       fantasyPointsPerGame:
         resolvedAnalytics?.fantasyPointsPerGame ??
         analytics?.fantasyPointsPerGame ??
+        sprSupplementFppg ??
         (row as RawRow).fantasyPointsPerGame ??
         undefined,
       lifetimeValue:
@@ -1588,7 +1706,11 @@ export async function getResolvedDraftPoolForLeague(
             return {}
           })()
         : {}),
-      ...(row.isDevy && !row.graduatedToNFL ? { isRookie: true } : {}),
+      ...(row.isDevy && !row.graduatedToNFL
+        ? { isRookie: true }
+        : sport !== 'NFL' && sprAug?.rookieHint === true
+          ? { isRookie: true }
+          : {}),
     } as unknown as RawRow
   })
 

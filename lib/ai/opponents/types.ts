@@ -90,6 +90,8 @@ export type DraftPlayerOption = {
   tier: number | null
   isRookie?: boolean
   age?: number | null
+  /** When set, must match `DraftDecisionContext.leagueSport` for scoring (wrong-sport guard). */
+  sport?: string | null
 }
 
 export type DraftDecisionContext = {
@@ -113,6 +115,12 @@ export type DraftDecisionContext = {
   futurePickCapital?: number
   /** From bot memory — do-not-draft list */
   avoidPlayerIds?: string[]
+  /** NPC / commissioner-assigned draft persona — AllFantasy live draft autopick */
+  npcDraftPersonality?: import('@/lib/live-draft-engine/npcDraftPersonalityTypes').NpcDraftPersonalityId | null
+  npcFavoriteTeamAbbr?: string | null
+  leagueSport?: string | null
+  /** Normalized NFL-like team abbreviations already rostered (skill positions) for stack personality */
+  rosteredSkillTeams?: string[]
 }
 
 export type DraftPickDecision = {

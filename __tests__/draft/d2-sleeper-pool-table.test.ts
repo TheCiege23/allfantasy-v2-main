@@ -83,10 +83,11 @@ describe('D.2 — SLEEPER_POOL_TABLE_COLUMNS spec', () => {
 describe('D.2 — SleeperPoolTable component wiring', () => {
   const src = read('components/app/draft-room/SleeperPoolTable.tsx')
 
-  it('renders a sticky header row aligned to the column spec', () => {
+  it('renders a sticky header row aligned to the sport-aware layout spec', () => {
     expect(src).toMatch(/sticky top-0/)
     expect(src).toMatch(/data-testid="sleeper-pool-table-header"/)
-    expect(src).toMatch(/SLEEPER_POOL_TABLE_COLUMNS\.map/)
+    expect(src).toMatch(/layout\.columns\.map/)
+    expect(src).toMatch(/buildSleeperPoolTableLayout/)
   })
 
   it('uses the shared PlayerAvatar (E.1) for the player image — not raw <img>', () => {
@@ -96,18 +97,15 @@ describe('D.2 — SleeperPoolTable component wiring', () => {
     expect(src).not.toMatch(/<img\s/)
   })
 
-  it('reads NflDraftProjectionSplits from PlayerEntry.nflDraftProjectionSplits (E.2.7 hydration)', () => {
+  it('still references nflDraftProjectionSplits for NFL tooltip hints on PTS/AVG-style cells', () => {
     expect(src).toMatch(/p\.nflDraftProjectionSplits/)
-    expect(src).toMatch(/splits\?\.projectedPoints/)
-    expect(src).toMatch(/splits\?\.projectedPointsPerGame/)
-    expect(src).toMatch(/splits\?\.rushing/)
-    expect(src).toMatch(/splits\?\.receiving/)
-    expect(src).toMatch(/splits\?\.passing/)
+    expect(src).toMatch(/splits\.projectedPoints/)
+    expect(src).toMatch(/splits\.projectedPointsPerGame/)
   })
 
-  it('renders em-dashes for null stat fields via formatNflStatCell + dashOrInt', () => {
-    expect(src).toMatch(/formatNflStatCell/)
-    expect(src).toMatch(/return '—'/)
+  it('renders stat cells via formatDraftStatDisplay (em-dash for missing)', () => {
+    expect(src).toMatch(/formatDraftStatDisplay/)
+    expect(src).toMatch(/getStatValueForDraftPlayer/)
   })
 
   it('Draft button is disabled when not on the clock or when player is drafted', () => {

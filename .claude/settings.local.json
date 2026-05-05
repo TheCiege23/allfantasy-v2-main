@@ -316,7 +316,16 @@
       "Bash(npx playwright *)",
       "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
       "Bash(sed -n '2929,2945p' prisma/schema.prisma)",
-      "Bash(sed -n '3927,3945p' prisma/schema.prisma)"
+      "Bash(sed -n '3927,3945p' prisma/schema.prisma)",
+      "Bash(cp \"C:/Users/Guap_/.claude/projects/C--Users-Guap--allfantasy-v2-main/32e0c8ef-e55a-4b77-8c74-6002b3de285c/tool-results/mcp-d15da996-2cd1-4bbf-86e8-0b67648f479a-get_deployment_build_logs-1777993191041.txt\" /tmp/buildlog.json)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/tmp/buildlog.json','utf8'\\)\\);const t=d.map\\(b=>b.text||''\\).join\\('\\\\n'\\);const lines=t.split\\('\\\\n'\\);console.log\\('total lines:',lines.length\\);console.log\\(lines.slice\\(-100\\).join\\('\\\\n'\\)\\);\")",
+      "PowerShell($d = Get-Content 'C:\\\\Users\\\\Guap_\\\\.claude\\\\projects\\\\C--Users-Guap--allfantasy-v2-main\\\\32e0c8ef-e55a-4b77-8c74-6002b3de285c\\\\tool-results\\\\mcp-d15da996-2cd1-4bbf-86e8-0b67648f479a-get_deployment_build_logs-1777993191041.txt' -Raw | ConvertFrom-Json; $text = \\($d | ForEach-Object { $_.text }\\) -join \"`n\"; $lines = $text -split \"`n\"; \"Total lines: $\\($lines.Count\\)\"; \"---LAST 80 LINES---\"; $lines[-80..-1] -join \"`n\")",
+      "Bash(awk -F/ '{print $3}')",
+      "Bash(grep -n \"isAuthenticated,$\\\\|isAdmin,$\\\\|userLabel,$\\\\|children,\" components/shell/ResponsiveNavSystem.tsx)",
+      "Bash(echo \"---exit:$?\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:59593)",
+      "Bash(git check-ignore *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:59593/dashboard)"
     ]
   }
 }

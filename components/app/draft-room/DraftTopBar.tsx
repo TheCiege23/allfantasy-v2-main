@@ -249,9 +249,9 @@ export function DraftTopBar({
     const beepThresholds = new Set([10, 5, 3, 2, 1])
     if (!beepThresholds.has(liveRemaining)) return
     try {
-      const Ctor =
-        (window as Window & { webkitAudioContext?: typeof AudioContext }).AudioContext ??
-        (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      type AudioCtor = new () => AudioContext
+      const w = window as Window & { AudioContext?: AudioCtor; webkitAudioContext?: AudioCtor }
+      const Ctor = w.AudioContext ?? w.webkitAudioContext
       if (!Ctor) return
       const ctx = new Ctor()
       const oscillator = ctx.createOscillator()

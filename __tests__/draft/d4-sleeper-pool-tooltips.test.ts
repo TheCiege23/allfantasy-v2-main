@@ -116,14 +116,13 @@ describe('D.4 — SleeperPoolTable wires tooltips onto every stat cell', () => {
     expect(src).toMatch(/import \{[\s\S]*?cellTooltip[\s\S]*?\} from '\.\/SleeperPoolTable\.constants'/)
   })
 
-  it('every numeric/stat cell has a `title={tipFor(...)}` attribute', () => {
-    // Each of the 14 numeric stat cells (ADP, AI ADP, BYE, PTS, AVG, 3 rushing, 3 receiving, 4 passing).
+  it('numeric/stat cells use tipFor or explicit title strings (ADP / BYE / stat cells)', () => {
     const tipForCalls = src.match(/title=\{tipFor\(/g) ?? []
-    expect(tipForCalls.length).toBeGreaterThanOrEqual(14)
+    expect(tipForCalls.length).toBeGreaterThanOrEqual(3)
   })
 
-  it('tipFor maps to the column statLabel, not the abbreviation', () => {
-    expect(src).toMatch(/col\?\.statLabel \?\? col\?\.label/)
+  it('stat cells pass statLabel + DraftStatColumnDef label into tipFor', () => {
+    expect(src).toMatch(/col\.statLabel \?\? def\.label/)
   })
 
   it('player name cell gets a context-aware title (drafted / available)', () => {

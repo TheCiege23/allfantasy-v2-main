@@ -8,7 +8,7 @@ import {
   loadAutopickDraftContextForOnClock,
   type BestAvailableAutopickResolved,
 } from "@/lib/live-draft-engine/autopickBestAvailableSubmit"
-import { decideDraftPick } from "@/lib/ai/opponents/draft/aiOpponentDraft"
+import { decideDraftPickWithScores } from "@/lib/ai/opponents/draft/aiOpponentDraft"
 import { getAiOpponentsSettings } from "@/lib/ai/opponents/leagueSettings"
 import { getAssignmentForTeam, logBotAction, profileFromDbRow } from "@/lib/ai/opponents/db"
 import { resolveLeagueTeamIdFromDraftRosterId } from "@/lib/ai/opponents/draftRosterMapping"
@@ -21,6 +21,21 @@ import { recentDuplicateFlavor, recordBotMessageLine, shouldThrottleFlavor } fro
 import { getStrategy, getAdaptedTendencies } from "@/lib/draft-strategies/strategyDefinitions"
 import { logStrategyPick } from "@/lib/draft-strategies/strategyTracker"
 import type { StrategicTendencies } from "@/lib/ai/opponents/types"
+import {
+  parseCommissionerAiManagers,
+  getAssignmentForRoster,
+  saveCommissionerAiManagers,
+  isRosterAiControlled,
+} from "@/lib/commissioner-ai-draft-manager/CommissionerAiDraftManagerService"
+import {
+  assignNpcDraftPersonality,
+  mergeNpcPersonalityIntoBlob,
+  mapArchetypeToNpcPersonality,
+  buildNpcAiManagerDraftAuditPayload,
+  type HistoricalPickLite,
+} from "@/lib/live-draft-engine/npcDraftPersonality"
+import type { NpcDraftPersonalityId } from "@/lib/live-draft-engine/npcDraftPersonalityTypes"
+import { logAction } from "@/lib/orphan-ai-manager/OrphanAIManagerService"
 
 function mapDraftType(dt: string): DraftFormatHint {
   const u = String(dt || "").toLowerCase()
@@ -34,7 +49,10 @@ function stablePoolPlayerId(e: { playerName: string; position: string; team: str
   return e.playerId ?? `pool:${normalize(e.playerName)}|${String(e.position).toUpperCase()}|${normalize(e.team ?? "")}`
 }
 
-function poolToOptions(pool: Array<{ playerName: string; position: string; team: string | null; playerId: string | null; adp: number | null }>): DraftPlayerOption[] {
+function poolToOptions(
+  pool: Array<{ playerName: string; position: string; team: string | null; playerId: string | null; adp: number | null }>,
+  leagueSport: string
+): DraftPlayerOption[] {
   return pool.map((e) => ({
     playerId: stablePoolPlayerId(e),
     name: e.playerName,
@@ -42,6 +60,36 @@ function poolToOptions(pool: Array<{ playerName: string; position: string; team:
     team: e.team,
     adp: e.adp,
     tier: null,
+    sport: leagueSport,
+  }))
+}
+
+function quickHashLeagueRoster(leagueId: string, rosterId: string): number {
+  const s = `${leagueId}:${rosterId}`
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0
+  return h
+}
+
+async function loadHistoricalPickLitesForNpc(leagueId: string, rosterId: string): Promise<HistoricalPickLite[]> {
+  const rows = await prisma.draftPick.findMany({
+    where: { rosterId, session: { leagueId } },
+    orderBy: { overall: "desc" },
+    take: 80,
+    select: {
+      position: true,
+      team: true,
+      overall: true,
+      assetType: true,
+    },
+  })
+  return rows.map((r) => ({
+    position: r.position,
+    team: r.team ?? null,
+    overallPick: r.overall,
+    isRookie: String(r.assetType ?? "").toLowerCase().includes("rookie"),
+    age: null,
+    expectedAdpRank: null,
   }))
 }
 
@@ -218,7 +266,50 @@ export async function tryAiOpponentAutopickForExpiredTimer(
     }
   }
 
-  const available = poolToOptions(ctx.fallbackPool)
+  const dsAiRow = await prisma.draftSession.findUnique({
+    where: { leagueId },
+    select: { commissionerAiManagers: true },
+  })
+  let workingBlob = parseCommissionerAiManagers(dsAiRow?.commissionerAiManagers)
+  const commissionerAssign = getAssignmentForRoster(workingBlob, onClockRosterId)
+  const hadStoredNpc = Boolean(commissionerAssign?.npcDraftPersonality)
+
+  let npcPersonality: NpcDraftPersonalityId | null = commissionerAssign?.npcDraftPersonality ?? null
+  let npcFavorite = commissionerAssign?.npcFavoriteTeamAbbr ?? null
+
+  if (commissionerAssign && !hadStoredNpc) {
+    const hist = await loadHistoricalPickLitesForNpc(leagueId, onClockRosterId)
+    const roll = assignNpcDraftPersonality({
+      existingPersonality: null,
+      historicalPicks: hist,
+      treatAsFreshLeague: hist.length === 0,
+      randomSeed: quickHashLeagueRoster(leagueId, onClockRosterId),
+    })
+    npcPersonality = roll.personality
+    npcFavorite = roll.favoriteTeamAbbr ?? npcFavorite
+    workingBlob = mergeNpcPersonalityIntoBlob(workingBlob, onClockRosterId, {
+      npcDraftPersonality: npcPersonality,
+      npcFavoriteTeamAbbr: npcFavorite,
+    })
+    await saveCommissionerAiManagers(leagueId, workingBlob)
+  } else if (!commissionerAssign) {
+    npcPersonality = mapArchetypeToNpcPersonality(bot.archetypeId)
+  }
+
+  const rosteredSkillTeams: string[] = []
+  for (const p of ctx.draftSession.picks) {
+    if (p.rosterId !== onClockRosterId) continue
+    const pos = String(p.position || "").toUpperCase()
+    if (
+      (pos.includes("QB") || pos.includes("RB") || pos.includes("WR") || pos.includes("TE")) &&
+      p.team
+    ) {
+      rosteredSkillTeams.push(String(p.team).trim().toUpperCase())
+    }
+  }
+
+  const sportUpper = String(ctx.sport || "NFL").toUpperCase()
+  const available = poolToOptions(ctx.fallbackPool, sportUpper)
   const settingsJson = (leagueRow?.settings as Record<string, unknown>) ?? {}
   const isSuperflex =
     settingsJson.is_superflex === true ||
@@ -244,12 +335,19 @@ export async function tryAiOpponentAutopickForExpiredTimer(
     queue: [],
     available,
     avoidPlayerIds: [],
+    npcDraftPersonality: npcPersonality ?? undefined,
+    npcFavoriteTeamAbbr: npcFavorite ?? undefined,
+    leagueSport: sportUpper,
+    rosteredSkillTeams,
   }
 
   const t0 = Date.now()
   let decision
+  let candidateScores: Array<{ playerId: string; score: number }> = []
   try {
-    decision = decideDraftPick(decisionCtx)
+    const pack = decideDraftPickWithScores(decisionCtx)
+    decision = pack.decision
+    candidateScores = pack.candidateScores
   } catch {
     return { ok: false }
   }
@@ -279,6 +377,29 @@ export async function tryAiOpponentAutopickForExpiredTimer(
   })
 
   if (!result.success) return { ok: false }
+
+  try {
+    if (isRosterAiControlled(workingBlob, onClockRosterId) || npcPersonality) {
+      await logAction({
+        leagueId,
+        rosterId: onClockRosterId,
+        action: "draft_pick",
+        payload: buildNpcAiManagerDraftAuditPayload({
+          personality: npcPersonality,
+          chosenPlayerId: decision.playerId,
+          chosenPlayerName: pick.playerName,
+          position: pick.position,
+          reason: decision.reason,
+          candidateScores,
+          leagueSport: sportUpper,
+        }),
+        reason: decision.reason,
+        triggeredBy: null,
+      })
+    }
+  } catch {
+    // audit best-effort
+  }
 
   // Log bot action (assignment case)
   if (botProfileId && botProfileId.startsWith('strategy-') === false) {

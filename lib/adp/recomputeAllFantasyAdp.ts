@@ -27,6 +27,60 @@ import {
   type DraftMode,
 } from '@/lib/adp/computeAllFantasyAdp'
 
+/**
+ * Upsert computed **`AllFantasyAdpSnapshot`** rows — shared by cron/CLI and tests.
+ * Does not run aggregation; pass **`AdpSnapshot`** from **`aggregateAdp`** / **`applyTrends`**.
+ */
+export async function persistAllFantasyAdpSnapshots(
+  snapshots: readonly AdpSnapshot[],
+): Promise<{ written: number; errors: string[] }> {
+  let written = 0
+  const errors: string[] = []
+  for (const s of snapshots) {
+    const data: Prisma.AllFantasyAdpSnapshotCreateInput = {
+      playerKey: s.playerKey,
+      playerName: s.playerName,
+      sport: s.context.sport,
+      leagueType: s.context.leagueType,
+      draftType: s.context.draftType,
+      scoringFormat: s.context.scoringFormat,
+      rosterFormat: s.context.rosterFormat,
+      teamCount: s.context.teamCount,
+      season: s.context.season,
+      draftMode: s.draftMode,
+      sampleSize: s.sampleSize,
+      averageOverallPick: s.averageOverallPick,
+      averageRound: s.averageRound,
+      averagePickInRound: s.averagePickInRound,
+      minOverallPick: s.minOverallPick,
+      maxOverallPick: s.maxOverallPick,
+      standardDeviation: s.standardDeviation,
+      sevenDayTrend: s.sevenDayTrend,
+      thirtyDayTrend: s.thirtyDayTrend,
+      contextHash: s.contextHash,
+    }
+    try {
+      await prisma.allFantasyAdpSnapshot.upsert({
+        where: {
+          playerKey_contextHash_draftMode: {
+            playerKey: s.playerKey,
+            contextHash: s.contextHash,
+            draftMode: s.draftMode,
+          },
+        },
+        create: data,
+        update: { ...data, lastUpdatedAt: new Date() },
+      })
+      written++
+    } catch (err) {
+      errors.push(
+        `upsert ${s.playerName} (${s.draftMode}): ${err instanceof Error ? err.message : String(err)}`,
+      )
+    }
+  }
+  return { written, errors }
+}
+
 export interface RecomputeAllFantasyAdpOptions {
   /** Default 'NFL'. Pass null to recompute across all sports (CLI use). */
   sport?: string | null
@@ -273,48 +327,9 @@ export async function recomputeAllFantasyAdp(
     const final: AdpSnapshot[] = applyTrends(snapshots, { sevenDay: sevenMap, thirtyDay: thirtyMap })
 
     if (apply) {
-      for (const s of final) {
-        const data: Prisma.AllFantasyAdpSnapshotCreateInput = {
-          playerKey: s.playerKey,
-          playerName: s.playerName,
-          sport: s.context.sport,
-          leagueType: s.context.leagueType,
-          draftType: s.context.draftType,
-          scoringFormat: s.context.scoringFormat,
-          rosterFormat: s.context.rosterFormat,
-          teamCount: s.context.teamCount,
-          season: s.context.season,
-          draftMode: s.draftMode,
-          sampleSize: s.sampleSize,
-          averageOverallPick: s.averageOverallPick,
-          averageRound: s.averageRound,
-          averagePickInRound: s.averagePickInRound,
-          minOverallPick: s.minOverallPick,
-          maxOverallPick: s.maxOverallPick,
-          standardDeviation: s.standardDeviation,
-          sevenDayTrend: s.sevenDayTrend,
-          thirtyDayTrend: s.thirtyDayTrend,
-          contextHash: s.contextHash,
-        }
-        try {
-          await prisma.allFantasyAdpSnapshot.upsert({
-            where: {
-              playerKey_contextHash_draftMode: {
-                playerKey: s.playerKey,
-                contextHash: s.contextHash,
-                draftMode: s.draftMode,
-              },
-            },
-            create: data,
-            update: { ...data, lastUpdatedAt: new Date() },
-          })
-          report.snapshotsWritten++
-        } catch (err) {
-          report.errors.push(
-            `upsert ${s.playerName} (${s.draftMode}): ${err instanceof Error ? err.message : String(err)}`,
-          )
-        }
-      }
+      const { written, errors: persistErrors } = await persistAllFantasyAdpSnapshots(final)
+      report.snapshotsWritten = written
+      report.errors.push(...persistErrors)
     }
   } catch (err) {
     report.errors.push(err instanceof Error ? err.message : String(err))

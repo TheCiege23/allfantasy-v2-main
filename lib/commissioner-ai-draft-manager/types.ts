@@ -1,5 +1,16 @@
 import { z } from 'zod'
 
+export const NpcDraftPersonalitySchema = z.enum([
+  'BALANCED',
+  'NEED_BASED',
+  'BEST_PLAYER_AVAILABLE',
+  'YOUTH_DYNASTY_UPSIDE',
+  'WIN_NOW_VETERAN',
+  'STACK_TEAM_CORRELATION',
+  'CONTRARIAN_CHAOS',
+  'HOMER_TEAM_FAVORITE',
+])
+
 export const AiStyleSchema = z.enum([
   'BPA',
   'NEEDS',
@@ -20,6 +31,9 @@ export const CommissionerAiAssignmentSchema = z.object({
   /** Per-team overrides; inherit global when omitted */
   allowOutbound: z.boolean().optional(),
   allowInbound: z.boolean().optional(),
+  npcDraftPersonality: NpcDraftPersonalitySchema.optional(),
+  /** Uppercase team abbreviation for HOMER_TEAM_FAVORITE */
+  npcFavoriteTeamAbbr: z.string().max(8).optional(),
 })
 
 export const CommissionerTradeRulesSchema = z.object({
@@ -29,6 +43,8 @@ export const CommissionerTradeRulesSchema = z.object({
   proposalCooldownSeconds: z.number().int().min(0).max(3600),
   maxProposalsPerRound: z.number().int().min(0).max(20),
   acceptConfidenceMin: z.number().min(0).max(1),
+  /** Opt-in: NPC/AI managers may send or accept draft pick trades (subject to route execution). */
+  npcDraftTradingEnabled: z.boolean().optional(),
 })
 
 export const CommissionerAiManagersBlobSchema = z.object({

@@ -86,6 +86,10 @@ import { mergeDraftSessionSnapshot } from '@/lib/draft-room/mergeDraftSessionSna
 import { CommissionerPickEditorPanel, type CommissionerPickEditorPlayerOption } from '@/components/app/draft-room/CommissionerPickEditorPanel'
 import { CommissionerAuditLogList } from '@/components/app/draft-room/CommissionerAuditLogList'
 import { PreDraftSlotSetupCard } from '@/components/app/draft-room/PreDraftSlotSetupCard'
+import {
+  DRAFT_PICK_RACE_RETRY,
+  DRAFT_PICK_STALE_OVERALL,
+} from '@/lib/live-draft-engine/pickAuthorityCodes'
 import { isDraftPickRowEmptyFromSnapshot } from '@/lib/live-draft-engine/draftPickEmpty'
 import { draftRoomPickTrace, draftRoomWarn } from '@/lib/draft-room/draftRoomDevLog'
 import { buildDraftRoomPageDerivedState } from '@/lib/draft-room/buildDraftRoomPageDerivedState'
@@ -2709,7 +2713,16 @@ export function DraftRoomPageClient({
           const detail =
             errText && codeText ? `${errText} (${codeText})` : errText ?? codeText ?? 'Pick failed. Try again.'
           draftRoomPickTrace({ event: 'pick-error', status: res.status, error: errText, code: codeText })
-          setPickError(detail)
+          if (codeText === DRAFT_PICK_STALE_OVERALL || codeText === DRAFT_PICK_RACE_RETRY) {
+            await fetchSession()
+            await fetchQueue()
+            await fetchDraftPool()
+            setPickError(
+              'The draft board moved before your pick landed — state refreshed. Submit again when you are on the clock.',
+            )
+          } else {
+            setPickError(detail)
+          }
         }
       } catch (err) {
         draftRoomWarn('pick-network', err)

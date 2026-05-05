@@ -4,6 +4,7 @@
  */
 
 import type { BotProfile, DraftDecisionContext, DraftPickDecision, DraftPlayerOption } from "../types"
+import { applyNpcPersonalityScoreAdjustment } from "@/lib/live-draft-engine/npcDraftPersonality"
 
 function adpValue(p: DraftPlayerOption): number {
   if (p.adp != null && p.adp > 0) return Math.max(1, 200 - p.adp)
@@ -60,7 +61,16 @@ function hashString(s: string): number {
   return h | 0
 }
 
-export function decideDraftPick(ctx: DraftDecisionContext): DraftPickDecision {
+function filterBySport(ctx: DraftDecisionContext, pool: DraftPlayerOption[]): DraftPlayerOption[] {
+  const ls = ctx.leagueSport ? String(ctx.leagueSport).toUpperCase() : null
+  if (!ls) return pool
+  return pool.filter((p) => !p.sport || String(p.sport).toUpperCase() === ls)
+}
+
+export function decideDraftPickWithScores(ctx: DraftDecisionContext): {
+  decision: DraftPickDecision
+  candidateScores: Array<{ playerId: string; score: number }>
+} {
   const { bot, available, queue, overallPick, round, rosterCounts, avoidPlayerIds } = ctx
   const avoid = new Set(avoidPlayerIds ?? [])
 
@@ -68,40 +78,56 @@ export function decideDraftPick(ctx: DraftDecisionContext): DraftPickDecision {
     const first = queue.find((id) => available.some((a) => a.playerId === id))
     if (first) {
       return {
-        playerId: first,
-        reason: "Top eligible player on queue",
-        confidence: 0.92,
+        decision: {
+          playerId: first,
+          reason: "Top eligible player on queue",
+          confidence: 0.92,
+        },
+        candidateScores: [],
       }
     }
   }
 
-  if (available.length === 0) {
+  const sportFiltered = filterBySport(ctx, available)
+  const pool = sportFiltered.length > 0 ? sportFiltered : available
+
+  if (pool.length === 0) {
     throw new Error("decideDraftPick: no available players")
   }
 
-  let best: DraftPlayerOption | null = null
-  let bestScore = -Infinity
+  const scored: Array<{ p: DraftPlayerOption; score: number }> = []
 
-  for (const p of available) {
+  for (const p of pool) {
     if (avoid.has(p.playerId)) continue
     const base = adpValue(p) * (0.55 + bot.tendencies.floorVsUpside * 0.15)
     const need = needBonus(bot, p, rosterCounts, round)
     const reach = reachNoise(bot, p.playerId, overallPick)
     const avoidPen = avoid.has(p.playerId) ? -200 : 0
-    const score = base + need + reach + avoidPen
-    if (score > bestScore) {
-      bestScore = score
-      best = p
-    }
+    const parts = { base, need, reach }
+    const npcAdj = ctx.npcDraftPersonality
+      ? applyNpcPersonalityScoreAdjustment(ctx, p, parts)
+      : 0
+    const score = base + need + reach + avoidPen + npcAdj
+    scored.push({ p, score })
   }
 
-  if (!best) best = available[0]!
+  scored.sort((a, b) => b.score - a.score)
+  let best = scored[0]?.p ?? null
+  if (!best) best = pool[0]!
 
+  const npc = ctx.npcDraftPersonality ? ` [NPC:${ctx.npcDraftPersonality}]` : ""
   return {
-    playerId: best.playerId,
-    reason: `Value + roster fit (round ${round}); ADP-weighted`,
-    confidence: 0.72,
+    decision: {
+      playerId: best.playerId,
+      reason: `Value + roster fit (round ${round}); ADP-weighted${npc}`,
+      confidence: 0.72,
+    },
+    candidateScores: scored.map((s) => ({ playerId: s.p.playerId, score: s.score })),
   }
+}
+
+export function decideDraftPick(ctx: DraftDecisionContext): DraftPickDecision {
+  return decideDraftPickWithScores(ctx).decision
 }
 
 export function suggestPreDraftQueue(

@@ -18,6 +18,8 @@ const hm = vi.hoisted(() => ({
   getPlayerPoolForLeague: vi.fn(),
   loadRollingInsightsSeasonByDraftPoolKey: vi.fn(),
   loadRollingInsightsStatsDetailByPlayerIds: vi.fn(),
+  adpDataFindFirst: vi.fn(),
+  adpDataFindMany: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -26,6 +28,15 @@ vi.mock('@/lib/prisma', () => ({
     draftSession: { findUnique: hm.draftSessionFindUnique },
     playerAnalyticsSnapshot: { findMany: hm.playerAnalyticsFindMany },
     devyPlayer: { findMany: hm.devyPlayerFindMany },
+    injuryReportRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    sportsPlayer: { findMany: vi.fn().mockResolvedValue([]) },
+    sportsPlayerRecord: { findMany: vi.fn().mockResolvedValue([]) },
+    adpDataRecord: {
+      findFirst: (...args: unknown[]) => hm.adpDataFindFirst(...args),
+      findMany: (...args: unknown[]) => hm.adpDataFindMany(...args),
+    },
+    allFantasyAdpSnapshot: { findMany: vi.fn().mockResolvedValue([]) },
+    playerSeasonStats: { findMany: vi.fn().mockResolvedValue([]) },
   },
 }))
 
@@ -52,7 +63,10 @@ vi.mock('@/lib/draft/analytics/nfl-rolling-insights-draft-analytics', () => ({
   loadRollingInsightsSeasonByDraftPoolKey: (...args: unknown[]) => hm.loadRollingInsightsSeasonByDraftPoolKey(...args),
   loadRollingInsightsStatsDetailByPlayerIds: (...args: unknown[]) =>
     hm.loadRollingInsightsStatsDetailByPlayerIds(...args),
-  loadPlayerSeasonStatsFallback: vi.fn(),
+  loadPlayerSeasonStatsFallback: vi.fn().mockResolvedValue({
+    seasonByPoolKey: new Map(),
+    diagnostics: { exactIdHits: 0, namePositionHits: 0, ambiguousSkips: 0, misses: 0 },
+  }),
   resolveNflDraftPoolAnalytics: vi.fn(() => ({
     fantasyPointsPerGame: null,
     lifetimeValue: null,
@@ -153,6 +167,8 @@ describe('getResolvedDraftPoolForLeague', () => {
       riSeasonByPlayerId: new Map(),
     })
     hm.loadRollingInsightsStatsDetailByPlayerIds.mockResolvedValue(new Map())
+    hm.adpDataFindFirst.mockResolvedValue(null)
+    hm.adpDataFindMany.mockResolvedValue([])
   })
 
   it('returns empty pool when roster schema is not persisted', async () => {
@@ -222,6 +238,11 @@ describe('getResolvedDraftPoolForLeague', () => {
 
   it('merges DB pool onto ADP rows preserving ADP order and enriching playerId, sleeperId, imageUrl, and display headshot', async () => {
     const getResolvedDraftPoolForLeague = await loadPool()
+    hm.adpDataFindFirst.mockResolvedValue({ season: 2025, week: 1 })
+    hm.adpDataFindMany.mockResolvedValue([
+      { playerName: 'Merge Adp Star', position: 'RB', team: 'ZZZ', source: 'espn', adp: 1.5 },
+      { playerName: 'Later Adp', position: 'WR', team: 'AAA', source: 'espn', adp: 99 },
+    ])
     hm.getLiveADP.mockResolvedValue([
       { name: 'Merge Adp Star', position: 'RB', team: 'ZZZ', adp: 1.5, bye: 5 },
       { name: 'Later Adp', position: 'WR', team: 'AAA', adp: 99, bye: 6 },

@@ -14,6 +14,7 @@ const hm = vi.hoisted(() => ({
   submitPick: vi.fn(),
   appendPickToRosterDraftSnapshot: vi.fn(),
   invalidateLeagueDraftCaches: vi.fn(),
+  buildSessionSnapshot: vi.fn(),
 }))
 
 vi.mock('@/lib/prisma', () => ({
@@ -30,9 +31,13 @@ vi.mock('@/lib/league/league-roster-draft-gate', () => ({
   isLeagueRosterDraftReady: hm.isLeagueRosterDraftReady,
 }))
 
-vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', () => ({
-  getDraftUISettingsForLeague: hm.getDraftUISettingsForLeague,
-}))
+vi.mock('@/lib/draft-defaults/DraftUISettingsResolver', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('@/lib/draft-defaults/DraftUISettingsResolver')>()
+  return {
+    ...mod,
+    getDraftUISettingsForLeague: hm.getDraftUISettingsForLeague,
+  }
+})
 
 vi.mock('@/lib/draft-defaults/DraftRoomConfigResolver', () => ({
   getDraftConfigForLeague: hm.getDraftConfigForLeague,
@@ -108,7 +113,7 @@ describe('processExpiredDraftPicks', () => {
     hm.isLeagueRosterDraftReady.mockResolvedValue(true)
     hm.getDraftUISettingsForLeague.mockResolvedValue({
       autoPickEnabled: true,
-      timerMode: 'normal',
+      timerMode: 'per_pick',
       slowDraftPauseWindow: null,
     })
     hm.getDraftConfigForLeague.mockResolvedValue({ autopick_behavior: 'queue-first' })
@@ -157,7 +162,7 @@ describe('processExpiredDraftPicks', () => {
 
     expect(summary.scanned).toBe(1)
     expect(summary.processed).toBe(1)
-    expect(hm.submitBestAvailableAutopickForExpiredTimer).toHaveBeenCalledWith('league-1', 'r1')
+    expect(hm.submitBestAvailableAutopickForExpiredTimer).toHaveBeenCalledWith('league-1', 'r1', 1)
     expect(hm.submitPick).not.toHaveBeenCalledWith(
       expect.objectContaining({ position: 'K' }),
     )
@@ -189,7 +194,7 @@ describe('processExpiredDraftPicks', () => {
     hm.draftSessionFindMany.mockResolvedValue([{ leagueId: 'league-1' }])
     hm.getDraftUISettingsForLeague.mockResolvedValue({
       autoPickEnabled: false,
-      timerMode: 'normal',
+      timerMode: 'per_pick',
       slowDraftPauseWindow: null,
     })
     const { processExpiredDraftPicks } = await import('@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks')

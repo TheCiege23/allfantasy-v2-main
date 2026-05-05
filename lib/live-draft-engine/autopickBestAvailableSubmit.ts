@@ -45,6 +45,7 @@ export type AutopickDraftContext = {
       rosterId: string
       playerName: string
       position: string
+      team?: string | null
     }>
     slotOrder: unknown
     tradedPicks: unknown
@@ -262,6 +263,7 @@ export async function loadAutopickDraftContextForOnClock(
         rosterId: p.rosterId,
         playerName: p.playerName,
         position: p.position,
+        team: p.team ?? null,
       })),
       slotOrder: draftSession.slotOrder,
       tradedPicks: draftSession.tradedPicks,

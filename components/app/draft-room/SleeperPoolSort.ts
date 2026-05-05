@@ -1,22 +1,20 @@
 /**
  * D.3 — sort model for the Sleeper-style draft pool table.
  *
- * Headers in `SleeperPoolTable` and the legacy toolbar buttons in `PlayerPanel`
- * share this single source of truth. Click handlers on either surface call
- * `nextSortState` to compute the new (key, direction) tuple, then memoize-sort
- * via `applyPoolSort`.
- *
- * Null-handling rule: missing values (em-dash players for a particular stat)
- * always sort LAST, regardless of direction. This way clicking "PTS desc"
- * brings real high-projection players to the top instead of an em-dash sea,
- * and clicking "PTS asc" brings real low-projection players to the top instead
- * of em-dash players.
- *
- * Pure module — no React, no JSX — so Vitest can import it without dragging
- * the table TSX through the transform.
+ * Sport-aware: stat sort keys resolve through **`findSleeperPoolStatDef`** +
+ * **`getStatValueForDraftPlayer`** for non-legacy keys. NFL split keys (`pts`, `ru_att`, …)
+ * stay compatible with existing behavior.
  */
 
 import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
+import type { PlayerDisplayModel } from '@/lib/draft-sports-models/types'
+import {
+  findSleeperPoolStatDef,
+  getStatValueForDraftPlayer,
+  type DraftStatColumnOptions,
+  type DraftStatPlayerSource,
+} from '@/lib/draft-room/draftSportStatColumns'
+import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 /** Minimal player shape this module needs. PlayerPanel.PlayerEntry is a superset. */
 export interface PoolSortPlayer {
@@ -24,37 +22,13 @@ export interface PoolSortPlayer {
   adp?: number | null
   aiAdp?: number | null
   byeWeek?: number | null
-  display?: { stats?: { fantasyPointsPerGame?: number | null } | null } | null
+  /** Pool row display (same shape as **`PlayerPanel.PlayerEntry`**). */
+  display?: PlayerDisplayModel | null
   nflDraftProjectionSplits?: NflDraftProjectionSplits | null
 }
 
-/**
- * Toolbar keys ('adp', 'aiAdp', 'projected', 'name') are kept verbatim from the
- * pre-D.3 implementation so existing analytics + tests + click handlers don't
- * need to be re-wired. New column keys add the rest.
- *
- * `projected` is a deliberate alias for the AVG (PPG) column — it's what the
- * "Proj" toolbar button has always sorted on.
- */
-export type PoolSortKey =
-  // Existing toolbar keys (pre-D.3) — preserved.
-  | 'adp'
-  | 'aiAdp'
-  | 'projected'
-  | 'name'
-  // New column-derived keys (D.3).
-  | 'bye'
-  | 'pts'
-  | 'ru_att'
-  | 'ru_yds'
-  | 'ru_td'
-  | 'rec'
-  | 'rec_yds'
-  | 'rec_td'
-  | 'pa_att'
-  | 'pa_yds'
-  | 'pa_td'
-  | 'pa_int'
+/** Sort state key — includes legacy (`projected`, `name`) and sport stat keys (`pts`, `hr`, …). */
+export type PoolSortKey = string
 
 export type PoolSortDirection = 'asc' | 'desc'
 
@@ -63,18 +37,143 @@ export interface PoolSortState {
   direction: PoolSortDirection
 }
 
+function num(v: number | null | undefined): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
+}
+
+export function defaultSortDirectionForKey(key: PoolSortKey): PoolSortDirection {
+  if (key === 'adp' || key === 'aiAdp' || key === 'name' || key === 'bye') return 'asc'
+  return 'desc'
+}
+
+/** Extract sort value. Pass **`draftSport`** so NBA/MLB/etc. stat keys resolve. */
+export function sortValueForKey(
+  p: PoolSortPlayer,
+  key: PoolSortKey,
+  draftSport?: string,
+  statOpts?: DraftStatColumnOptions,
+): string | number | null {
+  switch (key) {
+    case 'name':
+      return p.name ?? ''
+    case 'adp':
+      return num(p.adp)
+    case 'aiAdp':
+      return num(p.aiAdp ?? p.adp ?? null)
+    case 'bye':
+      return num(p.byeWeek)
+    case 'projected':
+      return (
+        num(p.display?.stats?.fantasyPointsPerGame ?? null) ??
+        num(p.nflDraftProjectionSplits?.projectedPointsPerGame)
+      )
+    default:
+      break
+  }
+
+  const sport = draftSport ?? 'NFL'
+  const def = findSleeperPoolStatDef(sport, key, statOpts)
+  if (def) return getStatValueForDraftPlayer(p as DraftStatPlayerSource, def)
+
+  // NFL legacy paths (also covered by findSleeperPoolStatDef for NFL — defensive fallback)
+  if (key === 'pts') return num(p.nflDraftProjectionSplits?.projectedPoints)
+  if (key === 'ru_att') return num(p.nflDraftProjectionSplits?.rushing?.att)
+  if (key === 'ru_yds') return num(p.nflDraftProjectionSplits?.rushing?.yds)
+  if (key === 'ru_td') return num(p.nflDraftProjectionSplits?.rushing?.td)
+  if (key === 'rec') return num(p.nflDraftProjectionSplits?.receiving?.rec)
+  if (key === 'rec_yds') return num(p.nflDraftProjectionSplits?.receiving?.yds)
+  if (key === 'rec_td') return num(p.nflDraftProjectionSplits?.receiving?.td)
+  if (key === 'pa_att') return num(p.nflDraftProjectionSplits?.passing?.att)
+  if (key === 'pa_yds') return num(p.nflDraftProjectionSplits?.passing?.yds)
+  if (key === 'pa_td') return num(p.nflDraftProjectionSplits?.passing?.td)
+  if (key === 'pa_int') return num(p.nflDraftProjectionSplits?.passing?.int)
+
+  return null
+}
+
+export function comparePoolSort(
+  a: string | number | null,
+  b: string | number | null,
+  direction: PoolSortDirection,
+): number {
+  if (a == null && b == null) return 0
+  if (a == null) return 1
+  if (b == null) return -1
+  if (typeof a === 'string' && typeof b === 'string') {
+    return direction === 'asc' ? a.localeCompare(b) : b.localeCompare(a)
+  }
+  const an = typeof a === 'number' ? a : Number(a)
+  const bn = typeof b === 'number' ? b : Number(b)
+  if (!Number.isFinite(an) && !Number.isFinite(bn)) return 0
+  if (!Number.isFinite(an)) return 1
+  if (!Number.isFinite(bn)) return -1
+  return direction === 'asc' ? an - bn : bn - an
+}
+
+export function applyPoolSort<T extends PoolSortPlayer>(
+  list: readonly T[],
+  state: PoolSortState,
+  draftSport?: string,
+  statOpts?: DraftStatColumnOptions,
+): T[] {
+  const out = [...list]
+  out.sort((a, b) => {
+    const cmp = comparePoolSort(
+      sortValueForKey(a, state.key, draftSport, statOpts),
+      sortValueForKey(b, state.key, draftSport, statOpts),
+      state.direction,
+    )
+    if (cmp !== 0) return cmp
+    const adpCmp = comparePoolSort(num(a.adp), num(b.adp), 'asc')
+    if (adpCmp !== 0) return adpCmp
+    return (a.name ?? '').localeCompare(b.name ?? '')
+  })
+  return out
+}
+
+export function nextSortState(current: PoolSortState, requested: PoolSortKey): PoolSortState {
+  if (current.key === requested) {
+    return { key: requested, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+  }
+  return { key: requested, direction: defaultSortDirectionForKey(requested) }
+}
+
 /**
- * Default direction the FIRST time a column is selected. Subsequent clicks on
- * the same key flip the direction.
- *   - lower-is-better fields (ADP, AI ADP, BYE, name) default to `asc`.
- *   - higher-is-better fields (PPG, season pts, all stat splits) default to `desc`.
+ * Map visible column key → sort key. **`avg`** on NFL/NCAAF maps to **`projected`** (PPG).
+ * Unknown stat column keys pass through (e.g. NBA **`pts`** → **`pts`**).
  */
-export const DEFAULT_SORT_DIRECTIONS: Record<PoolSortKey, PoolSortDirection> = {
+export function sortKeyForColumn(columnKey: string, draftSport?: string): PoolSortKey | null {
+  if (columnKey === 'actions') return null
+  if (columnKey === 'player') return 'name'
+  if (columnKey === 'rk') return 'adp'
+  if (columnKey === 'adp') return 'adp'
+  if (columnKey === 'aiAdp') return 'aiAdp'
+  if (columnKey === 'bye') return 'bye'
+  if (columnKey === 'avg') {
+    const s = draftSport ? normalizeToSupportedSport(draftSport) : 'NFL'
+    if (s === 'NFL' || s === 'NCAAF') return 'projected'
+    return 'avg'
+  }
+  return columnKey
+}
+
+export function ariaSortValue(
+  columnKey: string,
+  state: PoolSortState,
+  draftSport?: string,
+): 'ascending' | 'descending' | 'none' {
+  const sortKey = sortKeyForColumn(columnKey, draftSport)
+  if (!sortKey) return 'none'
+  if (sortKey !== state.key) return 'none'
+  return state.direction === 'asc' ? 'ascending' : 'descending'
+}
+
+/** @deprecated Use **`defaultSortDirectionForKey`** — kept for tests importing the old name. */
+export const DEFAULT_SORT_DIRECTIONS: Record<string, PoolSortDirection> = {
   adp: 'asc',
   aiAdp: 'asc',
   name: 'asc',
   bye: 'asc',
-
   projected: 'desc',
   pts: 'desc',
   ru_att: 'desc',
@@ -89,15 +188,15 @@ export const DEFAULT_SORT_DIRECTIONS: Record<PoolSortKey, PoolSortDirection> = {
   pa_int: 'desc',
 }
 
-/** Map every Sleeper-table column key to the underlying sort key (or null if not sortable). */
+/** @deprecated Prefer **`sortKeyForColumn(col, draftSport)` — static map valid for NFL-only. */
 export const COLUMN_TO_SORT_KEY: Record<string, PoolSortKey | null> = {
-  rk: 'adp', // RK = ADP rank
+  rk: 'adp',
   player: 'name',
   adp: 'adp',
   aiAdp: 'aiAdp',
   bye: 'bye',
   pts: 'pts',
-  avg: 'projected', // toolbar's "Proj" button + the AVG column share state
+  avg: 'projected',
   ru_att: 'ru_att',
   ru_yds: 'ru_yds',
   ru_td: 'ru_td',
@@ -109,126 +208,4 @@ export const COLUMN_TO_SORT_KEY: Record<string, PoolSortKey | null> = {
   pa_td: 'pa_td',
   pa_int: 'pa_int',
   actions: null,
-}
-
-function num(v: number | null | undefined): number | null {
-  return typeof v === 'number' && Number.isFinite(v) ? v : null
-}
-
-/** Extract the raw value to sort by for a given key. Returns string | number | null. */
-export function sortValueForKey(p: PoolSortPlayer, key: PoolSortKey): string | number | null {
-  switch (key) {
-    case 'name':
-      return p.name ?? ''
-    case 'adp':
-      return num(p.adp)
-    case 'aiAdp':
-      return num(p.aiAdp ?? p.adp ?? null)
-    case 'bye':
-      return num(p.byeWeek)
-    case 'projected':
-      // PPG — preserves the pre-D.3 toolbar semantic. Reads display.stats.fantasyPointsPerGame
-      // first (matches the card-mode sort), falls back to nflDraftProjectionSplits.projectedPointsPerGame
-      // so the table shows consistent ordering even when the display model lags.
-      return (
-        num(p.display?.stats?.fantasyPointsPerGame) ??
-        num(p.nflDraftProjectionSplits?.projectedPointsPerGame)
-      )
-    case 'pts':
-      return num(p.nflDraftProjectionSplits?.projectedPoints)
-    case 'ru_att':
-      return num(p.nflDraftProjectionSplits?.rushing?.att)
-    case 'ru_yds':
-      return num(p.nflDraftProjectionSplits?.rushing?.yds)
-    case 'ru_td':
-      return num(p.nflDraftProjectionSplits?.rushing?.td)
-    case 'rec':
-      return num(p.nflDraftProjectionSplits?.receiving?.rec)
-    case 'rec_yds':
-      return num(p.nflDraftProjectionSplits?.receiving?.yds)
-    case 'rec_td':
-      return num(p.nflDraftProjectionSplits?.receiving?.td)
-    case 'pa_att':
-      return num(p.nflDraftProjectionSplits?.passing?.att)
-    case 'pa_yds':
-      return num(p.nflDraftProjectionSplits?.passing?.yds)
-    case 'pa_td':
-      return num(p.nflDraftProjectionSplits?.passing?.td)
-    case 'pa_int':
-      return num(p.nflDraftProjectionSplits?.passing?.int)
-  }
-}
-
-/** Compare two values with nulls always sorted to the END. */
-export function comparePoolSort(
-  a: string | number | null,
-  b: string | number | null,
-  direction: PoolSortDirection,
-): number {
-  // Nulls always last — independent of direction.
-  if (a == null && b == null) return 0
-  if (a == null) return 1
-  if (b == null) return -1
-  if (typeof a === 'string' && typeof b === 'string') {
-    return direction === 'asc' ? a.localeCompare(b) : b.localeCompare(a)
-  }
-  // Coerce both to numbers (string-vs-number shouldn't happen given the getter map,
-  // but defensive: treat unparseable strings as nulls-last).
-  const an = typeof a === 'number' ? a : Number(a)
-  const bn = typeof b === 'number' ? b : Number(b)
-  if (!Number.isFinite(an) && !Number.isFinite(bn)) return 0
-  if (!Number.isFinite(an)) return 1
-  if (!Number.isFinite(bn)) return -1
-  return direction === 'asc' ? an - bn : bn - an
-}
-
-/**
- * Sort a list of players. Stable-by-name within ties (so re-sorting from
- * descending PTS to ascending PTS doesn't shuffle no-stat players randomly).
- * Returns a new array — never mutates the input.
- */
-export function applyPoolSort<T extends PoolSortPlayer>(
-  list: readonly T[],
-  state: PoolSortState,
-): T[] {
-  const out = [...list]
-  out.sort((a, b) => {
-    const cmp = comparePoolSort(sortValueForKey(a, state.key), sortValueForKey(b, state.key), state.direction)
-    if (cmp !== 0) return cmp
-    // Tiebreak: ADP asc, then name asc — keeps order intuitive within em-dash groups.
-    const adpCmp = comparePoolSort(num(a.adp), num(b.adp), 'asc')
-    if (adpCmp !== 0) return adpCmp
-    return (a.name ?? '').localeCompare(b.name ?? '')
-  })
-  return out
-}
-
-/**
- * Compute the next sort state when a header / toolbar button is tapped.
- * - Same key as current → flip direction.
- * - Different key → switch to default direction for that key.
- */
-export function nextSortState(current: PoolSortState, requested: PoolSortKey): PoolSortState {
-  if (current.key === requested) {
-    return { key: requested, direction: current.direction === 'asc' ? 'desc' : 'asc' }
-  }
-  return { key: requested, direction: DEFAULT_SORT_DIRECTIONS[requested] }
-}
-
-/**
- * Map a `SleeperPoolTable` column key to its sort key (or null if not sortable).
- * Wraps `COLUMN_TO_SORT_KEY` so callers don't have to import the dictionary.
- */
-export function sortKeyForColumn(columnKey: string): PoolSortKey | null {
-  return COLUMN_TO_SORT_KEY[columnKey] ?? null
-}
-
-/** aria-sort value for a column header. Returns 'none' when this column isn't the active sort. */
-export function ariaSortValue(
-  columnKey: string,
-  state: PoolSortState,
-): 'ascending' | 'descending' | 'none' {
-  const sortKey = sortKeyForColumn(columnKey)
-  if (!sortKey || sortKey !== state.key) return 'none'
-  return state.direction === 'asc' ? 'ascending' : 'descending'
 }

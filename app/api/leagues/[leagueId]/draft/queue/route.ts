@@ -17,6 +17,11 @@ import {
   normalizeQueueEntries,
   removeDraftedPlayersFromQueue,
 } from '@/lib/draft-queue-engine'
+import {
+  mergeAiManageDraftQueuePreference,
+  stripAiQueueMetadata,
+} from '@/lib/live-draft-engine/draftQueueAiPreferences'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,9 +84,34 @@ export async function PUT(
   const draftConfig = await getDraftConfigForLeague(leagueId)
   const queueSizeLimit = normalizeDraftQueueSizeLimit(draftConfig?.queue_size_limit)
 
-  const normalized = dedupeQueueEntries(
-    normalizeQueueEntries(queue, queueSizeLimit)
-  )
+  let normalized = dedupeQueueEntries(normalizeQueueEntries(queue, queueSizeLimit))
+  normalized = stripAiQueueMetadata(normalized)
+
+  if (typeof body.aiManageDraftQueueEnabled === 'boolean') {
+    const entitlementResolver = new EntitlementResolver()
+    const { hasAccess } = await entitlementResolver.resolveForUser(userId, 'pro_draft_ai')
+    if (body.aiManageDraftQueueEnabled === true && !hasAccess) {
+      return NextResponse.json(
+        { error: 'AF Pro required to enable AI queue management.' },
+        { status: 403 }
+      )
+    }
+    const roster = await prisma.roster.findUnique({
+      where: { leagueId_platformUserId: { leagueId, platformUserId: userId } },
+      select: { id: true, settings: true },
+    })
+    if (roster) {
+      await prisma.roster.update({
+        where: { id: roster.id },
+        data: {
+          settings: mergeAiManageDraftQueuePreference(
+            roster.settings,
+            body.aiManageDraftQueueEnabled
+          ) as never,
+        },
+      })
+    }
+  }
 
   const { draftPoolRowMatchesEligiblePositions } = await import('@/lib/draft-room/draft-pool-eligible-positions')
   const { getAllowedPositionsAndRosterSize } = await import('@/lib/live-draft-engine/RosterFitValidation')

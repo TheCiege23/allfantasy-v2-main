@@ -64,7 +64,7 @@ describe('Queue PUT route — hygiene chain', () => {
 
   it('runs normalize → dedupe before roster-eligibility validation', () => {
     expect(src).toMatch(
-      /dedupeQueueEntries\([\s\S]+?normalizeQueueEntries\(queue, queueSizeLimit\)/,
+      /dedupeQueueEntries\([\s\S]*?normalizeQueueEntries\(queue, queueSizeLimit\)/,
     )
   })
 

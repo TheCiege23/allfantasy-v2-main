@@ -209,8 +209,9 @@ describe('D.3 — column → sort-key mapping', () => {
     expect(sortKeyForColumn('player')).toBe('name')
   })
 
-  it('AVG column maps to the legacy "projected" sort key (toolbar Proj button)', () => {
+  it('AVG column maps to the legacy "projected" sort key for NFL/NCAAF (PPG)', () => {
     expect(sortKeyForColumn('avg')).toBe('projected')
+    expect(sortKeyForColumn('avg', 'NBA')).toBe('avg')
   })
 
   it('PTS column has its own sort key (season total, distinct from PPG)', () => {
@@ -271,7 +272,7 @@ describe('D.3 — SleeperPoolTable header wiring', () => {
   })
 
   it('only sortable columns are rendered as buttons (actions stays a span)', () => {
-    expect(src).toMatch(/sortKeyForColumn\(col\.key\) != null/)
+    expect(src).toMatch(/sortKeyForColumn\(col\.key, draftSport\) != null/)
     expect(src).toMatch(/Non-sortable column/)
   })
 
@@ -288,7 +289,9 @@ describe('D.3 — PlayerPanel toolbar + table sync', () => {
   const src = read('components/app/draft-room/PlayerPanel.tsx')
 
   it('uses applyPoolSort instead of inline if/else sort branch', () => {
-    expect(src).toMatch(/applyPoolSort\(list, \{ key: sortBy, direction: sortDirection \}\)/)
+    expect(src).toMatch(
+      /applyPoolSort(?:<PlayerEntry>)?\(list, \{ key: sortBy, direction: sortDirection \}, sport, sleeperStatOpts\)/,
+    )
     expect(src).not.toMatch(/sortBy === 'projected'\) \{[\s\S]*?diff !== 0/)
   })
 
@@ -311,11 +314,12 @@ describe('D.3 — PlayerPanel toolbar + table sync', () => {
   })
 
   it('handleColumnHeaderSort resolves column → sort key via sortKeyForColumn', () => {
-    expect(src).toMatch(/sortKeyForColumn\(columnKey\)/)
+    expect(src).toMatch(/sortKeyForColumn\(columnKey, sport\)/)
   })
 
-  it('memo deps include sortDirection so re-sort fires when direction flips', () => {
+  it('memo deps include sortDirection + sport + sleeperStatOpts so re-sort fires when layout/sport changes', () => {
     expect(src).toMatch(/sortBy,\s*\n?\s*sortDirection,/)
+    expect(src).toMatch(/sleeperStatOpts/)
   })
 })
 

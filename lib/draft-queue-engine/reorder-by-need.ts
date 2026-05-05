@@ -93,3 +93,40 @@ export function reorderQueueByNeed(input: ReorderQueueInput): ReorderQueueResult
 
   return { reordered, explanation, needByPosition }
 }
+
+/**
+ * Same as `reorderQueueByNeed`, but entries with `lockedByUser: true` stay fixed at their index;
+ * only unlocked rows are reordered among the unlocked slots (deterministic merge).
+ */
+export function reorderQueueByNeedRespectingLocks(input: ReorderQueueInput): ReorderQueueResult {
+  const { queue, rosterPositions, sport, availableNames } = input
+
+  const unlocked = queue.filter((e) => !e.lockedByUser)
+  if (unlocked.length === 0) {
+    return {
+      reordered: queue.map((e) => ({ ...e })),
+      explanation: 'All queue slots are locked; order unchanged.',
+      needByPosition: {},
+    }
+  }
+
+  const sub = reorderQueueByNeed({
+    queue: unlocked,
+    rosterPositions,
+    sport,
+    availableNames,
+  })
+
+  let u = 0
+  const merged = queue.map((entry) => {
+    if (entry.lockedByUser) return { ...entry }
+    const next = sub.reordered[u++]
+    return next ? { ...next } : { ...entry }
+  })
+
+  return {
+    reordered: merged,
+    explanation: sub.explanation,
+    needByPosition: sub.needByPosition,
+  }
+}
