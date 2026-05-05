@@ -17,6 +17,7 @@ import {
   Settings2,
   Shield,
   Sparkles,
+  Tv,
   User,
 } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -97,6 +98,8 @@ export type DraftTopBarProps = {
   draftRoomPresentation?: 'default' | 'redraft_snake'
   /** Slice 2 — surface "3RR ON" badge in header meta line when commissioner enabled Third Round Reversal. */
   thirdRoundReversal?: boolean
+  /** When set, the overflow menu shows a "Big Screen / Cast Board" entry that opens this URL in a new tab. */
+  bigScreenHref?: string | null
 }
 
 const TIMER_COLORS = {
@@ -207,6 +210,7 @@ export function DraftTopBar({
   timerPauseReason = null,
   overnightResumeAtIso = null,
   thirdRoundReversal = false,
+  bigScreenHref = null,
 }: DraftTopBarProps) {
   const { t } = useLanguage()
   const liveRemaining = useDraftCountdownSeconds(
@@ -348,6 +352,17 @@ export function DraftTopBar({
           ? 'cursor-pointer hover:shadow-[0_14px_40px_rgba(34,211,238,0.25)] active:scale-[0.98] disabled:opacity-55'
           : 'cursor-default'
       }`
+      const pillTooltip = isPausedCommissioner
+        ? 'Click to resume the draft. Time remaining is restored from when it was paused.'
+        : draftStatus === 'paused'
+          ? 'Draft is paused by the commissioner. Resume from the commissioner control center.'
+          : criticalLowTimer
+            ? 'Pick clock under 5 seconds — autopick about to fire.'
+            : urgentLowTimer
+              ? 'Pick clock under 10 seconds.'
+              : timerStatus === 'expired'
+                ? 'Pick clock expired. Soft timer leagues wait for a manual pick.'
+                : 'On-the-clock pick timer.'
       if (handlePillClick) {
         return (
           <button
@@ -355,7 +370,7 @@ export function DraftTopBar({
             onClick={handlePillClick}
             disabled={commissionerLoading}
             aria-label="Resume draft"
-            title="Click to resume draft"
+            title={pillTooltip}
             data-testid={isPausedCommissioner ? 'draft-topbar-resume-draft' : 'draft-topbar-clock'}
             data-paused={draftStatus === 'paused' ? 'true' : 'false'}
             data-urgent={urgentLowTimer ? 'true' : 'false'}
@@ -370,6 +385,7 @@ export function DraftTopBar({
           data-testid="draft-topbar-clock"
           data-paused={draftStatus === 'paused' ? 'true' : 'false'}
           data-urgent={urgentLowTimer ? 'true' : 'false'}
+          title={pillTooltip}
           className={pillClassName}
         >
           {sharedPill}
@@ -846,6 +862,25 @@ export function DraftTopBar({
                     </span>
                   </span>
                 </button>
+
+                {bigScreenHref ? (
+                  <Link
+                    href={bigScreenHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMenuOpen(false)}
+                    data-testid="draft-topbar-big-screen"
+                    className="flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition duration-150 hover:bg-white/8"
+                  >
+                    <Tv className="mt-0.5 h-4 w-4 text-[#dbe1ff]" aria-hidden />
+                    <span>
+                      <span className="block text-sm font-semibold text-white">Big Screen Mode</span>
+                      <span className="block text-xs text-white/55">
+                        Read-only board view for casting to a TV.
+                      </span>
+                    </span>
+                  </Link>
+                ) : null}
 
                 {isCommissioner ? (
                   <button

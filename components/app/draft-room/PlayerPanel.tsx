@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Search, User, Plus, GitCompare, X } from 'lucide-react'
+import { Search, User, Plus, GitCompare, LayoutGrid, Rows3, X } from 'lucide-react'
 import { usePlayerComparisonUIOptional } from '@/components/player-comparison-ui'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { applyDraftFilters, DRAFT_ROOM_I18N_KEYS, getPickConfirmationLabel, getPositionFilterOptionsForSport } from '@/lib/draft-room'
@@ -360,6 +360,8 @@ function PlayerPanelInner({
   const compareUi = usePlayerComparisonUIOptional()
   const [compareAnchor, setCompareAnchor] = useState<PlayerEntry | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  /** User-facing view-mode override; null defers to the auto rule below. */
+  const [viewModeOverride, setViewModeOverride] = useState<'sleeper_table' | 'card' | null>(null)
   const [positionFilter, setPositionFilter] = useState('All')
   const [teamFilter, setTeamFilter] = useState('All')
   const [poolFilter, setPoolFilter] = useState<'All' | 'Pro' | 'Devy' | 'College'>('All')
@@ -817,6 +819,46 @@ function PlayerPanelInner({
               </option>
             ))}
           </select>
+          {/* View-mode toggle: Table (dense) ↔ Cards. Computes the same `useTable`
+              rule the body uses; clicking flips the override. Null override defers
+              to the auto rule (NFL → table, others → cards). */}
+          <div
+            role="radiogroup"
+            aria-label="Player pool view mode"
+            data-testid="draft-pool-view-mode"
+            className="ml-auto inline-flex items-center gap-1 rounded-xl border border-white/14 bg-[#0a1228]/95 p-0.5"
+          >
+            <button
+              type="button"
+              role="radio"
+              aria-checked={viewModeOverride === 'sleeper_table' || (viewModeOverride === null && (poolLayout === 'sleeper_table' || (poolLayout === 'auto' && sport === 'NFL')))}
+              onClick={() => setViewModeOverride('sleeper_table')}
+              data-testid="draft-pool-view-table"
+              title="Table view"
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition ${
+                viewModeOverride === 'sleeper_table' || (viewModeOverride === null && (poolLayout === 'sleeper_table' || (poolLayout === 'auto' && sport === 'NFL')))
+                  ? 'bg-cyan-500/20 text-cyan-100 shadow-[0_0_10px_rgba(34,211,238,0.18)]'
+                  : 'text-white/55 hover:bg-white/[0.06] hover:text-white/85'
+              }`}
+            >
+              <Rows3 className="h-4 w-4" aria-hidden />
+            </button>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={viewModeOverride === 'card' || (viewModeOverride === null && poolLayout !== 'sleeper_table' && !(poolLayout === 'auto' && sport === 'NFL'))}
+              onClick={() => setViewModeOverride('card')}
+              data-testid="draft-pool-view-cards"
+              title="Card view"
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition ${
+                viewModeOverride === 'card' || (viewModeOverride === null && poolLayout !== 'sleeper_table' && !(poolLayout === 'auto' && sport === 'NFL'))
+                  ? 'bg-cyan-500/20 text-cyan-100 shadow-[0_0_10px_rgba(34,211,238,0.18)]'
+                  : 'text-white/55 hover:bg-white/[0.06] hover:text-white/85'
+              }`}
+            >
+              <LayoutGrid className="h-4 w-4" aria-hidden />
+            </button>
+          </div>
           {showPoolFilter && (
             <select
               value={poolFilter}
@@ -1166,8 +1208,10 @@ function PlayerPanelInner({
              * the table scrolls sideways rather than squishing column widths.
              */
             const useTable =
-              poolLayout === 'sleeper_table' ||
-              (poolLayout === 'auto' && sport === 'NFL')
+              viewModeOverride === 'sleeper_table' ||
+              (viewModeOverride === null &&
+                (poolLayout === 'sleeper_table' ||
+                  (poolLayout === 'auto' && sport === 'NFL')))
 
             if (!useTable) {
               return (

@@ -4809,6 +4809,7 @@ export function DraftRoomPageClient({
             draftRoomPresentation={presentationVariant}
             onToggleAutoPick={handleToggleAutoPick}
             thirdRoundReversal={Boolean(session.thirdRoundReversal)}
+            bigScreenHref={draftId ? `/draft/${draftId}/bigscreen` : null}
           />
         </>
       }
