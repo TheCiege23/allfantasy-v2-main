@@ -378,10 +378,20 @@ export function DraftTab({
 
   const canEnterDraftRoom = (preDraft || liveDraft) && Boolean(league.id)
 
+  /**
+   * Always navigate to the draft route — `/league/[id]/draft` handles its own
+   * state (pre-draft hub, live room, post-draft summary). The previous silent
+   * no-op when canEnterDraftRoom was false left users with a dead-feeling button.
+   * If the league truly has no draft session yet (no league.id), surface a toast
+   * instead of swallowing the click.
+   */
   const handleDraftRoom = useCallback(() => {
-    if (!canEnterDraftRoom) return
+    if (!league.id) {
+      toast.error('Draft is not available for this league yet.')
+      return
+    }
     router.push(enterDraftRoomHref)
-  }, [canEnterDraftRoom, enterDraftRoomHref, router])
+  }, [league.id, enterDraftRoomHref, router])
 
   const handleGenerateDraftOrder = useCallback(async () => {
     if (!(isCommissioner || isOwner)) return
