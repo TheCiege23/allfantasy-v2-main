@@ -25,38 +25,32 @@
  *    rows missing all metadata don't get accidentally counted as vets.
  */
 
-export type RookieFilterCandidate = {
-  isRookie?: boolean
-  yearsExp?: number | null
-  isDevy?: boolean
-  classYearLabel?: string | null
-}
+import { isDraftRoomRookie, type DraftRoomRookiePlayerLike } from '@/lib/draft-room/draftPlayerRookie'
+
+export type RookieFilterCandidate = DraftRoomRookiePlayerLike
 
 export type RookieFilterContext = {
   devyEnabled?: boolean
   c2cEnabled?: boolean
+  /** Defaults to NFL when omitted (legacy callers). */
+  sport?: string
+  seasonYear?: number
+  leagueSeasonYear?: number
+  draftYear?: number
 }
 
 export function isRookieEligibleForFilter(
   player: RookieFilterCandidate,
   options: RookieFilterContext = {},
 ): boolean {
-  if (player.isRookie === true) return true
-  if (player.yearsExp === 0) return true
-  if (options.devyEnabled || options.c2cEnabled) {
-    if (player.isDevy) return true
-    const yr = String(player.classYearLabel ?? '').toLowerCase()
-    if (
-      yr.includes('rookie') ||
-      yr.includes('fr') ||
-      yr.includes('so') ||
-      yr.includes('jr') ||
-      yr.includes('sr')
-    ) {
-      return true
-    }
-  }
-  return false
+  return isDraftRoomRookie(player, {
+    sport: options.sport ?? 'NFL',
+    seasonYear: options.seasonYear,
+    leagueSeasonYear: options.leagueSeasonYear,
+    draftYear: options.draftYear,
+    devyEnabled: options.devyEnabled,
+    c2cEnabled: options.c2cEnabled,
+  })
 }
 
 /**

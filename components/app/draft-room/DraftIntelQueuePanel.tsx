@@ -153,7 +153,7 @@ export function DraftIntelQueuePanel({
         <DraftRoomAccordion
           variant="redraft_snake"
           persistenceKey="af:draft:redraft:intel-queue"
-          defaultOpen
+          defaultOpen={false}
           title="Draft intelligence"
           collapsedSubtitle={collapsedSummary}
           testId="draft-intel-accordion"

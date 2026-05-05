@@ -88,6 +88,12 @@ export function detectPersistedRosterSchema(
   starters: unknown,
 ): boolean {
   if (Array.isArray(starters) && starters.length > 0) return true
+  if (starters && typeof starters === 'object' && !Array.isArray(starters)) {
+    for (const [, v] of Object.entries(starters as Record<string, unknown>)) {
+      const n = typeof v === 'number' ? v : Number(v)
+      if (Number.isFinite(n) && n > 0) return true
+    }
+  }
   if (Array.isArray(settings?.rosterPositions) && (settings!.rosterPositions as unknown[]).length > 0) return true
 
   const prefix = `${String(leagueSport).toLowerCase()}_roster_config`
@@ -194,7 +200,12 @@ export async function getEffectiveLeagueRosterTemplate(leagueId: string): Promis
     formatType.toUpperCase() === 'IDP' ||
     (supportsIdpLeagueSport(sport) && isIdpFromDb)
 
-  const hasPersistedRosterSchema = detectPersistedRosterSchema(sport, settings, league.starters)
+  const rosterCfgRow = await prisma.leagueRosterConfig.findUnique({
+    where: { leagueId },
+    select: { id: true },
+  })
+  const hasPersistedRosterSchema =
+    detectPersistedRosterSchema(sport, settings, league.starters) || Boolean(rosterCfgRow)
 
   const result: EffectiveLeagueRosterTemplate = {
     leagueId: league.id,

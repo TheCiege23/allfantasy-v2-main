@@ -14,11 +14,17 @@ This document maps **production** live-draft pieces in this repo: **Neon/Postgre
 | Queue | **`DraftQueue.order`** JSON (active path); AF Pro + **`Roster.settings.aiManageDraftQueueEnabled`**, **`planDraftQueueAiReorder`** (`lib/live-draft-engine/draftQueueAiReorder.ts`), **`POST /api/leagues/[leagueId]/draft/queue/ai-reorder`** |
 | NPC autopick | **`assignNpcDraftPersonality`** / **`decideDraftPickWithScores`** (`lib/live-draft-engine/npcDraftPersonality.ts`) — deterministic; no LLM required at pick time |
 | AI ADP | Daily **`GET`/`POST /api/cron/recompute-allfantasy-adp`** with **`requireCronAuth`** (`CRON_SECRET` / headers per `app/api/cron/_auth.ts`) |
-| DraftRoom UI | **`DraftRoomPageClient`**: **`GET .../draft/session`**, **`GET .../draft/live-sync`**, **`POST .../draft/pick`**, **`GET`/`PUT .../draft/queue`**, **`POST .../draft/queue/ai-reorder`**, **`GET .../draft/pool`**, **`GET`/`POST .../draft/chat`**; **`timerEndAt`** drives countdown; **`DRAFT_PICK_STALE_OVERALL`** / **`DRAFT_PICK_RACE_RETRY`** → **`mergeDraftSessionSnapshot`** |
-| ADP vs AI ADP in UI | **`resolvePlayerPoolAdpColumns`** (`lib/draft-room/playerPoolAdpColumns.ts`) |
+| DraftRoom UI | **`DraftRoomPageClient`**: **`GET .../draft/session`**, **`GET .../draft/live-sync`**, **`POST .../draft/pick`**, **`GET`/`PUT .../draft/queue`**, **`POST .../draft/queue/ai-reorder`**, **`GET .../draft/pool`**, **`GET`/`POST .../draft/chat`**; **`timerEndAt`** drives countdown; **`DRAFT_PICK_STALE_OVERALL`** / **`DRAFT_PICK_RACE_RETRY`** → **`mergeDraftSessionSnapshot`**. **UX (2026-05):** snake/linear drop the extra **`DraftTeamStrip`** (auction keeps it); premium queue folds Draft Intelligence + AI queue controls; **`ResponsiveNavSystem`** hides the global Chimmy FAB on `/draft/*`; **`WarRoomPopup`** trigger anchors bottom-left on redraft snake. |
+| ADP vs AI ADP in UI | **`resolvePlayerPoolAdpColumns`** (`lib/draft-room/playerPoolAdpColumns.ts`) — labels/tooltips from **`adpReadinessCopy`**; AI ADP sort uses **`aiAdp` only** (no silent fallback to system ADP in **`sortValueForKey`**) |
+| Rookie filter | **`isDraftRoomRookie`** / **`getDraftRoomRookieDataState`** (`lib/draft-room/draftPlayerRookie.ts`) consumed by **`isRookieEligibleForFilter`** (`rookieFilterPredicate.ts`) |
+| Position pill counts | **`poolPlayerMatchesPositionPill`** / **`getDraftRoomPositionGroupCounts`** (`lib/draft-room/draftPoolPositionGroups.ts`) — alias positions **PK→K**, **DEF/D/ST→DST** |
 | Sport pool grid | **`SleeperPoolTable`** + **`buildSleeperPoolTableLayout`** → **`draftSportStatColumns`** |
 
 **Manual browser QA:** After launch gate tests pass, run **`docs/draft-room-manual-qa-runbook.md`** (two-browser scenarios, stale pick, timer, queue, stat table, cron smoke).
+
+**Dashboard shell:** Selecting a league on **`/dashboard`** (`?leagueId=`) embeds the same **`LeagueShell`** hub in the center panel via **`/league/[id]?embed=1`** (see **`SelectedLeagueHomePanel`**, **`AppShell`** `embedCenterOnly`). Draft room entry still uses **`/draft/room/[draftId]`** explicitly.
+
+**Pre-draft checklist:** **`DraftValidationOrchestrator`** aligns roster/scoring checks with **`getEffectiveLeagueRosterTemplate`** and **`League.scoring` / `scoringPresetId` / settings**. Commissioners can apply defaults via **`POST /api/leagues/[leagueId]/draft/fix-setup`**; post-create bootstrap calls **`ensureLeagueDraftSetupDefaults`**.
 
 ---
 

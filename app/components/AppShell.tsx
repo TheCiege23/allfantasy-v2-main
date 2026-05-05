@@ -25,6 +25,11 @@ export type AppShellProps = {
    * Root height: default full viewport. Use a calc when the shell is nested under `GlobalAppShell` (header + mobile tabs).
    */
   rootClassName?: string
+  /**
+   * Renders only the center `children` full width/height (no side chat / My Leagues rails).
+   * Used when the same league hub is embedded in the dashboard center panel (see `?embed=1` on `/league/[id]`).
+   */
+  embedCenterOnly?: boolean
 }
 
 /**
@@ -41,7 +46,24 @@ export default function AppShell({
   rightRailCollapsedHint,
   immersive = false,
   rootClassName,
+  embedCenterOnly = false,
 }: AppShellProps) {
+  if (embedCenterOnly) {
+    return (
+      <div
+        className={cn(
+          'flex min-h-0 min-w-0 w-full flex-1 flex-col overflow-hidden text-[var(--text)]',
+          rootClassName ?? 'h-full',
+        )}
+        style={{ background: 'var(--bg)' }}
+        data-af-embed-center="1"
+        {...rootProps}
+      >
+        {children}
+      </div>
+    )
+  }
+
   const leftRailClass = immersive
     ? 'border-r border-white/[0.08] bg-[#070b14]/80 backdrop-blur-xl'
     : 'border-[var(--border)]'

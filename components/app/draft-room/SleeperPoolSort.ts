@@ -59,7 +59,7 @@ export function sortValueForKey(
     case 'adp':
       return num(p.adp)
     case 'aiAdp':
-      return num(p.aiAdp ?? p.adp ?? null)
+      return num(p.aiAdp)
     case 'bye':
       return num(p.byeWeek)
     case 'projected':
@@ -124,8 +124,11 @@ export function applyPoolSort<T extends PoolSortPlayer>(
       state.direction,
     )
     if (cmp !== 0) return cmp
-    const adpCmp = comparePoolSort(num(a.adp), num(b.adp), 'asc')
-    if (adpCmp !== 0) return adpCmp
+    const tieKey = state.key === 'aiAdp' ? 'aiAdp' : 'adp'
+    const tieA = tieKey === 'aiAdp' ? num(a.aiAdp) : num(a.adp)
+    const tieB = tieKey === 'aiAdp' ? num(b.aiAdp) : num(b.adp)
+    const tieCmp = comparePoolSort(tieA, tieB, 'asc')
+    if (tieCmp !== 0) return tieCmp
     return (a.name ?? '').localeCompare(b.name ?? '')
   })
   return out

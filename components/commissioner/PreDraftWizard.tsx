@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { CheckCircle, AlertCircle, XCircle, Loader } from 'lucide-react'
 import type { DraftValidationReport, ValidationResult } from '@/lib/draft/validation/DraftValidationOrchestrator'
 
@@ -97,11 +97,7 @@ export function PreDraftWizard({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadValidation()
-  }, [leagueId, draftId])
-
-  const loadValidation = async () => {
+  const loadValidation = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
@@ -122,7 +118,25 @@ export function PreDraftWizard({
     } finally {
       setLoading(false)
     }
-  }
+  }, [leagueId, draftId, onValidationComplete])
+
+  useEffect(() => {
+    loadValidation()
+  }, [loadValidation])
+
+  useEffect(() => {
+    const handler = () => {
+      void loadValidation()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('af-pre-draft-checklist-refresh', handler)
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('af-pre-draft-checklist-refresh', handler)
+      }
+    }
+  }, [loadValidation])
 
   const handleFixAction = (action: string) => {
     // Forward only the canonical action keys we know how to route. Unknown

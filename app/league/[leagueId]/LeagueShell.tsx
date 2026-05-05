@@ -203,6 +203,11 @@ export type LeagueShellProps = {
   seasonSnapshot?: LeagueSeasonSnapshot | null
   /** AF-native league settings copy + standings layout (divisions / guillotine / survivor). */
   leagueDashboard: LeagueDashboardView
+  /**
+   * When true, only the center column renders (no chat / My Leagues rails).
+   * Used when this shell is loaded inside the dashboard center panel (`?embed=1`).
+   */
+  embedMode?: boolean
 }
 
 export function LeagueShell({
@@ -224,6 +229,7 @@ export function LeagueShell({
   dispersalDraftInProgress = null,
   seasonSnapshot = null,
   leagueDashboard,
+  embedMode = false,
 }: LeagueShellProps) {
   const router = useRouter()
   const pathname = usePathname()
@@ -751,6 +757,30 @@ export function LeagueShell({
   const [mobileLeftOpen, setMobileLeftOpen] = useState(false)
   const [mobileRightOpen, setMobileRightOpen] = useState(false)
 
+  const navigateDashboardHome = useCallback(() => {
+    if (embedMode && typeof window !== 'undefined' && window.parent !== window) {
+      try {
+        window.parent.location.assign('/dashboard')
+        return
+      } catch {
+        /* cross-origin or restricted — fall back */
+      }
+    }
+    router.push('/dashboard')
+  }, [embedMode, router])
+
+  const openLeagueChatOrNavigate = useCallback(() => {
+    if (embedMode && typeof window !== 'undefined' && window.parent !== window) {
+      try {
+        window.parent.dispatchEvent(new CustomEvent('af-dashboard-open-mobile-left'))
+        return
+      } catch {
+        /* fall through */
+      }
+    }
+    router.push(`/league/${league.id}?openChat=league`)
+  }, [embedMode, league.id, router])
+
   const settingsInviteCode =
     league.settings &&
     typeof league.settings === 'object' &&
@@ -763,7 +793,7 @@ export function LeagueShell({
   /** Sidebar rows navigate via `<Link>` (`getLeagueListDestinationHref`); avoid `router.push(/league/${id})` so tournament hub links work. */
   const handleLeagueSelect = (l: UserLeague | null) => {
     if (!l) {
-      router.push('/dashboard')
+      navigateDashboardHome()
     }
   }
 
@@ -958,40 +988,53 @@ export function LeagueShell({
       ) : null}
       <div className="contents" data-league-id={league.id}>
         <AppShell
-          immersive={specialtyImmersive}
-          rootClassName="h-[calc(100dvh-8.5rem)] min-h-0 lg:h-[calc(100dvh-3.5rem)]"
+          immersive={specialtyImmersive && !embedMode}
+          embedCenterOnly={embedMode}
+          rootClassName={
+            embedMode
+              ? 'min-h-0 h-full flex-1'
+              : 'h-[calc(100dvh-8.5rem)] min-h-0 lg:h-[calc(100dvh-3.5rem)]'
+          }
           rightRailCollapsed={myLeaguesRail.collapsed}
           onRightRailExpand={() => myLeaguesRail.setCollapsed(false)}
           rightRailCollapsedHint={leagueList.length ? String(leagueList.length) : undefined}
           leftPanel={
-          <LeftChatPanel
-            selectedLeague={selectedLeague}
-            activeLeagueId={league.id}
-            userId={userId}
-            userDisplayName={userName}
-            userImage={userImage}
-            rootId="league-left-chat"
-            leagues={leagueList}
-            discordConnected={discordConnected}
-            commissionerLeagues={commissionerLeagues}
-            zombieChimmyPrefill={zombieChimmyPrefill}
-            initialOpenChat={initialOpenChat}
-          />
-        }
-        rightPanel={
-          <RightControlPanel
-            leagues={leagueList}
-            leaguesLoading={false}
-            selectedId={league.id}
-            activeLeagueId={league.id}
-            onSelectLeague={handleLeagueSelect}
-            userId={userId}
-            userName={userName}
-            userImage={userImage}
-            onImport={handleImport}
-            onRailCollapse={() => myLeaguesRail.setCollapsed(true)}
-          />
-        }
+            embedMode ? (
+              <></>
+            ) : (
+              <LeftChatPanel
+                selectedLeague={selectedLeague}
+                activeLeagueId={league.id}
+                userId={userId}
+                userDisplayName={userName}
+                userImage={userImage}
+                rootId="league-left-chat"
+                leagues={leagueList}
+                discordConnected={discordConnected}
+                commissionerLeagues={commissionerLeagues}
+                zombieChimmyPrefill={zombieChimmyPrefill}
+                initialOpenChat={initialOpenChat}
+              />
+            )
+          }
+          rightPanel={
+            embedMode ? (
+              <></>
+            ) : (
+              <RightControlPanel
+                leagues={leagueList}
+                leaguesLoading={false}
+                selectedId={league.id}
+                activeLeagueId={league.id}
+                onSelectLeague={handleLeagueSelect}
+                userId={userId}
+                userName={userName}
+                userImage={userImage}
+                onImport={handleImport}
+                onRailCollapse={() => myLeaguesRail.setCollapsed(true)}
+              />
+            )
+          }
       >
         <main
           className={`relative z-[1] flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden ${
@@ -1022,29 +1065,31 @@ export function LeagueShell({
           }
         >
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto [scrollbar-gutter:stable]">
-            <div className="shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden">
-              <div className="flex items-center justify-between gap-2">
-                <button
-                  type="button"
-                  onClick={() => setMobileLeftOpen(true)}
-                  className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white active:bg-white/[0.08]"
-                  aria-label={t('dashboard.shell.openChat')}
-                >
-                  <Bot className="h-5 w-5" aria-hidden />
-                </button>
-                <p className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-white/90">
-                  {selectedLeague.name}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setMobileRightOpen(true)}
-                  className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white active:bg-white/[0.08]"
-                  aria-label={t('dashboard.shell.openMyLeagues')}
-                >
-                  <LayoutGrid className="h-5 w-5" aria-hidden />
-                </button>
+            {!embedMode ? (
+              <div className="shrink-0 border-b border-white/[0.08] bg-[#050814] px-3 py-2 md:hidden">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMobileLeftOpen(true)}
+                    className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white active:bg-white/[0.08]"
+                    aria-label={t('dashboard.shell.openChat')}
+                  >
+                    <Bot className="h-5 w-5" aria-hidden />
+                  </button>
+                  <p className="min-w-0 flex-1 truncate text-center text-sm font-semibold text-white/90">
+                    {selectedLeague.name}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setMobileRightOpen(true)}
+                    className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.04] text-white active:bg-white/[0.08]"
+                    aria-label={t('dashboard.shell.openMyLeagues')}
+                  >
+                    <LayoutGrid className="h-5 w-5" aria-hidden />
+                  </button>
+                </div>
               </div>
-            </div>
+            ) : null}
             {showSpecialtyHero && specialtyHeroVariant ? (
               <SpecialtyLeagueHomeHero
                 leagueId={league.id}
@@ -1061,7 +1106,7 @@ export function LeagueShell({
                 isHeadCommissioner={isHeadCommissioner}
                 onOpenDraftTab={() => setActiveTab(draftTabForHero)}
                 onOpenStandingsTab={() => setActiveTab(standingsTabForHero)}
-                onOpenChat={() => router.push(`/league/${league.id}?openChat=league`)}
+                onOpenChat={openLeagueChatOrNavigate}
                 onOpenSettings={() => openLeagueSettingsModal(null)}
                 onOpenCommissionerSettings={() => setCommissionerSettingsOpen(true)}
               />
@@ -1073,7 +1118,7 @@ export function LeagueShell({
                 sport={String(selectedLeague.sport)}
                 season={Number(selectedLeague.season ?? new Date().getFullYear())}
                 isCommissioner={isCommissioner}
-                onOpenChat={() => router.push(`/league/${league.id}?openChat=league`)}
+                onOpenChat={openLeagueChatOrNavigate}
                 onOpenSettings={() =>
                   isCommissioner
                     ? openLeagueSettingsModal('devy-command-center')
@@ -1100,7 +1145,7 @@ export function LeagueShell({
                       onLeaveLeague: () => setLeaveLeagueHintOpen(true),
                     }
               }
-              onGoHome={() => router.push('/dashboard')}
+              onGoHome={navigateDashboardHome}
               idpLeagueActive={idpUi?.active ?? false}
               idpViewMode={idpViewMode}
               onIdpViewModeChange={setIdpViewMode}
@@ -1239,7 +1284,7 @@ export function LeagueShell({
         </div>
       ) : null}
 
-      {mobileRightOpen ? (
+      {!embedMode && mobileRightOpen ? (
         <div
           className="fixed inset-0 z-[60] bg-black/60 md:hidden"
           role="presentation"

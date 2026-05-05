@@ -41,6 +41,7 @@ import {
   sortKeyForColumn,
   type PoolSortState,
 } from './SleeperPoolSort'
+import { aiAdpCellTitle, systemAdpCellTitle } from '@/lib/draft-room/adpReadinessCopy'
 
 /** Re-export sizing constants for stories/tests that imported them from this module. */
 export {
@@ -231,7 +232,10 @@ function SleeperRow(props: SleeperRowProps) {
       case 'adp':
         return (
           <Cell key={col.key} width={col.width} align="right">
-            <span data-testid={`${testIdBase}-adp`} title={tipFor('adp', col.statLabel ?? 'ADP', p.adp ?? null)}>
+            <span
+              data-testid={`${testIdBase}-adp`}
+              title={systemAdpCellTitle(p.adp != null && Number.isFinite(Number(p.adp)))}
+            >
               {adpDisplay}
             </span>
           </Cell>
@@ -242,11 +246,11 @@ function SleeperRow(props: SleeperRowProps) {
             <span
               data-testid={`${testIdBase}-ai-adp`}
               data-low-sample={p.aiAdpLowSample ? 'true' : 'false'}
-              title={
-                p.aiAdp == null
-                  ? `AllFantasy AI ADP: average draft position from valid AllFantasy drafts matching this sport, league type, draft type, scoring, roster format, team count, and season. No drafts yet — em-dash until the next recompute.`
-                  : `AllFantasy AI ADP: average draft position from valid AllFantasy drafts matching this sport, league type, draft type, scoring, roster format, team count, and season.${p.aiAdpSampleSize != null ? ` Sample size: ${p.aiAdpSampleSize}.` : ''}${p.aiAdpLowSample ? ' Low sample — value will firm up as more drafts come in.' : ''}`
-              }
+              title={aiAdpCellTitle({
+                hasValue: p.aiAdp != null && Number.isFinite(Number(p.aiAdp)),
+                lowSample: Boolean(p.aiAdpLowSample),
+                sampleSize: p.aiAdpSampleSize ?? null,
+              })}
               className="inline-flex items-center gap-1"
             >
               {aiAdpDisplay}

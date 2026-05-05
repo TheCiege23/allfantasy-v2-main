@@ -8,6 +8,7 @@ import { MobileNavDrawer } from "./MobileNavDrawer"
 import { SearchOverlay } from "@/components/search/SearchOverlay"
 import { ChimmyFloatingActionButton } from "@/components/chimmy-surfaces"
 import { createCommandPaletteHandler } from "@/lib/search"
+import { shouldHideChimmyFloatingFab } from "@/lib/shell/draftRoomFloatingUi"
 
 const LG_BREAKPOINT_PX = 1024
 const USER_NOTIFICATIONS_UNREAD = "/api/user/notifications?unread=true&limit=50"
@@ -76,6 +77,7 @@ export function ResponsiveNavSystem({
   const [showShortcutHint, setShowShortcutHint] = useState(false)
 
   const leagueId = extractLeagueIdFromPath(pathname)
+  const hideChimmyFabOnDraftSurface = shouldHideChimmyFloatingFab(pathname)
 
   const openChimmy = useCallback(() => {
     try {
@@ -330,6 +332,7 @@ export function ResponsiveNavSystem({
               </button>
             </div>
           ) : null}
+          {!hideChimmyFabOnDraftSurface ? (
           <ChimmyFloatingActionButton
             label={isAdmin ? "Open Admin AI" : isCommissionerInLeague ? "Open Commissioner Chimmy" : "Open Chimmy"}
             hasNotification={hasUnreadAiAlerts}
@@ -337,6 +340,7 @@ export function ResponsiveNavSystem({
             positionClass="fixed bottom-24 right-4 z-40 lg:bottom-6 lg:right-6"
             className="shadow-2xl"
           />
+          ) : null}
         </>
       ) : null}
       {isAuthenticated && !hideHeader ? <MobileBottomTabs /> : null}

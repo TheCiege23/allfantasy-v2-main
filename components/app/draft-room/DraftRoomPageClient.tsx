@@ -1276,10 +1276,30 @@ export function DraftRoomPageClient({
           message: data.message ?? null,
         })
       } else {
-        setLeagueAiAdp({ enabled: true, entries: [], totalDrafts: 0, computedAt: null, stale: true, ageHours: null, message: 'AI ADP unavailable' })
+        setLeagueAiAdp({
+          enabled: true,
+          entries: [],
+          totalDrafts: 0,
+          computedAt: null,
+          stale: true,
+          ageHours: null,
+          message: 'Not enough AllFantasy draft data yet',
+        })
       }
     } catch {
-      setLeagueAiAdp(draftUISettings?.aiAdpEnabled ? { enabled: true, entries: [], totalDrafts: 0, computedAt: null, stale: true, ageHours: null, message: 'AI ADP unavailable' } : null)
+      setLeagueAiAdp(
+        draftUISettings?.aiAdpEnabled
+          ? {
+              enabled: true,
+              entries: [],
+              totalDrafts: 0,
+              computedAt: null,
+              stale: true,
+              ageHours: null,
+              message: 'Not enough AllFantasy draft data yet',
+            }
+          : null,
+      )
     }
   }, [leagueId, draftUISettings?.aiAdpEnabled, useAllFantasyAdp, allFantasyAdpDraftMode])
 
@@ -3621,6 +3641,8 @@ export function DraftRoomPageClient({
     scheduleWarRoomFetch,
   ])
 
+  const draftSeasonYear = useMemo(() => new Date().getUTCFullYear(), [])
+
   const playerPoolNode = useMemo(
     () => (
       <SportAwareDraftRoom
@@ -3671,6 +3693,7 @@ export function DraftRoomPageClient({
               String(q.position).trim().toLowerCase() === String(p.position).trim().toLowerCase(),
           )
         }
+        draftSeasonYear={draftSeasonYear}
       />
     ),
     [
@@ -3703,6 +3726,7 @@ export function DraftRoomPageClient({
       presentationVariant,
       getDraftCopilotInsight,
       getAssistantRoomContext,
+      draftSeasonYear,
     ]
   )
 
@@ -4346,20 +4370,28 @@ export function DraftRoomPageClient({
               }
             }}
             onFixAction={(action) => {
-              // Slice G — Target A: the draft route does NOT host
-              // `LeagueSettingsModal` (that modal lives on the league
-              // dashboard `/league/[id]` route via `LeagueShell`). Auto-
-              // opening it from here would require either a navigation
-              // call (forbidden by the unified-state contract locked in
-              // Commit E) or mounting the league shell inside the draft
-              // room (a separate refactor).
-              //
-              // For now we forward the canonical action key to the
-              // settings-fix-action event bus and close the wizard. The
-              // commissioner closes the draft tab and walks to League →
-              // Settings → {panel} themselves. Phase 2 will pick up
-              // `af-pre-draft-fix-action` on the dashboard side and deep-
-              // link into the right panel automatically.
+              if (action === 'configure_roster' || action === 'configure_scoring') {
+                void (async () => {
+                  try {
+                    const res = await fetch(
+                      `/api/leagues/${encodeURIComponent(leagueId)}/draft/fix-setup`,
+                      {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          scope: action === 'configure_roster' ? 'roster' : 'scoring',
+                        }),
+                      },
+                    )
+                    if (res.ok && typeof window !== 'undefined') {
+                      window.dispatchEvent(new CustomEvent('af-pre-draft-checklist-refresh'))
+                    }
+                  } catch {
+                    /* non-fatal */
+                  }
+                })()
+                return
+              }
               const panelByAction: Record<string, string> = {
                 invite_managers: 'invite',
                 set_draft_order: 'draft',
@@ -4918,16 +4950,18 @@ export function DraftRoomPageClient({
               the on-the-clock cell in DraftBoard now carry that information. */}
           <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5">
             <div className="flex min-h-[120px] min-w-0 flex-1 flex-col overflow-hidden lg:min-h-0">
-              <div className="shrink-0">
-                <DraftTeamStrip
-                  teamCount={safeBoardTeamCount}
-                  slotOrder={slotOrder}
-                  teamMetaByRoster={teamMetaByRoster}
-                  currentUserRosterId={currentUserRosterId ?? null}
-                  onClockRosterId={currentPick?.rosterId ?? null}
-                  canInvite={isCommissioner}
-                />
-              </div>
+              {session?.draftType === 'auction' ? (
+                <div className="shrink-0">
+                  <DraftTeamStrip
+                    teamCount={safeBoardTeamCount}
+                    slotOrder={slotOrder}
+                    teamMetaByRoster={teamMetaByRoster}
+                    currentUserRosterId={currentUserRosterId ?? null}
+                    onClockRosterId={currentPick?.rosterId ?? null}
+                    canInvite={isCommissioner}
+                  />
+                </div>
+              ) : null}
               <div className="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none]">
                 <DraftBoard
                   picks={session.picks ?? []}
@@ -5005,7 +5039,11 @@ export function DraftRoomPageClient({
         the popup body now, so power users still have one-click access to
         starter balance / positional mix / AI guidance, but the layout reclaims
         that left column for the player table. */}
-    <WarRoomPopup hasNewIntel={warRoomHasNewIntel} triggerLabel="War Room">
+    <WarRoomPopup
+      hasNewIntel={warRoomHasNewIntel}
+      triggerLabel="War Room"
+      triggerPosition={presentationVariant === 'redraft_snake' ? 'bottom-left' : 'bottom-right'}
+    >
       <DraftTeamPanel {...draftTeamPanelProps} redraftStarterHints={redraftStarterHints} />
     </WarRoomPopup>
     <DraftRoomSettingsModal
@@ -5206,6 +5244,7 @@ export function DraftRoomPageClient({
         badgeCount={draftHelperBadgeCount}
         hasContent={hasDraftHelperData}
         onClick={() => floatingHelperState.setVisible(true)}
+        anchor={presentationVariant === 'redraft_snake' ? 'bottom-left' : 'bottom-right'}
       />
     )}
 

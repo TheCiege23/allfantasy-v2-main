@@ -65,7 +65,22 @@ Keys documented in `scripts/draft-env-check.mjs` include `DATABASE_URL`, `NEXTAU
 4. **Start** the draft from commissioner / league flow so a **`DraftSession`** exists and you obtain a **`draftId`**.
 5. Open **`/draft/room/<draftId>`** (or navigate from league UI).
 
+**Dashboard → league hub (embedded):** On **`/dashboard`**, click a league in **My Leagues**. The URL should become **`/dashboard?leagueId=<id>`**. The **center panel** should show the **full league hub** (same hub as standalone **`/league/[id]`**, loaded inline)—draft tabs/cards, league fill, draft type/date/timer, etc. **Do not** expect a separate required step like “Open full league hub”; chat stays on the left (defaults to league chat) and My Leagues stays on the right. Use the **Draft** tab/card in the **center panel** to reach **`/draft/room/<draftId>`** when a draft exists. An optional **Open full page** link remains secondary if you need the standalone league route.
+
 Document your **league name**, **`draftId`**, **`leagueId`**, sport, timer, and users in §4 so runs are repeatable.
+
+### 2.5 Troubleshooting — Pre-Draft Checklist blocks draft start
+
+The draft engine intentionally refuses to start until validation passes (`DraftValidationOrchestrator`). Typical failures:
+
+| Check | What it means | What to do |
+|-------|----------------|------------|
+| Roster Configuration | No persisted roster slot layout on the league row | As **commissioner**, in the checklist modal click **Fix** next to Roster Configuration — this applies default roster slots from the league’s sport template. Then **Refresh**. |
+| Scoring Settings | No scoring format / preset on the league | Click **Fix** next to Scoring Settings — applies the default scoring preset for that sport. Then **Refresh**. |
+
+New leagues created after this fix should receive roster + scoring defaults automatically during post-create bootstrap. **Do not** bypass or disable the checklist.
+
+If fixes still fail, verify the league row in admin/tools: `League.scoring` / `scoringPresetId`, and roster slots derived from the roster template. Do not hand-edit production DB without understanding downstream scoring/roster engines.
 
 ---
 
@@ -112,6 +127,26 @@ Check each box when verified.
 - [ ] “On the clock” team/roster is identifiable.
 - [ ] **ADP** and **AI ADP** show as **separate** columns/labels where enabled.
 - [ ] No accidental **mock-demo** UI for **live** sessions (live vs mock is gated in `DraftRoomPage`—confirm you used **live** `draftId`).
+
+### UX. Draft board & queue hierarchy (snake / linear live room, premium redraft)
+
+- [ ] Draft board shows **one** team/manager header row aligned with pick columns (snake/linear: no separate avatar strip above the grid; auction may still show the overview strip).
+- [ ] Round labels remain on the left; on-clock / current pick highlight still obvious.
+- [ ] **Queue** tab: search, filters, and the queued player list are visible **without** expanding secondary sections.
+- [ ] **Draft Intelligence** is **collapsed by default** (expand to confirm recommendations still render).
+- [ ] **Queue & AI options** is **collapsed by default**; after expanding, AI reorder + autopick / away toggles still work.
+- [ ] **Global Chimmy** floating action button is **not** shown on `/draft/*` (use in-room helper / tabs instead — avoids covering the board or queue rail).
+- [ ] **War Room** trigger sits **bottom-left** on premium redraft snake so it does not stack on the right-hand queue corner.
+
+### Player pool — rookies, positions, ADP (data readiness)
+
+- [ ] **Rookies only** uses explicit + inferred rookie signals (`years_exp`, flags, draft year vs season) — not a dead-end when metadata exists on rows.
+- [ ] If **no rookies** appear with Rookies only on, the empty state explains **why** (no rookie metadata vs none for this season vs other filters).
+- [ ] **Imported ADP** (**ADP** column) stays separate from **AllFantasy / AI ADP** — verify both labels and tooltips.
+- [ ] When AI ADP has no snapshot yet, copy reads **“Not enough AllFantasy draft data yet”** (not alarming “data not ready”), without overwriting system ADP.
+- [ ] **Low sample** dot on AI ADP still appears when the segment is thin.
+- [ ] Position pills: **K** counts **PK/K**, **DST** counts **DEF/D/ST**, **FLEX** counts **RB/WR/TE** — spot-check counts vs visible rows.
+- [ ] If a major NFL position pill shows **0** but the pool clearly has players, treat as an **import / normalization gap** (dev-only console diagnostics may log counts).
 
 ### B. Two-manager live pick flow
 

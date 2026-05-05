@@ -26,6 +26,16 @@ import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { isRookieEligibleForFilter, isVetEligibleForFilter } from '@/lib/draft-room/rookieFilterPredicate'
 import { sleeperPoolStatOptionsFromPositionFilter } from '@/lib/draft-room/sleeperPoolTableLayout'
+import { getDraftRoomRookieDataState } from '@/lib/draft-room/draftPlayerRookie'
+import {
+  getDraftRoomPositionGroupCounts,
+  poolPlayerMatchesPositionPill,
+} from '@/lib/draft-room/draftPoolPositionGroups'
+import {
+  logDraftPoolAdpDiagnosticsIfNeeded,
+  logDraftPoolPositionDiagnosticsIfNeeded,
+} from '@/lib/draft-room/draftPoolDiagnostics'
+import { formatAiAdpUnavailableBanner } from '@/lib/draft-room/adpReadinessCopy'
 
 const PLAYER_ROW_ESTIMATE_HEIGHT = 76
 /** Redraft rows use slightly taller estimate (chips + stats). */
@@ -139,6 +149,8 @@ export type PlayerPanelProps = {
   getAssistantRoomContext?: (player: PlayerEntry) => DraftAssistantRoomContext | null
   /** Mark rows that match the user's draft queue (best-effort name + position). */
   isPlayerQueued?: (player: PlayerEntry) => boolean
+  /** Calendar season for rookie-class inference (NFL/NCAAF draft year match). Defaults internally if omitted. */
+  draftSeasonYear?: number
 }
 
 /** D.3 — re-exposed from SleeperPoolSort. Kept as `SortKey` for legacy call sites. */
@@ -354,6 +366,7 @@ function PlayerPanelInner({
   getDraftCopilotInsight,
   getAssistantRoomContext,
   isPlayerQueued,
+  draftSeasonYear,
 }: PlayerPanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
@@ -414,16 +427,10 @@ function PlayerPanelInner({
       }
       return players.filter((p) => {
         if (isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds)) return false
-        const pos = String(p.position ?? '').trim().toUpperCase()
-        if (v === 'FLEX') return pos === 'RB' || pos === 'WR' || pos === 'TE'
-        if (v === 'IDP FLEX') return pos === 'DL' || pos === 'LB' || pos === 'DB'
-        if (v === 'OFFENSE') return pos === 'QB' || pos === 'RB' || pos === 'WR' || pos === 'TE'
-        // Bug-stab: NFL pool emits 'DEF' but the standard roster slot is 'DST';
-        // either pill must count both (and 'D/ST' if any legacy feed produced it).
-        if (v === 'DEF' || v === 'DST' || v === 'D/ST') {
-          return pos === 'DEF' || pos === 'DST' || pos === 'D/ST'
-        }
-        return pos === v
+        return poolPlayerMatchesPositionPill(p.position, filterValue, {
+          sport,
+          formatType,
+        })
       }).length
     }
     return positionOptions.map((opt) => {
@@ -431,9 +438,11 @@ function PlayerPanelInner({
       // Same alias group as the available-count above: DEF/DST/D/ST
       // pillside drafted total should sum across all defense rows.
       const draftedCount =
-        k === 'DEF' || k === 'DST' || k === 'D/ST'
-          ? (draftedByPos.DEF ?? 0) + (draftedByPos.DST ?? 0) + (draftedByPos['D/ST'] ?? 0)
-          : (draftedByPos[k] ?? 0)
+        k === 'K'
+          ? (draftedByPos.K ?? 0) + (draftedByPos.PK ?? 0)
+          : k === 'DEF' || k === 'DST' || k === 'D/ST'
+            ? (draftedByPos.DEF ?? 0) + (draftedByPos.DST ?? 0) + (draftedByPos['D/ST'] ?? 0)
+            : (draftedByPos[k] ?? 0)
       return {
         value: opt.value,
         label: opt.label,
@@ -441,7 +450,64 @@ function PlayerPanelInner({
         available: available(String(opt.value)),
       }
     })
-  }, [positionOptions, players, currentRoster, draftedNames, draftedPlayerIds])
+  }, [positionOptions, players, currentRoster, draftedNames, draftedPlayerIds, sport, formatType])
+
+  const rookieFilterContext = useMemo(
+    () => ({
+      sport,
+      seasonYear: draftSeasonYear,
+      devyEnabled: devyConfig?.enabled,
+      c2cEnabled: c2cConfig?.enabled,
+    }),
+    [sport, draftSeasonYear, devyConfig?.enabled, c2cConfig?.enabled],
+  )
+
+  const rookieDataState = useMemo(
+    () => getDraftRoomRookieDataState(players, rookieFilterContext),
+    [players, rookieFilterContext],
+  )
+
+  const hasSecondaryPoolFilters = useMemo(
+    () =>
+      searchQuery.trim().length > 0 ||
+      positionFilter !== 'All' ||
+      teamFilter !== 'All' ||
+      poolFilter !== 'All' ||
+      watchlistOnly ||
+      vetsOnly ||
+      !hideDrafted,
+    [searchQuery, positionFilter, teamFilter, poolFilter, watchlistOnly, vetsOnly, hideDrafted],
+  )
+
+  useEffect(() => {
+    if (players.length === 0) return
+    const undrafted = players.filter((p) => !isPlayerDraftedEntry(p, draftedNames, draftedPlayerIds))
+    const counts = getDraftRoomPositionGroupCounts(undrafted, { sport, formatType })
+    logDraftPoolPositionDiagnosticsIfNeeded({
+      sport,
+      leagueId: leagueId ?? null,
+      totalPlayers: undrafted.length,
+      counts,
+      samplePositions: undrafted.slice(0, 40).map((p) => String(p.position ?? '')),
+    })
+    let sys = 0
+    let ai = 0
+    let neither = 0
+    for (const p of undrafted) {
+      const hasS = p.adp != null && Number.isFinite(Number(p.adp))
+      const hasA = p.aiAdp != null && Number.isFinite(Number(p.aiAdp))
+      if (hasS) sys += 1
+      if (hasA) ai += 1
+      if (!hasS && !hasA) neither += 1
+    }
+    logDraftPoolAdpDiagnosticsIfNeeded({
+      sport,
+      leagueId: leagueId ?? null,
+      withSystemAdp: sys,
+      withAiAdp: ai,
+      withNeither: neither,
+    })
+  }, [players, draftedNames, draftedPlayerIds, sport, formatType, leagueId])
 
   const teamOptions = useMemo(() => {
     const teams = new Set(players.map((p) => p.team).filter(Boolean) as string[])
@@ -497,12 +563,7 @@ function PlayerPanelInner({
       list = list.filter((p) => watchlistKeys.has(watchKeyFor(p)))
     }
     if (rookiesOnly) {
-      list = list.filter((p) =>
-        isRookieEligibleForFilter(p, {
-          devyEnabled: devyConfig?.enabled,
-          c2cEnabled: c2cConfig?.enabled,
-        }),
-      )
+      list = list.filter((p) => isRookieEligibleForFilter(p, rookieFilterContext))
     }
     // Commit N — Vets Only filter. Predicate is evidence-required (not a
     // simple negation of rookie) so rows with missing metadata don't get
@@ -564,21 +625,8 @@ function PlayerPanelInner({
     useAiAdp,
     sport,
     sleeperStatOpts,
+    rookieFilterContext,
   ])
-
-  /** D.7 — true when at least one row in the upstream pool has known years_exp
-   * metadata (or is a devy/college entry, which carries its own class-year
-   * signal). When false and the user toggles "Rookies Only", we surface a
-   * "Rookie data unavailable" message instead of a generic empty state. */
-  const rookieDataAvailable = useMemo(() => {
-    return players.some(
-      (p) =>
-        p.yearsExp != null ||
-        p.isRookie === true ||
-        p.isDevy === true ||
-        (p.classYearLabel != null && String(p.classYearLabel).trim() !== ''),
-    )
-  }, [players])
 
   const selectedIsWatchlisted = selectedPlayer ? watchlistKeys.has(watchKeyFor(selectedPlayer)) : false
 
@@ -941,8 +989,12 @@ function PlayerPanelInner({
             </label>
           )}
           {aiAdpUnavailable && (
-            <span className="text-[10px] text-amber-400/90" title={aiAdpUnavailableMessage ?? undefined}>
-              AI ADP data not ready
+            <span
+              className="text-[10px] text-amber-400/90"
+              data-testid="draft-ai-adp-unavailable-banner"
+              title={formatAiAdpUnavailableBanner(aiAdpUnavailableMessage) ?? undefined}
+            >
+              {formatAiAdpUnavailableBanner(aiAdpUnavailableMessage)}
             </span>
           )}
           {useAiAdp && aiAdpStaleWarning && !aiAdpUnavailable && (
@@ -1168,21 +1220,53 @@ function PlayerPanelInner({
           </ul>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-14 text-center">
-            {rookiesOnly && !rookieDataAvailable ? (
+            {players.length === 0 ? (
               <>
                 <p
                   className="text-sm font-medium text-white/75"
-                  data-testid="draft-rookie-data-unavailable"
+                  data-testid="draft-pool-empty-unloaded"
                 >
-                  Rookie data unavailable for this pool.
+                  No players loaded for this pool.
                 </p>
                 <p className="max-w-xs text-xs text-white/45">
-                  We couldn’t resolve first-year status for any player in this pool. Toggle Rookies Only off to see the full list.
+                  Wait for the pool to finish loading, or refresh the draft room if this persists.
+                </p>
+              </>
+            ) : rookiesOnly && !hasSecondaryPoolFilters && rookieDataState.reason === 'no_rookie_metadata' ? (
+              <>
+                <p
+                  className="text-sm font-medium text-white/75"
+                  data-testid="draft-rookie-metadata-missing"
+                >
+                  Rookie metadata is not available for this pool yet.
+                </p>
+                <p className="max-w-xs text-xs text-white/45">
+                  We could not read rookie signals (experience, flags, or draft year) on these rows. Toggle Rookies Only off to see the full list.
                 </p>
                 <button
                   type="button"
                   onClick={() => setRookiesOnly(false)}
                   data-testid="draft-rookie-data-unavailable-clear"
+                  className="rounded-full border border-violet-400/35 bg-violet-500/12 px-4 py-2 text-xs font-medium text-violet-100 transition hover:bg-violet-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
+                >
+                  Turn off Rookies Only
+                </button>
+              </>
+            ) : rookiesOnly && !hasSecondaryPoolFilters && rookieDataState.reason === 'no_rookies_for_context' ? (
+              <>
+                <p
+                  className="text-sm font-medium text-white/75"
+                  data-testid="draft-rookie-none-for-context"
+                >
+                  No rookies found for this draft context.
+                </p>
+                <p className="max-w-xs text-xs text-white/45">
+                  The pool has rookie signals, but no players matched as rookies for this sport/season. Toggle Rookies Only off to see everyone.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setRookiesOnly(false)}
+                  data-testid="draft-rookie-none-for-context-clear"
                   className="rounded-full border border-violet-400/35 bg-violet-500/12 px-4 py-2 text-xs font-medium text-violet-100 transition hover:bg-violet-500/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/45"
                 >
                   Turn off Rookies Only

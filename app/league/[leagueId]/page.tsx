@@ -42,6 +42,11 @@ export default async function LeaguePage({
     const sp = searchParams ? await searchParams : {}
         const zc = sp.zombieChimmy
     const zombieChimmyPrefill = typeof zc === 'string' ? zc : Array.isArray(zc) ? zc[0] ?? null : null
+    const embedRaw = sp.embed
+    const embedMode =
+          embedRaw === '1' ||
+          embedRaw === 'true' ||
+          (Array.isArray(embedRaw) && (embedRaw[0] === '1' || embedRaw[0] === 'true'))
 
   let session: {
         user?: { id?: string; name?: string | null; email?: string | null; image?: string | null }
@@ -59,7 +64,8 @@ export default async function LeaguePage({
     }
 
   if (!session?.user?.id) {
-        redirect(`/login?callbackUrl=${encodeURIComponent(`/league/${leagueId}`)}`)
+        const leaguePath = embedMode ? `/league/${leagueId}?embed=1` : `/league/${leagueId}`
+        redirect(`/login?callbackUrl=${encodeURIComponent(leaguePath)}`)
   }
 
   const userId = session.user.id
@@ -255,6 +261,7 @@ export default async function LeaguePage({
                                   dispersalDraftInProgress={null}
                                   seasonSnapshot={seasonSnapshot}
                                   leagueDashboard={leagueDashboard}
+                                  embedMode={embedMode}
                                 />
               </div>
             )

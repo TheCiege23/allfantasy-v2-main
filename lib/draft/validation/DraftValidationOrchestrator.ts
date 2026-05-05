@@ -14,6 +14,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 
 export type ValidationStatus = 'pass' | 'fail' | 'warning'
 
@@ -155,15 +156,13 @@ export class DraftValidationOrchestrator {
   }
 
   /**
-   * Check 3: Roster shape is configured. Sourced from `League.rosterSize` +
-   * `League.starters` (a JSON map of position → count). The legacy code path
-   * tried `LeagueSettings.starterSlots` / `LeagueSettings.benchSlots` — those
-   * fields do not exist on the current Prisma schema.
+   * Check 3: Roster shape is configured — aligned with {@link getEffectiveLeagueRosterTemplate}
+   * (`LeagueRosterConfig`, `League.starters`, `settings.rosterPositions`, sport-specific `*_roster_config`).
    */
   private static async checkRosterSlotsConfigured(leagueId: string): Promise<ValidationResult> {
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
-      select: { rosterSize: true, starters: true },
+      select: { id: true },
     })
 
     if (!league) {
@@ -175,38 +174,53 @@ export class DraftValidationOrchestrator {
       }
     }
 
-    const starters = (league.starters ?? {}) as Record<string, unknown>
-    const startersTotal = Object.values(starters).reduce<number>(
-      (sum, count) => sum + (Number(count) || 0),
-      0,
-    )
-    const totalSlots = (league.rosterSize ?? 0) + startersTotal
+    try {
+      const eff = await getEffectiveLeagueRosterTemplate(leagueId)
+      const totalSlots = eff.template.slots.reduce(
+        (sum, s) =>
+          sum +
+          (Number(s.starterCount) || 0) +
+          (Number(s.benchCount) || 0) +
+          (Number(s.reserveCount) || 0) +
+          (Number(s.taxiCount) || 0) +
+          (Number(s.devyCount) || 0),
+        0,
+      )
 
-    if (totalSlots > 0) {
+      if (eff.hasPersistedRosterSchema && totalSlots > 0) {
+        return {
+          key: 'roster_slots',
+          label: `Roster Configuration (${totalSlots} slots)`,
+          status: 'pass',
+        }
+      }
+
       return {
         key: 'roster_slots',
-        label: `Roster Configuration (${totalSlots} slots)`,
-        status: 'pass',
+        label: 'Roster Configuration',
+        status: 'fail',
+        message: 'No roster slots configured',
+        fixAction: 'configure_roster',
       }
-    }
-
-    return {
-      key: 'roster_slots',
-      label: 'Roster Configuration',
-      status: 'fail',
-      message: 'No roster slots configured',
-      fixAction: 'configure_roster',
+    } catch {
+      return {
+        key: 'roster_slots',
+        label: 'Roster Configuration',
+        status: 'fail',
+        message: 'Could not resolve roster template',
+        fixAction: 'configure_roster',
+      }
     }
   }
 
   /**
-   * Check 4: Scoring setting is present. Sourced from `League.scoring` —
-   * `LeagueSettings.scoringFormat` does not exist on this branch's schema.
+   * Check 4: Scoring — `League.scoring`, `League.scoringPresetId`, or merged `settings.scoring_format` /
+   * `settings.scoring_format_type` (canonical create stores presets on the league row + JSON settings).
    */
   private static async checkScoringSettingsPresent(leagueId: string): Promise<ValidationResult> {
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
-      select: { scoring: true },
+      select: { scoring: true, scoringPresetId: true, settings: true },
     })
 
     if (!league) {
@@ -218,10 +232,24 @@ export class DraftValidationOrchestrator {
       }
     }
 
-    if (league.scoring && league.scoring.trim().length > 0) {
+    const settings = (league.settings as Record<string, unknown> | null) ?? {}
+    const fromSettingsFormat =
+      typeof settings.scoring_format === 'string' && settings.scoring_format.trim().length > 0
+        ? settings.scoring_format.trim()
+        : typeof settings.scoring_format_type === 'string' && settings.scoring_format_type.trim().length > 0
+          ? settings.scoring_format_type.trim()
+          : ''
+
+    const preset = league.scoringPresetId?.trim() ?? ''
+    const column = league.scoring?.trim() ?? ''
+
+    const effective = column || preset || fromSettingsFormat
+
+    if (effective) {
+      const label = column || preset || fromSettingsFormat
       return {
         key: 'scoring_settings',
-        label: `Scoring: ${league.scoring}`,
+        label: `Scoring: ${label}`,
         status: 'pass',
       }
     }

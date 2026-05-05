@@ -1,7 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
-import { ListOrdered, GripVertical, X, Zap, UserMinus, Play } from 'lucide-react'
+import { ListOrdered, GripVertical, X, Zap, UserMinus, Play, ChevronDown } from 'lucide-react'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
@@ -199,91 +199,191 @@ export function QueuePanel({
           <option value="name">Sort: Name</option>
         </select>
       </div>
-      <div className="flex flex-wrap gap-2 border-b border-white/8 p-2.5">
-        {onAiReorder && (
-          <>
-            {onAiReorderEnabledChange && (
-              <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-cyan-100/85 touch-manipulation">
-                <input
-                  type="checkbox"
-                  checked={aiReorderEnabled}
-                  onChange={(e) => {
+      {rs ? (
+        <details className="group border-b border-white/8" data-testid="draft-queue-ai-options">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-2.5 py-2 text-[11px] font-semibold uppercase tracking-wide text-cyan-100/90 [&::-webkit-details-marker]:hidden">
+            <span>Queue &amp; AI options</span>
+            <ChevronDown
+              className="h-4 w-4 shrink-0 text-cyan-200/75 transition group-open:rotate-180"
+              aria-hidden
+            />
+          </summary>
+          <div className="flex flex-wrap gap-2 px-2.5 pb-2.5 pt-0">
+            {onAiReorder && (
+              <>
+                {onAiReorderEnabledChange && (
+                  <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-cyan-100/85 touch-manipulation">
+                    <input
+                      type="checkbox"
+                      checked={aiReorderEnabled}
+                      onChange={(e) => {
+                        if (analyticsLeagueId) {
+                          sendProductAnalyticsBeacon(DRAFT_ROOM.AI_REORDER_EXPLAIN_TOGGLE, {
+                            leagueId: analyticsLeagueId,
+                            enabled: e.target.checked,
+                          })
+                        }
+                        onAiReorderEnabledChange(e.target.checked)
+                      }}
+                      data-testid="draft-queue-ai-reorder-toggle"
+                      className="rounded border-cyan-300/40 w-4 h-4"
+                    />
+                    AI explanation for reorder
+                  </label>
+                )}
+                <button
+                  type="button"
+                  onClick={() => {
                     if (analyticsLeagueId) {
-                      sendProductAnalyticsBeacon(DRAFT_ROOM.AI_REORDER_EXPLAIN_TOGGLE, {
+                      sendProductAnalyticsBeacon(DRAFT_ROOM.AI_QUEUE_REORDER, {
                         leagueId: analyticsLeagueId,
-                        enabled: e.target.checked,
+                        queueLen: queue.length,
                       })
                     }
-                    onAiReorderEnabledChange(e.target.checked)
+                    onAiReorder()
                   }}
-                  data-testid="draft-queue-ai-reorder-toggle"
-                  className="rounded border-cyan-300/40 w-4 h-4"
-                />
-                AI explanation for reorder
-              </label>
+                  disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
+                  data-testid="draft-queue-ai-reorder"
+                  className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2.5 text-xs text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50 touch-manipulation"
+                >
+                  <Zap className="h-3.5 w-3.5" />
+                  {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
+                </button>
+              </>
             )}
-            <button
-              type="button"
-              onClick={() => {
+            <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
+              <input
+                type="checkbox"
+                checked={autoPickFromQueue}
+                onChange={(e) => {
+                  if (analyticsLeagueId) {
+                    sendProductAnalyticsBeacon(DRAFT_ROOM.AUTOPICK_QUEUE, {
+                      leagueId: analyticsLeagueId,
+                      enabled: e.target.checked,
+                    })
+                  }
+                  onAutoPickFromQueueChange(e.target.checked)
+                }}
+                disabled={!autoPickEnabled}
+                data-testid="draft-queue-autopick-toggle"
+                className="rounded border-white/20 w-4 h-4"
+              />
+              Auto-pick from queue
+            </label>
+            <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
+              <input
+                type="checkbox"
+                checked={awayMode}
+                onChange={(e) => {
+                  if (analyticsLeagueId) {
+                    sendProductAnalyticsBeacon(DRAFT_ROOM.AWAY_MODE, {
+                      leagueId: analyticsLeagueId,
+                      enabled: e.target.checked,
+                    })
+                  }
+                  onAwayModeChange(e.target.checked)
+                }}
+                disabled={!autoPickEnabled}
+                data-testid="draft-queue-away-toggle"
+                className="rounded border-white/20 w-4 h-4"
+              />
+              <UserMinus className="h-3.5 w-3.5" />
+              Away mode
+            </label>
+          </div>
+        </details>
+      ) : (
+        <div className="flex flex-wrap gap-2 border-b border-white/8 p-2.5">
+          {onAiReorder && (
+            <>
+              {onAiReorderEnabledChange && (
+                <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-cyan-100/85 touch-manipulation">
+                  <input
+                    type="checkbox"
+                    checked={aiReorderEnabled}
+                    onChange={(e) => {
+                      if (analyticsLeagueId) {
+                        sendProductAnalyticsBeacon(DRAFT_ROOM.AI_REORDER_EXPLAIN_TOGGLE, {
+                          leagueId: analyticsLeagueId,
+                          enabled: e.target.checked,
+                        })
+                      }
+                      onAiReorderEnabledChange(e.target.checked)
+                    }}
+                    data-testid="draft-queue-ai-reorder-toggle"
+                    className="rounded border-cyan-300/40 w-4 h-4"
+                  />
+                  AI explanation for reorder
+                </label>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  if (analyticsLeagueId) {
+                    sendProductAnalyticsBeacon(DRAFT_ROOM.AI_QUEUE_REORDER, {
+                      leagueId: analyticsLeagueId,
+                      queueLen: queue.length,
+                    })
+                  }
+                  onAiReorder()
+                }}
+                disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
+                data-testid="draft-queue-ai-reorder"
+                className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2.5 text-xs text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50 touch-manipulation"
+              >
+                <Zap className="h-3.5 w-3.5" />
+                {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
+              </button>
+            </>
+          )}
+          <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
+            <input
+              type="checkbox"
+              checked={autoPickFromQueue}
+              onChange={(e) => {
                 if (analyticsLeagueId) {
-                  sendProductAnalyticsBeacon(DRAFT_ROOM.AI_QUEUE_REORDER, {
+                  sendProductAnalyticsBeacon(DRAFT_ROOM.AUTOPICK_QUEUE, {
                     leagueId: analyticsLeagueId,
-                    queueLen: queue.length,
+                    enabled: e.target.checked,
                   })
                 }
-                onAiReorder()
+                onAutoPickFromQueueChange(e.target.checked)
               }}
-              disabled={aiReorderLoading || !aiReorderEnabled || queue.length < 2}
-              data-testid="draft-queue-ai-reorder"
-              className="min-h-[44px] inline-flex items-center gap-1.5 rounded-xl border border-cyan-300/35 bg-cyan-500/10 px-3 py-2.5 text-xs text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50 touch-manipulation"
-            >
-              <Zap className="h-3.5 w-3.5" />
-              {aiReorderLoading ? 'Reordering…' : 'Auto reorder'}
-            </button>
-          </>
-        )}
-        <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
-          <input
-            type="checkbox"
-            checked={autoPickFromQueue}
-            onChange={(e) => {
-              if (analyticsLeagueId) {
-                sendProductAnalyticsBeacon(DRAFT_ROOM.AUTOPICK_QUEUE, {
-                  leagueId: analyticsLeagueId,
-                  enabled: e.target.checked,
-                })
-              }
-              onAutoPickFromQueueChange(e.target.checked)
-            }}
-            disabled={!autoPickEnabled}
-            data-testid="draft-queue-autopick-toggle"
-            className="rounded border-white/20 w-4 h-4"
-          />
-          Auto-pick from queue
-        </label>
-        <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
-          <input
-            type="checkbox"
-            checked={awayMode}
-            onChange={(e) => {
-              if (analyticsLeagueId) {
-                sendProductAnalyticsBeacon(DRAFT_ROOM.AWAY_MODE, {
-                  leagueId: analyticsLeagueId,
-                  enabled: e.target.checked,
-                })
-              }
-              onAwayModeChange(e.target.checked)
-            }}
-            disabled={!autoPickEnabled}
-            data-testid="draft-queue-away-toggle"
-            className="rounded border-white/20 w-4 h-4"
-          />
-          <UserMinus className="h-3.5 w-3.5" />
-          Away mode
-        </label>
-      </div>
+              disabled={!autoPickEnabled}
+              data-testid="draft-queue-autopick-toggle"
+              className="rounded border-white/20 w-4 h-4"
+            />
+            Auto-pick from queue
+          </label>
+          <label className="min-h-[44px] flex cursor-pointer items-center gap-2 px-2 py-2 rounded-lg hover:bg-white/5 text-[11px] text-white/75 touch-manipulation">
+            <input
+              type="checkbox"
+              checked={awayMode}
+              onChange={(e) => {
+                if (analyticsLeagueId) {
+                  sendProductAnalyticsBeacon(DRAFT_ROOM.AWAY_MODE, {
+                    leagueId: analyticsLeagueId,
+                    enabled: e.target.checked,
+                  })
+                }
+                onAwayModeChange(e.target.checked)
+              }}
+              disabled={!autoPickEnabled}
+              data-testid="draft-queue-away-toggle"
+              className="rounded border-white/20 w-4 h-4"
+            />
+            <UserMinus className="h-3.5 w-3.5" />
+            Away mode
+          </label>
+        </div>
+      )}
       {!autoPickEnabled && (
-        <p className="border-b border-white/8 px-2 py-1.5 text-[10px] text-amber-200/90" data-testid="draft-queue-autopick-disabled-note">
+        <p
+          className={`border-b border-white/8 px-2 py-1 leading-snug ${
+            rs ? 'text-[9px] text-amber-200/75' : 'text-[10px] text-amber-200/90'
+          }`}
+          data-testid="draft-queue-autopick-disabled-note"
+        >
           Commissioner has disabled auto-pick for this draft.
         </p>
       )}

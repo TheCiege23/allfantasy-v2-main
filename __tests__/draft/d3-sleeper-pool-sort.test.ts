@@ -102,9 +102,9 @@ describe('D.3 — sortValueForKey reads the right field', () => {
     expect(sortValueForKey(cmcRb, 'bye')).toBe(9)
   })
 
-  it('aiAdp falls back to adp when aiAdp is null', () => {
+  it('aiAdp sort uses only AI ADP (no silent fallback to system ADP)', () => {
     const p = makePlayer({ name: 'X', adp: 100, aiAdp: null })
-    expect(sortValueForKey(p, 'aiAdp')).toBe(100)
+    expect(sortValueForKey(p, 'aiAdp')).toBeNull()
   })
 
   it('projected reads PPG (preserving the pre-D.3 toolbar semantic)', () => {

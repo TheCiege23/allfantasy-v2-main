@@ -225,6 +225,13 @@ export async function runLeagueBootstrap(
     // non-fatal — chain warms on first read if this fails
   })
 
+  try {
+    const { ensureLeagueDraftSetupDefaults } = await import('@/lib/league/ensureLeagueDraftSetupDefaults')
+    await ensureLeagueDraftSetupDefaults(leagueId, { scope: 'both' })
+  } catch {
+    /* non-fatal — pre-draft checklist columns may still be filled manually */
+  }
+
   return {
     roster: rosterResult,
     settings: settingsResult,

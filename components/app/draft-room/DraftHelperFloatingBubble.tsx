@@ -8,6 +8,8 @@ interface DraftHelperFloatingBubbleProps {
   onClick: () => void
   hasContent: boolean
   className?: string
+  /** Keep the helper reachable without covering the right-hand queue rail on premium layouts. */
+  anchor?: 'bottom-right' | 'bottom-left'
 }
 
 export function DraftHelperFloatingBubble({
@@ -15,14 +17,20 @@ export function DraftHelperFloatingBubble({
   onClick,
   hasContent,
   className,
+  anchor = 'bottom-right',
 }: DraftHelperFloatingBubbleProps) {
   if (!hasContent) return null
 
+  const corner =
+    anchor === 'bottom-left' ? 'fixed bottom-6 left-6 z-20' : 'fixed bottom-6 right-6 z-20'
+
   return (
     <button
+      type="button"
       onClick={onClick}
+      data-helper-anchor={anchor}
       className={cn(
-        'fixed bottom-6 right-6 z-20',
+        corner,
         'flex items-center justify-center',
         'w-14 h-14 rounded-full',
         'bg-gradient-to-br from-purple-600 to-purple-800 hover:from-purple-500 hover:to-purple-700',

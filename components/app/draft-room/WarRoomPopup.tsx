@@ -31,6 +31,11 @@ export interface WarRoomPopupProps {
   defaultOpen?: boolean
   /** Test id base — defaults to 'war-room-popup'. */
   testIdBase?: string
+  /**
+   * Anchor for the floating trigger + desktop panel so we do not stack on the queue rail (right).
+   * Defaults to bottom-right (legacy Sleeper-style).
+   */
+  triggerPosition?: 'bottom-right' | 'bottom-left'
 }
 
 const POPUP_OPEN_PREF_KEY = 'af:draft-warroom-popup-open'
@@ -41,6 +46,7 @@ export function WarRoomPopup({
   triggerLabel = 'War Room',
   defaultOpen = false,
   testIdBase = 'war-room-popup',
+  triggerPosition = 'bottom-right',
 }: WarRoomPopupProps) {
   const [open, setOpen] = useState(defaultOpen)
   const [acknowledgedIntel, setAcknowledgedIntel] = useState(false)
@@ -89,10 +95,18 @@ export function WarRoomPopup({
 
   const showBadge = hasNewIntel && !acknowledgedIntel && !open
 
+  const triggerCorner =
+    triggerPosition === 'bottom-left'
+      ? 'bottom-4 left-4'
+      : 'bottom-4 right-4'
+  const panelCorner =
+    triggerPosition === 'bottom-left'
+      ? 'sm:bottom-20 sm:left-4 sm:right-auto'
+      : 'sm:bottom-20 sm:right-4 sm:left-auto'
+
   return (
     <>
-      {/* Trigger button — fixed bottom-right corner. Always rendered so the
-          War Room is always one tap away. Sized at 56px (touch-friendly). */}
+      {/* Trigger button — fixed corner. Sized at 56px (touch-friendly). */}
       <button
         ref={triggerRef}
         type="button"
@@ -101,9 +115,10 @@ export function WarRoomPopup({
         aria-label={open ? `Close ${triggerLabel}` : `Open ${triggerLabel}`}
         title={triggerLabel}
         data-testid={`${testIdBase}-trigger`}
+        data-trigger-position={triggerPosition}
         data-open={open ? 'true' : 'false'}
         data-has-new-intel={showBadge ? 'true' : 'false'}
-        className={`fixed bottom-4 right-4 z-[60] inline-flex h-14 w-14 items-center justify-center rounded-full border-2 shadow-2xl shadow-black/50 transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${
+        className={`fixed ${triggerCorner} z-[60] inline-flex h-11 w-11 sm:h-14 sm:w-14 items-center justify-center rounded-full border-2 shadow-2xl shadow-black/50 transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${
           open
             ? 'border-cyan-400/55 bg-gradient-to-br from-cyan-500/30 to-violet-600/25 text-cyan-50'
             : 'border-white/20 bg-[linear-gradient(150deg,#0a1228_0%,#101a34_100%)] text-white/85 hover:border-cyan-400/35 hover:text-cyan-100'
@@ -131,7 +146,7 @@ export function WarRoomPopup({
           role="dialog"
           aria-label={triggerLabel}
           data-testid={testIdBase}
-          className="fixed inset-x-0 bottom-0 z-[55] flex h-[80vh] flex-col overflow-hidden border-t border-cyan-400/20 bg-[linear-gradient(180deg,#0a1228_0%,#060f20_100%)] shadow-2xl shadow-black/60 sm:bottom-20 sm:right-4 sm:left-auto sm:inset-x-auto sm:h-[min(560px,80vh)] sm:w-[min(380px,calc(100vw-2rem))] sm:rounded-xl sm:border"
+          className={`fixed inset-x-0 bottom-0 z-[55] flex h-[80vh] flex-col overflow-hidden border-t border-cyan-400/20 bg-[linear-gradient(180deg,#0a1228_0%,#060f20_100%)] shadow-2xl shadow-black/60 sm:inset-x-auto sm:h-[min(560px,80vh)] sm:w-[min(380px,calc(100vw-2rem))] sm:rounded-xl sm:border ${panelCorner}`}
         >
           <header className="flex shrink-0 items-center justify-between gap-2 border-b border-cyan-400/15 bg-[linear-gradient(90deg,rgba(8,18,40,0.95),rgba(6,14,30,0.92))] px-3 py-2">
             <div className="flex items-center gap-2">
