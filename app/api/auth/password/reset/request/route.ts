@@ -4,6 +4,7 @@ import { sha256Hex, makeToken } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { logPasswordResetAudit } from "@/lib/auth/password-reset-audit"
 import { getResendFromEmail } from "@/lib/resend-client"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export const runtime = "nodejs"
 
@@ -14,6 +15,28 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;")
+}
+
+function resolvePasswordResetAppBase(req: Request): string {
+  const requestOrigin = new URL(req.url).origin
+
+  if (process.env.NODE_ENV === "production") {
+    try {
+      const hostname = new URL(requestOrigin).hostname.toLowerCase()
+      if (hostname && hostname !== "localhost" && !hostname.endsWith(".vercel.app")) {
+        return requestOrigin
+      }
+    } catch {}
+
+    return getPublicSiteOrigin()
+  }
+
+  return (
+    process.env.NEXTAUTH_URL?.trim() ||
+    process.env.APP_BASE_URL?.trim() ||
+    process.env.APP_URL?.trim() ||
+    requestOrigin
+  )
 }
 
 export async function POST(req: Request) {
@@ -185,11 +208,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true }, { status: 200 })
   }
 
-  const appBase =
-    process.env.NEXTAUTH_URL?.trim() ||
-    process.env.APP_BASE_URL?.trim() ||
-    process.env.APP_URL?.trim() ||
-    new URL(req.url).origin
+  const appBase = resolvePasswordResetAppBase(req)
 
   const nextPath = returnTo && returnTo.startsWith("/") ? returnTo : "/dashboard"
   const resetUrl = `${appBase}/reset-password?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent(nextPath)}`
