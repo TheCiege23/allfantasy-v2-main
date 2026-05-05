@@ -50,6 +50,8 @@ export interface ResponsiveNavSystemProps {
   isAdmin: boolean
   userLabel: string | null
   children: React.ReactNode
+  /** Dashboard cleanup — hide the global desktop top nav + mobile bottom tabs on this route. */
+  hideHeader?: boolean
 }
 
 /**
@@ -61,6 +63,7 @@ export function ResponsiveNavSystem({
   isAdmin,
   userLabel,
   children,
+  hideHeader = false,
 }: ResponsiveNavSystemProps) {
   const router = useRouter()
   const pathname = usePathname() ?? ""
@@ -285,16 +288,18 @@ export function ResponsiveNavSystem({
 
   return (
     <>
-      <div className={mobileTopNavHidden ? "-translate-y-full transition-transform duration-200 lg:translate-y-0" : "translate-y-0 transition-transform duration-200"}>
-        <AppHeader
-          isAuthenticated={isAuthenticated}
-          isAdmin={isAdmin}
-          userLabel={userLabel}
-          mobileMenuOpen={mobileMenuOpen}
-          onOpenMobileMenu={() => setMobileMenuOpen(true)}
-          onOpenSearch={() => setSearchOpen(true)}
-        />
-      </div>
+      {hideHeader ? null : (
+        <div className={mobileTopNavHidden ? "-translate-y-full transition-transform duration-200 lg:translate-y-0" : "translate-y-0 transition-transform duration-200"}>
+          <AppHeader
+            isAuthenticated={isAuthenticated}
+            isAdmin={isAdmin}
+            userLabel={userLabel}
+            mobileMenuOpen={mobileMenuOpen}
+            onOpenMobileMenu={() => setMobileMenuOpen(true)}
+            onOpenSearch={() => setSearchOpen(true)}
+          />
+        </div>
+      )}
       <MobileNavDrawer
         open={mobileMenuOpen}
         onClose={() => setMobileMenuOpen(false)}
@@ -334,7 +339,7 @@ export function ResponsiveNavSystem({
           />
         </>
       ) : null}
-      {isAuthenticated ? <MobileBottomTabs /> : null}
+      {isAuthenticated && !hideHeader ? <MobileBottomTabs /> : null}
     </>
   )
 }

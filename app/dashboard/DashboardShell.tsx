@@ -540,6 +540,7 @@ export function DashboardShell({
           onLeaguesRefresh={onLeaguesRefresh}
           onLeagueRemoved={onLeagueRemoved}
           onRailCollapse={() => myLeaguesRail.setCollapsed(true)}
+          hideLeagueList
         />
       }
     >
@@ -715,6 +716,7 @@ export function DashboardShell({
                   onLeaguesRefresh={onLeaguesRefresh}
                   onLeagueRemoved={onLeagueRemoved}
                   onRailCollapse={() => myLeaguesRail.setCollapsed(true)}
+                  hideLeagueList
                 />
               </div>
             </div>

@@ -98,6 +98,8 @@ export type RightControlPanelLayoutProps = {
   onLeagueRemoved?: (leagueId: string) => void
   /** Desktop: collapse the My Leagues rail so the center workspace widens */
   onRailCollapse?: () => void
+  /** Dashboard cleanup — hide the MY LEAGUES list section while keeping the profile footer + gear menu. */
+  hideLeagueList?: boolean
 }
 
 export interface DashboardConnectedLeague extends UserLeague {

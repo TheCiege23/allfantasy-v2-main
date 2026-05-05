@@ -7,6 +7,8 @@ export interface GlobalShellClientProps {
   isAdmin: boolean
   userLabel: string | null
   children: React.ReactNode
+  /** Dashboard cleanup — hide the global top nav on this route only. */
+  hideHeader?: boolean
 }
 
 /**
@@ -17,12 +19,14 @@ export function GlobalShellClient({
   isAdmin,
   userLabel,
   children,
+  hideHeader = false,
 }: GlobalShellClientProps) {
   return (
     <ResponsiveNavSystem
       isAuthenticated={isAuthenticated}
       isAdmin={isAdmin}
       userLabel={userLabel}
+      hideHeader={hideHeader}
     >
       {children}
     </ResponsiveNavSystem>

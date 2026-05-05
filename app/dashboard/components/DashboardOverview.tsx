@@ -734,17 +734,33 @@ export function DashboardOverview({
           <button
             type="button"
             onClick={() => setChecklistExpanded(true)}
-            className="flex h-10 w-full cursor-pointer items-center justify-between rounded-xl border border-white/[0.07] bg-white/[0.04] px-4 text-[12px] text-white/50 transition hover:bg-white/[0.06]"
+            className="group relative flex h-10 w-full cursor-pointer items-center gap-3 overflow-hidden rounded-xl border border-white/[0.07] bg-white/[0.04] px-4 text-[12px] text-white/60 transition hover:border-white/12 hover:bg-white/[0.06]"
+            data-testid="dashboard-setup-collapsed"
           >
-            <span>
+            <span className="z-10 whitespace-nowrap text-white/70">
               {tInterpolate('dashboard.overview.setupCollapsed', { done: completedCount })}
             </span>
             <span
-              className="text-white/40 transition-transform"
+              className="z-10 ml-auto inline-flex items-center gap-1.5 text-white/40 transition-transform group-hover:text-white/70"
               aria-hidden
             >
+              <span className="text-[11px] font-medium tabular-nums">
+                {completedCount}/{checklistSteps.length}
+              </span>
               ›
             </span>
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 bottom-0 h-1 bg-white/[0.04]"
+            />
+            <span
+              aria-hidden
+              data-testid="dashboard-setup-progress-fill"
+              style={{
+                width: `${Math.round((completedCount / Math.max(1, checklistSteps.length)) * 100)}%`,
+              }}
+              className="pointer-events-none absolute bottom-0 left-0 h-1 bg-gradient-to-r from-cyan-400 via-cyan-300 to-violet-400 shadow-[0_0_8px_rgba(34,211,238,0.45)] transition-[width] duration-300"
+            />
           </button>
         )}
 
@@ -787,10 +803,24 @@ export function DashboardOverview({
               </Link>
               <Link
                 href="/brackets"
-                className="touch-manipulation inline-flex min-h-[48px] w-full items-center justify-center rounded-xl border border-white/20 px-3 py-2.5 text-sm font-semibold text-white active:bg-white/10 sm:w-auto sm:px-4 sm:py-2"
+                className="touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-white/15 px-3 py-2 text-[13px] font-semibold text-white/90 transition hover:border-white/30 hover:bg-white/[0.04] active:bg-white/10 sm:w-auto sm:px-3 sm:py-1.5"
                 data-testid="dashboard-brackets-link"
               >
                 {t('dashboard.overview.brackets')}
+              </Link>
+              <Link
+                href="/af-legacy"
+                className="touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-white/15 px-3 py-2 text-[13px] font-semibold text-white/90 transition hover:border-white/30 hover:bg-white/[0.04] active:bg-white/10 sm:w-auto sm:px-3 sm:py-1.5"
+                data-testid="dashboard-legacy-link"
+              >
+                Legacy
+              </Link>
+              <Link
+                href="/tools"
+                className="touch-manipulation inline-flex min-h-[44px] w-full items-center justify-center rounded-xl border border-white/15 px-3 py-2 text-[13px] font-semibold text-white/90 transition hover:border-white/30 hover:bg-white/[0.04] active:bg-white/10 sm:w-auto sm:px-3 sm:py-1.5"
+                data-testid="dashboard-tools-link"
+              >
+                Tools
               </Link>
             </div>
             {/* Dispersal drafts link removed from dashboard overview */}

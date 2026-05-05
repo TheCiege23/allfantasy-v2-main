@@ -167,10 +167,16 @@ export function TodayStrip({
           data-testid="today-waivers-chip"
           className={
             waiverChipHighlighted
-              ? 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1.5 text-[13px] text-cyan-400 transition hover:border-cyan-500/35 hover:bg-cyan-500/20'
-              : 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.08] bg-white/[0.06] px-3 py-1.5 text-[13px] text-white/75 transition hover:bg-white/[0.10]'
+              ? 'inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-cyan-500/35 bg-cyan-500/12 px-3 py-1.5 text-[13px] font-medium text-cyan-300 shadow-[0_0_12px_rgba(34,211,238,0.18)] transition hover:border-cyan-500/45 hover:bg-cyan-500/20'
+              : 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.06] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/55 transition hover:border-white/[0.12] hover:bg-white/[0.08] hover:text-white/80'
           }
         >
+          {waiverChipHighlighted ? (
+            <span aria-hidden className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300/55" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-cyan-300" />
+            </span>
+          ) : null}
           {waiverChipLabel}
         </button>
         {lineupChipState === 'clear' ? (
@@ -224,10 +230,16 @@ export function TodayStrip({
           data-testid="today-trades-chip"
           className={
             pendingTradeCount > 0
-              ? 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/25 bg-amber-500/10 px-3 py-1.5 text-[13px] text-amber-400 transition hover:border-amber-500/35 hover:bg-amber-500/20'
-              : 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.08] bg-white/[0.06] px-3 py-1.5 text-[13px] text-white/75 transition hover:bg-white/[0.10]'
+              ? 'inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-amber-500/35 bg-amber-500/12 px-3 py-1.5 text-[13px] font-medium text-amber-300 shadow-[0_0_12px_rgba(245,158,11,0.18)] transition hover:border-amber-500/45 hover:bg-amber-500/20'
+              : 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.06] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/55 transition hover:border-white/[0.12] hover:bg-white/[0.08] hover:text-white/80'
           }
         >
+          {pendingTradeCount > 0 ? (
+            <span aria-hidden className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-300/55" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-300" />
+            </span>
+          ) : null}
           {tradeChipLabel}
         </button>
         {showInjuryChip ? (
@@ -264,10 +276,16 @@ export function TodayStrip({
           data-testid="today-war-room-chip"
           className={
             warRoomDecisionsToReview > 0
-              ? 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-violet-500/25 bg-violet-500/10 px-3 py-1.5 text-[13px] text-violet-200/95 transition hover:border-violet-500/35 hover:bg-violet-500/18'
-              : 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.08] bg-white/[0.06] px-3 py-1.5 text-[13px] text-white/75 transition hover:bg-white/[0.10]'
+              ? 'inline-flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-full border border-violet-500/35 bg-violet-500/12 px-3 py-1.5 text-[13px] font-medium text-violet-200 shadow-[0_0_12px_rgba(168,85,247,0.18)] transition hover:border-violet-500/45 hover:bg-violet-500/20'
+              : 'inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap rounded-full border border-white/[0.06] bg-white/[0.04] px-3 py-1.5 text-[13px] text-white/55 transition hover:border-white/[0.12] hover:bg-white/[0.08] hover:text-white/80'
           }
         >
+          {warRoomDecisionsToReview > 0 ? (
+            <span aria-hidden className="relative flex h-1.5 w-1.5 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-violet-300/55" />
+              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-violet-300" />
+            </span>
+          ) : null}
           {warRoomChipLabel}
         </button>
       </div>
