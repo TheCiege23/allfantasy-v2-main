@@ -300,6 +300,14 @@ export async function finalizeLegacyImportJob(
     data: { leagueVariant: 'legacy_summary' },
   }).catch((e: unknown) => console.error('[import] retroactive variant tag failed:', e))
 
+  // Final rank recomputation after all seasons + retroactive tagging. Per-season calls
+  // inside importLegacySeasonAtIndex skip rank calc when saved===0 for that year, and the
+  // retroactive variant flip can change which leagues count toward rank. One last pass
+  // ensures the user's persisted xp/tier reflects the final state of the import.
+  await calculateAndSaveRank(userId).catch((e: unknown) =>
+    console.error('[import] finalize rank calc failed:', e),
+  )
+
   await sendImportCompleteNotification(userId, jobId).catch((e: unknown) =>
     console.error('[import] notification failed:', e),
   )
