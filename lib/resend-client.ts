@@ -33,10 +33,22 @@ function getRequiredEnv(name: string): string {
   return value;
 }
 
-function getResendFromEmail(): string {
-  return (
+export function getResendFromEmail(): string {
+  const configuredFrom =
     process.env.RESEND_FROM?.trim() ||
-    "AllFantasy.ai <noreply@allfantasy.ai>"
+    process.env.RESEND_FROM_EMAIL?.trim() ||
+    "";
+
+  if (configuredFrom) {
+    return configuredFrom;
+  }
+
+  if (process.env.NODE_ENV !== "production") {
+    return "AllFantasy <onboarding@resend.dev>";
+  }
+
+  throw new Error(
+    "Missing sender identity. Set RESEND_FROM or RESEND_FROM_EMAIL in Vercel project settings."
   );
 }
 

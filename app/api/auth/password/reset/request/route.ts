@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma"
 import { sha256Hex, makeToken } from "@/lib/tokens"
 import { getClientIp, rateLimit } from "@/lib/rate-limit"
 import { logPasswordResetAudit } from "@/lib/auth/password-reset-audit"
+import { getResendFromEmail } from "@/lib/resend-client"
 
 export const runtime = "nodejs"
 
@@ -150,7 +151,8 @@ export async function POST(req: Request) {
     data: { userId: user.id, tokenHash, expiresAt },
   })
 
-  if (!process.env.RESEND_API_KEY?.trim()) {
+  const resendApiKey = process.env.RESEND_API_KEY?.trim() || ""
+  if (!resendApiKey) {
     console.error(
       "[password/reset/request] RESEND_API_KEY is not set — password reset emails will not be delivered. Add RESEND_API_KEY (and verify RESEND_FROM domain) in Vercel / .env.local.",
     )
@@ -161,6 +163,24 @@ export async function POST(req: Request) {
       email,
       ip,
       detail: { reason: "RESEND_API_KEY unset" },
+    })
+    return NextResponse.json({ ok: true }, { status: 200 })
+  }
+
+  let fromEmail = ""
+  try {
+    fromEmail = getResendFromEmail()
+  } catch (error) {
+    console.error("[password/reset/request] sender identity missing:", error)
+    void logPasswordResetAudit({
+      outcome: "email_provider_missing",
+      type: "email",
+      userId: user.id,
+      email,
+      ip,
+      detail: {
+        reason: error instanceof Error ? error.message : String(error),
+      },
     })
     return NextResponse.json({ ok: true }, { status: 200 })
   }
@@ -177,9 +197,9 @@ export async function POST(req: Request) {
 
   try {
     const { getResendClient } = await import("@/lib/resend-client")
-    const { client, fromEmail } = getResendClient()
+    const { client } = getResendClient()
     const result = await client.emails.send({
-      from: fromEmail || "AllFantasy.ai <noreply@allfantasy.ai>",
+      from: fromEmail,
       to: email,
       subject: "Reset your AllFantasy password",
       html: `<!DOCTYPE html>
@@ -214,7 +234,7 @@ export async function POST(req: Request) {
       userId: user.id,
       email,
       ip,
-      detail: { provider: "resend" },
+      detail: { provider: "resend", fromEmail },
     })
   } catch (error) {
     console.error("[pw-reset] email send failed:", error)
@@ -224,7 +244,11 @@ export async function POST(req: Request) {
       userId: user.id,
       email,
       ip,
-      detail: { provider: "resend", error: error instanceof Error ? error.message : String(error) },
+      detail: {
+        provider: "resend",
+        fromEmail,
+        error: error instanceof Error ? error.message : String(error),
+      },
     })
   }
 
