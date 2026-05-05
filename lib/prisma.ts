@@ -149,7 +149,77 @@ function normalizePrismaEngineForDatabaseUrl(databaseUrl: string): void {
   }
 }
 
+/**
+ * Build-phase stub: during `next build`'s static prerender, return a Proxy that
+ * answers every Prisma operation with an empty value. Without this, Server
+ * Components that hit the DB during prerender would attempt a real TCP connect
+ * to the noop fallback URL (postgresql://noop:noop@localhost:5432/noop), fail,
+ * and crash the build. At runtime the real Prisma client takes over via SSR.
+ *
+ * Read ops → null / []  |  count → 0  |  aggregate → {}  |  $transaction → runs
+ * its callback with the same stub. Pages that depend on real data will render
+ * an empty shell at build time and SSR with real data on first request.
+ */
+function createBuildPhaseStubClient(): ExtendedPrismaClient {
+  const noopAsync = async () => null;
+  const emptyArrayAsync = async () => [];
+  const zeroAsync = async () => 0;
+  const emptyObjectAsync = async () => ({});
+
+  const modelHandler: ProxyHandler<object> = {
+    get(_target, prop) {
+      const name = String(prop);
+      if (name === "findMany" || name === "groupBy") return emptyArrayAsync;
+      if (name === "count") return zeroAsync;
+      if (name === "aggregate") return emptyObjectAsync;
+      if (
+        name === "findUnique" ||
+        name === "findFirst" ||
+        name === "findUniqueOrThrow" ||
+        name === "findFirstOrThrow"
+      ) {
+        return noopAsync;
+      }
+      // Writes (create/update/delete/upsert/...) — should not be called during prerender.
+      // Return null instead of throwing so a stray write doesn't crash the build.
+      return noopAsync;
+    },
+  };
+
+  const stubClient: object = {};
+  const handler: ProxyHandler<object> = {
+    get(_target, prop) {
+      const name = String(prop);
+      if (name === "$transaction") {
+        return async (arg: unknown) => {
+          if (typeof arg === "function") {
+            return (arg as (tx: unknown) => Promise<unknown>)(stubProxy);
+          }
+          if (Array.isArray(arg)) return arg.map(() => null);
+          return null;
+        };
+      }
+      if (name === "$queryRaw" || name === "$queryRawUnsafe") return emptyArrayAsync;
+      if (name === "$executeRaw" || name === "$executeRawUnsafe") return zeroAsync;
+      if (name === "$connect" || name === "$disconnect") return async () => undefined;
+      if (name === "$on" || name === "$use") return () => undefined;
+      if (name === "$extends") return () => stubProxy;
+      // Default: treat any other top-level property as a Prisma model accessor.
+      return new Proxy({}, modelHandler);
+    },
+  };
+
+  const stubProxy = new Proxy(stubClient, handler);
+  return stubProxy as unknown as ExtendedPrismaClient;
+}
+
 function createPrismaClient() {
+  // Build-phase short-circuit. Prevents the prerender loop from opening a real
+  // socket to the noop URL when a Server Component queries the DB at build time.
+  if (process.env.NEXT_PHASE === "phase-production-build") {
+    return createBuildPhaseStubClient();
+  }
+
   // Runtime URL: resolveDatabaseUrl() prefers DATABASE_URL / pooler keys before DIRECT_URL (see lib/env/database-url.ts).
   let databaseUrl: string;
   try {

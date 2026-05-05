@@ -36,9 +36,13 @@ export default async function GlobalAppShell({
         hideHeader={hideHeader}
       >
         {hideSidebar ? (
+          /* Full-bleed: dashboard handles its own 3-column layout (AppShell) and
+             needs the entire viewport. The 1400px cap and lg:px-4 gutters from
+             the default container would otherwise create side margins on wide
+             screens. */
           <ShellLayoutContainer
-            maxWidth="max-w-[1400px]"
-            paddingClassName="px-0 lg:px-4"
+            maxWidth="max-w-none"
+            paddingClassName="px-0"
             className=""
           >
             <div className="min-w-0">{children}</div>
