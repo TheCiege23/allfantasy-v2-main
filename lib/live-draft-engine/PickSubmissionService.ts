@@ -24,6 +24,12 @@ import type { KeeperConfig, KeeperSelection } from './keeper/types'
 import { getSalaryCapConfig } from '@/lib/salary-cap/SalaryCapLeagueConfig'
 import { assignRookieContract } from '@/lib/salary-cap/RookieContractService'
 import { isDraftBoardFull, isDraftPickRowEmpty } from './draftPickEmpty'
+import {
+  DRAFT_PICK_NOT_LIVE,
+  DRAFT_PICK_RACE_RETRY,
+  DRAFT_PICK_STALE_OVERALL,
+  type PickAuthorityCode,
+} from './pickAuthorityCodes'
 
 export interface SubmitPickInput {
   leagueId: string
@@ -42,12 +48,16 @@ export interface SubmitPickInput {
   /** Override asset classification (dispersal, pick_slot, etc.). */
   assetType?: 'player' | 'rookie_pick' | 'devy_pick' | 'dispersal_asset' | 'pick_slot' | 'c2c_college'
   pickMetadata?: Record<string, unknown> | null
+  /** Client view of next overall (typically picks.length + 1); stale guard when it differs from server. */
+  expectedOverall?: number
+  /** When true, commissioner correction flow — on-clock check skipped in validation. */
+  commissionerOverride?: boolean
 }
 
 export interface SubmitPickResult {
   success: boolean
   error?: string
-  code?: 'ROSTER_CONFIGURATION_INCOMPLETE'
+  code?: 'ROSTER_CONFIGURATION_INCOMPLETE' | PickAuthorityCode
   snapshot?: { sessionId: string; overall: number; pickLabel: string; rosterId: string }
 }
 
@@ -91,10 +101,19 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
     thirdRoundReversal: session.thirdRoundReversal,
     slotOrder,
   })
-  if (!current) return { success: false, error: 'Draft is complete or not started' }
+  if (!current) {
+    return { success: false, error: 'Draft is complete or not started', code: DRAFT_PICK_NOT_LIVE }
+  }
 
   // overall comes from the resolver so it correctly handles boards with gaps
   const overall = current.overall
+  if (input.expectedOverall != null && input.expectedOverall !== overall) {
+    return {
+      success: false,
+      error: 'Draft board moved; refresh and retry.',
+      code: DRAFT_PICK_STALE_OVERALL,
+    }
+  }
   const round = Math.ceil(overall / teamCount)
   const slot = current.slot
   const resolvedOwner = resolvePickOwner(round, slot, slotOrder, tradedPicks)
@@ -107,8 +126,15 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
     currentOnClockRosterId: onClockRosterId,
     existingPicks: session.picks.map((p) => ({ playerName: p.playerName, position: p.position })),
     sessionStatus: session.status,
+    commissionerOverride: input.commissionerOverride === true || input.source === 'commissioner',
   })
-  if (!validation.valid) return { success: false, error: validation.error }
+  if (!validation.valid) {
+    return {
+      success: false,
+      error: validation.error,
+      ...(validation.code ? { code: validation.code } : {}),
+    }
+  }
 
   const keeperConfig = (session.keeperConfig ?? (session as any).keeperConfig) as KeeperConfig | null
   const keeperSelections = (session.keeperSelections ?? (session as any).keeperSelections) as KeeperSelection[] | null
@@ -212,6 +238,7 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
 
   const timerSeconds = session.timerSeconds ?? 90
   const nextTimerEndAt = computeTimerEndAt(timerSeconds)
+  const picksCountAtSubmit = session.picks.length
 
   let pick: any
   try {
@@ -221,6 +248,9 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
         include: { picks: { orderBy: { overall: 'asc' } } },
       })
       if (!locked) {
+        throw new Error('Draft state changed; please retry')
+      }
+      if (locked.picks.length !== picksCountAtSubmit) {
         throw new Error('Draft state changed; please retry')
       }
       const existingAtOverall = locked.picks.find((p: any) => p.overall === overall)
@@ -270,10 +300,18 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
     })
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return { success: false, error: 'Draft state changed; please retry' }
+      return {
+        success: false,
+        error: 'Draft state changed; please retry',
+        code: DRAFT_PICK_RACE_RETRY,
+      }
     }
     if (error instanceof Error && /Draft state changed/.test(error.message)) {
-      return { success: false, error: 'Draft state changed; please retry' }
+      return {
+        success: false,
+        error: 'Draft state changed; please retry',
+        code: DRAFT_PICK_RACE_RETRY,
+      }
     }
     throw error
   }

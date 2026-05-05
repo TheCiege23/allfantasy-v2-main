@@ -305,7 +305,16 @@
       "Bash(DATABASE_URL=postgresql://x:x@localhost:5432/x DIRECT_URL=postgresql://x:x@localhost:5432/x \"C:/Users/Guap_/allfantasy-v2-main/node_modules/.bin/vitest\" run __tests__/league/draft-to-roster-sync.test.ts)",
       "Bash(DATABASE_URL=postgresql://x:x@localhost:5432/x DIRECT_URL=postgresql://x:x@localhost:5432/x \"C:/Users/Guap_/allfantasy-v2-main/node_modules/.bin/vitest\" run __tests__/draft/finalized-roster-dashboard-sync.test.ts __tests__/league/draft-to-roster-sync.test.ts)",
       "Bash(git -c user.email=noreply@anthropic.com commit -m ' *)",
-      "Bash(DATABASE_URL=postgresql://x:x@localhost:5432/x DIRECT_URL=postgresql://x:x@localhost:5432/x \"C:/Users/Guap_/allfantasy-v2-main/node_modules/.bin/prisma\" validate)"
+      "Bash(DATABASE_URL=postgresql://x:x@localhost:5432/x DIRECT_URL=postgresql://x:x@localhost:5432/x \"C:/Users/Guap_/allfantasy-v2-main/node_modules/.bin/prisma\" validate)",
+      "Bash(node C:/tmp/extract-vercel-tail.cjs)",
+      "Bash(node C:/tmp/extract-vercel-tail2.cjs)",
+      "Bash(node C:/tmp/extract-vercel-tail3.cjs)",
+      "Bash(node C:/tmp/extract-vercel-tail4.cjs)",
+      "Bash(git log *)",
+      "Bash(grep -vE \"react/no-unescaped-entities|@next/next/no-img-element|Warning: \\\\`'\\\\`|Warning: \\\\`\\\\\"\\\\`|Warning: Using \\\\`<img>\\\\`\")",
+      "WebFetch(domain:support.sleeper.com)",
+      "Bash(npx playwright *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")"
     ]
   }
 }

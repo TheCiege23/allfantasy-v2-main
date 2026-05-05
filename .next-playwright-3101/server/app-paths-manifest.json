@@ -1,1 +1,5 @@
-{}
+{
+  "/e2e/draft-room/page": "app/e2e/draft-room/page.js",
+  "/api/i18n/translations/route": "app/api/i18n/translations/route.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js"
+}

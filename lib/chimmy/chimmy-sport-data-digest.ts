@@ -194,7 +194,7 @@ ${gameRows
       if (parsed.length) {
         const sourceKey = `standings_${sp}`
         sources.push(sourceKey)
-        setSourceFreshness(sourceKey, standingsRows.map((row) => row.updatedAt ?? row.createdAt))
+        setSourceFreshness(sourceKey, standingsRows.map((row) => row.createdAt))
         chunks.push(
           `### ${sp} — Standings snapshot (DB)
 ${parsed
