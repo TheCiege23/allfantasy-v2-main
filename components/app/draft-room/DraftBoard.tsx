@@ -643,7 +643,7 @@ function DraftBoardInner({
               ))}
             </div>
 
-            <div className="space-y-2.5 pt-2">
+            <div className="space-y-1 pt-1">
               {visibleRounds.map((round) => (
                 <section key={round} data-testid={`draft-board-round-${round}`}>
                     <div

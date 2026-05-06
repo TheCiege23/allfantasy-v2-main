@@ -260,8 +260,8 @@ function DraftBoardCellInner({
             ? rs
               ? 'border-emerald-400/70 bg-gradient-to-br from-emerald-500/28 to-[#142032] ring-1 ring-emerald-400/50 shadow-[0_0_36px_rgba(52,211,153,0.28)]'
               : 'border-emerald-400/80 bg-gradient-to-br from-emerald-500/25 to-[#2a3d5a] ring-1 ring-emerald-400/60 shadow-[0_0_32px_rgba(52,211,153,0.35)]'
-            : isEmpty && rs
-              ? 'border border-dashed border-white/20 bg-[linear-gradient(145deg,rgba(15,23,42,0.5),rgba(8,15,28,0.85))] shadow-inner'
+            : isEmpty
+              ? 'border-transparent bg-[linear-gradient(145deg,rgba(15,23,42,0.45),rgba(8,15,28,0.78))]'
               : `border-cyan-400/35 bg-gradient-to-b from-[#2a3d5a] to-[#1a2844] ${rs ? 'shadow-lg' : 'shadow-xl'} ${highlightClass(pickHighlight)}`
       }`}
       style={tint ?? managerTint}
@@ -285,11 +285,11 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-commish-edit-${pick.overall}`}
           title={`Edit pick ${pick.overall}`}
           aria-label={`Edit pick ${pick.overall}`}
-          /* G.1 — Always discoverable. Previously `opacity-0 group-hover:opacity-100`
-             made the pencil invisible until hover, which broke discoverability on
-             mobile (no hover) and made commissioners think the affordance didn't
-             exist. Now visible at half opacity by default; hover/focus brightens. */
-          className="absolute left-0.5 top-0.5 z-[2] inline-flex h-6 w-6 items-center justify-center rounded-md border border-amber-400/40 bg-amber-500/15 text-amber-100 opacity-60 shadow-sm backdrop-blur-sm transition duration-150 hover:border-amber-300/60 hover:bg-amber-500/30 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 group-hover:opacity-100"
+          /* Slice 7 — hover/focus-only on desktop to match Sleeper's clean tile.
+             Mobile (no hover) keeps a touch-friendly always-visible tap target via
+             `md:opacity-0`: visible by default on small screens, hidden on md+ until
+             hover/focus reveals it. */
+          className="absolute left-0.5 top-0.5 z-[2] inline-flex h-6 w-6 items-center justify-center rounded-md border border-amber-400/40 bg-amber-500/15 text-amber-100 opacity-90 shadow-sm backdrop-blur-sm transition duration-150 hover:border-amber-300/60 hover:bg-amber-500/30 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         >
           <Pencil className="h-3 w-3" />
         </button>
@@ -304,7 +304,7 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-trade-${pick.overall}`}
           title="Offer pick trade"
           aria-label="Offer pick trade for this slot"
-          className="absolute right-0.5 top-0.5 z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/14 bg-[#0a1228]/95 text-white/60 shadow-sm backdrop-blur-sm transition duration-150 hover:border-cyan-400/40 hover:text-cyan-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90"
+          className="absolute right-0.5 top-0.5 z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md border border-white/14 bg-[#0a1228]/95 text-white/60 opacity-90 shadow-sm backdrop-blur-sm transition duration-150 hover:border-cyan-400/40 hover:text-cyan-100 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         >
           <ArrowLeftRight className="h-3 w-3" />
         </button>
@@ -319,7 +319,7 @@ function DraftBoardCellInner({
           data-testid={`draft-board-cell-history-${pick.overall}`}
           title="View trade history for this pick"
           aria-label="View trade history for this pick"
-          className={`absolute ${onTradeFromCell ? 'right-0.5 top-7' : 'right-0.5 top-0.5'} z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md border border-amber-400/30 bg-amber-500/12 text-amber-200/85 shadow-sm backdrop-blur-sm transition duration-150 hover:border-amber-300/50 hover:text-amber-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90`}
+          className={`absolute ${onTradeFromCell ? 'right-0.5 top-7' : 'right-0.5 top-0.5'} z-[1] inline-flex h-6 w-6 items-center justify-center rounded-md border border-amber-400/30 bg-amber-500/12 text-amber-200/85 opacity-90 shadow-sm backdrop-blur-sm transition duration-150 hover:border-amber-300/50 hover:text-amber-100 hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/50 active:scale-90 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100`}
         >
           <History className="h-3 w-3" />
         </button>
