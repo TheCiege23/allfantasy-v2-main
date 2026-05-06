@@ -24,6 +24,7 @@ import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 export type WarRoomTabProps = {
   league: UserLeague
   sport?: string
+  dashboardEmbed?: boolean
 }
 
 type QuickLink = { title: string; description: string; href: string; icon: typeof Telescope }
@@ -78,7 +79,7 @@ function GatedToolCard({ tool }: { tool: GatedTool }) {
   )
 }
 
-export function WarRoomTab({ league, sport }: WarRoomTabProps) {
+export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTabProps) {
   const resolved = normalizeToSupportedSport(sport ?? league.sport) ?? 'NFL'
   const sportU = resolved.toUpperCase()
   const [metaFrame, setMetaFrame] = useState<'24h' | '7d' | '30d'>('7d')
@@ -261,6 +262,7 @@ export function WarRoomTab({ league, sport }: WarRoomTabProps) {
         draftCopilotEmptyMessage={liveDraftCompanion ? leagueDraftCompanion.copilotEmptyMessage : null}
         draftCompanionDataLoading={liveDraftCompanion ? leagueDraftCompanion.loading : false}
         onDraftCompanionRefresh={liveDraftCompanion ? () => void leagueDraftCompanion.refresh() : undefined}
+        dashboardEmbed={dashboardEmbed}
       />
 
       <section className="space-y-2">

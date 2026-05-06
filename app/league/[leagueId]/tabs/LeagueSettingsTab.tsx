@@ -12,6 +12,7 @@ import { isBestBallLeague } from '@/lib/autocoach/bestBallShared'
 import { useEntitlement } from '@/hooks/useEntitlement'
 import { useSubscriptionGateOptional } from '@/hooks/useSubscriptionGate'
 import { isLeagueEligibleForDispersalDraft } from '@/lib/league/dispersal-draft-eligibility'
+import { postOpenDraftOverlayMessage } from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 import { getUpgradeUrlWithHighlightForFeature } from '@/lib/subscription/featureGating'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 import type { DraftOrderSlotRow } from '@/lib/draft/pick-order'
@@ -121,11 +122,14 @@ export function LeagueSettingsTab({
   leagueId,
   isCommissioner: isCommissionerShell,
   isHeadCommissioner: isHeadCommissionerShell,
+  dashboardEmbed = false,
 }: {
   leagueId: string
   /** From shell while settings API loads; API role wins once loaded */
   isCommissioner?: boolean
   isHeadCommissioner?: boolean
+  /** Dashboard iframe hub — open dispersal draft in parent overlay */
+  dashboardEmbed?: boolean
 }) {
   const [data, setData] = useState<LeagueSettingsApi | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
@@ -881,12 +885,29 @@ export function LeagueSettingsTab({
             <div className="mt-3 space-y-2">
               <p className="text-xs font-semibold text-emerald-200/90">Draft in Progress</p>
               <div className="flex flex-wrap gap-2">
-                <Link
-                  href={`/league/${leagueId}/dispersal-draft/${orphanApi.activeDispersalDraftId}`}
-                  className="inline-flex rounded-xl border border-emerald-400/35 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-100"
-                >
-                  Open draft room →
-                </Link>
+                {dashboardEmbed ? (
+                  <button
+                    type="button"
+                    className="inline-flex rounded-xl border border-emerald-400/35 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-100"
+                    data-testid="league-settings-dispersal-open-embed"
+                    onClick={() =>
+                      postOpenDraftOverlayMessage({
+                        leagueId,
+                        dispersalDraftId: orphanApi.activeDispersalDraftId as string,
+                        source: 'LeagueSettingsTab-dispersal',
+                      })
+                    }
+                  >
+                    Open draft room →
+                  </button>
+                ) : (
+                  <Link
+                    href={`/league/${leagueId}/dispersal-draft/${orphanApi.activeDispersalDraftId}`}
+                    className="inline-flex rounded-xl border border-emerald-400/35 bg-emerald-500/15 px-3 py-2 text-xs font-bold text-emerald-100"
+                  >
+                    Open draft room →
+                  </Link>
+                )}
               </div>
             </div>
           ) : null}

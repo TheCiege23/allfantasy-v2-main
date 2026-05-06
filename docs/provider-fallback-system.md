@@ -76,3 +76,14 @@ npm run data:audit-provider-gaps -- --sport NFL --surface roster --domain experi
 - **Board:** Completed pick cells overlay `mergePoolPlayerIntoBoardPickDisplay` when the pick’s `playerId` exists in the live pool map — better headshot/injury/experience badge; **no** change to `DraftPickSnapshot` or submission APIs.
 - **Queue:** Row chips use unified fallbacks from the same pool map; **queue JSON / order** from the draft engine is untouched.
 - **Selected player:** `PlayerDetailModal` headshot/injury prefer `getDraftRoomDisplayHeadshot` / `getDraftRoomDisplayInjury` so the modal matches the pool row.
+
+### Trade evaluator (AI context only)
+
+- `POST /api/trade-evaluator` maps Sleeper name keys and optional explicit ids to **`SportsPlayerRecord.id`**, then calls `getNormalizedPlayerData({ surface: 'trade', leagueId, playerIds })` (read-only DB/cache).
+- Prompt text includes `buildNormalizedTradeEvidencePrompt` output; response may include **`providerEvidence.summary`** (counts, capped `fallbackSources` / `missingDomains`, optional `missingDataNote`). **No raw provider blobs** and **no overwrite** of `valuationReport` or trade processing.
+- Dev-only log prefix: **`[trade normalized player context]`** (summary fields only).
+
+```bash
+npm run data:audit-provider-gaps -- --sport NFL --surface trade --domain injuries --limit 10
+npm run data:audit-provider-gaps -- --sport NFL --surface trade --domain stats --limit 10
+```

@@ -7,12 +7,19 @@ function read(rel: string): string {
 }
 
 describe('dashboard embedded league hub', () => {
-  it('SelectedLeagueHomePanel loads full hub via embed iframe (no primary Open full league hub CTA)', () => {
+  it('SelectedLeagueHomePanel loads full hub via embed iframe without extra header chrome', () => {
     const src = read('app/dashboard/components/SelectedLeagueHomePanel.tsx')
     expect(src).toContain('?embed=1')
     expect(src).toContain('dashboard-embedded-league-hub-iframe')
-    expect(src).not.toMatch(/Open full league hub/)
-    expect(src).toContain('dashboard-league-home-open-full-secondary')
+    expect(src).not.toMatch(/Dashboard home/)
+    expect(src).not.toMatch(/Open full page/)
+    expect(src).toContain('onDraftOverlayOpen')
+  })
+
+  it('LeagueEmbedGate skips ProductShell when embed=1', () => {
+    const src = read('components/navigation/LeagueEmbedGate.tsx')
+    expect(src).toContain('isEmbedModeFromSearchParams')
+    expect(src).toContain('data-af-league-embed-chrome-off')
   })
 
   it('DashboardShell keeps three-panel shell when a league is selected', () => {

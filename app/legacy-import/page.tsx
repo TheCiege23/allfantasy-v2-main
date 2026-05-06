@@ -3,6 +3,7 @@ import { authOptions } from '@/lib/auth';
 import { redirect } from 'next/navigation';
 import { Metadata } from 'next';
 import LegacyImportForm from '@/components/LegacyImportForm';
+import { LeagueImportFlow } from '@/components/unified-import-ui/LeagueImportFlow';
 
 export const metadata: Metadata = {
   title: 'Import Legacy League – AllFantasy',
@@ -19,18 +20,28 @@ export default async function LegacyImportPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] py-16 md:py-24">
-      <div className="container mx-auto px-4 max-w-3xl">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-purple-400 via-pink-400 to-cyan-400 bg-clip-text text-transparent mb-4">
-            Import Legacy / Dynasty League
-          </h1>
-          <p className="text-lg text-gray-300 max-w-2xl mx-auto">
-            Bring in your historical Sleeper or ESPN leagues to unlock dynasty rankings, aging curves, long-term value projections, and AI trade analysis.
-          </p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-b from-[#0a0a0f] to-[#0f0f1a] py-12 md:py-16">
+      <LeagueImportFlow
+        userId={session.user.id}
+        returnTo="/af-legacy"
+        defaultProvider="sleeper"
+        mode="full"
+        showBackButton
+        showSupportButton
+      />
 
-        <LegacyImportForm userId={session.user.id} />
+      <div className="container mx-auto mt-16 max-w-3xl px-4 pb-24">
+        <details className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <summary className="cursor-pointer text-sm font-semibold text-white/70">
+            Advanced: multi-season legacy import (original tool)
+          </summary>
+          <p className="mt-3 text-[13px] text-white/45">
+            Season-by-season Sleeper/ESPN pulls for dynasty historians. Prefer the unified import above for career rank & dashboard sync.
+          </p>
+          <div className="mt-6">
+            <LegacyImportForm userId={session.user.id} />
+          </div>
+        </details>
       </div>
     </div>
   );

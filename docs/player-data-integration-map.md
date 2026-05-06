@@ -37,6 +37,7 @@ Single orchestration layer connects **imported / cached provider rows** (Rolling
 - Draft pool: `getResolvedDraftPoolForLeague` — `lib/draft-room/getResolvedDraftPoolForLeague.ts` — `app/api/leagues/[leagueId]/draft/pool/route.ts` (and related).
 - Waiver free agents: `app/api/waiver-wire/leagues/[leagueId]/players/route.ts` — `getPlayerDataForSurface` + `serializeUnifiedPlayerForApi` (full `UnifiedPlayerWireDto` per row; legacy `id` / `name` / `position` / `team` preserved on each object).
 - Roster (DB/native leagues): `app/api/league/roster/route.ts` includes `unifiedRoster: UnifiedPlayerWireDto[]` alongside `roster` JSON. Sleeper platform responses are unchanged.
+- Trade evaluator: `app/api/trade-evaluator/route.ts` resolves trade assets to `sports_players` ids (`lib/trades/tradePlayerIdentityResolver.ts`), batches `getNormalizedPlayerData` with `surface: 'trade'`, and adds **provider evidence** to AI prompts plus a small `providerEvidence` summary on the JSON response. **Internal `valuationReport` / fairness math is unchanged**; provider rows are context only.
 
 ## Wired in this pass (client)
 
@@ -48,7 +49,6 @@ Single orchestration layer connects **imported / cached provider rows** (Rolling
 ## Known gaps (next wiring)
 
 - **Sleeper-backed** `/api/league/roster` responses do not include `unifiedRoster` until AF player ids are mapped consistently for those leagues.
-- **Trade evaluator** (`/api/trade-evaluator`) still ingests primarily Sleeper-shaped payloads; use `tradeEvidenceFromUnifiedWire` / `tradeEvidenceBlockForPrompt` when you attach DB-resolved `UnifiedPlayerWireDto[]` server-side.
 - **Draft board pick tiles / queue** — further polish can thread `unifiedProductView` where those components render avatars by name only.
 - **Start/sit / lineup optimizer** — `matchupPlayerAdapter` is ready; wire where engine exposes `UnifiedPlayerWireDto`.
 

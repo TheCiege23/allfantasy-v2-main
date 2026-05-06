@@ -30,6 +30,8 @@ export type LeagueTabProps = {
   idpLeagueUi?: boolean
   /** Current user's team in the league — used by the home hero. Plumbed from LeagueShell. */
   userTeam?: { id: string; teamName?: string | null } | null
+  /** Dashboard iframe — draft entry posts to parent for full-screen overlay. */
+  dashboardEmbed?: boolean
 }
 
 type ScoringRowProps = {
@@ -529,6 +531,7 @@ export function LeagueTab({
   inviteToken,
   idpLeagueUi = false,
   userTeam = null,
+  dashboardEmbed = false,
 }: LeagueTabProps) {
   const scoring = leagueDashboard.scoring
   const previewSeason =
@@ -617,6 +620,7 @@ export function LeagueTab({
         idpLeagueUi={idpLeagueUi}
         seasonSnapshot={seasonSnapshot}
         standingsPresentation={leagueDashboard.standings}
+        dashboardEmbed={dashboardEmbed}
       />
 
       <section

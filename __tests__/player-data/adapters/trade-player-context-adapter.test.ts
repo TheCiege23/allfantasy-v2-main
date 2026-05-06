@@ -27,7 +27,17 @@ function uw(partial: Partial<UnifiedPlayerWireDto>): UnifiedPlayerWireDto {
     projectionsSource: 'ri',
     normalizedStats: { a: 1 },
     normalizedProjections: {},
-    product: { unified: {} as any, yearsExp: 3, byeWeek: null },
+    product: {
+      unified: {
+        profileSource: 'sleeper',
+        adpSource: 'pool_adp',
+        aiAdpSource: 'ai_adp',
+        yearsExpSource: 'sleeper_live',
+        rookieSource: null,
+      } as any,
+      yearsExp: 3,
+      byeWeek: null,
+    },
     ...partial,
   }
 }
@@ -43,5 +53,13 @@ describe('tradePlayerContextAdapter', () => {
     const block = tradeEvidenceBlockForPrompt([uw({ injuryStatus: 'Out' })], 'Side A')
     expect(block).toContain('injury=Out')
     expect(block.toLowerCase()).not.toContain('tradevalue')
+  })
+
+  it('maps injury vs ADP vs AI ADP sources from unified meta', () => {
+    const e = tradeEvidenceFromUnifiedWire(uw({ injuryStatus: 'Doubtful', adp: 12, aiAdp: 15 }))
+    expect(e.injurySource).toBe('sleeper')
+    expect(e.adpSource).toBe('pool_adp')
+    expect(e.aiAdpSource).toBe('ai_adp')
+    expect(e.experienceSource).toBe('sleeper_live')
   })
 })

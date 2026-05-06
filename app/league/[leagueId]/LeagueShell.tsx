@@ -93,6 +93,7 @@ import { LeagueSettingsModal } from './components/LeagueSettingsModal'
 import { CommissionerSettingsModal } from './components/CommissionerSettingsModal'
 import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
 import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
+import { postOpenDraftOverlayMessage } from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 import { RedraftTab } from './tabs/RedraftTab'
 import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
@@ -1168,19 +1169,43 @@ export function LeagueShell({
 
             {dispersalDraftInProgress ? (
               <div className="shrink-0 border-b border-cyan-500/20 bg-[#081226] px-4 py-2.5">
-                <Link
-                  href={`/league/${league.id}/dispersal-draft/${dispersalDraftInProgress.draftId}`}
-                  className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-cyan-100/95 hover:text-cyan-50"
-                >
-                  <span>
-                    {dispersalDraftInProgress.status === 'in_progress'
-                      ? 'Dispersal draft in progress — join the draft room to make picks.'
-                      : 'Dispersal draft open — continue setup or open the draft room.'}
-                  </span>
-                  <span className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2">
-                    {dispersalDraftInProgress.status === 'in_progress' ? 'Join draft room →' : 'Open →'}
-                  </span>
-                </Link>
+                {embedMode ? (
+                  <button
+                    type="button"
+                    className="flex w-full flex-wrap items-center justify-between gap-2 text-left text-[12px] text-cyan-100/95 hover:text-cyan-50"
+                    data-testid="league-shell-dispersal-draft-embed-cta"
+                    onClick={() =>
+                      postOpenDraftOverlayMessage({
+                        leagueId: league.id,
+                        dispersalDraftId: dispersalDraftInProgress.draftId,
+                        source: 'LeagueShell-dispersal-banner',
+                      })
+                    }
+                  >
+                    <span>
+                      {dispersalDraftInProgress.status === 'in_progress'
+                        ? 'Dispersal draft in progress — join the draft room to make picks.'
+                        : 'Dispersal draft open — continue setup or open the draft room.'}
+                    </span>
+                    <span className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2">
+                      {dispersalDraftInProgress.status === 'in_progress' ? 'Join draft room →' : 'Open →'}
+                    </span>
+                  </button>
+                ) : (
+                  <Link
+                    href={`/league/${league.id}/dispersal-draft/${dispersalDraftInProgress.draftId}`}
+                    className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-cyan-100/95 hover:text-cyan-50"
+                  >
+                    <span>
+                      {dispersalDraftInProgress.status === 'in_progress'
+                        ? 'Dispersal draft in progress — join the draft room to make picks.'
+                        : 'Dispersal draft open — continue setup or open the draft room.'}
+                    </span>
+                    <span className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2">
+                      {dispersalDraftInProgress.status === 'in_progress' ? 'Join draft room →' : 'Open →'}
+                    </span>
+                  </Link>
+                )}
               </div>
             ) : null}
 
@@ -1232,6 +1257,7 @@ export function LeagueShell({
               seasonSnapshot={seasonSnapshot}
               leagueDashboard={leagueDashboard}
               onOpenLeagueSettingsModal={openLeagueSettingsModal}
+              dashboardEmbed={embedMode}
             />
           </div>
         </main>
@@ -1507,6 +1533,7 @@ function LeagueTabRouter({
   seasonSnapshot,
   leagueDashboard,
   onOpenLeagueSettingsModal,
+  dashboardEmbed = false,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -1525,6 +1552,7 @@ function LeagueTabRouter({
   seasonSnapshot: LeagueSeasonSnapshot | null
   leagueDashboard: LeagueDashboardView
   onOpenLeagueSettingsModal: (initialPanel?: string | null) => void
+  dashboardEmbed?: boolean
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -1544,6 +1572,7 @@ function LeagueTabRouter({
           seasonSnapshot={seasonSnapshot}
           standingsPresentation={leagueDashboard.standings}
           onOpenLeagueSettings={onOpenLeagueSettingsModal}
+          dashboardEmbed={dashboardEmbed}
         />
       )
     case 'matchups':
@@ -1562,6 +1591,7 @@ function LeagueTabRouter({
           seasonSnapshot={seasonSnapshot}
           standingsPresentation={leagueDashboard.standings}
           onOpenLeagueSettings={onOpenLeagueSettingsModal}
+          dashboardEmbed={dashboardEmbed}
         />
       )
     case 'redraft':
@@ -1657,6 +1687,7 @@ function LeagueTabRouter({
           inviteToken={inviteToken}
           idpLeagueUi={idpLeagueActive}
           userTeam={userTeam ? { id: userTeam.id, teamName: userTeam.teamName } : null}
+          dashboardEmbed={dashboardEmbed}
         />
       )
     case 'players':
@@ -1672,7 +1703,7 @@ function LeagueTabRouter({
     case 'finance':
       return <FinanceTab leagueId={leagueId} isCommissioner={isCommissioner} />
     case 'war_room':
-      return <WarRoomTab league={selectedLeague} sport={sport} />
+      return <WarRoomTab league={selectedLeague} sport={sport} dashboardEmbed={dashboardEmbed} />
     case 'ai_coaching':
       return <AICoachingTab league={selectedLeague} userTeam={userTeam} sport={sport} />
     case 'history':
@@ -1683,6 +1714,7 @@ function LeagueTabRouter({
           leagueId={leagueId}
           isCommissioner={isCommissioner}
           isHeadCommissioner={isHeadCommissioner}
+          dashboardEmbed={dashboardEmbed}
         />
       )
     case 'standings':

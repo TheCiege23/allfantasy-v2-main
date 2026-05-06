@@ -179,7 +179,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
                       <div className="mt-1 text-xs text-red-400">{importError[providerId]}</div>
                     ) : null}
                     <Link
-                      href="/import"
+                      href="/import?returnTo=/dashboard"
                       className="mt-2 flex w-full items-center justify-center rounded bg-gradient-to-r from-cyan-600 to-purple-600 py-2 text-xs font-bold text-white hover:opacity-95"
                     >
                       Open import tool →

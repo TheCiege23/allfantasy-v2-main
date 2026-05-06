@@ -13,6 +13,7 @@ import type { StandingsPresentation } from '@/app/league/[leagueId]/league-dashb
 import { getDraftIdFromSettings, getSleeperLikeBundle } from '@/app/league/[leagueId]/components/league-settings-modal-utils'
 import { IDPDraftFilters } from '@/app/idp/components/IDPDraftFilters'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { openDraftFromEmbeddedLeague } from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 
 export type DraftTabProps = {
   league: UserLeague
@@ -32,6 +33,8 @@ export type DraftTabProps = {
   mode?: 'draft' | 'league'
   /** Opens full league settings modal (replaces `?view=settings` tab on NFL redraft). */
   onOpenLeagueSettings?: (initialPanel?: string | null) => void
+  /** Dashboard iframe hub — ask parent window to open full-screen draft overlay instead of navigating inside iframe. */
+  dashboardEmbed?: boolean
 }
 
 function isPreDraftLeagueStatus(league: UserLeague): boolean {
@@ -213,6 +216,7 @@ export function DraftTab({
   standingsPresentation = { mode: 'standard' },
   mode = 'draft',
   onOpenLeagueSettings,
+  dashboardEmbed = false,
 }: DraftTabProps) {
   const isLeagueHome = mode === 'league'
   const router = useRouter()
@@ -385,13 +389,21 @@ export function DraftTab({
    * If the league truly has no draft session yet (no league.id), surface a toast
    * instead of swallowing the click.
    */
-  const handleDraftRoom = useCallback(() => {
+  const handleDraftRoom = useCallback(async () => {
     if (!league.id) {
       toast.error('Draft is not available for this league yet.')
       return
     }
+    if (dashboardEmbed) {
+      await openDraftFromEmbeddedLeague({
+        leagueId: league.id,
+        dashboardEmbed: true,
+        source: 'DraftTab',
+      })
+      return
+    }
     router.push(enterDraftRoomHref)
-  }, [league.id, enterDraftRoomHref, router])
+  }, [dashboardEmbed, enterDraftRoomHref, league.id, router])
 
   const handleGenerateDraftOrder = useCallback(async () => {
     if (!(isCommissioner || isOwner)) return

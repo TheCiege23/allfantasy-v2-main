@@ -52,6 +52,13 @@ import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middle
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
+import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
+import {
+  buildNormalizedTradeContext,
+  buildNormalizedTradeEvidencePrompt,
+  type BuildNormalizedTradeContextResult,
+} from '@/lib/trades/buildNormalizedTradeContext'
 
 const PlayerInputSchema = z.object({
   name: z.string(),
@@ -59,6 +66,17 @@ const PlayerInputSchema = z.object({
   team: z.string().optional(),
   age: z.number().optional(),
   value_notes: z.string().optional(),
+  playerId: z.string().optional(),
+  sportsPlayerId: z.string().optional(),
+  sports_player_id: z.string().optional(),
+  player_id: z.string().optional(),
+  internalPlayerId: z.string().optional(),
+  sleeperPlayerId: z.string().optional(),
+  sleeper_id: z.string().optional(),
+  externalSourceId: z.string().optional(),
+  external_source_id: z.string().optional(),
+  providerPlayerId: z.string().optional(),
+  provider_player_id: z.string().optional(),
 })
 
 const PickInputSchema = z.object({
@@ -413,30 +431,6 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
     if (!gate.ok) return gate.response
     if (gate.tokenSpend) tokenFallbackLedgerId = gate.tokenSpend.id
 
-    const cacheKey = config.cacheTtlMs
-      ? buildCacheKey('/api/trade-evaluator', {
-          leagueId: data.league_id ?? '',
-          sender: data.sender.gives_players.map(resolvePlayerName).sort(),
-          senderPicks: (data.sender.gives_picks ?? []).map((p: any) => ({ year: p.year, round: p.round })).sort((a: any, b: any) => a.round - b.round || a.year - b.year),
-          receiver: data.receiver.gives_players.map(resolvePlayerName).sort(),
-          receiverPicks: (data.receiver.gives_picks ?? []).map((p: any) => ({ year: p.year, round: p.round })).sort((a: any, b: any) => a.round - b.round || a.year - b.year),
-        })
-      : null
-    const cached = cacheKey ? getCachedResponse<Record<string, unknown>>(cacheKey) : null
-    if (cached) {
-      return NextResponse.json({
-        ...cached,
-        tokenSpend: gate.tokenSpend
-          ? {
-              ruleCode: gate.tokenPreview?.ruleCode ?? 'ai_trade_analyzer_full_review',
-              tokenCost: gate.tokenPreview?.tokenCost ?? null,
-              balanceAfter: gate.tokenSpend.balanceAfter,
-              ledgerId: gate.tokenSpend.id,
-            }
-          : null,
-      })
-    }
-
     const isSF = data.league?.qb_format === 'sf'
     const leagueSport = normalizeToSupportedSport(String(data.league?.sport || 'nfl'))
     const leagueSportSlug = String(leagueSport).toLowerCase()
@@ -459,6 +453,64 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
           }
         }
       } catch { /* non-critical */ }
+    }
+
+    let normalizedTradeBundle: BuildNormalizedTradeContextResult | null = null
+    const tradePlayerAssets = [...data.sender.gives_players, ...data.receiver.gives_players]
+    const internalLeagueId =
+      data.league_id && userId
+        ? await resolveTradeEvaluatorInternalLeagueId(data.league_id, userId).catch(() => null)
+        : null
+    const identityResult = await resolveTradePlayerAssets({
+      sport: leagueSportSlug,
+      nameLowerToExternalPid: playerNameToId,
+      assets: tradePlayerAssets,
+    })
+    if (internalLeagueId && identityResult.resolved.length > 0) {
+      normalizedTradeBundle = await buildNormalizedTradeContext({
+        internalLeagueId,
+        sport: leagueSportSlug,
+        playerIds: identityResult.resolved.map((r) => r.playerId),
+        unresolved: identityResult.unresolved,
+        totalAssetCount: tradePlayerAssets.length,
+        includeProviderFallbackDiagnostics: process.env.NODE_ENV === 'development',
+      })
+    }
+    if (process.env.NODE_ENV === 'development' && normalizedTradeBundle) {
+      console.info('[trade normalized player context]', {
+        leagueId: internalLeagueId,
+        sport: leagueSportSlug,
+        totalAssets: normalizedTradeBundle.summary.totalAssets,
+        resolvedPlayers: normalizedTradeBundle.summary.resolvedPlayers,
+        unresolvedPlayers: normalizedTradeBundle.summary.unresolvedPlayers,
+        fallbackSources: normalizedTradeBundle.summary.fallbackSources,
+        missingDomains: normalizedTradeBundle.summary.missingDomains,
+      })
+    }
+
+    const cacheKey = config.cacheTtlMs
+      ? buildCacheKey('/api/trade-evaluator', {
+          leagueId: data.league_id ?? '',
+          sender: data.sender.gives_players.map(resolvePlayerName).sort(),
+          senderPicks: (data.sender.gives_picks ?? []).map((p: any) => ({ year: p.year, round: p.round })).sort((a: any, b: any) => a.round - b.round || a.year - b.year),
+          receiver: data.receiver.gives_players.map(resolvePlayerName).sort(),
+          receiverPicks: (data.receiver.gives_picks ?? []).map((p: any) => ({ year: p.year, round: p.round })).sort((a: any, b: any) => a.round - b.round || a.year - b.year),
+          normalizedPlayerIds: identityResult.resolved.map((r) => r.playerId).sort(),
+        })
+      : null
+    const cached = cacheKey ? getCachedResponse<Record<string, unknown>>(cacheKey) : null
+    if (cached) {
+      return NextResponse.json({
+        ...cached,
+        tokenSpend: gate.tokenSpend
+          ? {
+              ruleCode: gate.tokenPreview?.ruleCode ?? 'ai_trade_analyzer_full_review',
+              tokenCost: gate.tokenPreview?.tokenCost ?? null,
+              balanceAfter: gate.tokenSpend.balanceAfter,
+              ledgerId: gate.tokenSpend.id,
+            }
+          : null,
+      })
     }
 
     let rosterConfigForVorp: import('@/lib/vorp-engine').LeagueRosterConfig | undefined
@@ -942,6 +994,24 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
         ...(data.asOfDate && { asOfDate: data.asOfDate }),
       },
       ...(leagueHistoryContext && { leagueHistoryContext }),
+      ...(normalizedTradeBundle && {
+        providerEvidence: {
+          summary: {
+            totalAssets: normalizedTradeBundle.summary.totalAssets,
+            resolvedPlayers: normalizedTradeBundle.summary.resolvedPlayers,
+            unresolvedPlayers: normalizedTradeBundle.summary.unresolvedPlayers,
+            fallbackSources: normalizedTradeBundle.summary.fallbackSources.slice(0, 15),
+            missingDomains: normalizedTradeBundle.summary.missingDomains.slice(0, 15),
+          },
+          ...(normalizedTradeBundle.summary.unresolvedPlayers > 0 ||
+          normalizedTradeBundle.summary.missingDomains.length > 0
+            ? {
+                missingDataNote:
+                  'Some player data was unavailable from imported provider cache.',
+              }
+            : {}),
+        },
+      }),
     }
 
     if (leagueDecisionCtx) {
@@ -1268,6 +1338,18 @@ export const POST = withApiUsage({ endpoint: "/api/trade-evaluator", tool: "Trad
       grok: 'skipped',
     }
 
+    const normalizedEvidencePrompt =
+      normalizedTradeBundle &&
+      (normalizedTradeBundle.players.length > 0 || normalizedTradeBundle.unresolvedPlayers.length > 0)
+        ? buildNormalizedTradeEvidencePrompt(normalizedTradeBundle)
+        : ''
+    const providerMissingNote =
+      normalizedTradeBundle &&
+      (normalizedTradeBundle.summary.unresolvedPlayers > 0 ||
+        normalizedTradeBundle.summary.missingDomains.length > 0)
+        ? '\nNote: Some player data was unavailable from imported provider cache.'
+        : ''
+
     const tradeContextForAI = `
 TRADE DETAILS:
 Team A (${data.sender.manager_name}) gives: ${senderPlayerNames.join(', ')}${senderPicksData.length ? ', ' + senderPicksData.map(p => p.label).join(', ') : ''}
@@ -1278,6 +1360,7 @@ Team A total value: ${senderGivenComposite}
 Team B total value: ${senderReceivedComposite}
 Net delta: ${teamANetValue}
 Fairness score: ${fairnessScore}/100
+${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — internal trade values above remain authoritative for fairness):\n${normalizedEvidencePrompt}${providerMissingNote}` : ''}
     `.trim()
 
     const [dsResult, grokResult] = await Promise.allSettled([
@@ -1391,6 +1474,9 @@ Fairness score: ${fairnessScore}/100
       const narrativePrompt = gptContract ? buildGptUserPrompt(gptContract) : ''
 
       const enrichedPayloadStr = `${narrativePrompt}\n\n${JSON.stringify(gptPayload)}\n\n` +
+        (normalizedEvidencePrompt
+          ? `NORMALIZED PROVIDER EVIDENCE (supplemental — not trade value):\n${normalizedEvidencePrompt}${providerMissingNote}\n\n`
+          : '') +
         `QUANTITATIVE ANALYSIS (DeepSeek):\n${deepseekQuantResult ? JSON.stringify(deepseekQuantResult, null, 2) : 'Unavailable'}\n\n` +
         `REAL-TIME SIGNALS (Grok):\n${grokTrendResult ? JSON.stringify(grokTrendResult, null, 2) : 'Unavailable'}\n\n` +
         `Synthesize all data into Chimmy's trade recommendation.\n\n${NEGOTIATION_USER_INSTRUCTION}`
@@ -1550,6 +1636,9 @@ Fairness score: ${fairnessScore}/100
               ledgerId: gate.tokenSpend.id,
             }
           : null,
+        ...(structuredPayload.providerEvidence && {
+          providerEvidence: structuredPayload.providerEvidence,
+        }),
         ...(confidenceInfo && { historicalAnalysis: confidenceInfo }),
         ...(dualModeGrades && { dualModeGrades }),
         tradeInsights,
@@ -1784,6 +1873,9 @@ Fairness score: ${fairnessScore}/100
             ledgerId: gate.tokenSpend.id,
           }
         : null,
+      ...(structuredPayload.providerEvidence && {
+        providerEvidence: structuredPayload.providerEvidence,
+      }),
       ...(confidenceInfo && { historicalAnalysis: confidenceInfo }),
       ...(dualModeGrades && { dualModeGrades }),
       tradeInsights,

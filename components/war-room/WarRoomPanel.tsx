@@ -19,6 +19,11 @@ import { PlayerOutlookDrawer } from './PlayerOutlookDrawer'
 import { WarRoomContingencyCard } from './WarRoomContingencyCard'
 import { WarRoomManagerIntel } from './WarRoomManagerIntel'
 import { PostDraftReportModal } from './PostDraftReportModal'
+import {
+  openDraftFromEmbeddedLeague,
+  parseLeagueDraftNavigationIntent,
+  postOpenDraftOverlayMessage,
+} from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 
 export type DraftCompanionCopilotProps = Partial<ComponentProps<typeof DraftHelperCopilot>>
 
@@ -51,6 +56,8 @@ export type WarRoomPanelProps = {
   draftCompanionDataLoading?: boolean
   /** Manual resync (league tab) — session, pool, intel, and copilot when on the clock. */
   onDraftCompanionRefresh?: () => void
+  /** Dashboard iframe — intercept draft room links for parent overlay */
+  dashboardEmbed?: boolean
 }
 
 function mergeBrainPayload(
@@ -85,6 +92,7 @@ export function WarRoomPanel({
   draftCopilotEmptyMessage = null,
   draftCompanionDataLoading = false,
   onDraftCompanionRefresh,
+  dashboardEmbed = false,
 }: WarRoomPanelProps) {
   const resolvedSport = (normalizeToSupportedSport(sport) ?? 'NFL') as SupportedSport
   const [copilotSectionOpen, setCopilotSectionOpen] = useState(true)
@@ -254,6 +262,7 @@ export function WarRoomPanel({
                   href={companionDraft.draftRoomHref}
                   className="shrink-0 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2.5 py-1.5 text-[10px] font-semibold text-cyan-100 transition hover:bg-cyan-500/20"
                   data-testid="war-room-enter-draft-room"
+                  onClick={(e) => void handleDraftRoomLinkClick(e, companionDraft.draftRoomHref ?? '')}
                 >
                   Enter draft room
                 </Link>
@@ -312,6 +321,7 @@ export function WarRoomPanel({
                           <Link
                             href={companionDraft.draftRoomHref}
                             className="mt-2 inline-flex text-[11px] font-semibold text-cyan-300 hover:text-cyan-200"
+                            onClick={(e) => void handleDraftRoomLinkClick(e, companionDraft.draftRoomHref ?? '')}
                           >
                             Go to draft room →
                           </Link>

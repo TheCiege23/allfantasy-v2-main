@@ -69,7 +69,11 @@ Keys documented in `scripts/draft-env-check.mjs` include `DATABASE_URL`, `NEXTAU
 4. **Start** the draft from commissioner / league flow so a **`DraftSession`** exists and you obtain a **`draftId`**.
 5. Open **`/draft/room/<draftId>`** (or navigate from league UI).
 
-**Dashboard → league hub (embedded):** On **`/dashboard`**, click a league in **My Leagues**. The URL should become **`/dashboard?leagueId=<id>`**. The **center panel** should show the **full league hub** (same hub as standalone **`/league/[id]`**, loaded inline)—draft tabs/cards, league fill, draft type/date/timer, etc. **Do not** expect a separate required step like “Open full league hub”; chat stays on the left (defaults to league chat) and My Leagues stays on the right. Use the **Draft** tab/card in the **center panel** to reach **`/draft/room/<draftId>`** when a draft exists. An optional **Open full page** link remains secondary if you need the standalone league route.
+**Dashboard → league hub (embedded):** On **`/dashboard`**, click a league in **My Leagues**. The URL should become **`/dashboard?leagueId=<id>`**. The **center panel** loads the league hub in an iframe (**`/league/[id]?embed=1`**) without duplicate global app chrome. Chat stays on the left (defaults to league chat) and My Leagues stays on the right.
+
+**Draft from embedded hub:** From that center hub, use **Draft tab**, **War Room → Enter draft room**, **dispersal banner**, or **Settings → dispersal “Open draft room”** when applicable. Each should open a **full-screen draft overlay** on top of the dashboard (URL gains **`draftOverlay=1`** and **`draftId`** or **`dispersalDraftId`**). **X** returns to **`/dashboard?leagueId=…`**; **Home** returns to **`/dashboard`**. Opening **`/league/[id]`** directly (no `embed`) still uses normal full-page navigation.
+
+Full-page league hub draft links (**`/league/[id]/draft`**, etc.) behave as before when not embedded.
 
 Document your **league name**, **`draftId`**, **`leagueId`**, sport, timer, and users in §4 so runs are repeatable.
 

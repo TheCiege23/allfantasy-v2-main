@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ImportSourceInputPanel } from './league-creation/ImportSourceInputPanel';
 import { ImportProvider } from '@/lib/league-import/types';
 import { getImportProviderLabel, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config';
@@ -15,9 +15,23 @@ export function UnifiedImportPanel({
   onImport,
   loadingProvider = null,
   disabledProviders = [],
+  initialInputs,
 }: UnifiedImportPanelProps) {
-  const [inputs, setInputs] = useState<Record<ImportProvider, string>>({} as any);
-  const [errors, setErrors] = useState<Record<ImportProvider, string | null>>({} as any);
+  const [inputs, setInputs] = useState<Record<ImportProvider, string>>({} as Record<ImportProvider, string>);
+  const [errors, setErrors] = useState<Record<ImportProvider, string | null>>({} as Record<ImportProvider, string | null>);
+
+  useEffect(() => {
+    if (!initialInputs) return
+    setInputs((prev) => {
+      const next = { ...prev }
+      for (const [k, v] of Object.entries(initialInputs)) {
+        if (typeof v === 'string' && v.trim()) {
+          next[k as ImportProvider] = v
+        }
+      }
+      return next
+    })
+  }, [initialInputs])
 
   return (
     <div className="space-y-8">

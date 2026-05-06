@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { TradesDashboardResponse, WaiverDashboardResponse } from '@/app/dashboard/dashboardStripApiTypes'
@@ -33,6 +34,7 @@ import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { tInterpolate as interpolateI18nMessage } from '@/lib/i18n/tInterpolate'
 import { emptyLineupActionSummary } from '@/lib/lineup-actions/emptySummary'
 import { useDashboardToolLeague } from '@/hooks/useDashboardToolLeague'
+import { consumeDashboardRankRefreshPending } from '@/lib/import/dashboardRankRefresh'
 
 const ONBOARDING_KEY = 'af-onboarding-v1'
 const STRIP_FETCH_STALE_MS = 5 * 60_000
@@ -99,6 +101,7 @@ export function DashboardOverview({
   onOpenChimmy: _onOpenChimmy,
   initialUserRankPayload = null,
 }: DashboardOverviewProps) {
+  const router = useRouter()
   const { t, tInterpolate } = useLanguage()
   const { hasPro } = useEntitlements()
   const { selectedLeagueId, selectedLeague, setSelectedLeagueId } = useDashboardToolLeague(leagues)
@@ -139,6 +142,28 @@ export function DashboardOverview({
 
   /** Increment after legacy rankings import so rank widgets refetch `/api/user/rank`. */
   const [rankRefreshKey, setRankRefreshKey] = useState(0)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      const u = new URL(window.location.href)
+      if (u.searchParams.get('rankSync') === '1') {
+        setRankRefreshKey((k) => k + 1)
+        u.searchParams.delete('rankSync')
+        window.history.replaceState({}, '', `${u.pathname}${u.search}${u.hash}`)
+        router.refresh()
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [router])
+
+  useEffect(() => {
+    if (consumeDashboardRankRefreshPending()) {
+      setRankRefreshKey((k) => k + 1)
+      router.refresh()
+    }
+  }, [router])
 
   /** Last successful `/api/dashboard/today-actions` refresh (lineup + waivers + trades + counts). */
   const stripFetchedAt = useRef<number | null>(null)

@@ -18,6 +18,12 @@ import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
 import { StartSitLauncher } from '@/components/dashboard/StartSitLauncher'
 import { mergeDashboardActiveLeagueId } from '@/lib/dashboard/dashboard-league-selection'
 import { SelectedLeagueHomePanel } from './components/SelectedLeagueHomePanel'
+import { DraftRoomOverlay } from './components/DraftRoomOverlay'
+import {
+  buildDashboardDraftOverlayUrl,
+  type DashboardDraftOverlayBridgePayload,
+  fetchLiveDraftSessionIdForLeague,
+} from '@/lib/dashboard/dashboard-draft-overlay-bridge'
 
 type DashboardShellProps = {
   userId: string
@@ -330,6 +336,11 @@ function DashboardShellInner({
   const myLeaguesRail = useMyLeaguesRailCollapse()
 
   const leagueIdFromUrl = searchParams.get('leagueId')
+  const draftOverlayFlag = searchParams.get('draftOverlay') === '1'
+  const draftIdFromUrl = searchParams.get('draftId')
+  const dispersalDraftIdFromUrl = searchParams.get('dispersalDraftId')
+  const [draftOverlayError, setDraftOverlayError] = useState<string | null>(null)
+  const [draftOverlayResolving, setDraftOverlayResolving] = useState(false)
   const validLeagueIds = useMemo(() => new Set(leagues.map((l) => l.id)), [leagues])
   const effectiveActiveLeagueId = useMemo(
     () =>
@@ -346,6 +357,23 @@ function DashboardShellInner({
     const found = leagues.find((l) => l.id === effectiveActiveLeagueId)
     return found ?? null
   }, [leagues, effectiveActiveLeagueId])
+
+  const overlayIframeSrc = useMemo(() => {
+    if (!effectiveActiveLeagueId) return null
+    if (dispersalDraftIdFromUrl) {
+      return `/league/${encodeURIComponent(effectiveActiveLeagueId)}/dispersal-draft/${encodeURIComponent(dispersalDraftIdFromUrl)}?embed=1`
+    }
+    if (draftIdFromUrl) {
+      return `/draft/${encodeURIComponent(draftIdFromUrl)}`
+    }
+    return null
+  }, [draftIdFromUrl, dispersalDraftIdFromUrl, effectiveActiveLeagueId])
+
+  const showDraftOverlayShell = Boolean(
+    draftOverlayFlag &&
+      effectiveActiveLeagueId &&
+      (overlayIframeSrc || draftOverlayResolving || Boolean(draftOverlayError)),
+  )
 
   const commissionerLeagues = useMemo(
     () =>
@@ -366,6 +394,73 @@ function DashboardShellInner({
     },
     [router],
   )
+
+  const handleDraftOverlayRequest = useCallback(
+    (payload: DashboardDraftOverlayBridgePayload) => {
+      if (!validLeagueIds.has(payload.leagueId)) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn('[dashboard] ignored draft overlay for unknown league', payload.leagueId)
+        }
+        return
+      }
+      setDraftOverlayError(null)
+      router.replace(
+        buildDashboardDraftOverlayUrl({
+          leagueId: payload.leagueId,
+          draftId: payload.draftId,
+          dispersalDraftId: payload.dispersalDraftId,
+        }),
+        { scroll: false },
+      )
+    },
+    [router, validLeagueIds],
+  )
+
+  /** Resolve live draft id when URL requests overlay without draft/dispersal ids */
+  useEffect(() => {
+    if (!draftOverlayFlag || !effectiveActiveLeagueId) return
+    if (draftIdFromUrl || dispersalDraftIdFromUrl) {
+      setDraftOverlayResolving(false)
+      return
+    }
+    let cancelled = false
+    setDraftOverlayResolving(true)
+    setDraftOverlayError(null)
+    fetchLiveDraftSessionIdForLeague(effectiveActiveLeagueId).then((id) => {
+      if (cancelled) return
+      setDraftOverlayResolving(false)
+      if (!id) {
+        setDraftOverlayError('Could not open draft — no draft session found for this league.')
+        return
+      }
+      router.replace(
+        buildDashboardDraftOverlayUrl({ leagueId: effectiveActiveLeagueId, draftId: id }),
+        { scroll: false },
+      )
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    draftOverlayFlag,
+    dispersalDraftIdFromUrl,
+    draftIdFromUrl,
+    effectiveActiveLeagueId,
+    router,
+  ])
+
+  const closeDraftOverlay = useCallback(() => {
+    setDraftOverlayError(null)
+    setDraftOverlayResolving(false)
+    if (!effectiveActiveLeagueId) return
+    router.replace(`/dashboard?leagueId=${encodeURIComponent(effectiveActiveLeagueId)}`, { scroll: false })
+  }, [effectiveActiveLeagueId, router])
+
+  const goDashboardHomeFromDraft = useCallback(() => {
+    setDraftOverlayError(null)
+    setDraftOverlayResolving(false)
+    router.replace('/dashboard', { scroll: false })
+  }, [router])
 
   useEffect(() => {
     const openMobileLeft = () => {
@@ -469,6 +564,7 @@ function DashboardShellInner({
   const geo = useGeoRestriction()
 
   return (
+    <>
     <AppShell
       rootClassName="h-[calc(100dvh-8.5rem)] min-h-0 lg:h-[calc(100dvh-3.5rem)]"
       rootProps={{ 'data-dashboard-user-id': userId }}
@@ -573,10 +669,7 @@ function DashboardShellInner({
 
         <div className="min-h-0 flex-1 overflow-hidden">
           {isLeagueRoute && effectiveActiveLeagueId && selectedLeague ? (
-            <SelectedLeagueHomePanel
-              league={selectedLeague}
-              onBackToOverview={() => router.replace('/dashboard', { scroll: false })}
-            />
+            <SelectedLeagueHomePanel league={selectedLeague} onDraftOverlayRequest={handleDraftOverlayRequest} />
           ) : isLeagueRoute && effectiveActiveLeagueId && !selectedLeague && !leaguesLoading ? (
             <div
               className="flex h-full min-h-0 flex-col items-center justify-center overflow-y-auto px-6 text-center"
@@ -711,6 +804,18 @@ function DashboardShellInner({
       ) : null}
       </>
     </AppShell>
+    {showDraftOverlayShell && effectiveActiveLeagueId ? (
+      <DraftRoomOverlay
+        leagueId={effectiveActiveLeagueId}
+        iframeSrc={draftOverlayError ? null : overlayIframeSrc}
+        leagueName={selectedLeague?.name ?? null}
+        loading={draftOverlayResolving && !draftOverlayError}
+        errorMessage={draftOverlayError}
+        onClose={closeDraftOverlay}
+        onHome={goDashboardHomeFromDraft}
+      />
+    ) : null}
+    </>
   )
 }
 
