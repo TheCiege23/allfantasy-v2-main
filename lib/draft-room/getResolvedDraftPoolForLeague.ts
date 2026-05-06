@@ -752,6 +752,39 @@ export async function getResolvedDraftPoolForLeague(
     if (!averagedAdpLoose.has(looseKey)) averagedAdpLoose.set(looseKey, row.adp)
   }
 
+  /**
+   * Block A — multi-sport ADP seed.
+   * Build a sport-agnostic raw-list seed from the averaged ADP rows so non-NFL
+   * pools (NBA / NHL / MLB / NCAAB / SOCCER) can start from real ADP order
+   * instead of falling through to a SportsPlayer-only slice. Caller decides
+   * when to apply this seed; NFL keeps its own branch (with IDP + rookie
+   * promoted-pro filtering).
+   */
+  function buildAdpSeedRowsForSport(
+    adpRows: AveragedAdpRow[],
+    useMixed: boolean,
+  ): DraftPoolRawRow[] {
+    return adpRows
+      .filter((row) => {
+        const name = String(row.name ?? '').trim()
+        const position = String(row.position ?? '').trim()
+        return Boolean(name && position && Number.isFinite(Number(row.adp)))
+      })
+      .sort((a, b) => Number(a.adp) - Number(b.adp))
+      .map<DraftPoolRawRow>((row) => ({
+        name: String(row.name).trim(),
+        position: String(row.position).trim().toUpperCase(),
+        team: row.team ? String(row.team).trim().toUpperCase() : null,
+        adp: Number(row.adp),
+        bye: null,
+        playerId: null,
+        injuryStatus: null,
+        status: null,
+        imageUrl: null,
+        ...(useMixed ? { poolType: 'pro' as const } : {}),
+      }))
+  }
+
   type RawRow = DraftPoolRawRow
   let rawList: RawRow[] = []
   const poolFetchLimit =
@@ -935,27 +968,51 @@ export async function getResolvedDraftPoolForLeague(
       }
     }
   } else {
-    rawList = poolRows.slice(0, limit).map((p) => ({
-      name: p.full_name,
-      position: p.position,
-      team: p.team_abbreviation,
-      playerId: p.external_source_id ?? (p as { player_id?: string | null }).player_id ?? null,
-      injuryStatus: p.injury_status,
-      status: (p as { status?: string | null }).status ?? null,
-      imageUrl: (p as { image_url?: string | null }).image_url ?? null,
-      age: (p as { age?: number | null }).age ?? null,
-      ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
-    }))
-    const seenNonNfl = new Set(
-      rawList.map((r) => normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')),
-    )
-    mergeDbPoolIntoRawList(
-      rawList,
-      poolRows as SportPoolRow[],
-      poolMergeCap(limit),
-      useMixedPoolTypeMarkers,
-      seenNonNfl,
-    )
+    /**
+     * Block A — non-NFL sports (NBA / NHL / MLB / NCAAB / SOCCER + NCAAF
+     * non-redraft / specialty paths). Prefer the averaged-ADP seed when
+     * present so the pool starts in real draft order; merge the SportsPlayer
+     * pool rows behind it for breadth + image / age / injury / secondary-pos
+     * enrichment. Falls back to the previous SportsPlayer-only behavior when
+     * no ADP rows exist for this sport (keeps drafts unblocked instead of
+     * empty).
+     */
+    const adpSeedRows = buildAdpSeedRowsForSport(averagedAdpRows, useMixedPoolTypeMarkers)
+    if (adpSeedRows.length > 0) {
+      rawList = adpSeedRows
+      const seenAfterAdpSeed = new Set(
+        rawList.map((r) => normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')),
+      )
+      mergeDbPoolIntoRawList(
+        rawList,
+        poolRows as SportPoolRow[],
+        poolMergeCap(limit),
+        useMixedPoolTypeMarkers,
+        seenAfterAdpSeed,
+      )
+    } else {
+      rawList = poolRows.slice(0, limit).map((p) => ({
+        name: p.full_name,
+        position: p.position,
+        team: p.team_abbreviation,
+        playerId: p.external_source_id ?? (p as { player_id?: string | null }).player_id ?? null,
+        injuryStatus: p.injury_status,
+        status: (p as { status?: string | null }).status ?? null,
+        imageUrl: (p as { image_url?: string | null }).image_url ?? null,
+        age: (p as { age?: number | null }).age ?? null,
+        ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
+      }))
+      const seenNonNfl = new Set(
+        rawList.map((r) => normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')),
+      )
+      mergeDbPoolIntoRawList(
+        rawList,
+        poolRows as SportPoolRow[],
+        poolMergeCap(limit),
+        useMixedPoolTypeMarkers,
+        seenNonNfl,
+      )
+    }
   }
 
   const proNames = new Set(rawList.map((r) => normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')))
