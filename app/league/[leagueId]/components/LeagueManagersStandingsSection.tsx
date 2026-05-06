@@ -239,9 +239,9 @@ export function LeagueManagersStandingsSection({
     const gBadge = extra?.guillotineTier ? guillotineBadge(extra.guillotineTier) : null
 
     return (
-      <li key={team.id} className="py-3 sm:py-3.5">
-        <div className="flex gap-2 sm:gap-3">
-          <div className="w-7 shrink-0 pt-0.5 text-center text-[15px] font-bold tabular-nums text-white sm:w-8 sm:text-[17px]">
+      <li key={team.id} className="py-2 sm:py-2.5">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <div className="w-7 shrink-0 text-center text-[14px] font-bold tabular-nums text-white/65 sm:w-8 sm:text-[15px]">
             {rank}
           </div>
           <div className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-white/10 sm:h-10 sm:w-10">
@@ -274,9 +274,11 @@ export function LeagueManagersStandingsSection({
                     </span>
                   ) : null}
                 </div>
-                <p className="mt-0.5 text-[11px] text-white/38">
-                  @{team.ownerName.replace(/^@/, '') || 'manager'}
-                </p>
+                {!preDraft ? (
+                  <p className="mt-0.5 text-[11px] text-white/38">
+                    @{team.ownerName.replace(/^@/, '') || 'manager'}
+                  </p>
+                ) : null}
               </div>
               {!preDraft ? (
                 <div className="shrink-0 text-right">
@@ -311,7 +313,7 @@ export function LeagueManagersStandingsSection({
           <div className="bg-[#151a28] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80 sm:px-4">
             {block.title}
           </div>
-          <ul className="divide-y divide-white/[0.06] px-2 sm:px-3">
+          <ul className="divide-y divide-white/[0.04] px-2 sm:px-3">
             {block.list.map((team, i) => renderRow(team, i + 1, block.list.length))}
           </ul>
         </div>
@@ -324,7 +326,7 @@ export function LeagueManagersStandingsSection({
           <div className="bg-[#151a28] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-amber-200/85 sm:px-4">
             {block.title}
           </div>
-          <ul className="divide-y divide-white/[0.06] px-2 sm:px-3">
+          <ul className="divide-y divide-white/[0.04] px-2 sm:px-3">
             {block.list.map((team, i) => renderRow(team, i + 1, block.list.length))}
           </ul>
         </div>
@@ -334,7 +336,7 @@ export function LeagueManagersStandingsSection({
     if (standingsPresentation.mode === 'guillotine' && guillotineList) {
       const danger = standingsPresentation.dangerByTeamId
       return (
-        <ul className="divide-y divide-white/[0.06] px-2 py-1 sm:px-3">
+        <ul className="divide-y divide-white/[0.04] px-2 py-1 sm:px-3">
           {guillotineList.map((team, index) =>
             renderRow(team, index + 1, guillotineList.length, {
               guillotineTier: danger[team.id],
@@ -345,7 +347,7 @@ export function LeagueManagersStandingsSection({
     }
 
     return (
-      <ul className="divide-y divide-white/[0.06] px-2 py-1 sm:px-3">
+      <ul className="divide-y divide-white/[0.04] px-2 py-1 sm:px-3">
         {sorted.map((team, index) => renderRow(team, index + 1, sorted.length))}
       </ul>
     )
@@ -353,24 +355,33 @@ export function LeagueManagersStandingsSection({
 
   return (
     <section
-      className="overflow-hidden rounded-2xl border border-white/[0.08] bg-[#1e2436]"
+      className="overflow-hidden rounded-2xl border border-white/[0.06] bg-[#11182b]"
       aria-label={preDraft ? 'Teams' : 'Standings'}
       data-testid="league-managers-standings"
     >
-      <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3 sm:px-5">
-        <h2 className="text-[14px] font-bold text-white sm:text-[15px]">{heading}</h2>
-        <div className="flex items-center gap-3">
-          {draftTabExtras ? (
+      <div className="flex items-start justify-between gap-3 px-4 py-3 sm:px-5 sm:py-4">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-bold text-white sm:text-[16px]">{heading}</h2>
+          {preDraft && draftTabExtras ? (
+            <p className="mt-0.5 text-[11px] text-white/45">
+              {draftTabExtras.isFull
+                ? 'League is full'
+                : `${draftTabExtras.filled} of ${draftTabExtras.cap} teams`}
+            </p>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 items-center gap-3">
+          {!preDraft && draftTabExtras ? (
             <p className="text-[11px] text-white/45">
               {draftTabExtras.isFull
                 ? 'League is full'
                 : `${draftTabExtras.filled} of ${draftTabExtras.cap} teams`}
             </p>
-          ) : (
+          ) : !preDraft ? (
             <span className="text-[11px] text-white/40">
               {teams.length} team{teams.length === 1 ? '' : 's'}
             </span>
-          )}
+          ) : null}
           {!preDraft ? (
             <Link
               href={bracketHref}
