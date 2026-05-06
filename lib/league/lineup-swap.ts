@@ -31,15 +31,24 @@ export function buildLineupListsFromPlayerData(
   }
 
   // Final fallback for completed-draft rosters whose `finalizeRosterAssignments`
-  // step never produced `lineup_sections` (e.g. roster template was missing,
-  // finalize errored mid-flight, or completion happened on a code path that
-  // bypassed it). The `appendPickToRosterDraftSnapshot` write path always
+  // step never produced `lineup_sections.starters` (e.g. roster template was
+  // missing, finalize errored mid-flight, or completion happened on a code path
+  // that bypassed it). The `appendPickToRosterDraftSnapshot` write path always
   // populates `playerData.draftPicks` during the draft, so we can derive a
   // greedy starter→bench split in pick order. This is a safety net for the
   // league dashboard Roster tab — `runPostDraftFinalizationArtifacts` remains
   // the canonical materialization path; this fallback just stops the dashboard
-  // from rendering an empty roster while the heal happens.
-  if (starters.length === 0 && bench.length === 0 && playerData && typeof playerData === 'object' && !Array.isArray(playerData)) {
+  // from rendering empty starter slots while the heal happens.
+  //
+  // Note: we intentionally fire this even when `bench` is already non-empty.
+  // The pre-existing `starters.length === 0 && bench.length === 0` guard
+  // assumed a non-empty bench meant the sections fallback had succeeded — but
+  // a partial finalize can leave players in `bench` while `starters` stays
+  // empty, which is exactly the bug class this fallback exists to repair.
+  // Overwriting `bench` is safe because it only fires when `starters` is empty
+  // (so a real lineup can never be clobbered) and the legacy
+  // `playerData.starters` short-circuit above (line 25) still wins when set.
+  if (starters.length === 0 && playerData && typeof playerData === 'object' && !Array.isArray(playerData)) {
     const pd = playerData as Record<string, unknown>
     const draftPicks = Array.isArray(pd.draftPicks)
       ? (pd.draftPicks as Array<Record<string, unknown>>)

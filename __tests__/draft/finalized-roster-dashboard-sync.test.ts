@@ -190,16 +190,47 @@ describe('buildLineupListsFromPlayerData — completed-draft draftPicks fallback
     expect(result.starters).toEqual(['legacy1', ''])
   })
 
-  it('does NOT use draftPicks when bench is non-empty (sections fallback already worked)', () => {
+  it('uses draftPicks when starters are empty even if bench is non-empty (heals stale bench-only data)', () => {
+    // Pre-existing behaviour gated this fallback on `bench.length === 0`, which
+    // blocked the heal whenever a partial finalize had already written stale
+    // rows to `lineup_sections.bench` while leaving `starters` empty. Loosened
+    // the guard to fire on `starters.length === 0` alone — the
+    // `playerData.starters` legacy short-circuit (asserted in the test above)
+    // still protects real lineups from being clobbered.
     const playerData = {
       lineup_sections: {
-        bench: [{ id: 'b1' }, { id: 'b2' }],
+        bench: [{ id: 'stale-b1' }, { id: 'stale-b2' }],
       },
-      draftPicks: [{ playerId: 'pick1', playerName: 'A' }],
+      draftPicks: [
+        { playerId: 'pick1', playerName: 'A' },
+        { playerId: 'pick2', playerName: 'B' },
+      ],
     }
     const result = buildLineupListsFromPlayerData(playerData, 2)
-    expect(result.starters).toEqual(['', ''])
-    expect(result.bench).toEqual(['b1', 'b2'])
+    expect(result.starters).toEqual(['pick1', 'pick2'])
+    // Stale bench is overwritten; the canonical post-draft order comes from draftPicks.
+    expect(result.bench).toEqual([])
+  })
+
+  it('heals empty starters from draftPicks while preserving overflow into bench (post-draft repair shape)', () => {
+    // Realistic shape for the league dashboard Roster tab when finalize ran
+    // partially: starters empty, lineup_sections.bench populated with stale
+    // pre-finalize rows, draftPicks fully populated.
+    const playerData = {
+      lineup_sections: {
+        bench: [{ id: 'stale-b1' }],
+      },
+      draftPicks: [
+        { playerId: 'p1', playerName: 'QB' },
+        { playerId: 'p2', playerName: 'RB' },
+        { playerId: 'p3', playerName: 'WR' },
+        { playerId: 'p4', playerName: 'TE' },
+      ],
+    }
+    const result = buildLineupListsFromPlayerData(playerData, 2)
+    // First 2 picks fill the starter slots, remainder goes to bench (in pick order).
+    expect(result.starters).toEqual(['p1', 'p2'])
+    expect(result.bench).toEqual(['p3', 'p4'])
   })
 
   it('handles draftPicks shorter than starter slot count by padding with empty', () => {
