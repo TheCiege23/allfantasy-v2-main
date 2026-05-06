@@ -393,7 +393,7 @@ function DraftBoardInner({
         aria-hidden
       />
       <div
-        className={`border-b px-3 py-3 text-xs text-white/70 backdrop-blur-sm sm:px-4 ${rs ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(7,15,29,0.96),rgba(6,13,30,0.9))]' : 'border-white/[0.08] bg-[linear-gradient(180deg,rgba(6,13,30,0.95),rgba(5,10,22,0.88))]'}`}
+        className={`border-b px-3 py-1.5 text-xs text-white/70 backdrop-blur-sm sm:px-4 ${rs ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(7,15,29,0.96),rgba(6,13,30,0.9))]' : 'border-white/[0.08] bg-[linear-gradient(180deg,rgba(6,13,30,0.95),rgba(5,10,22,0.88))]'}`}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -493,7 +493,7 @@ function DraftBoardInner({
       </div>
 
       <div
-        className={`border-b px-3 py-2 text-[10px] sm:px-4 ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
+        className={`border-b px-3 py-1 text-[10px] sm:px-4 ${rs ? 'border-cyan-500/10 bg-cyan-500/[0.07] text-cyan-100/72' : 'border-white/[0.08] bg-white/[0.03] text-white/60'}`}
         data-testid="draft-board-round-label"
       >
         {draftType === 'auction'

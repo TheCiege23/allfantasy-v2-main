@@ -35,7 +35,7 @@ export function RedraftPlanningRibbon({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-cyan-500/15 bg-[linear-gradient(92deg,rgba(34,211,238,0.08),rgba(15,23,42,0.55))] px-3 py-2 text-[11px] text-white/85 shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-cyan-500/15 bg-[linear-gradient(92deg,rgba(34,211,238,0.08),rgba(15,23,42,0.55))] px-3 py-1.5 text-[11px] text-white/85 shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]"
       role="region"
       aria-label="Draft planning"
       data-testid="redraft-planning-ribbon"
@@ -88,7 +88,7 @@ export function RedraftPlanningRibbon({
         </ol>
       </div>
 
-      <p className="w-full text-[10px] text-white/42 sm:w-auto sm:pl-2">
+      <p className="text-[10px] text-white/42 sm:pl-2">
         Snake: pick order reverses each round
         {thirdRoundReversal ? ' · 3rd-round reversal on' : ''}.
       </p>

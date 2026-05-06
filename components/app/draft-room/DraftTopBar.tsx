@@ -490,7 +490,7 @@ export function DraftTopBar({
 
   return (
     <header
-      className={`relative border-b px-3 pb-3 pt-2.5 backdrop-blur-xl sm:px-4 ${
+      className={`relative border-b px-3 pb-2 pt-2 backdrop-blur-xl sm:px-4 ${
         rs
           ? 'border-cyan-400/25 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(34,211,238,0.14),transparent),linear-gradient(180deg,#0b1829_0%,#060f1e_45%,#050814_100%)] shadow-[0_16px_56px_rgba(8,145,178,0.14)]'
           : 'border-white/[0.07] bg-gradient-to-b from-[#070d1c]/95 via-[#060b19]/98 to-[#050814]'
@@ -532,7 +532,7 @@ export function DraftTopBar({
 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="truncate text-xl font-bold tracking-tight text-white drop-shadow-sm sm:text-[1.35rem]">
+                <h1 className="truncate text-lg font-bold tracking-tight text-white drop-shadow-sm sm:text-xl">
                   {leagueName}
                 </h1>
                 {onlineCount != null && onlineCount > 0 && (
@@ -617,9 +617,9 @@ export function DraftTopBar({
                   onClick={onCommissionerOpen}
                   data-testid="draft-topbar-commissioner-primary"
                   disabled={commissionerLoading}
-                  className="mt-2 inline-flex items-center gap-2 rounded-full border border-amber-400/45 bg-amber-500/15 px-4 py-2 text-xs font-bold uppercase tracking-[0.12em] text-amber-100 shadow-[0_4px_20px_rgba(245,158,11,0.18)] transition duration-150 hover:bg-amber-500/22 hover:border-amber-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/55 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]"
+                  className="mt-1.5 inline-flex items-center gap-1.5 rounded-full border border-amber-400/45 bg-amber-500/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-amber-100 shadow-[0_4px_20px_rgba(245,158,11,0.18)] transition duration-150 hover:bg-amber-500/22 hover:border-amber-400/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-300/55 disabled:cursor-not-allowed disabled:opacity-50 active:scale-[0.99]"
                 >
-                  <Shield className="h-5 w-5 shrink-0 text-amber-100" aria-hidden />
+                  <Shield className="h-4 w-4 shrink-0 text-amber-100" aria-hidden />
                   Commissioner control center
                 </button>
               ) : null}
@@ -692,17 +692,17 @@ export function DraftTopBar({
             </div>
           ) : null}
 
-          <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-2.5">
+          <div className="mt-2 flex flex-wrap items-center gap-2 sm:gap-2.5">
             {pickLabel ? (
               <div
-                className={`inline-flex items-center gap-2 rounded-xl border px-3.5 py-2 shadow-[0_4px_24px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/15 ${
+                className={`inline-flex items-center gap-2 rounded-xl border px-3 py-1.5 shadow-[0_4px_24px_rgba(34,211,238,0.12)] ring-1 ring-cyan-400/15 ${
                   rs
                     ? 'border-cyan-400/35 bg-gradient-to-br from-cyan-500/18 via-[#0c1828]/95 to-[#081018]/98 shadow-[0_8px_36px_rgba(34,211,238,0.18)]'
                     : 'border-cyan-400/25 bg-gradient-to-br from-cyan-500/[0.12] to-[#0a1528]/90'
                 }`}
               >
                 <Hash className="h-4 w-4 shrink-0 text-cyan-300" />
-                <span className="text-base font-bold tracking-tight text-white sm:text-lg">{pickLabel}</span>
+                <span className="text-sm font-bold tracking-tight text-white sm:text-base">{pickLabel}</span>
                 {overallPickNumber != null ? (
                   <span className="rounded-md bg-white/10 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-white/60">
                     #{overallPickNumber}
@@ -713,7 +713,7 @@ export function DraftTopBar({
 
             {currentManagerOnClock ? (
               <div
-                className={`inline-flex max-w-full items-center gap-2 rounded-xl border px-3.5 py-2 ring-1 ${
+                className={`inline-flex max-w-full items-center gap-2 rounded-xl border px-3 py-1.5 ring-1 ${
                   rs
                     ? 'border-violet-400/40 bg-[radial-gradient(ellipse_at_30%_0%,rgba(139,92,246,0.28),transparent),linear-gradient(145deg,rgba(109,40,217,0.22),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(139,92,246,0.22)] ring-violet-400/25'
                     : 'border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-[#0a1228]/95 shadow-[0_6px_28px_rgba(139,92,246,0.15)] ring-violet-400/10'
@@ -736,7 +736,7 @@ export function DraftTopBar({
                   <User className="h-4 w-4 shrink-0 text-violet-300" />
                 )}
                 <span
-                  className="min-w-0 truncate text-base font-bold text-white sm:text-lg"
+                  className="min-w-0 truncate text-sm font-bold text-white sm:text-base"
                   data-testid="draft-topbar-on-clock-manager"
                 >
                   {currentManagerOnClock}
