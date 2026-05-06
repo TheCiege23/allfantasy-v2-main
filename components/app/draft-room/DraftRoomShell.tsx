@@ -153,8 +153,8 @@ export function DraftRoomShell({
               Collapsed: flex-1 — board fills the entire screen below the top bar. */}
           <div
             className={cn(
-              'min-h-[160px] shrink-0 overflow-auto overscroll-contain [overflow-anchor:none] border-b',
-              bottomDockExpanded ? 'max-h-[min(52vh,640px)]' : 'min-h-0 max-h-[unset] flex-1',
+              'min-h-[240px] overflow-auto overscroll-contain [overflow-anchor:none] border-b',
+              bottomDockExpanded ? 'flex-1 basis-0' : 'flex-1',
               surfaceVariant === 'redraft_snake'
                 ? 'border-cyan-500/15 bg-[linear-gradient(180deg,rgba(8,18,36,0.98),rgba(4,9,17,0.99))] shadow-[inset_0_-1px_0_rgba(34,211,238,0.06)]'
                 : 'border-white/8 bg-[#050c1d]',
@@ -183,8 +183,8 @@ export function DraftRoomShell({
           </div>
           <div
             className={cn(
-              'flex min-h-0 overflow-hidden',
-              bottomDockExpanded ? 'flex-1' : 'hidden',
+              'flex min-h-[240px] overflow-hidden',
+              bottomDockExpanded ? 'flex-1 basis-0' : 'hidden',
             )}
             data-testid="draft-premium-main-zones"
             data-dock-expanded={bottomDockExpanded ? 'true' : 'false'}
