@@ -108,6 +108,16 @@ export type DraftPoolRawRow = {
   /** D.7 — Sleeper years_exp; 0 = rookie. Only attached for NFL pools. */
   yearsExp?: number | null
   isRookie?: boolean | null
+  /** Block B.2-A — rookie inference metadata for non-NFL sports.
+   * Sport propagated so the predicate can branch on per-sport rules.
+   * Year fields normalized to camelCase here; pool rows may surface either
+   * snake_case or camelCase from upstream sources. */
+  sport?: string
+  draftYear?: number | string | null
+  rookieYear?: number | string | null
+  debutYear?: number | string | null
+  firstSeasonYear?: number | string | null
+  classYear?: string | null
   /** Internal: preserve source IDs before any backfill or reconciliation. */
   sourcePlayerId?: string | null
   sourceSleeperId?: string | null
@@ -148,6 +158,21 @@ type SportPoolRow = {
   status?: string | null
   player_id?: string | null
   age?: number | null
+  /** Block B.2-A — rookie inference inputs surfaced from SportsPlayer when
+   * available. Both snake_case (DB) and camelCase (already-normalized) are
+   * accepted so the resolver can read either shape without a refactor. */
+  draft_year?: number | string | null
+  draftYear?: number | string | null
+  rookie_year?: number | string | null
+  rookieYear?: number | string | null
+  debut_year?: number | string | null
+  debutYear?: number | string | null
+  first_season_year?: number | string | null
+  firstSeasonYear?: number | string | null
+  class_year?: string | null
+  classYear?: string | null
+  class_year_label?: string | null
+  classYearLabel?: string | null
 }
 
 type InjuryLookupRow = {
@@ -761,6 +786,7 @@ export async function getResolvedDraftPoolForLeague(
    * promoted-pro filtering).
    */
   function buildAdpSeedRowsForSport(
+    seedSport: string,
     adpRows: AveragedAdpRow[],
     useMixed: boolean,
   ): DraftPoolRawRow[] {
@@ -781,6 +807,7 @@ export async function getResolvedDraftPoolForLeague(
         injuryStatus: null,
         status: null,
         imageUrl: null,
+        sport: seedSport,
         ...(useMixed ? { poolType: 'pro' as const } : {}),
       }))
   }
@@ -977,7 +1004,7 @@ export async function getResolvedDraftPoolForLeague(
      * no ADP rows exist for this sport (keeps drafts unblocked instead of
      * empty).
      */
-    const adpSeedRows = buildAdpSeedRowsForSport(averagedAdpRows, useMixedPoolTypeMarkers)
+    const adpSeedRows = buildAdpSeedRowsForSport(sport, averagedAdpRows, useMixedPoolTypeMarkers)
     if (adpSeedRows.length > 0) {
       rawList = adpSeedRows
       const seenAfterAdpSeed = new Set(
@@ -991,7 +1018,7 @@ export async function getResolvedDraftPoolForLeague(
         seenAfterAdpSeed,
       )
     } else {
-      rawList = poolRows.slice(0, limit).map((p) => ({
+      rawList = poolRows.slice(0, limit).map<DraftPoolRawRow>((p) => ({
         name: p.full_name,
         position: p.position,
         team: p.team_abbreviation,
@@ -1000,6 +1027,17 @@ export async function getResolvedDraftPoolForLeague(
         status: (p as { status?: string | null }).status ?? null,
         imageUrl: (p as { image_url?: string | null }).image_url ?? null,
         age: (p as { age?: number | null }).age ?? null,
+        // Block B.2-A — surface rookie inference inputs from SportsPlayer when
+        // available. Predicate (rookieFilterPredicate) reads sport + year/age
+        // fields to classify rookies for non-NFL sports without changing
+        // existing NFL behavior. Both snake_case + camelCase tolerated.
+        sport,
+        draftYear: p.draft_year ?? p.draftYear ?? null,
+        rookieYear: p.rookie_year ?? p.rookieYear ?? null,
+        debutYear: p.debut_year ?? p.debutYear ?? null,
+        firstSeasonYear: p.first_season_year ?? p.firstSeasonYear ?? null,
+        classYear: p.class_year ?? p.classYear ?? null,
+        classYearLabel: p.class_year_label ?? p.classYearLabel ?? null,
         ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
       }))
       const seenNonNfl = new Set(
