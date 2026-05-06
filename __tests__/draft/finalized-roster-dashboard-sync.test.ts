@@ -290,8 +290,10 @@ describe('Source contract — read-side fallback wired in lineup-swap.ts', () =>
   })
 
   it('declares the draftPicks fallback path with the no-existing-lineup gate', () => {
-    expect(src).toMatch(/starters\.length === 0 && bench\.length === 0/)
-    expect(src).toMatch(/draftPicks = Array\.isArray\(pd\.draftPicks\)/)
+    expect(src).toMatch(
+      /if \(\s*starters\.length === 0 && playerData && typeof playerData === 'object' && !Array\.isArray\(playerData\)\s*\) \{\s*const pd = playerData as Record<string, unknown>\s*const draftPicks = Array\.isArray\(pd\.draftPicks\)/,
+    )
+    expect(src).not.toMatch(/if \(\s*starters\.length === 0 && bench\.length === 0/)
   })
 
   it('greedy-fills starters first, then bench', () => {
