@@ -249,7 +249,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex h-[70px] min-h-[70px] flex-col overflow-hidden rounded-xl border px-2.5 pb-2 pt-2 text-[10px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/55 hover:shadow-2xl sm:h-[74px] sm:min-h-[74px] sm:px-2.5 sm:pb-2 sm:pt-2 ${
+      className={`group relative flex h-[52px] min-h-[52px] flex-col overflow-hidden rounded-md border px-1.5 pb-1 pt-1 text-[10px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/55 hover:shadow-xl sm:h-[56px] sm:min-h-[56px] sm:px-2 sm:pb-1 sm:pt-1 ${
         onTradeFromCell ? 'pr-7 sm:pr-8' : ''
       } ${
         isCurrentPick
@@ -355,32 +355,30 @@ function DraftBoardCellInner({
       </div>
 
       {isEmpty ? (
-        <div className="mt-auto flex min-h-0 flex-1 flex-col justify-end gap-0.5">
-          <p className={`text-[9px] font-semibold uppercase tracking-[0.14em] ${rs ? 'text-cyan-200/45' : 'text-white/28'}`}>Open Slot</p>
-          <div className="flex items-end justify-between gap-2">
-            <div className="flex items-center gap-1 text-white/38">
-              {emptyCellDirection === 'reverse' ? (
-                <ArrowLeft className="h-3 w-3" aria-hidden />
-              ) : (
-                <ArrowRight className="h-3 w-3" aria-hidden />
-              )}
-              <span className="text-[8px] uppercase tracking-[0.12em]">Awaiting pick</span>
-              {isCollegeRound ? (
-                <StatusBadge label="College" className="bg-violet-500/25 text-violet-200" />
-              ) : isDevyRound ? (
-                <StatusBadge label="Devy" className="bg-violet-500/25 text-violet-200" />
-              ) : null}
-            </div>
-
-            {pick.tradedPickMeta?.previousOwnerName ? (
-              <span
-                className="max-w-[56px] truncate text-[8px] text-white/24"
-                title={`Originally ${pick.tradedPickMeta.previousOwnerName}`}
-              >
-                from {pick.tradedPickMeta.previousOwnerName}
-              </span>
+        <div className="mt-auto flex min-h-0 flex-1 items-end justify-between gap-1">
+          <div className="flex min-w-0 items-center gap-1 text-white/55">
+            {emptyCellDirection === 'reverse' ? (
+              <ArrowLeft className="h-3 w-3 shrink-0" aria-hidden />
+            ) : (
+              <ArrowRight className="h-3 w-3 shrink-0" aria-hidden />
+            )}
+            <span className="truncate text-[9px] font-medium" title={ownerLabel ?? 'Awaiting pick'}>
+              {ownerLabel ?? 'Awaiting pick'}
+            </span>
+            {isCollegeRound ? (
+              <StatusBadge label="College" className="shrink-0 bg-violet-500/25 text-violet-200" />
+            ) : isDevyRound ? (
+              <StatusBadge label="Devy" className="shrink-0 bg-violet-500/25 text-violet-200" />
             ) : null}
           </div>
+          {pick.tradedPickMeta?.previousOwnerName ? (
+            <span
+              className="max-w-[56px] shrink-0 truncate text-[8px] text-white/30"
+              title={`Originally ${pick.tradedPickMeta.previousOwnerName}`}
+            >
+              from {pick.tradedPickMeta.previousOwnerName}
+            </span>
+          ) : null}
         </div>
       ) : (
         <div className="mt-0.5 flex min-h-0 flex-1 flex-col justify-between gap-1 overflow-hidden">
@@ -420,37 +418,10 @@ function DraftBoardCellInner({
             </div>
           </div>
 
-          <div className="flex items-end justify-between gap-1">
-            <div className="min-w-0 truncate text-[8px] text-white/38">
-              {normalized?.stats?.summary ? (
-                <span title={normalized.stats.summary}>{normalized.stats.summary}</span>
-              ) : null}
-            </div>
-            <div className="shrink-0 text-right">
-              {pick.amount != null && pick.amount > 0 ? (
-                <span className="inline-flex items-center gap-1 rounded bg-amber-500/16 px-1.5 py-0.5 text-[8px] font-semibold text-amber-100">
-                  <Gavel className="h-2.5 w-2.5" aria-hidden />
-                  ${pick.amount}
-                </span>
-              ) : ownerLabel ? (
-                <span
-                  className={`block max-w-[66px] truncate text-[8px] ${
-                    showNewOwnerInRed && pick.tradedPickMeta?.newOwnerName ? 'text-red-200/90' : 'text-white/42'
-                  }`}
-                  title={ownerLabel}
-                >
-                  {ownerLabel}
-                </span>
-              ) : null}
-            </div>
-          </div>
-
-          {pick.tradedPickMeta?.previousOwnerName ? (
-            <span
-              className="truncate text-[8px] text-amber-200/78"
-              title={`Traded from ${pick.tradedPickMeta.previousOwnerName}`}
-            >
-              Traded from {pick.tradedPickMeta.previousOwnerName}
+          {pick.amount != null && pick.amount > 0 ? (
+            <span className="inline-flex w-fit items-center gap-1 rounded bg-amber-500/16 px-1.5 py-0.5 text-[8px] font-semibold text-amber-100">
+              <Gavel className="h-2.5 w-2.5" aria-hidden />
+              ${pick.amount}
             </span>
           ) : null}
 
