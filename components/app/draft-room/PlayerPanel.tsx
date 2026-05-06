@@ -803,16 +803,7 @@ function PlayerPanelInner({
       <div
         className={`sticky top-0 z-20 shrink-0 border-b shadow-[0_12px_40px_rgba(0,0,0,0.5)] backdrop-blur-xl ${rs ? 'border-cyan-500/12 bg-[rgba(6,14,28,0.97)]' : 'border-white/[0.08] bg-[#060d1e]/92'}`}
       >
-        {rs ? (
-          <div className="border-b border-cyan-500/10 px-3 py-2 sm:px-4">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200/65">Player pool</p>
-            <p className="mt-0.5 text-[11px] text-white/55">
-              Best available · filter by roster need ·{' '}
-              {!showPoolFilter ? 'redraft rankings & projections' : 'switch pool when devy/C2C rounds apply'}
-            </p>
-          </div>
-        ) : null}
-        <div className={`flex flex-wrap items-center gap-2 border-b border-white/[0.06] p-2.5 sm:p-3 ${rs ? 'gap-y-2' : ''}`}>
+        <div className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] p-2 ${rs ? 'gap-y-1.5' : ''}`}>
           <div
             className={`flex min-h-[44px] flex-1 items-center gap-2 rounded-xl border px-3 py-2 shadow-inner touch-manipulation transition duration-150 focus-within:border-cyan-400/40 focus-within:ring-2 focus-within:ring-cyan-400/20 ${
               rs

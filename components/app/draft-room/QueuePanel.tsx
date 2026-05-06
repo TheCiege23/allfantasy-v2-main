@@ -411,19 +411,21 @@ export function QueuePanel({
       )}
       <div className="flex-1 overflow-auto overscroll-contain p-2.5">
         {queue.length === 0 ? (
-          <div className="space-y-2 rounded-xl border border-dashed border-cyan-400/25 bg-cyan-500/5 px-3 py-6 text-center">
-            <p className={`text-[11px] font-semibold ${rs ? 'text-cyan-100/85' : 'text-white/75'}`}>Queue is empty</p>
-            <p className="mx-auto max-w-[280px] text-[10px] leading-relaxed text-white/55">
-              Build a 3-5 player lane so your draft stays fast when the clock turns to you.
+          <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-2 px-4 py-8 text-center">
+            <div
+              className={`flex h-14 w-14 items-center justify-center rounded-2xl border ${
+                rs ? 'border-cyan-400/25 bg-cyan-500/8' : 'border-white/10 bg-white/[0.03]'
+              }`}
+              aria-hidden
+            >
+              <ListOrdered className={`h-7 w-7 ${rs ? 'text-cyan-200/70' : 'text-white/45'}`} />
+            </div>
+            <p className={`text-sm font-semibold ${rs ? 'text-cyan-100/90' : 'text-white/85'}`}>
+              No players in your queue
             </p>
-            <p className="mx-auto max-w-[280px] text-[10px] leading-relaxed text-white/42">
-              Use + Queue from player rows, then drag or arrow reorder here.
+            <p className="max-w-[260px] text-[11px] leading-relaxed text-white/50">
+              Add to queue from player list
             </p>
-            {rs ? (
-              <p className="text-[9px] text-white/35">
-                Drag rows to reorder. AI reorder is optional — your order always wins on the clock.
-              </p>
-            ) : null}
           </div>
         ) : showFilteredEmptyState ? (
           <div className="space-y-1 rounded-xl border border-dashed border-white/15 bg-white/[0.03] px-3 py-5 text-center">
