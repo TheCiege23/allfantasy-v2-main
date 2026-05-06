@@ -67,13 +67,15 @@ describe('Resolved draft pool feeds isRookie + yearsExp through to entries', () 
   it('explicitly stamps yearsExp on NFL rows (Sleeper years_exp lookup chain)', () => {
     expect(src).toMatch(/lookupYearsExp\(/)
     // The conservative veteran fallback only ever increases yearsExp; never
-    // infers rookie status from analytics-only signals.
-    expect(src).toMatch(/return \{ yearsExp: 1 \}/)
+    // infers rookie status from analytics-only signals. Tolerate trailing
+    // telemetry fields after the value (e.g. `rookieYearsExpSource`).
+    expect(src).toMatch(/return \{ yearsExp: 1[,\s}]/)
     expect(src).toMatch(/Never infer rookie from this path/)
   })
 
   it('marks non-graduated devy rows as rookie regardless of yearsExp', () => {
-    expect(src).toMatch(/row\.isDevy && !row\.graduatedToNFL \? \{ isRookie: true \}/)
+    // Multi-line tolerant: the resolver wraps the ternary across lines.
+    expect(src).toMatch(/row\.isDevy && !row\.graduatedToNFL[\s\S]*?\?\s*\{ isRookie: true \}/)
   })
 
   it('dedupes the enriched pool before normalization (no duplicate served entries)', () => {
