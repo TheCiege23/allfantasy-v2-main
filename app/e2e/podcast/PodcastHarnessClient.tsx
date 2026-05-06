@@ -32,6 +32,7 @@ export default function PodcastHarnessClient() {
   const [playing, setPlaying] = useState(false)
   const [shareDone, setShareDone] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [playbackError, setPlaybackError] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
   function handleGenerate() {
@@ -40,6 +41,7 @@ export default function PodcastHarnessClient() {
     setError(null)
     setShareDone(false)
     setShareError(null)
+    setPlaybackError(null)
     setPlaying(false)
     try {
       const title = `Fantasy Recap — ${leagueName} ${weekLabel}`
@@ -70,8 +72,10 @@ export default function PodcastHarnessClient() {
       setPlaying(false)
       return
     }
+    setPlaybackError(null)
     audio.play().catch(() => {
-      setShareError("Playback failed")
+      setPlaying(false)
+      setPlaybackError("Playback failed")
     })
     setPlaying(true)
   }
@@ -209,6 +213,11 @@ export default function PodcastHarnessClient() {
             {shareError ? (
               <p className="text-xs text-red-300" data-testid="podcast-share-error">
                 {shareError}
+              </p>
+            ) : null}
+            {playbackError ? (
+              <p className="text-xs text-red-300" data-testid="podcast-playback-error">
+                {playbackError}
               </p>
             ) : null}
             <div className="rounded-xl border border-white/10 bg-white/5 p-4">
