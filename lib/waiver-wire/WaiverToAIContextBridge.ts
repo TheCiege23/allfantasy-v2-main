@@ -3,6 +3,8 @@
  */
 
 import { getToolToAIChatHref } from "@/lib/chimmy-chat"
+import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
+import { buildAiUnifiedPlayerBullets } from "@/lib/player-data/adapters/aiPlayerContextAdapter"
 
 type AIChatContextOptions = {
   leagueId?: string
@@ -54,4 +56,11 @@ export function buildWaiverSummaryForAI(
   }
   parts.push(". Can you suggest priority adds, FAAB bids, drops, and fallback contingencies?")
   return parts.join(" ")
+}
+
+/**
+ * Compact deterministic bullet list from waiver pool unified rows (for prompts / tool context).
+ */
+export function formatWaiverWireUnifiedForPrompt(players: UnifiedPlayerWireDto[], max = 6): string {
+  return buildAiUnifiedPlayerBullets(players, max)
 }

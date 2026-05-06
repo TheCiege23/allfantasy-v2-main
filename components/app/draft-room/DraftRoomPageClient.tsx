@@ -93,6 +93,14 @@ import {
 import { isDraftPickRowEmptyFromSnapshot } from '@/lib/live-draft-engine/draftPickEmpty'
 import { draftRoomPickTrace, draftRoomWarn } from '@/lib/draft-room/draftRoomDevLog'
 import { buildDraftRoomPageDerivedState } from '@/lib/draft-room/buildDraftRoomPageDerivedState'
+import { getDraftPickActionState, normalizeDraftRosterId } from '@/lib/draft-room/draftPickEligibility'
+import { mapNormalizedDraftEntryToPlayerEntry } from '@/lib/player-data/adapters/draftRoomPlayerAdapter'
+import {
+  getDraftRoomDisplayExperienceBadge,
+  getDraftRoomDisplayHeadshot,
+  getDraftRoomDisplayInjury,
+} from '@/lib/player-data/adapters/draftRoomDisplayFields'
+import { logNormalizedPlayerDataDiagnostics } from '@/lib/player-data/providerFallbackDiagnostics'
 import { LEAGUE_DRAFT_ROOM_REVALIDATE } from '@/lib/draft-room/emitLeagueDraftRoomRevalidate'
 import { filterPlayersAvailableForDraftAi } from '@/lib/draft-room/availableForDraftAi'
 import { buildDraftRoomClientDiagnostics } from '@/lib/draft-room/player-pool-audit'
@@ -546,41 +554,16 @@ export function DraftRoomPageClient({
         : []
     const useNormalizedPool = Array.isArray(draftPool?.entries) && draftPool.entries.length > 0
     return useNormalizedPool
-      ? (rawEntries as NormalizedDraftEntry[]).map((e) => {
-          const name = e.name ?? e.display?.displayName ?? ''
-          const position = e.position ?? e.display?.metadata?.position ?? ''
-          const team = e.team ?? e.display?.metadata?.teamAbbreviation ?? null
-          // D.5-proper — when the AllFantasy snapshot flag is on, the resolver-provided
-          // `e.aiAdp` is the single source of truth. Skip the legacy lookup so we never
-          // overwrite resolver values with cross-context data.
-          const ai = draftUISettings?.aiAdpEnabled && !useAllFantasyAdp
-            ? lookupAiAdpMatch(aiAdpLookupMaps, name, position, team)
-            : null
-          return {
-            id: e.playerId ?? e.display?.playerId ?? name,
-            name,
-            position,
-            team,
-            adp: e.adp ?? e.display?.stats?.adp ?? null,
-            byeWeek: e.byeWeek ?? e.display?.metadata?.byeWeek ?? null,
-            aiAdp: useAllFantasyAdp
-              ? (e.aiAdp ?? null)
-              : draftUISettings?.aiAdpEnabled && ai
-                ? ai.adp
-                : (e.aiAdp ?? null),
-            aiAdpSampleSize: useAllFantasyAdp ? e.aiAdpSampleSize : ai?.sampleSize,
-            aiAdpLowSample: useAllFantasyAdp ? e.aiAdpLowSample : ai?.lowSample,
-            display: e.display ?? null,
-            isDevy: e.isDevy,
-            school: e.school ?? null,
-            classYearLabel: e.classYearLabel ?? e.display?.metadata?.classYearLabel ?? null,
-            draftGrade: e.draftGrade ?? e.display?.metadata?.draftGrade ?? null,
-            projectedLandingSpot: e.projectedLandingSpot ?? e.display?.metadata?.projectedLandingSpot ?? null,
-            graduatedToNFL: e.graduatedToNFL,
-            poolType: e.poolType,
-            nflDraftProjectionSplits: e.nflDraftProjectionSplits ?? null,
-          }
-        })
+      ? (rawEntries as NormalizedDraftEntry[]).map((e) =>
+          mapNormalizedDraftEntryToPlayerEntry(e, {
+            draftUISettings,
+            useAllFantasyAdp,
+            aiAdpLookupMaps,
+            soccerLeagueAugment: null,
+            includeUnifiedProduct: true,
+            includeProviderFallbackDiagnostics: false,
+          }),
+        )
       : rawEntries.map((e: any) => {
           const name = e.name ?? e.playerName ?? ''
           const position = e.position ?? ''
@@ -589,6 +572,11 @@ export function DraftRoomPageClient({
           const ai = draftUISettings?.aiAdpEnabled && !useAllFantasyAdp
             ? lookupAiAdpMatch(aiAdpLookupMaps, name, position, team)
             : null
+          const yeRaw = e.yearsExp ?? e.years_exp
+          const yearsExp =
+            yeRaw != null && Number.isFinite(Number(yeRaw)) ? Number(yeRaw) : null
+          const isRookieComputed =
+            e.isRookie === true ? true : yearsExp === 0 ? true : undefined
           return {
             id: e.id ?? e.playerId ?? name,
             name,
@@ -603,9 +591,26 @@ export function DraftRoomPageClient({
                 : (e.aiAdp ?? null),
             aiAdpSampleSize: useAllFantasyAdp ? e.aiAdpSampleSize : ai?.sampleSize,
             aiAdpLowSample: useAllFantasyAdp ? e.aiAdpLowSample : ai?.lowSample,
+            yearsExp,
+            isRookie: isRookieComputed,
           }
         })
-  }, [draftPool, draftData, aiAdpLookupMaps, draftUISettings?.aiAdpEnabled, useAllFantasyAdp])
+  }, [
+    draftPool,
+    draftData,
+    aiAdpLookupMaps,
+    draftUISettings?.aiAdpEnabled,
+    useAllFantasyAdp,
+  ])
+
+  const poolPlayerById = useMemo(() => {
+    const m: Record<string, PlayerEntry> = {}
+    for (const p of players) {
+      const pid = String(p.playerId ?? p.display?.playerId ?? p.id ?? '').trim()
+      if (pid) m[pid] = p
+    }
+    return m
+  }, [players])
 
   const playerAuditFingerprintRef = useRef('')
   useEffect(() => {
@@ -809,28 +814,34 @@ export function DraftRoomPageClient({
   const rosterConfigBlocked = Boolean(session?.rosterConfigurationIncomplete)
 
   const commissionerOfflinePick = Boolean(draftUISettings?.executionMode === 'offline' && isCommissioner)
-  const isCurrentUserOnClock = Boolean(
-    currentUserRosterId &&
-      draftCore?.draftStarted &&
-      draftCore.currentOverall > 0 &&
-      draftCore.currentTeamId === currentUserRosterId,
-  )
   const overnightBlocksUserPicks = Boolean(
     session?.status === 'in_progress' &&
       session.timer?.pauseReason === 'overnight_window' &&
       draftUISettings?.allowPicksDuringOvernightPause !== true,
   )
-  const snakeCanDraftRaw = useMemo(
+  const pickActionState = useMemo(
     () =>
-      session != null &&
-      session.status === 'in_progress' &&
-      !overnightBlocksUserPicks &&
-      draftCore?.draftStarted === true &&
-      draftCore.currentOverall > 0 &&
-      pickSubmitting === false &&
-      (commissionerOfflinePick || isCurrentUserOnClock),
-    [session, draftCore, pickSubmitting, commissionerOfflinePick, isCurrentUserOnClock, overnightBlocksUserPicks],
+      getDraftPickActionState({
+        session,
+        draftCore,
+        currentPick,
+        currentUserRosterId,
+        overnightBlocksUserPicks,
+        pickSubmitting,
+        commissionerOfflinePick,
+      }),
+    [
+      session,
+      draftCore,
+      currentPick,
+      currentUserRosterId,
+      overnightBlocksUserPicks,
+      pickSubmitting,
+      commissionerOfflinePick,
+    ],
   )
+  const isCurrentUserOnClock = pickActionState.viewerOnClock
+  const snakeCanDraftRaw = pickActionState.snakeCanDraftRaw
 
   const isAuctionDraft = session?.draftType === 'auction'
   const auctionNom = session?.auction
@@ -878,6 +889,46 @@ export function DraftRoomPageClient({
   )
 
   const canDraft = draftRoomState.canDraft
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    if (!session || !currentPick) return
+    const clockRid = normalizeDraftRosterId(currentPick.rosterId)
+    const viewerRid = normalizeDraftRosterId(currentUserRosterId)
+    const rosterIdsAlign = clockRid.length > 0 && viewerRid.length > 0 && clockRid === viewerRid
+    if (!rosterIdsAlign || session.status !== 'in_progress') return
+    if (rosterConfigBlocked) return
+    if (pickActionState.canPick && canDraft) return
+    console.warn('[draft-room] pick eligibility diagnostic (dev)', {
+      topBarOnClockRosterId: pickActionState.topBarOnClockRosterId,
+      viewerRosterId: pickActionState.viewerRosterId,
+      rawViewerRosterId: currentUserRosterId ?? null,
+      viewerOnClock: pickActionState.viewerOnClock,
+      denialReason: pickActionState.denialReason,
+      canDraft,
+      currentOverall: pickActionState.currentOverall,
+      draftCoreCurrentTeam: draftCore?.currentTeamId ?? null,
+      draftCoreCurrentOverall: draftCore?.currentOverall ?? null,
+      pickSubmitting,
+      overnightBlocksUserPicks,
+      sessionStatus: session.status,
+      timerStatus: session.timer?.status,
+      timerPauseReason: session.timer?.pauseReason ?? null,
+      commissionerOfflinePick,
+    })
+  }, [
+    session,
+    currentPick,
+    currentUserRosterId,
+    pickActionState,
+    canDraft,
+    draftCore?.currentTeamId,
+    draftCore?.currentOverall,
+    pickSubmitting,
+    overnightBlocksUserPicks,
+    rosterConfigBlocked,
+    commissionerOfflinePick,
+  ])
 
   useEffect(() => {
     if (!session) return
@@ -936,12 +987,25 @@ export function DraftRoomPageClient({
         })
       }
       if (res.ok && Array.isArray(data.entries)) {
+        const poolPayload = data as {
+          entries: NormalizedDraftEntry[]
+          sport?: string
+          devyConfig?: { enabled: boolean; devyRounds: number[] }
+          c2cConfig?: { enabled: boolean; collegeRounds: number[] }
+          isIdp?: boolean
+          normalizedPlayerDataDiagnostics?: import('@/lib/player-data/providerFallbackDiagnostics').ProviderFallbackDiagnostics[]
+        }
+        const { normalizedPlayerDataDiagnostics, ...rest } = poolPayload
+        logNormalizedPlayerDataDiagnostics('draft-room', normalizedPlayerDataDiagnostics, {
+          limit: 10,
+          enabled: process.env.NODE_ENV !== 'production',
+        })
         setDraftPool({
-          entries: data.entries,
-          sport: data.sport ?? sport,
-          devyConfig: data.devyConfig,
-          c2cConfig: data.c2cConfig,
-          isIdp: data.isIdp,
+          entries: rest.entries,
+          sport: rest.sport ?? sport,
+          devyConfig: rest.devyConfig,
+          c2cConfig: rest.c2cConfig,
+          isIdp: rest.isIdp,
         })
       } else {
         setDraftPool(null)
@@ -3732,14 +3796,32 @@ export function DraftRoomPageClient({
 
   const queueStackNode = useMemo(
     () => {
-      const queuePlayerMetaById = players.reduce<Record<string, { headshotUrl?: string | null; teamLogoUrl?: string | null; adp?: number | null; rank?: number | null }>>((acc, player, idx) => {
+      const queuePlayerMetaById = players.reduce<
+        Record<
+          string,
+          {
+            headshotUrl?: string | null
+            teamLogoUrl?: string | null
+            adp?: number | null
+            aiAdp?: number | null
+            injuryStatus?: string | null
+            experienceBadge?: string | null
+          }
+        >
+      >((acc, player) => {
         const pid = String(player.playerId ?? player.display?.playerId ?? player.id ?? '').trim()
         if (!pid) return acc
         acc[pid] = {
-          headshotUrl: player.display?.assets?.headshotUrl ?? player.display?.assets?.headshotFallbackUrl ?? null,
+          headshotUrl:
+            getDraftRoomDisplayHeadshot(player) ??
+            player.display?.assets?.headshotUrl ??
+            player.display?.assets?.headshotFallbackUrl ??
+            null,
           teamLogoUrl: player.display?.assets?.teamLogoUrl ?? player.display?.assets?.teamLogoFallbackUrl ?? null,
           adp: player.adp ?? null,
-          rank: Number.isFinite(player.aiAdp ?? NaN) ? (player.aiAdp ?? null) : idx + 1,
+          aiAdp: player.aiAdp ?? null,
+          injuryStatus: getDraftRoomDisplayInjury(player),
+          experienceBadge: getDraftRoomDisplayExperienceBadge(player),
         }
         return acc
       }, {})
@@ -4804,6 +4886,7 @@ export function DraftRoomPageClient({
             teamCount={session.teamCount}
             rounds={session.rounds}
             currentManagerOnClock={currentPick?.displayName ?? null}
+            isCurrentUserOnClock={isCurrentUserOnClock}
             pickLabel={currentPick?.pickLabel ?? null}
             overallPickNumber={currentPick?.overall ?? null}
             timerStatus={draftRoomState.timerMode === 'blocked' ? 'none' : (session.timer?.status ?? 'none')}
@@ -4982,6 +5065,7 @@ export function DraftRoomPageClient({
                   aiManagedRosterIds={aiManagedRosterIds}
                   orderSourceLabel={boardOrderSourceLabel}
                   presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
+                  poolPlayerById={poolPlayerById}
                   onCellTrade={currentUserRosterId ? openPickTradeFromBoard : undefined}
                   onOpenTradeHistory={() => {
                     setTradeHistoryFocus(null)

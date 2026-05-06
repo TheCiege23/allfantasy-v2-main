@@ -167,7 +167,11 @@ function SleeperRow(props: SleeperRowProps) {
     [p, useAiAdp, draftSport],
   )
 
-  const headshotUrl = getPlayerImage(normalized, draftSport) ?? null
+  const headshotUrl =
+    getPlayerImage(normalized, draftSport) ??
+    p.display?.assets?.headshotUrl ??
+    p.unifiedProductView?.unified.headshotUrl ??
+    null
   const teamLogoUrl = normalized.teamLogoUrl ?? null
   const splits: NflDraftProjectionSplits | null = p.nflDraftProjectionSplits ?? null
 

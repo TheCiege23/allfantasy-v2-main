@@ -115,7 +115,11 @@
     "worker:simulations": "tsx scripts/start-simulation-worker.ts",
     "backfill:platform-core": "tsx scripts/backfill-platform-core.ts",
     "smoke:platform-backend:postgres": "tsx scripts/smoke-platform-backend-postgres.ts",
-    "smoke:platform-backend:postgres:readonly": "tsx scripts/smoke-platform-backend-postgres.ts --skip-writes"
+    "smoke:platform-backend:postgres:readonly": "tsx scripts/smoke-platform-backend-postgres.ts --skip-writes",
+    "data:audit-provider-coverage": "tsx scripts/audit-provider-coverage.ts",
+    "data:audit-player-surfaces": "node --env-file=.env --import tsx scripts/audit-player-surfaces.ts",
+    "data:audit-player-experience": "node --env-file=.env --import tsx scripts/audit-player-experience.ts",
+    "data:audit-provider-gaps": "node --env-file=.env --import tsx scripts/audit-provider-gaps.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.80.0",

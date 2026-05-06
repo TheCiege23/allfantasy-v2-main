@@ -96,6 +96,32 @@ export function isLikelyGoaliePosition(position: string | undefined): boolean {
   return normPos(position) === 'G'
 }
 
+export function isLikelyKickerPosition(position: string | undefined): boolean {
+  const p = normPos(position)
+  return p === 'PK' || p === 'K' || p === 'K/P' || p === 'KICKER'
+}
+
+export function isLikelyPunterPosition(position: string | undefined): boolean {
+  return normPos(position) === 'P'
+}
+
+function isLikelyReturnSpecialistPosition(position: string | undefined): boolean {
+  const p = normPos(position)
+  return p === 'KR' || p === 'PR' || p.includes('RET')
+}
+
+export function isLikelySoccerGoalkeeperPosition(position: string | undefined): boolean {
+  const p = normPos(position)
+  return p === 'GK' || p === 'G' || p.includes('GOALKEEPER')
+}
+
+export function isLikelySoccerDefenderPosition(position: string | undefined): boolean {
+  const p = normPos(position)
+  if (new Set(['D', 'CB', 'LB', 'RB', 'WB', 'LWB', 'RWB', 'DEF', 'DEFENDER']).has(p)) return true
+  if (p.includes('BACK') && !p.includes('GOAL')) return true
+  return false
+}
+
 /**
  * Merge NFL splits, typed **`display.stats`**, and any loose numeric keys into one lookup bag.
  */
@@ -214,6 +240,50 @@ const NFL_IDP: DraftStatColumnDef[] = [
   col('idp_proj', 'Proj', 'number', 'defense', ['projectedPoints', 'fantasy_points']),
 ]
 
+/** Rolling Insights NCAAFB — aliases include documented snake_case from imports. */
+const NCAAFB_OFFENSE: DraftStatColumnDef[] = [
+  col('pass_td', 'Pass TD', 'number', 'offense', ['pass_td', 'passing_touchdowns', 'passing_td']),
+  col('pass_yds', 'Pass Yds', 'number', 'offense', ['pass_yds', 'passing_yards']),
+  col('rush_yds', 'Rush Yds', 'number', 'offense', ['rush_yds', 'rushing_yards']),
+  col('rush_td', 'Rush TD', 'number', 'offense', ['rush_td', 'rushing_touchdowns']),
+  col('rec', 'Rec', 'number', 'offense', ['rec', 'receptions']),
+  col('rec_yds', 'Rec Yds', 'number', 'offense', ['rec_yds', 'receiving_yards']),
+  col('rec_td', 'Rec TD', 'number', 'offense', ['rec_td', 'receiving_touchdowns']),
+  col('proj_pts', 'Proj', 'number', 'offense', ['projectedPoints', 'season_projection', 'fantasy_points']),
+]
+
+const NCAAFB_IDP: DraftStatColumnDef[] = [
+  col('idp_tkl', 'Tackles', 'number', 'defense', ['tackles', 'combined_tackles', 'total_tackles', 'solo_tackles']),
+  col('idp_sack', 'Sacks', 'number', 'defense', ['sacks', 'defense_sacks']),
+  col('idp_fr', 'FR', 'number', 'defense', ['fumbles_recoveries', 'fumblesRecoveries', 'fumble_recoveries']),
+  col('idp_int', 'INT', 'number', 'defense', ['interceptions', 'def_interceptions', 'passing_interceptions']),
+  col('idp_td', 'Def TD', 'number', 'defense', ['defensive_touchdowns', 'dst_td']),
+  col('idp_proj', 'Proj', 'number', 'defense', ['projectedPoints', 'fantasy_points']),
+]
+
+const NCAAFB_K: DraftStatColumnDef[] = [
+  col('fgm', 'FGM', 'number', 'offense', ['fieldGoalsMade', 'field_goals_made', 'fg_made']),
+  col('xpm', 'XPM', 'number', 'offense', ['extraPointsMade', 'extra_points_made', 'xp_made']),
+  col('fg_long', 'Long', 'number', 'offense', ['fieldGoalsLong', 'field_goals_long']),
+  col('ncaaf_k_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points']),
+]
+
+const NCAAFB_P: DraftStatColumnDef[] = [
+  col('punts', 'Punts', 'number', 'offense', ['punts']),
+  col('punt_yds', 'Punt Yds', 'number', 'offense', ['punting_yards', 'puntingYards']),
+  col('in20', 'In 20', 'number', 'offense', ['inside_20', 'inside20']),
+  col('punt_long', 'Long', 'number', 'offense', ['punts_long', 'puntsLong']),
+  col('ncaaf_p_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points']),
+]
+
+const NCAAFB_RET: DraftStatColumnDef[] = [
+  col('kr_yds', 'KR Yds', 'number', 'offense', ['kick_return_yards', 'kickReturnYards']),
+  col('pr_yds', 'PR Yds', 'number', 'offense', ['punt_return_yards', 'puntReturnYards']),
+  col('kr_td', 'KR TD', 'number', 'offense', ['kick_return_touchdowns', 'kickReturnTouchdowns']),
+  col('pr_td', 'PR TD', 'number', 'offense', ['punt_return_touchdowns', 'puntReturnTouchdowns']),
+  col('ncaaf_ret_proj', 'Proj', 'number', 'offense', ['projectedPoints', 'fantasy_points']),
+]
+
 /**
  * **`SleeperPoolTable`** NFL / NCAAF — keys match legacy `SleeperPoolSort` (`pts`, `pa_yds`, …)
  * and `flattenDraftPlayerStatBag` aliases.
@@ -246,7 +316,13 @@ export function buildSleeperPoolStatColumnDefs(
     return getDraftStatColumnsForSport(draftSport, {})
   }
   const sport = normalizeToSupportedSport(draftSport)
-  if (sport === 'NFL' || sport === 'NCAAF') {
+  if (sport === 'NCAAF') {
+    return getDraftStatColumnsForSport('NCAAF', { position: opts?.position })
+  }
+  if (sport === 'SOCCER') {
+    return getDraftStatColumnsForSport('SOCCER', { position: opts?.position })
+  }
+  if (sport === 'NFL') {
     const pos = opts?.position
     if (supportsIdpLeagueSport(sport) && isLikelyIdpFootballPosition(pos ?? undefined)) {
       return [...NFL_IDP]
@@ -310,14 +386,41 @@ const NHL_GOALIE: DraftStatColumnDef[] = [
   col('nhl_g_proj', 'Proj', 'number', 'goalie', ['projectedPoints', 'fantasy_points']),
 ]
 
-const SOCCER: DraftStatColumnDef[] = [
+/** Rolling Insights-style keys on `display.stats` after ingestion. */
+const SOCCER_FIELDER: DraftStatColumnDef[] = [
   col('soc_g', 'G', 'number', 'soccer', ['goals', 'g']),
   col('soc_a', 'A', 'number', 'soccer', ['assists', 'a']),
-  col('soc_sh', 'Shots', 'number', 'soccer', ['shots', 'shots_total']),
+  col('soc_sog', 'SoG', 'number', 'soccer', ['shots_on_goal', 'shotsOnGoal']),
+  col('soc_sh_att', 'Sh Att', 'number', 'soccer', ['shots_attempted', 'shotsAttempted']),
+  col('soc_min', 'Min', 'number', 'soccer', ['minutes_played', 'minutesPlayed']),
+  col('soc_yc', 'YC', 'number', 'soccer', ['yellow_cards', 'yellowCards']),
+  col('soc_rc', 'RC', 'number', 'soccer', ['red_cards', 'redCards']),
+  col('soc_fc', 'Fl Com', 'number', 'soccer', ['fouls_committed', 'foulsCommitted']),
+  col('soc_fd', 'Fl Dr', 'number', 'soccer', ['fouls_drawn', 'foulsDrawn']),
+  col('soc_fkw', 'FK Won', 'number', 'soccer', ['free_kicks_won', 'freeKicksWon']),
+  col('soc_pk_att', 'PK Att', 'number', 'soccer', ['penalty_attempts', 'penaltyAttempts']),
+  col('soc_pk_scr', 'PK Scr', 'number', 'soccer', ['penalties_scored', 'penaltiesScored']),
+  col('soc_proj', 'Proj', 'number', 'soccer', ['projectedPoints', 'fantasy_points']),
+]
+
+const SOCCER_DEFENDER: DraftStatColumnDef[] = [
   col('soc_cs', 'CS', 'number', 'soccer', ['cleanSheets', 'clean_sheets']),
-  col('soc_svp', 'Saves', 'number', 'soccer', ['saves', 'goalkeeper_saves']),
-  col('soc_tkl', 'Tkl', 'number', 'soccer', ['tackles']),
-  col('soc_int', 'Int', 'number', 'soccer', ['interceptions']),
+  col('soc_g', 'G', 'number', 'soccer', ['goals', 'g']),
+  col('soc_a', 'A', 'number', 'soccer', ['assists', 'a']),
+  col('soc_fc', 'Fl Com', 'number', 'soccer', ['fouls_committed', 'foulsCommitted']),
+  col('soc_yc', 'YC', 'number', 'soccer', ['yellow_cards', 'yellowCards']),
+  col('soc_rc', 'RC', 'number', 'soccer', ['red_cards', 'redCards']),
+  col('soc_min', 'Min', 'number', 'soccer', ['minutes_played', 'minutesPlayed']),
+  col('soc_proj', 'Proj', 'number', 'soccer', ['projectedPoints', 'fantasy_points']),
+]
+
+const SOCCER_GOALKEEPER: DraftStatColumnDef[] = [
+  col('soc_sv', 'Saves', 'number', 'soccer', ['saves', 'goalkeeper_saves']),
+  col('soc_gc', 'GC', 'number', 'soccer', ['goals_conceded', 'goalsConceded']),
+  col('soc_cs', 'CS', 'number', 'soccer', ['cleanSheets', 'clean_sheets']),
+  col('soc_psaved', 'PK Saved', 'number', 'soccer', ['penalties_saved', 'penaltiesSaved']),
+  col('soc_pface', 'PK Faced', 'number', 'soccer', ['penalties_faced', 'penaltiesFaced']),
+  col('soc_min', 'Min', 'number', 'soccer', ['minutes_played', 'minutesPlayed']),
   col('soc_proj', 'Proj', 'number', 'soccer', ['projectedPoints', 'fantasy_points']),
 ]
 
@@ -378,12 +481,20 @@ export function getDraftStatColumnsForSport(
   if (raw === 'CRICKET') return [...CRICKET]
 
   switch (sport) {
-    case 'NFL':
-    case 'NCAAF': {
+    case 'NFL': {
       if (supportsIdpLeagueSport(sport) && isLikelyIdpFootballPosition(pos ?? undefined)) {
         return [...NFL_IDP]
       }
       return [...NFL_OFFENSE]
+    }
+    case 'NCAAF': {
+      if (isLikelyKickerPosition(pos ?? undefined)) return [...NCAAFB_K]
+      if (isLikelyPunterPosition(pos ?? undefined)) return [...NCAAFB_P]
+      if (isLikelyReturnSpecialistPosition(pos ?? undefined)) return [...NCAAFB_RET]
+      if (supportsIdpLeagueSport(sport) && isLikelyIdpFootballPosition(pos ?? undefined)) {
+        return [...NCAAFB_IDP]
+      }
+      return [...NCAAFB_OFFENSE]
     }
     case 'NBA':
     case 'NCAAB':
@@ -392,8 +503,11 @@ export function getDraftStatColumnsForSport(
       return isLikelyPitcherPosition(pos ?? undefined) ? [...MLB_PITCHER] : [...MLB_HITTER]
     case 'NHL':
       return isLikelyGoaliePosition(pos ?? undefined) ? [...NHL_GOALIE] : [...NHL_SKATER]
-    case 'SOCCER':
-      return [...SOCCER]
+    case 'SOCCER': {
+      if (isLikelySoccerGoalkeeperPosition(pos ?? undefined)) return [...SOCCER_GOALKEEPER]
+      if (isLikelySoccerDefenderPosition(pos ?? undefined)) return [...SOCCER_DEFENDER]
+      return [...SOCCER_FIELDER]
+    }
     default:
       return [
         col('proj_fallback', 'Proj', 'number', 'general', ['projectedPoints', 'fantasy_points', 'projectedPointsPerGame']),

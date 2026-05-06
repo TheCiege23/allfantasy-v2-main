@@ -52,13 +52,20 @@ function extractFppgFromJson(blob: unknown): number | null {
   return null
 }
 
-function extractRookieHint(stats: unknown, projections: unknown): boolean | null {
+function extractRookieHint(
+  stats: unknown,
+  projections: unknown,
+  sport: LeagueSport,
+): boolean | null {
+  const isNfl = String(sport).toUpperCase() === 'NFL'
   if (stats && typeof stats === 'object') {
     const s = stats as Record<string, unknown>
     if (s.rookie === true) return true
     if (s.isRookie === true) return true
-    const gp = Number(s.gamesPlayed ?? s.games ?? s.g)
-    if (Number.isFinite(gp) && gp === 0) return true
+    if (!isNfl) {
+      const gp = Number(s.gamesPlayed ?? s.games ?? s.g)
+      if (Number.isFinite(gp) && gp === 0) return true
+    }
     const exp = Number(s.experience ?? s.yearsExp ?? s.years_experience)
     if (Number.isFinite(exp) && exp === 0) return true
   }
@@ -69,13 +76,16 @@ function extractRookieHint(stats: unknown, projections: unknown): boolean | null
   return null
 }
 
-function augmentFromRecord(row: {
-  stats: unknown
-  projections: unknown
-  adp: number | null
-  headshotUrl: string | null
-  headshotUrlLg: string | null
-}): SportsPlayerRecordDraftAugment {
+function augmentFromRecord(
+  row: {
+    stats: unknown
+    projections: unknown
+    adp: number | null
+    headshotUrl: string | null
+    headshotUrlLg: string | null
+  },
+  sport: LeagueSport,
+): SportsPlayerRecordDraftAugment {
   const fppg =
     extractFppgFromJson(row.projections) ??
     extractFppgFromJson(row.stats) ??
@@ -84,7 +94,7 @@ function augmentFromRecord(row: {
   const rawHs = row.headshotUrlLg ?? row.headshotUrl ?? null
   const headshotUrl =
     rawHs && classifyAvatarSource(rawHs) === 'headshot' ? rawHs : null
-  const rookieHint = extractRookieHint(row.stats, row.projections)
+  const rookieHint = extractRookieHint(row.stats, row.projections, sport)
   return {
     fantasyPointsPerGame: fppg,
     adp,
@@ -166,7 +176,7 @@ export async function loadSportsPlayerRecordMapsForDraftPool(
   const looseGroups = new Map<string, Map<string, SportsPlayerRecordDraftAugment>>()
 
   for (const rec of records) {
-    const aug = augmentFromRecord(rec)
+    const aug = augmentFromRecord(rec, sport)
     const rid = String(rec.id ?? '').trim()
     if (rid && !byRecordId.has(rid)) byRecordId.set(rid, aug)
 

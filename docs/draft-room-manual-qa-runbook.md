@@ -6,6 +6,10 @@
 
 **Canonical live draft URL:** `/draft/room/[draftId]` (see `app/draft/room/[draftId]/page.tsx`). Avoid mock-only flows unless explicitly testing mock isolation.
 
+**Normalized player data / provider QA:** In development, loading the draft pool logs `[draft-room normalized player data]` for pool diagnostics when the API returns `normalizedPlayerDataDiagnostics`. Optional `?debugPlayerData=1` on `GET /api/leagues/[leagueId]/draft/pool` forces diagnostic attachment outside dev. Confirm list rows/cards show headshots when TSDB (or other fallbacks) supply `unified.unified.headshotUrl` after RI gaps.
+
+**Board / queue / detail consistency:** After picks land, board cells should show the same fallback headshot/injury as the pool when `playerId` matches a pool row. Queue rows should show ADP and **AI ADP** separately, plus injury/experience chips when available — without changing queue order (drag/up/down still reorders the same `QueueEntry[]`). Player detail modal headshot/injury should match the selected pool row.
+
 ---
 
 ## 1. Preconditions
@@ -81,6 +85,53 @@ The draft engine intentionally refuses to start until validation passes (`DraftV
 New leagues created after this fix should receive roster + scoring defaults automatically during post-create bootstrap. **Do not** bypass or disable the checklist.
 
 If fixes still fail, verify the league row in admin/tools: `League.scoring` / `scoringPresetId`, and roster slots derived from the roster template. Do not hand-edit production DB without understanding downstream scoring/roster engines.
+
+### 2.6 Troubleshooting — Top bar “on the clock” vs player card **Not your pick**
+
+Symptoms: timer counts down, pool loads, pick label matches reality, but opening a player shows **Not your pick** and only **Queue** — no **Draft / Make pick**.
+
+Capture for engineering:
+
+| Artifact | Why it matters |
+|----------|----------------|
+| Current overall pick (`#` from header / session) | Confirms server clock vs UI |
+| Top-bar manager / roster label | Comes from `session.currentPick` display |
+| Selected player name/id | Rules out wrong candidate player |
+| Dev console — `[draft-room] pick eligibility diagnostic (dev)` | Non-production only: trimmed roster ids, `denialReason`, `pickSubmitting`, overnight pause flag, roster-configuration gate |
+| Network — `POST /api/leagues/[leagueId]/draft/pick` | After **Draft** works — validates payload and race handling |
+
+### 2.7 Troubleshooting — **Rookies only** empty
+
+When **Rookies only** shows **no rows** or **metadata unavailable**:
+
+| Check | Interpretation |
+|-------|----------------|
+| Dev console — `[draft-room] rookies-only empty — signal diagnostics` | Non-production: counts `yearsExp`, draft-year hints, sample rows — distinguishes **data gap** vs **UI/filter bug** |
+| If diagnostics show **zero** rookie signals across hundreds of NFL rows | Treat as **upstream pool/import gap** (populate `years_exp` / flags on ingest). |
+| If diagnostics show non-zero signals but UI stays empty | File a **UI/filter** bug — mapping from pool rows to `PlayerEntry` may be dropping fields. |
+
+#### Rookies (NFL)
+
+NFL rookies in the draft pool should resolve from:
+
+1. **Imported / DB explicit fields** when present on the player row (`isRookie`, `years_exp`, `draftYear`, etc.).
+2. Otherwise **`Sleeper years_exp === 0`**, including via **`SportsDataCache`** key `sleeper:nfl:yearsexp:compact:v1` when live Sleeper is cold.
+
+If rookies are still missing after confirming filters:
+
+- Run **`npm run audit:ri-mapping`** (or your env’s **provider coverage audit** for NFL) to inspect identity coverage.
+- Inspect the Sleeper **`years_exp`** cache row in `SportsDataCache` for freshness.
+- Verify **player id cross-links** between Rolling Insights / pool ids and Sleeper ids (`PlayerIdentityMap`, pool `external_source_id`).
+
+For **NBA / MLB / NHL / NCAAB** pools: if stats or live-box columns look empty, run **`npm run data:audit-provider-coverage`** for that sport before assuming a UI bug — missing ingestion shows up as gaps in `stats`/`projections` JSON on cache rows.
+
+For **NCAA football** freshman/class filters: verify **`class`** is present on imported rows (`npm run data:audit-provider-coverage -- --sport NCAAFB --missing class`). NCAA football does **not** use Sleeper `years_exp` for freshman eligibility.
+
+If **Freshmen / Underclassmen / Draft eligible** filters look empty, run **`--missing class`** first; if **team D/ST or schedule-driven scoring** looks thin, run **`--missing team_stats`** or **`--missing schedule`** for **`NCAAFB`** to confirm cached JSON carries Rolling Insights aggregates before blaming UI.
+
+For **NCAA football schedules**, venue/geo fields may be **null** on some seasons — that is **not** a failed import; confirm **`team-info`** enrichment separately.
+
+For **soccer (SOCCER / EPL / LALIGA / SERIEA)** pools, use **`npm run data:audit-provider-coverage -- --sport SOCCER --league EPL`** when debugging competition-specific gaps. **`replaced`** schedule rows should **not** be expected to drive live scoring; **relegated** clubs may have **`regular_season: null`** on team-stats payloads.
 
 ---
 
@@ -221,6 +272,22 @@ Check each box when verified.
 
 - [ ] Name search; position / team filters; drafted players handled correctly.
 
+### N2. Experience / rookie vs veteran (unified model)
+
+- [ ] **Pro leagues (NFL/NBA/MLB/NHL):** rookie vs veteran reflects **`resolvePlayerExperience`** (`lib/player-data/playerExperience.ts`) — unknown is acceptable when DB payloads lack fields; do not assume vendor APIs match Neon without auditing imports.
+- [ ] **NFL:** Sleeper-style **`years_exp`** remains the usual fallback when Rolling Insights JSON does not determine experience (`resolveNflRookieSource` / pool `yearsExp`).
+- [ ] **NCAAF/NCAAB:** class / freshman / draft-eligible behavior uses **college class**, not Sleeper `years_exp`.
+- [ ] Optional filters (**Rookies**, **Veterans**, taxi/devy where surfaced): toggling does not break pick buttons or pool load.
+
+Read-only DB diagnostics:
+
+```bash
+npm run data:audit-player-experience -- --sport NFL --limit 10
+npm run data:audit-player-experience -- --sport NBA --missing experience --limit 10
+```
+
+See `docs/player-experience-source-priority.md`.
+
 ### O. Draft chat
 
 - [ ] Pick messages; manual chat if enabled; refresh—no obvious duplicate spam.
@@ -238,6 +305,27 @@ Check each box when verified.
 
 - [ ] `GET /api/cron/recompute-allfantasy-adp` **without** secret → **401**.
 - [ ] With `Authorization: Bearer <CRON_SECRET>` only on a **safe** environment—see `docs/draft-launch-gate.md`.
+
+### S. Unified player data parity (Draft / Waivers / Roster)
+
+- [ ] Draft pool **player card / panel** shows the same **identity + stat snapshot** shape users see elsewhere for that sport (via `buildUnifiedPlayerProductView` / `getPlayerDataForSurface`).
+- [ ] **Waiver wire** rows: image, name, team, position, injury/status, projections/stats—no Sleeper-only staleness when `sports_players` cache has Rolling Insights data.
+- [ ] **Roster** starters/bench rows align with that identity for the same `SportsPlayerRecord` ids.
+- [ ] **NCAAF:** college **class** / freshman / draft-eligible signals visible in devy or college-variant leagues (Rolling Insights `class`, not Sleeper `years_exp`).
+- [ ] **SOCCER:** **EPL / LALIGA / SERIEA** hint plus goalkeeper vs outfield grouping where league/competition applies.
+- [ ] **NFL rookies:** rookie UX follows **`years_exp` Sleeper fallback** when RI docs omit rookie fields (`resolveNflRookieSource`).
+
+Read-only diagnostics (DB/import only—no live RI HTTP):
+
+```bash
+npm run data:audit-player-surfaces -- --surface draft --sport NFL --limit 5
+npm run data:audit-player-surfaces -- --surface waivers --sport NCAAF --missing class --limit 5
+npm run data:audit-player-surfaces -- --surface roster --sport SOCCER --league EPL --limit 5
+npm run data:audit-player-experience -- --sport NFL --limit 10
+npm run data:audit-provider-gaps -- --sport NFL --surface draft --domain stats --limit 10
+```
+
+See `docs/player-data-integration-map.md`, `docs/provider-fallback-system.md`.
 
 ---
 
@@ -284,6 +372,7 @@ Track as a dedicated ticket: **“Create draft-room QA seed script.”**
 
 ## 9. Related docs
 
+- `docs/player-data-integration-map.md` — unified player row → Draft / Waivers / Roster / AI.
 - `docs/live-draft-engine-map.md` — engine, routes, known gaps (web push, `DraftQueueEntry`, typecheck).
 - `docs/draft-launch-gate.md` — automated gate commands, cron curl example, env concepts.
 

@@ -16,14 +16,20 @@ vi.mock('@/lib/auth', () => ({
   authOptions: {},
 }))
 
+const sportsPlayerRecordFindManyMock = vi.fn()
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: {
       findFirst: leagueFindFirstMock,
+      findUnique: leagueFindFirstMock,
     },
     roster: {
       findFirst: rosterFindFirstMock,
       findMany: rosterFindManyMock,
+    },
+    sportsPlayerRecord: {
+      findMany: sportsPlayerRecordFindManyMock,
     },
   },
 }))
@@ -41,9 +47,10 @@ describe('GET /api/waiver-wire/leagues/[leagueId]/players', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     getServerSessionMock.mockResolvedValue({ user: { id: 'u1' } })
-    leagueFindFirstMock.mockResolvedValue({ id: 'l1', sport: 'NFL', userId: 'u1' })
+    leagueFindFirstMock.mockResolvedValue({ id: 'l1', sport: 'NFL', userId: 'u1', settings: {} })
     rosterFindFirstMock.mockResolvedValue(null)
     rosterFindManyMock.mockResolvedValue([{ playerData: { starters: [] } }])
+    sportsPlayerRecordFindManyMock.mockResolvedValue([])
     getRosterPlayerIdsMock.mockReturnValue([])
     getPlayerPoolForLeagueMock.mockResolvedValue([])
     getPlayerPoolForSportMock.mockResolvedValue([])
@@ -78,20 +85,19 @@ describe('GET /api/waiver-wire/leagues/[leagueId]/players', () => {
     const data = await res.json()
 
     expect(getPlayerPoolForLeagueMock).toHaveBeenCalledWith('l1', 'NFL', {
-      limit: 500,
+      limit: 800,
       position: undefined,
       teamId: undefined,
     })
     expect(getPlayerPoolForSportMock).not.toHaveBeenCalled()
 
-    expect(data.players).toEqual([
-      {
-        id: 'player-2',
-        name: 'Available Defender',
-        position: 'DE',
-        team: 'KC',
-      },
-    ])
+    expect(data.players).toHaveLength(1)
+    expect(data.players[0]).toMatchObject({
+      id: 'player-2',
+      name: 'Available Defender',
+      position: 'DE',
+      team: 'KC',
+    })
     expect(data.rosteredCount).toBe(1)
   })
 

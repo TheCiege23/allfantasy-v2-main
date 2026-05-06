@@ -54,10 +54,48 @@ export function isSupportedSport(s: string | null | undefined): s is LeagueSport
   return (SUPPORTED_SPORTS as readonly string[]).includes(s.toUpperCase())
 }
 
-/** Normalize unknown sport to a supported value; use when you must have a fallback. */
+/**
+ * Normalize vendor / UI aliases to Prisma `LeagueSport`.
+ * Rolling Insights uses `NCAAFB` / `CFB` while leagues store `NCAAF`; `NCAABB` maps to `NCAAB`.
+ */
 export function normalizeToSupportedSport(sport: string | null | undefined): LeagueSport {
-  const u = sport?.trim().toUpperCase()
-  if (u && (SUPPORTED_SPORTS as readonly string[]).includes(u)) return u as LeagueSport
+  const raw = sport?.trim() ?? ''
+  if (!raw) return DEFAULT_SPORT
+  const u = raw.toUpperCase().replace(/[\s-]+/g, '_')
+
+  if (
+    u === 'NCAAFB' ||
+    u === 'CFB' ||
+    u === 'NCAAF' ||
+    u === 'NCAA_FOOTBALL' ||
+    u === 'COLLEGE_FOOTBALL' ||
+    u === 'NCAA_FB' ||
+    u === 'NCAA_F'
+  ) {
+    return 'NCAAF'
+  }
+  if (u === 'NCAABB' || u === 'NCAA_BASKETBALL' || u === 'NCAAM' || u === 'NCAAB_ALL') {
+    return 'NCAAB'
+  }
+
+  if (
+    u === 'EURO' ||
+    u === 'UEFA' ||
+    u === 'EURO_SOCCER' ||
+    u === 'EPL' ||
+    u === 'PREMIER_LEAGUE' ||
+    u === 'ENGLISH_PREMIER_LEAGUE' ||
+    u === 'LALIGA' ||
+    u === 'LA_LIGA' ||
+    u === 'LA_LIGA_SPAIN' ||
+    u === 'SERIEA' ||
+    u === 'SERIE_A' ||
+    u === 'ITALIAN_SERIE_A'
+  ) {
+    return 'SOCCER'
+  }
+
+  if ((SUPPORTED_SPORTS as readonly string[]).includes(u)) return u as LeagueSport
   return DEFAULT_SPORT
 }
 

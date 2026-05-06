@@ -11,7 +11,17 @@ type QueueSortMode = 'queue' | 'name' | 'adp' | 'rank'
 
 export type QueuePanelProps = {
   queue: QueueEntry[]
-  playerMetaById?: Record<string, { headshotUrl?: string | null; teamLogoUrl?: string | null; adp?: number | null; rank?: number | null }>
+  playerMetaById?: Record<
+    string,
+    {
+      headshotUrl?: string | null
+      teamLogoUrl?: string | null
+      adp?: number | null
+      aiAdp?: number | null
+      injuryStatus?: string | null
+      experienceBadge?: string | null
+    }
+  >
   canDraft: boolean
   onRemove: (index: number) => void
   onReorder: (fromIndex: number, toIndex: number) => void
@@ -78,7 +88,9 @@ export function QueuePanel({
       headshotUrl: fromMap?.headshotUrl ?? fromEntry.headshotUrl ?? null,
       teamLogoUrl: fromMap?.teamLogoUrl ?? fromEntry.teamLogoUrl ?? null,
       adp: fromMap?.adp ?? fromEntry.adp ?? null,
-      rank: fromMap?.rank ?? fromEntry.rank ?? null,
+      aiAdp: fromMap?.aiAdp ?? (fromEntry as { aiAdp?: number | null }).aiAdp ?? null,
+      injuryStatus: fromMap?.injuryStatus ?? null,
+      experienceBadge: fromMap?.experienceBadge ?? null,
     }
   }
 
@@ -124,7 +136,7 @@ export function QueuePanel({
       }
       const am = resolveMeta(a.entry)
       const bm = resolveMeta(b.entry)
-      return safeValue(am.rank) - safeValue(bm.rank)
+      return safeValue(am.aiAdp) - safeValue(bm.aiAdp)
     })
   }, [queueWithIndex, positionFilter, normalizedQuery, sortMode])
 
@@ -195,7 +207,7 @@ export function QueuePanel({
         >
           <option value="queue">Sort: Queue order</option>
           <option value="adp">Sort: ADP</option>
-          <option value="rank">Sort: Rank</option>
+          <option value="rank">Sort: AI ADP</option>
           <option value="name">Sort: Name</option>
         </select>
       </div>
@@ -423,7 +435,7 @@ export function QueuePanel({
             {displayQueue.map(({ entry, queueIndex }, displayIndex) => {
               const meta = resolveMeta(entry)
               const adpText = formatNumber(meta.adp)
-              const rankText = formatNumber(meta.rank)
+              const aiAdpText = formatNumber(meta.aiAdp)
               return (
               <li
                 key={`${entry.playerName}-${entry.playerId ?? queueIndex}`}
@@ -472,8 +484,18 @@ export function QueuePanel({
                       {adpText ? (
                         <span className="rounded border border-cyan-300/35 bg-cyan-500/12 px-1.5 py-[1px] text-cyan-100">ADP {adpText}</span>
                       ) : null}
-                      {rankText ? (
-                        <span className="rounded border border-violet-300/30 bg-violet-500/10 px-1.5 py-[1px] text-violet-100">Rank {rankText}</span>
+                      {aiAdpText ? (
+                        <span className="rounded border border-violet-300/30 bg-violet-500/10 px-1.5 py-[1px] text-violet-100">AI ADP {aiAdpText}</span>
+                      ) : null}
+                      {meta.injuryStatus ? (
+                        <span className="rounded border border-amber-400/35 bg-amber-500/12 px-1.5 py-[1px] text-amber-100">
+                          {meta.injuryStatus}
+                        </span>
+                      ) : null}
+                      {meta.experienceBadge ? (
+                        <span className="rounded border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-[1px] text-cyan-50">
+                          {meta.experienceBadge}
+                        </span>
                       ) : null}
                     </div>
                   </div>

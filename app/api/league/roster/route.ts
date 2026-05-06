@@ -8,6 +8,7 @@ import { getCachedSleeperUserId, setCachedSleeperUserId } from '@/lib/league/sle
 import { expandStarterSlots } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupLockService'
+import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -183,10 +184,39 @@ export async function GET(req: NextRequest) {
       lifecycleState: league.lifecycleState,
     })
 
+    let unifiedRoster: UnifiedPlayerWireDto[] = []
+    try {
+      const { getNormalizedPlayerData } = await import('@/lib/player-data/getNormalizedPlayerData')
+      const { serializeUnifiedPlayerForApi } = await import('@/lib/player-data/serializeUnifiedPlayerForApi')
+      const { soccerLeagueHintFromLeagueSettings } = await import('@/lib/player-data/leagueSoccerLeagueHint')
+      const { resolveIncludePlayerDataDiagnostics, logPrefixForSurface } = await import(
+        '@/lib/player-data/providerFallbackDiagnostics'
+      )
+      const diag = resolveIncludePlayerDataDiagnostics(req.nextUrl.searchParams)
+      const rows = await getNormalizedPlayerData({
+        surface: 'roster',
+        leagueId,
+        userId: targetUserId,
+        limit: 200,
+        soccerLeague: soccerLeagueHintFromLeagueSettings(league.settings) ?? undefined,
+        includeProviderFallbackDiagnostics: diag,
+      })
+      unifiedRoster = rows.map(serializeUnifiedPlayerForApi)
+      if (diag && process.env.NODE_ENV === 'development') {
+        for (const row of rows.slice(0, 5)) {
+          const d = row.providerFallbackDiagnostics
+          if (d) console.info(logPrefixForSurface('roster', d))
+        }
+      }
+    } catch {
+      unifiedRoster = []
+    }
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
       roster: roster.playerData,
+      unifiedRoster,
       faabRemaining: roster.faabRemaining,
       waiverPriority: roster.waiverPriority ?? null,
       sport: leagueSport,

@@ -10,6 +10,8 @@ import { isDraftPickRowEmptyFromSnapshot } from '@/lib/live-draft-engine/draftPi
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { getRoundNavigationState } from '@/lib/draft-room/DraftBoardRenderer'
 import { getManagerColorBySlot, withAlpha } from '@/lib/draft-room'
+import type { DraftRoomDisplayPlayerLike } from '@/lib/player-data/adapters/draftRoomDisplayFields'
+import { mergePoolPlayerIntoBoardPickDisplay } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 
 export type DraftBoardProps = {
   picks: DraftPickSnapshot[]
@@ -50,6 +52,8 @@ export type DraftBoardProps = {
   canCommissionerEditPicks?: boolean
   /** Click handler for the commissioner edit affordance on a cell. */
   onCommissionerEditPick?: (overall: number) => void
+  /** Live draft pool rows by player id — enriches tiles only; does not change stored picks */
+  poolPlayerById?: Record<string, DraftRoomDisplayPlayerLike>
 }
 
 type SequentialBoardEntry = {
@@ -150,6 +154,7 @@ function DraftBoardInner({
   canCommissionerEditPicks = false,
   onCommissionerEditPick,
   presentationVariant = 'default',
+  poolPlayerById,
 }: DraftBoardProps) {
   const rs = presentationVariant === 'redraft_snake'
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
@@ -257,34 +262,41 @@ function DraftBoardInner({
       const useLock = !existing && lock
 
       if (!byRoundSlot[round]) byRoundSlot[round] = new Map()
+      const basePick = {
+        overall,
+        round,
+        slot: ownerSlot,
+        pickLabel: `${round}.${pickInRound}`,
+        playerName: existing?.playerName ?? lock?.playerName ?? null,
+        position: existing?.position ?? lock?.position ?? null,
+        team: existing?.team ?? lock?.team ?? null,
+        playerId: existing?.playerId ?? lock?.playerId ?? null,
+        playerImageUrl: existing?.playerImageUrl ?? null,
+        sport: sport ?? null,
+        injuryStatus: (existing as { injuryStatus?: string | null } | undefined)?.injuryStatus ?? null,
+        byeWeek: existing?.byeWeek ?? null,
+        displayName: existing?.displayName ?? lock?.displayName ?? resolved?.displayName ?? null,
+        tradedPickMeta: resolvedTradedMeta,
+        managerTintColor: ownerColor.tintHex,
+        amount: existing?.amount ?? null,
+        isKeeper: useLock ?? undefined,
+        isDevyPick: isDevyPick || undefined,
+        isCollegePick: isCollegePick || undefined,
+        isProPick: isProPick || undefined,
+        isPromotedFromDevy: isPromotedFromDevy || undefined,
+        source: source || undefined,
+        ownerRosterId,
+      }
+      const pid = existing?.playerId ? String(existing.playerId).trim() : ''
+      const poolEntry = pid && poolPlayerById ? poolPlayerById[pid] : undefined
+      const mergedPick =
+        poolEntry && existing?.playerId
+          ? mergePoolPlayerIntoBoardPickDisplay(basePick, poolEntry)
+          : basePick
       byRoundSlot[round]!.set(ownerSlot, {
         round,
         overall,
-        pick: {
-          overall,
-          round,
-          slot: ownerSlot,
-          pickLabel: `${round}.${pickInRound}`,
-          playerName: existing?.playerName ?? lock?.playerName ?? null,
-          position: existing?.position ?? lock?.position ?? null,
-          team: existing?.team ?? lock?.team ?? null,
-          playerId: existing?.playerId ?? lock?.playerId ?? null,
-          playerImageUrl: existing?.playerImageUrl ?? null,
-          sport: sport ?? null,
-          injuryStatus: (existing as { injuryStatus?: string | null } | undefined)?.injuryStatus ?? null,
-          byeWeek: existing?.byeWeek ?? null,
-          displayName: existing?.displayName ?? lock?.displayName ?? resolved?.displayName ?? null,
-          tradedPickMeta: resolvedTradedMeta,
-          managerTintColor: ownerColor.tintHex,
-          amount: existing?.amount ?? null,
-          isKeeper: useLock ?? undefined,
-          isDevyPick: isDevyPick || undefined,
-          isCollegePick: isCollegePick || undefined,
-          isProPick: isProPick || undefined,
-          isPromotedFromDevy: isPromotedFromDevy || undefined,
-          source: source || undefined,
-          ownerRosterId,
-        },
+        pick: mergedPick,
       })
     }
 
@@ -303,6 +315,7 @@ function DraftBoardInner({
     devyRounds,
     c2cCollegeRounds,
     sport,
+    poolPlayerById,
   ])
 
   const auctionColumns = useMemo(() => {
@@ -316,7 +329,13 @@ function DraftBoardInner({
         const ownedPicks = picks
           .filter((pick) => pick.rosterId === entry.rosterId)
           .sort((a, b) => a.overall - b.overall)
-          .map((pick) => buildAuctionCellPick(pick, tintHex, sport, entry.rosterId))
+          .map((pick) => {
+            const base = buildAuctionCellPick(pick, tintHex, sport, entry.rosterId)
+            const pid = pick.playerId ? String(pick.playerId).trim() : ''
+            return pid && poolPlayerById?.[pid]
+              ? mergePoolPlayerIntoBoardPickDisplay(base, poolPlayerById[pid])
+              : base
+          })
 
         return {
           rosterId: entry.rosterId,
@@ -326,7 +345,7 @@ function DraftBoardInner({
           picks: ownedPicks,
         }
       })
-  }, [draftType, picks, slotOrder, sport])
+  }, [draftType, picks, slotOrder, sport, poolPlayerById])
 
   const navigation = getRoundNavigationState(selectedRound, rounds)
   const orderedSlots = useMemo(

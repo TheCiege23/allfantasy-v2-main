@@ -33,6 +33,15 @@ describe('isDraftRoomRookie — NFL', () => {
     expect(isDraftRoomRookie({ name: 'x', position: 'QB', draftYear: 2026 }, baseOpts)).toBe(true)
   })
 
+  it('Sleeper-style yearsExp > 0 excludes rookie even when draftYear matches season', () => {
+    expect(
+      isDraftRoomRookie(
+        { name: 'x', position: 'QB', draftYear: 2026, yearsExp: 1 },
+        baseOpts,
+      ),
+    ).toBe(false)
+  })
+
   it('detects metadata nflDraftYear matching season', () => {
     expect(
       isDraftRoomRookie(

@@ -19,6 +19,7 @@ import {
 // Sleeper-style table mode and rows actually align to those columns.
 import { PlayerDetailModal, type DraftAssistantRoomContext } from './PlayerDetailModal'
 import type { PlayerDisplayModel } from '@/lib/draft-sports-models/types'
+import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import { normalizePlayer } from '@/lib/players/normalizePlayer'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
@@ -26,7 +27,8 @@ import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { isRookieEligibleForFilter, isVetEligibleForFilter } from '@/lib/draft-room/rookieFilterPredicate'
 import { sleeperPoolStatOptionsFromPositionFilter } from '@/lib/draft-room/sleeperPoolTableLayout'
-import { getDraftRoomRookieDataState } from '@/lib/draft-room/draftPlayerRookie'
+import { getDraftRoomRookieDataState, type DraftRoomRookiePlayerLike } from '@/lib/draft-room/draftPlayerRookie'
+import { buildRookieSignalDiagnostics } from '@/lib/draft-room/draftRoomRookieDiagnostics'
 import {
   getDraftRoomPositionGroupCounts,
   poolPlayerMatchesPositionPill,
@@ -36,6 +38,7 @@ import {
   logDraftPoolPositionDiagnosticsIfNeeded,
 } from '@/lib/draft-room/draftPoolDiagnostics'
 import { formatAiAdpUnavailableBanner } from '@/lib/draft-room/adpReadinessCopy'
+import { getDraftRoomDisplayHeadshot, getDraftRoomDisplayInjury } from '@/lib/player-data/adapters/draftRoomDisplayFields'
 
 const PLAYER_ROW_ESTIMATE_HEIGHT = 76
 /** Redraft rows use slightly taller estimate (chips + stats). */
@@ -93,6 +96,8 @@ export type PlayerEntry = {
   yearsExp?: number | null
   /** D.7 — derived rookie flag (true when yearsExp === 0 or upstream marked as rookie). */
   isRookie?: boolean
+  /** Provider-prioritized unified layer for fallback image/injury/source metadata */
+  unifiedProductView?: UnifiedPlayerProductView | null
 }
 
 export type PlayerPanelProps = {
@@ -235,6 +240,7 @@ function PlayerListVirtualized({
           >
             <DraftPlayerCard
               display={p.display ?? null}
+              unifiedProductView={p.unifiedProductView ?? null}
               name={p.name}
               position={p.position}
               team={p.team}
@@ -627,6 +633,18 @@ function PlayerPanelInner({
     sleeperStatOpts,
     rookieFilterContext,
   ])
+
+  useEffect(() => {
+    if (process.env.NODE_ENV === 'production') return
+    if (!rookiesOnly) return
+    if (filtered.length > 0) return
+    if (players.length === 0) return
+    const seasonYear = rookieFilterContext.seasonYear ?? new Date().getUTCFullYear()
+    console.info(
+      '[draft-room] rookies-only empty — signal diagnostics',
+      buildRookieSignalDiagnostics(players as DraftRoomRookiePlayerLike[], sport, seasonYear),
+    )
+  }, [rookiesOnly, filtered.length, players, sport, rookieFilterContext])
 
   const selectedIsWatchlisted = selectedPlayer ? watchlistKeys.has(watchKeyFor(selectedPlayer)) : false
 
@@ -1116,9 +1134,13 @@ function PlayerPanelInner({
             team: selectedPlayer.team ?? null,
             byeWeek: selectedPlayer.byeWeek ?? null,
             adp: useAiAdp ? (selectedPlayer.aiAdp ?? null) : (selectedPlayer.adp ?? null),
-            headshotUrl: selectedNormalized?.imageUrl ?? selectedPlayer.display?.assets?.headshotUrl ?? null,
+            headshotUrl:
+              getDraftRoomDisplayHeadshot(selectedPlayer) ??
+              selectedNormalized?.imageUrl ??
+              selectedPlayer.display?.assets?.headshotUrl ??
+              null,
             teamLogoUrl: selectedNormalized?.teamLogoUrl ?? selectedPlayer.display?.assets?.teamLogoUrl ?? null,
-            status: selectedPlayer.display?.metadata?.injuryStatus ?? null,
+            status: getDraftRoomDisplayInjury(selectedPlayer) ?? selectedPlayer.display?.metadata?.injuryStatus ?? null,
             college: selectedPlayer.school ?? selectedPlayer.display?.metadata?.collegeOrPipeline ?? null,
             age: selectedPlayer.display?.metadata?.age ?? null,
             heightIn: null,

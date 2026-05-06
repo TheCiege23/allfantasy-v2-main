@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react'
 import type { PlayerDisplayModel, PlayerAssetModel } from '@/lib/draft-sports-models/types'
+import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { formatNflStatCell } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { NflDraftPoolStatsRow } from '@/components/app/draft-room/NflDraftPoolStatsStrip'
@@ -14,6 +15,8 @@ import { DEFAULT_SPORT } from '@/lib/sport-scope'
 export type DraftPlayerCardProps = {
   /** Normalized display model (preferred) */
   display?: PlayerDisplayModel | null
+  /** Unified product layer — fallback headshot / injury when display assets omit data */
+  unifiedProductView?: UnifiedPlayerProductView | null
   /** Fallback when display not provided: minimal fields for list row */
   name: string
   position: string
@@ -149,6 +152,7 @@ function TeamLogoOrFallback({
 
 function DraftPlayerCardInner({
   display,
+  unifiedProductView = null,
   name,
   position,
   team,
@@ -191,7 +195,8 @@ function DraftPlayerCardInner({
   const displayName = display?.displayName ?? name
   const primaryStat = display?.stats?.primaryStatValue ?? adp
   const bye = display?.metadata?.byeWeek ?? display?.stats?.byeWeek ?? byeWeek
-  const injuryStatus = display?.metadata?.injuryStatus ?? null
+  const injuryStatus =
+    display?.metadata?.injuryStatus ?? unifiedProductView?.unified.injuryStatus ?? unifiedProductView?.injuryStatus ?? null
   const resolvedSchool = school ?? display?.metadata?.collegeOrPipeline ?? null
   const resolvedClassYearLabel = display?.metadata?.classYearLabel ?? classYearLabel
   const resolvedDraftGrade = display?.metadata?.draftGrade ?? draftGrade
@@ -238,7 +243,11 @@ function DraftPlayerCardInner({
     ],
   )
 
-  const headshotUrl = getPlayerImage(normalized, draftSport) ?? assets?.headshotUrl ?? null
+  const headshotUrl =
+    getPlayerImage(normalized, draftSport) ??
+    assets?.headshotUrl ??
+    unifiedProductView?.unified.headshotUrl ??
+    null
   const teamLogoUrl = normalized.teamLogoUrl ?? assets?.teamLogoUrl ?? null
   const rowHeadshotSize = rs ? 44 : 40
   const rowLogoSize = rs ? 18 : 16

@@ -43,6 +43,8 @@ export type DraftBoardCellPick = {
   managerTintColor?: string | null
   /** Current owner of this pick slot (for trade targeting). */
   ownerRosterId?: string | null
+  /** From live pool merge — Rookie / N YOE */
+  experienceBadge?: string | null
 }
 
 function TinyHeadshot({
@@ -405,6 +407,11 @@ function DraftBoardCellInner({
                   {pick.playerName}
                 </span>
                 <PositionBadge pos={pick.position} />
+                {pick.experienceBadge ? (
+                  <span className="shrink-0 rounded border border-cyan-400/30 bg-cyan-500/12 px-1 py-0.5 text-[7px] font-bold uppercase tracking-wide text-cyan-100/95">
+                    {pick.experienceBadge}
+                  </span>
+                ) : null}
               </div>
               <p className="truncate text-[9px] text-white/60">
                 {(pick.team ?? '—').toString()}

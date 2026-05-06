@@ -30,6 +30,15 @@ import {
 } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import { dbFirstMode } from '@/lib/db-first-mode'
 import { prisma } from '@/lib/prisma'
+import { buildUnifiedPlayerProductView, type UnifiedPlayerAugment } from '@/lib/player-data/unifiedPlayerProductView'
+import {
+  buildPlayerFallbackDiagnostics,
+  logPrefixForSurface,
+  resolveIncludePlayerDataDiagnostics,
+  type ProviderFallbackDiagnostics,
+} from '@/lib/player-data/providerFallbackDiagnostics'
+import { soccerLeagueHintFromLeagueSettings } from '@/lib/player-data/leagueSoccerLeagueHint'
+import type { NormalizedDraftEntry } from '@/lib/draft-sports-models/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -57,7 +66,34 @@ type DraftPoolResponseBody = {
   entries?: unknown[]
   count?: number
   meta?: Partial<DraftPoolResponseMeta>
+  /** First 10 pool rows only — `?debugPlayerData=1` or dev */
+  normalizedPlayerDataDiagnostics?: ProviderFallbackDiagnostics[]
   [key: string]: unknown
+}
+
+async function injectDraftPoolDiagnosticsIfRequested(
+  payload: DraftPoolResponseBody,
+  leagueId: string,
+  req: NextRequest,
+): Promise<void> {
+  if (!resolveIncludePlayerDataDiagnostics(req.nextUrl.searchParams)) return
+  const entries = payload.entries
+  if (!Array.isArray(entries) || entries.length === 0) return
+  const leagueRow = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
+  const soccerHint = soccerLeagueHintFromLeagueSettings(leagueRow?.settings ?? null) ?? undefined
+  const augment: UnifiedPlayerAugment | undefined = soccerHint ? { soccerLeague: soccerHint } : undefined
+  const sample = entries.slice(0, 10) as NormalizedDraftEntry[]
+  payload.normalizedPlayerDataDiagnostics = sample.map((e) =>
+    buildPlayerFallbackDiagnostics(
+      buildUnifiedPlayerProductView(e, augment ? { augment } : undefined),
+      'draft',
+    ),
+  )
+  if (process.env.NODE_ENV === 'development') {
+    for (const d of payload.normalizedPlayerDataDiagnostics.slice(0, 5)) {
+      console.info(logPrefixForSurface('draft-room', d))
+    }
+  }
 }
 
 function withDraftPoolMeta(
@@ -147,7 +183,9 @@ export async function GET(
           status: 200,
           headers: { 'Cache-Control': DRAFT_POOL_CACHE_CONTROL },
         })
-        const response = NextResponse.json(payload, { status: 200 })
+        const outward = { ...payload } as DraftPoolResponseBody
+        await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
+        const response = NextResponse.json(outward, { status: 200 })
         response.headers.set('Cache-Control', DRAFT_POOL_CACHE_CONTROL)
         return response
       }
@@ -175,7 +213,9 @@ export async function GET(
       cacheKey,
       elapsedMs: Date.now() - routeStartedAt,
     })
-    const response = NextResponse.json(payload, { status: cached.status })
+    const outward = { ...payload } as DraftPoolResponseBody
+    await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
+    const response = NextResponse.json(outward, { status: cached.status })
     for (const [header, value] of Object.entries(cached.headers)) {
       response.headers.set(header, value)
     }
@@ -276,7 +316,9 @@ export async function GET(
       ]).catch(() => {})
     }
 
-    const res = NextResponse.json(payload)
+    const outward = { ...payload } as DraftPoolResponseBody
+    await injectDraftPoolDiagnosticsIfRequested(outward, leagueId, req)
+    const res = NextResponse.json(outward)
     res.headers.set('Cache-Control', DRAFT_POOL_CACHE_CONTROL)
 
     const payloadObj = payload as {

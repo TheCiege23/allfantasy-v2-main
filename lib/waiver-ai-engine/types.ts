@@ -35,6 +35,18 @@ export type WaiverAIEngineInput = {
     value?: number
     assetValue?: { impactValue?: number; marketValue?: number; vorpValue?: number; volatility?: number }
     source?: string
+    /** Unified player snapshot from `serializeUnifiedPlayerForApi` (waiver wire UI). */
+    product?: {
+      unified?: Record<string, unknown>
+      yearsExp?: number | null
+      isRookie?: boolean
+      byeWeek?: number | null
+    }
+    lowConfidence?: boolean
+    profileSource?: string | null
+    statsSource?: string | null
+    fantasyPointsPerGame?: number | null
+    injuryStatus?: string | null
   }>
   maxResults?: number
 }

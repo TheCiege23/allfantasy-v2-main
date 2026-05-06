@@ -33,7 +33,12 @@ import {
   emptyNflDraftProjectionSplits,
   type NflDraftProjectionSplits,
 } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
-import { loadNflRookieLookup, lookupYearsExp, type NflRookieLookup } from '@/lib/draft-room/nflRookieLookup'
+import {
+  loadNflRookieLookup,
+  lookupYearsExp,
+  type NflRookieFetchSource,
+  type NflRookieLookup,
+} from '@/lib/draft-room/nflRookieLookup'
 import {
   canonicalName,
   canonicalPosition,
@@ -1319,13 +1324,16 @@ export async function getResolvedDraftPoolForLeague(
    * "Rookie data unavailable" message in that case. Failures inside the helper
    * degrade silently to `hasData=false` rather than breaking the pool fetch. */
   let nflRookieLookup: NflRookieLookup | null = null
+  let nflRookieFetchSource: NflRookieFetchSource | null = null
   if (sport === 'NFL') {
     // DB-FIRST NOTE: loadNflRookieLookup calls the Sleeper /players/nfl endpoint
     // (24h in-process memory cache). A future hardening pass should back this
     // with a DB-persisted SleeperPlayersCache table so no cold-start API call
     // is made from the pool read path. Failures degrade silently to hasData=false.
     const perfRookie = perfStart('11. loadNflRookieLookup (Sleeper API — 24h cache)')
-    nflRookieLookup = await loadNflRookieLookup().catch(() => null)
+    const rookieBundle = await loadNflRookieLookup().catch(() => null)
+    nflRookieLookup = rookieBundle?.lookup ?? null
+    nflRookieFetchSource = rookieBundle?.fetchSource ?? null
     perfRookie()
   }
 
@@ -1676,7 +1684,9 @@ export async function getResolvedDraftPoolForLeague(
               row.yearsExp != null && Number.isFinite(Number(row.yearsExp))
                 ? Number(row.yearsExp)
                 : null
-            if (explicitYearsExp != null) return { yearsExp: explicitYearsExp }
+            if (explicitYearsExp != null) {
+              return { yearsExp: explicitYearsExp, rookieYearsExpSource: 'explicit_imported' as const }
+            }
 
             const sleeperIdCandidate =
               sourceSleeperId ??
@@ -1687,7 +1697,15 @@ export async function getResolvedDraftPoolForLeague(
             const ye = nflRookieLookup
               ? lookupYearsExp(nflRookieLookup, name, position, sleeperIdCandidate)
               : null
-            if (ye != null) return { yearsExp: ye }
+            if (ye != null) {
+              return {
+                yearsExp: ye,
+                rookieYearsExpSource:
+                  nflRookieFetchSource === 'sportsdatacache_compact'
+                    ? ('sleeper_db_cache' as const)
+                    : ('sleeper_live' as const),
+              }
+            }
 
             // Conservative fallback: if existing DB-backed analytics prove prior
             // NFL game participation/value, mark as veteran experience=1+.
@@ -1700,7 +1718,7 @@ export async function getResolvedDraftPoolForLeague(
                 resolvedSupplemental: resolvedAnalytics?.rollingInsightsSupplemental,
               })
             ) {
-              return { yearsExp: 1 }
+              return { yearsExp: 1, rookieYearsExpSource: 'analytics_veteran_inferred' as const }
             }
 
             return {}

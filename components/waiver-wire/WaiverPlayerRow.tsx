@@ -11,6 +11,10 @@ type Props = {
     name: string
     position: string | null
     team: string | null
+    headshotUrl?: string | null
+    injuryStatus?: string | null
+    /** From waiver adapter — optional experience chip */
+    experienceSummary?: string | null
   }
   sport?: string | null
   onAddClick: () => void
@@ -46,9 +50,21 @@ export default function WaiverPlayerRow({
       onClick={onRowClick}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-500/15 text-xs font-semibold text-cyan-100">
-          {pos}
-        </div>
+        {player.headshotUrl && /^https?:\/\//i.test(player.headshotUrl) ? (
+          <Image
+            src={player.headshotUrl}
+            alt=""
+            width={36}
+            height={36}
+            className="h-9 w-9 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+            unoptimized
+            data-testid={`waiver-player-headshot-${player.id}`}
+          />
+        ) : (
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-500/15 text-xs font-semibold text-cyan-100">
+            {pos}
+          </div>
+        )}
         {logo ? (
           <Image
             src={logo}
@@ -67,6 +83,16 @@ export default function WaiverPlayerRow({
             <span className="text-xs text-white/60">· {team}</span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-white/55">
+            {player.injuryStatus ? (
+              <span className="rounded border border-amber-400/30 bg-amber-500/10 px-1.5 py-0.5 text-[10px] text-amber-100">
+                {player.injuryStatus}
+              </span>
+            ) : null}
+            {player.experienceSummary ? (
+              <span className="rounded border border-cyan-400/25 bg-cyan-500/10 px-1.5 py-0.5 text-[10px] text-cyan-100">
+                {player.experienceSummary}
+              </span>
+            ) : null}
             <span className="inline-flex items-center gap-1">
               <TrendingUp className="h-3 w-3 text-emerald-300" />
               <span>Trend: {trend > 0 ? `+${trend}` : 'neutral'}</span>

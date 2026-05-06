@@ -35,9 +35,10 @@ describe('getDraftStatColumnsForSport', () => {
     expect(cols.map((c) => c.key)).not.toContain('pass_td')
   })
 
-  it('NCAAF mirrors NFL offense vs IDP', () => {
+  it('NCAAF offense vs IDP vs PK uses Rolling Insights-friendly aliases', () => {
     expect(getDraftStatColumnsForSport('NCAAF', { position: 'WR' }).some((c) => c.key === 'rec_yds')).toBe(true)
-    expect(getDraftStatColumnsForSport('NCAAF', { position: 'DE' }).some((c) => c.key === 'idp_sack')).toBe(true)
+    expect(getDraftStatColumnsForSport('NCAAF', { position: 'DE' }).some((c) => c.key === 'idp_fr')).toBe(true)
+    expect(getDraftStatColumnsForSport('NCAAF', { position: 'PK' }).some((c) => c.key === 'fgm')).toBe(true)
   })
 
   it('NBA / NCAAB share basketball columns', () => {

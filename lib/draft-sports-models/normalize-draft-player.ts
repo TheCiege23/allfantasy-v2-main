@@ -11,6 +11,7 @@ import type {
   PlayerStatSnapshotModel,
   TeamDisplayModel,
   NormalizedDraftEntry,
+  NflRookieYearsExpProvenance,
 } from './types'
 import type { NflDraftProjectionSplits } from '@/lib/draft/analytics/nfl-draft-pool-projection-splits'
 import { resolvePlayerAssets, buildTeamDisplayModel, looksLikeSleeperExternalId } from './player-asset-resolver'
@@ -62,6 +63,8 @@ export type RawDraftPlayerLike = {
   yearsExp?: number | null
   /** D.7 — explicit rookie marker (e.g. devy promoted to NFL). Falsy when unknown. */
   isRookie?: boolean | null
+  /** NFL: pool resolver provenance for Sleeper/import-backed yearsExp (diagnostics). */
+  rookieYearsExpSource?: NflRookieYearsExpProvenance | null
   [key: string]: unknown
 }
 
@@ -135,6 +138,13 @@ export function normalizeDraftPlayer(
     draftGrade: raw.draftGrade != null ? String(raw.draftGrade).trim() : null,
     projectedLandingSpot: raw.projectedLandingSpot != null ? String(raw.projectedLandingSpot).trim() : null,
     sport: sportNorm,
+    rookieYearsExpSource:
+      raw.rookieYearsExpSource === 'explicit_imported' ||
+      raw.rookieYearsExpSource === 'sleeper_live' ||
+      raw.rookieYearsExpSource === 'sleeper_db_cache' ||
+      raw.rookieYearsExpSource === 'analytics_veteran_inferred'
+        ? raw.rookieYearsExpSource
+        : undefined,
   }
 
   const fppg =

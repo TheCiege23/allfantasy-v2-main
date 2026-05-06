@@ -119,6 +119,21 @@ export type NflRookieLookup = {
   hasData: boolean
 }
 
+/** Where `years_exp` map rows were materialized (for NFL rookie diagnostics). */
+export type NflRookieFetchSource = 'sleeper_live' | 'sportsdatacache_compact'
+
+export type NflRookieLookupResult = {
+  lookup: NflRookieLookup
+  fetchSource: NflRookieFetchSource
+}
+
+const EMPTY_LOOKUP: NflRookieLookup = {
+  byNamePos: new Map(),
+  byName: new Map(),
+  bySleeperId: new Map(),
+  hasData: false,
+}
+
 function normName(name: string | null | undefined): string {
   return String(name ?? '').trim().toLowerCase()
 }
@@ -136,7 +151,7 @@ function normPos(pos: string | null | undefined): string {
  * persisted compact map in `SportsDataCache`. On Sleeper success the compact
  * map is written to `SportsDataCache` asynchronously (fire-and-forget).
  */
-export async function loadNflRookieLookup(): Promise<NflRookieLookup> {
+export async function loadNflRookieLookup(): Promise<NflRookieLookupResult> {
   let players: Record<string, SleeperPlayer> = {}
   let sleeperSucceeded = false
   try {
@@ -149,8 +164,8 @@ export async function loadNflRookieLookup(): Promise<NflRookieLookup> {
   // If Sleeper is unreachable (cold start), try to serve from DB cache.
   if (!sleeperSucceeded || Object.keys(players).length === 0) {
     const dbLookup = await loadYearsExpFromDb()
-    if (dbLookup) return dbLookup
-    return { byNamePos: new Map(), byName: new Map(), bySleeperId: new Map(), hasData: false }
+    if (dbLookup) return { lookup: dbLookup, fetchSource: 'sportsdatacache_compact' }
+    return { lookup: EMPTY_LOOKUP, fetchSource: 'sportsdatacache_compact' }
   }
 
   const byNamePos = new Map<string, RookieMetadataRow>()
@@ -182,7 +197,7 @@ export async function loadNflRookieLookup(): Promise<NflRookieLookup> {
     saveYearsExpToDb(bySleeperId, byNamePos, byName).catch(() => {})
   }
 
-  return { byNamePos, byName, bySleeperId, hasData }
+  return { lookup: { byNamePos, byName, bySleeperId, hasData }, fetchSource: 'sleeper_live' }
 }
 
 /**

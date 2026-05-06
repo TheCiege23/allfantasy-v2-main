@@ -36,6 +36,8 @@ import CommissionerWaiverControls from "@/components/waivers/CommissionerWaiverC
 import PendingClaimsList, { buildPendingClaimPatch } from "@/components/waivers/PendingClaimsList"
 import WaiverResultsFeed from "@/components/waivers/WaiverResultsFeed"
 import { formatWaiverOutcomeLabel, outcomeCodeFromMetadata } from "@/lib/waiver-wire/waiver-outcome-labels"
+import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
+import { adaptWaiverWirePlayer } from "@/lib/player-data/adapters/waiverPlayerAdapter"
 
 type WaiverSettings = {
   leagueId?: string
@@ -50,7 +52,7 @@ type WaiverSettings = {
   instantFaAfterClear?: boolean
 }
 
-type Player = { id: string; name: string; position: string | null; team: string | null }
+type Player = UnifiedPlayerWireDto
 type Claim = {
   id: string
   addPlayerId: string
@@ -565,6 +567,12 @@ export default function WaiverWirePage({ leagueId }: { leagueId: string }) {
             watchlistIdSet.has(player.id)
           ),
           source: "waiver-wire-ui",
+          product: player.product,
+          lowConfidence: player.lowConfidence,
+          profileSource: player.profileSource,
+          statsSource: player.statsSource,
+          fantasyPointsPerGame: player.fantasyPointsPerGame,
+          injuryStatus: player.injuryStatus,
         })),
         maxResults: 8,
       }
@@ -733,10 +741,19 @@ export default function WaiverWirePage({ leagueId }: { leagueId: string }) {
             ) : (
               (activeTab === "trending" ? trendingPlayers : filteredPlayers).map((p) => {
                 const alreadyClaimed = claims.some((c) => c.addPlayerId === p.id)
+                const row = adaptWaiverWirePlayer(p)
                 return (
                   <WaiverPlayerRow
                     key={p.id}
-                    player={p}
+                    player={{
+                      id: row.id,
+                      name: row.name,
+                      position: row.position,
+                      team: row.team,
+                      headshotUrl: row.displayHeadshotUrl ?? row.headshotUrl,
+                      injuryStatus: row.displayInjury ?? row.injuryStatus,
+                      experienceSummary: row.experienceSummary,
+                    }}
                     sport={settings?.sport ?? null}
                     trendScore={trendScoreByPlayerId.get(p.id) ?? 0}
                     onRowClick={() => {

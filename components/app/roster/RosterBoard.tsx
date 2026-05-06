@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import Image from "next/image"
 import { ChevronsDown, Users, Activity, Info, ArrowRightLeft } from "lucide-react"
 import { useRosterManager, type RosterPlayer, type RosterSectionKey } from "./useRosterManager"
 import LineupLockBanner from "./LineupLockBanner"
@@ -535,9 +536,20 @@ function PlayerCard({
       data-testid={`roster-player-card-${player.id}`}
     >
       <div className="flex flex-1 items-center gap-1.5 min-w-0">
-        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[9px] font-semibold text-white/90">
-          {player.position}
-        </div>
+        {player.headshotUrl && /^https?:\/\//i.test(player.headshotUrl) ? (
+          <Image
+            src={player.headshotUrl}
+            alt=""
+            width={24}
+            height={24}
+            className="h-6 w-6 shrink-0 rounded-full object-cover ring-1 ring-white/10"
+            unoptimized
+          />
+        ) : (
+          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#111a31] text-[9px] font-semibold text-white/90">
+            {player.position}
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1">
             {logo ? (
@@ -550,6 +562,9 @@ function PlayerCard({
               />
             ) : null}
             <p className="truncate text-[10px] sm:text-[11px] font-semibold text-white/95">{player.name}</p>
+            <span className="shrink-0 rounded bg-white/[0.06] px-1 py-0 text-[8px] font-semibold text-white/55">
+              {player.position}
+            </span>
             <span className="text-[9px] text-[#7f8aa6]">{player.team}</span>
           </div>
           <p className="truncate text-[9px] sm:text-[10px] text-[#6b7696]">

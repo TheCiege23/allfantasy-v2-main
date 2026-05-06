@@ -39,6 +39,20 @@ const AvailablePlayerSchema = z.object({
   value: z.number().optional(),
   assetValue: AssetValueSchema.optional(),
   source: z.string().optional(),
+  product: z
+    .object({
+      unified: z.record(z.string(), z.unknown()).optional(),
+      yearsExp: z.number().nullable().optional(),
+      isRookie: z.boolean().optional(),
+      byeWeek: z.number().nullable().optional(),
+    })
+    .passthrough()
+    .optional(),
+  lowConfidence: z.boolean().optional(),
+  profileSource: z.string().nullable().optional(),
+  statsSource: z.string().nullable().optional(),
+  fantasyPointsPerGame: z.number().nullable().optional(),
+  injuryStatus: z.string().nullable().optional(),
 })
 
 const RosterPlayerSchema = z.object({

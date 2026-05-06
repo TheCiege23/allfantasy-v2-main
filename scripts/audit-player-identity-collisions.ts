@@ -337,7 +337,8 @@ async function main(): Promise<void> {
     })
     .filter((v): v is NonNullable<typeof v> => Boolean(v))
 
-  const rookieLookup = await loadNflRookieLookup().catch(() => null)
+  const rookieBundle = await loadNflRookieLookup().catch(() => null)
+  const rookieLookup = rookieBundle?.lookup ?? null
   const referenceSeason = latestCache.syncedAt.getUTCFullYear()
 
   const identityByStrictKey = new Map<string, (typeof identityRows)[number]>()

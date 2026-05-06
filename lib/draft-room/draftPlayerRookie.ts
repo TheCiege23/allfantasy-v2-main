@@ -3,6 +3,8 @@
  * Does not invent players; only classifies rows already in the pool.
  */
 
+import { isFreshmanClass } from '@/lib/draft-room/collegeClass'
+import { resolveNflRookieSource } from '@/lib/providers/nflRookieSourcePolicy'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 
 export type DraftRoomRookiePlayerLike = {
@@ -85,6 +87,7 @@ export function poolRowHasRookieSignals(player: DraftRoomRookiePlayerLike): bool
   if (readLoose(player, 'draftYear') != null) return true
   if (readLoose(player, 'nflDraftYear') != null) return true
   if (player.classYearLabel != null && String(player.classYearLabel).trim() !== '') return true
+  if (readLoose(player, 'class') != null || readLoose(player, 'collegeClass') != null) return true
   if (player.isDevy === true) return true
   return false
 }
@@ -104,26 +107,92 @@ export function hasExplicitRookieClassification(player: DraftRoomRookiePlayerLik
 /**
  * Whether draft-year matching can infer rookie without yearsExp (NFL/NCAAF only).
  */
-function draftYearMatchesSeason(player: DraftRoomRookiePlayerLike, season: number): boolean {
-  const looseMeta = readLoose(player, 'metadata')
-  let metaDraft: number | null = null
-  if (looseMeta && typeof looseMeta === 'object') {
-    const o = looseMeta as Record<string, unknown>
-    metaDraft = num(o.draftYear) ?? num(o.nflDraftYear)
-  }
-  const dm = player.display?.metadata as Record<string, unknown> | undefined
-  const displayDraft =
-    dm && typeof dm === 'object' ? num(dm.draftYear) ?? num(dm.nflDraftYear) : null
+/** Operator-facing diagnostic label for where NFL rookie *signals* came from (not ISO timestamps). */
+export type NflRookieDiagnosticSource =
+  | 'rolling_insights_imported'
+  | 'sleeper_years_exp'
+  | 'sleeper_cache'
+  | 'unknown'
 
-  const candidates = [
-    num(player.draftYear),
-    num(player.nflDraftYear),
-    num(readLoose(player, 'draftYear')),
-    num(readLoose(player, 'nflDraftYear')),
-    metaDraft,
-    displayDraft,
-  ].filter((n): n is number => n != null)
-  return candidates.some((n) => n === season)
+function readCollegeClassLabel(player: DraftRoomRookiePlayerLike): string | null {
+  const v =
+    readLoose(player, 'class') ??
+    readLoose(player, 'collegeClass') ??
+    player.classYearLabel ??
+    null
+  if (v == null || v === '') return null
+  return String(v).trim()
+}
+
+/** NCAA football — Rolling Insights `class`; freshmen ~= pool “rookies” filter; never Sleeper years_exp. */
+function isDraftRoomRookieNcaaFb(
+  player: DraftRoomRookiePlayerLike,
+  options: DraftRoomRookieOptions,
+): boolean {
+  const cc = readCollegeClassLabel(player)
+  if (cc && isFreshmanClass(cc)) return true
+
+  if (options.devyEnabled || options.c2cEnabled) {
+    if (player.isDevy === true) return true
+  }
+
+  return false
+}
+
+function isDraftRoomRookieNfl(
+  player: DraftRoomRookiePlayerLike,
+  season: number,
+  options: DraftRoomRookieOptions,
+): boolean {
+  const res = resolveNflRookieSource({ ...player, seasonYear: season })
+  if (res.isRookie === true) return true
+  if (res.isRookie === false) return false
+
+  if (options.devyEnabled || options.c2cEnabled) {
+    if (player.isDevy === true) return true
+    const yr = String(player.classYearLabel ?? '').toLowerCase()
+    if (
+      yr.includes('rookie') ||
+      yr.includes('fr') ||
+      yr.includes('so') ||
+      yr.includes('jr') ||
+      yr.includes('sr')
+    ) {
+      return true
+    }
+  }
+
+  return false
+}
+
+export function resolveNflRookieDiagnosticSource(
+  player: DraftRoomRookiePlayerLike,
+): NflRookieDiagnosticSource {
+  const dm = player.display?.metadata as Record<string, unknown> | undefined
+  const prov = dm?.rookieYearsExpSource
+  if (prov === 'explicit_imported') return 'rolling_insights_imported'
+  if (prov === 'sleeper_live') return 'sleeper_years_exp'
+  if (prov === 'sleeper_db_cache') return 'sleeper_cache'
+  if (
+    player.isRookie === true ||
+    player.rookie === true ||
+    readLoose(player, 'isRookie') === true ||
+    readLoose(player, 'rookie') === true ||
+    player.draftYear != null ||
+    player.nflDraftYear != null ||
+    readLoose(player, 'draftYear') != null ||
+    readLoose(player, 'nflDraftYear') != null
+  ) {
+    return 'rolling_insights_imported'
+  }
+  if (
+    num(player.yearsExp) != null ||
+    num(readLoose(player, 'yearsExperience')) != null ||
+    num(readLoose(player, 'years_exp')) != null
+  ) {
+    return 'sleeper_years_exp'
+  }
+  return 'unknown'
 }
 
 export function isDraftRoomRookie(
@@ -136,16 +205,20 @@ export function isDraftRoomRookie(
   if (player.isRookie === true || player.rookie === true) return true
   if (readLoose(player, 'isRookie') === true || readLoose(player, 'rookie') === true) return true
 
+  if (sport === 'NFL') {
+    return isDraftRoomRookieNfl(player, season, options)
+  }
+
+  if (sport === 'NCAAF') {
+    return isDraftRoomRookieNcaaFb(player, options)
+  }
+
   const ye =
     num(player.yearsExp) ??
     num(readLoose(player, 'yearsExperience')) ??
     num(readLoose(player, 'years_exp'))
   const exp = num(player.experience) ?? num(readLoose(player, 'experience'))
   if (ye === 0 || exp === 0) return true
-
-  if (sport === 'NFL' || sport === 'NCAAF') {
-    if (draftYearMatchesSeason(player, season)) return true
-  }
 
   if (options.devyEnabled || options.c2cEnabled) {
     if (player.isDevy === true) return true

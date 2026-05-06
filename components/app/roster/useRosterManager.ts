@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
+import { mergeUnifiedIntoRosterState } from "@/lib/player-data/adapters/rosterPlayerAdapter"
+import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
 import { dispatchStateRefreshEvent } from "@/lib/state-consistency/state-events"
 
@@ -19,6 +21,11 @@ export type RosterPlayer = {
   actual: number | null
   status: "healthy" | "q" | "out" | "ir"
   slot: RosterSectionKey
+  /** Normalized display-only enrichments from `unifiedRoster` API slice */
+  headshotUrl?: string | null
+  providerInjuryLabel?: string | null
+  unifiedProjectedPoints?: number | null
+  unifiedLowConfidence?: boolean
 }
 
 export type RosterState = {
@@ -356,7 +363,12 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
       )
       setCanEditLineup(data?.canEditLineup !== false)
       setExistingPlayerData(data?.roster ?? null)
-      setRoster(buildRosterStateFromPlayerData(data?.roster))
+      const base = buildRosterStateFromPlayerData(data?.roster)
+      const unified =
+        Array.isArray(data?.unifiedRoster) && data.unifiedRoster.length > 0
+          ? (data.unifiedRoster as UnifiedPlayerWireDto[])
+          : null
+      setRoster(unified ? mergeUnifiedIntoRosterState(base, unified) : base)
       setSaveError(null)
       const incomingLimits = data?.slotLimits as Partial<SlotLimits> | null | undefined
       setSlotLimits({

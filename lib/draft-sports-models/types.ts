@@ -65,6 +65,13 @@ export interface PlayerStatSnapshotModel {
   projectionSource?: ProjectionSourceTag | null
 }
 
+/** NFL pool row: where `yearsExp` attached during pool resolution came from (diagnostics). */
+export type NflRookieYearsExpProvenance =
+  | 'explicit_imported'
+  | 'sleeper_live'
+  | 'sleeper_db_cache'
+  | 'analytics_veteran_inferred'
+
 /** Draft-specific metadata (eligibility, injury, devy/C2C). */
 export interface PlayerDraftMetadataModel {
   position: string
@@ -87,6 +94,8 @@ export interface PlayerDraftMetadataModel {
   draftGrade?: string | null
   projectedLandingSpot?: string | null
   sport: DraftSport
+  /** NFL: provenance for `yearsExp` when present (never inferred from undocumented RI fields). */
+  rookieYearsExpSource?: NflRookieYearsExpProvenance | null
 }
 
 /** Full normalized player for draft UIs (live, mock, auction, slow, keeper, devy, C2C). */

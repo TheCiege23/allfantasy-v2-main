@@ -1,7 +1,7 @@
 import { runCostControlledOpenAIText } from '@/lib/ai-cost-control'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { suggestWaiverPickups } from './suggest'
-import type { WaiverAIServiceInput, WaiverAIServiceOutput } from './types'
+import type { WaiverAIServiceInput, WaiverAIServiceOutput, WaiverAIEngineInput } from './types'
 
 function buildDeterministicExplanation(input: {
   suggestions: WaiverAIServiceOutput['deterministic']['suggestions']
@@ -33,10 +33,44 @@ function parseAIExplanation(raw: string): string | null {
   }
 }
 
+function formatProviderDataNotes(
+  availablePlayers: WaiverAIEngineInput['availablePlayers'],
+  suggestions: WaiverAIServiceOutput['deterministic']['suggestions'],
+): string | null {
+  const lines: string[] = []
+  for (const s of suggestions.slice(0, 6)) {
+    const ap = availablePlayers.find(
+      (p) =>
+        (p.playerId && p.playerId === s.playerId) ||
+        (p.playerName && p.playerName === s.playerName) ||
+        (p.name && p.name === s.playerName),
+    )
+    if (!ap?.product?.unified && ap?.lowConfidence == null && !ap?.profileSource) continue
+    const u = ap.product?.unified as {
+      lowConfidence?: boolean
+      soccerLeague?: string | null
+      collegeClass?: string
+      nflRookie?: { source?: string | null } | null
+    } | undefined
+    const bits: string[] = []
+    if (typeof ap.lowConfidence === 'boolean') bits.push(`lowConfidence=${ap.lowConfidence}`)
+    if (u?.lowConfidence != null) bits.push(`unified.lowConfidence=${u.lowConfidence}`)
+    if (ap.profileSource) bits.push(`profile=${ap.profileSource}`)
+    if (ap.statsSource) bits.push(`stats=${ap.statsSource}`)
+    const rookieSrc = u?.nflRookie?.source
+    if (rookieSrc) bits.push(`nflRookie=${rookieSrc}`)
+    if (u?.soccerLeague) bits.push(`soccer=${u.soccerLeague}`)
+    if (u?.collegeClass) bits.push(`class=${u.collegeClass}`)
+    if (bits.length > 0) lines.push(`${s.playerName}: ${bits.join('; ')}`)
+  }
+  return lines.length > 0 ? lines.join('\n') : null
+}
+
 async function buildAIExplanation(input: {
   sport: WaiverAIServiceOutput['sport']
   deterministic: WaiverAIServiceOutput['deterministic']
   deterministicExplanation: string
+  availablePlayers?: WaiverAIServiceInput['availablePlayers']
 }): Promise<string | null> {
   const topSuggestions = input.deterministic.suggestions.slice(0, 5).map((suggestion) => ({
     playerName: suggestion.playerName,
@@ -48,6 +82,8 @@ async function buildAIExplanation(input: {
       detail: driver.detail,
     })),
   }))
+
+  const providerNotes = formatProviderDataNotes(input.availablePlayers ?? [], input.deterministic.suggestions)
 
   const ai = await runCostControlledOpenAIText({
     feature: 'waiver_ai_explanation',
@@ -69,6 +105,9 @@ async function buildAIExplanation(input: {
           `Sport: ${input.sport}`,
           `Deterministic explanation: ${input.deterministicExplanation}`,
           `Suggestions: ${JSON.stringify(topSuggestions)}`,
+          providerNotes
+            ? `Provider data quality notes (do not contradict deterministic ranks; use only to mention uncertainty):\n${providerNotes}`
+            : '',
           'Return JSON only:',
           '{"explanation":"clear, concise explanation"}',
         ].join('\n'),
@@ -114,6 +153,7 @@ export async function runWaiverAIService(
     sport,
     deterministic: output.deterministic,
     deterministicExplanation,
+    availablePlayers: input.availablePlayers,
   })
   if (aiExplanation) {
     output.explanation = {
