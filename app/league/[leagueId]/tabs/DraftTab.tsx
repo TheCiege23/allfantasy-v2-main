@@ -515,16 +515,16 @@ export function DraftTab({
 
       {!isLeagueHome ? (
       <section
-        className="relative overflow-hidden rounded-[22px] text-white shadow-lg shadow-black/20"
+        className="relative overflow-hidden rounded-[22px] text-white shadow-lg shadow-black/30"
         style={{
-          background: 'linear-gradient(135deg, #3d5dc9 0%, #2e4aad 42%, #2547a8 100%)',
+          background: 'linear-gradient(135deg, #5b46c8 0%, #4836b8 42%, #3d2da3 100%)',
         }}
         aria-label="Draftboard"
         data-testid="league-draftboard-card"
       >
         {/* Right-side depth + faint grid blocks */}
         <div
-          className="pointer-events-none absolute inset-y-0 right-0 w-[min(52%,280px)] bg-gradient-to-l from-[#0c1a4a]/85 via-[#152560]/40 to-transparent"
+          className="pointer-events-none absolute inset-y-0 right-0 w-[min(52%,280px)] bg-gradient-to-l from-[#1a0f4a]/85 via-[#2a1d70]/40 to-transparent"
           aria-hidden
         />
         <div
@@ -660,10 +660,10 @@ export function DraftTab({
                 type="button"
                 onClick={() => void handleDraftRoom()}
                 disabled={!canEnterDraftRoom}
-                className="flex flex-1 items-center justify-center rounded-full border border-white/25 bg-white/10 px-5 py-3 text-[12px] font-bold uppercase tracking-wide text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-1 items-center justify-center rounded-full bg-cyan-400 px-5 py-3 text-[12px] font-black uppercase tracking-wide text-[#0a0f18] shadow-md shadow-cyan-900/30 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="league-draftboard-enter-room"
               >
-                Draft room
+                Draftroom
               </button>
             )}
           </div>
