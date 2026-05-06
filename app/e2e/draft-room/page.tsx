@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { E2eDraftRoomHarnessClient } from '@/app/e2e/draft-room/E2eDraftRoomHarnessClient'
+import E2eDraftRoomHarnessClient from '@/app/e2e/draft-room/E2eDraftRoomHarnessClient'
 import { DEFAULT_SPORT, normalizeToSupportedSport } from '@/lib/sport-scope'
 
 export default async function E2eDraftRoomHarnessPage({
