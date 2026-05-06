@@ -146,4 +146,13 @@ export interface NormalizedDraftEntry {
   isRookie?: boolean
   /** Identifies how fantasyPointsPerGame was produced. */
   projectionSource?: ProjectionSourceTag | null
+  /** Block B.2-C — rookie inference inputs surfaced from the resolver so the
+   * client predicate can branch per sport without reaching into display.metadata.
+   * All optional / string|number tolerant — upstream sources may use either shape. */
+  age?: number | string | null
+  draftYear?: number | string | null
+  rookieYear?: number | string | null
+  debutYear?: number | string | null
+  firstSeasonYear?: number | string | null
+  classYear?: string | null
 }
