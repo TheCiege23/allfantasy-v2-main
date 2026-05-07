@@ -66,6 +66,7 @@ export type PlayerPoolAuditReport = {
   missingPositionCount: number
   missingStatusCount: number
   missingStatsCount: number
+  missingAdpCount: number
   rookieFlagMissingCount: number
   rookieExamples: string[]
   sourceBreakdown: Record<string, number>
@@ -134,13 +135,20 @@ function isMalformedName(name: string | null | undefined): boolean {
   return false
 }
 
+function isFiniteNumeric(value: unknown): boolean {
+  if (value === null || value === undefined) return false
+  if (typeof value === 'string' && value.trim() === '') return false
+  const n = Number(value)
+  return Number.isFinite(n)
+}
+
 function missingStats(row: PlayerPoolAuditRow): boolean {
   const hasAnyStat =
-    Number.isFinite(Number(row.adp)) ||
-    Number.isFinite(Number(row.primaryStatValue)) ||
-    Number.isFinite(Number(row.secondaryStatValue)) ||
-    Number.isFinite(Number(row.fantasyPointsPerGame)) ||
-    Number.isFinite(Number(row.lifetimeValue))
+    isFiniteNumeric(row.adp) ||
+    isFiniteNumeric(row.primaryStatValue) ||
+    isFiniteNumeric(row.secondaryStatValue) ||
+    isFiniteNumeric(row.fantasyPointsPerGame) ||
+    isFiniteNumeric(row.lifetimeValue)
   return !hasAnyStat
 }
 
@@ -226,6 +234,7 @@ export function buildPlayerPoolAudit(rows: PlayerPoolAuditRow[]): PlayerPoolAudi
   const missingPositionRows = normalizedRows.filter((row) => !canonicalPosition(row.position))
   const missingStatusRows = normalizedRows.filter((row) => !cleanString(row.status))
   const missingStatsRows = normalizedRows.filter((row) => missingStats(row))
+  const missingAdpRows = normalizedRows.filter((row) => !isFiniteNumeric(row.adp))
 
   const rookieFlagMissingRows = normalizedRows.filter((row) => {
     const yearsExp = row.yearsExp
@@ -340,6 +349,7 @@ export function buildPlayerPoolAudit(rows: PlayerPoolAuditRow[]): PlayerPoolAudi
   missingTeamRows.forEach((row) => addProblem(row, 'missing team', 1))
   missingPositionRows.forEach((row) => addProblem(row, 'missing position', 1))
   missingStatsRows.forEach((row) => addProblem(row, 'missing stats', 1))
+  missingAdpRows.forEach((row) => addProblem(row, 'missing adp', 1))
   rookieFlagMissingRows.forEach((row) => addProblem(row, 'rookie flag missing', 1))
 
   const topProblemPlayers = [...problemScoreByPlayer.values()]
@@ -365,6 +375,9 @@ export function buildPlayerPoolAudit(rows: PlayerPoolAuditRow[]): PlayerPoolAudi
       : null,
     missingStatsRows.length > 0
       ? 'Backfill PlayerSeasonStats/ADP snapshots before draft room reads and expose synced_at in diagnostics.'
+      : null,
+    missingAdpRows.length > 0 && missingAdpRows.length === normalizedRows.length
+      ? 'No ADP snapshots matched any pool row — verify AllFantasyAdpSnapshot.playerKey shape (`${normalizedName}|${POSITION}`) and recompute job ran for this sport/season.'
       : null,
     rookieFlagMissingRows.length > 0
       ? 'Derive rookie flag from yearsExp/source metadata in normalization to avoid inconsistent rookie visibility.'
@@ -399,6 +412,7 @@ export function buildPlayerPoolAudit(rows: PlayerPoolAuditRow[]): PlayerPoolAudi
     missingPositionCount: missingPositionRows.length,
     missingStatusCount: missingStatusRows.length,
     missingStatsCount: missingStatsRows.length,
+    missingAdpCount: missingAdpRows.length,
     rookieFlagMissingCount: rookieFlagMissingRows.length,
     rookieExamples: rookieFlagMissingRows.slice(0, 12).map((row) => displayName(row)),
     sourceBreakdown,

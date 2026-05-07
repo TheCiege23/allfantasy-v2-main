@@ -67,12 +67,9 @@ export interface AdpSnapshot {
   thirtyDayTrend: number | null
 }
 
-/** Stable lowercase + position key. Pool side uses the same shape. */
-export function buildPlayerKey(name: string, position: string | null | undefined): string {
-  const n = (name ?? '').trim().toLowerCase()
-  const p = (position ?? '').trim().toLowerCase()
-  return `${n}|${p}`
-}
+/** Stable canonical key. Delegates to the shared helper so writer / resolver / audit agree. */
+import { buildAllFantasyAdpPlayerKeyPositional as buildPlayerKeyImpl } from './playerKey'
+export const buildPlayerKey = buildPlayerKeyImpl
 
 /** Deterministic context hash — used as the natural key alongside playerKey + draftMode. */
 export function buildContextHash(ctx: DraftContext): string {

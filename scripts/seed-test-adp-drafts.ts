@@ -25,6 +25,7 @@
 /** server-only stub is loaded by scripts/_audit-preload.cjs (node --require). */
 
 import { PrismaClient, type Prisma } from '@prisma/client'
+import { normalizeAdpPosition } from '@/lib/adp/playerKey'
 
 const prisma = new PrismaClient()
 
@@ -42,6 +43,20 @@ interface Args {
   drafts: number
   rounds: number
   seed: number
+  /** 'curated' uses the hardcoded NFL board; 'db' samples SportsPlayer for any sport. */
+  playersSource: 'curated' | 'db'
+  /** Cap on pool size when playersSource='db' or curated (used for `--players=N`). */
+  players: number
+  /**
+   * 'test' (default) → sessionKind='test', source='test_seed', recompute writes draftMode='test'.
+   *   Production resolver excludes these (it filters draftMode='real'), so they're invisible
+   *   to the live draft room — safe for repeated reseeds in shared dev DBs.
+   * 'real' → sessionKind='live', source='auto', recompute writes draftMode='real' so the
+   *   resolver overlays them onto the live pool. Use for end-to-end QA across sports
+   *   that don't yet have organic real drafts. Cleanup still finds them via the
+   *   `AF Test ADP` league name prefix and `allfantasy_test_adp_seed` platform marker.
+   */
+  mode: 'test' | 'real'
 }
 
 function parseArgs(argv: string[]): Args {
@@ -59,6 +74,10 @@ function parseArgs(argv: string[]): Args {
     drafts: 25,
     rounds: 12,
     seed: 1,
+    // Will be defaulted below based on sport (db for non-NFL, curated for NFL).
+    playersSource: 'curated',
+    players: 50,
+    mode: 'test',
   }
   for (const raw of argv) {
     if (raw === '--apply') out.apply = true
@@ -82,7 +101,22 @@ function parseArgs(argv: string[]): Args {
     } else if (raw.startsWith('--seed=')) {
       const n = Number(raw.slice('--seed='.length))
       if (Number.isFinite(n)) out.seed = n
+    } else if (raw.startsWith('--players-source=')) {
+      const v = raw.slice('--players-source='.length).toLowerCase()
+      if (v === 'curated' || v === 'db') out.playersSource = v
+    } else if (raw.startsWith('--players=')) {
+      const n = Number(raw.slice('--players='.length))
+      if (Number.isFinite(n) && n > 0) out.players = n
+    } else if (raw.startsWith('--mode=')) {
+      const v = raw.slice('--mode='.length).toLowerCase()
+      if (v === 'real' || v === 'test') out.mode = v
     }
+  }
+  // Default playersSource: curated for NFL (preserves existing behavior), db for other sports.
+  // The existing curated board is NFL-only; non-NFL sports must read from SportsPlayer.
+  const explicitlySetSource = argv.some((a) => a.startsWith('--players-source='))
+  if (!explicitlySetSource) {
+    out.playersSource = out.sport === 'NFL' ? 'curated' : 'db'
   }
   return out
 }
@@ -185,6 +219,53 @@ interface SeedSummary {
 
 const TEST_LEAGUE_NAME_PREFIX = 'AF Test ADP'
 const TEST_USER_ID = 'af-test-adp-seed-user'
+
+/**
+ * Per-sport `League.starters` payloads. The resolver short-circuits with
+ * `rosterConfigurationIncomplete: true` when `hasPersistedRosterSchema` is false,
+ * which happens when this column is null/empty. Seeding a sport-appropriate
+ * non-empty array satisfies `detectPersistedRosterSchema` so the resolver
+ * proceeds to build the full pool and apply the AI ADP overlay.
+ *
+ * Slot keys follow the canonical short codes used by each sport's slot map
+ * (NFL/NBA/MLB/NHL/NCAAF/NCAAB/SOCCER under lib/<sport>-roster/).
+ */
+const STARTERS_BY_SPORT: Record<string, string[]> = {
+  NFL: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DST'],
+  NBA: ['PG', 'SG', 'SF', 'PF', 'C', 'G', 'F', 'UTIL'],
+  MLB: ['C', '1B', '2B', '3B', 'SS', 'OF', 'OF', 'OF', 'SP', 'RP', 'UTIL'],
+  NHL: ['C', 'C', 'LW', 'RW', 'D', 'D', 'G', 'UTIL'],
+  NCAAF: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DST'],
+  NCAAB: ['G', 'G', 'F', 'F', 'C', 'UTIL'],
+  SOCCER: ['GK', 'DEF', 'DEF', 'MID', 'MID', 'FWD', 'FWD', 'UTIL'],
+}
+function startersForSport(sport: string): string[] {
+  return STARTERS_BY_SPORT[sport] ?? STARTERS_BY_SPORT.NFL
+}
+
+/**
+ * Canonical short-code positions the seed should restrict to per sport.
+ *
+ * The resolver applies its own pool eligibility filter based on the league's
+ * starter-eligible positions; if seeded picks live on positions outside that
+ * set (e.g., NCAAF defensive positions when the league is offense-only), the
+ * resolver excludes them BEFORE the ADP overlay runs and `aiAdp` shows 0.
+ *
+ * Values are matched against `normalizeAdpPosition(rawPosition)` from
+ * @/lib/adp/playerKey, which canonicalizes provider drift (full forms,
+ * mixed casing, etc.). For SOCCER, this also defends against sport-tag
+ * contamination in `SportsPlayer` (rows incorrectly tagged sport=SOCCER
+ * with baseball positions like "1B"/"OF").
+ */
+const ELIGIBLE_POSITIONS_BY_SPORT: Record<string, string[]> = {
+  NFL: ['qb', 'rb', 'wr', 'te', 'k', 'dst', 'def'],
+  NCAAF: ['qb', 'rb', 'wr', 'te', 'k', 'dst', 'def'],
+  NBA: ['pg', 'sg', 'sf', 'pf', 'c', 'g', 'f'],
+  NCAAB: ['pg', 'sg', 'sf', 'pf', 'c', 'g', 'f'],
+  MLB: ['c', '1b', '2b', '3b', 'ss', 'of', 'sp', 'rp', 'p', 'lf', 'cf', 'rf'],
+  NHL: ['c', 'lw', 'rw', 'd', 'g'],
+  SOCCER: ['gk', 'd', 'mid', 'f', 'fwd', 'def'],
+}
 const TEST_USER_EMAIL = 'af-test-adp-seed@allfantasy.test'
 const TEST_USER_USERNAME = 'af_test_adp_seed'
 
@@ -258,14 +339,79 @@ function generateDraftPicks(
   })
 }
 
+/**
+ * Build the player pool for a draft.
+ *
+ * - 'curated': hardcoded NFL TARGET_ADP_BOARD (existing behavior).
+ * - 'db': sample real `SportsPlayer` rows for the requested sport, filtered to
+ *   draftable shape (team set, not 'FA', position present). Position is run
+ *   through the shared canonical helper so seeded picks recompute into keys
+ *   the resolver can read.
+ *
+ * Cached per (sport, source, players) — re-used across drafts in a single run.
+ */
+const __dbPoolCache = new Map<string, PoolEntry[]>()
+async function buildPoolForArgs(args: Args): Promise<PoolEntry[]> {
+  if (args.playersSource === 'curated') {
+    return TARGET_ADP_BOARD.slice(0, args.players).map((p, i) => ({ ...p, target: i + 1 }))
+  }
+  const cacheKey = `${args.sport}|db|${args.players}`
+  const cached = __dbPoolCache.get(cacheKey)
+  if (cached) return cached
+  // Pull a wider slice and filter in JS. Prisma's `not: null` chain is finicky with
+  // nullable strings, and 5000 candidate rows is plenty to land --players draftable
+  // entries even on sports with mixed-quality ingestion.
+  const rawRows = await prisma.sportsPlayer.findMany({
+    where: { sport: { equals: args.sport, mode: 'insensitive' } },
+    take: 5000,
+    orderBy: [{ name: 'asc' }],
+    select: { name: true, position: true, team: true },
+  })
+  const eligible = ELIGIBLE_POSITIONS_BY_SPORT[args.sport] ?? null
+  const seen = new Set<string>()
+  const rows: typeof rawRows = []
+  for (const r of rawRows) {
+    const team = (r.team ?? '').trim()
+    const rawPos = (r.position ?? '').trim()
+    const name = (r.name ?? '').trim()
+    if (!team || !rawPos || !name) continue
+    if (team === 'FA' || team.toUpperCase() === 'FA') continue
+    // Restrict to positions the resolver will actually accept. Without this we seed
+    // picks on positions like "1B"/"OL"/"DB" that the league's starter template
+    // excludes — they get filtered out before the ADP overlay and aiAdp shows 0.
+    const canonical = normalizeAdpPosition(rawPos)
+    if (eligible && !eligible.includes(canonical)) continue
+    const key = `${name.toLowerCase()}|${canonical}|${team.toLowerCase()}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    rows.push({ name, position: rawPos, team })
+    if (rows.length >= args.players) break
+  }
+  const pool = rows
+    .filter((r) => r.name && r.position && r.team)
+    .map((r, i) => ({
+      name: r.name as string,
+      // Canonicalize at seed time: the recompute writer + resolver share this shape.
+      position: normalizeAdpPosition(r.position as string).toUpperCase() || (r.position as string),
+      team: r.team as string,
+      target: i + 1,
+    }))
+  __dbPoolCache.set(cacheKey, pool)
+  return pool
+}
+
 async function applyOneDraft(
   args: Args,
   draftIndex: number,
   rng: () => number,
   report: SeedSummary,
 ): Promise<void> {
-  const totalPicks = Math.min(args.teamCount * args.rounds, TARGET_ADP_BOARD.length)
-  const pool: PoolEntry[] = TARGET_ADP_BOARD.map((p, i) => ({ ...p, target: i + 1 }))
+  const pool: PoolEntry[] = await buildPoolForArgs(args)
+  if (pool.length === 0) {
+    report.errors.push(`draft ${draftIndex + 1}: empty player pool for sport=${args.sport} source=${args.playersSource}`)
+    return
+  }
+  const totalPicks = Math.min(args.teamCount * args.rounds, pool.length)
   const picks = generateDraftPicks(rng, pool, totalPicks, args.teamCount)
 
   const leagueName = `${TEST_LEAGUE_NAME_PREFIX} #${String(draftIndex + 1).padStart(3, '0')}`
@@ -295,14 +441,22 @@ async function applyOneDraft(
       data: {
         userId: TEST_USER_ID,
         platform: 'allfantasy_test_adp_seed',
-        platformLeagueId: `af-test-adp-${draftIndex + 1}`,
+        // Sport-scoped so seeding multiple sports doesn't collide on the
+        // (userId, platform, platformLeagueId, season) unique constraint.
+        platformLeagueId: `af-test-adp-${args.sport.toLowerCase()}-${draftIndex + 1}`,
         name: leagueName,
-        sport: args.sport === 'NFL' ? 'NFL' : 'NFL',
+        // Per-sport seeding: League.sport must reflect the actual sport so the recompute
+        // context hash matches what the resolver computes for that league. Previously this
+        // was hardcoded to 'NFL' which silently broke seeding for every other sport.
+        sport: args.sport as Prisma.LeagueCreateInput['sport'],
         season: Number(args.season) || new Date().getUTCFullYear(),
         scoring: args.scoringFormat,
         leagueSize: args.teamCount,
         isDynasty: args.leagueType === 'dynasty',
         leagueVariant: args.leagueType,
+        // Non-empty per-sport starters satisfy detectPersistedRosterSchema so the
+        // resolver does not short-circuit with rosterConfigurationIncomplete=true.
+        starters: startersForSport(args.sport) as Prisma.InputJsonValue,
         // Marker so cleanup can find these without ambiguity.
       },
     })
@@ -314,7 +468,10 @@ async function applyOneDraft(
         draftType: args.draftType,
         rounds: args.rounds,
         teamCount: args.teamCount,
-        sessionKind: 'test', // D.5-test marker — recompute uses this for draftMode='test'.
+        // sessionKind drives `deriveDraftMode`. 'test' → snapshots written as draftMode='test'
+        // (resolver excludes them); 'live' → draftMode='real' (resolver includes them, used
+        // for end-to-end QA). League name + platform marker still flag these as seeded.
+        sessionKind: args.mode === 'real' ? 'live' : 'test',
         sportType: args.sport,
         startedAt: now,
         completedAt: now,
@@ -336,7 +493,9 @@ async function applyOneDraft(
       team: p.player.team,
       playerId: `name:${p.player.name}:${p.player.position}:${p.player.team}`,
       assetType: 'player',
-      source: 'test_seed', // belt-and-suspenders test marker.
+      // Pick-level mode marker: 'test_seed' is also caught by deriveDraftMode → 'test'.
+      // Use 'auto' for --mode=real so the recompute classifies these picks as 'real'.
+      source: args.mode === 'real' ? 'auto' : 'test_seed',
       sportType: args.sport,
       pickedAt: new Date(now.getTime() - (picks.length - p.overall) * 30_000),
     }))

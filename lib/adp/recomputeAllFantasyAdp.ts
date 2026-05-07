@@ -114,6 +114,11 @@ export interface RecomputeAllFantasyAdpReport {
   filteredOutBySource: number
   filteredOutByAsset: number
   filteredOutByMode: number
+  filteredOutBySeason: number
+  filteredOutByLeagueType: number
+  filteredOutByDraftType: number
+  filteredOutByTeamCount: number
+  filteredOutByDraftModeOption: number
   uniquePlayers: number
   uniqueContexts: number
   snapshotsWritten: number
@@ -201,6 +206,11 @@ export async function recomputeAllFantasyAdp(
     filteredOutBySource: 0,
     filteredOutByAsset: 0,
     filteredOutByMode: 0,
+    filteredOutBySeason: 0,
+    filteredOutByLeagueType: 0,
+    filteredOutByDraftType: 0,
+    filteredOutByTeamCount: 0,
+    filteredOutByDraftModeOption: 0,
     uniquePlayers: 0,
     uniqueContexts: 0,
     snapshotsWritten: 0,
@@ -249,12 +259,26 @@ export async function recomputeAllFantasyAdp(
     for (const row of picksRaw) {
       const mode = deriveDraftMode(row)
       // Caller-provided narrowing.
-      if (season && String(row.session.league?.season ?? '') !== season) continue
-      if (options.leagueType && deriveLeagueType(row) !== options.leagueType.toLowerCase()) continue
-      if (options.draftType && (row.session.draftType ?? '').toLowerCase() !== options.draftType.toLowerCase())
+      if (season && String(row.session.league?.season ?? '') !== season) {
+        report.filteredOutBySeason++
         continue
-      if (options.teamCount != null && (row.session.teamCount ?? 0) !== options.teamCount) continue
-      if (draftMode !== 'all' && mode !== draftMode) continue
+      }
+      if (options.leagueType && deriveLeagueType(row) !== options.leagueType.toLowerCase()) {
+        report.filteredOutByLeagueType++
+        continue
+      }
+      if (options.draftType && (row.session.draftType ?? '').toLowerCase() !== options.draftType.toLowerCase()) {
+        report.filteredOutByDraftType++
+        continue
+      }
+      if (options.teamCount != null && (row.session.teamCount ?? 0) !== options.teamCount) {
+        report.filteredOutByTeamCount++
+        continue
+      }
+      if (draftMode !== 'all' && mode !== draftMode) {
+        report.filteredOutByDraftModeOption++
+        continue
+      }
 
       const ok = isPickValidForAdp(
         { source: row.source, assetType: row.assetType, draftMode: mode },

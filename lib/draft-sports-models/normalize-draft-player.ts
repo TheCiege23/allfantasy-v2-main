@@ -52,6 +52,14 @@ export type RawDraftPlayerLike = {
   imageUrl?: string | null
   fantasyPointsPerGame?: number | null
   lifetimeValue?: number | null
+  /** AllFantasyAdpSnapshot overlay (D.5) — populated by getResolvedDraftPoolForLeague.
+   * Pass-through only; the normalizer does not compute these. */
+  aiAdp?: number | null
+  aiAdpSampleSize?: number | null
+  aiAdpLowSample?: boolean | null
+  aiAdpSevenDayTrend?: number | null
+  aiAdpThirtyDayTrend?: number | null
+  aiAdpStandardDeviation?: number | null
   rollingInsightsSupplemental?: {
     fantasyPointsPerGame?: number | null
     gamesPlayed?: number | null
@@ -238,6 +246,12 @@ export function normalizeDraftPlayer(
     debutYear: raw.debutYear ?? undefined,
     firstSeasonYear: raw.firstSeasonYear ?? undefined,
     classYear: raw.classYear != null ? String(raw.classYear).trim() : undefined,
+    aiAdp: raw.aiAdp ?? undefined,
+    aiAdpSampleSize: raw.aiAdpSampleSize ?? undefined,
+    aiAdpLowSample: raw.aiAdpLowSample ?? undefined,
+    aiAdpSevenDayTrend: raw.aiAdpSevenDayTrend ?? undefined,
+    aiAdpThirtyDayTrend: raw.aiAdpThirtyDayTrend ?? undefined,
+    aiAdpStandardDeviation: raw.aiAdpStandardDeviation ?? undefined,
   }
 }
 

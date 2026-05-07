@@ -123,6 +123,9 @@ export interface NormalizedDraftEntry {
   aiAdp?: number | null
   aiAdpSampleSize?: number
   aiAdpLowSample?: boolean
+  aiAdpSevenDayTrend?: number | null
+  aiAdpThirtyDayTrend?: number | null
+  aiAdpStandardDeviation?: number | null
   injuryStatus?: string | null
   collegeOrPipeline?: string | null
   /** Devy: true when player is from devy/college pool */

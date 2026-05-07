@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { buildPlayerKey as buildAdpPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
@@ -1612,12 +1613,11 @@ export async function getResolvedDraftPoolForLeague(
       backfilledHeadshot = teamMatch ?? namePosMatch ?? nameOnlyMatch ?? null
     }
 
-    /** D.5 — AI ADP overlay from AllFantasyAdpSnapshot. The map is keyed by
-     * `<normalized name>|<normalized position>` matching the same shape the
-     * recompute script writes (see lib/adp/computeAllFantasyAdp.buildPlayerKey). */
-    const aiAdpHit = aiAdpByPlayerKey.get(
-      `${normalizeDraftPoolNameForDedupe(name ?? '')}|${normalizeKeyPart(position ?? '')}`,
-    )
+    /** D.5 — AI ADP overlay from AllFantasyAdpSnapshot. The lookup MUST use the same key
+     * builder as the writer (see lib/adp/computeAllFantasyAdp.buildPlayerKey) — previously
+     * this used canonicalName-style normalization while the writer stored raw lowercased
+     * keys, so 100% of lookups missed despite valid context-matched snapshots. */
+    const aiAdpHit = aiAdpByPlayerKey.get(buildAdpPlayerKey(name ?? '', position ?? ''))
     const averagedAdpHit =
       averagedAdpStrict.get(adpLookupKey(name ?? '', position ?? '', team ?? null)) ??
       averagedAdpLoose.get(adpLookupKeyLoose(name ?? '', position ?? '')) ??
