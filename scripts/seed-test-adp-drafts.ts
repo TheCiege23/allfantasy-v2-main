@@ -441,9 +441,12 @@ async function applyOneDraft(
       data: {
         userId: TEST_USER_ID,
         platform: 'allfantasy_test_adp_seed',
-        // Sport-scoped so seeding multiple sports doesn't collide on the
-        // (userId, platform, platformLeagueId, season) unique constraint.
-        platformLeagueId: `af-test-adp-${args.sport.toLowerCase()}-${draftIndex + 1}`,
+        // Matrix-cell-scoped so seeding multiple (sport × leagueType × draftType) cells
+        // doesn't collide on the (userId, platform, platformLeagueId, season) unique
+        // constraint. Without leagueType + draftType in the key, only the first cell of
+        // a given sport persists; subsequent cells fail silently and the matrix never
+        // produces snapshots for redraft+linear, dynasty+snake, dynasty+linear contexts.
+        platformLeagueId: `af-test-adp-${args.sport.toLowerCase()}-${args.leagueType.toLowerCase()}-${args.draftType.toLowerCase()}-${draftIndex + 1}`,
         name: leagueName,
         // Per-sport seeding: League.sport must reflect the actual sport so the recompute
         // context hash matches what the resolver computes for that league. Previously this
