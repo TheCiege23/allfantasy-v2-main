@@ -394,7 +394,19 @@ export function DraftTopBar({
             </span>
           ) : null}
           <Clock className="h-5 w-5 shrink-0 opacity-90" />
-          <span data-testid="draft-topbar-clock-time">{timerDisplay}</span>
+          {/*
+            Two testids on the same span: `draft-topbar-clock-time` is the
+            current name; `draft-topbar-timer-value` is the legacy name from
+            when the secondary timer pill below carried it. Three existing
+            specs (draft-room-click-audit, draft-roster-configuration-gate,
+            slow-draft-room-click-audit) still target the legacy id, so we
+            re-attach it here on the primary pill so removing the secondary
+            doesn't break them. A future cleanup can migrate those specs to
+            `draft-topbar-clock-time` and drop the alias.
+          */}
+          <span data-testid="draft-topbar-clock-time">
+            <span data-testid="draft-topbar-timer-value">{timerDisplay}</span>
+          </span>
           {isPausedCommissioner ? (
             <span className="rounded border border-emerald-300/45 bg-emerald-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-50">
               Resume
@@ -751,48 +763,32 @@ export function DraftTopBar({
               </div>
             ) : null}
 
-            <div className="flex min-w-[7.25rem] flex-col items-stretch gap-0.5 sm:min-w-[8rem]">
-              <div
-                className={`inline-flex min-h-[44px] min-w-full items-center gap-2 rounded-2xl border px-4 py-2 transition-all duration-200 sm:min-h-[52px] sm:justify-center ${criticalLowTimer ? 'text-rose-50 border-rose-500/55 bg-rose-500/15' : TIMER_COLORS[timerStatus]} ${
-                  criticalLowTimer
-                    ? 'relative z-0 shadow-[0_0_56px_rgba(239,68,68,0.55)] ring-2 ring-rose-500/65 animate-pulse sm:scale-105'
-                    : urgentLowTimer
-                      ? 'relative z-0 shadow-[0_0_48px_rgba(251,191,36,0.5)] ring-2 ring-amber-400/70 animate-pulse sm:scale-105'
-                      : rs
-                      ? 'shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_8px_32px_rgba(0,0,0,0.35)]'
-                      : 'shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
-                }`}
-                title={`${timerModeLabel} · Auto-pick ${autoPickEnabled ? 'on' : 'off'}`}
+            {/*
+              Sleeper-layout pass: secondary timer pill removed.
+              The primary timer pill (rendered as `centerCta` below at the top-middle
+              slot — see lines 386-466) always shows the same `{timerDisplay}` and
+              now serves as the single timer focal point. Pre-D.6.2 the pill here
+              was the only timer; it's been redundant since the primary pill became
+              the focal point and was contributing to the multi-row topbar density.
+              The overnight-resume copy that used to nest inside this block is
+              preserved as a sibling so commissioner overnight-pause leagues still
+              get the "resumes in …" hint without an empty pill above it.
+            */}
+            {timerPauseReason === 'overnight_window' && resumeInSeconds != null && overnightResumeAtIso ? (
+              <p
+                className="text-[10px] font-medium leading-tight text-amber-100/80"
+                data-testid="draft-topbar-overnight-resume"
               >
-                <Clock
-                  className={`h-4 w-4 shrink-0 ${urgentLowTimer ? 'text-amber-100 drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]' : ''}`}
-                  aria-hidden
-                />
-                <span
-                  className={`font-bold tabular-nums tracking-tight transition-all duration-200 ${
-                    urgentLowTimer ? 'text-2xl text-amber-50 sm:text-3xl' : 'text-sm font-semibold'
-                  }`}
-                  data-testid="draft-topbar-timer-value"
-                >
-                  {timerDisplay}
-                </span>
-              </div>
-              {timerPauseReason === 'overnight_window' && resumeInSeconds != null && overnightResumeAtIso ? (
-                <p
-                  className="text-center text-[10px] font-medium leading-tight text-amber-100/80"
-                  data-testid="draft-topbar-overnight-resume"
-                >
-                  Quiet window · resumes in {formatTimerRemaining(resumeInSeconds)} (
-                  {new Date(overnightResumeAtIso).toLocaleString(undefined, {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: 'numeric',
-                    minute: '2-digit',
-                  })}
-                  )
-                </p>
-              ) : null}
-            </div>
+                Quiet window · resumes in {formatTimerRemaining(resumeInSeconds)} (
+                {new Date(overnightResumeAtIso).toLocaleString(undefined, {
+                  month: 'short',
+                  day: 'numeric',
+                  hour: 'numeric',
+                  minute: '2-digit',
+                })}
+                )
+              </p>
+            ) : null}
           </div>
         </div>
 
