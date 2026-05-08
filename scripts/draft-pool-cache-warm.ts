@@ -134,7 +134,7 @@ function buildRouteCacheKey(params: {
   }
 
   // G.1 — keep nflproj version in sync with app/api/leagues/[leagueId]/draft/pool/route.ts.
-  return `draft_pool:${params.leagueId}:${params.rosterFingerprint}:dbmerge_v2:nflproj_v2:${buildApiCacheKey('GET', url.toString())}`
+  return `draft_pool:${params.leagueId}:${params.rosterFingerprint}:dbmerge_v4:nflproj_v2:${buildApiCacheKey('GET', url.toString())}`
 }
 
 async function createJobRun(args: WarmArgs, leagueId: string): Promise<SyncJobRunRecord | null> {
