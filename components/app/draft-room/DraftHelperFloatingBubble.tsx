@@ -28,6 +28,7 @@ export function DraftHelperFloatingBubble({
     <button
       type="button"
       onClick={onClick}
+      data-testid="draft-helper-floating-bubble"
       data-helper-anchor={anchor}
       className={cn(
         corner,
