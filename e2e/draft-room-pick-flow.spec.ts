@@ -136,22 +136,24 @@ test('manual pick POST mutates mocked state, board shows pick, on-clock advances
   await gotoDraftRoomHarness(page, `/e2e/draft-room?leagueId=${leagueId}&sport=NFL&e2eRoom=1`)
   await openDraftRoomHarness(page, { e2eRoom: true })
 
+  const targetPoolRow = page
+    .getByTestId('sleeper-pool-table')
+    .locator('[role="row"][data-testid^="sleeper-pool-row-"]')
+    .filter({ hasText: 'Phase5B Pick Target' })
+
   // Wait for the pool to render and our target player to appear.
-  await expect(page.getByText('Phase5B Pick Target').first()).toBeVisible({ timeout: 30_000 })
+  await expect(targetPoolRow.first()).toBeVisible({ timeout: 30_000 })
 
   // Slot 2 (Beta) starts on the clock — the helper preseeded a slot-1 keeper pick.
   const onClockManager = page.getByTestId('draft-topbar-on-clock-manager')
   await expect(onClockManager).toBeVisible({ timeout: 15_000 })
   await expect(onClockManager).toContainText(/beta/i)
 
-  // Per-row draft buttons are `sleeper-pool-row-${idx}-draft`. Row 0 = our target.
-  const drafted = new Promise<void>((resolve) => {
-    page.once('requestfinished', (req) => {
-      // best-effort: drop the listener after the first /draft/pick response.
-      if (req.url().includes('/draft/pick')) resolve()
-    })
-  })
-  await page.getByTestId('sleeper-pool-row-0-draft').first().click()
+  // Click the draft action in the row that contains our target player.
+  const drafted = page.waitForResponse(
+    (response) => response.url().includes('/draft/pick') && response.request().method() === 'POST',
+  )
+  await targetPoolRow.first().getByRole('button', { name: 'Draft' }).click()
   await drafted
 
   // After the pick lands the on-clock manager must advance from Beta (slot 2)
@@ -164,13 +166,9 @@ test('manual pick POST mutates mocked state, board shows pick, on-clock advances
 
   // The drafted player's name should also no longer be in the available pool —
   // the helper's pick handler filters it from the queue and the page's drafted-set
-  // logic gates the row's draft button. The simplest stable assertion is that
-  // the player's name no longer appears in the pool table's draft-button row 0.
-  // (Looser than checking every row; tolerant of virtualization re-ordering.)
-  const stillTargetButton = page
-    .getByTestId('sleeper-pool-row-0-draft')
-    .filter({ has: page.locator(':scope >> text=Phase5B Pick Target') })
-  await expect(stillTargetButton).toHaveCount(0)
+  // logic gates the row's draft button. Assert against the pool table rather
+  // than the button text, because action buttons only render "Draft"/"Drafted".
+  await expect(targetPoolRow).toHaveCount(0)
 
   // Reload the page — the helper's state is closure-scoped to this test, so
   // the picks array carries through the reload, and the on-clock manager
