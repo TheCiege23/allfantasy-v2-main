@@ -61,6 +61,7 @@
     "seed:test-adp-drafts": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/seed-test-adp-drafts.ts",
     "recompute:allfantasy-adp": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/recompute-allfantasy-adp.ts",
     "cleanup:orphan-adp-snapshots": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/cleanup-orphan-adp-snapshots.ts",
+    "normalize:soccer-sports-players": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/normalize-soccer-sports-players.ts",
     "smoke:full-draft": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/smoke-full-draft.ts",
     "smoke:draft-pool:endpoint": "node scripts/smoke-draft-pool-endpoint.mjs",
     "smoke:draft-session-parity": "node scripts/smoke-draft-session-parity.cjs",
