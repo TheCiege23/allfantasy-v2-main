@@ -26,9 +26,9 @@ interface CliOpts {
   iterations: number
 }
 
-function parseCli(argv: string[]): CliOpts {
+function parseCli(argv: string[], defaultSports: readonly string[]): CliOpts {
   const out: CliOpts = {
-    sports: ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAAB', 'SOCCER'],
+    sports: [...defaultSports],
     cold: false,
     iterations: 1,
   }
@@ -45,7 +45,8 @@ function parseCli(argv: string[]): CliOpts {
 }
 
 async function run() {
-  const opts = parseCli(process.argv.slice(2))
+  const { SUPPORTED_SPORTS } = await import('@/lib/sport-scope')
+  const opts = parseCli(process.argv.slice(2), SUPPORTED_SPORTS)
   // Lazy-import the resolver after AF_DRAFT_POOL_PERF is set so the module
   // captures the env at import time.
   const { getResolvedDraftPoolForLeague } = await import('@/lib/draft-room/getResolvedDraftPoolForLeague')
