@@ -438,6 +438,44 @@ function mergeDbPoolIntoRawList(
   useMixedPoolTypeMarkers: boolean,
   seenNames: Set<string>,
 ): void {
+  // Pre-compute normalize keys for every rawList row ONCE, then index them by
+  // both normalized-name and loose-name so the per-poolRow lookup is O(1)
+  // instead of an O(rawList) scan that re-normalizes every row on every pass.
+  //
+  // Background: this used to be O(rawList × poolRows) with 4 string-normalize
+  // calls per inner iteration. On NFL with ~885 rawList × ~5300 poolRows ≈
+  // 18M normalize calls, eating ~64s of the ~73s resolver wall-clock.
+  // The seenNames check upstream already prevents duplicate pushes, so we
+  // don't need to keep the lookup updated as new rows get pushed below.
+  type CachedKeys = {
+    norm: string
+    loose: string
+    pos: string
+    team: string
+  }
+  const cachedKeys: CachedKeys[] = new Array(rawList.length)
+  const byNormToIndex = new Map<string, number[]>()
+  const byLooseToIndex = new Map<string, number[]>()
+  for (let i = 0; i < rawList.length; i++) {
+    const r = rawList[i]
+    const rowName = r.name ?? r.playerName ?? r.full_name ?? ''
+    const norm = normalizeDraftPoolNameForDedupe(rowName)
+    const loose = normalizeLooseName(rowName)
+    const pos = normalizeKeyPart(r.position ?? r.pos ?? '')
+    const team = normalizeKeyPart(r.team ?? r.teamAbbr ?? '')
+    cachedKeys[i] = { norm, loose, pos, team }
+    if (norm) {
+      const list = byNormToIndex.get(norm) ?? []
+      list.push(i)
+      byNormToIndex.set(norm, list)
+    }
+    if (loose) {
+      const list = byLooseToIndex.get(loose) ?? []
+      list.push(i)
+      byLooseToIndex.set(loose, list)
+    }
+  }
+
   for (const p of poolRows) {
     const norm = normalizeDraftPoolNameForDedupe(p.full_name ?? '')
     const looseNorm = normalizeLooseName(p.full_name ?? '')
@@ -445,21 +483,46 @@ function mergeDbPoolIntoRawList(
     const poolTeam = normalizeKeyPart(p.team_abbreviation ?? '')
     if (!norm) continue
 
-    const existingIdx = rawList.findIndex(
-      (r) => {
-        const rowName = r.name ?? r.playerName ?? r.full_name ?? ''
-        const rowNorm = normalizeDraftPoolNameForDedupe(rowName)
-        const rowLoose = normalizeLooseName(rowName)
-        const rowPos = normalizeKeyPart(r.position ?? r.pos ?? '')
-        const rowTeam = normalizeKeyPart(r.team ?? r.teamAbbr ?? '')
+    // Gather candidate indices via the precomputed maps. A rawList row matches
+    // when its norm OR loose name matches the pool row's, AND positions/teams
+    // either match exactly or one side is empty (preserves the old findIndex
+    // predicate). Most common case: exactly one candidate, found in O(1).
+    const candidateIdx: number[] = []
+    const seenCandidate = new Set<number>()
+    const normMatches = byNormToIndex.get(norm)
+    if (normMatches) {
+      for (const idx of normMatches) {
+        if (!seenCandidate.has(idx)) {
+          seenCandidate.add(idx)
+          candidateIdx.push(idx)
+        }
+      }
+    }
+    if (looseNorm) {
+      const looseMatches = byLooseToIndex.get(looseNorm)
+      if (looseMatches) {
+        for (const idx of looseMatches) {
+          if (!seenCandidate.has(idx)) {
+            seenCandidate.add(idx)
+            candidateIdx.push(idx)
+          }
+        }
+      }
+    }
 
-        const posMatch = !poolPos || !rowPos || poolPos === rowPos
-        const teamMatch = !poolTeam || !rowTeam || poolTeam === rowTeam
-        if (!posMatch || !teamMatch) return false
+    let existingIdx = -1
+    for (const idx of candidateIdx) {
+      const c = cachedKeys[idx]
+      const posMatch = !poolPos || !c.pos || poolPos === c.pos
+      const teamMatch = !poolTeam || !c.team || poolTeam === c.team
+      if (!posMatch || !teamMatch) continue
+      // Re-confirm name match (set membership above guarantees one of these).
+      if (c.norm === norm || (looseNorm && c.loose === looseNorm)) {
+        existingIdx = idx
+        break
+      }
+    }
 
-        return rowNorm === norm || (looseNorm && rowLoose === looseNorm)
-      },
-    )
     if (existingIdx >= 0) {
       enrichRawRowFromDbPool(rawList[existingIdx], p)
       seenNames.add(norm)
@@ -469,6 +532,7 @@ function mergeDbPoolIntoRawList(
     if (rawList.length >= mergeCap) continue
     if (seenNames.has(norm)) continue
     seenNames.add(norm)
+    const newIdx = rawList.length
     rawList.push({
       name: p.full_name,
       position: p.position ?? '—',
@@ -483,6 +547,20 @@ function mergeDbPoolIntoRawList(
       age: p.age ?? null,
       ...(useMixedPoolTypeMarkers ? { poolType: 'pro' as const } : {}),
     })
+    // Keep the lookup maps in sync with newly pushed rows so a later poolRow
+    // with the same name can still find and enrich the row we just added.
+    // Without this, a 2nd pool row with matching name+different team would
+    // be skipped at the seenNames check above, losing the team-field enrichment
+    // and causing the downstream teamless filter to drop the player.
+    cachedKeys[newIdx] = { norm, loose: looseNorm, pos: poolPos, team: poolTeam }
+    const normList = byNormToIndex.get(norm) ?? []
+    normList.push(newIdx)
+    byNormToIndex.set(norm, normList)
+    if (looseNorm) {
+      const looseList = byLooseToIndex.get(looseNorm) ?? []
+      looseList.push(newIdx)
+      byLooseToIndex.set(looseNorm, looseList)
+    }
   }
 }
 
@@ -977,6 +1055,7 @@ export async function getResolvedDraftPoolForLeague(
     const seenAfterRanked = new Set(
       rawList.map((r) => normalizeDraftPoolNameForDedupe(r.name ?? r.playerName ?? r.full_name ?? '')),
     )
+    const perfMergeNfl = perfStart(`5b. mergeDbPoolIntoRawList NFL (rawList=${rawList.length}, poolRows=${poolRows.length})`)
     mergeDbPoolIntoRawList(
       rawList,
       poolRows as SportPoolRow[],
@@ -984,6 +1063,7 @@ export async function getResolvedDraftPoolForLeague(
       useMixedPoolTypeMarkers,
       seenAfterRanked,
     )
+    perfMergeNfl()
     if (strictPoolSeparation && poolType === 'rookie') {
       const excludedProIds = isC2C
         ? await getC2CPromotedProPlayerIdsExcludedFromRookiePool(leagueId)
