@@ -74,6 +74,7 @@
     "test:draft": "vitest run __tests__/draft/",
     "test:phase2:pick-submission": "node --env-file=.env --import tsx node_modules/vitest/vitest.mjs run __tests__/draft/pick-submission-service.test.ts",
     "test:phase3:queue-autopick": "node --env-file=.env --import tsx node_modules/vitest/vitest.mjs run __tests__/draft/queue-and-autopick.test.ts",
+    "test:phase4:pause-resume-timer": "node --env-file=.env --import tsx node_modules/vitest/vitest.mjs run __tests__/draft/pause-resume-timer.test.ts",
     "check:draft-env": "node scripts/draft-env-check.mjs",
     "gate:draft": "npm run typecheck && npx vitest run __tests__/draft/",
     "gate:draft:tests": "npx vitest run __tests__/draft/",
