@@ -148,7 +148,13 @@ export async function GET(
   const rosterFp = `${effectiveLeagueTemplate.hasPersistedRosterSchema ? 'cfg' : 'nocfg'}:starters:${rosterFingerprintFromEligible(
     starterEligible.size > 0 ? starterEligible : new Set(effectiveLeagueTemplate.allowedPositions),
   )}`
-  const cacheKey = `draft_pool:${leagueId}:${rosterFp}:dbmerge_v4:nflproj_v1:${buildApiCacheKey('GET', req.url)}`
+  /** G.1 — bump nflproj cache version. PR #47 changed which players resolve to RI splits
+   * (suffix-bearing names like Brian Thomas Jr. now resolve to `mixed` source instead of
+   * `snapshot_projection`). The wire shape is unchanged, but cached rows persist the OLD
+   * resolver output until the 5-min TTL expires. Bumping `nflproj_v1` → `nflproj_v2` forces
+   * an immediate rebuild on deploy so suffix-bearing players show their per-stat splits
+   * without users waiting up to 5 minutes per league. */
+  const cacheKey = `draft_pool:${leagueId}:${rosterFp}:dbmerge_v4:nflproj_v2:${buildApiCacheKey('GET', req.url)}`
   // dbFirstMode persistent DB cache layer. Guarded because the DraftPoolCache
   // Prisma client may not be generated yet (the model is in schema.prisma but
   // requires `prisma generate` to surface on the client). Falls back to the

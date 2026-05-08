@@ -106,6 +106,59 @@ describe('cells — missing stats render em dash, not zero', () => {
   })
 })
 
+/**
+ * G.1 regression: a BTJ-shaped entry (RI splits attached) must populate every
+ * legacy SleeperPoolTable column key — `ru_att`/`ru_yds`/`ru_td`, `rec`/`rec_yds`/`rec_td`,
+ * `pa_*`. PR #47 made the resolver attach the right splits but a stale `DraftPoolCache`
+ * row served the old `snapshot_projection` shape; once the cache key was bumped (G.1),
+ * the table reads splits via aliases. This test pins the alias map so a future refactor
+ * that renames `splits.rushing.att` → `splits.rushing.attempts` (or similar) trips the
+ * test instead of silently dashing every NFL split column.
+ */
+describe('NFL split columns read nflDraftProjectionSplits via alias bag', () => {
+  const btj: DraftStatPlayerSource = {
+    name: 'Brian Thomas Jr.',
+    display: { stats: {} },
+    nflDraftProjectionSplits: {
+      source: 'mixed',
+      projectedPoints: 138.8,
+      projectedPointsPerGame: 9.91,
+      rushing: { att: 3, yds: 21, td: 1 },
+      receiving: { rec: 48, tar: 91, yds: 707, td: 2 },
+      passing: { cmp: null, att: null, yds: null, td: null, int: null },
+    },
+  } as DraftStatPlayerSource
+
+  const layout = buildSleeperPoolTableLayout('NFL')
+  function defFor(key: string) {
+    const def = layout.statDefs.find((d) => d.key === key)
+    if (!def) throw new Error(`missing stat def for ${key}`)
+    return def
+  }
+
+  it.each<[string, number]>([
+    ['ru_att', 3],
+    ['ru_yds', 21],
+    ['ru_td', 1],
+    ['rec', 48],
+    ['rec_yds', 707],
+    ['rec_td', 2],
+  ])('column %s renders %s for BTJ-shaped splits', (key, expected) => {
+    expect(getStatValueForDraftPlayer(btj, defFor(key))).toBe(expected)
+  })
+
+  it('passing columns render — when passing splits are all null', () => {
+    expect(getStatValueForDraftPlayer(btj, defFor('pa_yds'))).toBeNull()
+    expect(getStatValueForDraftPlayer(btj, defFor('pa_td'))).toBeNull()
+    expect(getStatValueForDraftPlayer(btj, defFor('pa_int'))).toBeNull()
+  })
+
+  it('PTS reads splits.projectedPoints, AVG reads splits.projectedPointsPerGame', () => {
+    expect(getStatValueForDraftPlayer(btj, defFor('pts'))).toBe(138.8)
+    expect(getStatValueForDraftPlayer(btj, defFor('avg'))).toBe(9.91)
+  })
+})
+
 describe('ADP vs AI ADP remain distinct columns in layout', () => {
   it('both adp and aiAdp precede stat section', () => {
     const keys = layoutKeys('NFL')
