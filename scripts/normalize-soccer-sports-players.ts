@@ -158,6 +158,8 @@ async function run() {
   await prisma.$disconnect()
 }
 
-run().catch((err) => { console.error(err); process.exit(1) })
+if (require.main === module) {
+  run().catch((err) => { console.error(err); process.exit(1) })
+}
 
 export { canonicalSoccerPosition, SOCCER_POSITION_MAP }
