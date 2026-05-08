@@ -49,6 +49,7 @@ async function run() {
   // Lazy-import the resolver after AF_DRAFT_POOL_PERF is set so the module
   // captures the env at import time.
   const { getResolvedDraftPoolForLeague } = await import('@/lib/draft-room/getResolvedDraftPoolForLeague')
+  const { clearEffectiveLeagueRosterTemplateCache } = await import('@/lib/league/getEffectiveLeagueRosterTemplate')
   const prisma = new PrismaClient()
 
   const findings: Array<{
@@ -76,6 +77,7 @@ async function run() {
 
     for (let i = 0; i < opts.iterations; i++) {
       console.log(`\n=== ${sport} iter ${i + 1} (leagueId=${league.id.slice(0, 8)})${opts.cold ? ' COLD' : ''} ===`)
+      if (opts.cold) clearEffectiveLeagueRosterTemplateCache(league.id)
       const t0 = Date.now()
       try {
         const result = await getResolvedDraftPoolForLeague(league.id, { limit: 500 })
