@@ -1445,6 +1445,7 @@ export async function getResolvedDraftPoolForLeague(
   )
   perfSprMaps()
 
+  const perfEnrich = perfStart(`12. enrichedList map (n=${rawListFiltered.length})`)
   const enrichedList = rawListFiltered.map((row) => {
     const name = row.name ?? row.playerName ?? row.full_name ?? ''
     const position = row.position ?? row.pos ?? ''
@@ -1858,8 +1859,16 @@ export async function getResolvedDraftPoolForLeague(
     }
   }
 
+  perfEnrich()
+
+  const perfDedupe = perfStart('13. dedupeEnrichedRawRows')
   const dedupedEnrichedList = dedupeEnrichedRawRows(enrichedList as DraftPoolRawRow[])
+  perfDedupe()
+
+  const perfNormalize = perfStart(`14. normalizePlayerList (n=${dedupedEnrichedList.length})`)
   let entries = normalizePlayerList(dedupedEnrichedList, sport)
+  perfNormalize()
+
   entries = filterExcludedDraftEntries(
     entries,
     options.excludeDraftedNames,
@@ -1875,12 +1884,14 @@ export async function getResolvedDraftPoolForLeague(
     return team !== null && String(team).trim() !== '' && String(team).trim().toUpperCase() !== 'FA'
   })
 
+  const perfFallbacks = perfStart(`15. applyPositionAwareProjectionFallbacks (n=${entries.length})`)
   const { entries: entriesWithProjectionFallbacks, diagnostics: projectionDiagnostics } =
     await applyPositionAwareProjectionFallbacks({
       sport,
       entries,
     })
   entries = entriesWithProjectionFallbacks
+  perfFallbacks()
 
   // Deterministic ranking: ADP-first when present, then AI ADP, then lexical tie-breakers.
   // This avoids visually jumbled boards when merged sources contribute mixed/null ADP values.
