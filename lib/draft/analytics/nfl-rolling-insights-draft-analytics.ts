@@ -161,8 +161,21 @@ export async function loadRollingInsightsSeasonByDraftPoolKey(options: {
     ),
   ]
 
-  const nkSet = [...new Set(options.rows.map((r) => r.nk).filter(Boolean))]
-
+  /**
+   * G.1 — Asymmetric-normalization fix.
+   *
+   * The pool side runs every name through `canonicalName` (strips Jr/Sr/III suffixes,
+   * apostrophes, dots, collapses single-letter token pairs), but PlayerIdentityMap
+   * stores `normalizedName` in its raw, suffix-preserving form ("brian thomas jr.").
+   * A `WHERE normalizedName IN (nkSet)` filter therefore misses every suffix-bearing
+   * player — Brian Thomas Jr., Patrick Mahomes II, Marvin Harrison Jr., etc. — and
+   * those players silently fall back to `snapshot_projection` (no per-stat splits).
+   *
+   * Fix is read-only: pull every NFL identity row that has `rollingInsightsId`, then
+   * canonicalize the DB-side name in memory before keying the lookup map. The pool
+   * row's `r.nk` is already canonical, so post-fix both sides agree on the same key.
+   * NFL identity table is small (~2k rows) — single cold-path query, no migration.
+   */
   const [bySleeper, byName] = await Promise.all([
     sleeperIds.length
       ? prisma.playerIdentityMap.findMany({
@@ -170,16 +183,14 @@ export async function loadRollingInsightsSeasonByDraftPoolKey(options: {
           select: { sleeperId: true, rollingInsightsId: true },
         })
       : [],
-    nkSet.length
-      ? prisma.playerIdentityMap.findMany({
-          where: { sport, normalizedName: { in: nkSet }, rollingInsightsId: { not: null } },
-          select: {
-            normalizedName: true,
-            position: true,
-            rollingInsightsId: true,
-          },
-        })
-      : [],
+    prisma.playerIdentityMap.findMany({
+      where: { sport, rollingInsightsId: { not: null } },
+      select: {
+        normalizedName: true,
+        position: true,
+        rollingInsightsId: true,
+      },
+    }),
   ])
 
   const sleeperToRi = new Map<string, string>()
@@ -188,16 +199,16 @@ export async function loadRollingInsightsSeasonByDraftPoolKey(options: {
   }
 
   // E.3: detect ambiguous (name, position) pairs in PlayerIdentityMap to skip collisions.
-  // If multiple RI players match the same (normalizedName, position), skip to avoid silent data loss.
+  // If multiple RI players match the same canonical (name, position), skip to avoid silent data loss.
   const namePosToRi = new Map<string, string>()
   const namePosAmbiguous = new Set<string>()
   for (const m of byName) {
-    /** E.2 bug fix: pool callers normalize pk via toLowerCase() (see getResolvedDraftPoolForLeague.ts
-     * `normalizeKeyPart`), so storing keys with `.toUpperCase()` here meant `namePosToRi.get(...)` at
-     * line 203 below never matched even when PlayerIdentityMap had the right rows. The audit found
-     * 0/146 mappings — partly because of empty source tables, partly because of THIS bug. Aligning
-     * to lowercase guarantees that once ingestion populates PlayerIdentityMap, matches will fire. */
-    const nk = (m.normalizedName ?? '').trim().toLowerCase()
+    /** G.1: canonicalize DB-side name to match the pool-side key built from `canonicalName`.
+     * Previous body used `(m.normalizedName ?? '').trim().toLowerCase()` which left suffix-bearing
+     * names ("brian thomas jr.") un-canonical and never matched pool keys ("brian thomas").
+     * Position handling preserves the E.2 bug fix — pool callers normalize pk via toLowerCase()
+     * (see getResolvedDraftPoolForLeague.ts `normalizeKeyPart`), so we must lowercase here too. */
+    const nk = canonicalName(m.normalizedName ?? '')
     const pk = (m.position ?? '').trim().toLowerCase()
     if (nk && pk && m.rollingInsightsId) {
       const k = `${nk}|${pk}`
@@ -425,10 +436,12 @@ export async function loadPlayerSeasonStatsFallback(options: {
     const nkSet = [...new Set(unmatched.map((r) => r.nk).filter(Boolean))]
 
     if (nkSet.length > 0) {
+      // G.1 — same asymmetric-normalization fix as `loadRollingInsightsSeasonByDraftPoolKey`:
+      // pool-side `nk` is canonical, DB-side `normalizedName` is raw — drop the by-name WHERE
+      // and canonicalize in memory so suffix-bearing names match.
       const identitiesByNamePos = await prisma.playerIdentityMap.findMany({
         where: {
           sport,
-          normalizedName: { in: nkSet },
           rollingInsightsId: { not: null },
         },
         select: {
@@ -442,7 +455,7 @@ export async function loadPlayerSeasonStatsFallback(options: {
       const namePosToRiId = new Map<string, string>()
       const namePosAmbiguous = new Set<string>()
       for (const ident of identitiesByNamePos) {
-        const nk = (ident.normalizedName ?? '').trim().toLowerCase()
+        const nk = canonicalName(ident.normalizedName ?? '')
         const pk = (ident.position ?? '').trim().toLowerCase()
         if (nk && pk && ident.rollingInsightsId) {
           const key = `${nk}|${pk}`
