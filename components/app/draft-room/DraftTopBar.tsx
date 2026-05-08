@@ -104,13 +104,6 @@ export type DraftTopBarProps = {
   bigScreenHref?: string | null
 }
 
-const TIMER_COLORS = {
-  running: 'text-emerald-300 border-emerald-400/25 bg-emerald-500/10',
-  paused: 'text-amber-200 border-amber-400/25 bg-amber-500/10',
-  expired: 'text-red-200 border-red-400/25 bg-red-500/10',
-  none: 'text-white/70 border-white/12 bg-white/5',
-}
-
 function translateDraftStatus(draftStatus: string, t: (key: string) => string): string {
   const key = `draftRoom.status.${draftStatus}`
   const out = t(key)
@@ -124,13 +117,6 @@ function translateDraftType(draftType: string, t: (key: string) => string): stri
   const out = t(key)
   if (out !== key) return out
   return draftType
-}
-
-function translateTimerMode(mode: TimerMode, t: (key: string) => string): string {
-  const key = `draftRoom.timerMode.${mode}`
-  const out = t(key)
-  if (out !== key) return out
-  return mode.replace(/_/g, ' ')
 }
 
 function resolveDraftFormatLabel(
@@ -177,7 +163,6 @@ export function DraftTopBar({
   timerSeconds = null,
   isCommissioner,
   draftStatus,
-  timerMode = 'per_pick',
   autoPickEnabled = false,
   inviteLink,
   onCopyInvite,
@@ -340,7 +325,6 @@ export function DraftTopBar({
   const statusLabel = translateDraftStatus(draftStatus, t)
   const draftTypeLabel = translateDraftType(draftType, t)
   const draftFormatLabel = resolveDraftFormatLabel(draftType, thirdRoundReversal)
-  const timerModeLabel = translateTimerMode(timerMode, t)
 
   const centerCta = (() => {
     /** Completed state: show a clear broadcast "Draft Complete" badge. */
