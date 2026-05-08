@@ -246,6 +246,9 @@ function PlayerListVirtualized({
               team={p.team}
               adp={useAiAdp ? p.aiAdp : p.adp}
               adpMetricLabel={useAiAdp ? 'AI ADP' : 'ADP'}
+              aiAdp={p.aiAdp ?? null}
+              aiAdpSampleSize={p.aiAdpSampleSize ?? null}
+              aiAdpLowSample={Boolean(p.aiAdpLowSample)}
               byeWeek={p.byeWeek}
               draftSport={draftSport}
               presentationVariant={presentationVariant}

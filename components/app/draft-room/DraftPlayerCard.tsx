@@ -65,6 +65,12 @@ export type DraftPlayerCardProps = {
   isQueued?: boolean
   /** Label for the ADP column (e.g. AI ADP when sorting by AI ADP). */
   adpMetricLabel?: string
+  /** AllFantasy AI ADP — rendered separately from the legacy ADP slot when present. */
+  aiAdp?: number | null
+  /** Sample size behind aiAdp; surfaced as a tooltip when low-sample. */
+  aiAdpSampleSize?: number | null
+  /** Marks the aiAdp value as low-confidence; UI may emphasise the warning. */
+  aiAdpLowSample?: boolean
   /** NFL redraft pool: projection + split stats (from `/draft/pool`). */
   nflDraftProjectionSplits?: NflDraftProjectionSplits | null
 }
@@ -181,6 +187,9 @@ function DraftPlayerCardInner({
   isSelected = false,
   isQueued = false,
   adpMetricLabel = 'ADP',
+  aiAdp = null,
+  aiAdpSampleSize = null,
+  aiAdpLowSample = false,
   nflDraftProjectionSplits = null,
 }: DraftPlayerCardProps) {
   const rs = presentationVariant === 'redraft_snake'
@@ -544,6 +553,25 @@ function DraftPlayerCardInner({
               {formatBye(normalized.byeWeek)}
             </span>
           </div>
+          {aiAdp != null && Number.isFinite(Number(aiAdp)) ? (
+            <div
+              className={rs ? 'mt-0.5' : ''}
+              title={
+                aiAdpLowSample
+                  ? `AllFantasy AI ADP — low sample${aiAdpSampleSize != null ? ` (n=${aiAdpSampleSize})` : ''}`
+                  : `AllFantasy AI ADP${aiAdpSampleSize != null ? ` (n=${aiAdpSampleSize})` : ''}`
+              }
+            >
+              <span className={rs ? 'text-[9px] font-medium text-white/45' : ''}>AI ADP</span>{' '}
+              <span
+                className={`text-cyan-300${aiAdpLowSample ? ' opacity-70' : ''}`}
+                data-testid={testId ? `${testId}-ai-adp` : 'draft-player-ai-adp'}
+                data-low-sample={aiAdpLowSample ? 'true' : 'false'}
+              >
+                {formatAdpDisplay(Number(aiAdp))}
+              </span>
+            </div>
+          ) : null}
         </div>
         <div className="flex items-center gap-1">{compareAction}{secondaryAction}{primaryAction}</div>
       </div>
