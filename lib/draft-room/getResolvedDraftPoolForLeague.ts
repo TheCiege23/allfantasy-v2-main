@@ -552,7 +552,12 @@ function mergeDbPoolIntoRawList(
     // Without this, a 2nd pool row with matching name+different team would
     // be skipped at the seenNames check above, losing the team-field enrichment
     // and causing the downstream teamless filter to drop the player.
-    cachedKeys[newIdx] = { norm, loose: looseNorm, pos: poolPos, team: poolTeam }
+    cachedKeys[newIdx] = {
+      norm,
+      loose: looseNorm,
+      pos: normalizeKeyPart(p.position ?? '—'),
+      team: poolTeam,
+    }
     const normList = byNormToIndex.get(norm) ?? []
     normList.push(newIdx)
     byNormToIndex.set(norm, normList)
