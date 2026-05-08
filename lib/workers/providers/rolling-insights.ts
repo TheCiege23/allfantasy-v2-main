@@ -109,10 +109,27 @@ function buildRestBaseCandidates(configBase: string): string[] {
   return dedupe([...explicit, ...derivedFromConfig, ...DEFAULT_RI_REST_BASES])
 }
 
-function buildRestPathCandidates(dataSeg: string, chainSport: ApiChainSport): string[] {
+/**
+ * Build the list of REST path candidates for a given dataSeg/sport.
+ *
+ * `season` honors the caller-supplied season (e.g. "2023") so historical
+ * backfills request the right year in the URL path. When unset, falls back
+ * to the current UTC year for live/current-season requests.
+ */
+export function buildRestPathCandidates(
+  dataSeg: string,
+  chainSport: ApiChainSport,
+  season?: string
+): string[] {
   const sportCodes = REST_SPORT_CODES[chainSport]
   const sportLower = SPORT_PATH[chainSport]
-  const year = String(new Date().getUTCFullYear())
+  const seasonRaw = (season ?? '').trim()
+  // RI accepts "YYYY" or "YYYY-YYYY" — the path always wants a single year.
+  const year = seasonRaw
+    ? seasonRaw.includes('-')
+      ? (seasonRaw.split('-')[0] as string)
+      : seasonRaw
+    : String(new Date().getUTCFullYear())
   const today = new Date().toISOString().slice(0, 10)
 
   // Soccer endpoints are significantly less consistent; keep probes intentionally narrow
@@ -549,7 +566,14 @@ export async function rollingInsightsProvider(params: ApiFetchParams): Promise<C
     let rscTokenCandidates = collectRscTokenCandidates(accessToken)
 
     let restBases = buildRestBaseCandidates(base)
-    const restPaths = buildRestPathCandidates(dataSeg, chainSport)
+    // Honor caller-supplied season so historical backfills request the right
+    // year in the path (e.g. .../player-stats/2023/NFL). Falls back to the
+    // current year inside buildRestPathCandidates when absent.
+    const requestedSeason =
+      typeof merged.season === 'string' || typeof merged.season === 'number'
+        ? String(merged.season)
+        : undefined
+    const restPaths = buildRestPathCandidates(dataSeg, chainSport, requestedSeason)
 
     if (chainSport === 'soccer_euro' || chainSport === 'soccer_mls') {
       // Keep soccer probing intentionally tight to reduce worst-case latency.
