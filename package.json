@@ -72,6 +72,7 @@
     "draft-pool:sweep-multi-league": "node --env-file=.env --require ./scripts/_audit-preload.cjs --import tsx scripts/sweep-draft-pool-multi-league.ts",
     "repair:player-identity": "tsx scripts/repair-player-identity-drift.ts",
     "test:draft": "vitest run __tests__/draft/",
+    "test:phase2:pick-submission": "node --env-file=.env --import tsx node_modules/vitest/vitest.mjs run __tests__/draft/pick-submission-service.test.ts",
     "check:draft-env": "node scripts/draft-env-check.mjs",
     "gate:draft": "npm run typecheck && npx vitest run __tests__/draft/",
     "gate:draft:tests": "npx vitest run __tests__/draft/",
