@@ -553,7 +553,7 @@ function DraftPlayerCardInner({
               {formatBye(normalized.byeWeek)}
             </span>
           </div>
-          {aiAdp != null && Number.isFinite(Number(aiAdp)) ? (
+          {adpMetricLabel !== 'AI ADP' && aiAdp != null && Number.isFinite(Number(aiAdp)) ? (
             <div
               className={rs ? 'mt-0.5' : ''}
               title={
