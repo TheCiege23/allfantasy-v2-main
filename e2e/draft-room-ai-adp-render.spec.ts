@@ -17,16 +17,12 @@
  * tests + the all-sports Node resolver probes.
  *
  * Scope intentionally narrow per Shape A:
- *   - NFL covered as a passing assertion.
- *   - NBA covered as a SKIPPED assertion that documents a real product gap:
- *     non-NFL pools fall through to `PlayerListVirtualized` (card layout) in
- *     `components/app/draft-room/PlayerPanel.tsx:1316-1322`, and the card
- *     component (`DraftPlayerCard`) doesn't reference `aiAdp` at all. So
- *     the AI ADP overlay we just unblocked at the resolver layer never reaches
- *     the rendered NBA pool — even though the API returns `aiAdp` correctly.
- *     Unskipping this test requires wiring AI ADP into the card layout
- *     (or forcing `viewModeOverride='sleeper_table'` for non-NFL through the
- *     harness so `SleeperPoolTable` renders for those sports too).
+ *   - NFL covered as a passing assertion via the auto-table layout.
+ *   - NBA covered as a passing assertion via an explicit click on the
+ *     `draft-pool-view-table` toggle (NBA's default `poolLayout='auto'` falls
+ *     to the card layout, which doesn't render the `-ai-adp` testid). Once a
+ *     follow-up wires AI ADP into `DraftPlayerCard` directly, the toggle
+ *     click can be removed and NBA's default render will pass without it.
  *   - Single page open, no pick / queue / chat / multi-tab.
  */
 import { expect, test } from '@playwright/test'
@@ -185,10 +181,7 @@ const SPORT_FIXTURES: SportFixture[] = [
 ]
 
 for (const fixture of SPORT_FIXTURES) {
-  // Non-NFL pools render through PlayerListVirtualized (card layout) which
-  // doesn't currently reference aiAdp. Unskip once that pipeline lands.
-  const testFn = fixture.sport === 'NFL' ? test : test.skip
-  testFn(`draft room renders AI ADP column from pool API response (${fixture.sport})`, async ({ page }) => {
+  test(`draft room renders AI ADP column from pool API response (${fixture.sport})`, async ({ page }) => {
     page.setDefaultTimeout(15_000)
     page.setDefaultNavigationTimeout(45_000)
     attachDraftHarnessDiagnostics(page)
@@ -221,6 +214,16 @@ for (const fixture of SPORT_FIXTURES) {
 
     // At least one star from the mocked pool reaches the DOM.
     await expect(page.getByText(fixture.starPlayerName).first()).toBeVisible({ timeout: 30_000 })
+
+    // Non-NFL defaults to card layout (PlayerPanel.tsx:1316-1322 — `useTable`
+    // is true only when sport=NFL or the user clicked the table-view toggle).
+    // The AI ADP column lives in SleeperPoolTable, so for non-NFL we click the
+    // `draft-pool-view-table` radio first to flip `viewModeOverride='sleeper_table'`.
+    if (fixture.sport !== 'NFL') {
+      const tableViewToggle = page.getByTestId('draft-pool-view-table')
+      await expect(tableViewToggle).toBeVisible({ timeout: 15_000 })
+      await tableViewToggle.click()
+    }
 
     // The AI ADP column emits `data-testid` ending in "-ai-adp" per row. Each cell
     // shows the formatted aiAdp value when present (em-dash when null).
