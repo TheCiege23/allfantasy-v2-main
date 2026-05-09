@@ -37,7 +37,13 @@ async function getDevBypassFallbackRosterId(
 }
 
 /**
- * User can view draft session if they are commissioner (league owner) or have their own roster in the league.
+ * User can view draft session if they are commissioner (league owner), have their own roster
+ * in the league (rosters table), or are a claimed/platform member via league_teams.
+ *
+ * league_teams.platformUserId  — platform-synced user id (Sleeper, etc.)
+ * league_teams.claimedByUserId — AllFantasy user who claimed this team slot
+ * Both map to session.user.id (AppUser.id). Checking both ensures access regardless
+ * of whether the user imported or claimed their team first.
  */
 export async function canAccessLeagueDraft(leagueId: string, userId: string | undefined): Promise<boolean> {
   if (!userId) return false
@@ -47,6 +53,14 @@ export async function canAccessLeagueDraft(leagueId: string, userId: string | un
     select: { id: true },
   })
   if (roster) return true
+  const team = await prisma.leagueTeam.findFirst({
+    where: {
+      leagueId,
+      OR: [{ platformUserId: userId }, { claimedByUserId: userId }],
+    },
+    select: { id: true },
+  })
+  if (team) return true
   return (await getDevBypassFallbackRosterId(leagueId, userId)) != null
 }
 
