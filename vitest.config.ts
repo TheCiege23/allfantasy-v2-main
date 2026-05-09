@@ -2,9 +2,12 @@ import { defineConfig } from 'vitest/config'
 import path from 'path'
 
 export default defineConfig({
-  esbuild: {
-    jsx: 'automatic',
-    jsxImportSource: 'react',
+  // Vite 8 (rolldown-vite) routes transforms through oxc instead of esbuild
+  // and silently ignores the `esbuild` block. With no `oxc.jsx` set, JSX
+  // tokens reach the SSR parser untransformed and fail with
+  // `Unexpected JSX expression`. Configure oxc explicitly so .tsx tests parse.
+  oxc: {
+    jsx: { runtime: 'automatic', importSource: 'react' },
   },
   test: {
     environment: 'jsdom',
