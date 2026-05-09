@@ -93,7 +93,8 @@ export async function GET(
 
   try {
     const providerStatus = getProviderStatus()
-    const shared = await dedupeInFlight(`draft:session:${leagueId}`, async () => {
+    // Dedup key includes viewer userId because the snapshot now contains viewer-private fields (viewerAutopick).
+    const shared = await dedupeInFlight(`draft:session:${leagueId}:${userId}`, async () => {
       // Phase 3b — perf: automation ticks were running sequentially (4 awaits
       // = 2-4 sec on a typical snake draft where most are no-ops). They don't
       // depend on each other, so run in parallel. Same for the snapshot/UI
@@ -109,7 +110,7 @@ export async function GET(
         syncPostDraftArtifactsIfCompletedThrottled(leagueId).catch(() => {}),
       ])
       const [snapshot, uiSettings, orphanRosterIds, orderMode] = await Promise.all([
-        buildSessionSnapshot(leagueId),
+        buildSessionSnapshot(leagueId, new Date(), userId),
         getDraftUISettingsForLeague(leagueId),
         getOrphanRosterIdsForLeague(leagueId),
         getDraftOrderModeAndLotteryConfig(leagueId),
@@ -266,7 +267,7 @@ export async function POST(
       await runSlowDraftAutomationTick(leagueId).catch(() => {})
       const providerStatus = getProviderStatus()
       const [snapshot, uiSettings, orphanRosterIds] = await Promise.all([
-        buildSessionSnapshot(leagueId),
+        buildSessionSnapshot(leagueId, new Date(), userId),
         getDraftUISettingsForLeague(leagueId),
         getOrphanRosterIdsForLeague(leagueId),
       ])

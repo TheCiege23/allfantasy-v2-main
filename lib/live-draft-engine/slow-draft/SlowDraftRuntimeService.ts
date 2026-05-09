@@ -201,28 +201,46 @@ export async function runSlowDraftAutomationTick(
   const insidePauseWindow = pauseWindow ? isInsidePauseWindow(now, pauseWindow) : false
 
   if (pauseWindow && session.status === 'in_progress' && insidePauseWindow) {
-    const paused = await pauseDraftSession(leagueId)
-    if (paused) {
+    if (!uiSettings.allowPicksDuringOvernightPause) {
+      // Default: pause session to block all picks during the window.
+      const paused = await pauseDraftSession(leagueId)
+      if (paused) {
+        changed = true
+        actions.push({ type: 'pause_window_started' })
+        nextRuntimeMeta.autoPausedByWindow = true
+        session = await prisma.draftSession.findUnique({
+          where: { leagueId },
+          include: { picks: { orderBy: { overall: 'asc' } } },
+        })
+      }
+    } else if (!runtimeMeta.autoPausedByWindow) {
+      // allowPicksDuringOvernightPause=true: leave session in_progress so managers can still pick.
+      // reconcileOvernightDraftTimerForLeague freezes timerEndAt→null + sets overnightFrozenPickSeconds,
+      // which prevents the expired-pick worker from auto-picking during the window.
       changed = true
       actions.push({ type: 'pause_window_started' })
       nextRuntimeMeta.autoPausedByWindow = true
-      session = await prisma.draftSession.findUnique({
-        where: { leagueId },
-        include: { picks: { orderBy: { overall: 'asc' } } },
-      })
     }
   }
 
-  if (pauseWindow && session?.status === 'paused' && !insidePauseWindow && runtimeMeta.autoPausedByWindow) {
-    const resumed = await resumeDraftSession(leagueId)
-    if (resumed) {
+  if (pauseWindow && !insidePauseWindow && runtimeMeta.autoPausedByWindow) {
+    if (session?.status === 'paused') {
+      const resumed = await resumeDraftSession(leagueId)
+      if (resumed) {
+        changed = true
+        actions.push({ type: 'pause_window_ended' })
+        nextRuntimeMeta.autoPausedByWindow = false
+        session = await prisma.draftSession.findUnique({
+          where: { leagueId },
+          include: { picks: { orderBy: { overall: 'asc' } } },
+        })
+      }
+    } else if (session?.status === 'in_progress' && uiSettings.allowPicksDuringOvernightPause) {
+      // Picks were allowed during window: session stayed in_progress, just clear the meta flag.
+      // Timer restoration already handled by reconcileOvernightDraftTimerForLeague.
       changed = true
       actions.push({ type: 'pause_window_ended' })
       nextRuntimeMeta.autoPausedByWindow = false
-      session = await prisma.draftSession.findUnique({
-        where: { leagueId },
-        include: { picks: { orderBy: { overall: 'asc' } } },
-      })
     }
   }
 

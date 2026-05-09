@@ -56,6 +56,8 @@ import {
 } from '@/lib/draft-intelligence'
 import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
+import { getViewerAutopickPreference } from '@/lib/live-draft-engine/LiveDraftAutopickPreferenceService'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -403,6 +405,17 @@ export async function POST(
         onClockRoster?.platformUserId && !String(onClockRoster.platformUserId).startsWith('orphan-')
           ? String(onClockRoster.platformUserId)
           : null
+      let useAiQueueMode = false
+      let aiQueueFallbackReason: string | undefined
+      if (queueUserId) {
+        const pref = await getViewerAutopickPreference(draftSession.id, queueUserId)
+        if (pref.enabled && pref.mode === 'ai_queue') {
+          const { hasAccess } = await new EntitlementResolver().resolveForUser(queueUserId, 'pro_draft_ai')
+          useAiQueueMode = hasAccess
+          if (!hasAccess) aiQueueFallbackReason = 'entitlement_lapsed'
+        }
+      }
+      const candidatesBeforeQueue = candidates.length
       if (queueUserId) {
         const queueRow = draftSession.queues.find((q) => q.userId === queueUserId)
         const queued = Array.isArray(queueRow?.order)
@@ -423,26 +436,34 @@ export async function POST(
         }
       }
 
-      const league = await prisma.league.findUnique({
-        where: { id: leagueId },
-        select: { sport: true },
-      })
-      const sport = String(league?.sport ?? draftSession.sportType ?? 'NFL').toUpperCase()
-      const fallbackPool = await loadFallbackCandidates(leagueId, sport)
-      const fallbackSorted = [...fallbackPool].sort((a, b) => {
-        const adpA = a.adp ?? 999
-        const adpB = b.adp ?? 999
-        if (adpA !== adpB) return adpA - adpB
-        return a.playerName.localeCompare(b.playerName)
-      })
-      for (const player of fallbackSorted) {
-        pushCandidate({
-          playerName: player.playerName,
-          position: player.position,
-          team: player.team,
-          playerId: player.playerId,
-          byeWeek: player.byeWeek,
+      const queueCandidatesAdded = candidates.length - candidatesBeforeQueue
+      if (useAiQueueMode && queueCandidatesAdded === 0) {
+        aiQueueFallbackReason = aiQueueFallbackReason ?? 'queue_empty'
+        useAiQueueMode = false
+      }
+
+      if (!useAiQueueMode) {
+        const league = await prisma.league.findUnique({
+          where: { id: leagueId },
+          select: { sport: true },
         })
+        const sport = String(league?.sport ?? draftSession.sportType ?? 'NFL').toUpperCase()
+        const fallbackPool = await loadFallbackCandidates(leagueId, sport)
+        const fallbackSorted = [...fallbackPool].sort((a, b) => {
+          const adpA = a.adp ?? 999
+          const adpB = b.adp ?? 999
+          if (adpA !== adpB) return adpA - adpB
+          return a.playerName.localeCompare(b.playerName)
+        })
+        for (const player of fallbackSorted) {
+          pushCandidate({
+            playerName: player.playerName,
+            position: player.position,
+            team: player.team,
+            playerId: player.playerId,
+            byeWeek: player.byeWeek,
+          })
+        }
       }
 
       if (!candidates.length) {
@@ -507,6 +528,24 @@ export async function POST(
           { status },
         )
       }
+      void prisma.draftPickAuditLog.create({
+        data: {
+          leagueId,
+          draftSessionId: draftSession.id,
+          overallPickNumber: current.overall,
+          round: current.round,
+          action: 'force_autopick',
+          actorUserId: userId,
+          newRosterId: onClockRosterId,
+          newPlayerId: selectedCandidate.playerId ?? null,
+          newPlayerName: selectedCandidate.playerName,
+          metadata: {
+            mode: useAiQueueMode ? 'ai_queue' : 'standard',
+            aiPathUsed: useAiQueueMode,
+            ...(aiQueueFallbackReason ? { fallbackReason: aiQueueFallbackReason } : {}),
+          },
+        },
+      }).catch(() => {})
       if (result.snapshot?.rosterId) {
         void appendPickToRosterDraftSnapshot(leagueId, result.snapshot.rosterId, {
           playerName: selectedCandidate.playerName,
@@ -524,7 +563,7 @@ export async function POST(
       void notifyDraftIntelPickConfirmation(leagueId, onClockRosterId, selectedCandidate.playerName).catch(() => {})
       void notifyDraftIntelOrphanTeamPick(leagueId, selectedCandidate.playerName).catch(() => {})
       void notifyOnTheClockAfterPick(leagueId)
-      const snapshot = await buildSessionSnapshot(leagueId)
+      const snapshot = await buildSessionSnapshot(leagueId, new Date(), userId)
       void (async () => {
         const states = await publishDraftIntelForUpcomingManagers({
           leagueId,

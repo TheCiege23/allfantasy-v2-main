@@ -155,16 +155,14 @@ export async function POST(
     draftId: draftSession.id,
   })
   const picksMade = canonicalDraftState?.picksMade ?? (draftSession.picks ?? []).length
-  const legacyCurrentPick = (draftSession as { currentPick?: { overall: number; round: number; slot: number; rosterId?: string } | null })
-    .currentPick
-  const currentPick = canonicalDraftState?.nextPick?.overall
+  const currentPick = canonicalDraftState?.nextPick?.overall != null
     ? {
         overall: canonicalDraftState.nextPick.overall,
         round: canonicalDraftState.nextPick.round ?? 1,
         slot: canonicalDraftState.nextPick.slot ?? 1,
         rosterId: canonicalDraftState.currentTeamId ?? undefined,
       }
-    : legacyCurrentPick
+    : null
 
   if (invocation.decision === 'allow_ai') {
     const aiResult = await withTimeout(

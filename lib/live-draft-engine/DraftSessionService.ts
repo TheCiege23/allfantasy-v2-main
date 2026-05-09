@@ -21,6 +21,7 @@ import {
   isInsidePauseWindow,
 } from './DraftTimerService'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { getViewerAutopickPreference } from './LiveDraftAutopickPreferenceService'
 import { buildApiResponse, parseCommissionerAiManagers } from '@/lib/commissioner-ai-draft-manager'
 import { formatPickLabel } from './DraftOrderService'
 import { getManagerColorBySeed } from '@/lib/draft-room'
@@ -355,7 +356,8 @@ export async function getDraftSessionByLeague(leagueId: string) {
  */
 export async function buildSessionSnapshot(
   leagueId: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  viewerUserId?: string | null,
 ): Promise<DraftSessionSnapshot | null> {
   await repairDraftSessionSlotOrderIfNeeded(leagueId)
   await reconcileOvernightDraftTimerForLeague(leagueId, now)
@@ -591,6 +593,11 @@ export async function buildSessionSnapshot(
     dispersalPool,
     rosterConfigurationIncomplete,
     rosterConfigurationMessage: rosterConfigurationIncomplete ? DRAFT_ROSTER_CONFIGURATION_CLIENT_MESSAGE : null,
+    pausedByUserId: session.pausedByUserId ?? null,
+    allowPicksDuringOvernightPause: uiSettings.allowPicksDuringOvernightPause ?? false,
+    viewerAutopick: viewerUserId
+      ? await getViewerAutopickPreference(session.id, viewerUserId)
+      : null,
   }
 }
 
@@ -866,12 +873,33 @@ export async function undoLastPick(
   const last = session.picks[0]
   const reason = typeof options?.reason === 'string' ? options.reason.trim() : ''
   const actorUserId = options?.actorUserId ?? null
+
+  // Compute fresh timer before entering the transaction so the timestamp is stable.
+  // Only reset when in_progress — if paused, leave pausedRemainingSeconds so resume still works.
+  const freshTimerEndAt =
+    session.status === 'in_progress' && session.timerSeconds != null && session.timerSeconds > 0
+      ? new Date(Date.now() + session.timerSeconds * 1000)
+      : null
+
   await prisma.$transaction(async (tx) => {
     await tx.draftPick.delete({ where: { id: last.id } })
-    await tx.draftSession.update({
-      where: { id: session.id },
-      data: { version: { increment: 1 }, updatedAt: new Date() },
-    })
+    if (freshTimerEndAt !== null) {
+      await tx.draftSession.update({
+        where: { id: session.id },
+        data: {
+          version: { increment: 1 },
+          updatedAt: new Date(),
+          timerEndAt: freshTimerEndAt,
+          pausedRemainingSeconds: null,
+          overnightFrozenPickSeconds: null,
+        },
+      })
+    } else {
+      await tx.draftSession.update({
+        where: { id: session.id },
+        data: { version: { increment: 1 }, updatedAt: new Date() },
+      })
+    }
     if (actorUserId) {
       await tx.draftPickAuditLog.create({
         data: {

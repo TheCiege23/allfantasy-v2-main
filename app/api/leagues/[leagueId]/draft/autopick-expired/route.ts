@@ -238,7 +238,7 @@ export async function POST(
   void notifyOnTheClockAfterPick(leagueId)
 
   try {
-    const snapshot = await buildSessionSnapshot(leagueId)
+    const snapshot = await buildSessionSnapshot(leagueId, new Date(), userId)
     if (snapshot?.currentPick && result.snapshot) {
       await appendPickToRosterDraftSnapshot(leagueId, rosterId, {
         playerName: selected.playerName.trim(),
@@ -250,7 +250,7 @@ export async function POST(
     }
   } catch (_) {}
 
-  const updated = await buildSessionSnapshot(leagueId)
+  const updated = await buildSessionSnapshot(leagueId, new Date(), userId)
   void (async () => {
     const states = await publishDraftIntelForUpcomingManagers({
       leagueId,

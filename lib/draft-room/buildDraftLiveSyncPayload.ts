@@ -61,7 +61,7 @@ export async function buildDraftLiveSyncPayload(
 
   if (sessionNeedsRefresh) {
     const [snapshot, uiSettings, orphanRosterIds] = await Promise.all([
-      buildSessionSnapshot(leagueId),
+      buildSessionSnapshot(leagueId, new Date(), userId),
       getDraftUISettingsForLeague(leagueId),
       getOrphanRosterIdsForLeague(leagueId),
     ])

@@ -103,6 +103,17 @@ export interface DraftSessionSnapshot {
   rosterConfigurationIncomplete?: boolean
   /** User-facing banner copy when roster configuration blocks drafting (paired with rosterConfigurationIncomplete). Cleared as null when configuration is valid. */
   rosterConfigurationMessage?: string | null
+  /** The userId who triggered a commissioner pause, or null. Only meaningful when status === 'paused'. */
+  pausedByUserId?: string | null
+  /** Whether picks are allowed during the overnight auto-pause window. Client uses this to show/hide the pick panel. Server enforcement added in Commit 4. */
+  allowPicksDuringOvernightPause?: boolean
+  /** Viewer-specific auto-pick preference. Null when no authenticated viewer; populated from `LiveDraftAutopickPreference`. */
+  viewerAutopick?: {
+    enabled: boolean
+    mode: 'standard' | 'ai_queue'
+    isProEligible: boolean
+    updatedAt: string | null
+  } | null
 }
 
 export interface C2CSessionSnapshot {

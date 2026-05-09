@@ -248,15 +248,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
     draftId: draftSession.id,
   })
   const ctxPicksMade = canonicalDraftState?.picksMade ?? (picks.length || 0)
-  const legacyCurrentPick = (draftSession as { currentPick?: { overall: number; round: number; slot: number } | null })
-    .currentPick
-  const currentPick = canonicalDraftState?.nextPick?.overall
+  const currentPick = canonicalDraftState?.nextPick?.overall != null
     ? {
         overall: canonicalDraftState.nextPick.overall,
         round: canonicalDraftState.nextPick.round ?? 1,
         slot: canonicalDraftState.nextPick.slot ?? 1,
       }
-    : legacyCurrentPick
+    : null
   const modeHint =
     suggestionKind === 'move_up'
       ? 'Prioritize trades that improve draft position soon without massive overpay.'
