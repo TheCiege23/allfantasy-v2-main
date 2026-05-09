@@ -83,7 +83,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
   return (
     <div
       data-testid="autopick-me-toggle"
-      className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-1.5"
+      className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-1"
     >
       <label className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] text-white/70">
         <input

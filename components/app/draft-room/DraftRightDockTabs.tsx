@@ -123,7 +123,7 @@ export function DraftRightDockTabs({
               {isActive ? (
                 <span
                   aria-hidden
-                  className="absolute inset-x-3 bottom-0 h-px rounded-full bg-cyan-300/90 shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                  className="absolute inset-x-3 bottom-0 h-px rounded-full bg-gradient-to-r from-cyan-400 to-violet-400 shadow-[0_0_10px_rgba(34,211,238,0.3)]"
                 />
               ) : null}
             </button>

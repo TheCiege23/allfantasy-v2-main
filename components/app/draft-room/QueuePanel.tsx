@@ -154,7 +154,7 @@ export function QueuePanel({
       }`}
       data-testid="draft-queue-panel"
     >
-      <div className={`flex items-center justify-between gap-2 border-b px-2.5 py-1.5 ${rs ? 'border-cyan-500/15 bg-[linear-gradient(90deg,rgba(34,211,238,0.08),transparent)]' : 'border-white/[0.06]'}`}>
+      <div className={`flex items-center justify-between gap-2 border-b px-2.5 py-1 ${rs ? 'border-cyan-500/15 bg-[linear-gradient(90deg,rgba(34,211,238,0.08),transparent)]' : 'border-white/[0.06]'}`}>
         <div className="flex items-center gap-2">
           <ListOrdered className="h-4 w-4 text-cyan-400" />
           <span className="text-sm font-semibold text-white">Queue</span>
@@ -179,7 +179,7 @@ export function QueuePanel({
           Auto-pick
         </label>
       </div>
-      <div className="grid grid-cols-1 gap-1.5 border-b border-white/[0.06] p-1.5 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-1 border-b border-white/[0.06] p-1 sm:grid-cols-2 lg:grid-cols-3">
         <input
           type="search"
           value={searchQuery}
@@ -428,7 +428,7 @@ export function QueuePanel({
           Execution: {aiReorderExecutionMode === 'ai_explained' ? 'rules engine + AI explanation' : 'instant rules automation'}
         </p>
       )}
-      <div className="flex-1 overflow-auto overscroll-contain p-1.5">
+      <div className="flex-1 overflow-auto overscroll-contain p-1">
         {queue.length === 0 ? (
           <div className="flex h-full min-h-[104px] flex-col items-center justify-center gap-1 px-3 py-3 text-center">
             <div
@@ -452,7 +452,7 @@ export function QueuePanel({
             <p className="text-[10px] text-white/55">Adjust search, position, or sort to see queued players.</p>
           </div>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-1">
             {displayQueue.map(({ entry, queueIndex }, displayIndex) => {
               const meta = resolveMeta(entry)
               const adpText = formatNumber(meta.adp)
@@ -478,7 +478,7 @@ export function QueuePanel({
                     setDragIndex(null)
                   }
                 }}
-                className={`draft-live-queue-item flex items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,18,40,0.94),rgba(7,14,30,0.98))] px-2.5 py-1.5 text-[11px] min-h-[46px] ${
+                className={`draft-live-queue-item flex items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-[linear-gradient(180deg,rgba(10,18,40,0.94),rgba(7,14,30,0.98))] px-2.5 py-1 text-[11px] min-h-[44px] ${
                   dragIndex === displayIndex ? 'opacity-60' : 'hover:bg-white/5'
                 }`}
               >
