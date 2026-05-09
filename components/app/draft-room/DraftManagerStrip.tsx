@@ -109,7 +109,7 @@ export function DraftManagerStrip({
                 />
                 <div
                   className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border bg-[#020814] shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:h-9 sm:w-9 ${
-                    isActive ? 'ring-2 ring-cyan-300/75 ring-offset-2 ring-offset-[#060b14]' : ''
+                    isActive ? 'ring-2 ring-cyan-300/90 ring-offset-2 ring-offset-[#060b14]' : ''
                   }`}
                   style={
                     tradedTint ?? {
@@ -135,7 +135,12 @@ export function DraftManagerStrip({
                 ) : null}
 
                 {isActive ? (
-                  <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border border-[#071020] bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.8)]" />
+                  <span className="absolute bottom-0 right-0" aria-hidden>
+                    <span className="relative flex h-3 w-3">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-300/60 opacity-75" />
+                      <span className="relative inline-flex h-3 w-3 rounded-full border border-[#071020] bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.8)]" />
+                    </span>
+                  </span>
                 ) : null}
               </div>
 

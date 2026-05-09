@@ -10,9 +10,11 @@ import { DEFAULT_SPORT } from '@/lib/sport-scope'
 function PickRow({
   pick,
   sport,
+  isLatest = false,
 }: {
   pick: DraftPickSnapshot
   sport: string
+  isLatest?: boolean
 }) {
   const normalized = useMemo(
     () =>
@@ -31,7 +33,11 @@ function PickRow({
 
   return (
     <li
-      className="flex animate-in fade-in slide-in-from-left-2 items-center gap-2.5 rounded-xl border border-white/[0.06] bg-gradient-to-r from-[#0c1528]/90 to-[#0a1228]/80 px-2.5 py-2 text-[12px] shadow-[0_4px_16px_rgba(0,0,0,0.2)] duration-300 hover:border-white/12 hover:shadow-[0_8px_24px_rgba(0,0,0,0.3)]"
+      className={`flex animate-in fade-in slide-in-from-left-2 items-center gap-2.5 rounded-xl border px-2.5 py-2 text-[12px] duration-300 hover:shadow-[0_8px_24px_rgba(0,0,0,0.3)] ${
+        isLatest
+          ? 'draft-pick-history-latest border-amber-400/25 bg-gradient-to-r from-[#1a1208]/90 to-[#0a1228]/80 shadow-[0_4px_20px_rgba(246,196,69,0.08)] hover:border-amber-400/35'
+          : 'border-white/[0.06] bg-gradient-to-r from-[#0c1528]/90 to-[#0a1228]/80 shadow-[0_4px_16px_rgba(0,0,0,0.2)] hover:border-white/12'
+      }`}
       style={{ animationDelay: '0ms', animationFillMode: 'both' }}
     >
       <span className="shrink-0 font-mono text-[11px] font-semibold text-cyan-300/95" aria-label={`Pick ${pick.pickLabel}`}>
@@ -91,7 +97,7 @@ export function PickHistory({
             <p className="mt-1 text-[11px] text-white/35">Selections will show here as the draft progresses.</p>
           </li>
         ) : (
-          rows.map((p) => <PickRow key={p.id} pick={p} sport={sport} />)
+          rows.map((p, idx) => <PickRow key={p.id} pick={p} sport={sport} isLatest={idx === 0} />)
         )}
       </ul>
     </div>

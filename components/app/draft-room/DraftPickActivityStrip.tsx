@@ -38,15 +38,24 @@ export function DraftPickActivityStrip({
               <li
                 key={p.id}
                 className={`draft-live-activity-item shrink-0 rounded-lg border px-2 py-1.5 text-[10px] md:shrink md:px-2 ${
-                  rs
-                    ? 'border-white/12 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(8,16,32,0.95))] shadow-[0_4px_16px_rgba(0,0,0,0.25)]'
-                    : 'border-white/10 bg-[#0a1228]'
+                  idx === 0
+                    ? 'draft-live-activity-latest border-amber-400/30 bg-[linear-gradient(135deg,rgba(246,196,69,0.1),rgba(10,18,40,0.95))] shadow-[0_4px_20px_rgba(246,196,69,0.12)]'
+                    : rs
+                      ? 'border-white/12 bg-[linear-gradient(135deg,rgba(15,23,42,0.9),rgba(8,16,32,0.95))] shadow-[0_4px_16px_rgba(0,0,0,0.25)]'
+                      : 'border-white/10 bg-[#0a1228]'
                 }`}
                 style={{ animationDelay: `${Math.min(idx, 6) * 28}ms` }}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-medium text-white/90 truncate">{p.playerName}</span>
-                  <span className="shrink-0 tabular-nums text-cyan-200/80">#{p.overall}</span>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {idx === 0 ? (
+                      <span className="rounded border border-amber-400/40 bg-amber-500/15 px-1 py-px text-[8px] font-bold uppercase tracking-[0.1em] text-amber-200">
+                        Latest
+                      </span>
+                    ) : null}
+                    <span className="tabular-nums text-cyan-200/80">#{p.overall}</span>
+                  </div>
                 </div>
                 <div className="mt-0.5 flex items-center justify-between gap-1 text-[9px] text-white/45">
                   <span>
