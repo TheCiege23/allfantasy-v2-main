@@ -249,7 +249,7 @@ function DraftBoardCellInner({
 
   return (
     <div
-      className={`group relative flex h-[44px] min-h-[44px] flex-col overflow-hidden rounded-[6px] border px-1 pb-0.5 pt-0.5 text-[9px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[46px] sm:min-h-[46px] sm:px-1 sm:pb-0.5 sm:pt-0.5 ${
+      className={`group relative flex h-[42px] min-h-[42px] flex-col overflow-hidden rounded-[6px] border px-1 pb-0.5 pt-0.5 text-[9px] backdrop-blur-sm transition-[border-color,box-shadow,transform,background-color] duration-200 ${hoverLift} hover:border-cyan-300/45 hover:shadow-lg sm:h-[44px] sm:min-h-[44px] sm:px-1 sm:pb-0.5 sm:pt-0.5 ${
         onTradeFromCell ? 'pr-7 sm:pr-8' : ''
       } ${
         isCurrentPick ? 'draft-live-current-pick' : isRecentPick ? 'draft-live-recent-pick' : ''

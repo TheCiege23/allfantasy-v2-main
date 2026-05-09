@@ -63,7 +63,7 @@ export function DraftManagerStrip({
   const claimSet = claimableRosterIds?.length ? new Set(claimableRosterIds) : null
 
   return (
-    <div className="border-b border-white/8 bg-[#060b14] px-2 pb-2 pt-1 sm:px-3 sm:pb-2.5 sm:pt-1.5">
+    <div className="border-b border-white/8 bg-[#060b14] px-2 pb-1 pt-0.5 sm:px-3 sm:pb-1.5 sm:pt-1">
       {orderSourceLabel ? (
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <span className="text-[10px] font-medium uppercase tracking-[0.18em] text-white/38">
@@ -96,19 +96,19 @@ export function DraftManagerStrip({
           return (
             <div
               key={manager.rosterId}
-              className="group flex min-w-[64px] flex-col items-center gap-1 pb-0.5 text-center sm:min-w-[70px]"
+              className="group flex min-w-[56px] flex-col items-center gap-1 pb-0.5 text-center sm:min-w-[64px]"
               data-slot={manager.slot}
               data-roster-id={manager.rosterId}
               data-testid={`draft-manager-slot-${manager.slot}`}
             >
-              <div className="relative flex h-11 w-11 items-center justify-center sm:h-[52px] sm:w-[52px]">
+              <div className="relative flex h-9 w-9 items-center justify-center sm:h-11 sm:w-11">
                 <span
                   className="absolute inset-1 rounded-full blur-[10px] transition-opacity duration-200 group-hover:opacity-100"
                   style={{ backgroundColor: withAlpha(color.tintHex, isActive ? 0.48 : 0.3) }}
                   aria-hidden
                 />
                 <div
-                  className={`relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border bg-[#020814] shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:h-11 sm:w-11 ${
+                  className={`relative flex h-8 w-8 items-center justify-center overflow-hidden rounded-full border bg-[#020814] shadow-[0_8px_24px_rgba(0,0,0,0.35)] sm:h-9 sm:w-9 ${
                     isActive ? 'ring-2 ring-cyan-300/75 ring-offset-2 ring-offset-[#060b14]' : ''
                   }`}
                   style={
@@ -139,7 +139,7 @@ export function DraftManagerStrip({
                 ) : null}
               </div>
 
-              <div className="w-[70px] sm:w-[78px]">
+              <div className="w-[62px] sm:w-[70px]">
                 <p className={`truncate text-[10px] font-semibold leading-tight sm:text-[11px] ${isActive ? 'text-white' : 'text-[#9fb7ff]'}`}>
                   {displayHandle}
                 </p>
