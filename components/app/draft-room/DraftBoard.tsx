@@ -519,7 +519,7 @@ function DraftBoardInner({
       </div>
 
       {draftType === 'auction' ? (
-        <div className="snap-x snap-mandatory overflow-x-auto overflow-y-visible px-2 py-3 pb-4 [-webkit-overflow-scrolling:touch]">
+        <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-3 pb-4 [-webkit-overflow-scrolling:touch]">
           <div
             className="grid min-w-min gap-3"
             data-testid="draft-board-grid"
@@ -611,7 +611,7 @@ function DraftBoardInner({
           </div>
         </div>
       ) : (
-        <div className="snap-x snap-mandatory overflow-x-auto overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
+        <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
           <div className="min-w-max" data-testid="draft-board-grid">
             <div
               className={`sticky top-0 z-10 grid gap-0 border-b pb-0.5 backdrop-blur-md sm:gap-0.5 ${

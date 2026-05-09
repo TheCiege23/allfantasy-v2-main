@@ -3910,7 +3910,7 @@ export function DraftRoomPageClient({
 
   const mobileStickyBar =
     showMobileStickyBar ? (
-      <div className="space-y-1.5 px-2.5 py-2 text-xs" data-testid="draft-mobile-sticky-bar">
+      <div className="space-y-1 px-2.5 py-1.5 text-xs" data-testid="draft-mobile-sticky-bar">
         <div className="flex items-center justify-between gap-1.5">
           {currentPick != null ? (
             <span className="font-medium text-cyan-200" data-testid="draft-mobile-current-pick">
