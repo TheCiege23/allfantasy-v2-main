@@ -49,5 +49,5 @@ export default async function LeagueDraftResolverPage({
     },
   })
 
-  redirect(`/draft/${ds.id}`)
+  redirect(`/drafts/${ds.id}`)
 }

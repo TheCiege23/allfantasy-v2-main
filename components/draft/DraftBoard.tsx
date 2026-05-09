@@ -1,3 +1,4 @@
+import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
 import { DraftRoomPageClient } from '@/components/app/draft-room/DraftRoomPageClient'
 import { MockDraftSessionBoard } from '@/components/mock-draft/MockDraftSessionBoard'
 
@@ -12,6 +13,12 @@ type LiveDraftBoardProps = {
   formatType?: string
   /** Snake redraft live room — enables premium chrome from `/draft/[id]/snake`. */
   presentationVariant?: 'default' | 'redraft_snake'
+  /**
+   * Server-rendered snapshot (built via `buildSessionSnapshot` on the route)
+   * used to seed the client's first paint. Omit on legacy routes that fetch
+   * client-side.
+   */
+  initialSnapshot?: DraftSessionSnapshot | null
 }
 
 type MockDraftBoardProps = {
@@ -37,6 +44,7 @@ export function DraftBoard(props: DraftBoardProps) {
       isCommissioner={props.isCommissioner}
       formatType={props.formatType}
       presentationVariant={props.presentationVariant ?? 'default'}
+      initialSnapshot={props.initialSnapshot ?? null}
     />
   )
 }

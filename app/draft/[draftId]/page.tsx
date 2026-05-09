@@ -35,5 +35,5 @@ export default async function DraftRouterPage({
     redirect(`/draft/${encodeURIComponent(context.draftId)}/lottery`)
   }
 
-  redirect(`/draft/${encodeURIComponent(context.draftId)}/snake`)
+  redirect(`/drafts/${encodeURIComponent(context.draftId)}`)
 }

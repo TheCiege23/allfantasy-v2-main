@@ -364,7 +364,7 @@ function DashboardShellInner({
       return `/league/${encodeURIComponent(effectiveActiveLeagueId)}/dispersal-draft/${encodeURIComponent(dispersalDraftIdFromUrl)}?embed=1`
     }
     if (draftIdFromUrl) {
-      return `/draft/${encodeURIComponent(draftIdFromUrl)}`
+      return `/drafts/${encodeURIComponent(draftIdFromUrl)}`
     }
     return null
   }, [draftIdFromUrl, dispersalDraftIdFromUrl, effectiveActiveLeagueId])

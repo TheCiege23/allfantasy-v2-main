@@ -7,8 +7,8 @@ import { DraftBoard } from '@/components/draft/DraftBoard'
 export const dynamic = 'force-dynamic'
 
 /**
- * Canonical “draft room” URL — same live client as `/draft/[draftId]/snake`.
- * Use for deep links from league home / notifications.
+ * Canonical "draft room" URL — deep links from league home / notifications.
+ * Live snake drafts redirect to /drafts/[draftId]; mock drafts render inline.
  */
 export default async function DraftRoomPage({
   params,
@@ -26,24 +26,16 @@ export default async function DraftRoomPage({
   const context = await resolveDraftRouteContext(draftId, userId)
   if (!context) redirect('/dashboard')
 
+  if (context.kind === 'live') {
+    redirect(`/drafts/${encodeURIComponent(context.draftId)}`)
+  }
+
+  // Mock draft — render inline (unchanged behavior)
   return (
     <div className="min-h-screen">
-      {context.kind === 'mock' ? (
-        <div className="mx-auto max-w-6xl p-4">
-          <DraftBoard kind="mock" draftId={context.draftId} canManage />
-        </div>
-      ) : (
-        <DraftBoard
-          kind="live"
-          draftId={context.draftId}
-          leagueId={context.leagueId}
-          leagueName={context.leagueName}
-          sport={context.sport}
-          isDynasty={context.isDynasty}
-          isCommissioner={context.isCommissioner}
-          formatType={context.formatType}
-        />
-      )}
+      <div className="mx-auto max-w-6xl p-4">
+        <DraftBoard kind="mock" draftId={context.draftId} canManage />
+      </div>
     </div>
   )
 }
