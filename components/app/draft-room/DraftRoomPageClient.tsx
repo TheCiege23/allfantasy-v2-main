@@ -11,6 +11,9 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room/DraftRoomShell'
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
+import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
+import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
+import { useCommissionerActions, type CommissionerControlApiResult } from '@/hooks/useCommissionerActions'
 import { DraftRoomSettingsModal } from '@/components/app/draft-room/DraftRoomSettingsModal'
 import { DraftBoard } from '@/components/app/draft-room/DraftBoard'
 import { DraftTeamStrip, type DraftTeamStripTeamMeta } from '@/components/app/draft-room/DraftTeamStrip'
@@ -105,36 +108,6 @@ import {
 } from '@/lib/draft-room/draft-chat-player-context'
 import type { DraftAssistantRoomContext } from '@/components/app/draft-room/PlayerDetailModal'
 
-/** User-visible copy after a successful commissioner POST to `/draft/controls`. */
-function commissionerActionSuccessCopy(action: string): string {
-  switch (String(action).toLowerCase()) {
-    case 'start':
-      return 'Draft started — live picks are now enabled.'
-    case 'pause':
-      return 'Draft paused — pick clock frozen for everyone.'
-    case 'resume':
-      return 'Draft resumed — pick clock restored.'
-    case 'reset_timer':
-      return 'Pick timer reset to full time for the current pick.'
-    case 'undo_pick':
-      return 'Last pick was removed from the board.'
-    case 'set_timer_seconds':
-      return 'Pick clock length updated.'
-    case 'force_autopick':
-      return 'Auto-pick executed for the on-clock team.'
-    case 'skip_pick':
-      return 'Current pick was skipped.'
-    case 'complete':
-      return 'Draft marked complete.'
-    default:
-      return 'Commissioner action completed.'
-  }
-}
-
-type CommissionerControlApiResult =
-  | ({ ok: true } & Record<string, unknown>)
-  | { ok: false; error: string; cancelled?: boolean }
-
 export type DraftRoomPageClientProps = {
   /** Draft session id from URL (`/draft/[draftId]/snake`) — used for telemetry / deep links only. */
   draftId?: string
@@ -149,6 +122,12 @@ export type DraftRoomPageClientProps = {
   formatType?: string
   /** Premium chrome for live snake redraft route. */
   presentationVariant?: 'default' | 'redraft_snake'
+  /**
+   * Server-rendered snapshot used to seed initial state and avoid the empty
+   * flash. Live-sync polling still runs as designed; this only primes the
+   * first render. Omit for the legacy client-fetch flow.
+   */
+  initialSnapshot?: DraftSessionSnapshot | null
 }
 
 type DraftRoomChromeTeam = {
@@ -230,12 +209,13 @@ export function DraftRoomPageClient({
   isCommissioner,
   formatType,
   presentationVariant = 'default',
+  initialSnapshot,
 }: DraftRoomPageClientProps) {
   type CenterDockTab = 'queue' | 'chat' | 'ai' | 'commish'
   const { data: authSession } = useSession()
   const viewerAppUserId = (authSession?.user as { id?: string } | undefined)?.id ?? null
-  const [session, setSession] = useState<DraftSessionSnapshot | null>(null)
-  const sessionRef = useRef<DraftSessionSnapshot | null>(null)
+  const [session, setSession] = useState<DraftSessionSnapshot | null>(initialSnapshot ?? null)
+  const sessionRef = useRef<DraftSessionSnapshot | null>(initialSnapshot ?? null)
   useEffect(() => {
     sessionRef.current = session
   }, [session])
@@ -244,7 +224,7 @@ export function DraftRoomPageClient({
   const [draftIntelLoading, setDraftIntelLoading] = useState(true)
   const [chatMessages, setChatMessages] = useState<DraftChatMessage[]>([])
   const [chatSyncActive, setChatSyncActive] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(initialSnapshot ? false : true)
   /** Set when GET draft/session returns 401/403 so we don't show the misleading "no draft session" copy. */
   const [draftSessionAccess, setDraftSessionAccess] = useState<"ok" | "unauthorized" | "forbidden" | null>(null)
   /** True only after repeated failed draft session polls — not routine background sync (avoids top-bar flicker). */
@@ -1389,50 +1369,6 @@ export function DraftRoomPageClient({
     return () => window.removeEventListener(LEAGUE_DRAFT_ROOM_REVALIDATE, handler as EventListener)
   }, [leagueId, fetchDraftPool, fetchRosterConfig, fetchSession])
 
-  /**
-   * Combined poll: authoritative session when changed (`since` vs row `updatedAt`) + optional queue + chat.
-   * Does not bump `updatedAt` when unchanged (avoids merge churn). Returns whether the HTTP round-trip succeeded.
-   */
-  const fetchLiveSync = useCallback(
-    async (opts: { since?: string; includeQueue: boolean; includeChat: boolean }): Promise<boolean> => {
-      try {
-        const sp = new URLSearchParams()
-        if (opts.since) sp.set('since', opts.since)
-        if (!opts.includeQueue) sp.set('queue', '0')
-        if (!opts.includeChat) sp.set('chat', '0')
-        const res = await fetch(
-          `/api/leagues/${encodeURIComponent(leagueId)}/draft/live-sync?${sp.toString()}`,
-          { cache: 'no-store' },
-        )
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) return false
-
-        if (data.session && controlActionInflightRef.current === 0) {
-          setSession((prev) => mergeDraftSessionSnapshot(prev, data.session as DraftSessionSnapshot))
-        }
-
-        if (opts.includeQueue && Array.isArray(data.queue)) {
-          const next = data.queue as QueueEntry[]
-          setQueue((prev) => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
-        }
-
-        if (opts.includeChat && Array.isArray(data.messages)) {
-          const incoming = data.messages as DraftChatMessage[]
-          setChatMessages((prev) => {
-            const merged = mergeDraftChatWire(prev, incoming)
-            return JSON.stringify(prev) === JSON.stringify(merged) ? prev : merged
-          })
-          if (typeof data.syncActive === 'boolean') setChatSyncActive(data.syncActive)
-        }
-
-        return true
-      } catch {
-        return false
-      }
-    },
-    [leagueId],
-  )
-
   const fetchQueue = useCallback(async () => {
     try {
       const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/queue`, { cache: 'no-store' })
@@ -1893,17 +1829,23 @@ export function DraftRoomPageClient({
     let cancelled = false
 
     const bootstrapDraftRoom = async () => {
-      setLoading(true)
+      if (initialSnapshot) {
+        // Server pre-seeded the session snapshot — skip the blocking session GET
+        // and mark access as ok so the board renders immediately on first paint.
+        setDraftSessionAccess('ok')
+      } else {
+        setLoading(true)
 
-      const canAccessDraftRoom = await fetchSession()
-      if (cancelled) return
+        const canAccessDraftRoom = await fetchSession()
+        if (cancelled) return
 
-      // Show expired-session / forbidden states as soon as the authoritative
-      // draft-session check resolves instead of waiting on slower ancillary
-      // draft endpoints that may also 401/403.
-      if (!canAccessDraftRoom) {
-        setLoading(false)
-        return
+        // Show expired-session / forbidden states as soon as the authoritative
+        // draft-session check resolves instead of waiting on slower ancillary
+        // draft endpoints that may also 401/403.
+        if (!canAccessDraftRoom) {
+          setLoading(false)
+          return
+        }
       }
 
       // Phase 3b — perf: render the draft room as soon as the CRITICAL fetches
@@ -1933,7 +1875,7 @@ export function DraftRoomPageClient({
     return () => {
       cancelled = true
     }
-  }, [leagueId, fetchSession, fetchQueue, fetchDraftSettings, fetchDraftChromeData, fetchChat, fetchDraftPool, fetchDraftAssistantContext])
+  }, [leagueId, initialSnapshot, fetchSession, fetchQueue, fetchDraftSettings, fetchDraftChromeData, fetchChat, fetchDraftPool, fetchDraftAssistantContext])
 
   useEffect(() => {
     if (!leagueId || !draftUISettings?.aiAdpEnabled) return
@@ -1973,133 +1915,33 @@ export function DraftRoomPageClient({
     }
   }, [leagueId, currentUserRosterId, fetchSession])
 
-  const [pollInterval, setPollInterval] = useState(POLL_MS)
-  const refetchOnceRef = useRef<(() => void) | null>(null)
-  const pollTickRef = useRef(0)
-  const pollInFlightRef = useRef(false)
   /** Prevents double POST before React state catches up with rapid Draft clicks. */
   const pickInflightRef = useRef(false)
-  useEffect(() => {
-    if (!leagueId) return
-    const run = async () => {
-      if (pollInFlightRef.current) return
-      pollInFlightRef.current = true
-      const tick = pollTickRef.current + 1
-      pollTickRef.current = tick
-      try {
-        const since = sessionRef.current?.updatedAt
-        const onClockForCurrentUser = Boolean(
-          sessionRef.current?.currentPick?.rosterId &&
-          currentUserRosterId &&
-          sessionRef.current.currentPick.rosterId === currentUserRosterId
-        )
-        const shouldRefreshQueue = (tick % QUEUE_POLL_EVERY_N_TICKS) === 0 || onClockForCurrentUser
-        const shouldRefreshSettings = (tick % SETTINGS_POLL_EVERY_N_TICKS) === 0 || showCommissionerModal
-        const shouldRefreshChat = chatSyncActive || (tick % CHAT_POLL_EVERY_N_TICKS) === 0
-        const shouldRefreshPool = (tick % POOL_POLL_EVERY_N_TICKS) === 0
 
-        const sessionPollOk = await fetchLiveSync({
-          since,
-          includeQueue: shouldRefreshQueue,
-          includeChat: shouldRefreshChat,
-        })
-
-        const secondary: Promise<unknown>[] = []
-        if (shouldRefreshSettings) secondary.push(fetchDraftSettings())
-        if (shouldRefreshSettings) secondary.push(fetchDraftAssistantContext())
-        if (shouldRefreshPool) secondary.push(fetchDraftPool())
-
-        const aiAdpComputedAt = leagueAiAdp?.computedAt ? new Date(leagueAiAdp.computedAt).getTime() : 0
-        const skipAiAdp = draftUISettings?.aiAdpEnabled && aiAdpComputedAt && Date.now() - aiAdpComputedAt < AI_ADP_POLL_SKIP_MS
-        if (draftUISettings?.aiAdpEnabled && !skipAiAdp) secondary.push(fetchLeagueAiAdp())
-        await Promise.all(secondary)
-
-        /** Authoritative session sync failed: streak + delay before showing badge (healthy polls stay quiet). */
-        if (!sessionPollOk) {
-          pollSessionFailStreakRef.current += 1
-          if (pollSessionFailStreakRef.current >= SESSION_POLL_FAILS_FOR_DEGRADED && connectionDegradedTimerRef.current == null) {
-            connectionDegradedTimerRef.current = window.setTimeout(() => {
-              connectionDegradedTimerRef.current = null
-              setConnectionDegraded(true)
-            }, CONNECTION_DEGRADED_SHOW_DELAY_MS)
-          }
-        } else {
-          pollSessionFailStreakRef.current = 0
-          if (connectionDegradedTimerRef.current != null) {
-            clearTimeout(connectionDegradedTimerRef.current)
-            connectionDegradedTimerRef.current = null
-          }
-          setConnectionDegraded(false)
-        }
-      } finally {
-        pollInFlightRef.current = false
-      }
-    }
-    refetchOnceRef.current = () => { void run() }
-  }, [
+  useLiveDraftSync({
     leagueId,
-    fetchLiveSync,
+    sessionRef,
+    controlActionInflightRef,
+    pollSessionFailStreakRef,
+    connectionDegradedTimerRef,
+    currentUserRosterId,
+    showCommissionerModal,
+    chatSyncActive,
+    aiAdpEnabled: draftUISettings?.aiAdpEnabled,
+    aiAdpComputedAt: leagueAiAdp?.computedAt ? new Date(leagueAiAdp.computedAt).getTime() : 0,
+    sessionStatus: session?.status,
+    timerStatus: session?.timer?.status,
+    setSession,
+    setQueue,
+    setChatMessages,
+    setChatSyncActive,
+    setConnectionDegraded,
+    fetchSession,
     fetchDraftSettings,
     fetchDraftAssistantContext,
     fetchDraftPool,
     fetchLeagueAiAdp,
-    draftUISettings?.aiAdpEnabled,
-    leagueAiAdp?.computedAt,
-    showCommissionerModal,
-    chatSyncActive,
-    currentUserRosterId,
-  ])
-
-  useEffect(() => {
-    if (typeof document === 'undefined') return
-    const compute = () => {
-      const hidden = document.hidden
-      if (hidden) {
-        setPollInterval(POLL_MS_BACKGROUND)
-        return
-      }
-      refetchOnceRef.current?.()
-      const active = session?.status === 'in_progress'
-      const ts = session?.timer?.status
-      if (active && (ts === 'running' || ts === 'expired')) {
-        setPollInterval(2000)
-      } else {
-        setPollInterval(POLL_MS)
-      }
-    }
-    compute()
-    document.addEventListener('visibilitychange', compute)
-    return () => document.removeEventListener('visibilitychange', compute)
-  }, [session?.status, session?.timer?.status])
-
-  /** Full session GET when tab becomes visible — complements `/draft/live-sync` polling. */
-  useEffect(() => {
-    if (typeof document === 'undefined') return
-    const onVisibility = () => {
-      if (document.hidden) return
-      void fetchSession().then((ok) => {
-        if (ok) {
-          pollSessionFailStreakRef.current = 0
-          if (connectionDegradedTimerRef.current != null) {
-            clearTimeout(connectionDegradedTimerRef.current)
-            connectionDegradedTimerRef.current = null
-          }
-          setConnectionDegraded(false)
-        }
-      })
-      refetchOnceRef.current?.()
-    }
-    document.addEventListener('visibilitychange', onVisibility)
-    return () => document.removeEventListener('visibilitychange', onVisibility)
-  }, [fetchSession])
-
-  useEffect(() => {
-    if (!leagueId) return
-    const id = setInterval(() => {
-      refetchOnceRef.current?.()
-    }, pollInterval)
-    return () => clearInterval(id)
-  }, [leagueId, pollInterval])
+  })
 
   // ── Supabase realtime: draft-room presence ────────────────────────────────
   // Presence tracking removed (Supabase removed). Online count is always 0.
@@ -2124,155 +1966,20 @@ export function DraftRoomPageClient({
     }
   }, [governanceBanner])
 
-  const handleCommissionerAction = useCallback(
-    async (action: string, payload?: Record<string, unknown>): Promise<CommissionerControlApiResult> => {
-      setCommissionerLoading(true)
-      controlActionInflightRef.current += 1
-      /** Slice C.1: snapshot the current session so we can roll back on API failure, then
-       * apply an optimistic patch so the UI freezes/resumes/resets instantly while the
-       * /draft/controls POST is still in flight. The in-flight ref keeps the 2s live-sync
-       * poll from clobbering this patch with the server's pre-action snapshot. */
-      let priorSession: DraftSessionSnapshot | null = null
-      setSession((prev) => {
-        priorSession = prev
-        if (!prev) return prev
-        const liveRemaining =
-          prev.timer?.status === 'running' && typeof prev.timer.timerEndAt === 'string'
-            ? Math.max(0, Math.ceil((new Date(prev.timer.timerEndAt).getTime() - Date.now()) / 1000))
-            : prev.timer?.remainingSeconds ?? prev.pausedRemainingSeconds ?? prev.timerSeconds ?? null
-        if (action === 'pause') {
-          return {
-            ...prev,
-            status: 'paused',
-            pausedRemainingSeconds: liveRemaining,
-            timerEndAt: null,
-            timer: prev.timer
-              ? { ...prev.timer, status: 'paused', remainingSeconds: liveRemaining, pauseReason: 'commissioner' }
-              : prev.timer,
-          } as DraftSessionSnapshot
-        }
-        if (action === 'resume') {
-          const sec = prev.pausedRemainingSeconds ?? liveRemaining ?? prev.timerSeconds ?? null
-          const endAt = sec != null && sec > 0 ? new Date(Date.now() + sec * 1000).toISOString() : null
-          return {
-            ...prev,
-            status: 'in_progress',
-            pausedRemainingSeconds: null,
-            timerEndAt: endAt,
-            timer: prev.timer
-              ? { ...prev.timer, status: 'running', remainingSeconds: sec, timerEndAt: endAt, pauseReason: null }
-              : prev.timer,
-          } as DraftSessionSnapshot
-        }
-        if (action === 'reset_timer') {
-          const sec = prev.timerSeconds ?? liveRemaining ?? null
-          if (prev.status === 'in_progress' && sec != null && sec > 0) {
-            const endAt = new Date(Date.now() + sec * 1000).toISOString()
-            return {
-              ...prev,
-              timerEndAt: endAt,
-              pausedRemainingSeconds: null,
-              timer: prev.timer
-                ? { ...prev.timer, status: 'running', remainingSeconds: sec, timerEndAt: endAt, pauseReason: null }
-                : prev.timer,
-            } as DraftSessionSnapshot
-          }
-          if (prev.status === 'paused' && sec != null) {
-            return {
-              ...prev,
-              pausedRemainingSeconds: sec,
-              timer: prev.timer ? { ...prev.timer, status: 'paused', remainingSeconds: sec } : prev.timer,
-            } as DraftSessionSnapshot
-          }
-        }
-        return prev
-      })
-      try {
-        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/controls`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action, ...payload }),
-        })
-        const data = (await res.json().catch(() => ({}))) as Record<string, unknown>
-        const errMsg =
-          typeof data.error === 'string'
-            ? data.error
-            : typeof (data as { message?: unknown }).message === 'string'
-              ? String((data as { message: string }).message)
-              : null
-
-        if (!res.ok) {
-          const msg = errMsg || `Commissioner action failed (${res.status}).`
-          setGovernanceBanner({ variant: 'error', message: msg })
-          if (priorSession) setSession(priorSession)
-          return { ok: false, error: msg }
-        }
-
-        let usedSessionFallback = false
-        if (data.session) {
-          setSession((prev) => mergeDraftSessionSnapshot(prev, data.session as DraftSessionSnapshot))
-        } else {
-          usedSessionFallback = true
-          await fetchSession()
-          void fetchDraftSettings()
-          void fetchChat()
-          void fetchDraftPool()
-        }
-
-        void fetchQueue()
-        if (action === 'undo_pick') {
-          void fetchChat()
-          void fetchDraftPool()
-          void fetchDraftAssistantContext()
-        }
-        if (action === 'pause' || action === 'resume' || (action === 'start' && !usedSessionFallback)) {
-          void fetchDraftPool()
-        }
-        if (action === 'set_timer_seconds') void fetchDraftSettings()
-
-        const successMsg = commissionerActionSuccessCopy(action)
-        setGovernanceBanner({ variant: 'success', message: successMsg })
-
-        return { ok: true, ...data }
-      } catch {
-        const msg = 'Network error — try your commissioner action again.'
-        setGovernanceBanner({ variant: 'error', message: msg })
-        if (priorSession) setSession(priorSession)
-        return { ok: false, error: msg }
-      } finally {
-        setCommissionerLoading(false)
-        controlActionInflightRef.current = Math.max(0, controlActionInflightRef.current - 1)
-      }
-    },
-    [
+  const { handleCommissionerAction, handleCommissionerUndoPick, handleCommissionerResetTimer } =
+    useCommissionerActions({
       leagueId,
+      controlActionInflightRef,
+      setSession,
+      setCommissionerLoading,
+      setGovernanceBanner,
       fetchSession,
       fetchQueue,
       fetchChat,
       fetchDraftPool,
       fetchDraftAssistantContext,
       fetchDraftSettings,
-    ],
-  )
-
-  const handleCommissionerUndoPick = useCallback(() => {
-    if (
-      typeof window !== 'undefined' &&
-      !window.confirm(
-        'Undo the last drafted pick for everyone in this league? Traded-pick swaps may need a manual double-check.',
-      )
-    ) {
-      return Promise.resolve({ ok: false as const, error: 'Cancelled.', cancelled: true })
-    }
-    return handleCommissionerAction('undo_pick')
-  }, [handleCommissionerAction])
-
-  const handleCommissionerResetTimer = useCallback(() => {
-    if (typeof window !== 'undefined' && !window.confirm('Reset the pick clock to full time for the current pick?')) {
-      return Promise.resolve({ ok: false as const, error: 'Cancelled.', cancelled: true })
-    }
-    return handleCommissionerAction('reset_timer')
-  }, [handleCommissionerAction])
+    })
 
   const fetchPendingTradesCount = useCallback(async () => {
     if (!leagueId || !currentUserRosterId) return
@@ -2382,6 +2089,10 @@ export function DraftRoomPageClient({
   const handleToggleAutoPick = useCallback(() => {
     handleSettingsPatch({ autoPickEnabled: !(draftUISettings?.autoPickEnabled ?? false) })
   }, [draftUISettings?.autoPickEnabled, handleSettingsPatch])
+
+  const handleAutopickMeUpdate = useCallback((updated: ViewerAutopickData) => {
+    setSession((prev) => prev ? { ...prev, viewerAutopick: updated } : prev)
+  }, [])
 
   const handleSaveCommissionerAiDraft = useCallback(
     async (payload: {
@@ -4902,6 +4613,11 @@ export function DraftRoomPageClient({
             draftRoomPresentation={presentationVariant}
             onToggleAutoPick={handleToggleAutoPick}
             thirdRoundReversal={Boolean(session.thirdRoundReversal)}
+          />
+          <AutopickMeToggle
+            viewerAutopick={session.viewerAutopick}
+            leagueId={leagueId}
+            onUpdate={handleAutopickMeUpdate}
           />
         </>
       }
