@@ -819,9 +819,9 @@ function PlayerPanelInner({
       <div
         className={`sticky top-0 z-20 shrink-0 border-b shadow-[0_8px_28px_rgba(0,0,0,0.4)] backdrop-blur-xl ${rs ? 'border-cyan-500/12 bg-[rgba(6,14,28,0.97)]' : 'border-white/[0.08] bg-[#060d1e]/92'}`}
       >
-        <div className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1.5 ${rs ? 'gap-y-1' : ''}`}>
+        <div className={`flex flex-wrap items-center gap-1.5 border-b border-white/[0.06] px-2 py-1 ${rs ? 'gap-y-1' : ''}`}>
           <div
-            className={`flex min-h-[34px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 shadow-inner touch-manipulation transition duration-150 focus-within:border-cyan-400/45 focus-within:ring-2 focus-within:ring-cyan-400/20 ${
+            className={`flex min-h-[30px] flex-1 items-center gap-1.5 rounded-full border px-2.5 py-1 shadow-inner touch-manipulation transition duration-150 focus-within:border-cyan-400/45 focus-within:ring-2 focus-within:ring-cyan-400/20 ${
               rs
                 ? 'min-w-[150px] border-cyan-400/30 bg-[#0c162d]/95 ring-1 ring-cyan-500/10'
                 : 'border-white/[0.06] bg-[#101a30]/95'

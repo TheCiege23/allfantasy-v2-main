@@ -82,6 +82,33 @@ function rowKey(p: PlayerEntry): string {
   return `${p.name.trim().toLowerCase()}|${p.position.trim().toLowerCase()}|${String(p.team ?? '').trim().toLowerCase()}`
 }
 
+/** D.7 — scannable position badge with sport-position-aware colors. */
+function PositionChip({ pos }: { pos: string | null }) {
+  const p = (pos ?? '').trim().slice(0, 4).toUpperCase() || '—'
+  const tone =
+    p === 'QB'
+      ? 'border-rose-400/50 bg-rose-500/16 text-rose-100'
+      : p === 'RB'
+        ? 'border-emerald-400/50 bg-emerald-500/16 text-emerald-100'
+        : p === 'WR'
+          ? 'border-cyan-400/50 bg-cyan-500/16 text-cyan-100'
+          : p === 'TE'
+            ? 'border-amber-400/50 bg-amber-500/16 text-amber-100'
+            : p === 'K'
+              ? 'border-slate-400/30 bg-slate-500/12 text-slate-300'
+              : p === 'DEF' || p === 'DST'
+                ? 'border-violet-400/40 bg-violet-500/14 text-violet-100'
+                : 'border-white/18 bg-white/[0.07] text-white/75'
+  return (
+    <span
+      className={`inline-flex shrink-0 items-center justify-center rounded border px-1 py-px text-[8px] font-bold uppercase leading-none ${tone}`}
+      title={pos ?? undefined}
+    >
+      {p}
+    </span>
+  )
+}
+
 /** Cell with consistent alignment + tabular numbers. */
 function Cell({
   width,
@@ -246,10 +273,10 @@ function SleeperRow(props: SleeperRowProps) {
                   </span>
                 ) : null}
               </div>
-              <span className="truncate whitespace-nowrap text-[10px] text-white/55">
-                <span className="font-semibold text-white/72">{p.position || '—'}</span>
-                {p.team ? <span className="ml-1 text-white/45">{p.team}</span> : null}
-              </span>
+              <div className="flex min-w-0 items-center gap-1">
+                <PositionChip pos={p.position} />
+                {p.team ? <span className="truncate text-[10px] text-white/38">{p.team}</span> : null}
+              </div>
               {showAi ? (
                 <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1">
                   <span
@@ -314,17 +341,36 @@ function SleeperRow(props: SleeperRowProps) {
           </Cell>
         )
         }
-      case 'adp':
+      case 'adp': {
+        const delta =
+          p.adp != null && Number.isFinite(Number(p.adp)) &&
+          p.aiAdp != null && Number.isFinite(Number(p.aiAdp))
+            ? Math.round(p.adp - p.aiAdp)
+            : null
         return (
           <Cell key={col.key} width={col.width} align="right">
             <span
+              className="inline-flex items-center gap-0.5"
               data-testid={`${testIdBase}-adp`}
               title={systemAdpCellTitle(p.adp != null && Number.isFinite(Number(p.adp)))}
             >
-              {adpDisplay}
+              <span>{adpDisplay}</span>
+              {delta !== null && delta !== 0 ? (
+                <span
+                  aria-hidden
+                  data-testid={`${testIdBase}-adp-delta`}
+                  title={`vs AI ADP: ${delta > 0 ? 'undervalued' : 'overvalued'} by ${Math.abs(delta)} spots`}
+                  className={`text-[8px] font-medium tabular-nums leading-none ${
+                    delta > 0 ? 'text-emerald-300/85' : 'text-rose-300/70'
+                  }`}
+                >
+                  {delta > 0 ? '+' : ''}{delta}
+                </span>
+              ) : null}
             </span>
           </Cell>
         )
+      }
       case 'aiAdp':
         return (
           <Cell key={col.key} width={col.width} align="right">
@@ -448,7 +494,11 @@ function SleeperRow(props: SleeperRowProps) {
               : raw
         return (
           <Cell key={col.key} width={col.width} align="right">
-            <span data-testid={statTestId} title={tipFor(col.key, col.statLabel ?? def.label, tipRaw)}>
+            <span
+              data-testid={statTestId}
+              title={tipFor(col.key, col.statLabel ?? def.label, tipRaw)}
+              className={display === '—' ? 'text-white/30' : undefined}
+            >
               {display}
             </span>
           </Cell>
