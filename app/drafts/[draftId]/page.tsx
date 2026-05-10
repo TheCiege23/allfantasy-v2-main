@@ -35,8 +35,28 @@ export default async function DraftsByIdPage({
     redirect(`/login?callbackUrl=${encodeURIComponent(`/drafts/${draftId}`)}`)
   }
 
+  console.warn('[drafts:page] start', {
+    draftId,
+    userId_present: !!userId,
+    userId,
+  })
+
   const context = await resolveDraftRouteContext(draftId, userId)
-  if (!context) notFound()
+
+  console.warn('[drafts:context]', {
+    draftId,
+    context_null: context === null,
+    kind: (context as any)?.kind ?? null,
+    leagueId: (context as any)?.leagueId ?? null,
+    routeType: (context as any)?.routeType ?? null,
+    draftType: (context as any)?.draftType ?? null,
+    status: (context as any)?.status ?? null,
+  })
+
+  if (!context) {
+    console.warn('[drafts:notFound] branch=context_null', { draftId, userId })
+    notFound()
+  }
 
   // Mock drafts ride a different engine — keep them on their existing URL family.
   if (context.kind === 'mock') {
@@ -53,13 +73,35 @@ export default async function DraftsByIdPage({
 
   // Live snake — gate non-members with notFound (do not reveal existence).
   const allowed = await canAccessLeagueDraft(context.leagueId, userId)
-  if (!allowed) notFound()
 
-  const initialSnapshot = await buildSessionSnapshot(
-    context.leagueId,
-    new Date(),
+  console.warn('[drafts:access]', {
+    draftId,
+    leagueId: context.leagueId,
     userId,
-  )
+    allowed,
+  })
+
+  if (!allowed) {
+    console.warn('[drafts:notFound] branch=access_denied', { draftId, leagueId: context.leagueId, userId })
+    notFound()
+  }
+
+  let initialSnapshot = null
+  try {
+    initialSnapshot = await buildSessionSnapshot(
+      context.leagueId,
+      new Date(),
+      userId,
+    )
+    console.warn('[drafts:snapshot]', { draftId, leagueId: context.leagueId, snapshot_null: initialSnapshot === null })
+  } catch (err) {
+    console.warn('[drafts:snapshot:error]', {
+      draftId,
+      leagueId: context.leagueId,
+      error: (err as Error)?.message ?? String(err),
+    })
+    throw err
+  }
 
   return (
     <div

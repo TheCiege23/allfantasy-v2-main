@@ -103,7 +103,24 @@ export async function resolveLiveDraftContextByDraftId(
     },
   })
 
+  console.warn('[resolve-draft-context:live] lookup', {
+    draftId,
+    session_found: session !== null,
+    session_id: session?.id ?? null,
+    session_leagueId: session?.leagueId ?? null,
+    league_present: session?.league != null,
+    league_id: session?.league?.id ?? null,
+    session_status: session?.status ?? null,
+    session_draftType: session?.draftType ?? null,
+  })
+
   if (!session?.league?.id) {
+    console.warn('[resolve-draft-context:live] returning null — session or league missing', {
+      draftId,
+      session_null: session === null,
+      league_null: session !== null && session.league === null,
+      league_id_falsy: session?.league != null && !session.league.id,
+    })
     return null
   }
 
