@@ -580,17 +580,17 @@ export default function WorldCupGuidedMatchupPicker({
       setShowComplete(false)
     } else {
       setCurrentMatchId(null)
-      setShowComplete(isBracketComplete(pickableProjected, picks, includeThirdPlace))
+      setShowComplete(isBracketComplete(projected, picks, includeThirdPlace))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, initialMatchId, projected, pickableProjected, picks, orderedRounds, includeThirdPlace])
 
   // Detect completion
   useEffect(() => {
-    if (isBracketComplete(pickableProjected, picks, includeThirdPlace)) {
+    if (isBracketComplete(projected, picks, includeThirdPlace)) {
       setShowComplete(true)
     }
-  }, [pickableProjected, picks, includeThirdPlace])
+  }, [projected, picks, includeThirdPlace])
 
   const currentMatch = useMemo(
     () => projected.find((m) => m.id === currentMatchId) ?? null,

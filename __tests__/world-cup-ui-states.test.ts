@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
 import {
   getBracketBlockReason,
@@ -6,11 +8,39 @@ import {
 } from "@/lib/world-cup/worldCupBracketUtils"
 import {
   assertWorldCupPickPayloadReady,
+  buildWorldCupProjectedMatches,
   getWorldCupGuidedPicksState,
   getWorldCupUnpickableReason,
+  hasWorldCupPickSelection,
+  isBracketComplete,
   isWorldCupMatchPickable,
 } from "@/lib/world-cup/worldCupProjectedBracket"
-import type { WorldCupMatchView } from "@/lib/world-cup/types"
+import type { WorldCupMatchView, WorldCupPickView } from "@/lib/world-cup/types"
+
+const root = resolve(__dirname, "..")
+const pickerSrc = readFileSync(
+  resolve(root, "components/brackets/world-cup/WorldCupGuidedMatchupPicker.tsx"),
+  "utf8"
+)
+
+function makePick(
+  matchId: string,
+  round: WorldCupMatchView["round"],
+  selectedTeamId: string,
+  selectedSlotKey: string
+): WorldCupPickView {
+  return {
+    id: `pick-${matchId}`,
+    matchId,
+    round,
+    selectedTeamId,
+    selectedSlotKey,
+    selectedTeamName: "Team",
+    pointsAwarded: 0,
+    isCorrect: null,
+    lockedAt: null,
+  }
+}
 
 function makeMatch(overrides: Partial<WorldCupMatchView> = {}): WorldCupMatchView {
   return {
@@ -241,5 +271,136 @@ describe("World Cup pick readiness guards", () => {
     )
     expect(getWorldCupGuidedPicksState(after)).toBe("ready")
     expect(after.filter((m) => isWorldCupMatchPickable(m)).length).toBe(16)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Source invariants: pick handler structure (behaviors 1–6)
+// ---------------------------------------------------------------------------
+
+describe("WorldCupGuidedMatchupPicker — pick handler source invariants (behaviors 1–6)", () => {
+  it("behavior 1: home team button calls onPick(\"home\")", () => {
+    expect(pickerSrc).toMatch(/onPick=\{.*onPick\("home"\)/)
+  })
+
+  it("behavior 2: away team button calls onPick(\"away\")", () => {
+    expect(pickerSrc).toMatch(/onPick=\{.*onPick\("away"\)/)
+  })
+
+  it("behavior 3: success path never calls onClose — modal stays open after save", () => {
+    const handlePickMatch = pickerSrc.match(/const handlePick = useCallback\(\s*async[\s\S]*?^\s*\},\s*\[/m)
+    expect(handlePickMatch).not.toBeNull()
+    const successBlock = handlePickMatch![0].split("} catch")[0]
+    expect(successBlock).not.toMatch(/onClose\(\)/)
+  })
+
+  it("behavior 4: success path calls goToNext with serverPicks to advance to next matchup", () => {
+    expect(pickerSrc).toMatch(/goToNext\(currentMatch\.id, serverPicks\)/)
+  })
+
+  it("behavior 5: catch block exposes error message via setSaveError", () => {
+    expect(pickerSrc).toMatch(/setSaveError\(err instanceof Error \? err\.message/)
+  })
+
+  it("behavior 6: catch block rolls back optimistic picks on failure", () => {
+    expect(pickerSrc).toMatch(/Roll back optimistic update[\s\S]{0,60}setPicks\(picks\)/)
+  })
+
+  it("behavior 6: catch block does NOT call goToNext — failed save does not advance", () => {
+    const catchMatch = pickerSrc.match(/\} catch \(err\) \{([\s\S]*?)setSaveError/)
+    expect(catchMatch).not.toBeNull()
+    expect(catchMatch![1]).not.toMatch(/goToNext/)
+  })
+
+  it("completion detection useEffect uses projected not pickableProjected (false-completion fix)", () => {
+    expect(pickerSrc).toMatch(/if \(isBracketComplete\(projected, picks, includeThirdPlace\)\)/)
+    expect(pickerSrc).not.toMatch(/if \(isBracketComplete\(pickableProjected, picks, includeThirdPlace\)\)/)
+  })
+
+  it("isOpen useEffect uses projected not pickableProjected for showComplete", () => {
+    expect(pickerSrc).toMatch(/setShowComplete\(isBracketComplete\(projected, picks, includeThirdPlace\)\)/)
+    expect(pickerSrc).not.toMatch(/setShowComplete\(isBracketComplete\(pickableProjected, picks, includeThirdPlace\)\)/)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// isBracketComplete logic — false-completion prevention (behaviors 7–9)
+// ---------------------------------------------------------------------------
+
+// Matches without nextMatchId linkage: projected cannot fill in the final.
+const noLinkMatches: WorldCupMatchView[] = [
+  makeMatch({ id: "m1", homeTeamId: "h1", awayTeamId: "a1", homeTeamName: "Home1", awayTeamName: "Away1", nextMatchId: null }),
+  makeMatch({ id: "m2", homeTeamId: "h2", awayTeamId: "a2", homeTeamName: "Home2", awayTeamName: "Away2", nextMatchId: null }),
+  makeMatch({ id: "fin", round: "final", homeTeamId: null, awayTeamId: null, homeTeamName: "TBD", awayTeamName: "TBD", nextMatchId: null }),
+]
+
+// Matches with proper nextMatchId links: projected can fill in the final.
+const linkedMatches: WorldCupMatchView[] = [
+  makeMatch({ id: "q1", homeTeamId: "h1", awayTeamId: "a1", homeTeamName: "Home1", awayTeamName: "Away1", nextMatchId: "fin", nextMatchSlot: "home" }),
+  makeMatch({ id: "q2", homeTeamId: "h2", awayTeamId: "a2", homeTeamName: "Home2", awayTeamName: "Away2", nextMatchId: "fin", nextMatchSlot: "away" }),
+  makeMatch({ id: "fin", round: "final", homeTeamId: null, awayTeamId: null, homeTeamName: "TBD", awayTeamName: "TBD", nextMatchId: null }),
+]
+
+describe("isBracketComplete — false completion prevention (behaviors 7–9)", () => {
+  it("behavior 9: picks for only early-round matches do NOT mark complete when final is unpicked", () => {
+    const picks = [
+      makePick("m1", "round_of_32", "h1", "A1"),
+      makePick("m2", "round_of_32", "h2", "B2"),
+    ]
+    const projected = buildWorldCupProjectedMatches(noLinkMatches, picks)
+    // All 3 matches required; final has no pick → not complete
+    expect(isBracketComplete(projected, picks)).toBe(false)
+  })
+
+  it("documents the old bug: pickableProjected-only check would falsely complete", () => {
+    const picks = [
+      makePick("m1", "round_of_32", "h1", "A1"),
+      makePick("m2", "round_of_32", "h2", "B2"),
+    ]
+    const projected = buildWorldCupProjectedMatches(noLinkMatches, picks)
+    const pickableProjected = projected.filter(isWorldCupMatchPickable)
+    // Final is not pickable (no teams), so pickableProjected is only [m1, m2]
+    // isBracketComplete against that subset falsely returns true — this was the bug
+    expect(pickableProjected).toHaveLength(2)
+    expect(isBracketComplete(pickableProjected, picks)).toBe(true)
+    // But against all projected (3 matches) it correctly returns false
+    expect(isBracketComplete(projected, picks)).toBe(false)
+  })
+
+  it("behavior 7: all qualifying matches picked → projection fills final team slots", () => {
+    const picks = [
+      makePick("q1", "round_of_32", "h1", "A1"),
+      makePick("q2", "round_of_32", "h2", "B2"),
+    ]
+    const projected = buildWorldCupProjectedMatches(linkedMatches, picks)
+    const final = projected.find((m) => m.id === "fin")!
+    expect(final.homeTeamId).toBe("h1")
+    expect(final.awayTeamId).toBe("h2")
+    expect(isWorldCupMatchPickable(final)).toBe(true)
+  })
+
+  it("behavior 8: champion pick with all downstream picks marks bracket complete", () => {
+    const picks = [
+      makePick("q1", "round_of_32", "h1", "A1"),
+      makePick("q2", "round_of_32", "h2", "B2"),
+      makePick("fin", "final", "h1", "A1"),
+    ]
+    const projected = buildWorldCupProjectedMatches(linkedMatches, picks)
+    expect(isBracketComplete(projected, picks)).toBe(true)
+  })
+
+  it("bracket is NOT complete when any required match lacks a pick", () => {
+    const picks = [makePick("q1", "round_of_32", "h1", "A1")]
+    const projected = buildWorldCupProjectedMatches(linkedMatches, picks)
+    expect(isBracketComplete(projected, picks)).toBe(false)
+  })
+
+  it("hasWorldCupPickSelection returns false for null selectedTeamId", () => {
+    const emptyPick: WorldCupPickView = {
+      id: "p1", matchId: "m1", round: "round_of_32",
+      selectedTeamId: null, selectedSlotKey: null,
+      selectedTeamName: "", pointsAwarded: 0, isCorrect: null, lockedAt: null,
+    }
+    expect(hasWorldCupPickSelection(emptyPick)).toBe(false)
   })
 })
