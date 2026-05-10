@@ -169,6 +169,8 @@ export type PlayerPanelProps = {
   isPlayerQueued?: (player: PlayerEntry) => boolean
   /** Calendar season for rookie-class inference (NFL/NCAAF draft year match). Defaults internally if omitted. */
   draftSeasonYear?: number
+  /** When true, pool fetch completed with a network or server error (distinguishes from a legitimately empty pool). */
+  poolError?: boolean
 }
 
 /** D.3 — re-exposed from SleeperPoolSort. Kept as `SortKey` for legacy call sites. */
@@ -387,6 +389,7 @@ function PlayerPanelInner({
   getAssistantRoomContext,
   isPlayerQueued,
   draftSeasonYear,
+  poolError = false,
 }: PlayerPanelProps) {
   const rs = presentationVariant === 'redraft_snake'
   const draftedIdsForRows = draftedPlayerIds?.size ? draftedPlayerIds : undefined
@@ -1225,8 +1228,13 @@ function PlayerPanelInner({
         }`}
       >
         {loading ? (
-          <div className="space-y-2 py-1" aria-busy="true" aria-label={t(DRAFT_ROOM_I18N_KEYS.playerPoolLoading)}>
-            <p className="sr-only">{t(DRAFT_ROOM_I18N_KEYS.playerPoolLoading)}</p>
+          <div className="space-y-2 py-1" aria-busy="true">
+            <p
+              className="py-3 text-center text-sm text-white/65"
+              data-testid="draft-pool-loading-message"
+            >
+              Loading player pool...
+            </p>
             {Array.from({ length: 8 }).map((_, i) => (
               <div
                 key={i}
@@ -1260,17 +1268,31 @@ function PlayerPanelInner({
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-3 px-4 py-14 text-center">
             {players.length === 0 ? (
-              <>
-                <p
-                  className="text-sm font-medium text-white/75"
-                  data-testid="draft-pool-empty-unloaded"
-                >
-                  No players loaded for this pool.
-                </p>
-                <p className="max-w-xs text-xs text-white/45">
-                  Wait for the pool to finish loading, or refresh the draft room if this persists.
-                </p>
-              </>
+              poolError ? (
+                <>
+                  <p
+                    className="text-sm font-medium text-red-400/90"
+                    data-testid="draft-pool-error-state"
+                  >
+                    Failed to load player pool.
+                  </p>
+                  <p className="max-w-xs text-xs text-white/45">
+                    There was a problem loading players. Refresh the draft room to try again.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p
+                    className="text-sm font-medium text-white/75"
+                    data-testid="draft-pool-empty-unloaded"
+                  >
+                    No players loaded for this pool.
+                  </p>
+                  <p className="max-w-xs text-xs text-white/45">
+                    Wait for the pool to finish loading, or refresh the draft room if this persists.
+                  </p>
+                </>
+              )
             ) : rookiesOnly && !hasSecondaryPoolFilters && rookieDataState.reason === 'no_rookie_metadata' ? (
               <>
                 <p
