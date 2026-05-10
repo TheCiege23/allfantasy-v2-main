@@ -403,6 +403,7 @@ export function DraftRoomPageClient({
   const roundOneBootstrapRef = useRef(false)
   const [pickError, setPickError] = useState<string | null>(null)
   const [draftPool, setDraftPool] = useState<{ entries: NormalizedDraftEntry[]; sport: string; devyConfig?: { enabled: boolean; devyRounds: number[] }; c2cConfig?: { enabled: boolean; collegeRounds: number[] }; isIdp?: boolean } | null>(null)
+  const [poolFetching, setPoolFetching] = useState(true)
   const [draftAssistantContext, setDraftAssistantContext] = useState<{
     sport: string
     headlines: Array<{
@@ -468,7 +469,7 @@ export function DraftRoomPageClient({
 
   /** Draft room uses normalized pool from fetchDraftPool only; skip useLeagueSectionData to avoid duplicate /api/mock-draft/adp. */
   const draftData = null as { entries?: PlayerEntry[] } | null
-  const poolLoading = loading && draftPool === null
+  const poolLoading = poolFetching && draftPool === null
   const effectiveDraftSport = draftPool?.sport ?? sport
 
   const draftedNames = useMemo(
@@ -892,7 +893,11 @@ export function DraftRoomPageClient({
   ])
 
   const fetchDraftPool = useCallback(async () => {
-    if (!leagueId) return
+    if (!leagueId) {
+      setPoolFetching(false)
+      return
+    }
+    setPoolFetching(true)
     const endpoint = `/api/leagues/${encodeURIComponent(leagueId)}/draft/pool`
     const startedAt = typeof performance !== 'undefined' ? performance.now() : Date.now()
     try {
@@ -932,6 +937,8 @@ export function DraftRoomPageClient({
         })
       }
       setDraftPool(null)
+    } finally {
+      setPoolFetching(false)
     }
   }, [leagueId, sport])
 
@@ -1849,17 +1856,16 @@ export function DraftRoomPageClient({
       }
 
       // Phase 3b — perf: render the draft room as soon as the CRITICAL fetches
-      // resolve. The two AI-bound fetches (`assistant-context` ~68s, the
-      // `ai-opponents/summary` nested inside `fetchDraftSettings` ~70s) used to
-      // be in this Promise.allSettled, holding the loading spinner up for over
-      // a minute on cold load. They're now fire-and-forget — panels that need
-      // them branch on `null` until the data arrives, then re-render.
+      // resolve. AI-bound fetches and the draft pool are fire-and-forget — panels
+      // branch on `null` / poolFetching until data arrives, then re-render.
+      // fetchDraftPool was moved out of this group because a cold pool build can
+      // take 60–90 s (ADP importer + 30K row fetch). The player panel shows a
+      // skeleton via poolFetching state while the pool loads independently.
       await Promise.allSettled([
         fetchQueue(),
         fetchDraftSettings(),
         fetchDraftChromeData(),
         fetchChat(),
-        fetchDraftPool(),
       ])
 
       if (!cancelled) {
@@ -1868,6 +1874,7 @@ export function DraftRoomPageClient({
 
       // Deferred — let panels populate after the room is interactive.
       void fetchDraftAssistantContext()
+      void fetchDraftPool()
     }
 
     void bootstrapDraftRoom()
