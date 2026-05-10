@@ -100,17 +100,11 @@ export function useCommissionerActions({
           } as DraftSessionSnapshot
         }
         if (action === 'resume') {
-          const sec = prev.pausedRemainingSeconds ?? liveRemaining ?? prev.timerSeconds ?? null
-          const endAt = sec != null && sec > 0 ? new Date(Date.now() + sec * 1000).toISOString() : null
-          return {
-            ...prev,
-            status: 'in_progress',
-            pausedRemainingSeconds: null,
-            timerEndAt: endAt,
-            timer: prev.timer
-              ? { ...prev.timer, status: 'running', remainingSeconds: sec, timerEndAt: endAt, pauseReason: null }
-              : prev.timer,
-          } as DraftSessionSnapshot
+          // Do NOT apply optimistic status: 'in_progress' before server confirms.
+          // The clock starts only once the authoritative snapshot arrives so the
+          // displayed timerEndAt matches the server's DB write (avoids client/server
+          // clock drift and false "pick available" state during the POST flight).
+          return prev
         }
         if (action === 'reset_timer') {
           const sec = prev.timerSeconds ?? liveRemaining ?? null

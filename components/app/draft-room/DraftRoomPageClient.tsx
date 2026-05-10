@@ -803,11 +803,12 @@ export function DraftRoomPageClient({
       session != null &&
       session.status === 'in_progress' &&
       !overnightBlocksUserPicks &&
+      !commissionerLoading &&
       draftCore?.draftStarted === true &&
       draftCore.currentOverall > 0 &&
       pickSubmitting === false &&
       (commissionerOfflinePick || isCurrentUserOnClock),
-    [session, draftCore, pickSubmitting, commissionerOfflinePick, isCurrentUserOnClock, overnightBlocksUserPicks],
+    [session, draftCore, pickSubmitting, commissionerOfflinePick, isCurrentUserOnClock, overnightBlocksUserPicks, commissionerLoading],
   )
 
   const isAuctionDraft = session?.draftType === 'auction'

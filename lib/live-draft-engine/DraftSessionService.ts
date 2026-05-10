@@ -358,9 +358,12 @@ export async function buildSessionSnapshot(
   leagueId: string,
   now: Date = new Date(),
   viewerUserId?: string | null,
+  opts?: { skipRepair?: boolean },
 ): Promise<DraftSessionSnapshot | null> {
-  await repairDraftSessionSlotOrderIfNeeded(leagueId)
-  await reconcileOvernightDraftTimerForLeague(leagueId, now)
+  if (!opts?.skipRepair) {
+    await repairDraftSessionSlotOrderIfNeeded(leagueId)
+    await reconcileOvernightDraftTimerForLeague(leagueId, now)
+  }
 
   const session = await getDraftSessionByLeague(leagueId)
   if (!session) return null

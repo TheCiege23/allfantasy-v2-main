@@ -230,20 +230,28 @@ export async function POST(
     }
 
     if (action === 'pause') {
+      const _pauseStart = Date.now()
       const ok = await pauseDraftSession(leagueId, userId)
       if (!ok) return NextResponse.json({ error: 'Cannot pause draft' }, { status: 400 })
       const { notifyDraftPaused } = await import('@/lib/draft-notifications')
       notifyDraftPaused(leagueId).catch(() => {})
-      const snapshot = await buildSessionSnapshot(leagueId)
-      return NextResponse.json({ ok: true, action: 'pause', session: await withViewerSession(leagueId, userId, snapshot) })
+      // skipRepair: repair/reconcile not needed for a status-only transition.
+      // No withViewerSession: viewer-scoped fields are unchanged on pause;
+      // client mergeDraftSessionSnapshot preserves them from the prior state.
+      const snapshot = await buildSessionSnapshot(leagueId, new Date(), undefined, { skipRepair: true })
+      console.info('[draft-perf] pause controls', { ms: Date.now() - _pauseStart })
+      return NextResponse.json({ ok: true, action: 'pause', session: snapshot })
     }
     if (action === 'resume') {
+      const _resumeStart = Date.now()
       const ok = await resumeDraftSession(leagueId)
       if (!ok) return NextResponse.json({ error: 'Cannot resume draft' }, { status: 400 })
       const { notifyDraftResumed } = await import('@/lib/draft-notifications')
       notifyDraftResumed(leagueId).catch(() => {})
-      const snapshot = await buildSessionSnapshot(leagueId)
-      return NextResponse.json({ ok: true, action: 'resume', session: await withViewerSession(leagueId, userId, snapshot) })
+      // skipRepair: repair/reconcile not needed for a status-only transition.
+      const snapshot = await buildSessionSnapshot(leagueId, new Date(), undefined, { skipRepair: true })
+      console.info('[draft-perf] resume controls', { ms: Date.now() - _resumeStart })
+      return NextResponse.json({ ok: true, action: 'resume', session: snapshot })
     }
     if (action === 'reset_timer') {
       const ok = await resetTimer(leagueId)
