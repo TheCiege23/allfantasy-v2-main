@@ -114,18 +114,32 @@ export async function resolveLiveDraftContextByDraftId(
     session_draftType: session?.draftType ?? null,
   })
 
-  if (!session?.league?.id) {
+  // When the Prisma join returns null (e.g. broken FK, data inconsistency in prod),
+  // fall back to a direct league lookup — mirrors what the session API does.
+  let resolvedLeague = session?.league ?? null
+  if (session && !resolvedLeague?.id && session.leagueId) {
+    console.warn('[resolve-draft-context:live] league join null — falling back to direct lookup', {
+      draftId,
+      leagueId: session.leagueId,
+    })
+    resolvedLeague = await prisma.league.findUnique({
+      where: { id: session.leagueId },
+      select: { id: true, name: true, sport: true, isDynasty: true, leagueVariant: true },
+    })
+  }
+
+  if (!session || !resolvedLeague?.id) {
     console.warn('[resolve-draft-context:live] returning null — session or league missing', {
       draftId,
       session_null: session === null,
-      league_null: session !== null && session.league === null,
-      league_id_falsy: session?.league != null && !session.league.id,
+      league_null: session !== null && resolvedLeague === null,
+      league_id_falsy: resolvedLeague != null && !resolvedLeague.id,
     })
     return null
   }
 
-  const orderMode = await getDraftOrderModeAndLotteryConfig(session.league.id).catch(() => null)
-  const variant = String(session.league.leagueVariant ?? '').toUpperCase()
+  const orderMode = await getDraftOrderModeAndLotteryConfig(resolvedLeague.id).catch(() => null)
+  const variant = String(resolvedLeague.leagueVariant ?? '').toUpperCase()
   const formatType = variant === 'IDP' || variant === 'DYNASTY_IDP' ? 'IDP' : undefined
   const routeType: DraftRouteType =
     session.draftType === 'auction'
@@ -137,11 +151,11 @@ export async function resolveLiveDraftContextByDraftId(
   return {
     kind: 'live',
     draftId: session.id,
-    leagueId: session.league.id,
-    leagueName: session.league.name ?? 'League Draft',
-    sport: normalizeToSupportedSport(String(session.league.sport ?? session.sportType ?? DEFAULT_SPORT)),
-    isDynasty: Boolean(session.league.isDynasty),
-    isCommissioner: userId ? await isCommissioner(session.league.id, userId).catch(() => false) : false,
+    leagueId: resolvedLeague.id,
+    leagueName: resolvedLeague.name ?? 'League Draft',
+    sport: normalizeToSupportedSport(String(resolvedLeague.sport ?? session.sportType ?? DEFAULT_SPORT)),
+    isDynasty: Boolean(resolvedLeague.isDynasty),
+    isCommissioner: userId ? await isCommissioner(resolvedLeague.id, userId).catch(() => false) : false,
     formatType,
     routeType,
     draftType: String(session.draftType ?? 'snake'),
