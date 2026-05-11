@@ -506,7 +506,7 @@ export function DraftTopBar({
 
   return (
     <header
-      className={`relative border-b px-3 pb-0.5 pt-0.5 backdrop-blur-xl sm:px-4 ${
+      className={`relative z-30 border-b px-3 pb-0.5 pt-0.5 backdrop-blur-xl sm:px-4 ${
         rs
           ? 'border-cyan-400/25 bg-[radial-gradient(ellipse_120%_80%_at_50%_-20%,rgba(34,211,238,0.14),transparent),linear-gradient(180deg,#0b1829_0%,#060f1e_45%,#050814_100%)] shadow-[0_16px_56px_rgba(8,145,178,0.14)]'
           : 'border-white/[0.07] bg-gradient-to-b from-[#070d1c]/95 via-[#060b19]/98 to-[#050814]'

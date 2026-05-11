@@ -528,3 +528,86 @@ describe('Behavioral: pause never checks pool cache', () => {
     expect(triggerDraftPoolPrewarmBackgroundMock).not.toHaveBeenCalled()
   })
 })
+
+// ---------------------------------------------------------------------------
+// Invariant 15: draft room page triggers prewarm on cold cache
+// ---------------------------------------------------------------------------
+
+const draftPageSrc = readFileSync(resolve(root, 'app/drafts/[draftId]/page.tsx'), 'utf8')
+
+describe('Invariant 15: drafts page imports prewarm helpers', () => {
+  it('imports checkDraftPoolCacheFast', () => {
+    expect(draftPageSrc).toContain('checkDraftPoolCacheFast')
+    expect(draftPageSrc).toContain("from '@/lib/draft-room/ensureDraftPoolReady'")
+  })
+
+  it('imports triggerDraftPoolPrewarmBackground', () => {
+    expect(draftPageSrc).toContain('triggerDraftPoolPrewarmBackground')
+  })
+
+  it('calls checkDraftPoolCacheFast with leagueId', () => {
+    expect(draftPageSrc).toContain('checkDraftPoolCacheFast(context.leagueId)')
+  })
+
+  it('calls triggerDraftPoolPrewarmBackground on cold cache', () => {
+    expect(draftPageSrc).toContain('triggerDraftPoolPrewarmBackground(context.leagueId)')
+  })
+
+  it('runs cache check concurrently with buildSessionSnapshot via Promise.all', () => {
+    const promiseAllIdx = draftPageSrc.indexOf('Promise.all(')
+    expect(promiseAllIdx).toBeGreaterThan(-1)
+    // Both calls must appear INSIDE the Promise.all block (after it in source)
+    const poolCheckCallIdx = draftPageSrc.indexOf('checkDraftPoolCacheFast(context.leagueId)')
+    const snapshotCallIdx = draftPageSrc.indexOf('buildSessionSnapshot(')
+    expect(poolCheckCallIdx).toBeGreaterThan(promiseAllIdx)
+    expect(snapshotCallIdx).toBeGreaterThan(promiseAllIdx)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Invariant 16: warm script uses the same cache key version as pool route
+// ---------------------------------------------------------------------------
+
+const warmScriptSrc = readFileSync(resolve(root, 'scripts/draft-pool-cache-warm.ts'), 'utf8')
+
+describe('Invariant 16: warm script cache key matches pool route (dbmerge_v4)', () => {
+  it('warm script uses dbmerge_v4 in buildRouteCacheKey', () => {
+    expect(warmScriptSrc).toContain('dbmerge_v4')
+    expect(warmScriptSrc).not.toContain('dbmerge_v2')
+  })
+
+  it('pool route uses dbmerge_v4 in cacheKey', () => {
+    expect(poolRouteSrc).toContain('dbmerge_v4')
+    expect(poolRouteSrc).not.toContain('dbmerge_v2')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Invariant 17: pool cold build emits [draft-perf] timing log unconditionally
+// ---------------------------------------------------------------------------
+
+const resolvedPoolSrc = readFileSync(
+  resolve(root, 'lib/draft-room/getResolvedDraftPoolForLeague.ts'),
+  'utf8',
+)
+
+describe('Invariant 17: pool cold build always logs [draft-perf] timing', () => {
+  it('logs [draft-perf] pool cold build done with totalMs', () => {
+    expect(resolvedPoolSrc).toContain('[draft-perf] pool cold build done')
+    expect(resolvedPoolSrc).toContain('totalMs')
+  })
+
+  it('timing log is NOT inside perfStart (runs unconditionally, not behind PERF_LOG)', () => {
+    const logIdx = resolvedPoolSrc.indexOf('[draft-perf] pool cold build done')
+    const perfStartIdx = resolvedPoolSrc.indexOf('function perfStart(')
+    // The log must appear after the function definition (inside the function body),
+    // not inside the perfStart helper
+    expect(logIdx).toBeGreaterThan(perfStartIdx)
+    // It must use console.info, not be wrapped in a perfStart closure
+    const consoleIdx = resolvedPoolSrc.lastIndexOf('console.info', logIdx)
+    expect(consoleIdx).toBeGreaterThan(-1)
+    // Ensure the log is not gated by an if(PERF_LOG) block right before it
+    const snippet = resolvedPoolSrc.slice(logIdx - 100, logIdx)
+    expect(snippet).not.toMatch(/if\s*\(\s*PERF_LOG\s*\)/)
+  })
+})

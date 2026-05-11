@@ -133,7 +133,7 @@ function buildRouteCacheKey(params: {
     url.searchParams.set('poolType', params.poolType)
   }
 
-  return `draft_pool:${params.leagueId}:${params.rosterFingerprint}:dbmerge_v2:nflproj_v1:${buildApiCacheKey('GET', url.toString())}`
+  return `draft_pool:${params.leagueId}:${params.rosterFingerprint}:dbmerge_v4:nflproj_v1:${buildApiCacheKey('GET', url.toString())}`
 }
 
 async function createJobRun(args: WarmArgs, leagueId: string): Promise<SyncJobRunRecord | null> {

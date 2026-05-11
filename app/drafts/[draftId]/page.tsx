@@ -19,6 +19,7 @@ import { resolveDraftRouteContext } from '@/lib/draft/resolve-draft-context'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { DraftBoard } from '@/components/draft/DraftBoard'
+import { checkDraftPoolCacheFast, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,21 +87,31 @@ export default async function DraftsByIdPage({
     notFound()
   }
 
-  let initialSnapshot = null
-  try {
-    initialSnapshot = await buildSessionSnapshot(
-      context.leagueId,
-      new Date(),
-      userId,
-    )
-    console.warn('[drafts:snapshot]', { draftId, leagueId: context.leagueId, snapshot_null: initialSnapshot === null })
-  } catch (err) {
-    console.warn('[drafts:snapshot:error]', {
-      draftId,
-      leagueId: context.leagueId,
-      error: (err as Error)?.message ?? String(err),
-    })
-    throw err
+  // Run pool cache check concurrently with session snapshot build.
+  // Triggers a background prewarm if cold so the pool has a head start
+  // before the client fetches GET /draft/pool.
+  const [poolCacheResult, initialSnapshot] = await Promise.all([
+    checkDraftPoolCacheFast(context.leagueId).catch(() => ({ warm: false as const })),
+    buildSessionSnapshot(context.leagueId, new Date(), userId).catch((err) => {
+      console.warn('[drafts:snapshot:error]', {
+        draftId,
+        leagueId: context.leagueId,
+        error: (err as Error)?.message ?? String(err),
+      })
+      return null
+    }),
+  ])
+
+  console.warn('[drafts:snapshot]', {
+    draftId,
+    leagueId: context.leagueId,
+    snapshot_null: initialSnapshot === null,
+    pool_warm: poolCacheResult.warm,
+  })
+
+  if (!poolCacheResult.warm) {
+    console.info('[drafts:page] pool cache cold — firing background prewarm', { leagueId: context.leagueId })
+    triggerDraftPoolPrewarmBackground(context.leagueId)
   }
 
   return (

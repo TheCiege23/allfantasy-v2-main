@@ -692,6 +692,7 @@ export async function getResolvedDraftPoolForLeague(
   leagueId: string,
   options: GetResolvedDraftPoolOptions = {},
 ): Promise<GetResolvedDraftPoolResult> {
+  const _coldBuildStartMs = Date.now()
   const perfTotal = perfStart(`TOTAL leagueId=${leagueId.slice(0, 8)}`)
   const perfTemplate = perfStart('1. effectiveLeagueTemplate')
   const effectiveLeagueTemplate =
@@ -1900,6 +1901,12 @@ export async function getResolvedDraftPoolForLeague(
   }
 
   perfTotal()
+  console.info('[draft-perf] pool cold build done', {
+    leagueId,
+    sport,
+    entryCount: entries.length,
+    totalMs: Date.now() - _coldBuildStartMs,
+  })
 
   return {
     entries,
