@@ -1051,6 +1051,7 @@ export function DraftTopBar({
                           setMenuOpen(false)
                         }}
                         disabled={commissionerLoading}
+                        data-testid="draft-topbar-reset-timer"
                         className="rounded-xl border border-white/12 bg-white/5 px-3 py-2 text-xs text-white/82 transition duration-150 hover:bg-white/12 disabled:opacity-45"
                       >
                         Reset Timer
@@ -1064,6 +1065,7 @@ export function DraftTopBar({
                           setMenuOpen(false)
                         }}
                         disabled={commissionerLoading}
+                        data-testid="draft-topbar-undo-pick"
                         className="rounded-xl border border-red-400/25 bg-red-500/12 px-3 py-2 text-xs text-red-100 transition duration-150 hover:bg-red-500/20 disabled:opacity-45"
                       >
                         Undo Pick

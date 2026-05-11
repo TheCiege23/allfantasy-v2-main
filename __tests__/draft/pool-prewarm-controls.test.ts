@@ -686,3 +686,157 @@ describe('Invariant 17: pool cold build always logs [draft-perf] timing', () => 
     expect(snippet).not.toMatch(/if\s*\(\s*PERF_LOG\s*\)/)
   })
 })
+
+// ---------------------------------------------------------------------------
+// Invariant 22: commissioner menu button wiring (DraftTopBar + DraftRoomPageClient)
+// ---------------------------------------------------------------------------
+
+const pageClientSrc = readFileSync(
+  resolve(root, 'components/app/draft-room/DraftRoomPageClient.tsx'),
+  'utf8',
+)
+
+describe('Invariant 22a: DraftTopBar menu — all items have data-testid', () => {
+  it('Copy Invite Link has data-testid="draft-topbar-copy-invite"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-topbar-copy-invite"')
+  })
+  it('Big Screen Mode has data-testid="draft-topbar-big-screen"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-topbar-big-screen"')
+  })
+  it('Set Draft Order has data-testid="draft-topbar-set-order"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-topbar-set-order"')
+  })
+  it('Trades has data-testid="draft-open-trades-button"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-open-trades-button"')
+  })
+  it('Resync has data-testid="draft-resync-button"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-resync-button"')
+  })
+  it('Edit/View Draft Settings has data-testid="draft-topbar-league-draft-settings"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-topbar-league-draft-settings"')
+  })
+  it('Commissioner Draft Settings has data-testid="draft-topbar-open-settings"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-topbar-open-settings"')
+  })
+  it('Resume/Pause has data-testid="draft-topbar-menu-resume" (ternary value)', () => {
+    // The testid is set via ternary: draftStatus === 'paused' ? 'draft-topbar-menu-resume' : 'draft-topbar-menu-pause'
+    expect(topBarSrc).toContain("'draft-topbar-menu-resume'")
+  })
+  it('Resume/Pause has data-testid="draft-topbar-menu-pause" (ternary value)', () => {
+    expect(topBarSrc).toContain("'draft-topbar-menu-pause'")
+  })
+  it('Reset Timer has data-testid="draft-topbar-reset-timer"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-topbar-reset-timer"')
+  })
+  it('Undo Pick has data-testid="draft-topbar-undo-pick"', () => {
+    expect(topBarSrc).toContain('data-testid="draft-topbar-undo-pick"')
+  })
+})
+
+describe('Invariant 22b: DraftTopBar menu — disabled logic', () => {
+  it('Resync button is disabled when resyncLoading', () => {
+    const resyncButtonIdx = topBarSrc.indexOf('data-testid="draft-resync-button"')
+    const buttonBlock = topBarSrc.slice(resyncButtonIdx - 200, resyncButtonIdx + 50)
+    expect(buttonBlock).toContain('disabled={resyncLoading}')
+  })
+  it('Reset Timer button is disabled when commissionerLoading', () => {
+    const resetTimerIdx = topBarSrc.indexOf('data-testid="draft-topbar-reset-timer"')
+    const buttonBlock = topBarSrc.slice(resetTimerIdx - 300, resetTimerIdx + 50)
+    expect(buttonBlock).toContain('disabled={commissionerLoading}')
+  })
+  it('Undo Pick button is disabled when commissionerLoading', () => {
+    const undoPickIdx = topBarSrc.indexOf('data-testid="draft-topbar-undo-pick"')
+    const buttonBlock = topBarSrc.slice(undoPickIdx - 300, undoPickIdx + 50)
+    expect(buttonBlock).toContain('disabled={commissionerLoading}')
+  })
+  it('Resume/Pause button is disabled when commissionerLoading', () => {
+    // disabled appears AFTER the ternary testid string in source
+    const resumePauseIdx = topBarSrc.indexOf("'draft-topbar-menu-resume'")
+    const buttonBlock = topBarSrc.slice(resumePauseIdx, resumePauseIdx + 600)
+    expect(buttonBlock).toContain('disabled={commissionerLoading')
+  })
+})
+
+describe('Invariant 22c: DraftTopBar menu — handler calls', () => {
+  it('Copy Invite Link calls handleCopyInvite (internal)', () => {
+    const copyBtnIdx = topBarSrc.indexOf('data-testid="draft-topbar-copy-invite"')
+    const block = topBarSrc.slice(copyBtnIdx - 300, copyBtnIdx + 50)
+    expect(block).toContain('handleCopyInvite')
+  })
+  it('Set Draft Order calls onCommissionerOpen', () => {
+    const setOrderIdx = topBarSrc.indexOf('data-testid="draft-topbar-set-order"')
+    const block = topBarSrc.slice(setOrderIdx - 400, setOrderIdx + 50)
+    expect(block).toContain('onCommissionerOpen')
+  })
+  it('Commissioner Draft Settings calls onCommissionerOpen', () => {
+    const settingsIdx = topBarSrc.indexOf('data-testid="draft-topbar-open-settings"')
+    const block = topBarSrc.slice(settingsIdx - 400, settingsIdx + 50)
+    expect(block).toContain('onCommissionerOpen')
+  })
+  it('Trades calls onTradesClick', () => {
+    const tradesIdx = topBarSrc.indexOf('data-testid="draft-open-trades-button"')
+    const block = topBarSrc.slice(tradesIdx - 300, tradesIdx + 50)
+    expect(block).toContain('onTradesClick()')
+  })
+  it('Resync calls onResync', () => {
+    const resyncIdx = topBarSrc.indexOf('data-testid="draft-resync-button"')
+    const block = topBarSrc.slice(resyncIdx - 300, resyncIdx + 50)
+    expect(block).toContain('onResync()')
+  })
+  it('Edit Draft Settings calls onOpenDraftRoomSettings', () => {
+    const editSettingsIdx = topBarSrc.indexOf('data-testid="draft-topbar-league-draft-settings"')
+    const block = topBarSrc.slice(editSettingsIdx - 400, editSettingsIdx + 50)
+    expect(block).toContain('onOpenDraftRoomSettings()')
+  })
+  it('Big Screen Mode is conditional on bigScreenHref', () => {
+    const bigScreenIdx = topBarSrc.indexOf('data-testid="draft-topbar-big-screen"')
+    // bigScreenHref appears ~150 chars before the testid (wrapping conditional + href= attribute)
+    const block = topBarSrc.slice(bigScreenIdx - 250, bigScreenIdx + 50)
+    expect(block).toContain('bigScreenHref')
+  })
+})
+
+describe('Invariant 22d: DraftRoomPageClient wires DraftTopBar menu props correctly', () => {
+  it('onCopyInvite is wired to handleCopyInvite', () => {
+    expect(pageClientSrc).toContain('handleCopyInvite')
+    const onCopyInviteIdx = pageClientSrc.indexOf('onCopyInvite=')
+    expect(onCopyInviteIdx).toBeGreaterThan(-1)
+    const block = pageClientSrc.slice(onCopyInviteIdx, onCopyInviteIdx + 80)
+    expect(block).toContain('handleCopyInvite')
+  })
+  it('onTradesClick is wired to openPickTradePanel', () => {
+    expect(pageClientSrc).toContain('onTradesClick={openPickTradePanel}')
+  })
+  it('onResync is passed exactly once to DraftTopBar (no duplicate prop)', () => {
+    // Count occurrences of onResync={handleResync} in the DraftTopBar JSX block
+    const topBarJsxStart = pageClientSrc.indexOf('<DraftTopBar')
+    const topBarJsxEnd = pageClientSrc.indexOf('/>', topBarJsxStart + 1000)
+    const topBarJsx = pageClientSrc.slice(topBarJsxStart, topBarJsxEnd)
+    const matches = topBarJsx.match(/onResync=/g) ?? []
+    expect(matches).toHaveLength(1)
+  })
+  it('onCommissionerOpen gates on isCommissioner', () => {
+    const commOpenIdx = pageClientSrc.indexOf('onCommissionerOpen=')
+    expect(commOpenIdx).toBeGreaterThan(-1)
+    const block = pageClientSrc.slice(commOpenIdx, commOpenIdx + 80)
+    expect(block).toContain('isCommissioner')
+  })
+  it('onResetTimer calls handleCommissionerResetTimer', () => {
+    const resetTimerIdx = pageClientSrc.indexOf('onResetTimer=')
+    expect(resetTimerIdx).toBeGreaterThan(-1)
+    const block = pageClientSrc.slice(resetTimerIdx, resetTimerIdx + 80)
+    expect(block).toContain('handleCommissionerResetTimer')
+  })
+  it('onUndoPick calls handleCommissionerUndoPick', () => {
+    const undoPickIdx = pageClientSrc.indexOf('onUndoPick=')
+    expect(undoPickIdx).toBeGreaterThan(-1)
+    const block = pageClientSrc.slice(undoPickIdx, undoPickIdx + 80)
+    expect(block).toContain('handleCommissionerUndoPick')
+  })
+  it('onOpenDraftRoomSettings calls setDraftRoomSettingsOpen', () => {
+    const settingsIdx = pageClientSrc.indexOf('onOpenDraftRoomSettings=')
+    expect(settingsIdx).toBeGreaterThan(-1)
+    const block = pageClientSrc.slice(settingsIdx, settingsIdx + 80)
+    expect(block).toContain('setDraftRoomSettingsOpen')
+  })
+})
