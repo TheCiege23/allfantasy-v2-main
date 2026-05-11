@@ -814,6 +814,21 @@ export function DraftRoomPageClient({
     [session, draftCore, pickSubmitting, commissionerOfflinePick, isCurrentUserOnClock, overnightBlocksUserPicks, commissionerLoading],
   )
 
+  useEffect(() => {
+    if (snakeCanDraftRaw || session?.status !== 'in_progress') return
+    console.warn('[draft-gate] picks blocked', {
+      draftStarted: draftCore?.draftStarted,
+      currentOverall: draftCore?.currentOverall,
+      onClockTeam: draftCore?.currentTeamId,
+      viewerRosterId: currentUserRosterId,
+      rosterMatch: draftCore?.currentTeamId === currentUserRosterId,
+      commissionerLoading,
+      pickSubmitting,
+      overnightBlocked: overnightBlocksUserPicks,
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snakeCanDraftRaw, session?.status])
+
   const isAuctionDraft = session?.draftType === 'auction'
   const auctionNom = session?.auction
   const auctionNominator = auctionNom?.nominationOrder?.[auctionNom?.auctionState?.nominationOrderIndex ?? 0]

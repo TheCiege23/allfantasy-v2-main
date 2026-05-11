@@ -271,6 +271,10 @@
     {
       "path": "/api/cron/recompute-allfantasy-adp",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/cron/draft-pool-prewarm",
+      "schedule": "*/30 * * * *"
     }
   ]
 }

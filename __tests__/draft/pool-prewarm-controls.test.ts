@@ -591,6 +591,81 @@ const resolvedPoolSrc = readFileSync(
   'utf8',
 )
 
+// ---------------------------------------------------------------------------
+// Invariants 18-21: production hardening — cron prewarm, portal menu, snapshot
+// ---------------------------------------------------------------------------
+
+const cronPrewarmSrc = readFileSync(resolve(root, 'app/api/cron/draft-pool-prewarm/route.ts'), 'utf8')
+const vercelJson = readFileSync(resolve(root, 'vercel.json'), 'utf8')
+const topBarSrc = readFileSync(resolve(root, 'components/app/draft-room/DraftTopBar.tsx'), 'utf8')
+const draftSessionSvcSrc = readFileSync(resolve(root, 'lib/live-draft-engine/DraftSessionService.ts'), 'utf8')
+
+describe('Invariant 18: cron draft-pool-prewarm route is correct', () => {
+  it('imports checkDraftPoolCacheFast and ensureDraftPoolReady', () => {
+    expect(cronPrewarmSrc).toContain('checkDraftPoolCacheFast')
+    expect(cronPrewarmSrc).toContain('ensureDraftPoolReady')
+  })
+  it('uses requireCronAuth for authorization', () => {
+    expect(cronPrewarmSrc).toContain('requireCronAuth')
+  })
+  it('queries DraftSession for scheduled and in_progress', () => {
+    expect(cronPrewarmSrc).toContain("'scheduled'")
+    expect(cronPrewarmSrc).toContain("'in_progress'")
+  })
+  it('awaits ensureDraftPoolReady (not fire-and-forget)', () => {
+    expect(cronPrewarmSrc).toContain('await ensureDraftPoolReady')
+  })
+})
+
+describe('Invariant 19: vercel.json schedules draft-pool-prewarm cron', () => {
+  it('has the cron path /api/cron/draft-pool-prewarm', () => {
+    expect(vercelJson).toContain('/api/cron/draft-pool-prewarm')
+  })
+  it('runs every 30 minutes', () => {
+    const json = JSON.parse(vercelJson) as { crons?: Array<{ path: string; schedule: string }> }
+    const entry = json.crons?.find((c) => c.path === '/api/cron/draft-pool-prewarm')
+    expect(entry).toBeDefined()
+    expect(entry?.schedule).toBe('*/30 * * * *')
+  })
+})
+
+describe('Invariant 20: DraftTopBar commissioner menu uses createPortal (not inline absolute)', () => {
+  it('imports createPortal from react-dom', () => {
+    expect(topBarSrc).toContain("from 'react-dom'")
+    expect(topBarSrc).toContain('createPortal')
+  })
+  it('portal dropdown has solid bg-[#1d2638] without opacity or backdrop-blur', () => {
+    expect(topBarSrc).toContain("bg-[#1d2638]")
+    // Must NOT have the old transparent + blur combo
+    expect(topBarSrc).not.toContain('bg-[#1d2638]/96')
+    expect(topBarSrc).not.toContain('backdrop-blur-xl\n')
+  })
+  it('dropdown is rendered at document.body via portal (not inline absolute)', () => {
+    expect(topBarSrc).toContain('document.body')
+    // Old absolute positioning removed from dropdown
+    const portalCallIdx = topBarSrc.indexOf('createPortal(')
+    const absoluteAfterPortal = topBarSrc.indexOf('"absolute right-0 z-20', portalCallIdx)
+    expect(absoluteAfterPortal).toBe(-1)
+  })
+  it('uses fixed positioning for the portal dropdown', () => {
+    expect(topBarSrc).toContain('"fixed z-[9999]')
+  })
+})
+
+describe('Invariant 21: buildSessionSnapshot includes currentUserRosterId for viewer', () => {
+  it('imports getCurrentUserRosterIdForLeague', () => {
+    expect(draftSessionSvcSrc).toContain('getCurrentUserRosterIdForLeague')
+  })
+  it('returns currentUserRosterId in snapshot', () => {
+    expect(draftSessionSvcSrc).toContain('currentUserRosterId')
+  })
+  it('uses viewerUserId to populate currentUserRosterId', () => {
+    const idx = draftSessionSvcSrc.indexOf('currentUserRosterId')
+    const snippet = draftSessionSvcSrc.slice(idx, idx + 200)
+    expect(snippet).toContain('viewerUserId')
+  })
+})
+
 describe('Invariant 17: pool cold build always logs [draft-perf] timing', () => {
   it('logs [draft-perf] pool cold build done with totalMs', () => {
     expect(resolvedPoolSrc).toContain('[draft-perf] pool cold build done')

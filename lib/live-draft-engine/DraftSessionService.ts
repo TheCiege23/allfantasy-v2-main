@@ -22,6 +22,7 @@ import {
 } from './DraftTimerService'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
 import { getViewerAutopickPreference } from './LiveDraftAutopickPreferenceService'
+import { getCurrentUserRosterIdForLeague } from './auth'
 import { buildApiResponse, parseCommissionerAiManagers } from '@/lib/commissioner-ai-draft-manager'
 import { formatPickLabel } from './DraftOrderService'
 import { getManagerColorBySeed } from '@/lib/draft-room'
@@ -601,6 +602,9 @@ export async function buildSessionSnapshot(
     viewerAutopick: viewerUserId
       ? await getViewerAutopickPreference(session.id, viewerUserId)
       : null,
+    currentUserRosterId: viewerUserId
+      ? (await getCurrentUserRosterIdForLeague(leagueId, viewerUserId).catch(() => null)) ?? undefined
+      : undefined,
   }
 }
 

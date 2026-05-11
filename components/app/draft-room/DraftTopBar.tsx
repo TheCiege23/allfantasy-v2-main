@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import {
   ArrowLeft,
   ArrowLeftRight,
@@ -238,7 +239,10 @@ export function DraftTopBar({
     { pauseReason: timerPauseReason, overnightResumeAtIso },
   )
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const menuButtonRef = useRef<HTMLButtonElement | null>(null)
+  const menuDropdownRef = useRef<HTMLDivElement | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [menuPos, setMenuPos] = useState<{ top: number; right: number } | null>(null)
   const [copyFeedback, setCopyFeedback] = useState<'idle' | 'copied'>('idle')
 
   // Audible timer cue. Plays a short beep when the live countdown crosses 10s, 5s,
@@ -309,7 +313,10 @@ export function DraftTopBar({
   useEffect(() => {
     if (!menuOpen) return
     const handlePointerDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) {
+      if (
+        !menuRef.current?.contains(event.target as Node) &&
+        !menuDropdownRef.current?.contains(event.target as Node)
+      ) {
         setMenuOpen(false)
       }
     }
@@ -786,8 +793,15 @@ export function DraftTopBar({
 
           <div className="relative" ref={menuRef}>
             <button
+              ref={menuButtonRef}
               type="button"
-              onClick={() => setMenuOpen((prev) => !prev)}
+              onClick={() => {
+                if (!menuOpen && menuButtonRef.current) {
+                  const rect = menuButtonRef.current.getBoundingClientRect()
+                  setMenuPos({ top: rect.bottom + 8, right: window.innerWidth - rect.right })
+                }
+                setMenuOpen((prev) => !prev)
+              }}
               data-testid="draft-topbar-menu-toggle"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/12 bg-[#7180a8]/20 text-white/85 transition duration-150 hover:bg-[#7b89af]/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/40 active:scale-95"
               aria-expanded={menuOpen}
@@ -796,11 +810,14 @@ export function DraftTopBar({
               <Menu className="h-4 w-4" />
             </button>
 
-            {menuOpen ? (
-              <div
-                className="absolute right-0 z-20 mt-2 w-64 overflow-hidden rounded-2xl border border-white/12 bg-[#1d2638]/96 p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
-                data-testid="draft-topbar-menu"
-              >
+            {menuOpen && menuPos
+              ? createPortal(
+                <div
+                  ref={menuDropdownRef}
+                  className="fixed z-[9999] w-64 overflow-hidden rounded-2xl border border-white/12 bg-[#1d2638] p-2 shadow-[0_24px_80px_rgba(0,0,0,0.55)]"
+                  style={{ top: menuPos.top, right: menuPos.right }}
+                  data-testid="draft-topbar-menu"
+                >
                 <button
                   type="button"
                   onClick={() => {
@@ -1054,8 +1071,10 @@ export function DraftTopBar({
                     ) : null}
                   </div>
                 ) : null}
-              </div>
-            ) : null}
+              </div>,
+                document.body
+              )
+              : null}
           </div>
 
           {isReconnecting ? (
