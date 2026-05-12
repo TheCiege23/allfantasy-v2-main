@@ -60,6 +60,10 @@ type SequentialBoardEntry = {
   round: number
   overall: number
   pick: DraftBoardCellPick
+  /** P1 Fix #9: Emptiness pre-computed at board-build time to remove O(N) picks.find() from the cell render loop. */
+  isPickEditorEmpty: boolean
+  /** P1 Fix #9: rosterId of the manager that made this pick — drives pickHighlight without an O(N) find. */
+  pickedByRosterId: string | null
 }
 
 type AuctionBoardColumn = {
@@ -130,6 +134,75 @@ function buildAuctionCellPick(
   }
 }
 
+// ─── BoardTeamHeader ──────────────────────────────────────────────────────────
+// P1 Fix #9: Memoized sticky team header row. Only re-renders when the active
+// owner slot changes (a new team's turn), NOT on every timer tick, chat update,
+// or pick that doesn't change whose turn it is.
+
+type BoardTeamHeaderProps = {
+  orderedSlots: SlotOrderEntry[]
+  currentOwnerSlot: number | null
+  teamCount: number
+  presentationVariant: 'default' | 'redraft_snake'
+}
+
+const BoardTeamHeader = React.memo(function BoardTeamHeaderInner({
+  orderedSlots,
+  currentOwnerSlot,
+  teamCount,
+  presentationVariant: pv,
+}: BoardTeamHeaderProps) {
+  const rs = pv === 'redraft_snake'
+  return (
+    <div
+      className={`sticky top-0 z-10 grid gap-0 border-b pb-0.5 backdrop-blur-md sm:gap-0.5 ${
+        rs
+          ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
+          : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
+      }`}
+      style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
+      data-testid="draft-board-team-header"
+    >
+      <div
+        className={`flex h-10 items-center justify-center text-[9px] font-bold uppercase tracking-[0.16em] ${
+          rs ? 'text-cyan-100/55' : 'text-white/45'
+        }`}
+      >
+        Rd
+      </div>
+      {orderedSlots.map((entry) => (
+        <div
+          key={entry.rosterId}
+          className={`group relative flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 transition duration-150 ${
+            currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
+          }`}
+        >
+          <span
+            className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold uppercase tracking-[0.03em] shadow-sm ${
+              currentOwnerSlot === entry.slot
+                ? 'border-cyan-300/75 bg-cyan-500/20 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.40)]'
+                : 'border-white/15 bg-white/[0.05] text-white/85'
+            }`}
+          >
+            {managerInitials(entry.displayName)}
+          </span>
+          <span
+            className="w-full truncate text-center text-[8px] font-medium leading-none text-white/72"
+            title={entry.displayName}
+          >
+            {entry.displayName}
+          </span>
+          {currentOwnerSlot === entry.slot ? (
+            <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
+          ) : null}
+        </div>
+      ))}
+    </div>
+  )
+})
+
+// ─── DraftBoardInner ──────────────────────────────────────────────────────────
+
 function DraftBoardInner({
   picks,
   slotOrder,
@@ -160,6 +233,10 @@ function DraftBoardInner({
   const [viewMode, setViewMode] = useState<'all' | 'single'>('all')
   const [selectedRound, setSelectedRound] = useState(1)
   const lastFollowedOverallRef = useRef<number | null>(null)
+  /** P1 Fix #9: Per-round Map stability cache — preserves Map identity for rounds whose cell
+   *  data has not changed between recomputes, enabling React.memo on future BoardRound components
+   *  to skip re-rendering unchanged rows when only one new pick lands. */
+  const roundMapCacheRef = useRef<Map<number, Map<number, SequentialBoardEntry>>>(new Map())
 
   useEffect(() => {
     setSelectedRound((prev) => Math.min(Math.max(1, prev), Math.max(1, rounds)))
@@ -195,11 +272,12 @@ function DraftBoardInner({
   const slotOrderBySlot = useMemo(() => new Map(slotOrder.map((entry) => [entry.slot, entry])), [slotOrder])
   const slotOrderByRosterId = useMemo(() => new Map(slotOrder.map((entry) => [entry.rosterId, entry])), [slotOrder])
 
-  const pickHighlight = (existing: DraftPickSnapshot | undefined): PickHighlightTone => {
-    const rid = existing?.rosterId
-    if (!rid) return 'none'
-    if (currentUserRosterId && rid === currentUserRosterId) return 'user'
-    if (aiManagedRosterIds.length && aiManagedRosterIds.includes(rid)) return 'ai'
+  // P1 Fix #9: Takes a rosterId directly instead of a DraftPickSnapshot so callers
+  // can use the pre-computed pickedByRosterId field without a redundant picks.find().
+  const calcPickHighlight = (rosterId: string | null | undefined): PickHighlightTone => {
+    if (!rosterId) return 'none'
+    if (currentUserRosterId && rosterId === currentUserRosterId) return 'user'
+    if (aiManagedRosterIds.length && aiManagedRosterIds.includes(rosterId)) return 'ai'
     return 'none'
   }
 
@@ -308,11 +386,52 @@ function DraftBoardInner({
         poolEntry && existing?.playerId
           ? mergePoolPlayerIntoBoardPickDisplay(basePick, poolEntry)
           : basePick
+
+      // P1 Fix #9: Pre-compute emptiness and the pick owner at build time so the
+      // per-cell render loop can skip the O(N) picks.find() call entirely.
+      const isPickEditorEmpty = mergedPick.isKeeper
+        ? false
+        : existing
+          ? isDraftPickRowEmptyFromSnapshot({
+              playerName: existing.playerName,
+              position: existing.position,
+              pickMetadata: (existing as { pickMetadata?: unknown }).pickMetadata,
+              pickEditorEmpty: existing.pickEditorEmpty,
+            })
+          : !String(mergedPick.playerName ?? '').trim()
+
       byRoundSlot[round]!.set(ownerSlot, {
         round,
         overall,
         pick: mergedPick,
+        isPickEditorEmpty,
+        pickedByRosterId: existing?.rosterId ?? null,
       })
+    }
+
+    // P1 Fix #9: Preserve Map identity for rounds whose cell data has not changed.
+    // When a single new pick lands, only that round's Map reference changes; all other
+    // rounds keep their previous identity, letting React.memo skip unchanged rows.
+    const cache = roundMapCacheRef.current
+    for (const roundKey of Object.keys(byRoundSlot)) {
+      const rn = Number(roundKey)
+      const newMap = byRoundSlot[rn]!
+      const prevMap = cache.get(rn)
+      if (prevMap && prevMap.size === newMap.size) {
+        let identical = true
+        for (const [slot, entry] of newMap) {
+          const prev = prevMap.get(slot)
+          if (!prev || prev.isPickEditorEmpty !== entry.isPickEditorEmpty || prev.pickedByRosterId !== entry.pickedByRosterId) {
+            identical = false
+            break
+          }
+        }
+        if (identical) {
+          byRoundSlot[rn] = prevMap
+          continue
+        }
+      }
+      cache.set(rn, newMap)
     }
 
     return byRoundSlot
@@ -565,7 +684,6 @@ function DraftBoardInner({
                       )
                     }
 
-                    const existing = picks.find((entry) => entry.overall === pick.overall)
                     return (
                       <DraftBoardCell
                         key={pick.overall}
@@ -576,7 +694,7 @@ function DraftBoardInner({
                         isRecentPick={Boolean(pick.playerName?.trim() && pick.overall === lastFilledPickOverall)}
                         tradedPickColorMode={tradedPickColorMode}
                         showNewOwnerInRed={showNewOwnerInRed}
-                        pickHighlight={pickHighlight(existing)}
+                        pickHighlight={calcPickHighlight(pick.ownerRosterId)}
                         onTradeFromCell={
                           currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'
                             ? () =>
@@ -613,50 +731,13 @@ function DraftBoardInner({
       ) : (
         <div className="snap-x snap-mandatory overflow-x-auto overscroll-x-contain overflow-y-visible px-2 py-2 pb-3 [-webkit-overflow-scrolling:touch]">
           <div className="min-w-max" data-testid="draft-board-grid">
-            <div
-              className={`sticky top-0 z-10 grid gap-0 border-b pb-0.5 backdrop-blur-md sm:gap-0.5 ${
-                rs
-                  ? 'border-cyan-500/15 bg-[rgba(7,13,28,0.92)] shadow-[0_16px_40px_rgba(0,0,0,0.45)]'
-                  : 'border-white/[0.06] bg-[#0b1428]/95 shadow-[0_12px_32px_rgba(0,0,0,0.35)]'
-              }`}
-              style={{ gridTemplateColumns: `40px repeat(${teamCount}, minmax(88px, 1fr))` }}
-              data-testid="draft-board-team-header"
-            >
-              <div
-                className={`flex h-10 items-center justify-center text-[9px] font-bold uppercase tracking-[0.16em] ${
-                  rs ? 'text-cyan-100/55' : 'text-white/45'
-                }`}
-              >
-                Rd
-              </div>
-              {orderedSlots.map((entry) => (
-                <div
-                  key={entry.rosterId}
-                  className={`group relative flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 transition duration-150 ${
-                    currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
-                  }`}
-                >
-                  <span
-                    className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold uppercase tracking-[0.03em] shadow-sm ${
-                      currentOwnerSlot === entry.slot
-                        ? 'border-cyan-300/75 bg-cyan-500/20 text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.40)]'
-                        : 'border-white/15 bg-white/[0.05] text-white/85'
-                    }`}
-                  >
-                    {managerInitials(entry.displayName)}
-                  </span>
-                  <span
-                    className="w-full truncate text-center text-[8px] font-medium leading-none text-white/72"
-                    title={entry.displayName}
-                  >
-                    {entry.displayName}
-                  </span>
-                  {currentOwnerSlot === entry.slot ? (
-                    <span className="absolute bottom-0 inset-x-2 h-[2px] rounded-full bg-cyan-300/60 shadow-[0_0_6px_rgba(34,211,238,0.6)]" aria-hidden />
-                  ) : null}
-                </div>
-              ))}
-            </div>
+            {/* P1 Fix #9: BoardTeamHeader is React.memo — skips re-render unless currentOwnerSlot changes */}
+            <BoardTeamHeader
+              orderedSlots={orderedSlots}
+              currentOwnerSlot={currentOwnerSlot}
+              teamCount={teamCount}
+              presentationVariant={presentationVariant}
+            />
 
             <div className="space-y-[3px] pt-0.5">
               {visibleRounds.map((round) => (
@@ -706,19 +787,10 @@ function DraftBoardInner({
                           />
                         )
                       }
-                      const { pick, overall } = cell
-                      const existing = picks.find((entry) => entry.overall === overall)
-                      const isPickDisplayEmpty =
-                        pick.isKeeper
-                          ? false
-                          : existing
-                            ? isDraftPickRowEmptyFromSnapshot({
-                                playerName: existing.playerName,
-                                position: existing.position,
-                                pickMetadata: (existing as { pickMetadata?: unknown }).pickMetadata,
-                                pickEditorEmpty: existing.pickEditorEmpty,
-                              })
-                            : !String(pick.playerName ?? '').trim()
+                      // P1 Fix #9: isPickEditorEmpty and pickedByRosterId are pre-computed
+                      // in boardRowsByRoundAndSlot — the O(N) linear scan per cell is eliminated.
+                      const { pick, overall, isPickEditorEmpty: isPickEditorEmptyCell, pickedByRosterId } = cell
+                      const isPickDisplayEmpty = isPickEditorEmptyCell
                       const isCurrentPick = currentOverallPick != null && overall === currentOverallPick
                       const emptyCellDirection =
                         draftType === 'snake' && isSnakeRoundReversed(round, draftType, thirdRoundReversal)
@@ -741,7 +813,7 @@ function DraftBoardInner({
                             showNewOwnerInRed={showNewOwnerInRed}
                             isDevyRound={devyRounds.includes(round) && isPickDisplayEmpty}
                             isCollegeRound={c2cCollegeRounds.includes(round) && isPickDisplayEmpty}
-                            pickHighlight={isCurrentPick ? 'none' : pickHighlight(existing)}
+                            pickHighlight={isCurrentPick ? 'none' : calcPickHighlight(pickedByRosterId)}
                             emptyCellDirection={emptyCellDirection}
                             onTradeFromCell={
                               currentUserRosterId && onCellTrade && pick.ownerRosterId && typeof pick.slot === 'number'

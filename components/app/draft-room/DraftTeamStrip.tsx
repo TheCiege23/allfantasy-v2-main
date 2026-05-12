@@ -12,7 +12,7 @@
  * when that's richer than the normalized slotOrder display name.
  */
 
-import React, { useMemo } from 'react'
+import React, { memo, useMemo } from 'react'
 import { getManagerColorBySlot } from '@/lib/draft-room'
 import type { SlotOrderEntry } from '@/lib/live-draft-engine/types'
 import { BotPersonalityBadge } from '@/components/league-feed/BotPersonalityBadge'
@@ -53,7 +53,7 @@ function initials(name: string | null | undefined): string {
   return parts.map((p) => p[0]?.toUpperCase() ?? '').join('') || '??'
 }
 
-export function DraftTeamStrip({
+function DraftTeamStripInner({
   teamCount,
   slotOrder,
   teamMetaByRoster,
@@ -188,3 +188,9 @@ export function DraftTeamStrip({
     </section>
   )
 }
+
+/**
+ * P1 Fix #9: Wrapped in React.memo so the team strip does not re-render on every
+ * timer tick, chat update, or poll that doesn't change the on-clock roster or team meta.
+ */
+export const DraftTeamStrip = memo(DraftTeamStripInner)

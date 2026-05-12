@@ -13,6 +13,7 @@ import { DraftRoomShell, type MobileDraftTab } from '@/components/app/draft-room
 import { DraftTopBar } from '@/components/app/draft-room/DraftTopBar'
 import { AutopickMeToggle, type ViewerAutopickData } from '@/components/app/draft-room/AutopickMeToggle'
 import { useLiveDraftSync } from '@/hooks/useLiveDraftSync'
+import { useDraftPusher } from '@/hooks/useDraftPusher'
 import { useCommissionerActions, type CommissionerControlApiResult } from '@/hooks/useCommissionerActions'
 import { DraftRoomSettingsModal } from '@/components/app/draft-room/DraftRoomSettingsModal'
 import { DraftBoard } from '@/components/app/draft-room/DraftBoard'
@@ -61,7 +62,7 @@ const PreDraftWizard = dynamic(
   () => import('@/components/commissioner/PreDraftWizard').then((m) => m.PreDraftWizard),
   { ssr: false },
 )
-import type { DraftSessionSnapshot, QueueEntry } from '@/lib/live-draft-engine/types'
+import type { DraftSessionSnapshot, DraftPickSnapshot, QueueEntry } from '@/lib/live-draft-engine/types'
 import {
   buildDraftRoomCoreState,
   resolveEffectiveCurrentPick,
@@ -96,6 +97,7 @@ import { buildDraftRoomPageDerivedState } from '@/lib/draft-room/buildDraftRoomP
 import { getPlayerImage, preloadPlayerImage } from '@/lib/players/getPlayerImage'
 import { LEAGUE_DRAFT_ROOM_REVALIDATE } from '@/lib/draft-room/emitLeagueDraftRoomRevalidate'
 import { filterPlayersAvailableForDraftAi } from '@/lib/draft-room/availableForDraftAi'
+import { useDraftCountdownSeconds } from '@/lib/draft/useDraftCountdown'
 import { buildDraftRoomClientDiagnostics } from '@/lib/draft-room/player-pool-audit'
 import type { DraftCopilotInsight } from '@/lib/draft-room/draft-copilot-types'
 import { detectSnakeBackToBackSoon, computeRedraftStarterHints } from '@/lib/draft-room/redraftPlanningHints'
@@ -2002,6 +2004,123 @@ export function DraftRoomPageClient({
     fetchLeagueAiAdp,
   })
 
+  // ── Pusher real-time: sub-second pick / pause / chat push ─────────────────
+  // Receives events from draftStreamStore.publish() via Pusher channels.
+  // Each event is a wake-up signal — we re-fetch authoritative state from the
+  // DB rather than applying the payload directly, keeping the DB as the single
+  // source of truth. timer_update is the one exception: we merge timerEndAt
+  // directly for zero-lag countdown accuracy without a full round-trip.
+  const { pusherConnectionState } = useDraftPusher({
+    draftId: draftId ?? leagueId,
+    enabled: !!session && (session.status === 'in_progress' || session.status === 'paused'),
+    // P1 Fix #8: Force-fetch authoritative state when Pusher reconnects so we
+    // recover any events we missed while the WebSocket was down.
+    onReconnect: useCallback(() => {
+      // Re-fetch the server snapshot — covers missed pick/pause/resume events.
+      void fetchSession()
+      // Re-sync chat if it is currently visible so the user doesn't see a gap.
+      if (mobileTab === 'chat' || chatSyncActive) void fetchChat?.()
+      // P1 Fix #8: Strip any stale optimistic picks that survived the connection
+      // drop. This only fires when controlActionInflightRef is 0 — meaning no
+      // pick submission is genuinely in flight — so it is safe to clear them.
+      // The subsequent fetchSession() will apply the canonical server picks.
+      if (controlActionInflightRef.current === 0) {
+        setSession((prev) => {
+          if (!prev || !prev.picks?.some((p) => p.id.startsWith('__optimistic_'))) return prev
+          return { ...prev, picks: prev.picks.filter((p) => !p.id.startsWith('__optimistic_')) }
+        })
+      }
+      // A successful reconnect means the underlying network is healthy — clear any
+      // HTTP-poll degraded state that may have been set during the outage window.
+      pollSessionFailStreakRef.current = 0
+      if (connectionDegradedTimerRef.current != null) {
+        clearTimeout(connectionDegradedTimerRef.current)
+        connectionDegradedTimerRef.current = null
+      }
+      setConnectionDegraded(false)
+    }, [
+      fetchSession,
+      fetchChat,
+      mobileTab,
+      chatSyncActive,
+      controlActionInflightRef,
+      pollSessionFailStreakRef,
+      connectionDegradedTimerRef,
+      setConnectionDegraded,
+      setSession,
+    ]),
+    onEvent: useCallback(
+      (event) => {
+        switch (event.type) {
+          case 'pick_made':
+          case 'draft_state':
+          case 'draft_paused':
+          case 'draft_resumed':
+          case 'draft_complete':
+            // Re-fetch full snapshot — Pusher event is just the signal.
+            void fetchSession()
+            break
+          case 'chat_message':
+            void fetchChat?.()
+            break
+          case 'timer_update': {
+            // Apply timerEndAt directly to avoid a DB round-trip on every tick.
+            // Also merge serverNow so the client can recompute its clock-skew offset
+            // without waiting for the next full snapshot poll.
+            const p = event.payload as { timerEndAt?: string | null; serverNow?: string | null }
+            if (p?.timerEndAt != null) {
+              setSession((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      timerEndAt: p.timerEndAt!,
+                      ...(p.serverNow != null ? { serverNow: p.serverNow } : {}),
+                    }
+                  : prev,
+              )
+            }
+            break
+          }
+          default:
+            break
+        }
+      },
+      // fetchSession and fetchChat are stable useCallback refs defined above.
+      // setSession is a stable React dispatch — safe to include.
+      [fetchSession, fetchChat, setSession],
+    ),
+  })
+
+  // ── P1 Fix #9: Stable boardPicks reference ───────────────────────────────
+  // session.picks gets a new array identity on every 8-second poll even when no
+  // new pick landed (because timerEndAt changes and creates a new session object).
+  // By fingerprinting on length + last-pick overall, we preserve the same boardPicks
+  // reference across polls with no new content, letting DraftBoard.React.memo
+  // skip the re-render entirely — avoiding a full boardRowsByRoundAndSlot recompute
+  // and preventing all N×M cells from re-rendering on every timer update.
+  const _boardPicksLength = session?.picks?.length ?? 0
+  const _boardPicksLastOverall = _boardPicksLength > 0
+    ? (session!.picks![_boardPicksLength - 1]?.overall ?? -1)
+    : -1
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const boardPicks = useMemo(() => session?.picks ?? [], [_boardPicksLength, _boardPicksLastOverall])
+
+  // P1 Fix #9: Stable DraftBoard trade-history callbacks — prevents DraftBoard.React.memo
+  // from seeing a new function identity on every parent render. setTradeHistoryFocus and
+  // setTradeHistoryOpen are React setState dispatches and are guaranteed stable.
+  const handleOpenTradeHistory = useCallback(() => {
+    setTradeHistoryFocus(null)
+    setTradeHistoryOpen(true)
+  }, [])
+
+  const handleViewCellTradeHistory = useCallback(
+    (ctx: { round: number; originalRosterId: string }) => {
+      setTradeHistoryFocus({ round: ctx.round, originalRosterId: ctx.originalRosterId })
+      setTradeHistoryOpen(true)
+    },
+    [],
+  )
+
   // ── Supabase realtime: draft-room presence ────────────────────────────────
   // Presence tracking removed (Supabase removed). Online count is always 0.
   const onlineCount = 0
@@ -2025,7 +2144,7 @@ export function DraftRoomPageClient({
     }
   }, [governanceBanner])
 
-  const { handleCommissionerAction, handleCommissionerUndoPick, handleCommissionerResetTimer } =
+  const { handleCommissionerAction: _hookCommissionerAction, handleCommissionerUndoPick: _hookCommissionerUndoPick, handleCommissionerResetTimer } =
     useCommissionerActions({
       leagueId,
       controlActionInflightRef,
@@ -2039,6 +2158,24 @@ export function DraftRoomPageClient({
       fetchDraftAssistantContext,
       fetchDraftSettings,
     })
+
+  const handleCommissionerAction = useCallback(
+    // In-place optimistic patches applied via setSession before the POST returns:
+    //   action === 'pause'  → optimistic status: 'paused', timer frozen client-side immediately
+    //   action === 'resume' → status: 'in_progress' confirmed server-side after POST completes;
+    //                         no optimistic client flip before DB write (avoids clock drift)
+    // Posts to: fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/controls`, { method: 'POST' })
+    // On failure: priorSession snapshot restored; commissionerLoading cleared in finally block.
+    // Full implementation: hooks/useCommissionerActions.ts → handleCommissionerAction useCallback.
+    (action: string, payload?: Record<string, unknown>) =>
+      _hookCommissionerAction(action, payload),
+    [_hookCommissionerAction],
+  )
+
+  const handleCommissionerUndoPick = useCallback(
+    () => _hookCommissionerUndoPick(),
+    [_hookCommissionerUndoPick],
+  )
 
   const fetchPendingTradesCount = useCallback(async () => {
     if (!leagueId || !currentUserRosterId) return
@@ -2419,6 +2556,53 @@ export function DraftRoomPageClient({
       pickInflightRef.current = true
       setPickSubmitting(true)
       const _pickPerfStart = typeof performance !== 'undefined' ? performance.now() : Date.now()
+
+      // ── Optimistic pick ──────────────────────────────────────────────────────
+      // Snapshot taken BEFORE the optimistic state update so we can restore it
+      // on any failure path. sessionRef is always one render behind state, so
+      // capture it here (before the queued setSession fires).
+      const prePickSnapshot = sessionRef.current
+      // Read the on-clock slot from the ref (latest committed value, not stale
+      // closure capture) so we build the optimistic pick from the right slot.
+      const optimisticPickSlot = sessionRef.current?.currentPick ?? null
+      // Tracks whether controlActionInflightRef was bumped so we only decrement
+      // once and never leave the ref unbalanced.
+      let optimisticInflightBumped = false
+      if (optimisticPickSlot && currentUserRosterId) {
+        // Suppress live-sync session merges while the optimistic pick is shown
+        // (same guard that protects commissioner control-action patches).
+        controlActionInflightRef.current += 1
+        optimisticInflightBumped = true
+        const optimisticPick: DraftPickSnapshot = {
+          id: `__optimistic_${optimisticPickSlot.overall}`,
+          overall: optimisticPickSlot.overall,
+          round: optimisticPickSlot.round,
+          slot: optimisticPickSlot.slot,
+          rosterId: currentUserRosterId,
+          displayName: optimisticPickSlot.displayName,
+          playerName: player.name,
+          position: player.position,
+          team: player.team ?? null,
+          byeWeek: player.byeWeek ?? null,
+          playerId: stablePlayerId,
+          playerImageUrl,
+          tradedPickMeta: null,
+          source: 'user',
+          pickLabel: optimisticPickSlot.pickLabel,
+          createdAt: new Date().toISOString(),
+        }
+        setSession((prev) => {
+          if (!prev) return prev
+          // Guard: skip if a real (non-optimistic) pick already exists at this
+          // slot — prevents double-flash on Pusher wake-up during inflight.
+          if (prev.picks.some((p) => p.overall === optimisticPick.overall && !p.id.startsWith('__optimistic_'))) {
+            return prev
+          }
+          return { ...prev, picks: [...prev.picks, optimisticPick] }
+        })
+      }
+      // ── /Optimistic pick ─────────────────────────────────────────────────────
+
       try {
         draftRoomPickTrace({
           event: 'pick-submit',
@@ -2458,6 +2642,13 @@ export function DraftRoomPageClient({
         })
         const data = await res.json().catch(() => ({}))
         if (res.ok && data.session) {
+          // Decrement BEFORE the session merge so controlActionInflightRef === 0
+          // and mergeDraftSessionSnapshot is not suppressed. The server-confirmed
+          // snapshot naturally replaces the optimistic pick via the merge.
+          if (optimisticInflightBumped) {
+            controlActionInflightRef.current -= 1
+            optimisticInflightBumped = false
+          }
           sendProductAnalyticsBeacon(DRAFT_ROOM.PICK, {
             leagueId,
             position: player.position,
@@ -2488,6 +2679,13 @@ export function DraftRoomPageClient({
           }
           setConnectionDegraded(false)
         } else if (res.ok) {
+          // Pick accepted but response omitted the session snapshot — roll back
+          // the optimistic pick and fetch authoritative state.
+          if (optimisticInflightBumped) {
+            controlActionInflightRef.current -= 1
+            optimisticInflightBumped = false
+          }
+          setSession(prePickSnapshot)
           sendProductAnalyticsBeacon(DRAFT_ROOM.PICK, { leagueId, position: player.position, ok: false })
           draftRoomWarn('pick-missing-session', { status: res.status })
           await fetchSession()
@@ -2495,6 +2693,12 @@ export function DraftRoomPageClient({
           void fetchDraftPool()
           setPickError('Pick response was incomplete — draft state was refreshed.')
         } else {
+          // Server rejected the pick — roll back the optimistic pick.
+          if (optimisticInflightBumped) {
+            controlActionInflightRef.current -= 1
+            optimisticInflightBumped = false
+          }
+          setSession(prePickSnapshot)
           sendProductAnalyticsBeacon(DRAFT_ROOM.PICK, { leagueId, position: player.position, ok: false })
           const errText = typeof data?.error === 'string' ? data.error : null
           const codeText = typeof (data as { code?: unknown }).code === 'string' ? String((data as { code: string }).code) : null
@@ -2504,10 +2708,21 @@ export function DraftRoomPageClient({
           setPickError(detail)
         }
       } catch (err) {
+        // Network error — roll back the optimistic pick.
+        if (optimisticInflightBumped) {
+          controlActionInflightRef.current -= 1
+          optimisticInflightBumped = false
+        }
+        setSession(prePickSnapshot)
         draftRoomWarn('pick-network', err)
         setPickError('Network error while submitting your pick. Check your connection and try again.')
         await fetchSession()
       } finally {
+        // Safety net: if an unexpected exception bypassed our explicit decrements,
+        // ensure the ref is always balanced so future polls are not suppressed.
+        if (optimisticInflightBumped) {
+          controlActionInflightRef.current -= 1
+        }
         pickInflightRef.current = false
         setPickSubmitting(false)
       }
@@ -3521,6 +3736,41 @@ export function DraftRoomPageClient({
     scheduleWarRoomFetch,
   ])
 
+  // P1 Fix #6 — stable memos/callbacks that break the broad `session` dep chain in
+  // playerPoolNode.  Without these, the entire SportAwareDraftRoom (hundreds of player
+  // rows) recomputed on every 8-second session poll even when only the timer changed.
+  // devyConfig / c2cConfig are set at draft creation and never mutate mid-draft.
+  const devyConfigForPool = useMemo(
+    () =>
+      draftPool?.devyConfig ??
+      (session?.devy?.enabled
+        ? { enabled: true as const, devyRounds: session.devy?.devyRounds ?? [] }
+        : undefined),
+    // devyRounds is a static config array; omitted intentionally from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draftPool?.devyConfig, session?.devy?.enabled],
+  )
+  const c2cConfigForPool = useMemo(
+    () =>
+      draftPool?.c2cConfig ??
+      (session?.c2c?.enabled
+        ? { enabled: true as const, collegeRounds: session.c2c?.collegeRounds ?? [] }
+        : undefined),
+    // collegeRounds is a static config array; omitted intentionally from deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [draftPool?.c2cConfig, session?.c2c?.enabled],
+  )
+  /** Stable queue-membership predicate — only updates when queue changes, not on session polls. */
+  const isPlayerQueued = useCallback(
+    (p: { name: string; position: string }) =>
+      queue.some(
+        (q) =>
+          normalizeDraftedPlayerName(q.playerName) === normalizeDraftedPlayerName(p.name) &&
+          String(q.position).trim().toLowerCase() === String(p.position).trim().toLowerCase(),
+      ),
+    [queue],
+  )
+
   const playerPoolNode = useMemo(
     () => (
       <SportAwareDraftRoom
@@ -3542,20 +3792,8 @@ export function DraftRoomPageClient({
         aiAdpLowSampleWarning={aiAdpLowSampleWarning}
         canNominate={draftRoomState.isAuction ? draftRoomState.canNominate : false}
         onNominate={draftRoomState.isAuction ? handleAuctionNominate : undefined}
-        devyConfig={
-          draftPool?.devyConfig
-            ? draftPool.devyConfig
-            : (session as DraftSessionSnapshot | null)?.devy?.enabled
-              ? { enabled: true, devyRounds: (session as DraftSessionSnapshot).devy?.devyRounds ?? [] }
-              : undefined
-        }
-        c2cConfig={
-          draftPool?.c2cConfig
-            ? draftPool.c2cConfig
-            : (session as DraftSessionSnapshot | null)?.c2c?.enabled
-              ? { enabled: true, collegeRounds: (session as DraftSessionSnapshot).c2c?.collegeRounds ?? [] }
-              : undefined
-        }
+        devyConfig={devyConfigForPool}
+        c2cConfig={c2cConfigForPool}
         currentRound={currentPick?.round}
         formatType={formatType === 'IDP' || Boolean((draftPool as { isIdp?: boolean } | null)?.isIdp) ? 'IDP' : undefined}
         selectedPlayerTarget={helperSelectedPlayer}
@@ -3568,20 +3806,15 @@ export function DraftRoomPageClient({
         getAssistantRoomContext={
           presentationVariant === 'redraft_snake' ? getAssistantRoomContext : undefined
         }
-        isPlayerQueued={(p) =>
-          queue.some(
-            (q) =>
-              normalizeDraftedPlayerName(q.playerName) === normalizeDraftedPlayerName(p.name) &&
-              String(q.position).trim().toLowerCase() === String(p.position).trim().toLowerCase(),
-          )
-        }
+        isPlayerQueued={isPlayerQueued}
       />
     ),
     [
       players,
       draftedNames,
       draftedPlayerIds,
-      queue,
+      // P1 Fix #6: stable useCallback(queue) replaces inline lambda + raw `queue` dep
+      isPlayerQueued,
       effectiveDraftSport,
       draftRoomState.isAuction,
       draftRoomState.canNominate,
@@ -3597,10 +3830,11 @@ export function DraftRoomPageClient({
       aiAdpStaleWarning,
       aiAdpLowSampleWarning,
       handleAuctionNominate,
-      draftPool?.devyConfig,
-      draftPool?.c2cConfig,
-      session,
-      draftRoomState.isAuction,
+      // P1 Fix #6: stable memos replace `draftPool?.devyConfig`, `draftPool?.c2cConfig`, and `session`
+      devyConfigForPool,
+      c2cConfigForPool,
+      // currentPick?.round was implicitly covered by `session`; now explicit as a narrow number dep
+      currentPick?.round,
       formatType,
       helperSelectedPlayer,
       leagueId,
@@ -4041,13 +4275,38 @@ export function DraftRoomPageClient({
     }
   }
 
+  // P1 Fix #7 — live countdown for the mobile sticky-bar timer chip.
+  // Replaces the stale `session.timer.remainingSeconds` value (only updated on
+  // each 8-second poll) with a real 1-second tick anchored to `timerEndAt`,
+  // matching the accuracy of the DraftTopBar countdown on desktop.
+  const mobileLiveSeconds = useDraftCountdownSeconds(
+    session.timer?.status ?? 'none',
+    session.timer?.timerEndAt ?? null,
+    session.timer?.remainingSeconds ?? null,
+    {
+      pauseReason: session.timer?.pauseReason ?? null,
+      overnightResumeAtIso: session.timer?.overnightResumeAt ?? null,
+    },
+  )
+  /** True when ≤10s remain and timer is actively running (amber urgency). */
+  const mobileLiveUrgent =
+    mobileLiveSeconds != null &&
+    mobileLiveSeconds <= 10 &&
+    session.timer?.status === 'running'
+  /** True when ≤5s remain (critical — red pulse). */
+  const mobileLiveCritical =
+    mobileLiveSeconds != null &&
+    mobileLiveSeconds <= 5 &&
+    session.timer?.status === 'running'
+
   const mobileTimerLabel = (() => {
     const status = session.timer?.status ?? 'none'
-    const remaining = session.timer?.remainingSeconds ?? null
     if (status === 'paused') return 'Paused'
     if (status === 'expired') return '0:00'
-    if (status === 'none' || remaining == null || !Number.isFinite(remaining)) return '—'
-    const n = Math.max(0, Math.floor(remaining))
+    // Use the live-ticking value when available; fall back to server snapshot.
+    const secs = mobileLiveSeconds ?? session.timer?.remainingSeconds ?? null
+    if (status === 'none' || secs == null || !Number.isFinite(secs)) return '—'
+    const n = Math.max(0, Math.ceil(secs))
     const min = Math.floor(n / 60)
     const sec = String(n % 60).padStart(2, '0')
     return `${min}:${sec}`
@@ -4073,8 +4332,20 @@ export function DraftRoomPageClient({
               Draft room
             </span>
           )}
-          <div className="inline-flex items-center gap-1 rounded-full border border-cyan-300/30 bg-cyan-500/10 px-2 py-1 text-[10px] font-semibold text-cyan-100">
-            <span className="text-cyan-200/80">Clock</span>
+          {/* P1 Fix #7 — live urgency timer chip; ticks every second via useDraftCountdownSeconds */}
+          <div
+            data-testid="draft-mobile-timer-chip"
+            data-urgent={mobileLiveUrgent ? 'true' : 'false'}
+            data-critical={mobileLiveCritical ? 'true' : 'false'}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold transition duration-150 ${
+              mobileLiveCritical
+                ? 'animate-pulse border-rose-500/65 bg-rose-600/25 text-rose-50'
+                : mobileLiveUrgent
+                  ? 'animate-pulse border-rose-400/50 bg-rose-500/18 text-rose-100'
+                  : 'border-cyan-300/30 bg-cyan-500/10 text-cyan-100'
+            }`}
+          >
+            <span className="opacity-75">Clock</span>
             <span className="font-mono tabular-nums">{mobileTimerLabel}</span>
           </div>
         </div>
@@ -4088,6 +4359,27 @@ export function DraftRoomPageClient({
           <p className="text-[10px] text-cyan-200/75" data-testid="draft-mobile-picks-until-you">
             ~{ribbonPicksUntilUser} pick{ribbonPicksUntilUser === 1 ? '' : 's'} until your turn
           </p>
+        ) : null}
+        {/* P1 Fix #7 — on-clock CTA: surfaces draft action without requiring scroll when user is up */}
+        {isCurrentUserOnClock && canDraft ? (
+          <div
+            className="flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/15 px-2.5 py-1.5 shadow-[0_0_12px_rgba(34,211,238,0.10)]"
+            data-testid="draft-mobile-on-clock-cta"
+          >
+            <span className="relative flex h-2 w-2 shrink-0" aria-hidden>
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400/55 opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
+            </span>
+            <span className="flex-1 text-[11px] font-bold text-cyan-50">You&apos;re on the clock!</span>
+            <button
+              type="button"
+              onClick={() => setMobileTab('players')}
+              className="touch-manipulation rounded-md border border-cyan-300/40 bg-cyan-500/22 px-2.5 py-1 text-[10px] font-bold text-cyan-50 transition active:scale-[0.97]"
+              data-testid="draft-mobile-on-clock-draft-btn"
+            >
+              Draft →
+            </button>
+          </div>
         ) : null}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scroll-smooth" data-testid="draft-mobile-quick-actions">
           <button
@@ -4741,6 +5033,7 @@ export function DraftRoomPageClient({
             commissionerPauseControlsEnabled={draftUISettings?.commissionerPauseControlsEnabled ?? true}
             commissionerLoading={commissionerLoading}
             isReconnecting={connectionDegraded}
+            isPusherConnecting={pusherConnectionState === 'connecting' || pusherConnectionState === 'unavailable'}
             isOrphanOnClock={isOrphanOnClock}
             orphanDrafterMode={effectiveOrphanDrafterMode}
             orphanDrafterRequestedMode={requestedOrphanDrafterMode}
@@ -4881,7 +5174,7 @@ export function DraftRoomPageClient({
               </div>
               <div className="min-h-0 flex-1 overflow-auto overscroll-contain [overflow-anchor:none]">
                 <DraftBoard
-                  picks={session.picks ?? []}
+                  picks={boardPicks}
                   slotOrder={slotOrder}
                   tradedPicks={(session as any).tradedPicks ?? []}
                   teamCount={safeBoardTeamCount}
@@ -4900,17 +5193,8 @@ export function DraftRoomPageClient({
                   orderSourceLabel={boardOrderSourceLabel}
                   presentationVariant={presentationVariant === 'redraft_snake' ? 'redraft_snake' : 'default'}
                   onCellTrade={currentUserRosterId ? openPickTradeFromBoard : undefined}
-                  onOpenTradeHistory={() => {
-                    setTradeHistoryFocus(null)
-                    setTradeHistoryOpen(true)
-                  }}
-                  onViewCellTradeHistory={(ctx) => {
-                    setTradeHistoryFocus({
-                      round: ctx.round,
-                      originalRosterId: ctx.originalRosterId,
-                    })
-                    setTradeHistoryOpen(true)
-                  }}
+                  onOpenTradeHistory={handleOpenTradeHistory}
+                  onViewCellTradeHistory={handleViewCellTradeHistory}
                   canCommissionerEditPicks={
                     isCommissioner && session?.status === 'paused' && session?.draftType !== 'auction'
                   }
