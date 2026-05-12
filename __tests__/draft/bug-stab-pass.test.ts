@@ -117,10 +117,13 @@ describe('bug-stab #10 — paused-timer countdown stays frozen until resume', ()
     expect(src).toMatch(/} else \{[\s\S]*?data\.timerEndAt = new Date\(Date\.now\(\) \+ sec \* 1000\)/)
   })
 
-  it('resumeDraft consumes pausedRemainingSeconds first (so the staged value applies)', () => {
-    // session.pausedRemainingSeconds ?? effectiveStored ?? 0 — covers the
-    // exact code path: changed-while-paused → resume picks up new value.
-    expect(src).toMatch(/session\.pausedRemainingSeconds \?\? effectiveStored \?\? 0/)
+  it('resumeDraft consumes pausedRemainingSeconds first when positive (so the staged value applies)', () => {
+    // hasUsableRemaining guards the stored seconds: > 0 prevents a 0-value
+    // (timer expired before pause) from producing a 1-second timerEndAt on resume.
+    // changed-while-paused → resume picks up the new positive value.
+    expect(src).toMatch(/hasUsableRemaining/)
+    expect(src).toMatch(/session\.pausedRemainingSeconds > 0/)
+    expect(src).toMatch(/sec = hasUsableRemaining \? session\.pausedRemainingSeconds/)
   })
 })
 

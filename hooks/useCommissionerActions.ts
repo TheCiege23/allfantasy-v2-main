@@ -181,6 +181,9 @@ export function useCommissionerActions({
         if (action === 'pause' || action === 'resume' || (action === 'start' && !usedSessionFallback)) {
           void fetchDraftPool()
         }
+        if (action === 'resume' && !usedSessionFallback) {
+          void fetchSession()
+        }
         if (action === 'set_timer_seconds') void fetchDraftSettings()
 
         const successMsg = commissionerActionSuccessCopy(action)

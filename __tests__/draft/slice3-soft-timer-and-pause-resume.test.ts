@@ -45,10 +45,13 @@ describe('Slice 3 — pause/resume continuation behavior (no reset on resume)', 
     expect(draftSessionService).toMatch(/timerEndAt: null/)
   })
 
-  it('resumeDraftSession continues from pausedRemainingSeconds (no reset)', () => {
+  it('resumeDraftSession continues from pausedRemainingSeconds when it is positive', () => {
     expect(draftSessionService).toMatch(/export async function resumeDraftSession/)
-    // CONTINUE behavior: prefer pausedRemainingSeconds over the configured timer length.
-    expect(draftSessionService).toMatch(/sec = session\.pausedRemainingSeconds \?\? effectiveStored/)
+    // CONTINUE behavior: prefer pausedRemainingSeconds over configured timer — but only when > 0.
+    // pausedRemainingSeconds = 0 means the timer was already expired; fall back to effectiveStored.
+    expect(draftSessionService).toMatch(/hasUsableRemaining/)
+    expect(draftSessionService).toMatch(/session\.pausedRemainingSeconds > 0/)
+    expect(draftSessionService).toMatch(/sec = hasUsableRemaining \? session\.pausedRemainingSeconds/)
     // After resume, paused seconds field is cleared so the next pause writes fresh remaining.
     expect(draftSessionService).toMatch(/pausedRemainingSeconds: null/)
   })

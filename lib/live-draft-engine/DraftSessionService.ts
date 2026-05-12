@@ -723,10 +723,14 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
     getDraftUISettingsForLeague(leagueId),
   ])
   const effectiveStored = computeEffectivePickTimerSeconds(ls, config, uiSettings)
-  const sec = session.pausedRemainingSeconds ?? effectiveStored ?? 0
+  // Use stored remainder only when it's a positive number — 0 means the timer had
+  // already expired when the draft was paused, so restore the full configured clock.
+  const hasUsableRemaining =
+    typeof session.pausedRemainingSeconds === 'number' && session.pausedRemainingSeconds > 0
+  const sec = hasUsableRemaining ? session.pausedRemainingSeconds : (effectiveStored ?? 0)
   const timerEndAt =
     effectiveStored != null && effectiveStored > 0
-      ? new Date(Date.now() + Math.max(1, sec) * 1000)
+      ? new Date(Date.now() + sec * 1000)
       : null
   const auctionState =
     session.draftType === 'auction' &&
