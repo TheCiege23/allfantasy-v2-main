@@ -203,7 +203,11 @@ export class DraftSimulator {
 
   // ── Session snapshot builder ───────────────────────────────────────────────
 
-  buildSession(sessionId = 'session-e2e-1', leagueId = 'e2e-league'): Record<string, unknown> {
+  buildSession(
+    sessionId = 'session-e2e-1',
+    leagueId = 'e2e-league',
+    currentUserRosterId = 'roster-1',
+  ): Record<string, unknown> {
     const nextOverall = this._picks.length + 1
     const totalPicks = this.teamCount * this.rounds
     const isDone = this._status === 'completed' || nextOverall > totalPicks
@@ -247,9 +251,14 @@ export class DraftSimulator {
       pausedRemainingSeconds: this._status === 'paused' ? 45 : null,
       slotOrder: this._slotOrder,
       tradedPicks: [],
+      proposals: [],
       version: this._version,
       picks: this._picks,
       currentPick,
+      currentUserRosterId,
+      orphanRosterIds: [],
+      aiManagerEnabled: false,
+      orphanDrafterMode: 'cpu',
       timer: {
         status: timerStatus,
         remainingSeconds: this._status === 'paused' ? 45 : this.timerSeconds,
@@ -264,7 +273,17 @@ export class DraftSimulator {
 
   // ── Route handler helpers ─────────────────────────────────────────────────
 
-  async handleStateRoute(route: Route, sessionId?: string, leagueId?: string): Promise<void> {
+  /**
+   * Handle GET /api/leagues/{id}/draft/session.
+   * Returns { leagueId, session: ... } — the shape fetchSession() in
+   * DraftRoomPageClient expects (checks data.session).
+   */
+  async handleStateRoute(
+    route: Route,
+    sessionId?: string,
+    leagueId?: string,
+    currentUserRosterId?: string,
+  ): Promise<void> {
     // Inject artificial delay (used to test connection-degraded banner)
     if (this._stateDelayMs > 0) {
       await new Promise((r) => setTimeout(r, this._stateDelayMs))
@@ -272,13 +291,58 @@ export class DraftSimulator {
     // Inject transient failures (used to test reconnect recovery)
     if (this._stateFailsRemaining > 0) {
       this._stateFailsRemaining -= 1
-      await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Service Unavailable' }) })
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Service Unavailable' }),
+      })
       return
     }
+    const lg = leagueId ?? 'e2e-league'
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(this.buildSession(sessionId, leagueId)),
+      body: JSON.stringify({
+        leagueId: lg,
+        session: this.buildSession(sessionId, lg, currentUserRosterId),
+      }),
+    })
+  }
+
+  /**
+   * Handle GET /api/leagues/{id}/draft/live-sync.
+   * Returns { leagueId, updated, updatedAt, session, queue, messages } —
+   * the shape fetchLiveSync() in useLiveDraftSync expects (checks data.session).
+   */
+  async handleLiveSyncRoute(
+    route: Route,
+    sessionId?: string,
+    leagueId?: string,
+    currentUserRosterId?: string,
+  ): Promise<void> {
+    if (this._stateFailsRemaining > 0) {
+      this._stateFailsRemaining -= 1
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Service Unavailable' }),
+      })
+      return
+    }
+    const lg = leagueId ?? 'e2e-league'
+    const session = this.buildSession(sessionId, lg, currentUserRosterId)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        leagueId: lg,
+        updated: true,
+        updatedAt: session.updatedAt,
+        session,
+        queue: [],
+        messages: [],
+        syncActive: false,
+      }),
     })
   }
 
@@ -363,29 +427,38 @@ export class DraftSimulator {
 /**
  * Register all the API route mocks needed by DraftRoomPageClient on `page`.
  *
- * Routes registered (all wildcard-matched so they work regardless of exact path):
- *  - auth/session
- *  - auth/config-check
- *  - user/profile
- *  - subscription/entitlements
- *  - tokens/balance
+ * Routes registered (wildcard-matched):
+ *  - auth/session, auth/config-check
+ *  - user/profile, subscription/entitlements, tokens/balance
  *  - league/settings
- *  - draft/{id}/state  (session polling — reads from sim)
- *  - draft/{id}/pick   (pick submission — records in sim)
- *  - draft/{id}/controls  (pause/resume — records in sim)
- *  - draft/{id}/bid    (auction bids — records in sim)
- *  - draft/{id}/autopick
- *  - draft/{id}/queue/{...}
- *  - draft/{id}/chat/{...}
+ *  - leagues/{id}/draft/session   (GET state + POST start — reads from sim)
+ *  - leagues/{id}/draft/live-sync (8-second poll — reads from sim)
+ *  - leagues/{id}/draft/events    (event feed)
+ *  - leagues/{id}/draft/pick      (pick submission — records in sim)
+ *  - leagues/{id}/draft/controls  (pause/resume — records in sim)
+ *  - leagues/{id}/draft/auction/bid (auction bids — records in sim)
+ *  - leagues/{id}/draft/autopick  (auto-pick)
+ *  - leagues/{id}/draft/queue     (user queue GET/PUT)
+ *  - leagues/{id}/draft/settings  (UI settings)
+ *  - leagues/{id}/draft/pool      (player pool)
+ *  - leagues/{id}/draft/assistant-context
+ *  - leagues/{id}/roster-config
+ *  - league/ai-opponents/summary
+ *  - draft/intel/stream (SSE — returns empty stream)
  *  - draft/pusher-auth  (returns 403 so Pusher stays disabled — polling is the signal)
- *  - leagues/{id}/draft/{...}  (any other league-draft endpoints)
+ *  - leagues/{id}/privacy, leagues/{id}/claim-roster
+ *  - leagues/{id}/draft/round-one-highlight
+ *  - leagues/{id}/ai-opponents
  *
- * @param page       Playwright page to install mocks on
- * @param leagueId   Used to scope league/settings and build session leagueId
- * @param sim        DraftSimulator instance (shared across pages for multi-user tests)
- * @param opts.sessionId  Override default 'session-e2e-1'
+ * @param page                Playwright page to install mocks on
+ * @param leagueId            Used to scope league/settings and build session leagueId
+ * @param sim                 DraftSimulator instance (shared across pages for multi-user tests)
+ * @param opts.sessionId      Override default 'session-e2e-1'
  * @param opts.currentUserId  Auth session userId (default 'e2e-user-1')
- * @param opts.isCommissioner  Auth session isCommissioner flag
+ * @param opts.currentUserRosterId  The rosterId owned by this page's user (default 'roster-1')
+ * @param opts.isCommissioner Auth session isCommissioner flag
+ * @param opts.forcePickConflict  When true, pick submissions return 409
+ * @param opts.forceBidConflict   When true, bid submissions return 409
  */
 export async function installDraftMocks(
   page: Page,
@@ -394,6 +467,7 @@ export async function installDraftMocks(
   opts: {
     sessionId?: string
     currentUserId?: string
+    currentUserRosterId?: string
     isCommissioner?: boolean
     /** When true the pick route will return 409 (simulate collision for this page's picks). */
     forcePickConflict?: boolean
@@ -404,6 +478,7 @@ export async function installDraftMocks(
   const {
     sessionId = 'session-e2e-1',
     currentUserId = 'e2e-user-1',
+    currentUserRosterId = 'roster-1',
     isCommissioner = true,
     forcePickConflict = false,
     forceBidConflict = false,
@@ -426,7 +501,11 @@ export async function installDraftMocks(
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        user: { id: currentUserId, name: `User ${currentUserId}`, email: `${currentUserId}@e2e.test` },
+        user: {
+          id: currentUserId,
+          name: `User ${currentUserId}`,
+          email: `${currentUserId}@e2e.test`,
+        },
       }),
     })
   })
@@ -452,7 +531,7 @@ export async function installDraftMocks(
     })
   })
 
-  // ── League settings (provides slotOrder / team display names) ─────────────
+  // ── League settings ────────────────────────────────────────────────────────
   await page.route('**/api/league/settings**', async (route) => {
     await route.fulfill({
       status: 200,
@@ -488,59 +567,133 @@ export async function installDraftMocks(
     })
   })
 
-  // ── Draft session state (main polling endpoint) ────────────────────────────
-  // Match both common path patterns: /api/draft/[id]/state and /api/leagues/[id]/draft/session
-  await page.route('**/api/draft/*/state**', async (route) => {
-    await sim.handleStateRoute(route, sessionId, leagueId)
-  })
-
-  await page.route('**/api/leagues/*/draft/session**', async (route) => {
-    await sim.handleStateRoute(route, sessionId, leagueId)
-  })
-
-  // Also catch the initial load endpoint (some routes use /state, others /session directly)
-  await page.route('**/api/leagues/*/draft**', async (route) => {
-    // Only handle GET requests for state; let POST fall through
+  // ── Draft session state — GET returns session; POST handles 'start' action ─
+  await page.route(`**/api/leagues/*/draft/session**`, async (route) => {
     if (route.request().method() === 'GET') {
-      await sim.handleStateRoute(route, sessionId, leagueId)
-    } else {
-      await route.fallback()
+      await sim.handleStateRoute(route, sessionId, leagueId, currentUserRosterId)
+      return
     }
+    if (route.request().method() === 'POST') {
+      // Start / resync actions
+      const raw = route.request().postData()
+      const body = raw ? (JSON.parse(raw) as Record<string, unknown>) : {}
+      if (body.action === 'start') {
+        sim.setStatus('in_progress')
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          leagueId,
+          session: sim.buildSession(sessionId, leagueId, currentUserRosterId),
+        }),
+      })
+      return
+    }
+    await route.fallback()
   })
 
-  // ── Pick submission ────────────────────────────────────────────────────────
-  await page.route('**/api/draft/*/pick**', async (route) => {
+  // ── Live-sync poll — the 8-second heartbeat ───────────────────────────────
+  await page.route(`**/api/leagues/*/draft/live-sync**`, async (route) => {
+    await sim.handleLiveSyncRoute(route, sessionId, leagueId, currentUserRosterId)
+  })
+
+  // ── Draft events feed ─────────────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/events**`, async (route) => {
+    const session = sim.buildSession(sessionId, leagueId, currentUserRosterId)
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        leagueId,
+        updated: true,
+        updatedAt: session.updatedAt,
+        session,
+      }),
+    })
+  })
+
+  // ── Draft UI settings ──────────────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/settings**`, async (route) => {
+    const method = route.request().method()
+    const settingsPayload = {
+      config: { queue_size_limit: 50, autopick_behavior: 'skip' },
+      draftUISettings: {
+        draftOrderRandomizationEnabled: false,
+        pickTradeEnabled: false,
+        tradedPickColorModeEnabled: false,
+        tradedPickOwnerNameRedEnabled: false,
+        aiAdpEnabled: false,
+        aiQueueReorderEnabled: false,
+        orphanTeamAiManagerEnabled: false,
+        orphanDrafterMode: 'cpu',
+        liveDraftChatSyncEnabled: false,
+        autoPickEnabled: true,
+        timerMode: 'per_pick',
+        slowDraftPauseWindow: null,
+        commissionerForceAutoPickEnabled: true,
+        commissionerPauseControlsEnabled: true,
+      },
+      idpRosterSummary: null,
+      orphanStatus: { orphanRosterIds: [], recentActions: [] },
+    }
+    if (method === 'GET' || method === 'PATCH') {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(settingsPayload),
+      })
+      return
+    }
+    await route.fallback()
+  })
+
+  // ── Player pool ────────────────────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/pool**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        entries: [
+          { playerId: 'p-1', name: 'Atlas Runner', position: 'RB', team: 'NYJ', adp: 12.1 },
+          { playerId: 'p-2', name: 'Blaze Catcher', position: 'WR', team: 'DAL', adp: 15.4 },
+          { playerId: 'p-3', name: 'Core Signal', position: 'QB', team: 'KC', adp: 21.2 },
+          { playerId: 'p-4', name: 'Delta Edge', position: 'TE', team: 'SEA', adp: 25.3 },
+          { playerId: 'p-5', name: 'Echo Guard', position: 'RB', team: 'MIA', adp: 31.8 },
+        ],
+        sport: 'NFL',
+        count: 5,
+      }),
+    })
+  })
+
+  // ── Pick submission ─ real path: /api/leagues/{id}/draft/pick ─────────────
+  await page.route(`**/api/leagues/*/draft/pick**`, async (route) => {
     await sim.handlePickRoute(route, { forceConflict: forcePickConflict })
   })
 
-  await page.route('**/api/draft/pick/**', async (route) => {
-    await sim.handlePickRoute(route, { forceConflict: forcePickConflict })
+  // ── AI pick (commissioner force-pick) ─────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/ai-pick**`, async (route) => {
+    if (route.request().method() !== 'POST') { await route.fallback(); return }
+    await sim.handlePickRoute(route)
   })
 
   // ── Commissioner controls (pause / resume / undo) ─────────────────────────
-  await page.route('**/api/draft/*/controls**', async (route) => {
+  await page.route(`**/api/leagues/*/draft/controls**`, async (route) => {
     await sim.handleControlRoute(route)
   })
 
-  await page.route('**/api/leagues/*/draft/controls**', async (route) => {
-    await sim.handleControlRoute(route)
-  })
-
-  await page.route('**/api/leagues/*/draft/actions**', async (route) => {
+  await page.route(`**/api/leagues/*/draft/actions**`, async (route) => {
     await sim.handleControlRoute(route)
   })
 
   // ── Auction bids ──────────────────────────────────────────────────────────
-  await page.route('**/api/draft/*/bid**', async (route) => {
+  await page.route(`**/api/leagues/*/draft/auction/**`, async (route) => {
     await sim.handleBidRoute(route, { forceConflict: forceBidConflict })
   })
 
-  await page.route('**/api/draft/auction/**', async (route) => {
-    await sim.handleBidRoute(route, { forceConflict: forceBidConflict })
-  })
-
-  // ── Auto-pick / queue ─────────────────────────────────────────────────────
-  await page.route('**/api/draft/*/autopick**', async (route) => {
+  // ── Auto-pick ─────────────────────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/autopick**`, async (route) => {
     if (route.request().method() === 'POST') {
       const raw = route.request().postData()
       sim.autopickRequests.push(raw ? (JSON.parse(raw) as Record<string, unknown>) : {})
@@ -548,71 +701,140 @@ export async function installDraftMocks(
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
-  await page.route('**/api/draft/queue**', async (route) => {
-    if (route.request().method() === 'GET') {
+  // ── User draft queue ───────────────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/queue**`, async (route) => {
+    const method = route.request().method()
+    if (method === 'GET') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
+          leagueId,
           queue: [
             { playerName: 'Atlas Runner', position: 'RB', team: 'NYJ' },
             { playerName: 'Blaze Catcher', position: 'WR', team: 'DAL' },
           ],
         }),
       })
-    } else {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+      return
     }
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
-  await page.route('**/api/draft/*/queue**', async (route) => {
-    if (route.request().method() === 'GET') {
+  // ── Draft chat — GET (bootstrap fetchChat) and POST (send) ───────────────
+  // Must be mocked or the bootstrap hangs waiting for a DB-backed route.
+  await page.route(`**/api/leagues/*/draft/chat**`, async (route) => {
+    const method = route.request().method()
+    if (method === 'GET') {
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ queue: [] }),
+        body: JSON.stringify({ messages: [], leagueId, updatedAt: new Date().toISOString() }),
       })
-    } else {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
+      return
     }
+    // POST (send message)
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
   })
 
-  // ── Chat ──────────────────────────────────────────────────────────────────
-  await page.route('**/api/draft/chat/**', async (route) => {
-    if (route.request().method() === 'GET') {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ messages: [{ id: 'm1', from: 'System', text: 'Draft started.', at: new Date().toISOString() }] }),
-      })
-    } else {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ ok: true }) })
-    }
+  // ── AI queue reorder ───────────────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/queue/ai-reorder**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        reordered: [
+          { playerName: 'Blaze Catcher', position: 'WR', team: 'DAL' },
+          { playerName: 'Atlas Runner', position: 'RB', team: 'NYJ' },
+        ],
+        explanation: 'Balanced by roster need and ADP value.',
+      }),
+    })
+  })
+
+  // ── AI draft assistant context ────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/draft/assistant-context**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        sport: 'NFL',
+        headlines: [],
+        injuries: [],
+        sportsFeed: { available: false, updatedAt: null, sourceKeys: [], digest: null },
+      }),
+    })
+  })
+
+  // ── Roster config ─────────────────────────────────────────────────────────
+  await page.route(`**/api/leagues/*/roster-config**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        starterSlots: { QB: 1, RB: 2, WR: 2, TE: 1, FLEX: 1, K: 1, DST: 1 },
+        benchSlots: 6,
+        taxiSlots: 0,
+        devySlots: 0,
+        orderedSlotLabels: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DST',
+                            'BN', 'BN', 'BN', 'BN', 'BN', 'BN', 'BN'],
+      }),
+    })
+  })
+
+  // ── AI opponents summary ───────────────────────────────────────────────────
+  await page.route(`**/api/league/ai-opponents/summary**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ aiManagedDraftRosterIds: [], assignments: [] }),
+    })
+  })
+
+  // ── Draft intel SSE stream ─────────────────────────────────────────────────
+  await page.route(`**/api/draft/intel/stream**`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: 'retry: 60000\nevent: ping\ndata: {}\n\n',
+    })
   })
 
   // ── Pusher auth — return 403 so Pusher stays disabled in tests ─────────────
   // The polling fallback (useLiveDraftSync) remains the sole sync mechanism,
   // which is exactly what we want: deterministic, controlled by simulator state.
-  await page.route('**/api/draft/*/pusher-auth**', async (route) => {
-    await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: 'Forbidden' }) })
+  await page.route('**/api/*/pusher-auth**', async (route) => {
+    await route.fulfill({
+      status: 403,
+      contentType: 'application/json',
+      body: JSON.stringify({ error: 'Forbidden' }),
+    })
   })
 
-  // ── AI recommendations (not under test — return empty) ────────────────────
+  // ── AI recommendations ────────────────────────────────────────────────────
   await page.route('**/api/draft/ai/**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ picks: [], recommendations: [] }) })
-  })
-
-  await page.route('**/api/draft/recommend**', async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ picks: [] }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ picks: [], recommendations: [] }),
+    })
   })
 
   // ── Misc league endpoints ─────────────────────────────────────────────────
   await page.route(`**/api/leagues/*/privacy**`, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ inviteLink: null }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ inviteLink: null, inviteCode: null }),
+    })
   })
 
   await page.route(`**/api/leagues/*/claim-roster**`, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ alreadyClaimed: true, rosters: [] }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ alreadyClaimed: true, rosters: [] }),
+    })
   })
 
   await page.route(`**/api/leagues/*/draft/round-one-highlight**`, async (route) => {
@@ -620,7 +842,11 @@ export async function installDraftMocks(
   })
 
   await page.route(`**/api/leagues/*/ai-opponents/**`, async (route) => {
-    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ opponents: [] }) })
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ opponents: [] }),
+    })
   })
 }
 
@@ -629,13 +855,24 @@ export async function installDraftMocks(
 /**
  * Navigate to the E2E draft room harness and wait for the board to be visible.
  *
+ * Mirrors the retry + server-readiness pattern used by gotoDraftRoomHarness in
+ * draft-room-click-audit.spec.ts:
+ *  1. Poll GET / until the Next.js server responds (handles cold starts).
+ *  2. Navigate up to 3 times with backoff; use waitUntil:'domcontentloaded' so
+ *     we don't block on every client-side fetch completing before checking the DOM.
+ *  3. Wait for data-testid="e2e-draft-room-harness" to appear.
+ *
  * With `e2eRoom=1` the harness skips the "Enter draft room" gate button and
  * mounts DraftBoard immediately.
  */
 export async function navigateToDraftRoom(
   page: Page,
   leagueId: string,
-  opts: { sport?: string; commissioner?: boolean; viewport?: { width: number; height: number } } = {},
+  opts: {
+    sport?: string
+    commissioner?: boolean
+    viewport?: { width: number; height: number }
+  } = {},
 ): Promise<void> {
   if (opts.viewport) {
     await page.setViewportSize(opts.viewport)
@@ -648,17 +885,58 @@ export async function navigateToDraftRoom(
     commissioner: opts.commissioner !== false ? 'true' : 'false',
   })
 
-  await page.goto(`/e2e/draft-room?${params.toString()}`)
+  const url = `/e2e/draft-room?${params.toString()}`
 
-  // Wait for the board or the harness gate button (whichever appears first)
-  await page
-    .getByTestId('draft-board')
-    .or(page.getByRole('button', { name: /enter draft room/i }))
-    .waitFor({ state: 'visible', timeout: 30_000 })
+  // Playwright's webServer config (reuseExistingServer + timeout:120s) guarantees
+  // the server is up before any test runs, so no extra readiness poll is needed here.
 
-  // If the gate button appeared, click through it
-  const gateBtn = page.getByRole('button', { name: /enter draft room/i })
-  if (await gateBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await gateBtn.click()
+  // ── Navigate with retry ───────────────────────────────────────────────────
+  let lastErr: unknown = null
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const navTimeout = attempt === 0 ? 90_000 : 60_000
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: navTimeout })
+
+      // Phase 1: wait for ANY loading indicator — covers three possible states:
+      //   (a) Outer RSC Suspense in page.tsx:              "Loading draft harness…"
+      //   (b) E2eDraftRoomHarnessClient Suspense fallback:  data-testid="e2e-draft-room-harness"
+      //   (c) DraftRoomPageClient bootstrap loading text:   "Loading draft room…"
+      // Use .first() to avoid strict-mode violation when multiple are visible at once.
+      await page
+        .getByTestId('e2e-draft-room-harness')
+        .or(page.getByText('Loading draft room…'))
+        .or(page.getByText('Loading draft harness…'))
+        .first()
+        .waitFor({ state: 'visible', timeout: 25_000 })
+
+      // Phase 1b: guarantee RSC streaming is done.
+      // "Loading draft harness…" is the outer RSC Suspense fallback — it stays visible
+      // until the server finishes streaming E2eDraftRoomHarnessClient. The harness
+      // testid only appears AFTER that boundary resolves, so waiting for it here
+      // ensures client hydration can begin before we proceed to Phase 2.
+      // Under heavy parallel load the RSC stream can take up to 45 s — do NOT swallow
+      // (throw to trigger the outer retry on timeout).
+      await page
+        .getByTestId('e2e-draft-room-harness')
+        .waitFor({ state: 'visible', timeout: 45_000 })
+
+      // Phase 2: wait for DraftRoomPageClient bootstrap to complete.
+      // bootstrapDraftRoom() shows draft-room-loading-state while loading, then removes it.
+      // If the session loads fast (before DraftRoomPageClient even mounts) the element may
+      // never appear; waitFor({ state: 'detached' }) resolves immediately when the element
+      // is not in the DOM, which is the correct fast-path behavior.
+      await page
+        .getByTestId('draft-room-loading-state')
+        .waitFor({ state: 'detached', timeout: 45_000 })
+        .catch(() => null)
+
+      return
+    } catch (err) {
+      lastErr = err
+      await page.goto('about:blank', { waitUntil: 'domcontentloaded', timeout: 8_000 }).catch(() => null)
+      await page.waitForTimeout(700 * (attempt + 1)).catch(() => null)
+    }
   }
+
+  throw lastErr
 }

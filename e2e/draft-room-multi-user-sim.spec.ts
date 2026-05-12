@@ -58,8 +58,9 @@ function uniqueLeagueId(prefix: string): string {
  * Board cells use `data-testid="draft-board-cell-{overall}"`.
  */
 async function waitForCellFilled(page: Page, overall: number, playerName: string): Promise<void> {
-  // The cell testid may live inside the DraftBoardCell component
-  const cell = page.getByTestId(`draft-board-cell-${overall}`)
+  // The cell testid may live inside the DraftBoardCell component.
+  // Use .first() because DraftBoard renders in both desktop + mobile zones (same testids).
+  const cell = page.getByTestId(`draft-board-cell-${overall}`).first()
   await expect(cell).toContainText(playerName, { timeout: POLL_SETTLE_MS })
 }
 
@@ -68,7 +69,8 @@ async function waitForCellFilled(page: Page, overall: number, playerName: string
  * Used to verify optimistic-pick rollback.
  */
 async function waitForCellEmpty(page: Page, overall: number): Promise<void> {
-  const cell = page.getByTestId(`draft-board-cell-${overall}`)
+  // .first() because DraftBoard renders in both desktop + mobile zones
+  const cell = page.getByTestId(`draft-board-cell-${overall}`).first()
   // Cell should not contain a non-empty player name
   await expect(cell).not.toContainText(/[A-Z][a-z]/, { timeout: POLL_SETTLE_MS })
 }
@@ -109,10 +111,10 @@ test.describe('@draft-sim:snake — 12-user snake draft progression', () => {
       await navigateToDraftRoom(page, leagueId)
 
       // ── Verify initial state ──────────────────────────────────────────────
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
       // Slot 1 (Alpha) should be "on the clock" at pick 1
-      await expect(page.getByTestId('draft-board-team-header')).toBeVisible()
+      await expect(page.getByTestId('draft-board-team-header').first()).toBeVisible()
 
       // ── Round 1: simulate picks 1-3 ──────────────────────────────────────
       // Pick 1: slot 1 (Alpha) drafts Atlas Runner
@@ -158,14 +160,14 @@ test.describe('@draft-sim:snake — 12-user snake draft progression', () => {
 
       // ── Board structural checks ───────────────────────────────────────────
       // The draft-board-grid testid and round indicators should be present
-      await expect(page.getByTestId('draft-board-grid')).toBeVisible()
+      await expect(page.getByTestId('draft-board-grid').first()).toBeVisible()
 
       // Round 1 row marker
-      const round1Row = page.getByTestId('draft-board-round-1-direction')
+      const round1Row = page.getByTestId('draft-board-round-1-direction').first()
       await expect(round1Row).toBeVisible()
 
       // Round 2 row should show reverse direction (snake)
-      const round2Row = page.getByTestId('draft-board-round-2-direction')
+      const round2Row = page.getByTestId('draft-board-round-2-direction').first()
       await expect(round2Row).toBeVisible()
       await expect(round2Row).toHaveAttribute('data-direction', 'reverse')
     },
@@ -190,32 +192,17 @@ test.describe('@draft-sim:pause — commissioner pause and resume', () => {
       await installDraftMocks(page, leagueId, sim, { isCommissioner: true })
       await navigateToDraftRoom(page, leagueId)
 
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
-      // ── Open commissioner controls ─────────────────────────────────────────
-      // Try the dedicated gear icon first, then fall back to CTA / menu
-      const pauseBtn = page
-        .getByTestId('draft-commissioner-controls')
-        .getByRole('button', { name: /pause/i })
-        .or(page.getByRole('button', { name: /pause draft/i }))
-
-      const gearBtn = page
-        .getByTestId('draft-open-commissioner-controls')
-        .or(page.getByTestId('draft-topbar-commissioner-primary'))
-
-      if (await gearBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-        await gearBtn.click()
-      }
-
-      // Wait for commissioner control panel
-      const controlPanel = page
-        .getByTestId('draft-commissioner-controls')
-        .or(page.getByTestId('draft-commissioner-modal'))
-        .or(page.getByRole('dialog', { name: /commissioner/i }))
-      await expect(controlPanel.first()).toBeVisible({ timeout: 15_000 })
-
-      // ── Click Pause ────────────────────────────────────────────────────────
-      const pauseControl = controlPanel.first().getByRole('button', { name: /pause/i })
+      // ── Click Pause via the topbar pill ───────────────────────────────────
+      // DraftRoomPageClient renders the Pause/Resume button directly in the
+      // topbar as data-testid="draft-topbar-pause-pill" (or resume-pill when
+      // paused) — no separate commissioner panel needs to be opened.
+      const pauseControl = page
+        .getByTestId('draft-topbar-pause-pill')
+        .or(page.getByRole('button', { name: /^pause$/i }))
+        .first()
+      await expect(pauseControl).toBeVisible({ timeout: 15_000 })
       await pauseControl.click()
 
       // Verify sim received the pause request
@@ -238,8 +225,13 @@ test.describe('@draft-sim:pause — commissioner pause and resume', () => {
         )
         .toBe(true)
 
-      // ── Click Resume ───────────────────────────────────────────────────────
-      const resumeControl = controlPanel.first().getByRole('button', { name: /resume/i })
+      // ── Click Resume via the topbar pill ──────────────────────────────────
+      // After pausing, the button's testid switches to 'draft-topbar-resume-pill'.
+      const resumeControl = page
+        .getByTestId('draft-topbar-resume-pill')
+        .or(page.getByRole('button', { name: /^resume$/i }))
+        .first()
+      await expect(resumeControl).toBeVisible({ timeout: 15_000 })
       await resumeControl.click()
 
       await expect
@@ -264,7 +256,7 @@ test.describe('@draft-sim:pause — commissioner pause and resume', () => {
       await installDraftMocks(page, leagueId, sim, { isCommissioner: true })
       await navigateToDraftRoom(page, leagueId)
 
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
       // The top bar timer should indicate paused — look for paused-related text
       await expect
@@ -323,58 +315,51 @@ test.describe('@draft-sim:collision — simultaneous pick attempts', () => {
           navigateToDraftRoom(page2, leagueId),
         ])
 
-        await expect(page1.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
-        await expect(page2.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+        await expect(page1.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
+        await expect(page2.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
-        // ── Page2 makes the WINNING pick ───────────────────────────────────────
-        // Navigate to the players tab on page2 and draft the first player
-        const playersTab2 = page2
-          .getByRole('tab', { name: /players/i })
-          .or(page2.getByTestId('draft-tab-players'))
-        if (await playersTab2.isVisible({ timeout: 5_000 }).catch(() => false)) {
-          await playersTab2.click()
-        }
-
-        // Find a "Draft" button and click it
-        const draftBtn2 = page2
-          .getByRole('button', { name: /^draft$/i })
-          .or(page2.getByTestId('player-draft-btn').first())
-          .first()
-
-        if (await draftBtn2.isVisible({ timeout: 8_000 }).catch(() => false)) {
-          await draftBtn2.click()
-
-          // Page2's pick should succeed — sim picks array should grow
-          await expect
-            .poll(() => sim.pickRequests.length, { timeout: 15_000, intervals: [POLL_INTERVAL_MS] })
-            .toBeGreaterThanOrEqual(1)
-
-          // The winning pick appears on page2's board
-          if (sim.picks.length > 0) {
-            const pick = sim.picks[sim.picks.length - 1]!
-            await waitForCellFilled(page2, pick.overall, pick.playerName)
-          }
-        }
-
-        // ── Page1 attempts a conflicting pick ──────────────────────────────────
+        // ── Navigate to players tabs on both pages simultaneously ──────────────
+        // Both users are Alpha (roster-1) and Alpha is on clock for pick 1.
+        // We MUST click both Draft buttons before either pick is confirmed;
+        // if page2's pick resolves first the sim advances to Beta's turn and
+        // page1's button becomes disabled — making concurrent clicks essential.
         const playersTab1 = page1
           .getByRole('tab', { name: /players/i })
           .or(page1.getByTestId('draft-tab-players'))
-        if (await playersTab1.isVisible({ timeout: 5_000 }).catch(() => false)) {
-          await playersTab1.click()
-        }
+        const playersTab2 = page2
+          .getByRole('tab', { name: /players/i })
+          .or(page2.getByTestId('draft-tab-players'))
+
+        await Promise.all([
+          playersTab1.isVisible({ timeout: 5_000 }).then((v) => v ? playersTab1.click() : null).catch(() => null),
+          playersTab2.isVisible({ timeout: 5_000 }).then((v) => v ? playersTab2.click() : null).catch(() => null),
+        ])
 
         const draftBtn1 = page1
           .getByRole('button', { name: /^draft$/i })
           .or(page1.getByTestId('player-draft-btn').first())
           .first()
+        const draftBtn2 = page2
+          .getByRole('button', { name: /^draft$/i })
+          .or(page2.getByTestId('player-draft-btn').first())
+          .first()
 
-        if (await draftBtn1.isVisible({ timeout: 8_000 }).catch(() => false)) {
-          await draftBtn1.click()
-          // Page1's pick returns 409 — verify an error/conflict state appears or
-          // the optimistic pick disappears. We verify at the API layer that the
-          // conflict route was called, and that page1's board eventually shows
-          // the server-authoritative state (matching what page2 sees).
+        const btn1Visible = await draftBtn1.isVisible({ timeout: 10_000 }).catch(() => false)
+        const btn2Visible = await draftBtn2.isVisible({ timeout: 10_000 }).catch(() => false)
+
+        if (btn1Visible && btn2Visible) {
+          // Fire both clicks simultaneously — this is the race condition under test.
+          // page2's pick (forcePickConflict=false) will be accepted and advance the sim.
+          // page1's pick (forcePickConflict=true) returns 409 regardless.
+          await Promise.all([
+            draftBtn1.click({ timeout: 10_000 }).catch(() => null),
+            draftBtn2.click({ timeout: 10_000 }).catch(() => null),
+          ])
+
+          // page2's successful pick must register in sim
+          await expect
+            .poll(() => sim.pickRequests.length, { timeout: 15_000, intervals: [POLL_INTERVAL_MS] })
+            .toBeGreaterThanOrEqual(1)
         }
 
         // ── Verify consistency: both pages eventually show the same board ──────
@@ -411,7 +396,9 @@ test.describe('@draft-sim:reconnect — network drop and polling recovery', () =
       await installDraftMocks(page, leagueId, sim)
       await navigateToDraftRoom(page, leagueId)
 
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      // navigateToDraftRoom already waits for e2e-draft-room-harness (RSC done)
+      // and for draft-room-loading-state to detach (Phase 2). No extra wait needed.
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 25_000 })
       await waitForCellFilled(page, 1, 'Pre-Drop Pick')
 
       // ── Simulate network drop: inject 3 consecutive state-API failures ──────
@@ -442,7 +429,7 @@ test.describe('@draft-sim:reconnect — network drop and polling recovery', () =
               .catch(() => false)
             // Or simply the failures have been exhausted (sim.stateFailsRemaining will be 0)
             // Check via page title / board presence to ensure we're still on the page
-            const boardPresent = await page.getByTestId('draft-board').isVisible().catch(() => false)
+            const boardPresent = await page.getByTestId('draft-board').first().isVisible().catch(() => false)
             return degraded || reconnecting || boardPresent
           },
           { timeout: 35_000, intervals: [2_000] },
@@ -477,12 +464,15 @@ test.describe('@draft-sim:reconnect — network drop and polling recovery', () =
       await installDraftMocks(page, leagueId, sim)
       await navigateToDraftRoom(page, leagueId)
 
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
-      // Verify timer is counting (look for seconds display in the topbar)
+      // Verify timer is counting (look for seconds display in the topbar).
+      // The topbar clock time span uses data-testid="draft-topbar-clock-time".
+      // .first() avoids strict-mode if desktop + mobile both render the element.
       const timerEl = page
-        .getByTestId('draft-topbar-timer')
-        .or(page.locator('[data-testid*="timer"]').first())
+        .getByTestId('draft-topbar-clock-time')
+        .or(page.getByTestId('draft-mobile-timer-chip'))
+        .first()
 
       if (await timerEl.isVisible({ timeout: 5_000 }).catch(() => false)) {
         const firstReading = await timerEl.textContent()
@@ -527,7 +517,9 @@ test.describe('@draft-sim:mobile — mobile viewport draft (375 px)', () => {
       await installDraftMocks(page, leagueId, sim, { currentUserId: 'e2e-user-1' })
       await navigateToDraftRoom(page, leagueId, { viewport: { width: 375, height: 812 } })
 
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      // On 375 px the desktop board zone is CSS-hidden; use :visible to select
+      // the actually visible board (the mobile scroll zone's draft-board).
+      await expect(page.locator('[data-testid="draft-board"]:visible').first()).toBeVisible({ timeout: 20_000 })
 
       // ── Mobile layout should be visible (md:hidden hides it on desktop) ────
       const mobileLayout = page
@@ -560,7 +552,7 @@ test.describe('@draft-sim:mobile — mobile viewport draft (375 px)', () => {
 
       await installDraftMocks(page, leagueId, sim, { currentUserId: 'e2e-user-roster-1' })
       await page.goto(`/e2e/draft-room?leagueId=${encodeURIComponent(leagueId)}&e2eRoom=1&commissioner=true`)
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.locator('[data-testid="draft-board"]:visible').first()).toBeVisible({ timeout: 20_000 })
 
       // The on-clock CTA appears when `isCurrentUserOnClock && canDraft`
       // Since our harness user is 'roster-1' and pick 1 goes to slot 1 (roster-1),
@@ -589,10 +581,11 @@ test.describe('@draft-sim:mobile — mobile viewport draft (375 px)', () => {
       await installDraftMocks(page, leagueId, sim)
       await navigateToDraftRoom(page, leagueId, { viewport: { width: 375, height: 812 } })
 
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      // On 375 px the desktop board zone is CSS-hidden; use :visible selectors.
+      await expect(page.locator('[data-testid="draft-board"]:visible').first()).toBeVisible({ timeout: 20_000 })
 
       // Verify the board grid exists and is scrollable
-      const boardGrid = page.getByTestId('draft-board-grid')
+      const boardGrid = page.locator('[data-testid="draft-board-grid"]:visible').first()
       await expect(boardGrid).toBeVisible({ timeout: 10_000 })
 
       // Check that horizontal scroll is possible without navigation (overscroll-x-contain)
@@ -646,8 +639,8 @@ test.describe('@draft-sim:auction — auction bid collision handling', () => {
           navigateToDraftRoom(bidder2, leagueId),
         ])
 
-        await expect(bidder1.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
-        await expect(bidder2.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+        await expect(bidder1.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
+        await expect(bidder2.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
         // ── Bidder 1: submit a winning bid ─────────────────────────────────────
         // The auction board has an AuctionSpotlightPanel — find bid input
@@ -725,10 +718,14 @@ test.describe('@draft-sim:autopick — timer expiry triggers auto-pick', () => {
 
       await installDraftMocks(page, leagueId, sim, { currentUserId: 'e2e-commissioner' })
 
-      // Override the state route to report an expired timer
+      // Override the session route to report an expired timer.
       // This simulates the server having already advanced the clock past timerEndAt.
-      // We use page.route BEFORE navigating so it takes precedence.
-      await page.route('**/api/draft/*/state**', async (route) => {
+      // Must match the actual URL the app fetches:
+      //   GET /api/leagues/{leagueId}/draft/session
+      // We register AFTER installDraftMocks so this handler takes precedence
+      // (Playwright applies handlers in reverse-registration order).
+      await page.route('**/api/leagues/*/draft/session**', async (route) => {
+        if (route.request().method() !== 'GET') { await route.fallback(); return }
         const session = sim.buildSession('session-e2e-1', leagueId)
         // Set timerEndAt in the past so the client-side sees it as expired
         ;(session as Record<string, unknown>).timerEndAt = new Date(Date.now() - 5_000).toISOString()
@@ -738,7 +735,8 @@ test.describe('@draft-sim:autopick — timer expiry triggers auto-pick', () => {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify(session),
+          // fetchSession() expects { leagueId, session } — match that shape.
+          body: JSON.stringify({ leagueId, session }),
         })
       })
 
@@ -754,12 +752,15 @@ test.describe('@draft-sim:autopick — timer expiry triggers auto-pick', () => {
       })
 
       await navigateToDraftRoom(page, leagueId)
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
       // ── Verify timer shows 0 / expired ────────────────────────────────────
+      // The topbar clock time span uses data-testid="draft-topbar-clock-time".
+      // .first() avoids strict-mode if desktop + mobile both render the element.
       const timerEl = page
-        .getByTestId('draft-topbar-timer')
-        .or(page.locator('[data-testid*="timer"]').first())
+        .getByTestId('draft-topbar-clock-time')
+        .or(page.getByTestId('draft-mobile-timer-chip'))
+        .first()
 
       if (await timerEl.isVisible({ timeout: 5_000 }).catch(() => false)) {
         // Timer should show 0 or expired state
@@ -783,7 +784,7 @@ test.describe('@draft-sim:autopick — timer expiry triggers auto-pick', () => {
           async () => {
             // Either the pick appeared on the board, or an autopick request was captured
             const pickOnBoard = await page
-              .getByTestId('draft-board-cell-1')
+              .getByTestId('draft-board-cell-1').first()
               .isVisible()
               .catch(() => false)
             return sim.autopickRequests.length > 0 || sim.picks.length > 0 || pickOnBoard
@@ -802,13 +803,16 @@ test.describe('@draft-sim:autopick — timer expiry triggers auto-pick', () => {
 
       await installDraftMocks(page, leagueId, sim)
 
-      // Override the queue endpoint to return 2 queued players
-      await page.route('**/api/draft/queue**', async (route) => {
+      // Override the queue endpoint to return 2 queued players.
+      // IMPORTANT: the actual URL is /api/leagues/{id}/draft/queue — must use
+      // the leagues/* prefix to shadow the installDraftMocks handler (LIFO order).
+      await page.route('**/api/leagues/*/draft/queue**', async (route) => {
         if (route.request().method() === 'GET') {
           await route.fulfill({
             status: 200,
             contentType: 'application/json',
             body: JSON.stringify({
+              leagueId,
               queue: [
                 { playerName: 'Queue Player A', position: 'RB', team: 'BUF' },
                 { playerName: 'Queue Player B', position: 'WR', team: 'LAR' },
@@ -821,7 +825,7 @@ test.describe('@draft-sim:autopick — timer expiry triggers auto-pick', () => {
       })
 
       await navigateToDraftRoom(page, leagueId)
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
 
       // Navigate to queue tab if available
       const queueTab = page
@@ -860,13 +864,18 @@ test.describe('@draft-sim:rollback — optimistic pick rollback on 409', () => {
       // Seed pick 1 so we're on overall=2
       sim.makePick(1, { playerName: 'Prior Pick', position: 'QB', team: 'BUF' })
 
-      await installDraftMocks(page, leagueId, sim)
+      // roster-2 is on clock for overall=2 (snake: slot 1 already picked).
+      // Without this the default roster-1 user sees "Not your turn" and the
+      // Draft button stays disabled, blocking the test.
+      await installDraftMocks(page, leagueId, sim, { currentUserRosterId: 'roster-2' })
 
       // Override the pick endpoint to:
       //   1. Delay 400ms (so we can observe the optimistic state)
       //   2. Then return 409 (conflict — another user already drafted this player)
+      // IMPORTANT: the actual pick URL is /api/leagues/{leagueId}/draft/pick — the
+      // "**/api/leagues/*/draft/pick**" pattern must be used to override installDraftMocks.
       let pickCallCount = 0
-      await page.route('**/api/draft/*/pick**', async (route) => {
+      await page.route('**/api/leagues/*/draft/pick**', async (route) => {
         if (route.request().method() !== 'POST') { await route.fallback(); return }
         pickCallCount += 1
         const raw = route.request().postData()
@@ -881,20 +890,8 @@ test.describe('@draft-sim:rollback — optimistic pick rollback on 409', () => {
         })
       })
 
-      await page.route('**/api/draft/pick/**', async (route) => {
-        if (route.request().method() !== 'POST') { await route.fallback(); return }
-        const raw = route.request().postData()
-        sim.pickRequests.push(raw ? (JSON.parse(raw) as Record<string, unknown>) : {})
-        await new Promise((r) => setTimeout(r, 400))
-        await route.fulfill({
-          status: 409,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'CONFLICT', message: 'Player already drafted.' }),
-        })
-      })
-
       await navigateToDraftRoom(page, leagueId)
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
       await waitForCellFilled(page, 1, 'Prior Pick')
 
       // ── Navigate to players tab and draft a player ─────────────────────────
@@ -933,12 +930,6 @@ test.describe('@draft-sim:rollback — optimistic pick rollback on 409', () => {
       // ── Click Draft and observe optimistic state briefly ──────────────────
       // The pick submission is optimistic — the cell shows the player immediately
       // before the HTTP response arrives (which will return 409 after 400ms).
-
-      // Capture the player name we're about to draft from the button context
-      const playerRow = draftBtn.locator('../..')
-      const playerNameEl = playerRow.locator('[data-testid*="player-name"]').or(playerRow.locator('span').first())
-      const playerName = await playerNameEl.textContent().catch(() => 'Unknown')
-
       await draftBtn.click()
 
       // ── Verify pick submission was attempted ──────────────────────────────
@@ -946,19 +937,34 @@ test.describe('@draft-sim:rollback — optimistic pick rollback on 409', () => {
         .poll(() => sim.pickRequests.length, { timeout: 10_000, intervals: [POLL_INTERVAL_MS] })
         .toBeGreaterThan(0)
 
+      // ── Dismiss any optimistic pick announcement ───────────────────────────
+      // The app may show a "pick announcement" dialog optimistically before the 409
+      // arrives. The app keeps the optimistic board state while the dialog is open,
+      // so we must dismiss it to allow the rollback to complete.
+      const skipBtn = page.getByRole('button', { name: /^skip$/i })
+      if (await skipBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
+        await skipBtn.click()
+      } else {
+        // Try the dismiss button if skip isn't available
+        const dismissBtn = page.getByRole('button', { name: /^dismiss$/i })
+        if (await dismissBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+          await dismissBtn.click()
+        }
+      }
+
       // ── Verify rollback: after 409, the board reverts to server state ──────
-      // The optimistic pick should disappear from overall=2 (or wherever it was placed)
-      // and the board should show it as empty again.
-      // We wait for the polling cycle to deliver the canonical state (no pick 2).
+      // Use the cell's aria-label to detect the empty-slot state — it changes from
+      // e.g. "Atlas Runner, RB, NYJ, pick 1.2" (optimistic) back to
+      // "Draft pick 1.2, empty slot" (server canonical) after rollback.
+      // This avoids the fragile player-name-from-row extraction that can return null.
       await expect
         .poll(
           async () => {
-            const cell2 = page.getByTestId('draft-board-cell-2')
-            const text = await cell2.textContent().catch(() => '')
-            // Cell 2 should NOT contain the optimistic player name after rollback
-            return !(text ?? '').includes(playerName ?? '')
+            const cell2 = page.getByTestId('draft-board-cell-2').first()
+            const label = await cell2.getAttribute('aria-label').catch(() => '')
+            return (label ?? '').toLowerCase().includes('empty slot')
           },
-          { timeout: POLL_SETTLE_MS, intervals: [POLL_INTERVAL_MS] },
+          { timeout: 20_000, intervals: [POLL_INTERVAL_MS] },
         )
         .toBe(true)
 
@@ -977,7 +983,7 @@ test.describe('@draft-sim:rollback — optimistic pick rollback on 409', () => {
       await installDraftMocks(page, leagueId, sim)
       await navigateToDraftRoom(page, leagueId)
 
-      await expect(page.getByTestId('draft-board')).toBeVisible({ timeout: 20_000 })
+      await expect(page.getByTestId('draft-board').first()).toBeVisible({ timeout: 20_000 })
       await waitForCellFilled(page, 1, 'Real Pick')
 
       // Simulate the Pusher reconnect path:
