@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { useCallback, useEffect, useState } from "react"
 import { Loader2, Lock, Send, Settings, Sparkles } from "lucide-react"
 import { toast } from "sonner"
@@ -271,6 +272,27 @@ export default function WorldCupCommissionerBrainPanel({
         </label>
       ) : null}
 
+      {!hasAi && (
+        <div className="rounded-xl border border-cyan-400/20 bg-gradient-to-br from-cyan-400/10 to-transparent p-4">
+          <div className="flex items-start gap-3">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-cyan-200/90" />
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-black text-white">AF Pro required for AI actions</p>
+              <p className="mt-1 text-xs leading-relaxed text-white/55">
+                Generate Hype, Summarize Standings, What To Watch, and Post Round Recap use
+                Bracket Brain AI — exclusive to AF Pro commissioners.
+              </p>
+              <Link
+                href="/pricing"
+                className="mt-3 inline-flex rounded-lg bg-cyan-300 px-4 py-2 text-xs font-black text-black"
+              >
+                Upgrade to AF Pro
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap">
         <BrainButton
           disabled={
@@ -292,30 +314,34 @@ export default function WorldCupCommissionerBrainPanel({
           Broadcast Pool Reminder
         </BrainButton>
         <BrainButton
-          disabled={!bracketBrainEnabled || !hasAi || busy !== null}
+          disabled={!bracketBrainEnabled || busy !== null}
           loading={busy === "hype"}
           onClick={() => void runBrain("hype")}
+          proGated={!hasAi}
         >
           Generate Hype
         </BrainButton>
         <BrainButton
-          disabled={!bracketBrainEnabled || !hasAi || busy !== null}
+          disabled={!bracketBrainEnabled || busy !== null}
           loading={busy === "standings"}
           onClick={() => void runBrain("standings")}
+          proGated={!hasAi}
         >
           Summarize Standings
         </BrainButton>
         <BrainButton
-          disabled={!bracketBrainEnabled || !hasAi || busy !== null}
+          disabled={!bracketBrainEnabled || busy !== null}
           loading={busy === "watch"}
           onClick={() => void runBrain("watch")}
+          proGated={!hasAi}
         >
           What To Watch
         </BrainButton>
         <BrainButton
-          disabled={!bracketBrainEnabled || !hasAi || busy !== null}
+          disabled={!bracketBrainEnabled || busy !== null}
           loading={busy === "recap"}
           onClick={() => void runBrain("recap")}
+          proGated={!hasAi}
         >
           Post Round Recap
         </BrainButton>
@@ -358,21 +384,23 @@ function BrainButton({
   disabled,
   loading,
   icon,
+  proGated,
 }: {
   children: React.ReactNode
   onClick: () => void
   disabled?: boolean
   loading?: boolean
   icon?: React.ReactNode
+  proGated?: boolean
 }) {
   return (
     <button
       type="button"
       disabled={disabled || loading}
       onClick={onClick}
-      className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2.5 text-[11px] font-bold text-cyan-100 disabled:opacity-40 sm:min-h-0 sm:w-auto sm:justify-start sm:py-2"
+      className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2.5 text-[11px] font-bold text-cyan-100 transition disabled:opacity-40 hover:enabled:bg-cyan-400/20 sm:min-h-0 sm:w-auto sm:justify-start sm:py-2"
     >
-      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : icon}
+      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : proGated ? <Lock className="h-3.5 w-3.5 text-cyan-300/60" /> : icon}
       {children}
     </button>
   )

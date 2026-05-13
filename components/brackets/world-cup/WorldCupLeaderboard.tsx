@@ -117,7 +117,7 @@ export default function WorldCupLeaderboard({
               type="button"
               onClick={onRecalculate}
               disabled={busy}
-              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70"
+              className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/70 transition-all hover:bg-white/[0.08] hover:text-white active:scale-[0.97]"
             >
               <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
               Recalculate
@@ -177,7 +177,7 @@ export default function WorldCupLeaderboard({
                 className={`rounded-lg border p-3 transition ${
                   highlightEntryId && row.entryId === highlightEntryId
                     ? "sticky bottom-20 z-10 border-cyan-300/40 bg-cyan-300/[0.07] sm:static"
-                    : "border-white/10 bg-white/[0.03]"
+                    : "border-white/10 bg-white/[0.03] hover:bg-white/[0.05] hover:border-white/20"
                 }`}
               >
                 <div className="flex flex-col gap-2">

@@ -39,7 +39,7 @@ function MatchChip({ match }: { match: WorldCupMatchView }) {
   const isSimulated = match.apiStatusShort === "SIM"
 
   return (
-    <div className="flex shrink-0 items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/60">
+    <div className="flex shrink-0 items-center gap-2 rounded-full border border-white/15 bg-white/[0.04] px-3 py-1.5 text-[11px] text-white/60 transition-colors hover:border-white/25">
       {isLive && (
         <span className="flex items-center gap-0.5 text-rose-300 font-bold">
           <Radio className="h-3 w-3" />
@@ -62,8 +62,9 @@ function MatchChip({ match }: { match: WorldCupMatchView }) {
 export default function WorldCupLiveScoreTicker({ matches }: { matches: WorldCupMatchView[] }) {
   if (!matches || matches.length === 0) {
     return (
-      <div className="border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] text-white/30">
-        World Cup fixtures will appear here once synced.
+      <div className="flex items-center gap-1.5 border-b border-white/10 bg-black/30 px-4 py-2 text-[11px] text-white/30">
+        <Radio className="h-3 w-3 shrink-0 opacity-40" />
+        <span className="italic">World Cup fixtures will appear here once synced.</span>
       </div>
     )
   }
@@ -84,7 +85,8 @@ export default function WorldCupLiveScoreTicker({ matches }: { matches: WorldCup
   return (
     <div className="flex items-center gap-2 overflow-x-auto border-b border-white/10 bg-black/40 px-3 py-2 scrollbar-none">
       {showLiveDot && (
-        <span className="shrink-0 text-[10px] font-bold uppercase tracking-widest text-rose-300">
+        <span className="inline-flex shrink-0 items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-rose-300">
+          <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400" />
           Live
         </span>
       )}

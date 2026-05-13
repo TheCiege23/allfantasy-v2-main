@@ -87,11 +87,11 @@ export default function WorldCupBracketCreateModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#05070b] text-white">
-      <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3">
+      <header className="flex items-center gap-3 border-b border-white/15 bg-white/[0.02] px-4 py-3">
         <button
           type="button"
           onClick={() => router.back()}
-          className="rounded-lg border border-white/10 bg-white/[0.04] p-2"
+          className="rounded-lg border border-white/10 bg-white/[0.04] p-2 transition hover:bg-white/[0.08]"
           aria-label="Go back"
         >
           <ArrowLeft className="h-4 w-4" />

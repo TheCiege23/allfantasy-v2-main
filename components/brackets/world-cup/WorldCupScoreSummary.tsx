@@ -99,13 +99,13 @@ export default function WorldCupScoreSummary({
       )}
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
-        <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
+        <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
           <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">Total pts</div>
-          <div data-testid="wc-summary-total-points" className="mt-0.5 text-xl font-black tabular-nums text-white sm:mt-1 sm:text-2xl">
+          <div data-testid="wc-summary-total-points" className="mt-0.5 text-xl font-black tabular-nums text-cyan-100 sm:mt-1 sm:text-2xl">
             {totalScore}
           </div>
         </div>
-        <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
+        <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
           <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">Possible left</div>
           <div
             data-testid="wc-summary-possible-remaining"
@@ -114,7 +114,7 @@ export default function WorldCupScoreSummary({
             {possibleRemaining}
           </div>
         </div>
-        <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
+        <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
           <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">Correct</div>
           <div
             data-testid="wc-summary-correct-picks"
@@ -124,7 +124,7 @@ export default function WorldCupScoreSummary({
             {correct}
           </div>
         </div>
-        <div className="rounded-xl border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
+        <div className="rounded-xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5">
           <div className="text-[8px] font-bold uppercase tracking-wide text-white/40 sm:text-[9px]">Wrong</div>
           <div
             data-testid="wc-summary-wrong-picks"
@@ -146,7 +146,7 @@ export default function WorldCupScoreSummary({
           {championName ? (
             <div
               data-testid="wc-summary-champion-status"
-              className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold sm:mt-2 sm:text-[10px] ${
+              className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold transition-colors duration-300 sm:mt-2 sm:text-[10px] ${
                 championStillAlive
                   ? "bg-emerald-500/20 text-emerald-200"
                   : "bg-rose-500/20 text-rose-200"

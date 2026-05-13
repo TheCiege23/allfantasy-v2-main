@@ -79,7 +79,7 @@ export default function WorldCupDiscoverClient() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <Link
           href="/brackets/world-cup"
-          className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/60 hover:text-white"
+          className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/60 transition hover:bg-white/[0.07] hover:text-white"
         >
           ← World Cup hub
         </Link>

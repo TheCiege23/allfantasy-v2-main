@@ -113,7 +113,7 @@ export default function WorldCupMatchupCard({
   return (
     <article
       data-testid={`world-cup-match-${match.id}`}
-      className={`w-[min(20rem,calc(100vw-2.5rem))] shrink-0 rounded-lg border bg-zinc-950/80 p-3 shadow-2xl shadow-black/30 transition sm:w-72 ${pickStateBorderClass}`}
+      className={`w-[min(20rem,calc(100vw-2.5rem))] shrink-0 rounded-lg border bg-zinc-950/80 p-3 shadow-2xl shadow-black/30 transition-all duration-300 sm:w-72 ${pickStateBorderClass}`}
     >
       {/* Header row — clicking opens guided picker */}
       <div
@@ -310,7 +310,7 @@ export default function WorldCupMatchupCard({
                 : selected ? "border-cyan-300/70 bg-cyan-300/10"
                 : teamIsLeading ? "border-white/20 bg-white/[0.06]"
                 : "border-white/10 bg-white/[0.03]",
-                locked || !matchIsPickable ? "cursor-not-allowed opacity-60" : "hover:bg-white/[0.06]",
+                locked || !matchIsPickable ? "cursor-not-allowed opacity-60" : "hover:bg-white/[0.09] hover:border-white/20",
               ]
                 .filter(Boolean)
                 .join(" ")}

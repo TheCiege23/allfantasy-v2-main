@@ -275,6 +275,14 @@
     {
       "path": "/api/cron/draft-pool-prewarm",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/draft-expired-timers",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/world-cup-live-sync",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

@@ -127,7 +127,7 @@ export default function WorldCupInvitePanel({ view }: { view: WorldCupChallengeV
             <button
               type="button"
               onClick={copyCode}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-white/60 hover:text-white"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-bold text-white/60 transition hover:bg-white/[0.08] hover:text-white"
             >
               {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-300" /> : <Copy className="h-3.5 w-3.5" />}
               {copiedCode ? "Copied" : "Copy Code"}
