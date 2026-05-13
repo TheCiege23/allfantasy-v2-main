@@ -72,6 +72,19 @@ export async function PATCH(request: Request, context: { params: { challengeId: 
     return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
   }
 
+  // Prevent accidentally setting a lock time in the past which would immediately
+  // lock all entries. Require at least 60 seconds in the future.
+  if (parsed.data.pickLockAt) {
+    const lockAt = new Date(parsed.data.pickLockAt)
+    const minAllowed = new Date(Date.now() + 60_000)
+    if (lockAt < minAllowed) {
+      return NextResponse.json(
+        { error: "pickLockAt must be at least 60 seconds in the future" },
+        { status: 422 }
+      )
+    }
+  }
+
   await updateWorldCupChallengeSettings({
     challengeId: params.data.challengeId,
     name: parsed.data.name,

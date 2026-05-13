@@ -259,7 +259,22 @@ export async function ensureWorldCupBracketFixtureTemplate(challengeId: string) 
 }
 
 export function getWorldCupAppBaseUrl() {
-  return (process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXTAUTH_URL || "http://localhost:3000").replace(/\/$/, "")
+  const base =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXTAUTH_URL ||
+    ""
+  if (!base) {
+    // Invite links will contain localhost:3000 — set NEXT_PUBLIC_APP_URL in your env.
+    if (process.env.NODE_ENV !== "test") {
+      console.warn(
+        "[world-cup] NEXT_PUBLIC_APP_URL / NEXT_PUBLIC_SITE_URL / NEXTAUTH_URL are all unset. " +
+          "Invite URLs will fall back to http://localhost:3000 which is wrong in production."
+      )
+    }
+    return "http://localhost:3000"
+  }
+  return base.replace(/\/$/, "")
 }
 
 export async function generateWorldCupInviteCode() {
@@ -1060,16 +1075,21 @@ export async function createWorldCupBracketEntry(input: { challengeId: string; u
     where: { challengeId_userId: { challengeId: input.challengeId, userId: input.userId } },
   })
   if (!participant) throw new Error("Join the bracket before creating entries")
-  const count = await prisma.worldCupBracketEntry.count({ where: { participantId: participant.id } })
-  if (count >= challenge.maxEntriesPerParticipant) throw new Error("Maximum bracket entries reached")
-  const label = input.name?.trim() || `Bracket ${count + 1}`
-  const row = await prisma.worldCupBracketEntry.create({
-    data: {
-      challengeId: input.challengeId,
-      participantId: participant.id,
-      userId: input.userId,
-      name: label,
-    },
+
+  // Use a transaction to atomically count-then-create so the maxEntriesPerParticipant
+  // cap cannot be exceeded under concurrent requests (e.g., double-click on submit).
+  const row = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const count = await tx.worldCupBracketEntry.count({ where: { participantId: participant.id } })
+    if (count >= challenge.maxEntriesPerParticipant) throw new Error("Maximum bracket entries reached")
+    const label = input.name?.trim() || `Bracket ${count + 1}`
+    return tx.worldCupBracketEntry.create({
+      data: {
+        challengeId: input.challengeId,
+        participantId: participant.id,
+        userId: input.userId,
+        name: label,
+      },
+    })
   })
   emitWorldCupEntryCreated(input.challengeId, row.id, input.userId, row.name)
   return row

@@ -65,6 +65,15 @@ export default function WorldCupLeaderboard({
   }, [view.leaderboard])
 
   const scoresSynced = Boolean(view.challenge.lastSyncedAt)
+  const isSimulated = Boolean(
+    view.challenge.isTestMode || view.challenge.simulationEnabled || view.challenge.hasSimulatedResults
+  )
+  // Suppress "not synced" banner when: (a) this is a test/simulated pool where lastSyncedAt
+  // is never set by design, or (b) the leaderboard already has scored entries (recalculate
+  // was run and scores are live). Showing "not synced" alongside a leaderboard with real
+  // scores is confusing.
+  const hasAnyScore = view.leaderboard.some((r) => r.totalScore > 0)
+  const showNotSyncedBanner = !scoresSynced && !isSimulated && !hasAnyScore
   const fixturesReady = view.matches.some((m) => m.homeTeamId && m.awayTeamId)
 
   return (
@@ -117,7 +126,7 @@ export default function WorldCupLeaderboard({
         </div>
       </div>
 
-      {!scoresSynced && (
+      {showNotSyncedBanner && (
         <div
           data-testid="wc-leaderboard-scores-not-synced"
           className="mb-4 flex items-start gap-2 rounded-xl border border-sky-400/25 bg-sky-500/10 px-3 py-2 text-[11px] text-sky-100"
