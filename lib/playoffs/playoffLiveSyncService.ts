@@ -338,6 +338,8 @@ export async function syncPlayoffLiveSeries(input: {
   let seriesUpdated = 0
   let newlyClinchedCount = 0
   let anySeriesClinched = false
+  // true whenever at least one series is in_progress — triggers entry lock
+  let anySeriesIsLive = false
 
   for (const series of seriesRows) {
     // ── Skip placeholder teams (non-test-mode before commissioner seeds teams)
@@ -433,6 +435,7 @@ export async function syncPlayoffLiveSeries(input: {
     } else if (game.isLive) {
       newStatus = "in_progress"
       newWinner = null
+      anySeriesIsLive = true
     } else if (game.isFinal) {
       // Game completed but series not over — still scheduled until next game
       newStatus = series.status === "in_progress" ? "scheduled" : series.status
@@ -480,6 +483,24 @@ export async function syncPlayoffLiveSeries(input: {
       newlyClinched,
       skipped: false,
     })
+  }
+
+  // ── Lock submitted entries when play is live (first_tipoff rule) ─────────
+  // Idempotent: updateMany with `isLocked: false` is a no-op once locked.
+  if (!dryRun && anySeriesIsLive) {
+    try {
+      const lockResult = await (prisma as any).playoffBracketEntry.updateMany({
+        where: { challengeId, submittedAt: { not: null }, isLocked: false },
+        data: { isLocked: true },
+      })
+      if (lockResult.count > 0) {
+        console.log(
+          `[SyncService] Locked ${lockResult.count} submitted entries for challengeId=${challengeId}`
+        )
+      }
+    } catch (err) {
+      errors.push(`Entry lock failed: ${String(err)}`)
+    }
   }
 
   // ── Rescore all entries if any series was newly clinched ──────────────────

@@ -455,11 +455,16 @@ export async function savePlayoffBracketPick(input: {
       id: true,
       userId: true,
       challengeId: true,
+      isLocked: true,
     },
   })
 
   if (!entry || entry.challengeId !== input.challengeId || entry.userId !== input.userId) {
     throw new Error("Entry not found")
+  }
+
+  if (entry.isLocked) {
+    throw new Error("LOCKED: This bracket is locked — the first game has already started")
   }
 
   const series = await (prisma as any).playoffBracketSeries.findUnique({

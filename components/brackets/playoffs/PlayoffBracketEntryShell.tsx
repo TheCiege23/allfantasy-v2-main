@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, CheckCircle2, Loader2 } from "lucide-react"
+import { ArrowLeft, CheckCircle2, Loader2, Lock } from "lucide-react"
 import { toast } from "sonner"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
 import {
@@ -30,7 +30,8 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
   const rounds = Array.isArray(view.rounds) ? view.rounds : []
   const totalSeries = series.length
   const pickCount = activeEntry?.pickCount ?? picks.length
-  const canSubmit = Boolean(activeEntry) && totalSeries > 0 && pickCount >= totalSeries
+  const isLocked = activeEntry?.isLocked ?? false
+  const canSubmit = Boolean(activeEntry) && totalSeries > 0 && pickCount >= totalSeries && !isLocked
 
   if (!activeEntry) {
     return null
@@ -84,8 +85,15 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
           </div>
           <div className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-700">
             <span className="rounded-full bg-slate-900 px-3 py-1 text-white">{pickCount}/{totalSeries} picks</span>
-            <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">Autosave on</span>
-            {saving ? (
+            {isLocked ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-3 py-1 text-rose-800">
+                <Lock className="h-3.5 w-3.5" />
+                Locked
+              </span>
+            ) : (
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-emerald-900">Autosave on</span>
+            )}
+            {saving && !isLocked ? (
               <span className="inline-flex items-center gap-2 rounded-full bg-amber-100 px-3 py-1 text-amber-900">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Saving
@@ -95,34 +103,49 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Bracket Entry</h2>
-            <p className="mt-1 text-sm text-slate-600">
-              Picks save automatically. Finish every series, then submit to return to the pool dashboard.
-            </p>
+      {/* Lock banner — shown when the first game has tipped off */}
+      {isLocked ? (
+        <section className="rounded-2xl border border-rose-300 bg-rose-50 p-4 shadow-sm">
+          <div className="flex items-start gap-3">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-wide text-rose-800">Bracket Locked</h2>
+              <p className="mt-1 text-sm text-rose-700">
+                The first playoff game has started. Your picks are final and can no longer be changed.
+              </p>
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={!canSubmit || submitting}
-            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            {dirtySinceSubmit && activeEntry.isComplete ? "Re-Submit Bracket" : "Submit Bracket"}
-          </button>
-        </div>
-        {!canSubmit ? (
-          <p className="mt-3 text-sm text-amber-700">Complete every series before submitting this bracket.</p>
-        ) : null}
-        {dirtySinceSubmit ? (
-          <p className="mt-3 text-sm text-sky-700">You changed a submitted bracket. Re-submit to confirm the latest picks.</p>
-        ) : null}
-      </section>
+        </section>
+      ) : (
+        <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Bracket Entry</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Picks save automatically. Finish every series, then submit to return to the pool dashboard.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={!canSubmit || submitting}
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              {dirtySinceSubmit && activeEntry.isComplete ? "Re-Submit Bracket" : "Submit Bracket"}
+            </button>
+          </div>
+          {!canSubmit ? (
+            <p className="mt-3 text-sm text-amber-700">Complete every series before submitting this bracket.</p>
+          ) : null}
+          {dirtySinceSubmit ? (
+            <p className="mt-3 text-sm text-sky-700">You changed a submitted bracket. Re-submit to confirm the latest picks.</p>
+          ) : null}
+        </section>
+      )}
 
       <LiveSeriesTicker series={series} />
-      <PlayoffBracketBoard rounds={rounds} series={series} picks={picks} onPick={handlePick} />
+      <PlayoffBracketBoard rounds={rounds} series={series} picks={picks} onPick={isLocked ? undefined : handlePick} locked={isLocked} />
     </div>
   )
 }

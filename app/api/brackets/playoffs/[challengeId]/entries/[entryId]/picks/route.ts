@@ -37,6 +37,7 @@ export async function POST(request: Request, context: { params: { challengeId: s
     const view = await getPlayoffBracketView({
       challengeId: params.data.challengeId,
       user: auth.user,
+      requestedEntryId: params.data.entryId,
     })
 
     return NextResponse.json({
@@ -44,11 +45,14 @@ export async function POST(request: Request, context: { params: { challengeId: s
       view,
     })
   } catch (error) {
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Failed to save pick",
-      },
-      { status: 400 }
-    )
+    const message = error instanceof Error ? error.message : "Failed to save pick"
+    // LOCKED sentinel thrown by savePlayoffBracketPick — HTTP 423 Locked
+    if (message.startsWith("LOCKED:")) {
+      return NextResponse.json(
+        { error: "Bracket is locked — the first game has already started" },
+        { status: 423 }
+      )
+    }
+    return NextResponse.json({ error: message }, { status: 400 })
   }
 }
