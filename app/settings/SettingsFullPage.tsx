@@ -1,5 +1,14 @@
 "use client"
 
+/**
+ * @deprecated LEGACY — This was the original single-page settings view.
+ * The canonical settings experience is now `app/settings/components/SettingsApp.tsx`
+ * at the route `/settings`. Do NOT add new settings features here.
+ *
+ * This file is kept for reference during the transition period.
+ * Once all features have migrated to SettingsApp + section components, this file
+ * should be deleted.
+ */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { signOut, useSession } from "next-auth/react"

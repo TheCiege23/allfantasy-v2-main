@@ -1566,6 +1566,7 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.aria.navigation": "Settings navigation",
     "settings.nav.profile": "Profile",
     "settings.nav.preferences": "Preferences",
+    "settings.nav.ai": "AI Features",
     "settings.nav.security": "Security",
     "settings.nav.notifications": "Notifications",
     "settings.nav.connected": "Connected Accounts",

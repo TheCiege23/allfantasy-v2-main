@@ -69,7 +69,8 @@ export function SettingsChrome({
   const router = useRouter()
   const { t } = useLanguage()
 
-  const NavButton = ({ tab, mobile }: { tab: NavDef; mobile?: boolean }) => {
+  /** Desktop sidebar button — icon + full label */
+  const SidebarNavButton = ({ tab }: { tab: NavDef }) => {
     const Icon = tab.icon
     const active = activeTab === tab.id
     const label = t(`settings.nav.${tab.id}`)
@@ -77,9 +78,9 @@ export function SettingsChrome({
       <button
         type="button"
         onClick={() => onTabChange(tab.id)}
+        aria-label={label}
+        aria-current={active ? "page" : undefined}
         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm font-medium transition ${
-          mobile ? 'shrink-0 whitespace-nowrap' : ''
-        } ${
           active
             ? 'border-l-2 border-cyan-400 bg-cyan-500/10 text-white'
             : 'border-l-2 border-transparent text-white/55 hover:bg-white/[0.04] hover:text-white/85'
@@ -90,6 +91,34 @@ export function SettingsChrome({
       </button>
     )
   }
+
+  /** Mobile top strip button — icon only, active dot indicator */
+  const MobileNavButton = ({ tab }: { tab: NavDef }) => {
+    const Icon = tab.icon
+    const active = activeTab === tab.id
+    const label = t(`settings.nav.${tab.id}`)
+    return (
+      <button
+        type="button"
+        onClick={() => onTabChange(tab.id)}
+        aria-label={label}
+        aria-current={active ? "page" : undefined}
+        title={label}
+        className={`relative flex shrink-0 flex-col items-center gap-0.5 rounded-lg px-2.5 py-2 transition ${
+          active
+            ? 'bg-cyan-500/15 text-cyan-300'
+            : 'text-white/40 hover:bg-white/[0.04] hover:text-white/70'
+        }`}
+      >
+        <Icon className="h-5 w-5 shrink-0" />
+        {active && (
+          <span className="h-1 w-1 rounded-full bg-cyan-400" aria-hidden />
+        )}
+      </button>
+    )
+  }
+
+  const activeLabel = t(`settings.nav.${activeTab}`)
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#0d1117] text-white">
@@ -103,26 +132,39 @@ export function SettingsChrome({
           <Home className="h-5 w-5 text-cyan-400/90" strokeWidth={2} />
           {t('settings.home')}
         </button>
-        <h1 className="text-lg font-bold tracking-tight text-white">{t('settings.title')}</h1>
+        <div className="flex flex-col gap-0.5">
+          <h1 className="text-lg font-bold tracking-tight text-white">{t('settings.title')}</h1>
+          {/* Show active section name on mobile, subtitle on desktop */}
+          <p className="text-xs text-white/45 md:hidden">{activeLabel}</p>
+          <p className="hidden text-xs text-white/45 md:block">{t('settings.subtitle')}</p>
+        </div>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav
-          className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-white/[0.08] px-2 py-2 md:hidden"
-          aria-label={t('settings.aria.sections')}
-        >
-          {SETTINGS_NAV.map((tab) => (
-            <NavButton key={tab.id} tab={tab} mobile />
-          ))}
-        </nav>
+        {/* Mobile top nav — icon-only scrollable strip with fade edges */}
+        <div className="relative border-b border-white/[0.08] md:hidden">
+          {/* Fade left */}
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-4 bg-gradient-to-r from-[#0d1117] to-transparent" />
+          {/* Fade right */}
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-4 bg-gradient-to-l from-[#0d1117] to-transparent" />
+          <nav
+            className="flex gap-0.5 overflow-x-auto px-2 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            aria-label={t('settings.aria.sections')}
+          >
+            {SETTINGS_NAV.map((tab) => (
+              <MobileNavButton key={tab.id} tab={tab} />
+            ))}
+          </nav>
+        </div>
 
+        {/* Desktop sidebar */}
         <aside
           className="hidden w-60 shrink-0 flex-col border-r border-white/[0.08] bg-[#0a0e1a] p-3 md:flex"
           aria-label={t('settings.aria.navigation')}
         >
           <div className="rounded-xl border border-white/[0.06] bg-[#1a1f3a]/50 p-2">
             {SETTINGS_NAV.map((tab) => (
-              <NavButton key={tab.id} tab={tab} />
+              <SidebarNavButton key={tab.id} tab={tab} />
             ))}
           </div>
         </aside>

@@ -708,6 +708,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.legal.yes": "Sí",
   "settings.loading": "Cargando ajustes...",
   "settings.nav.account": "Cuenta",
+  "settings.nav.ai": "Funciones de IA",
   "settings.nav.billing": "Suscripción y facturación",
   "settings.nav.connected": "Cuentas conectadas",
   "settings.nav.legacy": "Importación Legacy",

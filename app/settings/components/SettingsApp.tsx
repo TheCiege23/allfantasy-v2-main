@@ -1,6 +1,20 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+/**
+ * Settings App — Tabbed settings interface with 10 tabs (profile, preferences, security, etc).
+ *
+ * CANONICAL ROUTE: /settings
+ *
+ * Deep linking: Tab state preserved via URL query params (?tab=profile, ?tab=connected, etc).
+ * Router uses router.replace() to update URL without adding history entry on tab change.
+ *
+ * Tab routing:
+ * - useSearchParams() reads tab param from URL
+ * - setActiveTab() updates state
+ * - handleTabSelect() updates URL via router.replace()
+ * - useEffect() syncs URL param changes back to state
+ */
+import { useState, useEffect } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { signOut } from "next-auth/react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
