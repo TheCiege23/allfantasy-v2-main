@@ -684,3 +684,167 @@ export async function syncAllPlayoffChallenges(input: {
     errors,
   }
 }
+
+// ─── Diagnostic: expose raw ESPN data + per-series match attempts ─────────────
+
+export type EspnDiagnosticSeriesResult = {
+  seriesId: string
+  homeTeamName: string
+  awayTeamName: string
+  round: string
+  status: string
+  isRealTeams: boolean
+  matched: boolean
+  espnHomeTeam: string | null
+  espnAwayTeam: string | null
+  /** "normal" | "reversed" | null */
+  matchOrientation: "normal" | "reversed" | null
+  homeSeriesWins: number | null
+  awaySeriesWins: number | null
+}
+
+export type EspnDiagnosticsResult = {
+  sport: PlayoffSport
+  season: number
+  espnUrl: string
+  espnGamesFound: number
+  espnGames: Array<{
+    homeTeamFull: string
+    awayTeamFull: string
+    homeSeriesWins: number | null
+    awaySeriesWins: number | null
+    statusName: string
+    isLive: boolean
+    isFinal: boolean
+  }>
+  seriesMatchAttempts: EspnDiagnosticSeriesResult[]
+  errors: string[]
+}
+
+/**
+ * Fetch the ESPN scoreboard and attempt to match each non-final series
+ * for a challenge. Returns raw ESPN data alongside match diagnostics —
+ * useful for verifying team name matching during live games without
+ * actually writing any DB state.
+ */
+export async function fetchEspnDiagnostics(input: {
+  challengeId: string
+  sport: PlayoffSport
+  season: number
+}): Promise<EspnDiagnosticsResult> {
+  const { challengeId, sport } = input
+  const errors: string[] = []
+
+  const path = ESPN_SPORT_PATH[sport]
+  const espnUrl = `https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`
+
+  // Fetch ESPN games
+  let espnGames: EspnPlayoffGame[] = []
+  try {
+    espnGames = await fetchEspnPlayoffGames(sport)
+  } catch (err) {
+    errors.push(`ESPN fetch failed: ${String(err)}`)
+  }
+
+  // Load all non-final series for the challenge
+  let seriesRows: SeriesRow[] = []
+  try {
+    const rows = await (prisma as any).playoffBracketSeries.findMany({
+      where: { challengeId, status: { not: "final" } },
+      select: {
+        id: true,
+        homeTeamName: true,
+        awayTeamName: true,
+        round: true,
+        homeWins: true,
+        awayWins: true,
+        bestOf: true,
+        status: true,
+        winnerTeamName: true,
+      },
+    })
+    seriesRows = rows as SeriesRow[]
+  } catch (err) {
+    errors.push(`Series load failed: ${String(err)}`)
+  }
+
+  // Attempt match for each series
+  const seriesMatchAttempts: EspnDiagnosticSeriesResult[] = seriesRows.map((series) => {
+    const realTeams = isRealTeamName(series.homeTeamName, sport) && isRealTeamName(series.awayTeamName, sport)
+    if (!realTeams) {
+      return {
+        seriesId: series.id,
+        homeTeamName: series.homeTeamName,
+        awayTeamName: series.awayTeamName,
+        round: series.round,
+        status: series.status,
+        isRealTeams: false,
+        matched: false,
+        espnHomeTeam: null,
+        espnAwayTeam: null,
+        matchOrientation: null,
+        homeSeriesWins: null,
+        awaySeriesWins: null,
+      }
+    }
+
+    const match = findMatchingGame(espnGames, series.homeTeamName, series.awayTeamName)
+    if (!match) {
+      return {
+        seriesId: series.id,
+        homeTeamName: series.homeTeamName,
+        awayTeamName: series.awayTeamName,
+        round: series.round,
+        status: series.status,
+        isRealTeams: true,
+        matched: false,
+        espnHomeTeam: null,
+        espnAwayTeam: null,
+        matchOrientation: null,
+        homeSeriesWins: null,
+        awaySeriesWins: null,
+      }
+    }
+
+    const { game, reversed } = match
+    // Translate wins to series perspective
+    let homeSeriesWins = game.homeSeriesWins
+    let awaySeriesWins = game.awaySeriesWins
+    if (reversed && homeSeriesWins !== null && awaySeriesWins !== null) {
+      ;[homeSeriesWins, awaySeriesWins] = [awaySeriesWins, homeSeriesWins]
+    }
+
+    return {
+      seriesId: series.id,
+      homeTeamName: series.homeTeamName,
+      awayTeamName: series.awayTeamName,
+      round: series.round,
+      status: series.status,
+      isRealTeams: true,
+      matched: true,
+      espnHomeTeam: reversed ? game.awayTeamFull : game.homeTeamFull,
+      espnAwayTeam: reversed ? game.homeTeamFull : game.awayTeamFull,
+      matchOrientation: reversed ? "reversed" : "normal",
+      homeSeriesWins,
+      awaySeriesWins,
+    }
+  })
+
+  return {
+    sport,
+    season: input.season,
+    espnUrl,
+    espnGamesFound: espnGames.length,
+    espnGames: espnGames.map((g) => ({
+      homeTeamFull: g.homeTeamFull,
+      awayTeamFull: g.awayTeamFull,
+      homeSeriesWins: g.homeSeriesWins,
+      awaySeriesWins: g.awaySeriesWins,
+      statusName: g.statusName,
+      isLive: g.isLive,
+      isFinal: g.isFinal,
+    })),
+    seriesMatchAttempts,
+    errors,
+  }
+}
