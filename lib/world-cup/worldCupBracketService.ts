@@ -671,10 +671,14 @@ export async function getWorldCupChallengeView(input: { challengeId: string; use
       })
     : []
 
+  const _srcPayload = c.sourcePayload as { simulation?: { isTestMode?: boolean } } | null
+  const allowSimulated = Boolean(_srcPayload?.simulation?.isTestMode)
+
   const leaderboard = buildWorldCupLeaderboardRows({
     entries: c.entries as Parameters<typeof buildWorldCupLeaderboardRows>[0]["entries"],
     matches: c.matches as Parameters<typeof buildWorldCupLeaderboardRows>[0]["matches"],
     scoring: c.scoringProfile,
+    allowSimulated,
   })
 
   const baseView = serialize({
