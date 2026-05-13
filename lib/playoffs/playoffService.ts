@@ -1,6 +1,6 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
-import { buildPlayoffTemplate, getPlayoffRoundOrder } from "./playoffTemplate"
+import { buildPlayoffTemplate, getPlayoffRoundOrder, getTeamForSeed } from "./playoffTemplate"
 import type { PlayoffChallengeListItem, PlayoffChallengeView, PlayoffCreateResponse, PlayoffSport } from "./types"
 
 type SessionUser = {
@@ -228,6 +228,41 @@ export async function getPlayoffBracketView(input: {
   const challengeEntries = Array.isArray(challenge.entries) ? challenge.entries : []
   const challengeSeries = Array.isArray(challenge.series) ? challenge.series : []
   const totalSeries = challengeSeries.length
+
+  // ── Pick-advancement resolution ────────────────────────────────────────────
+  // Maps seriesNumber → DB series id, and seriesId → user's pickTeamName
+  const seriesIdByNumber = new Map<number, string>()
+  for (const s of challengeSeries) {
+    seriesIdByNumber.set(s.seriesNumber as number, s.id as string)
+  }
+  const pickBySeriesId = new Map<string, string>()
+  for (const p of picks) {
+    pickBySeriesId.set(p.seriesId as string, p.pickTeamName as string)
+  }
+  const sport = challenge.sport as "nba" | "nhl"
+
+  /**
+   * Resolve a stored team-name placeholder to a real team name:
+   * - Legacy seed placeholder ("EAST1", "WEST3") → real team via sport/conference/seed
+   * - Later-round placeholder ("Winner S1" etc.) → user's existing pick for that source series
+   * - Already a real name → returned as-is
+   */
+  function resolveSlotTeam(storedName: string, sourceSeriesNumber: number | null): string {
+    // Legacy production placeholder: "EAST1", "WEST3", etc.
+    const seedMatch = /^(EAST|WEST)(\d+)$/.exec(storedName)
+    if (seedMatch) {
+      const conf = seedMatch[1].toLowerCase() as "east" | "west"
+      const seed = parseInt(seedMatch[2], 10)
+      return getTeamForSeed(sport, conf, seed)
+    }
+    // Later-round placeholder: resolve from user's pick for the source series
+    if (sourceSeriesNumber != null) {
+      const sourceId = seriesIdByNumber.get(sourceSeriesNumber)
+      if (sourceId) return pickBySeriesId.get(sourceId) ?? storedName
+    }
+    return storedName
+  }
+  // ──────────────────────────────────────────────────────────────────────────
   const participantMap = new Map<string, { userId: string; displayName: string; entryCount: number }>()
   for (const entry of challengeEntries) {
     const existing = participantMap.get(entry.userId)
@@ -315,8 +350,9 @@ export async function getPlayoffBracketView(input: {
       conference: series.conference,
       homeSeed: series.homeSeed,
       awaySeed: series.awaySeed,
-      homeTeamName: series.homeTeamName,
-      awayTeamName: series.awayTeamName,
+      // Resolve placeholder names → real team names using pick advancement
+      homeTeamName: resolveSlotTeam(series.homeTeamName as string, series.sourceSeriesHome as number | null),
+      awayTeamName: resolveSlotTeam(series.awayTeamName as string, series.sourceSeriesAway as number | null),
       winnerTeamName: series.winnerTeamName,
       homeWins: series.homeWins ?? 0,
       awayWins: series.awayWins ?? 0,
@@ -449,48 +485,122 @@ export async function savePlayoffBracketPick(input: {
   seriesId: string
   pickTeamName: string
 }) {
-  const entry = await (prisma as any).playoffBracketEntry.findUnique({
-    where: { id: input.entryId },
-    select: {
-      id: true,
-      userId: true,
-      challengeId: true,
-      isLocked: true,
-    },
-  })
+  // Load everything needed in parallel for best TTFB
+  const [entry, targetSeries, challenge, allSeries, existingPicks] = await Promise.all([
+    (prisma as any).playoffBracketEntry.findUnique({
+      where: { id: input.entryId },
+      select: { id: true, userId: true, challengeId: true, isLocked: true },
+    }),
+    (prisma as any).playoffBracketSeries.findUnique({
+      where: { id: input.seriesId },
+      select: {
+        id: true,
+        challengeId: true,
+        seriesNumber: true,
+        homeTeamName: true,
+        awayTeamName: true,
+        sourceSeriesHome: true,
+        sourceSeriesAway: true,
+      },
+    }),
+    (prisma as any).playoffBracketChallenge.findUnique({
+      where: { id: input.challengeId },
+      select: { sport: true },
+    }),
+    (prisma as any).playoffBracketSeries.findMany({
+      where: { challengeId: input.challengeId },
+      select: { id: true, seriesNumber: true, sourceSeriesHome: true, sourceSeriesAway: true },
+    }),
+    (prisma as any).playoffBracketPick.findMany({
+      where: { entryId: input.entryId },
+      select: { seriesId: true, pickTeamName: true },
+    }),
+  ])
 
   if (!entry || entry.challengeId !== input.challengeId || entry.userId !== input.userId) {
     throw new Error("Entry not found")
   }
-
   if (entry.isLocked) {
     throw new Error("LOCKED: This bracket is locked — the first game has already started")
   }
-
-  const series = await (prisma as any).playoffBracketSeries.findUnique({
-    where: { id: input.seriesId },
-    select: {
-      id: true,
-      challengeId: true,
-      homeTeamName: true,
-      awayTeamName: true,
-    },
-  })
-
-  if (!series || series.challengeId !== input.challengeId) {
+  if (!targetSeries || targetSeries.challengeId !== input.challengeId) {
     throw new Error("Series not found")
   }
 
-  if (![series.homeTeamName, series.awayTeamName].includes(input.pickTeamName)) {
+  const pickSport = challenge?.sport as "nba" | "nhl" | undefined
+
+  // Build resolution maps
+  const seriesIdByNum = new Map<number, string>()
+  for (const s of allSeries) seriesIdByNum.set(s.seriesNumber as number, s.id as string)
+
+  const pickBySeries = new Map<string, string>()
+  for (const p of existingPicks) pickBySeries.set(p.seriesId as string, p.pickTeamName as string)
+
+  /** Resolve a stored placeholder name to a real team name */
+  function resolveTeamName(storedName: string, sourceSeriesNumber: number | null): string {
+    // Legacy seed placeholder: "EAST1", "WEST3", etc.
+    const seedMatch = /^(EAST|WEST)(\d+)$/.exec(storedName)
+    if (seedMatch && pickSport) {
+      const conf = seedMatch[1].toLowerCase() as "east" | "west"
+      const seed = parseInt(seedMatch[2], 10)
+      return getTeamForSeed(pickSport, conf, seed)
+    }
+    // Later-round placeholder → resolve from user's existing pick for the source series
+    if (sourceSeriesNumber != null) {
+      const sourceId = seriesIdByNum.get(sourceSeriesNumber)
+      if (sourceId) return pickBySeries.get(sourceId) ?? storedName
+    }
+    return storedName
+  }
+
+  const resolvedHome = resolveTeamName(
+    targetSeries.homeTeamName as string,
+    targetSeries.sourceSeriesHome as number | null,
+  )
+  const resolvedAway = resolveTeamName(
+    targetSeries.awayTeamName as string,
+    targetSeries.sourceSeriesAway as number | null,
+  )
+
+  if (![resolvedHome, resolvedAway].includes(input.pickTeamName)) {
     throw new Error("Pick team must be one of the teams in this series")
+  }
+
+  // Cascade-delete stale downstream picks when the pick changes
+  const currentPick = pickBySeries.get(input.seriesId)
+  const pickIsChanging = currentPick !== undefined && currentPick !== input.pickTeamName
+
+  if (pickIsChanging) {
+    // BFS to find all series that (transitively) depend on this one
+    const downstreamIds: string[] = []
+    const visited = new Set<number>()
+    const queue = [targetSeries.seriesNumber as number]
+
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      for (const s of allSeries) {
+        const sn = s.seriesNumber as number
+        if (
+          !visited.has(sn) &&
+          (s.sourceSeriesHome === current || s.sourceSeriesAway === current)
+        ) {
+          visited.add(sn)
+          downstreamIds.push(s.id as string)
+          queue.push(sn)
+        }
+      }
+    }
+
+    if (downstreamIds.length > 0) {
+      await (prisma as any).playoffBracketPick.deleteMany({
+        where: { entryId: input.entryId, seriesId: { in: downstreamIds } },
+      })
+    }
   }
 
   const pick = await (prisma as any).playoffBracketPick.upsert({
     where: {
-      entryId_seriesId: {
-        entryId: input.entryId,
-        seriesId: input.seriesId,
-      },
+      entryId_seriesId: { entryId: input.entryId, seriesId: input.seriesId },
     },
     create: {
       challengeId: input.challengeId,

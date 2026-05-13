@@ -7,20 +7,31 @@ const ROUND_ORDER: PlayoffRoundKey[] = [
   "finals",
 ]
 
+// 2025 NBA Playoff seedings (2024-25 season)
 const NBA_TEAMS = {
-  east: ["Celtics", "Knicks", "Bucks", "Cavaliers", "Magic", "Pacers", "Heat", "76ers"],
-  west: ["Thunder", "Nuggets", "Timberwolves", "Mavericks", "Suns", "Lakers", "Pelicans", "Warriors"],
+  east: ["Cavaliers", "Celtics", "Knicks", "Pacers", "Bucks", "Pistons", "Heat", "Magic"],
+  west: ["Thunder", "Rockets", "Lakers", "Warriors", "Nuggets", "Grizzlies", "Mavericks", "Timberwolves"],
 } as const
 
+// 2025 NHL Playoff seedings (2024-25 season)
 const NHL_TEAMS = {
-  east: ["Rangers", "Hurricanes", "Panthers", "Maple Leafs", "Bruins", "Lightning", "Islanders", "Red Wings"],
-  west: ["Stars", "Avalanche", "Canucks", "Oilers", "Jets", "Kings", "Golden Knights", "Predators"],
+  east: ["Panthers", "Maple Leafs", "Hurricanes", "Lightning", "Senators", "Bruins", "Devils", "Capitals"],
+  west: ["Jets", "Stars", "Oilers", "Avalanche", "Golden Knights", "Kings", "Wild", "Blues"],
 } as const
 
-function resolveSeedName(sport: BuildPlayoffTemplateInput["sport"], conference: "east" | "west", seed: number, isTestMode: boolean) {
-  if (!isTestMode) return `${conference.toUpperCase()}${seed}`
+/** Resolve a real team name from sport + conference + seed. Safe to call at runtime. */
+export function getTeamForSeed(
+  sport: "nba" | "nhl",
+  conference: "east" | "west",
+  seed: number,
+): string {
   const bySport = sport === "nba" ? NBA_TEAMS : NHL_TEAMS
   return bySport[conference][seed - 1] ?? `${conference.toUpperCase()}${seed}`
+}
+
+function resolveSeedName(sport: BuildPlayoffTemplateInput["sport"], conference: "east" | "west", seed: number, _isTestMode: boolean) {
+  // Always use real team names — isTestMode parameter kept for API compatibility
+  return getTeamForSeed(sport, conference, seed)
 }
 
 function createSeries(data: PlayoffTemplateSeries): PlayoffTemplateSeries {
