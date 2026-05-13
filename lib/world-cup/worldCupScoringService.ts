@@ -330,7 +330,8 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
   })
   if (!c) throw new Error("World Cup bracket challenge not found")
 
-  const allowSimulated = Boolean((c as { isTestMode?: boolean }).isTestMode)
+  const _srcPayload = c.sourcePayload as { simulation?: { isTestMode?: boolean } } | null
+  const allowSimulated = Boolean(_srcPayload?.simulation?.isTestMode)
 
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     for (const entry of c.entries) {
