@@ -6,16 +6,23 @@ import {
   createAdditionalWorldCupInvite,
   createWorldCupBracketChallenge,
   getWorldCupChallengeByInvite,
+  getWorldCupChallengeIntegrityReport,
   getWorldCupChallengeView,
   joinWorldCupChallengeByInvite,
+  loadWorldCupTestFixtures,
   recalculateWorldCupChallenge,
+  resetWorldCupSimulation,
   saveWorldCupPicks,
+  simulateWorldCupMatchResult,
+  simulateWorldCupRound,
+  simulateWorldCupTournament,
   syncAllOpenWorldCupChallenges,
   syncWorldCupChallenge,
   updateWorldCupChallengeSettings,
 } from "@/lib/world-cup"
 import {
   assertWorldCupManager,
+  assertWorldCupSimulationAccess,
   getWorldCupAdminState,
   getWorldCupApiUser,
   requireWorldCupApiUser,
@@ -84,6 +91,40 @@ const createInviteSchema = z.object({
 
 const syncWorldCupSchema = z.object({
   challengeId: z.string().min(1).optional(),
+})
+
+const simulateTournamentSchema = z.object({
+  strategy: z.enum(["random", "higher_seed", "home", "away"]),
+  dryRun: z.boolean().optional().default(false),
+  confirmSimulation: z.literal(true),
+})
+
+const simulateRoundSchema = z.object({
+  round: z.enum(["round_of_32", "round_of_16", "quarterfinal", "semifinal", "third_place", "final"]),
+  strategy: z.enum(["random", "higher_seed", "home", "away"]),
+  dryRun: z.boolean().optional().default(false),
+  confirmSimulation: z.literal(true),
+})
+
+const simulateMatchSchema = z.object({
+  matchId: z.string().min(1),
+  winnerTeamId: z.string().min(1).nullable().optional(),
+  homeScore: z.number().int().min(0).max(20).nullable().optional(),
+  awayScore: z.number().int().min(0).max(20).nullable().optional(),
+  elapsedMinute: z.number().int().min(0).max(180).nullable().optional(),
+  dryRun: z.boolean().optional().default(false),
+  status: z.enum(["scheduled", "live", "final"]).optional().default("final"),
+  confirmSimulation: z.literal(true),
+})
+
+const resetSimulationSchema = z.object({
+  confirmSimulationReset: z.literal(true),
+  dryRun: z.boolean().optional().default(false),
+})
+
+const loadTestFixturesSchema = z.object({
+  confirmTestFixtures: z.literal(true),
+  dryRun: z.boolean().optional().default(false),
 })
 
 function notFound() {
@@ -555,6 +596,204 @@ async function adminHealthCheck(request: Request) {
   return NextResponse.json({ ok: true, diagnostics })
 }
 
+async function adminSimulateTournament(request: Request, challengeId: string) {
+  const auth = await requireWorldCupApiUser(request)
+  if (!auth.ok) return auth.response
+
+  const params = worldCupChallengeParamsSchema.safeParse({ challengeId })
+  if (!params.success) {
+    return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
+  }
+
+  const body = await request.json().catch(() => ({}))
+  const parsed = simulateTournamentSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const access = await assertWorldCupSimulationAccess({
+    request,
+    challengeId: params.data.challengeId,
+    user: auth.user,
+    confirmSimulation: parsed.data.confirmSimulation,
+  })
+  if (!access.ok) return access.response
+
+  try {
+    const result = await simulateWorldCupTournament({
+      challengeId: params.data.challengeId,
+      strategy: parsed.data.strategy,
+      dryRun: parsed.data.dryRun,
+    })
+    return NextResponse.json({ ok: true, result })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Simulation failed"
+    return NextResponse.json({ error: message }, { status: 400 })
+  }
+}
+
+async function adminSimulateRound(request: Request, challengeId: string) {
+  const auth = await requireWorldCupApiUser(request)
+  if (!auth.ok) return auth.response
+
+  const params = worldCupChallengeParamsSchema.safeParse({ challengeId })
+  if (!params.success) {
+    return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
+  }
+
+  const body = await request.json().catch(() => ({}))
+  const parsed = simulateRoundSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const access = await assertWorldCupSimulationAccess({
+    request,
+    challengeId: params.data.challengeId,
+    user: auth.user,
+    confirmSimulation: parsed.data.confirmSimulation,
+  })
+  if (!access.ok) return access.response
+
+  try {
+    const result = await simulateWorldCupRound({
+      challengeId: params.data.challengeId,
+      round: parsed.data.round,
+      strategy: parsed.data.strategy,
+      dryRun: parsed.data.dryRun,
+    })
+    return NextResponse.json({ ok: true, result })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Simulation failed"
+    return NextResponse.json({ error: message }, { status: 400 })
+  }
+}
+
+async function adminSimulateMatch(request: Request, challengeId: string) {
+  const auth = await requireWorldCupApiUser(request)
+  if (!auth.ok) return auth.response
+
+  const params = worldCupChallengeParamsSchema.safeParse({ challengeId })
+  if (!params.success) {
+    return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
+  }
+
+  const body = await request.json().catch(() => ({}))
+  const parsed = simulateMatchSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const access = await assertWorldCupSimulationAccess({
+    request,
+    challengeId: params.data.challengeId,
+    user: auth.user,
+    confirmSimulation: parsed.data.confirmSimulation,
+  })
+  if (!access.ok) return access.response
+
+  try {
+    const result = await simulateWorldCupMatchResult({
+      challengeId: params.data.challengeId,
+      matchId: parsed.data.matchId,
+      winnerTeamId: parsed.data.winnerTeamId,
+      homeScore: parsed.data.homeScore,
+      awayScore: parsed.data.awayScore,
+      elapsedMinute: parsed.data.elapsedMinute,
+      dryRun: parsed.data.dryRun,
+      status: parsed.data.status,
+    })
+    return NextResponse.json({ ok: true, result })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Simulation failed"
+    return NextResponse.json({ error: message }, { status: 400 })
+  }
+}
+
+async function adminResetSimulation(request: Request, challengeId: string) {
+  const auth = await requireWorldCupApiUser(request)
+  if (!auth.ok) return auth.response
+
+  const params = worldCupChallengeParamsSchema.safeParse({ challengeId })
+  if (!params.success) {
+    return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
+  }
+
+  const body = await request.json().catch(() => ({}))
+  const parsed = resetSimulationSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const access = await assertWorldCupSimulationAccess({
+    request,
+    challengeId: params.data.challengeId,
+    user: auth.user,
+    confirmSimulation: parsed.data.confirmSimulationReset,
+  })
+  if (!access.ok) return access.response
+
+  try {
+    const result = await resetWorldCupSimulation({
+      challengeId: params.data.challengeId,
+      dryRun: parsed.data.dryRun,
+    })
+    return NextResponse.json({ ok: true, result })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Reset failed"
+    return NextResponse.json({ error: message }, { status: 400 })
+  }
+}
+
+async function adminLoadTestFixtures(request: Request, challengeId: string) {
+  const auth = await requireWorldCupApiUser(request)
+  if (!auth.ok) return auth.response
+
+  const params = worldCupChallengeParamsSchema.safeParse({ challengeId })
+  if (!params.success) {
+    return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
+  }
+
+  const access = await assertWorldCupManager(request, params.data.challengeId, auth.user)
+  if (!access.ok) return access.response
+
+  const body = await request.json().catch(() => ({}))
+  const parsed = loadTestFixturesSchema.safeParse(body)
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request", issues: parsed.error.flatten() }, { status: 400 })
+  }
+
+  const result = await loadWorldCupTestFixtures(params.data.challengeId, {
+    dryRun: parsed.data.dryRun,
+  })
+
+  if (!result.success) {
+    return NextResponse.json({ error: result.warnings[0] ?? "Failed to load test fixtures" }, { status: 400 })
+  }
+
+  return NextResponse.json({ ok: true, result })
+}
+
+async function adminGetIntegrity(request: Request, challengeId: string) {
+  const auth = await requireWorldCupApiUser()
+  if (!auth.ok) return auth.response
+
+  const params = worldCupChallengeParamsSchema.safeParse({ challengeId })
+  if (!params.success) {
+    return NextResponse.json({ error: "Invalid challenge id" }, { status: 400 })
+  }
+
+  const access = await assertWorldCupManager(request, params.data.challengeId, auth.user)
+  if (!access.ok) return access.response
+
+  const report = await getWorldCupChallengeIntegrityReport(params.data.challengeId)
+  if (!report) {
+    return NextResponse.json({ error: "Challenge not found" }, { status: 404 })
+  }
+
+  return NextResponse.json({ ok: true, report })
+}
+
 export async function GET(request: Request, context: WorldCupRouteContext) {
   const path = getPath(context)
 
@@ -565,6 +804,7 @@ export async function GET(request: Request, context: WorldCupRouteContext) {
   if (path.length === 2 && path[1] === "picks") return getPicks(path[0])
   if (path.length === 2 && path[0] === "admin" && path[1] === "challenges") return adminListChallenges(request)
   if (path.length === 2 && path[0] === "admin" && path[1] === "health") return adminHealthCheck(request)
+  if (path.length === 3 && path[1] === "admin" && path[2] === "integrity") return adminGetIntegrity(request, path[0])
 
   return notFound()
 }
@@ -580,6 +820,11 @@ export async function POST(request: Request, context: WorldCupRouteContext) {
   if (path.length === 2 && path[1] === "invite") return createInvite(request, path[0])
   if (path.length === 2 && path[1] === "recalculate") return recalculateChallenge(request, path[0])
   if (path.length === 2 && path[0] === "admin" && path[1] === "action") return adminChallengeAction(request)
+  if (path.length === 3 && path[1] === "admin" && path[2] === "simulate-tournament") return adminSimulateTournament(request, path[0])
+  if (path.length === 3 && path[1] === "admin" && path[2] === "simulate-round") return adminSimulateRound(request, path[0])
+  if (path.length === 3 && path[1] === "admin" && path[2] === "simulate-match") return adminSimulateMatch(request, path[0])
+  if (path.length === 3 && path[1] === "admin" && path[2] === "reset-simulation") return adminResetSimulation(request, path[0])
+  if (path.length === 3 && path[1] === "admin" && path[2] === "load-test-fixtures") return adminLoadTestFixtures(request, path[0])
 
   return notFound()
 }
