@@ -7,16 +7,16 @@ const ROUND_ORDER: PlayoffRoundKey[] = [
   "finals",
 ]
 
-// 2025 NBA Playoff seedings (2024-25 season)
+// 2026 NBA Playoff seedings (2025-26 season)
 const NBA_TEAMS = {
-  east: ["Cavaliers", "Celtics", "Knicks", "Pacers", "Bucks", "Pistons", "Heat", "Magic"],
-  west: ["Thunder", "Rockets", "Lakers", "Warriors", "Nuggets", "Grizzlies", "Mavericks", "Timberwolves"],
+  east: ["Pistons", "Celtics", "Knicks", "Cavaliers", "Raptors", "Hawks", "76ers", "Magic"],
+  west: ["Thunder", "Spurs", "Nuggets", "Lakers", "Rockets", "Timberwolves", "Trail Blazers", "Suns"],
 } as const
 
-// 2025 NHL Playoff seedings (2024-25 season)
+// 2026 NHL Playoff seedings (2025-26 season)
 const NHL_TEAMS = {
-  east: ["Panthers", "Maple Leafs", "Hurricanes", "Lightning", "Senators", "Bruins", "Devils", "Capitals"],
-  west: ["Jets", "Stars", "Oilers", "Avalanche", "Golden Knights", "Kings", "Wild", "Blues"],
+  east: ["Hurricanes", "Sabres", "Lightning", "Penguins", "Flyers", "Canadiens", "Bruins", "Senators"],
+  west: ["Avalanche", "Golden Knights", "Stars", "Oilers", "Ducks", "Wild", "Mammoth", "Kings"],
 } as const
 
 /** Resolve a real team name from sport + conference + seed. Safe to call at runtime. */
