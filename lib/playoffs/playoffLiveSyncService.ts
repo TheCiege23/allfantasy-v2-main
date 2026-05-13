@@ -1,6 +1,7 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
 import { scoreAllEntriesForChallenge } from "./playoffScoringService"
+import { notifySeriesClinched, notifyRankImproved } from "./playoffNotificationService"
 import type { PlayoffSport } from "./types"
 
 // ─── ESPN path segments ───────────────────────────────────────────────────────
@@ -50,6 +51,7 @@ export type LiveSyncSeriesResult = {
   seriesId: string
   homeTeamName: string
   awayTeamName: string
+  round: string
   prevHomeWins: number
   prevAwayWins: number
   homeWins: number
@@ -240,6 +242,7 @@ type SeriesRow = {
   id: string
   homeTeamName: string
   awayTeamName: string
+  round: string
   homeWins: number
   awayWins: number
   bestOf: number
@@ -273,6 +276,18 @@ export async function syncPlayoffLiveSeries(input: {
   const { challengeId, sport, season, dryRun = false } = input
   const errors: string[] = []
 
+  // ── Load challenge name (for notification titles) ─────────────────────────
+  let challengeName = "Playoff Pool"
+  try {
+    const challengeRow = await (prisma as any).playoffBracketChallenge.findUnique({
+      where: { id: challengeId },
+      select: { name: true },
+    }) as { name: string } | null
+    if (challengeRow?.name) challengeName = challengeRow.name
+  } catch {
+    // Non-fatal — notifications will fall back to generic name
+  }
+
   // ── Load all non-final series ─────────────────────────────────────────────
   const allSeries = await (prisma as any).playoffBracketSeries.findMany({
     where: { challengeId, status: { not: "final" } },
@@ -280,6 +295,7 @@ export async function syncPlayoffLiveSeries(input: {
       id: true,
       homeTeamName: true,
       awayTeamName: true,
+      round: true,
       homeWins: true,
       awayWins: true,
       bestOf: true,
@@ -333,6 +349,7 @@ export async function syncPlayoffLiveSeries(input: {
         seriesId: series.id,
         homeTeamName: series.homeTeamName,
         awayTeamName: series.awayTeamName,
+        round: series.round,
         prevHomeWins: series.homeWins,
         prevAwayWins: series.awayWins,
         homeWins: series.homeWins,
@@ -359,6 +376,7 @@ export async function syncPlayoffLiveSeries(input: {
         seriesId: series.id,
         homeTeamName: series.homeTeamName,
         awayTeamName: series.awayTeamName,
+        round: series.round,
         prevHomeWins: series.homeWins,
         prevAwayWins: series.awayWins,
         homeWins: series.homeWins,
@@ -450,6 +468,7 @@ export async function syncPlayoffLiveSeries(input: {
       seriesId: series.id,
       homeTeamName: series.homeTeamName,
       awayTeamName: series.awayTeamName,
+      round: series.round,
       prevHomeWins: series.homeWins,
       prevAwayWins: series.awayWins,
       homeWins,
@@ -465,11 +484,48 @@ export async function syncPlayoffLiveSeries(input: {
 
   // ── Rescore all entries if any series was newly clinched ──────────────────
   if (!dryRun && anySeriesClinched) {
+    // Snapshot current ranks before scoring so we can detect rank improvements
+    let prevRanks = new Map<string, { userId: string; rank: number | null }>()
     try {
-      await scoreAllEntriesForChallenge({ challengeId })
+      const preScoreEntries = await (prisma as any).playoffBracketEntry.findMany({
+        where: { challengeId },
+        select: { id: true, userId: true, rank: true },
+      }) as Array<{ id: string; userId: string; rank: number | null }>
+      prevRanks = new Map(preScoreEntries.map((e) => [e.id, { userId: e.userId, rank: e.rank }]))
+    } catch (err) {
+      errors.push(`Pre-scoring rank snapshot failed: ${String(err)}`)
+    }
+
+    let newRanks: Array<{ entryId: string; rank: number; totalScore: number; correctPicks: number }> = []
+    try {
+      newRanks = await scoreAllEntriesForChallenge({ challengeId })
     } catch (err) {
       errors.push(`Scoring failed after clinch: ${String(err)}`)
     }
+
+    // ── Fire notifications (non-blocking, non-fatal) ─────────────────────
+    const clinchedResults = results.filter((r) => r.newlyClinched && r.winnerTeamName)
+    Promise.allSettled([
+      // One notification per clinched series per participant
+      ...clinchedResults.map((r) =>
+        notifySeriesClinched({
+          challengeId,
+          challengeName,
+          sport,
+          seriesId: r.seriesId,
+          homeTeamName: r.homeTeamName,
+          awayTeamName: r.awayTeamName,
+          winnerTeamName: r.winnerTeamName!,
+          round: r.round,
+        })
+      ),
+      // Rank-improvement notifications if we have both snapshots
+      ...(prevRanks.size > 0 && newRanks.length > 0
+        ? [notifyRankImproved({ challengeId, challengeName, prevRanks, newRanks })]
+        : []),
+    ]).catch((err) => {
+      console.warn("[SyncService] post-clinch notification batch error", { challengeId, err })
+    })
   }
 
   return {

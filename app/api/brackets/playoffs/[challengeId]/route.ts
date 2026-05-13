@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { createPlayoffBracketEntry, getPlayoffBracketView } from "@/lib/playoffs/playoffService"
+import { notifyInviteAccepted } from "@/lib/playoffs/playoffNotificationService"
 import { prisma } from "@/lib/prisma"
 import { playoffChallengeParamsSchema, requireWorldCupApiUser } from "../_utils"
 
@@ -82,7 +83,7 @@ export async function POST(request: Request, context: { params: { challengeId: s
 
     const challenge = await (prisma as any).playoffBracketChallenge.findUnique({
       where: { id: challengeId },
-      select: { id: true, status: true },
+      select: { id: true, status: true, name: true, ownerUserId: true },
     })
 
     if (!challenge) {
@@ -121,6 +122,23 @@ export async function POST(request: Request, context: { params: { challengeId: s
         user: auth.user,
         name,
       })
+
+      // Notify pool owner non-blocking
+      if (challenge.ownerUserId) {
+        const joinerName =
+          (auth.user as any)?.displayName?.trim() ||
+          (auth.user as any)?.username?.trim() ||
+          (auth.user as any)?.name?.trim() ||
+          "Someone"
+        notifyInviteAccepted({
+          challengeId,
+          challengeName: (challenge as any).name ?? "Playoff Pool",
+          ownerUserId: challenge.ownerUserId,
+          joinerUserId: auth.user?.id ?? "",
+          joinerName,
+        }).catch((err) => console.warn("[JoinRoute] invite notification error", err))
+      }
+
       return NextResponse.json({ ok: true, joined: true, ...result })
     } catch (error) {
       return NextResponse.json(

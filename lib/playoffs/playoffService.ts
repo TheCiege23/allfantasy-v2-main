@@ -429,6 +429,12 @@ export async function submitPlayoffBracketEntry(input: {
     throw new Error("Complete every series before submitting")
   }
 
+  // Persist submission timestamp (idempotent — updates on re-submit)
+  await (prisma as any).playoffBracketEntry.update({
+    where: { id: input.entryId },
+    data: { submittedAt: new Date() },
+  })
+
   return {
     challengeId: input.challengeId,
     entryId: input.entryId,

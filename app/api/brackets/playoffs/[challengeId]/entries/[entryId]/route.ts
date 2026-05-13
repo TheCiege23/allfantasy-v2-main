@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
+import { prisma } from "@/lib/prisma"
 import { submitPlayoffBracketEntry } from "@/lib/playoffs/playoffService"
+import { notifyBracketSubmitted } from "@/lib/playoffs/playoffNotificationService"
 import { playoffEntryParamsSchema, requireWorldCupApiUser } from "../../../_utils"
 
 export const runtime = "nodejs"
@@ -30,6 +32,32 @@ export async function POST(request: Request, context: { params: { challengeId: s
       entryId: params.data.entryId,
       userId: auth.user.id,
     })
+
+    // Fire submit notification non-blocking (load entry name + owner in background)
+    const { challengeId, entryId } = params.data
+    Promise.allSettled([
+      (prisma as any).playoffBracketEntry.findUnique({
+        where: { id: entryId },
+        select: { name: true },
+      }),
+      (prisma as any).playoffBracketChallenge.findUnique({
+        where: { id: challengeId },
+        select: { name: true, ownerUserId: true },
+      }),
+    ]).then(([entryRes, challengeRes]) => {
+      if (entryRes.status !== "fulfilled" || challengeRes.status !== "fulfilled") return
+      const entryRow = entryRes.value as { name: string } | null
+      const challengeRow = challengeRes.value as { name: string; ownerUserId: string } | null
+      if (!entryRow || !challengeRow) return
+      notifyBracketSubmitted({
+        challengeId,
+        challengeName: challengeRow.name,
+        entryId,
+        entryName: entryRow.name,
+        submitterUserId: auth.user.id,
+        ownerUserId: challengeRow.ownerUserId,
+      }).catch((err) => console.warn("[SubmitRoute] notification error", err))
+    }).catch((err) => console.warn("[SubmitRoute] notification lookup error", err))
 
     return NextResponse.json({ ok: true, ...result })
   } catch (error) {

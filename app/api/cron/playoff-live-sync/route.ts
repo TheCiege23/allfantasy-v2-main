@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+import { prisma } from "@/lib/prisma"
 import { requireCronAuth } from "../_auth"
 import { syncAllPlayoffChallenges } from "@/lib/playoffs/playoffLiveSyncService"
+import { notifyBracketLockReminder } from "@/lib/playoffs/playoffNotificationService"
 import type { PlayoffSport } from "@/lib/playoffs/types"
 
 export const runtime = "nodejs"
@@ -74,6 +76,32 @@ export async function GET(request: NextRequest) {
       ...result.challengeResults.flatMap((c) => c.errors),
     ]
     console.warn("[playoff-live-sync/cron] errors:", allErrors)
+  }
+
+  // ── Lock reminders (non-blocking, runs in parallel with response) ─────────
+  // Check all open challenges once per cron tick — notifyBracketLockReminder
+  // self-dedupes so repeated cron runs won't spam users.
+  if (!dryRun) {
+    Promise.resolve().then(async () => {
+      try {
+        const openChallenges = await (prisma as any).playoffBracketChallenge.findMany({
+          where: { sport, seasonYear: season, status: "open" },
+          select: { id: true, name: true },
+        }) as Array<{ id: string; name: string }>
+
+        await Promise.allSettled(
+          openChallenges.map((c) =>
+            notifyBracketLockReminder({
+              challengeId: c.id,
+              challengeName: c.name,
+              windowHours: 24,
+            })
+          )
+        )
+      } catch (err) {
+        console.warn("[playoff-live-sync/cron] lock reminder check failed", err)
+      }
+    }).catch(() => {/* already warned above */})
   }
 
   return NextResponse.json({
