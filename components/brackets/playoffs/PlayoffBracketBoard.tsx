@@ -21,6 +21,11 @@ function getPickForSeries(picks: PlayoffPickView[], seriesId: string): PlayoffPi
   return picks.find((pick) => pick.seriesId === seriesId) ?? null
 }
 
+/** Ordinal label for the next game in a series, e.g. "Game 5" */
+function nextGameLabel(homeWins: number, awayWins: number): string {
+  return `Game ${homeWins + awayWins + 1}`
+}
+
 function SeriesStatusBadge({ status, winnerTeamName }: { status: string; winnerTeamName: string | null }) {
   if (status === "final" && winnerTeamName) {
     return (
@@ -31,12 +36,50 @@ function SeriesStatusBadge({ status, winnerTeamName }: { status: string; winnerT
   }
   if (status === "in_progress") {
     return (
-      <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-800">
+      <span className="relative inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-amber-800">
+        {/* Pulsing live dot */}
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
+          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-amber-500" />
+        </span>
         Live
       </span>
     )
   }
   return null
+}
+
+/** Compact series score display — shows current win totals for both teams */
+function SeriesScore({
+  homeWins,
+  awayWins,
+  isFinal,
+  isLive,
+}: {
+  homeWins: number
+  awayWins: number
+  isFinal: boolean
+  isLive: boolean
+}) {
+  const hasGames = homeWins > 0 || awayWins > 0
+  if (!hasGames && !isLive && !isFinal) return null
+
+  return (
+    <div
+      className={`mb-2 flex items-center justify-center gap-1.5 text-xs font-black ${
+        isFinal ? "text-emerald-700" : isLive ? "text-amber-800" : "text-slate-600"
+      }`}
+    >
+      <span>{homeWins}</span>
+      <span className="font-normal text-slate-400">–</span>
+      <span>{awayWins}</span>
+      {!isFinal && !isLive && hasGames && (
+        <span className="ml-0.5 text-[9px] font-medium uppercase tracking-wide text-slate-400">
+          series
+        </span>
+      )}
+    </div>
+  )
 }
 
 export default function PlayoffBracketBoard({ rounds, series, picks, onPick, locked = false }: Props) {
@@ -61,6 +104,7 @@ export default function PlayoffBracketBoard({ rounds, series, picks, onPick, loc
                   const pick = getPickForSeries(picks, item.id)
                   const isFinal = item.status === "final"
                   const isLive = item.status === "in_progress"
+                  const hasStarted = item.homeWins > 0 || item.awayWins > 0
                   const teams = [
                     { name: item.homeTeamName, wins: item.homeWins, seed: item.homeSeed },
                     { name: item.awayTeamName, wins: item.awayWins, seed: item.awaySeed },
@@ -69,25 +113,39 @@ export default function PlayoffBracketBoard({ rounds, series, picks, onPick, loc
                     <article
                       key={item.id}
                       data-series-id={item.id}
-                      className={`rounded-xl border p-3 shadow-sm ${isLive ? "border-amber-300 bg-amber-50/50" : "border-slate-200 bg-white"}`}
+                      className={`rounded-xl border p-3 shadow-sm transition-colors ${
+                        isLive
+                          ? "border-amber-300 bg-amber-50/50"
+                          : isFinal
+                            ? "border-emerald-200/60 bg-emerald-50/20"
+                            : "border-slate-200 bg-white"
+                      }`}
                     >
+                      {/* Series header: number + status badge + bestOf */}
                       <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-500">
-                        <span>S{item.seriesNumber}</span>
+                        <span className="flex items-center gap-1.5">
+                          <span>S{item.seriesNumber}</span>
+                          {(isLive || hasStarted) && !isFinal && (
+                            <span className="rounded bg-slate-100 px-1 py-0.5 text-[9px] font-medium normal-case tracking-normal text-slate-500">
+                              {nextGameLabel(item.homeWins, item.awayWins)}
+                            </span>
+                          )}
+                        </span>
                         <div className="flex items-center gap-1">
                           <SeriesStatusBadge status={item.status} winnerTeamName={item.winnerTeamName} />
                           <span className="text-slate-400">Bo{item.bestOf}</span>
                         </div>
                       </div>
 
-                      {/* Series score (live or final) */}
-                      {(isLive || isFinal) && (
-                        <div className="mb-2 flex items-center justify-center gap-1 text-xs font-black text-slate-700">
-                          <span>{item.homeWins}</span>
-                          <span className="text-slate-400">–</span>
-                          <span>{item.awayWins}</span>
-                        </div>
-                      )}
+                      {/* Series win score */}
+                      <SeriesScore
+                        homeWins={item.homeWins}
+                        awayWins={item.awayWins}
+                        isFinal={isFinal}
+                        isLive={isLive}
+                      />
 
+                      {/* Team pick buttons */}
                       <div className="space-y-1.5">
                         {teams.map(({ name: teamName, wins, seed }) => {
                           const selected = pick?.pickTeamName === teamName
@@ -117,8 +175,16 @@ export default function PlayoffBracketBoard({ rounds, series, picks, onPick, loc
                                   <span className="mr-1 text-[10px] font-normal text-slate-400">#{seed}</span>
                                   {teamName}
                                 </span>
-                                {(isLive || isFinal) && (
-                                  <span className={`shrink-0 text-xs font-black ${isWinner ? "text-emerald-700" : "text-slate-500"}`}>
+                                {(isLive || isFinal || hasStarted) && (
+                                  <span
+                                    className={`shrink-0 text-xs font-black ${
+                                      isWinner
+                                        ? "text-emerald-700"
+                                        : isLive
+                                          ? "text-amber-700"
+                                          : "text-slate-500"
+                                    }`}
+                                  >
                                     {wins}
                                   </span>
                                 )}
@@ -128,11 +194,30 @@ export default function PlayoffBracketBoard({ rounds, series, picks, onPick, loc
                         })}
                       </div>
 
+                      {/* Footer: conference + start date / live label */}
                       <div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-                        <span>{item.conference === "finals" ? "Finals" : `${item.conference.charAt(0).toUpperCase() + item.conference.slice(1)}`}</span>
-                        {item.startsAt && !isFinal && !isLive && (
-                          <span>{new Date(item.startsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
-                        )}
+                        <span>
+                          {item.conference === "finals"
+                            ? "Finals"
+                            : `${item.conference.charAt(0).toUpperCase() + item.conference.slice(1)}`}
+                        </span>
+                        <span>
+                          {isLive && (
+                            <span className="font-medium text-amber-600">Live now</span>
+                          )}
+                          {!isLive && !isFinal && item.startsAt && (
+                            <span>
+                              {hasStarted ? "Next: " : ""}
+                              {new Date(item.startsAt).toLocaleDateString(undefined, {
+                                month: "short",
+                                day: "numeric",
+                              })}
+                            </span>
+                          )}
+                          {isFinal && item.winnerTeamName && (
+                            <span className="font-medium text-emerald-600">{item.winnerTeamName} wins</span>
+                          )}
+                        </span>
                       </div>
                     </article>
                   )

@@ -11,6 +11,7 @@ import {
   submitPlayoffBracketEntryClient,
 } from "@/lib/playoffs/playoffClientApi"
 import PlayoffBracketBoard from "./PlayoffBracketBoard"
+import LiveSeriesTicker from "./LiveSeriesTicker"
 
 type Props = {
   initialView: PlayoffChallengeView
@@ -120,6 +121,7 @@ export default function PlayoffBracketEntryShell({ initialView }: Props) {
         ) : null}
       </section>
 
+      <LiveSeriesTicker series={series} />
       <PlayoffBracketBoard rounds={rounds} series={series} picks={picks} onPick={handlePick} />
     </div>
   )

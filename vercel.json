@@ -283,6 +283,14 @@
     {
       "path": "/api/cron/world-cup-live-sync",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/playoff-live-sync?sport=nba",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/playoff-live-sync?sport=nhl",
+      "schedule": "*/5 * * * *"
     }
   ]
 }
