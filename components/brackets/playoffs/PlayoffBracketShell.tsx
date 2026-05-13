@@ -3,8 +3,8 @@
 import { useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import {
-  RefreshCw, Trophy, Plus, Link2, Clipboard, Settings2,
-  ArrowRightCircle, ChevronDown, ChevronUp, Zap,
+  RefreshCw, Trophy, Plus, Copy, Check, Settings2,
+  ArrowRightCircle, ChevronDown, ChevronUp, Zap, RotateCcw,
   CheckCircle2, Circle, AlertCircle,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -138,11 +138,14 @@ function CommissionerPanel({
 }) {
   const [open, setOpen] = useState(false)
   const [syncing, startSyncing] = useTransition()
+  const [recalculating, startRecalculating] = useTransition()
+  const [lastSyncMsg, setLastSyncMsg] = useState<string | null>(null)
 
   const totalSeries = series.length
   const resolvedCount = series.filter((s) => s.status === "final").length
   const liveCount = series.filter((s) => s.status === "in_progress").length
   const pct = totalSeries > 0 ? Math.round((resolvedCount / totalSeries) * 100) : 0
+  const allResolved = resolvedCount === totalSeries && totalSeries > 0
 
   function handleSyncLive() {
     startSyncing(async () => {
@@ -154,14 +157,32 @@ function CommissionerPanel({
         if (!res.ok) throw new Error((data as any)?.error ?? "Sync failed")
         const updated = (data as any)?.seriesUpdated ?? 0
         const clinched = (data as any)?.newlyClinched ?? 0
-        toast.success(
+        const msg =
           updated > 0
-            ? `Synced: ${updated} series updated${clinched > 0 ? `, ${clinched} clinched` : ""}`
-            : "Sync complete — no changes"
-        )
+            ? `${updated} updated${clinched > 0 ? `, ${clinched} clinched` : ""}`
+            : "No changes"
+        setLastSyncMsg(msg)
+        toast.success(updated > 0 ? `Synced — ${msg}` : "Sync complete — no changes")
         onRefresh()
       } catch (err) {
         toast.error(err instanceof Error ? err.message : "Live sync failed")
+      }
+    })
+  }
+
+  function handleRecalculate() {
+    startRecalculating(async () => {
+      try {
+        const res = await fetch(`/api/brackets/playoffs/${challengeId}/recalculate`, {
+          method: "POST",
+        })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) throw new Error((data as any)?.error ?? "Recalculate failed")
+        const count = (data as any)?.entriesScored ?? 0
+        toast.success(`Scores recalculated (${count} entries)`)
+        onRefresh()
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Recalculate failed")
       }
     })
   }
@@ -175,14 +196,21 @@ function CommissionerPanel({
       >
         <div className="flex items-center gap-2">
           <Settings2 className="h-4 w-4 text-indigo-700" />
-          <h2 className="text-sm font-black uppercase tracking-wide text-indigo-900">Commissioner Panel</h2>
+          <h2 className="text-sm font-black uppercase tracking-wide text-indigo-900">Commissioner</h2>
         </div>
         <div className="flex items-center gap-2">
-          <span className="rounded-full bg-indigo-200 px-2 py-0.5 text-[11px] font-semibold text-indigo-900">
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+              allResolved
+                ? "bg-emerald-200 text-emerald-900"
+                : "bg-indigo-200 text-indigo-900"
+            }`}
+          >
             {resolvedCount}/{totalSeries} resolved
           </span>
           {liveCount > 0 && (
-            <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-200 px-2 py-0.5 text-[11px] font-semibold text-amber-900">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-600" />
               {liveCount} live
             </span>
           )}
@@ -197,45 +225,68 @@ function CommissionerPanel({
       {/* Progress bar */}
       <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-indigo-100">
         <div
-          className="h-full rounded-full bg-indigo-500 transition-all"
-          style={{ width: `${pct}%` }}
+          className="h-full rounded-full transition-all duration-500"
+          style={{
+            width: `${pct}%`,
+            backgroundColor: allResolved ? "#10b981" : "#6366f1",
+          }}
         />
       </div>
 
       {open && (
         <div className="mt-4 space-y-4">
           {/* Actions row */}
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               onClick={handleSyncLive}
-              disabled={syncing}
+              disabled={syncing || recalculating}
               className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-300 bg-white px-3 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Zap className={`h-4 w-4 ${syncing ? "animate-pulse" : ""}`} />
+              <Zap className={`h-4 w-4 ${syncing ? "animate-pulse text-amber-500" : ""}`} />
               {syncing ? "Syncing…" : "Sync Live Scores"}
             </button>
+
+            <button
+              type="button"
+              onClick={handleRecalculate}
+              disabled={recalculating || syncing}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RotateCcw className={`h-4 w-4 ${recalculating ? "animate-spin" : ""}`} />
+              {recalculating ? "Recalculating…" : "Recalculate Scores"}
+            </button>
+
+            {lastSyncMsg && !syncing && (
+              <span className="rounded-lg bg-slate-100 px-2 py-1 text-[11px] text-slate-600">
+                Last sync: {lastSyncMsg}
+              </span>
+            )}
           </div>
 
           {/* Series management */}
           <div>
             <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-indigo-700">
-              Series Management
+              Series Status
             </h3>
-            <ul className="space-y-1.5">
-              {series.map((s) => (
-                <SeriesResolveRow
-                  key={s.id}
-                  series={s}
-                  challengeId={challengeId}
-                  onResolved={onRefresh}
-                />
-              ))}
-            </ul>
+            {series.length === 0 ? (
+              <p className="text-xs text-slate-500 italic">No series configured yet.</p>
+            ) : (
+              <ul className="space-y-1.5">
+                {series.map((s) => (
+                  <SeriesResolveRow
+                    key={s.id}
+                    series={s}
+                    challengeId={challengeId}
+                    onResolved={onRefresh}
+                  />
+                ))}
+              </ul>
+            )}
           </div>
 
           {/* Legend */}
-          <div className="flex flex-wrap gap-3 text-[10px] text-slate-500">
+          <div className="flex flex-wrap gap-3 border-t border-indigo-100 pt-3 text-[10px] text-slate-500">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="h-3 w-3 text-emerald-500" /> Resolved
             </span>
@@ -259,7 +310,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const [view, setView] = useState(initialView)
   const [refreshing, startRefreshing] = useTransition()
   const [creatingEntry, startCreatingEntry] = useTransition()
-  const [recalculating, startRecalculating] = useTransition()
+  const [copiedInvite, setCopiedInvite] = useState(false)
 
   const safeChallenge = {
     id: view?.challenge?.id || "unknown-challenge",
@@ -357,27 +408,15 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     })
   }
 
-  function handleRecalculate() {
-    startRecalculating(async () => {
-      try {
-        const res = await fetch(`/api/brackets/playoffs/${safeChallenge.id}/recalculate`, {
-          method: "POST",
-        })
-        if (!res.ok) throw new Error("Recalculate failed")
-        toast.success("Scores recalculated")
-        const latest = await getPlayoffBracketViewClient(safeChallenge.id)
-        setView(latest)
-      } catch {
-        toast.error("Could not recalculate scores")
-      }
-    })
-  }
+  const inviteFullUrl = `${typeof window !== "undefined" ? window.location.origin : ""}${safeChallenge.inviteUrl}?code=${safeChallenge.inviteCode}`
 
   async function copyInvite() {
     try {
-      const absoluteUrl = `${window.location.origin}${safeChallenge.inviteUrl}?code=${safeChallenge.inviteCode}`
-      await navigator.clipboard.writeText(absoluteUrl)
-      toast.success("Invite link copied")
+      const url = `${window.location.origin}${safeChallenge.inviteUrl}?code=${safeChallenge.inviteCode}`
+      await navigator.clipboard.writeText(url)
+      setCopiedInvite(true)
+      toast.success("Invite link copied!")
+      setTimeout(() => setCopiedInvite(false), 2500)
     } catch {
       toast.error("Could not copy invite link")
     }
@@ -497,20 +536,13 @@ export default function PlayoffBracketShell({ initialView }: Props) {
               onClick={copyInvite}
               className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-sky-700"
             >
-              <Clipboard className="h-4 w-4" />
-              Invite
+              {copiedInvite ? (
+                <Check className="h-4 w-4 text-emerald-600" />
+              ) : (
+                <Copy className="h-4 w-4" />
+              )}
+              {copiedInvite ? "Copied!" : "Invite"}
             </button>
-            {isOwner && (
-              <button
-                type="button"
-                onClick={handleRecalculate}
-                disabled={recalculating}
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <Settings2 className="h-4 w-4" />
-                {recalculating ? "Recalculating…" : "Recalculate"}
-              </button>
-            )}
           </div>
 
           {!canCreateEntry && (
@@ -522,22 +554,28 @@ export default function PlayoffBracketShell({ initialView }: Props) {
 
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Invite Your Pool</h2>
-          <p className="mt-2 break-all text-sm text-slate-600">
-            Share this link with friends to join:
+          <p className="mt-2 text-sm text-slate-600">
+            Share this link to invite players:
           </p>
-          <code className="mt-1 block rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-800 break-all">
-            …{safeChallenge.inviteUrl}?code={safeChallenge.inviteCode}
-          </code>
-          <button
-            type="button"
-            onClick={copyInvite}
-            className="mt-3 inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-sky-400 hover:text-sky-700"
-          >
-            <Link2 className="h-4 w-4" />
-            Copy full invite link
-          </button>
+          <div className="mt-2 flex items-stretch gap-2">
+            <code className="min-w-0 flex-1 rounded-lg bg-slate-100 px-3 py-2 text-xs font-medium text-slate-700 break-all leading-relaxed">
+              {safeChallenge.inviteUrl}?code={safeChallenge.inviteCode}
+            </code>
+            <button
+              type="button"
+              onClick={copyInvite}
+              title="Copy invite link"
+              className={`shrink-0 rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                copiedInvite
+                  ? "border-emerald-400 bg-emerald-50 text-emerald-700"
+                  : "border-slate-300 bg-white text-slate-700 hover:border-sky-400 hover:text-sky-700"
+              }`}
+            >
+              {copiedInvite ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </button>
+          </div>
           <p className="mt-2 text-xs text-slate-500">
-            Invite code: <span className="font-mono font-bold">{safeChallenge.inviteCode}</span>
+            Code: <span className="font-mono font-bold tracking-widest text-indigo-700">{safeChallenge.inviteCode}</span>
           </p>
         </article>
       </section>
@@ -617,38 +655,67 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
         data-testid="playoff-dashboard-leaderboard"
       >
-        <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
+          {leaderboardRows.length > 0 && (
+            <span className="text-xs text-slate-500">{leaderboardRows.length} bracket{leaderboardRows.length !== 1 ? "s" : ""}</span>
+          )}
+        </div>
+
         {leaderboardRows.length === 0 ? (
-          <p className="mt-2 text-sm text-slate-600">No entries yet. Be the first to fill out a bracket!</p>
+          <div className="mt-6 flex flex-col items-center gap-2 py-4 text-center">
+            <Trophy className="h-8 w-8 text-slate-300" />
+            <p className="text-sm font-semibold text-slate-600">No brackets yet</p>
+            <p className="text-xs text-slate-400">Be the first to fill out a bracket and claim the top spot!</p>
+          </div>
         ) : (
           <ol className="mt-3 space-y-1.5">
-            {leaderboardRows.map((row) => (
-              <li
-                key={row.id}
-                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
-                  row.userId === view?.viewerUserId
-                    ? "border-indigo-300 bg-indigo-50"
-                    : "border-slate-200"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <span className="w-8 text-center text-xs font-black text-slate-400">
-                    #{row.rank}
-                  </span>
-                  <div>
-                    <p className="font-semibold text-slate-800">{row.name}</p>
-                    <p className="text-xs text-slate-500">
-                      {row.pickCount}/{totalSeries} picks ·{" "}
-                      {row.isComplete ? "Complete" : "In progress"}
+            {leaderboardRows.map((row) => {
+              const isViewer = row.userId === view?.viewerUserId
+              const rankIcon =
+                row.rank === 1 ? "🥇" :
+                row.rank === 2 ? "🥈" :
+                row.rank === 3 ? "🥉" : null
+
+              return (
+                <li
+                  key={row.id}
+                  className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm transition ${
+                    isViewer
+                      ? "border-indigo-300 bg-indigo-50 ring-1 ring-indigo-200"
+                      : "border-slate-200 hover:border-slate-300"
+                  }`}
+                >
+                  {/* Rank */}
+                  <div className="w-8 shrink-0 text-center">
+                    {rankIcon ? (
+                      <span className="text-base leading-none">{rankIcon}</span>
+                    ) : (
+                      <span className="text-xs font-black text-slate-400">#{row.rank}</span>
+                    )}
+                  </div>
+
+                  {/* Name + meta */}
+                  <div className="min-w-0 flex-1">
+                    <p className={`truncate font-semibold ${isViewer ? "text-indigo-900" : "text-slate-800"}`}>
+                      {row.name}
+                      {isViewer && <span className="ml-1.5 text-xs font-normal text-indigo-500">(you)</span>}
+                    </p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {row.correctPicks} correct · {row.pickCount}/{totalSeries} picks
+                      {!row.isComplete && <span className="text-amber-600"> · Incomplete</span>}
                     </p>
                   </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-base font-black text-slate-900">{row.totalScore} pts</p>
-                  <p className="text-xs text-slate-500">{row.correctPicks} correct</p>
-                </div>
-              </li>
-            ))}
+
+                  {/* Score */}
+                  <div className="shrink-0 text-right">
+                    <p className={`text-base font-black ${row.totalScore > 0 ? "text-slate-900" : "text-slate-400"}`}>
+                      {row.totalScore}<span className="text-xs font-semibold text-slate-400"> pts</span>
+                    </p>
+                  </div>
+                </li>
+              )
+            })}
           </ol>
         )}
       </section>
