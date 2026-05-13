@@ -3298,19 +3298,25 @@ model PlayoffBracketChallenge {
 }
 
 model PlayoffBracketEntry {
-  id          String               @id @default(cuid())
-  challengeId String               @map("challenge_id")
-  userId      String               @map("user_id")
-  name        String
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
-  challenge   PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  user        AppUser              @relation("PlayoffBracketEntryUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  picks       PlayoffBracketPick[]
+  id           String               @id @default(cuid())
+  challengeId  String               @map("challenge_id")
+  userId       String               @map("user_id")
+  name         String
+  totalScore   Int                  @default(0) @map("total_score")
+  correctPicks Int                  @default(0) @map("correct_picks")
+  rank         Int?
+  submittedAt  DateTime?            @map("submitted_at")
+  isLocked     Boolean              @default(false) @map("is_locked")
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  challenge    PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user         AppUser              @relation("PlayoffBracketEntryUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  picks        PlayoffBracketPick[]
 
   @@index([challengeId])
   @@index([userId])
   @@index([challengeId, userId])
+  @@index([challengeId, totalScore])
   @@map("playoff_bracket_entries")
 }
 
@@ -3326,6 +3332,8 @@ model PlayoffBracketSeries {
   homeTeamName     String                @map("home_team_name")
   awayTeamName     String                @map("away_team_name")
   winnerTeamName   String?               @map("winner_team_name")
+  homeWins         Int                   @default(0) @map("home_wins")
+  awayWins         Int                   @default(0) @map("away_wins")
   bestOf           Int                   @default(7) @map("best_of")
   status           String                @default("scheduled")
   startsAt         DateTime?             @map("starts_at")
@@ -3346,16 +3354,18 @@ model PlayoffBracketSeries {
 }
 
 model PlayoffBracketPick {
-  id           String                @id @default(cuid())
-  challengeId  String                @map("challenge_id")
-  entryId      String                @map("entry_id")
-  seriesId     String                @map("series_id")
-  pickTeamName String                @map("pick_team_name")
-  createdAt    DateTime              @default(now()) @map("created_at")
-  updatedAt    DateTime              @updatedAt @map("updated_at")
-  challenge    PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  entry        PlayoffBracketEntry   @relation(fields: [entryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  series       PlayoffBracketSeries  @relation(fields: [seriesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id            String                @id @default(cuid())
+  challengeId   String                @map("challenge_id")
+  entryId       String                @map("entry_id")
+  seriesId      String                @map("series_id")
+  pickTeamName  String                @map("pick_team_name")
+  pointsAwarded Int                   @default(0) @map("points_awarded")
+  isCorrect     Boolean?              @map("is_correct")
+  createdAt     DateTime              @default(now()) @map("created_at")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  challenge     PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  entry         PlayoffBracketEntry   @relation(fields: [entryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  series        PlayoffBracketSeries  @relation(fields: [seriesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([entryId, seriesId])
   @@index([challengeId])

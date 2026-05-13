@@ -19,6 +19,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   const [view, setView] = useState(initialView)
   const [refreshing, startRefreshing] = useTransition()
   const [creatingEntry, startCreatingEntry] = useTransition()
+  const [recalculating, startRecalculating] = useTransition()
 
   const safeChallenge = {
     id: view?.challenge?.id || "unknown-challenge",
@@ -54,18 +55,29 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     : primaryEntry.isComplete
       ? "View/Edit Bracket"
       : "Complete Bracket"
-  const leaderboardRows = useMemo(
-    () =>
-      [...entries]
-        .sort((a, b) => b.pickCount - a.pickCount)
-        .map((entry, index) => ({
-          rank: index + 1,
-          id: entry.id,
-          name: entry.name || `Bracket ${index + 1}`,
-          picks: entry.pickCount,
-        })),
-    [entries]
-  )
+  const leaderboardRows = useMemo(() => {
+    const sorted = [...entries].sort(
+      (a, b) => b.totalScore - a.totalScore || b.correctPicks - a.correctPicks
+    )
+    let currentRank = 1
+    return sorted.map((entry, index) => {
+      if (index > 0 && entry.totalScore === sorted[index - 1].totalScore) {
+        // tied — share previous rank
+      } else {
+        currentRank = index + 1
+      }
+      return {
+        rank: entry.rank ?? currentRank,
+        id: entry.id,
+        name: entry.name || `Bracket ${index + 1}`,
+        totalScore: entry.totalScore,
+        correctPicks: entry.correctPicks,
+        pickCount: entry.pickCount,
+        isComplete: entry.isComplete,
+        userId: entry.userId,
+      }
+    })
+  }, [entries])
 
   function handleRefresh() {
     startRefreshing(async () => {
@@ -98,6 +110,22 @@ export default function PlayoffBracketShell({ initialView }: Props) {
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unable to create entry"
         toast.error(message)
+      }
+    })
+  }
+
+  function handleRecalculate() {
+    startRecalculating(async () => {
+      try {
+        const res = await fetch(`/api/brackets/playoffs/${safeChallenge.id}/recalculate`, {
+          method: "POST",
+        })
+        if (!res.ok) throw new Error("Recalculate failed")
+        toast.success("Scores recalculated")
+        const latest = await getPlayoffBracketViewClient(safeChallenge.id)
+        setView(latest)
+      } catch {
+        toast.error("Could not recalculate scores")
       }
     })
   }
@@ -197,10 +225,12 @@ export default function PlayoffBracketShell({ initialView }: Props) {
             {safeChallenge.ownerUserId && safeChallenge.ownerUserId === view?.viewerUserId ? (
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+                onClick={handleRecalculate}
+                disabled={recalculating}
+                className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition hover:border-indigo-400 hover:text-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <Settings2 className="h-4 w-4" />
-                Commissioner Tools
+                {recalculating ? "Recalculating…" : "Recalculate Scores"}
               </button>
             ) : null}
           </div>
@@ -274,11 +304,29 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         {leaderboardRows.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No leaderboard entries yet.</p>
         ) : (
-          <ol className="mt-3 space-y-2">
+          <ol className="mt-3 space-y-1.5">
             {leaderboardRows.map((row) => (
-              <li key={row.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
-                <span className="font-semibold text-slate-800">#{row.rank} {row.name}</span>
-                <span className="text-slate-600">{row.picks} picks</span>
+              <li
+                key={row.id}
+                className={`flex items-center justify-between rounded-lg border px-3 py-2 text-sm ${
+                  row.userId === view?.viewerUserId
+                    ? "border-indigo-300 bg-indigo-50"
+                    : "border-slate-200"
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="w-7 text-center text-xs font-black text-slate-400">#{row.rank}</span>
+                  <div>
+                    <p className="font-semibold text-slate-800">{row.name}</p>
+                    <p className="text-xs text-slate-500">
+                      {row.pickCount}/{totalSeries} picks · {row.isComplete ? "Complete" : "In progress"}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-base font-black text-slate-900">{row.totalScore} pts</p>
+                  <p className="text-xs text-slate-500">{row.correctPicks} correct</p>
+                </div>
               </li>
             ))}
           </ol>
