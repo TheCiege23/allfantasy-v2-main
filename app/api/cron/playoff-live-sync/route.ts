@@ -63,11 +63,13 @@ export async function GET(request: NextRequest) {
   // Build a compact summary log
   const totalUpdated = result.challengeResults.reduce((acc, c) => acc + c.seriesUpdated, 0)
   const totalClinched = result.challengeResults.reduce((acc, c) => acc + c.newlyClinched, 0)
+  const totalAutoClosed = result.challengeResults.reduce((acc, c) => acc + (c.autoClosed ? 1 : 0), 0)
   const totalErrors = result.errors.length + result.challengeResults.reduce((acc, c) => acc + c.errors.length, 0)
 
   console.log(
     `[playoff-live-sync/cron] done — challenges=${result.challengesProcessed} ` +
-      `seriesUpdated=${totalUpdated} clinched=${totalClinched} errors=${totalErrors} ${durationMs}ms`
+      `seriesUpdated=${totalUpdated} clinched=${totalClinched} ` +
+      `autoClosed=${totalAutoClosed} errors=${totalErrors} ${durationMs}ms`
   )
 
   if (totalErrors > 0) {
@@ -113,6 +115,7 @@ export async function GET(request: NextRequest) {
     challengesProcessed: result.challengesProcessed,
     seriesUpdated: totalUpdated,
     newlyClinched: totalClinched,
+    autoClosed: totalAutoClosed,
     errors: totalErrors,
     results: result.challengeResults.map((c) => ({
       challengeId: c.challengeId,
@@ -120,6 +123,7 @@ export async function GET(request: NextRequest) {
       seriesProcessed: c.seriesProcessed,
       seriesUpdated: c.seriesUpdated,
       newlyClinched: c.newlyClinched,
+      autoClosed: c.autoClosed || undefined,
       errors: c.errors.length > 0 ? c.errors : undefined,
       series: c.results.map((s) => ({
         id: s.seriesId,

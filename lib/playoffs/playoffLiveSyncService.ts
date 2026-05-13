@@ -74,6 +74,8 @@ export type LiveSyncChallengeResult = {
   seriesProcessed: number
   seriesUpdated: number
   newlyClinched: number
+  /** True when all series are final and the challenge was auto-closed */
+  autoClosed: boolean
   results: LiveSyncSeriesResult[]
   errors: string[]
 }
@@ -307,6 +309,31 @@ export async function syncPlayoffLiveSeries(input: {
   const seriesRows = allSeries as SeriesRow[]
 
   if (seriesRows.length === 0) {
+    // No non-final series remaining — either bracket not seeded yet, or
+    // all series are final (tournament over). Auto-close in the latter case.
+    let autoClosed = false
+    try {
+      const totalCount = await (prisma as any).playoffBracketSeries.count({
+        where: { challengeId },
+      }) as number
+
+      if (totalCount > 0 && !dryRun) {
+        // All series are final — mark challenge as closed so cron stops syncing it
+        const closeResult = await (prisma as any).playoffBracketChallenge.updateMany({
+          where: { id: challengeId, status: "open" },
+          data: { status: "closed" },
+        })
+        autoClosed = closeResult.count > 0
+        if (autoClosed) {
+          console.log(
+            `[SyncService] Auto-closed challengeId=${challengeId} — all ${totalCount} series are final`
+          )
+        }
+      }
+    } catch (err) {
+      errors.push(`Auto-close check failed: ${String(err)}`)
+    }
+
     return {
       challengeId,
       sport,
@@ -316,6 +343,7 @@ export async function syncPlayoffLiveSeries(input: {
       seriesProcessed: 0,
       seriesUpdated: 0,
       newlyClinched: 0,
+      autoClosed,
       results: [],
       errors,
     }
@@ -558,6 +586,7 @@ export async function syncPlayoffLiveSeries(input: {
     seriesProcessed,
     seriesUpdated,
     newlyClinched: newlyClinchedCount,
+    autoClosed: false,
     results,
     errors,
   }
@@ -640,6 +669,7 @@ export async function syncAllPlayoffChallenges(input: {
       seriesProcessed: 0,
       seriesUpdated: 0,
       newlyClinched: 0,
+      autoClosed: false,
       results: [],
       errors: [msg],
     }
