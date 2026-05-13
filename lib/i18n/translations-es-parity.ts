@@ -780,6 +780,7 @@ export const translationsEsParity: Record<string, string> = {
     "La 2FA por autenticador o SMS aún no está activada. Cuando esté disponible, podrás activarla aquí.",
   "settings.security.twoFactorTitle": "Autenticación en dos pasos",
   "settings.title": "Ajustes",
+  "settings.subtitle": "Cuenta, preferencias y suscripción.",
   "theme.ariaSwitch": "Cambiar a tema {{label}}",
   "theme.current": "Tema actual: {{label}}",
   "theme.dark": "Oscuro",

@@ -1561,6 +1561,7 @@ export const translations: Record<string, Record<string, string>> = {
     "leaguePowerRankings.ai.chimmyExplanation": "Chimmy explanation",
 
     "settings.title": "Settings",
+    "settings.subtitle": "Account, preferences, and subscription.",
     "settings.home": "Home",
     "settings.aria.sections": "Settings sections",
     "settings.aria.navigation": "Settings navigation",
