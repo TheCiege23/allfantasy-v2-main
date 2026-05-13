@@ -116,7 +116,14 @@ async function fetchEspnPlayoffGames(sport: PlayoffSport): Promise<EspnPlayoffGa
 
   let data: unknown
   try {
-    const res = await fetch(url, { cache: "no-store" })
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 8000) // 8 s timeout
+    let res: Response
+    try {
+      res = await fetch(url, { cache: "no-store", signal: controller.signal })
+    } finally {
+      clearTimeout(timeoutId)
+    }
     if (!res.ok) return []
     data = await res.json()
   } catch {
@@ -260,6 +267,8 @@ export async function syncPlayoffLiveSeries(input: {
   sport: PlayoffSport
   season: number
   dryRun?: boolean
+  /** Pre-fetched ESPN games — pass to avoid redundant network calls in batch mode */
+  prefetchedGames?: EspnPlayoffGame[]
 }): Promise<LiveSyncChallengeResult> {
   const { challengeId, sport, season, dryRun = false } = input
   const errors: string[] = []
@@ -296,13 +305,15 @@ export async function syncPlayoffLiveSeries(input: {
     }
   }
 
-  // ── Fetch ESPN playoff games for today ────────────────────────────────────
-  let espnGames: EspnPlayoffGame[] = []
-  try {
-    espnGames = await fetchEspnPlayoffGames(sport)
-  } catch (err) {
-    errors.push(`ESPN scoreboard fetch failed: ${String(err)}`)
-    // Non-fatal — continue with live detection degraded
+  // ── Fetch ESPN playoff games (or use pre-fetched batch) ───────────────────
+  let espnGames: EspnPlayoffGame[] = input.prefetchedGames ?? []
+  if (!input.prefetchedGames) {
+    try {
+      espnGames = await fetchEspnPlayoffGames(sport)
+    } catch (err) {
+      errors.push(`ESPN scoreboard fetch failed: ${String(err)}`)
+      // Non-fatal — continue with live detection degraded
+    }
   }
 
   // ── Process each non-final series ─────────────────────────────────────────
@@ -514,30 +525,48 @@ export async function syncAllPlayoffChallenges(input: {
     }
   }
 
-  // ── Sync each challenge ───────────────────────────────────────────────────
-  const challengeResults: LiveSyncChallengeResult[] = []
-
-  for (const challengeId of challengeIds) {
+  // ── Fetch ESPN games once for all challenges (shared network call) ──────────
+  let sharedEspnGames: EspnPlayoffGame[] | undefined
+  if (!singleChallengeId) {
+    // Only pre-fetch in batch mode; single-challenge mode fetches itself
     try {
-      const result = await syncPlayoffLiveSeries({ challengeId, sport, season, dryRun })
-      challengeResults.push(result)
+      sharedEspnGames = await fetchEspnPlayoffGames(sport)
     } catch (err) {
-      const msg = String(err)
-      errors.push(`Challenge ${challengeId} failed: ${msg}`)
-      challengeResults.push({
+      errors.push(`ESPN pre-fetch failed (degraded): ${String(err)}`)
+      sharedEspnGames = []
+    }
+  }
+
+  // ── Sync all challenges in parallel ──────────────────────────────────────
+  const settled = await Promise.allSettled(
+    challengeIds.map((challengeId) =>
+      syncPlayoffLiveSeries({
         challengeId,
         sport,
         season,
         dryRun,
-        seriesTotal: 0,
-        seriesProcessed: 0,
-        seriesUpdated: 0,
-        newlyClinched: 0,
-        results: [],
-        errors: [msg],
+        prefetchedGames: sharedEspnGames,
       })
+    )
+  )
+
+  const challengeResults: LiveSyncChallengeResult[] = settled.map((result, i) => {
+    if (result.status === "fulfilled") return result.value
+    const msg = String(result.reason)
+    errors.push(`Challenge ${challengeIds[i]} failed: ${msg}`)
+    return {
+      challengeId: challengeIds[i],
+      sport,
+      season,
+      dryRun,
+      seriesTotal: 0,
+      seriesProcessed: 0,
+      seriesUpdated: 0,
+      newlyClinched: 0,
+      results: [],
+      errors: [msg],
     }
-  }
+  })
 
   return {
     sport,
