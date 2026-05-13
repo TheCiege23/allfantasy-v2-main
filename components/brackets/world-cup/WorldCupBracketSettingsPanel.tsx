@@ -628,7 +628,7 @@ export default function WorldCupBracketSettingsPanel({
           type="button"
           disabled={saving || Boolean(clientValidationError)}
           onClick={() => void handleSave()}
-          className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-xs font-black text-black disabled:opacity-40 sm:w-auto sm:min-h-0"
+          className="inline-flex min-h-11 w-full touch-manipulation items-center justify-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-xs font-black text-black transition active:scale-[0.97] disabled:opacity-40 hover:enabled:bg-cyan-200 sm:w-auto sm:min-h-0"
         >
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save settings

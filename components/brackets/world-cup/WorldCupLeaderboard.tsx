@@ -294,7 +294,7 @@ export default function WorldCupLeaderboard({
 
                   <div
                     data-testid="wc-lb-mobile-score-row"
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-2 sm:hidden"
+                    className="mt-1 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/25 px-2.5 py-2 sm:hidden"
                   >
                     <div className="flex items-center gap-1.5">
                       <span className="text-[10px] font-bold uppercase tracking-wide text-white/40">Pts</span>
