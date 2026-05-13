@@ -27,6 +27,7 @@ export async function BracketLeagueShell({ leagueId, userId }: BracketLeagueShel
       ownerId: true,
       scoringRules: true,
       deadline: true,
+      tournamentId: true,
       tournament: {
         select: { name: true, sport: true },
       },
@@ -216,7 +217,7 @@ export async function BracketLeagueShell({ leagueId, userId }: BracketLeagueShel
                     </td>
                     <td className="px-4 py-3 text-right">
                       <Link
-                        href={`/brackets/leagues/${leagueId}/entries/${entry.id}`}
+                        href={`/bracket/${league.tournamentId}/entry/${entry.id}`}
                         className="text-xs font-semibold transition hover:opacity-70"
                         style={{ color: "var(--accent)" }}
                       >
