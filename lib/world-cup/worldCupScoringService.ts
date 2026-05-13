@@ -130,15 +130,17 @@ function isWorldCupPickSelectionStillAlive(
 export function evaluateWorldCupPick(
   pickOrMatch: Pick<DbPick, "round" | "selectedTeamId" | "selectedTeamName" | "selectedSlotKey"> | DbMatch,
   matchOrPick: DbMatch | Partial<Pick<DbPick, "round" | "selectedTeamId" | "selectedTeamName" | "selectedSlotKey">>,
-  scoring?: Partial<WorldCupScoringValues> | null
+  scoring?: Partial<WorldCupScoringValues> | null,
+  options?: { allowSimulated?: boolean }
 ) {
   const firstLooksLikeMatch = "status" in pickOrMatch && ("winnerTeamId" in pickOrMatch || "winnerTeamName" in pickOrMatch)
   const match = (firstLooksLikeMatch ? pickOrMatch : matchOrPick) as DbMatch
   const pick = (firstLooksLikeMatch ? matchOrPick : pickOrMatch) as Partial<Pick<DbPick, "round" | "selectedTeamId" | "selectedTeamName" | "selectedSlotKey">>
   if (!hasWorldCupPickSelection(pick)) return { isCorrect: null, pointsAwarded: 0 }
+  const officialOrSimAllowed = isOfficialWorldCupFixtureState(match) || Boolean(options?.allowSimulated)
   if (
     match.status !== "final" ||
-    !isOfficialWorldCupFixtureState(match) ||
+    !officialOrSimAllowed ||
     (!match.winnerTeamId && !match.winnerTeamName)
   ) {
     return { isCorrect: null, pointsAwarded: 0 }
@@ -183,6 +185,7 @@ export function buildWorldCupLeaderboardRows(input: {
   entries: DbEntryForLb[]
   matches: DbMatch[]
   scoring?: Partial<WorldCupScoringValues> | null
+  allowSimulated?: boolean
 }): WorldCupLeaderboardRow[] {
   const rows = input.entries.map((e) => {
     const picks = e.picks.filter(hasWorldCupPickSelection)
@@ -192,7 +195,7 @@ export function buildWorldCupLeaderboardRows(input: {
     let correctPicks = 0
     let incorrectPicks = 0
     for (const pick of picks) {
-      const r = pick.match ? evaluateWorldCupPick(pick, pick.match, input.scoring) : { isCorrect: pick.isCorrect ?? null, pointsAwarded: pick.pointsAwarded ?? 0 }
+      const r = pick.match ? evaluateWorldCupPick(pick, pick.match, input.scoring, { allowSimulated: input.allowSimulated }) : { isCorrect: pick.isCorrect ?? null, pointsAwarded: pick.pointsAwarded ?? 0 }
       if (r.isCorrect === true) correctPicks++
       if (r.isCorrect === false) incorrectPicks++
       totalScore += r.pointsAwarded
@@ -327,11 +330,13 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
   })
   if (!c) throw new Error("World Cup bracket challenge not found")
 
+  const allowSimulated = Boolean((c as { isTestMode?: boolean }).isTestMode)
+
   await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     for (const entry of c.entries) {
       for (const pick of entry.picks) {
         if (!pick.match) continue
-        const r = evaluateWorldCupPick(pick, pick.match, c.scoringProfile)
+        const r = evaluateWorldCupPick(pick, pick.match, c.scoringProfile, { allowSimulated })
         await tx.worldCupBracketPick.update({
           where: { id: pick.id },
           data: {
@@ -368,6 +373,7 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
     entries: fresh.entries as DbEntryForLb[],
     matches: fresh.matches as DbMatch[],
     scoring: fresh.scoringProfile,
+    allowSimulated,
   })
 
   const bracketLocked = isWorldCupChallengeLocked({
