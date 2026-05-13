@@ -60,7 +60,11 @@ const movedFiles = []
 let cleanedUp = false
 const filesToKeep = new Set([
   path.join('app', 'api', 'cron', '_auth.ts').replace(/\\/g, '/'),
+  // Production draft timer progression — must compile in local `npm run build` same as deploy.
+  path.join('app', 'api', 'cron', 'draft-expired-timers', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'waivers', 'route.ts').replace(/\\/g, '/'),
+  // NBA/NHL playoff live sync — 5-min cron, must be deployed to production.
+  path.join('app', 'api', 'cron', 'playoff-live-sync', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),
@@ -230,6 +234,14 @@ function run() {
     NODE_OPTIONS: process.env.NODE_OPTIONS?.includes('--max-old-space-size=')
       ? process.env.NODE_OPTIONS
       : [process.env.NODE_OPTIONS, '--max-old-space-size=8192'].filter(Boolean).join(' '),
+    // Default to single static worker on Windows to avoid missing `server/pages/500.js`
+    // during early `/500` prerender (see next.config `AF_NEXT_BUILD_STATIC_WORKERS`).
+    ...(process.platform === 'win32'
+      ? {
+          AF_NEXT_BUILD_STATIC_WORKERS:
+            process.env.AF_NEXT_BUILD_STATIC_WORKERS ?? '1',
+        }
+      : {}),
   }
 
   console.log(
@@ -248,19 +260,28 @@ function run() {
     process.exit(1)
   }
 
-  const shutdown = (code) => {
+  /** Next / OS sometimes reports -1 on crash; process.exit(-1) shows as 4294967295 on Windows. */
+  function normalizeExitCode(code, signal) {
+    if (signal === 'SIGINT') return 130
+    if (signal === 'SIGTERM') return 143
+    if (code == null) return 1
+    if (typeof code !== 'number' || code < 0 || code > 255) return 1
+    return code
+  }
+
+  const shutdown = (code, signal) => {
     restoreNonProdRoutes()
-    process.exit(code)
+    process.exit(normalizeExitCode(code, signal))
   }
 
   process.on('SIGINT', () => {
     child.kill('SIGINT')
-    shutdown(130)
+    shutdown(130, 'SIGINT')
   })
 
   process.on('SIGTERM', () => {
     child.kill('SIGTERM')
-    shutdown(143)
+    shutdown(143, 'SIGTERM')
   })
 
   child.on('close', (code, signal) => {
@@ -268,13 +289,15 @@ function run() {
       console.error(
         `[vercel-next-build] next build exited with code ${code ?? 'null'} and signal ${signal ?? 'none'}`
       )
+    } else {
+      console.log('[vercel-next-build] next build completed successfully')
     }
-    shutdown(code ?? 1)
+    shutdown(code, signal)
   })
 
   child.on('error', (error) => {
     console.error('[vercel-next-build] Failed to start next build:', error)
-    shutdown(1)
+    shutdown(1, null)
   })
 }
 
