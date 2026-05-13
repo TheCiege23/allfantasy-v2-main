@@ -18,6 +18,16 @@ const PLAN_TIER_ORDER: SubscriptionPlanId[] = [
   "pro",
 ]
 
+/**
+ * Races a promise against a wall-clock timeout.
+ * Returns the fallback if the timeout fires first.
+ * Prevents slow DB queries from blocking the page SSR response.
+ */
+function withTimeout<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  const timer = new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))
+  return Promise.race([promise, timer])
+}
+
 export default async function SettingsPage() {
   const session = (await getServerSession(authOptions as never)) as {
     user?: { id?: string }
@@ -33,23 +43,28 @@ export default async function SettingsPage() {
 
   const userId = session.user.id
 
-  // TG3 — fetch account creation date
-  const user = await prisma.appUser
-    .findUnique({ where: { id: userId }, select: { createdAt: true } })
-    .catch(() => null)
+  // TG2 + TG3 — fetch plan label and account creation date in parallel,
+  // each capped at 2 s so a cold DB start cannot stall the page render.
+  const [user, snapshot] = await Promise.all([
+    withTimeout(
+      prisma.appUser
+        .findUnique({ where: { id: userId }, select: { createdAt: true } })
+        .catch(() => null),
+      2000,
+      null
+    ),
+    withTimeout(
+      new EntitlementResolver().resolveSnapshot(userId).catch(() => null),
+      2000,
+      null
+    ),
+  ])
 
-  // TG2 — fetch subscription plan label
   let planLabel: string | null = null
-  try {
-    const snapshot = await new EntitlementResolver().resolveSnapshot(userId)
-    if (snapshot.plans.length > 0) {
-      // Pick the highest-tier plan present in the snapshot
-      const topPlan =
-        PLAN_TIER_ORDER.find((p) => snapshot.plans.includes(p)) ?? snapshot.plans[0]
-      planLabel = getDisplayPlanName(topPlan)
-    }
-  } catch {
-    // Fall back to null → AccountSettingsSection shows localised "Free" label
+  if (snapshot && snapshot.plans.length > 0) {
+    const topPlan =
+      PLAN_TIER_ORDER.find((p) => snapshot.plans.includes(p)) ?? snapshot.plans[0]
+    planLabel = getDisplayPlanName(topPlan)
   }
 
   return (
