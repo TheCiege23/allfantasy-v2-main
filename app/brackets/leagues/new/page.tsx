@@ -40,14 +40,29 @@ const CHALLENGE_TYPE_OPTIONS = [
 type ChallengeType = (typeof CHALLENGE_TYPE_OPTIONS)[number]["id"]
 
 export default function NewBracketLeaguePage() {
-  const now = new Date()
-  const defaultSeason = now.getFullYear()
   const searchParams = useSearchParams()
+  const currentYear = new Date().getFullYear()
 
   const [name, setName] = useState("")
-  const [season, setSeason] = useState<number>(defaultSeason)
-  const [sport, setSport] = useState<string>("NCAAB")
-  const [challengeType, setChallengeType] = useState<ChallengeType>("playoff_challenge")
+  // Lazy initializers read searchParams synchronously at first render — no flash, no effect delay.
+  const [season, setSeason] = useState<number>(() => {
+    const yearParam = searchParams?.get("year") ?? searchParams?.get("season")
+    if (yearParam) {
+      const parsed = parseInt(yearParam, 10)
+      if (!isNaN(parsed) && parsed >= 2024 && parsed <= currentYear + 1) return parsed
+    }
+    return currentYear
+  })
+  const [sport, setSport] = useState<string>(() => {
+    const param = searchParams?.get("sport")
+    if (!param) return "NCAAB"
+    return normalizeToSupportedSport(param)
+  })
+  const [challengeType, setChallengeType] = useState<ChallengeType>(() => {
+    const typeParam = searchParams?.get("challengeType")
+    if (typeParam === "mens_ncaa" || typeParam === "playoff_challenge") return typeParam
+    return "playoff_challenge"
+  })
   const [isPublic, setIsPublic] = useState(false)
   const [scoringMode, setScoringMode] = useState<string>("momentum")
   const [maxEntriesPerUser, setMaxEntriesPerUser] = useState(1)
@@ -293,11 +308,11 @@ export default function NewBracketLeaguePage() {
               <input
                 type="number"
                 min={2024}
-                max={defaultSeason + 1}
+                max={currentYear + 1}
                 className="mt-2 w-full rounded-lg border px-3 py-2 text-sm bg-transparent"
                 style={{ borderColor: "var(--border)", color: "var(--text)" }}
                 value={season}
-                onChange={(e) => setSeason(Number(e.target.value) || defaultSeason)}
+                onChange={(e) => setSeason(Number(e.target.value) || currentYear)}
                 disabled={loading}
                 data-testid="bracket-create-season-input"
               />
