@@ -178,6 +178,8 @@ export default async function LeaguePage({
           // Guard: if this ID belongs to any bracket pool table, redirect to the bracket route.
           // This handles stale bookmarks, old notification links, and canonicalization remnants
           // that incorrectly sent bracket pool UUIDs to /league/[id].
+          // NOTE: redirect() throws a NEXT_REDIRECT error — catch blocks MUST re-throw it or
+          // the redirect is silently swallowed. Only suppress non-redirect errors (e.g. missing table).
           try {
             const bracketLeagueRow = await (prisma as any).bracketLeague.findUnique({
               where: { id: leagueId },
@@ -186,7 +188,8 @@ export default async function LeaguePage({
             if (bracketLeagueRow?.id) {
               redirect(`/brackets/leagues/${leagueId}`)
             }
-          } catch {
+          } catch (err) {
+            if (isAppRouterRedirectError(err)) throw err
             // Table may not exist in all environments — continue to not-found
           }
           try {
@@ -197,7 +200,8 @@ export default async function LeaguePage({
             if (playoffRow?.id) {
               redirect(`/brackets/leagues/${leagueId}`)
             }
-          } catch {
+          } catch (err) {
+            if (isAppRouterRedirectError(err)) throw err
             // Table may not exist — continue
           }
           try {
@@ -208,7 +212,8 @@ export default async function LeaguePage({
             if (worldCupRow?.id) {
               redirect(`/brackets/leagues/${leagueId}`)
             }
-          } catch {
+          } catch (err) {
+            if (isAppRouterRedirectError(err)) throw err
             // Table may not exist — continue
           }
 
