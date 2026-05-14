@@ -177,10 +177,55 @@ export default async function BracketLeagueDetailPage({
     console.warn("[brackets/leagues] checking legacy league", { leagueId: params.leagueId })
     const existingLeague = await (prisma as any).bracketLeague.findUnique({
       where: { id: params.leagueId },
-      select: { id: true },
+      select: { id: true, scoringRules: true },
     })
 
     if (existingLeague?.id) {
+      // Check if this is a legacy NBA/NHL playoff pool — show recovery UI instead of broken shell
+      const rules = (existingLeague.scoringRules ?? {}) as Record<string, unknown>
+      const legacySport = String(rules.sport ?? "").toLowerCase()
+      const legacyBracketType = String(rules.bracketType ?? rules.challengeType ?? "")
+      const isLegacyPlayoffPool =
+        (legacySport === "nba" || legacySport === "nhl") &&
+        legacyBracketType === "playoff_challenge"
+
+      if (isLegacyPlayoffPool) {
+        const sportLabel = legacySport.toUpperCase()
+        console.warn("[brackets/leagues] legacy NBA/NHL playoff pool — showing recovery UI", {
+          leagueId: params.leagueId,
+          sport: legacySport,
+        })
+        return (
+          <main className="mx-auto max-w-3xl p-6">
+            <div className="rounded-xl border border-slate-700 bg-slate-900 p-6 text-center shadow-sm">
+              <div className="mb-3 text-3xl">🏆</div>
+              <h1 className="text-xl font-semibold text-white">
+                Create a new {sportLabel} Playoff Pool
+              </h1>
+              <p className="mt-2 text-sm text-slate-400">
+                This pool was created with an older format that isn&apos;t compatible with the
+                full playoff bracket experience. Create a new {sportLabel} pool to get the
+                interactive bracket, live standings, and team logos.
+              </p>
+              <div className="mt-5 flex items-center justify-center gap-3">
+                <Link
+                  href={`/brackets/leagues/new?sport=${sportLabel}&challengeType=playoff_challenge`}
+                  className="rounded-lg bg-sky-500 px-4 py-2 text-sm font-semibold text-white hover:bg-sky-400 transition"
+                >
+                  Create New {sportLabel} Pool
+                </Link>
+                <Link
+                  href="/brackets"
+                  className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-300 hover:border-slate-400 transition"
+                >
+                  Back to Brackets
+                </Link>
+              </div>
+            </div>
+          </main>
+        )
+      }
+
       console.warn("[brackets/leagues] rendering legacy BracketLeague shell", {
         leagueId: params.leagueId,
       })

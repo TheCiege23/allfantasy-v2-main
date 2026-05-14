@@ -28,7 +28,9 @@ export function resolvePlayoffCardHref(input: {
     }
 
     if (normalizedSport === "nba" || normalizedSport === "nhl") {
-      return "/brackets"
+      // No existing challenge — link directly to the create form pre-set to this sport
+      const sportUpper = normalizedSport.toUpperCase()
+      return `/brackets/leagues/new?sport=${sportUpper}&challengeType=playoff_challenge`
     }
 
     return "/brackets"
