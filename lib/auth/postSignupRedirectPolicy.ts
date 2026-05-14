@@ -33,7 +33,8 @@ export function isAllowedSignupPostAuthDestination(
   const pathname = pathnameFromPathAndQuery(pathAndQuery)
   if (isAuthEntrySurfacePathname(pathname)) return false
   if (pathname.startsWith("/leagues/")) return false
-  if (pathname === "/brackets" || pathname.startsWith("/brackets/")) return false
+  // /brackets/* are valid post-auth destinations — bracket pool links must survive login redirects.
+  // Do NOT block /brackets/leagues/[id] here; canonicalizeProductRoute now preserves these paths.
   if (pathname === "/af-legacy" || pathname.startsWith("/af-legacy/")) return false
   if (pathname === "/app" || pathname.startsWith("/app/")) return false
   if (pathname === "/web" || pathname.startsWith("/web/")) return false

@@ -172,12 +172,15 @@ describe('Slice 8 — canonicalizeProductRoute', () => {
     expect(canonicalizeProductRoute('/leagues/abc')).toBe('/league/abc')
   })
 
-  it('maps /brackets/leagues/:id to /league/:id', () => {
-    expect(canonicalizeProductRoute('/brackets/leagues/abc')).toBe('/league/abc')
+  // Bracket pool paths must NEVER be canonicalized to /league/[id].
+  // /brackets/leagues/[id] is preserved as-is (bracket pools live at this route).
+  it('preserves /brackets/leagues/:id — bracket pools must not route to /league/:id', () => {
+    expect(canonicalizeProductRoute('/brackets/leagues/abc')).toBe('/brackets/leagues/abc')
   })
 
-  it('maps /bracket/leagues/:id to /league/:id', () => {
-    expect(canonicalizeProductRoute('/bracket/leagues/xyz')).toBe('/league/xyz')
+  // /bracket/leagues/:id (singular) normalizes to /brackets/leagues/:id via the /bracket→/brackets rewrite.
+  it('normalizes /bracket/leagues/:id to /brackets/leagues/:id (not /league/:id)', () => {
+    expect(canonicalizeProductRoute('/bracket/leagues/xyz')).toBe('/brackets/leagues/xyz')
   })
 
   it('sends external and /api paths to /dashboard', () => {

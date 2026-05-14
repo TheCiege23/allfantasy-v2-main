@@ -29,9 +29,10 @@ export function canonicalizeProductRoute(path: string): string {
   const leagues = pathname.match(/^\/leagues\/([^/]+)\/?$/)
   if (leagues) return `/league/${leagues[1]}${search}`
 
-  const bracketLeague = pathname.match(/^\/bracket\/leagues\/([^/]+)\/?$/i)
-    ?? pathname.match(/^\/brackets\/leagues\/([^/]+)\/?$/i)
-  if (bracketLeague) return `/league/${bracketLeague[1]}${search}`
+  // Bracket pool paths must NEVER canonicalize to /league/[id].
+  // /brackets/leagues/[id] and nested bracket paths are preserved as-is.
+  // /bracket/leagues/[id] (singular) is normalized to /brackets/leagues/[id] via the /bracket→/brackets rewrite below.
+  if (pathname === "/brackets" || pathname.startsWith("/brackets/")) return pathname + search
 
   if (pathname === "/app" || pathname.startsWith("/app/")) return DASHBOARD
   if (pathname === "/web" || pathname.startsWith("/web/")) return DASHBOARD
@@ -39,7 +40,6 @@ export function canonicalizeProductRoute(path: string): string {
     return pathname.replace(/^\/bracket(\/|$)/, "/brackets$1") + search
   }
   if (pathname === "/af-legacy" || pathname.startsWith("/af-legacy/")) return DASHBOARD
-  if (pathname === "/brackets" || pathname.startsWith("/brackets/")) return DASHBOARD
 
   return pathname + search
 }

@@ -9,6 +9,7 @@ import { resolveTimezonePreferenceSync } from "@/lib/preferences/TimezonePrefere
 
 describe("Unified auth integration services", () => {
   it("resolves post-auth destination with safe precedence", () => {
+    // External callbackUrl is rejected; `next` wins over `returnTo`
     expect(
       resolvePostAuthIntentDestination({
         callbackUrl: "https://bad.site",
@@ -17,11 +18,13 @@ describe("Unified auth integration services", () => {
       })
     ).toBe("/dashboard")
 
+    // bracket-challenge intent correctly resolves to /brackets (not /dashboard)
+    // canonicalizeProductRoute now preserves /brackets paths instead of collapsing them
     expect(
       resolvePostAuthIntentDestination({
         intent: "bracket-challenge",
       })
-    ).toBe("/dashboard")
+    ).toBe("/brackets")
   })
 
   it("canonicalizes plural league URLs after login intent resolution", () => {

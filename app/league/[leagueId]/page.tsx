@@ -18,6 +18,8 @@ import {
 } from '@/lib/dashboard/runtime-issues'
 import { isAppRouterRedirectError } from '@/lib/next/is-app-router-redirect-error'
 import { LeagueShellClient } from './LeagueShellClient'
+import { loadLeagueFirstRunNiceEvidence } from '@/lib/league/first-run-readiness-evidence.server'
+import type { LeagueFirstRunNiceEvidence } from '@/lib/league/first-run-types'
 
 export const dynamic = 'force-dynamic'
 
@@ -175,6 +177,43 @@ export default async function LeaguePage({
                 }
           }
 
+          // Guard: if this ID belongs to any bracket pool table, redirect to the bracket route.
+          // This handles stale bookmarks, old notification links, and canonicalization remnants
+          // that incorrectly sent bracket pool UUIDs to /league/[id].
+          try {
+            const bracketLeagueRow = await (prisma as any).bracketLeague.findUnique({
+              where: { id: leagueId },
+              select: { id: true },
+            })
+            if (bracketLeagueRow?.id) {
+              redirect(`/brackets/leagues/${leagueId}`)
+            }
+          } catch {
+            // Table may not exist in all environments — continue to not-found
+          }
+          try {
+            const playoffRow = await (prisma as any).playoffBracketChallenge.findUnique({
+              where: { id: leagueId },
+              select: { id: true },
+            })
+            if (playoffRow?.id) {
+              redirect(`/brackets/leagues/${leagueId}`)
+            }
+          } catch {
+            // Table may not exist — continue
+          }
+          try {
+            const worldCupRow = await (prisma as any).worldCupBracketChallenge.findUnique({
+              where: { id: leagueId },
+              select: { id: true },
+            })
+            if (worldCupRow?.id) {
+              redirect(`/brackets/leagues/${leagueId}`)
+            }
+          } catch {
+            // Table may not exist — continue
+          }
+
           return (
             <DashboardUnavailableState
               title="League not found"
@@ -283,6 +322,17 @@ export default async function LeaguePage({
 
       const isCommissioner = role === 'commissioner' || role === 'co_commissioner'
         const isHeadCommissioner = role === 'commissioner'
+        let firstRunNiceEvidence: LeagueFirstRunNiceEvidence | null = null
+        if (isCommissioner) {
+          firstRunNiceEvidence = await loadLeagueFirstRunNiceEvidence({
+            leagueId: league.id,
+            leagueOwnerUserId: league.userId,
+            settings: league.settings,
+          }).catch((err) => {
+            console.error('[league page] firstRunNiceEvidence failed', { leagueId, err })
+            return null
+          })
+        }
         const userImage = resolveDashboardAvatarUrl(session.user.image, dbUser?.avatarUrl)
         const currentSleeperUserId = userProfile?.sleeperUserId ?? null
         const sleeperUsersByPlatformId: Record<string, { display_name: string; avatar: string | null }> =
@@ -322,6 +372,7 @@ export default async function LeaguePage({
             defaultShowInvite={defaultShowInvite}
             defaultOpenChat={defaultOpenChat}
             shouldPlayIntro={shouldPlayIntro}
+            firstRunNiceEvidence={firstRunNiceEvidence}
           />
         </div>
       )
