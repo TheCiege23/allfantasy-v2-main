@@ -17,6 +17,7 @@ import {
     getDashboardRuntimeIssue,
 } from '@/lib/dashboard/runtime-issues'
 import { isAppRouterRedirectError } from '@/lib/next/is-app-router-redirect-error'
+import { resolveBracketPoolRedirectUrl } from '@/lib/league/bracketPoolGuard'
 import { LeagueShellClient } from './LeagueShellClient'
 
 export const dynamic = 'force-dynamic'
@@ -176,45 +177,15 @@ export default async function LeaguePage({
           }
 
           // Guard: if this ID belongs to any bracket pool table, redirect to the bracket route.
-          // This handles stale bookmarks, old notification links, and canonicalization remnants
-          // that incorrectly sent bracket pool UUIDs to /league/[id].
-          // NOTE: redirect() throws a NEXT_REDIRECT error — catch blocks MUST re-throw it or
-          // the redirect is silently swallowed. Only suppress non-redirect errors (e.g. missing table).
-          try {
-            const bracketLeagueRow = await (prisma as any).bracketLeague.findUnique({
-              where: { id: leagueId },
-              select: { id: true },
-            })
-            if (bracketLeagueRow?.id) {
-              redirect(`/brackets/leagues/${leagueId}`)
-            }
-          } catch (err) {
-            if (isAppRouterRedirectError(err)) throw err
-            // Table may not exist in all environments — continue to not-found
-          }
-          try {
-            const playoffRow = await (prisma as any).playoffBracketChallenge.findUnique({
-              where: { id: leagueId },
-              select: { id: true },
-            })
-            if (playoffRow?.id) {
-              redirect(`/brackets/leagues/${leagueId}`)
-            }
-          } catch (err) {
-            if (isAppRouterRedirectError(err)) throw err
-            // Table may not exist — continue
-          }
-          try {
-            const worldCupRow = await (prisma as any).worldCupBracketChallenge.findUnique({
-              where: { id: leagueId },
-              select: { id: true },
-            })
-            if (worldCupRow?.id) {
-              redirect(`/brackets/leagues/${leagueId}`)
-            }
-          } catch (err) {
-            if (isAppRouterRedirectError(err)) throw err
-            // Table may not exist — continue
+          // Handles stale bookmarks, old notification links, and post-auth canonicalization
+          // remnants that incorrectly sent bracket pool IDs to /league/[id].
+          // resolveBracketPoolRedirectUrl checks BracketLeague, PlayoffBracketChallenge,
+          // and WorldCupBracketChallenge; missing-table errors are suppressed internally.
+          // redirect() is called here (not inside the helper) so NEXT_REDIRECT propagates
+          // through the outer catch which re-throws it via isAppRouterRedirectError.
+          const bracketRedirectUrl = await resolveBracketPoolRedirectUrl(leagueId)
+          if (bracketRedirectUrl) {
+            redirect(bracketRedirectUrl)
           }
 
           return (
