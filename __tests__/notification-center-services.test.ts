@@ -90,6 +90,19 @@ describe("notification center services", () => {
     )
     expect(league).toEqual({ href: "/league/league-123?sport=NBA", label: "Open league" })
 
+    // Bracket pool notifications must route to /brackets/leagues/[id], not /league/[id]
+    const bracketPool = getNotificationDestination(
+      makeNotification({
+        product: "bracket",
+        type: "bracket_pool_created",
+        meta: { leagueId: "c3dd3c1f-fa8b-4116-93b7-26823bcbfb48", sport: "nba" },
+      })
+    )
+    expect(bracketPool).toEqual({
+      href: "/brackets/leagues/c3dd3c1f-fa8b-4116-93b7-26823bcbfb48",
+      label: "Open pool",
+    })
+
     const draft = getNotificationDestination(
       makeNotification({
         type: "draft_on_the_clock",

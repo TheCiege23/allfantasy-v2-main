@@ -73,6 +73,13 @@ export function getNotificationDestination(n: PlatformNotification): Notificatio
     return { href: chatHref!, label: "Open chat" }
   }
   if (leagueId) {
+    // Bracket pools live at /brackets/leagues/[id], not /league/[id]
+    if (n.product === "bracket") {
+      return {
+        href: `/brackets/leagues/${leagueId}`,
+        label: "Open pool",
+      }
+    }
     return {
       href: withSportContext(`/league/${leagueId}`, sport),
       label: "Open league",
