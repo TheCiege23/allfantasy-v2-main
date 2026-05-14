@@ -18,8 +18,6 @@ import {
 } from '@/lib/dashboard/runtime-issues'
 import { isAppRouterRedirectError } from '@/lib/next/is-app-router-redirect-error'
 import { LeagueShellClient } from './LeagueShellClient'
-import { loadLeagueFirstRunNiceEvidence } from '@/lib/league/first-run-readiness-evidence.server'
-import type { LeagueFirstRunNiceEvidence } from '@/lib/league/first-run-types'
 
 export const dynamic = 'force-dynamic'
 
@@ -322,17 +320,6 @@ export default async function LeaguePage({
 
       const isCommissioner = role === 'commissioner' || role === 'co_commissioner'
         const isHeadCommissioner = role === 'commissioner'
-        let firstRunNiceEvidence: LeagueFirstRunNiceEvidence | null = null
-        if (isCommissioner) {
-          firstRunNiceEvidence = await loadLeagueFirstRunNiceEvidence({
-            leagueId: league.id,
-            leagueOwnerUserId: league.userId,
-            settings: league.settings,
-          }).catch((err) => {
-            console.error('[league page] firstRunNiceEvidence failed', { leagueId, err })
-            return null
-          })
-        }
         const userImage = resolveDashboardAvatarUrl(session.user.image, dbUser?.avatarUrl)
         const currentSleeperUserId = userProfile?.sleeperUserId ?? null
         const sleeperUsersByPlatformId: Record<string, { display_name: string; avatar: string | null }> =
@@ -372,7 +359,6 @@ export default async function LeaguePage({
             defaultShowInvite={defaultShowInvite}
             defaultOpenChat={defaultOpenChat}
             shouldPlayIntro={shouldPlayIntro}
-            firstRunNiceEvidence={firstRunNiceEvidence}
           />
         </div>
       )
