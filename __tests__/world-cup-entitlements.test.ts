@@ -9,13 +9,14 @@ import {
 } from "@/lib/world-cup/worldCupEntitlements"
 
 describe("World Cup entitlement helpers", () => {
-  it("keeps normal free users out of premium World Cup tools", () => {
+  it("keeps normal free users out of premium World Cup tools (except basic chat)", () => {
     const input = { isOwner: false, isAdmin: false, hasBracketBrainAi: false }
 
     expect(canUseWorldCupCommissionerTools(input)).toBe(false)
     expect(canCreateMultipleWorldCupEntries(input)).toBe(false)
     expect(canExportWorldCupLeaderboard(input)).toBe(false)
-    expect(canUseWorldCupChat(input)).toBe(false)
+    // Basic chat is open to all participants — API enforces pool membership
+    expect(canUseWorldCupChat(input)).toBe(true)
     expect(canUseWorldCupAiTools(input)).toBe(false)
   })
 
@@ -42,6 +43,43 @@ describe("World Cup entitlement helpers", () => {
     expect(resolveWorldCupEntitlementSummary({ isAdmin: true }).labels).toEqual({
       commissioner: "AF Commissioner active",
       ai: "AI/Pro active",
+    })
+  })
+
+  describe("canUseWorldCupChat — open to all participants", () => {
+    it("returns true for a free user with no flags set", () => {
+      expect(canUseWorldCupChat({})).toBe(true)
+    })
+
+    it("returns true for an owner", () => {
+      expect(canUseWorldCupChat({ isOwner: true })).toBe(true)
+    })
+
+    it("returns true for an admin", () => {
+      expect(canUseWorldCupChat({ isAdmin: true })).toBe(true)
+    })
+
+    it("returns true even when all flags are explicitly false", () => {
+      expect(canUseWorldCupChat({ isOwner: false, isAdmin: false, hasBracketBrainAi: false })).toBe(true)
+    })
+
+    it("does not change AI gating — AI tools still require subscription or pro access", () => {
+      expect(canUseWorldCupAiTools({})).toBe(false)
+      expect(canUseWorldCupAiTools({ isOwner: false, isAdmin: false })).toBe(false)
+    })
+  })
+
+  describe("canUseWorldCupAiTools — admin gets full access via isAdmin flag", () => {
+    it("grants AI access when isAdmin is true", () => {
+      expect(canUseWorldCupAiTools({ isAdmin: true })).toBe(true)
+    })
+
+    it("grants AI access when allFantasyTestAccess is true", () => {
+      expect(canUseWorldCupAiTools({ allFantasyTestAccess: true })).toBe(true)
+    })
+
+    it("denies AI access for pool owner without subscription", () => {
+      expect(canUseWorldCupAiTools({ isOwner: true })).toBe(false)
     })
   })
 })

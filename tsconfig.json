@@ -58,7 +58,9 @@
     ".next-build-fix-30536/types/**/*.ts",
     ".next-build-fix-2888/types/**/*.ts",
     ".next-world-cup-smoke/types/**/*.ts",
-    ".next-build-fix-11656/types/**/*.ts"
+    ".next-build-fix-11656/types/**/*.ts",
+    ".next-build-fix-8336/types/**/*.ts",
+    ".next-build-fix-20896/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

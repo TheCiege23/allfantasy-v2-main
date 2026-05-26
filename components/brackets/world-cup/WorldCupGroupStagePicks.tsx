@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Check, Loader2, Sparkles } from "lucide-react"
+import { Check, ChevronRight, Loader2, Sparkles } from "lucide-react"
 import {
   fetchWorldCupGroupStageView,
   saveWorldCupGroupRankingClient,
@@ -9,6 +9,7 @@ import {
   type WorldCupGroupStageTeamClient,
   type WorldCupGroupStageViewClient,
 } from "@/lib/world-cup/worldCupClientApi"
+import WorldCupTeamFlag from "@/components/brackets/world-cup/WorldCupTeamFlag"
 import {
   buildWorldCupGroupStageGroupInsights,
   buildWorldCupGroupStageThirdPlaceInsights,
@@ -23,6 +24,7 @@ type Props = {
   entryId: string
   onCompletionChanged?: () => void
   onDirtyChange?: (hasUnsavedChanges: boolean) => void
+  onNavigateToKnockouts?: () => void
   aiInsightsUnlocked?: boolean
 }
 
@@ -181,7 +183,7 @@ function GroupAiInsightPanel({
           </p>
         </div>
       ) : (
-        <div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-2 py-2 text-[11px] leading-5 text-white/60" hidden>
+        <div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-2 py-2 text-[11px] leading-5 text-white/60">
           {t("wc.groupStage.aiLockedBody")}
         </div>
       )}
@@ -232,7 +234,7 @@ function ThirdPlaceAiInsightPanel({
           </p>
         </div>
       ) : (
-        <div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-2 py-2 text-[11px] leading-5 text-white/60" hidden>
+        <div className="mt-3 rounded-lg border border-white/10 bg-black/25 px-2 py-2 text-[11px] leading-5 text-white/60">
           {t("wc.thirdPlace.aiLockedBody")}
         </div>
       )}
@@ -240,7 +242,7 @@ function ThirdPlaceAiInsightPanel({
   )
 }
 
-export default function WorldCupGroupStagePicks({ challengeId, entryId, onCompletionChanged, onDirtyChange, aiInsightsUnlocked = false }: Props) {
+export default function WorldCupGroupStagePicks({ challengeId, entryId, onCompletionChanged, onDirtyChange, onNavigateToKnockouts, aiInsightsUnlocked = false }: Props) {
   // Hydration-safe: locale flows from the global LanguageProviderClient
   // which reads <html data-lang> on first render — SSR HTML matches the
   // first CSR pass.
@@ -341,14 +343,18 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
     try {
       const nextView = await saveWorldCupGroupRankingClient(challengeId, entryId, groupId, orderedTeamIds)
       setView(nextView)
-      const nextOrders: Record<string, string[]> = {}
-      const nextSaveStates: Record<string, GroupSaveState> = {}
-      for (const group of nextView.groups) {
-        nextOrders[group.id] = orderedTeamIdsForGroup(nextView, group.id)
-        if (isGroupRanked(nextView, group.id)) nextSaveStates[group.id] = "saved"
-      }
-      setLocalOrders(nextOrders)
-      setSaveStates((prev) => ({ ...nextSaveStates, [groupId]: "saved" }))
+      // Only sync the saved group's local order; preserve other groups' in-progress edits.
+      setLocalOrders((prev) => ({ ...prev, [groupId]: orderedTeamIdsForGroup(nextView, groupId) }))
+      setSaveStates((prev) => {
+        const next: Record<string, GroupSaveState> = { ...prev, [groupId]: "saved" }
+        // Promote other ranked-but-idle groups to "saved"; never touch dirty/saving groups.
+        for (const g of nextView.groups) {
+          if (g.id !== groupId && prev[g.id] !== "dirty" && prev[g.id] !== "saving" && isGroupRanked(nextView, g.id)) {
+            next[g.id] = "saved"
+          }
+        }
+        return next
+      })
       setThirdPlaceSelection(new Set(nextView.thirdPlaceAdvancerPicks.filter((pick) => pick.isSelected).map((pick) => pick.teamId)))
       onCompletionChanged?.()
     } catch (err) {
@@ -480,6 +486,12 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                       className={`flex flex-wrap items-center gap-2 rounded-xl border bg-black/20 px-2 py-2 sm:flex-nowrap ${resultBorderClass(status)}`}
                     >
                       <span className="w-7 shrink-0 text-center text-sm font-black text-white/90">{index + 1}</span>
+                      <WorldCupTeamFlag
+                        flagUrl={team?.flagUrl ?? null}
+                        teamName={team?.name ?? teamId}
+                        countryCode={team?.fifaCode ?? null}
+                        size="sm"
+                      />
                       <div className="min-w-0 flex-1">
                         {/* Team name (team?.name) is intentionally NOT translated — see Phase 5 brief. */}
                         <div className="truncate text-sm font-bold text-white">{team?.name ?? teamId}</div>
@@ -493,7 +505,7 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                           {badge.label}
                         </span>
                       ) : null}
-                      <div className="grid w-full grid-cols-2 gap-1 sm:flex sm:w-auto sm:shrink-0">
+                      <div className="grid w-full grid-cols-2 gap-1 touch-manipulation sm:flex sm:w-auto sm:shrink-0">
                         <button
                           type="button"
                           onClick={() => setGroupOrder(group.id, moveItem(order, index, -1))}
@@ -540,7 +552,7 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
               <button
                 type="button"
                 onClick={() => void saveGroup(group.id)}
-                disabled={isLocked || state === "saving" || !hasCompleteTeams || !hasUnsavedOrderChanges}
+                disabled={isLocked || state === "saving" || !hasCompleteTeams}
                 className="mt-3 w-full rounded-xl bg-cyan-300 px-3 py-2 text-xs font-black text-black disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {state === "saving"
@@ -617,30 +629,27 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
               : null
             const badge = resultBadge(status, t, pick?.pointsAwarded ?? 0)
             return (
-              <label
+              <button
                 key={candidate.groupId}
+                type="button"
                 data-testid={`world-cup-third-place-result-${candidate.groupKey}`}
                 data-result-state={status}
                 data-selected={isSelected ? "true" : "false"}
+                onClick={() => candidate.team && toggleThirdPlace(candidate.team.teamId)}
+                disabled={isLocked || !view.completion.allGroupsRanked || !candidate.team}
+                aria-pressed={isSelected}
+                aria-label={t("wc.thirdPlace.selectAria", {
+                  name: candidate.team?.name ?? candidate.displayName,
+                })}
                 className={[
-                  "flex min-h-[4.75rem] items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition",
+                  "flex min-h-[4.75rem] w-full items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition touch-manipulation text-left",
                   resultBorderClass(status),
                   isSelected
                     ? "border-cyan-200 bg-cyan-300/[0.18] text-white/90 shadow-[0_0_0_2px_rgba(103,232,249,0.35),0_14px_36px_rgba(8,145,178,0.22)]"
                     : "border-white/10 bg-black/25 text-white/75",
-                  isLocked || !view.completion.allGroupsRanked || !candidate.team ? "opacity-60" : "cursor-pointer hover:border-cyan-200/50 hover:bg-cyan-300/10",
+                  isLocked || !view.completion.allGroupsRanked || !candidate.team ? "opacity-60 cursor-not-allowed" : "cursor-pointer hover:border-cyan-200/50 hover:bg-cyan-300/10",
                 ].join(" ")}
               >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => candidate.team && toggleThirdPlace(candidate.team.teamId)}
-                  disabled={isLocked || !view.completion.allGroupsRanked || !candidate.team}
-                  className="sr-only"
-                  aria-label={t("wc.thirdPlace.selectAria", {
-                    name: candidate.team?.name ?? candidate.displayName,
-                  })}
-                />
                 <span
                   aria-hidden
                   className={[
@@ -667,23 +676,36 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                     {badge.label}
                   </span>
                 ) : null}
-              </label>
+              </button>
             )
           })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => void saveThirdPlace()}
-          disabled={isLocked || !view.completion.allGroupsRanked || thirdPlaceStatus === "saving" || !hasUnsavedThirdPlaceChanges}
-          className="mt-4 min-h-11 w-full rounded-xl bg-cyan-300 px-4 py-2 text-sm font-black text-black touch-manipulation disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
-        >
-          {thirdPlaceStatus === "saving"
-            ? t("wc.thirdPlace.saving")
-            : thirdPlaceStatus === "saved"
-              ? t("wc.thirdPlace.savePicksDone")
-              : t("wc.thirdPlace.savePrimaryBtn")}
-        </button>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => void saveThirdPlace()}
+            disabled={isLocked || !view.completion.allGroupsRanked || thirdPlaceStatus === "saving" || !hasUnsavedThirdPlaceChanges}
+            className="mt-4 min-h-11 w-full rounded-xl bg-cyan-300 px-4 py-2 text-sm font-black text-black touch-manipulation disabled:cursor-not-allowed disabled:opacity-45 sm:w-auto"
+          >
+            {thirdPlaceStatus === "saving"
+              ? t("wc.thirdPlace.saving")
+              : thirdPlaceStatus === "saved"
+                ? t("wc.thirdPlace.savePicksDone")
+                : t("wc.thirdPlace.savePrimaryBtn")}
+          </button>
+          {onNavigateToKnockouts && view.completion.allGroupsRanked ? (
+            <button
+              type="button"
+              data-testid="world-cup-group-stage-continue-to-knockouts"
+              onClick={onNavigateToKnockouts}
+              className="mt-4 flex min-h-11 items-center gap-1 rounded-xl border border-cyan-300/50 px-4 py-2 text-sm font-black text-cyan-200 touch-manipulation hover:border-cyan-300 hover:text-white sm:w-auto"
+            >
+              {t("wc.groupStage.continueToKnockouts")}
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          ) : null}
+        </div>
       </div>
     </section>
   )

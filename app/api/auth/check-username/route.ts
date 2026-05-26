@@ -28,7 +28,7 @@ export async function GET(req: Request) {
 
   try {
     const existing = await prisma.appUser.findFirst({
-      where: { username: normalized },
+      where: { username: { equals: normalized, mode: "insensitive" } },
       select: { id: true },
     })
 

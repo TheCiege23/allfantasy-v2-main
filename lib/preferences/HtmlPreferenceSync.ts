@@ -82,7 +82,7 @@ export function buildLanguageInitScript(serverLang?: string | null): string {
       try {
         var fallbackLang = ${JSON.stringify(fallbackLanguage)};
         var lang = localStorage.getItem(${JSON.stringify(LANG_STORAGE_KEY)}) || fallbackLang;
-        if (lang !== "en" && lang !== "es") lang = fallbackLang;
+        if (lang !== "en" && lang !== "es" && lang !== "zh" && lang !== "fil" && lang !== "vi") lang = fallbackLang;
         document.documentElement.setAttribute("lang", lang);
         document.documentElement.setAttribute("data-lang", lang);
       } catch (e) {

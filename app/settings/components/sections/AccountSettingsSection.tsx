@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { signOut } from "next-auth/react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
+import { useEntitlements } from "@/hooks/useEntitlements"
 
 export function AccountSettingsSection({
   accountCreatedAt,
@@ -12,6 +13,7 @@ export function AccountSettingsSection({
   planLabel: string | null
 }) {
   const { t, tInterpolate } = useLanguage()
+  const ents = useEntitlements()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState("")
 
@@ -23,7 +25,15 @@ export function AccountSettingsSection({
       })
     : null
 
-  const planDisplay = planLabel?.trim() || t("settings.account.planFree")
+  const planDisplay = (() => {
+    if (planLabel?.trim()) return planLabel.trim()
+    if (ents.loading) return "…"
+    if (ents.hasSupreme || ents.hasAllAccess) return "AF All-Access"
+    if (ents.hasCommissioner) return "AF Commissioner"
+    if (ents.hasPro) return "AF Pro"
+    if (ents.hasWarRoom) return "AF War Room"
+    return t("settings.account.planFree")
+  })()
 
   const deletionMailto = `mailto:support@allfantasy.ai?subject=${encodeURIComponent(
     "Account deletion request"

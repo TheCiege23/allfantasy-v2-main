@@ -1725,3 +1725,67 @@ describe("World Cup projected knockout readiness (semifinal / final)", () => {
     expect(isWorldCupMatchPickable(finalMatch)).toBe(true)
   })
 })
+
+describe("TBD qualifier virtual teams (Issue 1 fix)", () => {
+  it("TBD slot produces a virtual team with a non-placeholder name so R32 match is pickable", () => {
+    const projection = makeCompleteGroupStageProjection()
+    const r32TbdMatch = makeMatch({
+      id: "r32-tbd",
+      round: "round_of_32",
+      matchNumber: 16,
+      homeSlotKey: "TBD1",
+      awaySlotKey: "TBD2",
+      homeTeamId: null,
+      awayTeamId: null,
+      homeTeamName: "TBD Qualifier 1",
+      awayTeamName: "TBD Qualifier 2",
+    })
+    const result = buildWorldCupMatchesFromGroupPredictions({
+      matches: [r32TbdMatch],
+      groupStageView: { ...projection, bestThirdMappingConfirmed: true } as never,
+      bestThirdMappingConfirmed: true,
+    })
+    const tbd = result.matches.find((m) => m.id === "r32-tbd")!
+    expect(tbd.homeTeamId).toBe("tbd-qualifier-1")
+    expect(tbd.awayTeamId).toBe("tbd-qualifier-2")
+    expect(tbd.homeTeamName).toBe("TBD Qualifier 1")
+    expect(tbd.awayTeamName).toBe("TBD Qualifier 2")
+    expect(isWorldCupMatchPickable(tbd)).toBe(true)
+  })
+
+  it("TBD virtual team cascades so downstream R16 match is also pickable after a pick", () => {
+    // Simulate real app call order: group-stage projection assigns virtual IDs first,
+    // then buildWorldCupProjectedMatches cascades picks downstream.
+    const r32TbdMatch = makeMatch({
+      id: "r32-tbd",
+      round: "round_of_32",
+      matchNumber: 16,
+      homeSlotKey: "TBD1",
+      awaySlotKey: "TBD2",
+      // Virtual teams already applied by buildWorldCupMatchesFromGroupPredictions
+      homeTeamId: "tbd-qualifier-1",
+      awayTeamId: "tbd-qualifier-2",
+      homeTeamName: "TBD Qualifier 1",
+      awayTeamName: "TBD Qualifier 2",
+      nextMatchId: "r16-next",
+      nextMatchSlot: "home",
+    })
+    const r16Match = makeMatch({
+      id: "r16-next",
+      round: "round_of_16",
+      matchNumber: 24,
+      homeSlotKey: "W-M16",
+      awaySlotKey: "K2",
+      homeTeamId: null,
+      awayTeamId: "team-k2",
+      homeTeamName: "Winner Match 16",
+      awayTeamName: "Netherlands",
+      nextMatchId: null,
+    })
+    const pick = makePick({ matchId: "r32-tbd", selectedTeamId: "tbd-qualifier-1", selectedSlotKey: "TBD1" })
+    const projected = buildWorldCupProjectedMatches([r32TbdMatch, r16Match], [pick])
+    const projected16 = projected.find((m) => m.id === "r16-next")!
+    expect(projected16.homeTeamId).toBe("tbd-qualifier-1")
+    expect(isWorldCupMatchPickable(projected16)).toBe(true)
+  })
+})

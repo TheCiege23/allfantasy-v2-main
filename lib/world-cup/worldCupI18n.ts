@@ -855,6 +855,7 @@ const EN: WorldCupDictionary = {
   "wc.groupStage.saving": "Saving...",
   "wc.groupStage.saved": "Saved",
   "wc.groupStage.retrySave": "Retry Save",
+  "wc.groupStage.continueToKnockouts": "Continue to Knockout Picks →",
   "wc.groupStage.failedSave": "Failed to save group ranking",
   "wc.groupStage.aiTitle": "AI Insights",
   "wc.groupStage.aiTierOpen": "Open",
@@ -2022,6 +2023,7 @@ const ES: WorldCupDictionary = {
   "wc.groupStage.saving": "Guardando...",
   "wc.groupStage.saved": "Guardado",
   "wc.groupStage.retrySave": "Reintentar guardar",
+  "wc.groupStage.continueToKnockouts": "Continuar a selecciones eliminatorias →",
   "wc.groupStage.failedSave":
     "No se pudo guardar el orden del grupo",
   "wc.groupStage.aiTitle": "Análisis IA",
@@ -3170,6 +3172,7 @@ const ZH: WorldCupDictionary = {
   "wc.groupStage.saving": "儲存中...",
   "wc.groupStage.saved": "已儲存",
   "wc.groupStage.retrySave": "重試儲存",
+  "wc.groupStage.continueToKnockouts": "繼續進行淘汰賽選擇 →",
   "wc.groupStage.failedSave": "無法儲存小組排名",
   "wc.groupStage.aiTitle": "AI 解析",
   "wc.groupStage.aiTierOpen": "已開啟",
@@ -4341,6 +4344,7 @@ const FIL: WorldCupDictionary = {
   "wc.groupStage.saving": "Sini-save...",
   "wc.groupStage.saved": "Na-save",
   "wc.groupStage.retrySave": "Subukan ulit",
+  "wc.groupStage.continueToKnockouts": "Magpatuloy sa Knockout Picks →",
   "wc.groupStage.failedSave":
     "Hindi na-save ang group ranking",
   "wc.groupStage.aiTitle": "AI Insights",
@@ -5542,6 +5546,7 @@ const VI: WorldCupDictionary = {
   "wc.groupStage.saving": "Đang lưu...",
   "wc.groupStage.saved": "Đã lưu",
   "wc.groupStage.retrySave": "Thử lại",
+  "wc.groupStage.continueToKnockouts": "Tiếp tục chọn vòng loại trực tiếp →",
   "wc.groupStage.failedSave":
     "Không lưu được xếp hạng bảng",
   "wc.groupStage.aiTitle": "Phân tích AI",

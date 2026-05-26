@@ -1450,7 +1450,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(screen.queryByTestId("world-cup-readiness-panel")).not.toBeInTheDocument()
   })
 
-  it("renders owner simulation controls with dry run defaults and checklist results", async () => {
+  it("renders admin simulation controls with dry run defaults and checklist results", async () => {
     clientApiMocks.adminSimulateRound.mockResolvedValueOnce({
       ok: true,
       result: {
@@ -1467,6 +1467,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     render(
       <WorldCupBracketShell
         initialView={makeShellView({
+          isAdmin: true,
           matches: makeShellSeededMatches(),
           challenge: { ...makeShellView().challenge, simulationEnabled: true },
         }) as any}
@@ -1501,6 +1502,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     render(
       <WorldCupBracketShell
         initialView={makeShellView({
+          isAdmin: true,
           matches: makeShellSeededMatches(),
           challenge: { ...makeShellView().challenge, simulationEnabled: true },
         }) as any}
@@ -2506,7 +2508,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
   it("disables admin integrity after a missing route response", async () => {
     clientApiMocks.getIntegrityReport.mockRejectedValueOnce(new Error("Route not found"))
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false }) as any} />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isAdmin: true }) as any} />)
 
     const button = await screen.findByRole("button", { name: /Run Integrity Check/i })
     fireEvent.click(button)
@@ -2522,7 +2524,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     }))
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false }) as any} />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isAdmin: true }) as any} />)
 
     await screen.findByTestId("world-cup-readiness-panel")
     fireEvent.click(screen.getByRole("button", { name: /Run readiness check/i }))

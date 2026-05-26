@@ -70,7 +70,8 @@ describe("WorldCupGroupStagePicks", () => {
     render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" onCompletionChanged={onCompletionChanged} />)
 
     const group = await screen.findByTestId("world-cup-group-A")
-    expect(within(group).getByRole("button", { name: /Saved/i })).toBeDisabled()
+    // Fix 4: "Save as-is" button is now enabled even when no local changes exist
+    expect(within(group).getByRole("button", { name: /Saved/i })).toBeEnabled()
 
     fireEvent.click(within(group).getAllByRole("button", { name: /Move Up/i })[1])
 
@@ -137,15 +138,20 @@ describe("WorldCupGroupStagePicks", () => {
 
     expect(clientApiMocks.saveGroupRanking).toHaveBeenCalledTimes(1)
     resolveSave(makeGroupStageView())
-    await waitFor(() => expect(within(group).getByRole("button", { name: /Saved/i })).toBeDisabled())
+    // Fix 4: "Saved" button stays enabled after save completes (save-as-is is allowed)
+    await waitFor(() => expect(within(group).getByRole("button", { name: /Saved/i })).toBeEnabled())
   })
 
-  it("keeps no-op group save disabled and preserves submitted state by not calling save", async () => {
+  it("no-op group save is enabled but does not call the API when order matches server", async () => {
     const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
     render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" />)
 
     const group = await screen.findByTestId("world-cup-group-A")
-    expect(within(group).getByRole("button", { name: /Saved/i })).toBeDisabled()
+    // Fix 4: save-as-is is now allowed — button stays enabled
+    const saveBtn = within(group).getByRole("button", { name: /Saved/i })
+    expect(saveBtn).toBeEnabled()
+    // Clicking when order already matches server must NOT call the API
+    fireEvent.click(saveBtn)
     expect(clientApiMocks.saveGroupRanking).not.toHaveBeenCalled()
   })
 
@@ -216,7 +222,10 @@ describe("WorldCupGroupStagePicks", () => {
     expect(within(thirdPlace).queryByText("Argentina")).not.toBeInTheDocument()
     expect(within(thirdPlace).queryByText("Brazil")).not.toBeInTheDocument()
     expect(within(thirdPlace).queryByText("Denmark")).not.toBeInTheDocument()
-    expect(within(thirdPlace).getByRole("checkbox", { name: /Select Canada as a third-place advancer/i })).toBeInTheDocument()
+    // Third-place cards are now <button aria-pressed> elements (label→button conversion for mobile double-tap fix).
+    // The card itself IS the interactive control — verify it has the correct accessible name.
+    expect(thirdPlace.tagName.toLowerCase()).toBe("button")
+    expect(thirdPlace).toHaveAccessibleName(/Select Canada as a third-place advancer/i)
   })
 
   it("makes selected third-place advancer cards obvious on mobile/dark UI", async () => {
@@ -241,7 +250,8 @@ describe("WorldCupGroupStagePicks", () => {
     expect(selectedCard.className).toContain("bg-cyan-300/[0.18]")
     expect(selectedCard.className).toContain("border-cyan-200")
     expect(within(selectedCard).getByText("Selected to advance")).toBeInTheDocument()
-    expect(within(selectedCard).getByRole("checkbox", { name: /Select Canada as a third-place advancer/i })).toBeChecked()
+    // After label→button conversion, "checked" state is expressed via aria-pressed.
+    expect(selectedCard).toHaveAttribute("aria-pressed", "true")
   })
 
   it("ignores rapid duplicate third-place saves while the first request is in flight", async () => {
@@ -284,8 +294,9 @@ describe("WorldCupGroupStagePicks", () => {
     render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" />)
 
     const selectedCards = await screen.findAllByText("Tap to select")
-    selectedCards.slice(0, 8).forEach((label) => {
-      fireEvent.click(label.closest("label") as HTMLElement)
+    selectedCards.slice(0, 8).forEach((el) => {
+      // Text lives inside a <button>; closest("button") reaches the clickable card.
+      fireEvent.click(el.closest("button") as HTMLElement)
     })
     const saveButton = screen.getByRole("button", { name: /^Save Third-Place$/i })
     fireEvent.click(saveButton)
@@ -304,5 +315,118 @@ describe("WorldCupGroupStagePicks", () => {
     expect(screen.getByText("Ask Chimmy")).toBeInTheDocument()
     expect(screen.getByText(/AI\/Pro unlocks third-place selection insights/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Save Third-Place Advancers/i }).className).toContain("w-full")
+  })
+
+  it("Issue 3 — saving one group does not clobber local order of a concurrently edited group", async () => {
+    // Two groups: A already ranked, B has live local edits when A's save resolves
+    const twoGroupView = makeGroupStageView({
+      groups: [
+        makeGroupStageView().groups[0],
+        {
+          id: "group-b",
+          groupKey: "B",
+          displayName: "Group B",
+          sortOrder: 2,
+          teams: [
+            { id: "gt-5", teamId: "team-e", name: "England", country: "England", fifaCode: "ENG", flagUrl: null, logoUrl: null, seedOrder: 1, actualRank: null, points: null, goalDifference: null, goalsFor: null },
+            { id: "gt-6", teamId: "team-f", name: "France", country: "France", fifaCode: "FRA", flagUrl: null, logoUrl: null, seedOrder: 2, actualRank: null, points: null, goalDifference: null, goalsFor: null },
+            { id: "gt-7", teamId: "team-g", name: "Germany", country: "Germany", fifaCode: "GER", flagUrl: null, logoUrl: null, seedOrder: 3, actualRank: null, points: null, goalDifference: null, goalsFor: null },
+            { id: "gt-8", teamId: "team-h", name: "Honduras", country: "Honduras", fifaCode: "HON", flagUrl: null, logoUrl: null, seedOrder: 4, actualRank: null, points: null, goalDifference: null, goalsFor: null },
+          ],
+        },
+      ],
+      groupRankingPicks: [
+        { id: "grp-1", groupId: "group-a", teamId: "team-a", predictedRank: 1, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+        { id: "grp-2", groupId: "group-a", teamId: "team-b", predictedRank: 2, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+        { id: "grp-3", groupId: "group-a", teamId: "team-c", predictedRank: 3, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+        { id: "grp-4", groupId: "group-a", teamId: "team-d", predictedRank: 4, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+        { id: "grp-5", groupId: "group-b", teamId: "team-e", predictedRank: 1, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+        { id: "grp-6", groupId: "group-b", teamId: "team-f", predictedRank: 2, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+        { id: "grp-7", groupId: "group-b", teamId: "team-g", predictedRank: 3, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+        { id: "grp-8", groupId: "group-b", teamId: "team-h", predictedRank: 4, actualRank: null, isCorrect: null, pointsAwarded: 0 },
+      ],
+    })
+    let resolveGroupASave!: (v: ReturnType<typeof makeGroupStageView>) => void
+    clientApiMocks.fetchGroupStageView.mockResolvedValue(twoGroupView)
+    clientApiMocks.saveGroupRanking.mockReturnValue(new Promise((resolve) => {
+      resolveGroupASave = resolve
+    }))
+
+    const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
+    render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" />)
+
+    const groupA = await screen.findByTestId("world-cup-group-A")
+    const groupB = await screen.findByTestId("world-cup-group-B")
+
+    // Reorder group A and start saving
+    fireEvent.click(within(groupA).getAllByRole("button", { name: /Move Up/i })[1])
+    fireEvent.click(within(groupA).getByRole("button", { name: /Save Group/i }))
+
+    // While group A is saving, reorder group B
+    fireEvent.click(within(groupB).getAllByRole("button", { name: /Move Up/i })[1])
+    // Group B is now dirty — France moved to #1 in local state
+
+    // Resolve group A save
+    resolveGroupASave(twoGroupView)
+    await waitFor(() => expect(within(groupA).getByRole("button", { name: /Saved/i })).toBeEnabled())
+
+    // Group B's reordered state must still be visible (not clobbered)
+    const groupBRows = within(groupB).getAllByTestId(/world-cup-group-pick-result-B/)
+    expect(groupBRows[0]).toHaveTextContent("France")
+    expect(groupBRows[1]).toHaveTextContent("England")
+  })
+
+  it("Issue 5 — shows Continue to Knockout Picks button when allGroupsRanked and prop provided", async () => {
+    const completeView = makeGroupStageView({
+      completion: {
+        groupsRankedCount: 12,
+        allGroupsRanked: true,
+        thirdPlaceSelectedCount: 0,
+        thirdPlaceComplete: false,
+        groupStageComplete: false,
+      },
+    })
+    clientApiMocks.fetchGroupStageView.mockResolvedValue(completeView)
+    const onNavigate = vi.fn()
+
+    const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
+    render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" onNavigateToKnockouts={onNavigate} />)
+
+    const btn = await screen.findByTestId("world-cup-group-stage-continue-to-knockouts")
+    expect(btn).toBeInTheDocument()
+    fireEvent.click(btn)
+    expect(onNavigate).toHaveBeenCalledTimes(1)
+  })
+
+  it("Issue 5 — Continue to Knockout Picks button is hidden when allGroupsRanked is false", async () => {
+    const onNavigate = vi.fn()
+    const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
+    render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" onNavigateToKnockouts={onNavigate} />)
+
+    await screen.findByTestId("world-cup-group-A")
+    expect(screen.queryByTestId("world-cup-group-stage-continue-to-knockouts")).not.toBeInTheDocument()
+  })
+
+  it("Issue 5 — Continue button absent when onNavigateToKnockouts prop not provided", async () => {
+    const completeView = makeGroupStageView({
+      completion: { groupsRankedCount: 12, allGroupsRanked: true, thirdPlaceSelectedCount: 0, thirdPlaceComplete: false, groupStageComplete: false },
+    })
+    clientApiMocks.fetchGroupStageView.mockResolvedValue(completeView)
+
+    const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
+    render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" />)
+
+    await screen.findByTestId("world-cup-group-A")
+    expect(screen.queryByTestId("world-cup-group-stage-continue-to-knockouts")).not.toBeInTheDocument()
+  })
+
+  it("Issue 6 — team rows render a flag element for each team", async () => {
+    const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
+    render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" />)
+
+    const group = await screen.findByTestId("world-cup-group-A")
+    // WorldCupTeamFlag renders a span with aria-label like "Argentina country code ARG"
+    const flagElements = within(group).queryAllByLabelText(/country code/i)
+    expect(flagElements.length).toBeGreaterThanOrEqual(4)
   })
 })

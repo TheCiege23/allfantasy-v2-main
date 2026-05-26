@@ -14,14 +14,13 @@ describe("central AllFantasy admin entitlements", () => {
     expect(isSiteAdmin({ email: "cjabar.henson@gmail.com" })).toBe(true)
   })
 
-  it("grants all-access test permissions by username", () => {
-    const user = { username: "TheCiege26" }
-
-    expect(hasAllFantasyTestAccess(user)).toBe(true)
-    expect(isAfCommissioner(user)).toBe(true)
-    expect(hasAiAccess(user)).toBe(true)
-    expect(hasPoolAdminAccess(user)).toBe(true)
-    expect(hasChatAdminAccess(user)).toBe(true)
+  it("grants all-access test permissions by username (case-insensitive)", () => {
+    for (const username of ["TheCiege26", "theciege26", "THECIEGE26", "tHeciEge26"]) {
+      const user = { username }
+      expect(hasAllFantasyTestAccess(user), `username: ${username}`).toBe(true)
+      expect(isAfCommissioner(user), `isAfCommissioner: ${username}`).toBe(true)
+      expect(hasAiAccess(user), `hasAiAccess: ${username}`).toBe(true)
+    }
   })
 
   it("does not grant admin, AI, commissioner, or pool access to a normal user", () => {

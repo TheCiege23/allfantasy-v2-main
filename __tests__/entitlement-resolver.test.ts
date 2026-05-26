@@ -92,17 +92,38 @@ describe("EntitlementResolver", () => {
     expect(userSubscriptionFindManyMock).not.toHaveBeenCalled()
   })
 
-  it("returns all-access entitlement for the configured owner email", async () => {
+  it("resolves via DB for the platform owner email — no longer subscription-bypass", async () => {
+    // The platform owner email is in STATIC_ALL_ACCESS_EMAILS for admin-panel access,
+    // but subscription bypass is now userId-only. The resolver must hit the DB so the
+    // real Stripe subscription (or lack thereof) is reflected in the billing UI.
+    userSubscriptionFindManyMock.mockResolvedValueOnce([
+      {
+        status: "active",
+        currentPeriodEnd: new Date("2099-01-01T00:00:00.000Z"),
+        gracePeriodEnd: null,
+        expiresAt: null,
+        sku: "af_pro_monthly",
+        plan: { code: "af_pro" },
+      },
+    ])
     const { EntitlementResolver } = await import("@/lib/subscription/EntitlementResolver")
     const resolver = new EntitlementResolver()
     const snapshot = await resolver.resolveSnapshot("normal-id", "CJABAR.HENSON@GMAIL.COM")
 
-    expect(snapshot).toMatchObject({
-      plans: ["all_access"],
-      status: "active",
-      currentPeriodEnd: null,
-      gracePeriodEnd: null,
-    })
-    expect(userSubscriptionFindManyMock).not.toHaveBeenCalled()
+    expect(snapshot.status).toBe("active")
+    expect(snapshot.plans).toContain("pro")
+    // DB was consulted — not short-circuited by the old email bypass
+    expect(userSubscriptionFindManyMock).toHaveBeenCalledOnce()
+  })
+
+  it("returns none for owner email when no DB subscription exists", async () => {
+    userSubscriptionFindManyMock.mockResolvedValueOnce([])
+    const { EntitlementResolver } = await import("@/lib/subscription/EntitlementResolver")
+    const resolver = new EntitlementResolver()
+    const snapshot = await resolver.resolveSnapshot("normal-id", "CJABAR.HENSON@GMAIL.COM")
+
+    expect(snapshot.status).toBe("none")
+    expect(snapshot.plans).toEqual([])
+    expect(userSubscriptionFindManyMock).toHaveBeenCalledOnce()
   })
 })

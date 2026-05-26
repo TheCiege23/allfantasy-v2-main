@@ -114,4 +114,68 @@ describe("Resolver-backed entitlement/token routes", () => {
     expect(body.error).toBe("Unauthorized")
     expect(tokenResolveForUserMock).not.toHaveBeenCalled()
   })
+
+  it("normal paid user (af_pro_monthly) gets real balance — isAdminBypassAccount false", async () => {
+    isSubscriptionEntitlementBypassUserIdMock.mockReturnValue(false)
+    tokenResolveForUserMock.mockResolvedValue({
+      balance: 5,
+      lifetimePurchased: 5,
+      lifetimeSpent: 0,
+      lifetimeRefunded: 0,
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    })
+    const { GET } = await import("@/app/api/tokens/balance/route")
+    const res = await GET()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.balance).toBe(5)
+    expect(body.isAdminBypassAccount).toBe(false)
+  })
+
+  it("normal paid user entitlements resolve af_pro_monthly as pro plan", async () => {
+    entitlementResolveForUserMock.mockResolvedValue({
+      entitlement: {
+        plans: ["pro"],
+        status: "active",
+        currentPeriodEnd: "2099-01-01T00:00:00.000Z",
+        gracePeriodEnd: null,
+      },
+      hasAccess: true,
+      message: "Access granted.",
+    })
+    const { GET } = await import("@/app/api/subscription/entitlements/route")
+    const req = createMockNextRequest("http://localhost/api/subscription/entitlements")
+    const res = await GET(req)
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.entitlement.plans).toContain("pro")
+    expect(body.entitlement.status).toBe("active")
+    expect(body.hasAccess).toBe(true)
+  })
+
+  it("platform owner email does not trigger bypass — isSubscriptionEntitlementBypassUserId not called with email-only path", async () => {
+    // This test documents that bypass is purely userId-driven.
+    // An admin-email account like cjabar.henson@gmail.com goes through normal resolution.
+    getServerSessionMock.mockResolvedValue({
+      user: { id: "owner-user-id", email: "cjabar.henson@gmail.com" },
+    })
+    isSubscriptionEntitlementBypassUserIdMock.mockReturnValue(false)
+    tokenResolveForUserMock.mockResolvedValue({
+      balance: 5,
+      lifetimePurchased: 5,
+      lifetimeSpent: 0,
+      lifetimeRefunded: 0,
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    })
+    const { GET } = await import("@/app/api/tokens/balance/route")
+    const res = await GET()
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.balance).toBe(5)
+    expect(body.isAdminBypassAccount).toBe(false)
+    expect(isSubscriptionEntitlementBypassUserIdMock).toHaveBeenCalledWith(
+      "owner-user-id",
+      "cjabar.henson@gmail.com"
+    )
+  })
 })

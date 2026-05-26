@@ -1334,24 +1334,25 @@ export default function WorldCupBracketShell({
     setSavingPickMatchIds(new Set(savingPickMatchIdsRef.current))
 
     try {
-      if (invalidMatchIds.length > 0) {
-        await clearWorldCupBracketEntryPicks(challengeId, selectedEntryId, invalidMatchIds)
-      }
-
-      const result = await saveWorldCupBracketEntryPick(challengeId, selectedEntryId, {
-        activeEntryId: selectedEntryId,
-        matchId: match.id,
-        selectedTeamId,
-        selectedTeamName,
-        selectedSlotKey,
-        selectedSide: side,
-        round: match.round,
-        sourceSlotKey: selectedSlotKey,
-        nextMatchId: match.nextMatchId,
-        nextMatchSlot: match.nextMatchSlot,
-        matchNumber: match.matchNumber,
-        confidencePoints: view.challenge.confidenceScoringEnabled ? confidencePoints ?? null : null,
-      })
+      const [result] = await Promise.all([
+        saveWorldCupBracketEntryPick(challengeId, selectedEntryId, {
+          activeEntryId: selectedEntryId,
+          matchId: match.id,
+          selectedTeamId,
+          selectedTeamName,
+          selectedSlotKey,
+          selectedSide: side,
+          round: match.round,
+          sourceSlotKey: selectedSlotKey,
+          nextMatchId: match.nextMatchId,
+          nextMatchSlot: match.nextMatchSlot,
+          matchNumber: match.matchNumber,
+          confidencePoints: view.challenge.confidenceScoringEnabled ? confidencePoints ?? null : null,
+        }),
+        invalidMatchIds.length > 0
+          ? clearWorldCupBracketEntryPicks(challengeId, selectedEntryId, invalidMatchIds)
+          : Promise.resolve(null),
+      ])
 
       // Keep pick saves fast: the save route returns entry/pick state only.
       // Admin/leaderboard/review paths refresh the full challenge view when needed.
@@ -2160,9 +2161,9 @@ export default function WorldCupBracketShell({
             </button>
           ) : (
             <Link
-              href="/brackets"
+              href="/brackets/world-cup"
               className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] p-2 text-white/70 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white touch-manipulation focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55"
-              aria-label="Back to brackets hub"
+              aria-label="Back to World Cup hub"
             >
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -2481,7 +2482,7 @@ export default function WorldCupBracketShell({
             />
           )}
 
-          {(view.isOwner || view.isAdmin) && (
+          {view.isAdmin && (
             <>
             <div id="world-cup-admin" className="mx-4 mb-2 h-0" aria-hidden="true" />
             <WorldCupReadinessPanel
@@ -3615,6 +3616,7 @@ export default function WorldCupBracketShell({
                 entryId={selectedEntry.id}
                 aiInsightsUnlocked={aiInsightsUnlocked}
                 onDirtyChange={setHasUnsavedGroupChanges}
+                onNavigateToKnockouts={() => scrollToAnchor("world-cup-picks", "picks")}
                 onCompletionChanged={() => {
                   setHasUnsavedGroupChanges(false)
                   refreshKnockoutBracketFromGroupStage()

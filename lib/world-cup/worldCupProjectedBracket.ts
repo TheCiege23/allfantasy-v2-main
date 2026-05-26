@@ -372,6 +372,12 @@ function selectedThirdPlaceTeams(view: WorldCupGroupStageProjectionView) {
     .sort((a, b) => a.groupKey.localeCompare(b.groupKey))
 }
 
+function tbdQualifierVirtualTeam(slotKey: string): WorldCupGroupStageProjectionTeam | null {
+  const m = slotKey.match(/^TBD(\d+)$/i)
+  if (!m) return null
+  return { teamId: `tbd-qualifier-${m[1]}`, name: `TBD Qualifier ${m[1]}`, logoUrl: null }
+}
+
 function resolveProjectedSlotTeam(
   slotKey: string,
   groupStageView: WorldCupGroupStageProjectionView,
@@ -382,7 +388,7 @@ function resolveProjectedSlotTeam(
     return teamForGroupRank(groupStageView, groupRank[1], Number(groupRank[2]))
   }
   if (isBestThirdSlot(slotKey)) return bestThirdBySlot.get(slotKey) ?? null
-  return null
+  return tbdQualifierVirtualTeam(slotKey)
 }
 
 function applyProjectedSide(

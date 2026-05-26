@@ -354,6 +354,8 @@ const NEW_KEYS = [
   "wc.premium.card.whatIf.desc",
   "wc.premium.card.alerts.title",
   "wc.premium.card.alerts.desc",
+  // Group stage navigation (Issue 5 fix)
+  "wc.groupStage.continueToKnockouts",
 ] as const
 
 describe("worldCupI18n — new keys present and non-empty in all locales", () => {

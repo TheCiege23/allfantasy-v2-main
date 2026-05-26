@@ -351,7 +351,7 @@ export default function WorldCupMatchupCard({
             </p>
           </div>
         ) : (
-          <p className="mt-2 rounded-md border border-white/10 bg-black/25 px-2 py-1.5 leading-4 text-white/60" hidden>
+          <p className="mt-2 rounded-md border border-white/10 bg-black/25 px-2 py-1.5 leading-4 text-white/60">
             {t("wc.matchup.aiLockedBody")}
           </p>
         )}

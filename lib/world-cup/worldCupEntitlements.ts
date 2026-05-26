@@ -48,8 +48,10 @@ export function canExportWorldCupLeaderboard(input: WorldCupEntitlementInput) {
   return canUseWorldCupCommissionerTools(input)
 }
 
-export function canUseWorldCupChat(input: WorldCupEntitlementInput) {
-  return canUseWorldCupCommissionerTools(input)
+export function canUseWorldCupChat(_input: WorldCupEntitlementInput) {
+  // Basic pool chat is available to all participants. AI/Chimmy private replies
+  // and commissioner controls are gated separately. The API enforces membership.
+  return true
 }
 
 export function resolveWorldCupEntitlementSummary(input: WorldCupEntitlementInput) {

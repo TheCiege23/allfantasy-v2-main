@@ -1151,7 +1151,9 @@ describe("PROOF-E — AI gating: free users blocked, paid users unlocked", () =>
     expect(canUseWorldCupCommissionerTools(input)).toBe(false)
     expect(canCreateMultipleWorldCupEntries(input)).toBe(false)
     expect(canExportWorldCupLeaderboard(input)).toBe(false)
-    expect(canUseWorldCupChat(input)).toBe(false)
+    // Basic pool chat is open to all participants — API enforces pool membership.
+    // AI/Chimmy private replies and commissioner controls remain separately gated.
+    expect(canUseWorldCupChat(input)).toBe(true)
     expect(canUseWorldCupAiTools(input)).toBe(false)
   })
 
