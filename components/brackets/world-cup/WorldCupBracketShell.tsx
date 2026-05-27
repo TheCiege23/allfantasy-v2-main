@@ -3190,11 +3190,38 @@ export default function WorldCupBracketShell({
               isOwnerOrAdmin={Boolean(view.isOwner || view.isAdmin)}
             />
 
-            <WorldCupCommunityFoundationPanel
-              challengeId={challengeId}
-              entitlementSummary={entitlementSummary}
-              poolName={view.challenge.name}
-            />
+            {/* Phase 1: Chat teaser — floating drawer & Chat tab hold the full experience */}
+            <section
+              data-testid="wc-chat-teaser-card"
+              className="mx-auto max-w-2xl px-4 py-4"
+            >
+              <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-zinc-900 to-zinc-950 p-5">
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-x-0 top-0 h-24 bg-[radial-gradient(ellipse_at_top_center,rgba(34,211,238,0.07),transparent_70%)] rounded-t-2xl"
+                />
+                <div className="relative flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <span className="mb-1.5 inline-flex items-center gap-1 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-200/80">
+                      {t("wc.chat.hero.badge")}
+                    </span>
+                    <p className="mt-1 text-base font-black text-white">{t("wc.chat.hero.title")}</p>
+                    <p className="mt-0.5 max-w-xs text-xs leading-5 text-white/50">
+                      {t("wc.chat.hero.subtitle")}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => switchTab("chat")}
+                    data-testid="wc-chat-teaser-open"
+                    className="inline-flex shrink-0 min-h-11 touch-manipulation items-center gap-1.5 rounded-xl bg-cyan-300 px-4 py-2.5 text-sm font-black text-black shadow-[0_2px_16px_-4px_rgba(34,211,238,0.4)] transition hover:bg-cyan-200 active:scale-95"
+                  >
+                    <MessageSquare className="h-4 w-4" aria-hidden />
+                    {t("wc.chat.drawer.open")}
+                  </button>
+                </div>
+              </div>
+            </section>
 
             <section className="mx-auto max-w-[min(100%,1600px)] px-2 sm:px-4">
               <AllFantasyBracketBoard

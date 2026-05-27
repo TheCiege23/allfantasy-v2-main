@@ -1250,7 +1250,14 @@ export default function WorldCupChatDrawer({
           isOpen ? "pointer-events-none opacity-0" : "opacity-100",
         ].join(" ")}
       >
-        <MessageSquare className="h-4 w-4 text-cyan-300/80" aria-hidden />
+        <span className="relative">
+          <MessageSquare className="h-4 w-4 text-cyan-300/80" aria-hidden />
+          {/* Pulsing activity dot — signals the chat is active */}
+          <span
+            aria-hidden
+            className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-cyan-400 ring-2 ring-zinc-900/80 animate-pulse"
+          />
+        </span>
         <span>{t("wc.chat.drawer.open")}</span>
       </button>
 

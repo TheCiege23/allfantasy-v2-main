@@ -1578,22 +1578,13 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(screen.getByText(/AI What-If Scenarios/i)).toBeInTheDocument()
     expect(screen.getAllByText(/Requires AF Commissioner/i).length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Requires AI\/Pro/i).length).toBeGreaterThan(0)
-    const community = screen.getByTestId("world-cup-community-foundation")
-    expect(community).toHaveTextContent("Pool Chat")
-    expect(within(community).getByText(/Talk strategy, call your shots, and keep the pool alive/i)).toBeInTheDocument()
-    expect(screen.getByPlaceholderText(/Message the pool or ask Chimmy/i)).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /^Send$/i })).toBeDisabled()
-    expect(screen.getByRole("button", { name: /^GIF$/i })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /^Poll$/i })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /^Image$/i })).toBeInTheDocument()
-    expect(screen.getByRole("button", { name: /^Voice$/i })).toBeInTheDocument()
-    expect(screen.getByText(/^Notification Settings$/i)).toBeInTheDocument()
-    expect(screen.getByText(/In-app notifications are on by default/i)).toBeInTheDocument()
-    expect(screen.getByText(/SMS alerts require a verified phone number and opt-in/i)).toBeInTheDocument()
-    expect(screen.getByText(/Pool muted/i)).toBeInTheDocument()
-    expect(screen.getByText(/Requires verified phone/i)).toBeInTheDocument()
-    expect(screen.getByText(/Pool owners and commissioners cannot override/i)).toBeInTheDocument()
-    expect(screen.getByText(/Free users can follow pool updates here/i)).toBeInTheDocument()
+    // Home tab now shows a chat teaser card (full panel moved to Chat tab + floating drawer)
+    const teaserCard = screen.getByTestId("wc-chat-teaser-card")
+    expect(teaserCard).toHaveTextContent("Pool Chat")
+    expect(within(teaserCard).getByText(/Talk strategy, call your shots, and keep the pool alive/i)).toBeInTheDocument()
+    expect(screen.getByTestId("wc-chat-teaser-open")).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/Message the pool or ask Chimmy/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/^Notification Settings$/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/System Reminders/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/^Moderation$/i)).not.toBeInTheDocument()
   })
@@ -1683,7 +1674,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="chat" />)
 
     expect(await screen.findByText("Opening message")).toBeInTheDocument()
     fireEvent.change(screen.getByPlaceholderText(/Message the pool or ask Chimmy/i), {
@@ -1748,7 +1739,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="chat" />)
 
     const muteSwitch = await screen.findByRole("switch", { name: /Pool muted/i })
     fireEvent.click(muteSwitch)
@@ -1766,7 +1757,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
 
   it("supports World Cup composer emoji and rich media foundations", async () => {
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="chat" />)
 
     const input = await screen.findByPlaceholderText(/Message the pool or ask Chimmy/i)
     fireEvent.click(screen.getByRole("button", { name: /Insert 🔥/i }))
@@ -1825,7 +1816,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="chat" />)
 
     expect(await screen.findByText("Bold", { selector: "span" })).toHaveClass("font-black")
     expect(screen.getByText("Italic", { selector: "span" })).toHaveClass("italic")
@@ -1912,7 +1903,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="chat" />)
 
     fireEvent.click(await screen.findByRole("button", { name: /^GIF$/i }))
     fireEvent.change(screen.getByPlaceholderText(/Search Klipy GIFs/i), { target: { value: "goal" } })
@@ -1998,7 +1989,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="chat" />)
 
     fireEvent.click(await screen.findByRole("button", { name: /^Image$/i }))
     const fileInput = screen.getByLabelText(/Choose Image/i, { selector: "input" })
@@ -2120,7 +2111,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: false, isAdmin: false }) as any} defaultTab="chat" />)
 
     fireEvent.click(await screen.findByRole("button", { name: /^Poll$/i }))
     fireEvent.change(screen.getByPlaceholderText(/Poll question/i), { target: { value: "Who wins Group A?" } })
@@ -2234,7 +2225,7 @@ describe("WorldCupBracketShell fixture readiness", () => {
     })
     vi.stubGlobal("fetch", fetchMock)
     const WorldCupBracketShell = (await import("@/components/brackets/world-cup/WorldCupBracketShell")).default
-    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false, hasBracketBrainAi: true }) as any} defaultTab="home" />)
+    render(<WorldCupBracketShell initialView={makeShellView({ isOwner: true, isAdmin: false, hasBracketBrainAi: true }) as any} defaultTab="chat" />)
 
     const input = await screen.findByPlaceholderText(/Message the pool or ask Chimmy/i)
     fireEvent.change(input, { target: { value: "@chimmy who should I pick?" } })
@@ -2400,11 +2391,11 @@ describe("WorldCupBracketShell fixture readiness", () => {
     expect(within(panel).getByText(/AI Bracket Builder/i)).toBeInTheDocument()
     expect(within(panel).getAllByText(/Unlocked/i).length).toBeGreaterThan(0)
     expect(within(panel).getAllByText(/Requires AI\/Pro/i).length).toBeGreaterThan(0)
-    const community = screen.getByTestId("world-cup-community-foundation")
-    expect(within(community).getAllByText(/Commissioner Announcements/i).length).toBeGreaterThan(0)
-    expect(within(community).getByText(/Pinned Announcement/i)).toBeInTheDocument()
-    expect(within(community).getByText(/System Reminders/i)).toBeInTheDocument()
-    expect(within(community).getByText(/Moderation/i)).toBeInTheDocument()
+    // Home tab shows the teaser card; commissioner chat tools are on the Chat tab
+    const teaserCard = screen.getByTestId("wc-chat-teaser-card")
+    expect(teaserCard).toBeInTheDocument()
+    expect(screen.getByTestId("wc-chat-teaser-open")).toBeInTheDocument()
+    expect(screen.queryByText(/^Moderation$/i)).not.toBeInTheDocument()
   })
 
   it("shows AI affordances unlocked for all-access users", async () => {
