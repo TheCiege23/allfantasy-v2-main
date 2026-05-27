@@ -914,6 +914,7 @@ const EN: WorldCupDictionary = {
   "wc.groupStage.actualRank": "Actual #{{rank}}",
   "wc.groupStage.moveUp": "Move Up",
   "wc.groupStage.moveDown": "Move Down",
+  "wc.groupStage.dragHandle": "Drag to reorder {{team}}",
   "wc.groupStage.needsFourTeams":
     "{{group}} needs 4 teams before it can be saved.",
   "wc.groupStage.unsavedOrder":
@@ -2156,6 +2157,7 @@ const ES: WorldCupDictionary = {
   "wc.groupStage.actualRank": "Real #{{rank}}",
   "wc.groupStage.moveUp": "Subir",
   "wc.groupStage.moveDown": "Bajar",
+  "wc.groupStage.dragHandle": "Arrastra para reordenar {{team}}",
   "wc.groupStage.needsFourTeams":
     "{{group}} necesita 4 equipos antes de poder guardarse.",
   "wc.groupStage.unsavedOrder":
@@ -3375,6 +3377,7 @@ const ZH: WorldCupDictionary = {
   "wc.groupStage.actualRank": "實際 #{{rank}}",
   "wc.groupStage.moveUp": "上移",
   "wc.groupStage.moveDown": "下移",
+  "wc.groupStage.dragHandle": "拖動以重新排序 {{team}}",
   "wc.groupStage.needsFourTeams":
     "{{group}} 需要 4 隊才能儲存。",
   "wc.groupStage.unsavedOrder":
@@ -4621,6 +4624,7 @@ const FIL: WorldCupDictionary = {
   "wc.groupStage.actualRank": "Aktwal #{{rank}}",
   "wc.groupStage.moveUp": "Itaas",
   "wc.groupStage.moveDown": "Ibaba",
+  "wc.groupStage.dragHandle": "I-drag para i-ayos muli ang {{team}}",
   "wc.groupStage.needsFourTeams":
     "Kailangan ng 4 teams ang {{group}} bago ma-save.",
   "wc.groupStage.unsavedOrder":
@@ -5897,6 +5901,7 @@ const VI: WorldCupDictionary = {
   "wc.groupStage.actualRank": "Thực tế #{{rank}}",
   "wc.groupStage.moveUp": "Lên",
   "wc.groupStage.moveDown": "Xuống",
+  "wc.groupStage.dragHandle": "Kéo để sắp xếp lại {{team}}",
   "wc.groupStage.needsFourTeams":
     "{{group}} cần 4 đội trước khi có thể lưu.",
   "wc.groupStage.unsavedOrder":

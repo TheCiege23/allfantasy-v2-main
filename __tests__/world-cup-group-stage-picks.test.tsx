@@ -305,4 +305,27 @@ describe("WorldCupGroupStagePicks", () => {
     expect(screen.getByText(/AI\/Pro unlocks third-place selection insights/i)).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /Save Third-Place Advancers/i }).className).toContain("w-full")
   })
+
+  it("renders a drag handle button with the correct aria-label for each team", async () => {
+    const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
+    render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" />)
+
+    const group = await screen.findByTestId("world-cup-group-A")
+    expect(within(group).getByRole("button", { name: "Drag to reorder Argentina" })).toBeInTheDocument()
+    expect(within(group).getByRole("button", { name: "Drag to reorder Brazil" })).toBeInTheDocument()
+    expect(within(group).getByRole("button", { name: "Drag to reorder Canada" })).toBeInTheDocument()
+    expect(within(group).getByRole("button", { name: "Drag to reorder Denmark" })).toBeInTheDocument()
+  })
+
+  it("disables drag handles when the group stage is locked", async () => {
+    clientApiMocks.fetchGroupStageView.mockResolvedValue(makeGroupStageView({
+      lock: { isLocked: true, lockReason: "Group stage closed" },
+    }))
+    const WorldCupGroupStagePicks = (await import("@/components/brackets/world-cup/WorldCupGroupStagePicks")).default
+    render(<WorldCupGroupStagePicks challengeId="c1" entryId="entry-1" />)
+
+    const group = await screen.findByTestId("world-cup-group-A")
+    expect(within(group).getByRole("button", { name: "Drag to reorder Argentina" })).toBeDisabled()
+    expect(within(group).getByRole("button", { name: "Drag to reorder Brazil" })).toBeDisabled()
+  })
 })

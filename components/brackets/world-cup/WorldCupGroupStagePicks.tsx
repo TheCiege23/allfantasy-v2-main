@@ -1,7 +1,25 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { ArrowRight, Check, Loader2, Sparkles } from "lucide-react"
+import { ArrowRight, Check, GripVertical, Loader2, Sparkles } from "lucide-react"
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core"
+import {
+  SortableContext,
+  useSortable,
+  sortableKeyboardCoordinates,
+  arrayMove,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable"
+import { CSS } from "@dnd-kit/utilities"
 import {
   fetchWorldCupGroupStageView,
   saveWorldCupGroupRankingClient,
@@ -129,6 +147,123 @@ function savedThirdPlaceTeamIds(view: WorldCupGroupStageViewClient): string[] {
   return view.thirdPlaceAdvancerPicks
     .filter((pick) => pick.isSelected)
     .map((pick) => pick.teamId)
+}
+
+function SortableTeamRow({
+  teamId,
+  index,
+  orderLength,
+  team,
+  status,
+  badge,
+  groupKey,
+  groupId,
+  order,
+  isLocked,
+  t,
+  setGroupOrder,
+}: {
+  teamId: string
+  index: number
+  orderLength: number
+  team: WorldCupGroupStageTeamClient | null
+  status: "correct" | "wrong" | "pending" | "none"
+  badge: { label: string; className: string } | null
+  groupKey: string
+  groupId: string
+  order: string[]
+  isLocked: boolean
+  t: TranslateFn
+  setGroupOrder: (groupId: string, orderedTeamIds: string[]) => void
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: teamId })
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    ...(isDragging ? { zIndex: 10 } : {}),
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      data-testid={`world-cup-group-pick-result-${groupKey}-${teamId}`}
+      data-result-state={status}
+      className={`flex flex-wrap items-center gap-2 rounded-xl border bg-black/20 px-2 py-2 sm:flex-nowrap ${resultBorderClass(status)}${isDragging ? " opacity-60 ring-2 ring-cyan-300/40" : ""}`}
+    >
+      {/* Drag handle — 44 px touch target; sr-only Move Up/Down remain for keyboard/a11y */}
+      <button
+        ref={setActivatorNodeRef}
+        type="button"
+        {...attributes}
+        {...listeners}
+        aria-label={t("wc.groupStage.dragHandle", { team: team?.name ?? teamId })}
+        disabled={isLocked}
+        className={[
+          "flex h-11 w-7 shrink-0 touch-none items-center justify-center rounded-lg text-white/30 transition hover:text-white/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-cyan-300",
+          isLocked ? "cursor-not-allowed opacity-30" : "cursor-grab active:cursor-grabbing",
+        ].join(" ")}
+        style={{ touchAction: "none" }}
+      >
+        <GripVertical className="h-4 w-4" aria-hidden />
+      </button>
+      <span className={[
+        "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black",
+        index === 0
+          ? "border border-amber-400/40 bg-amber-400/[0.12] text-amber-200"
+          : index === 1
+          ? "border border-white/20 bg-white/[0.08] text-white/80"
+          : "border border-white/10 bg-white/[0.04] text-white/55",
+      ].join(" ")}>
+        {index + 1}
+      </span>
+      <WorldCupTeamFlag
+        teamName={team?.name}
+        countryCode={team?.fifaCode ?? undefined}
+        flagUrl={team?.flagUrl ?? undefined}
+        size="sm"
+      />
+      <div className="min-w-0 flex-1">
+        {/* Team name (team?.name) is intentionally NOT translated — see Phase 5 brief. */}
+        <div className="truncate text-sm font-bold text-white">{team?.name ?? teamId}</div>
+        <div className="truncate text-xs text-white/40">
+          {team?.country ?? t("wc.groupStage.teamFallback")}
+          {team?.actualRank ? ` · ${t("wc.groupStage.actualRank", { rank: team.actualRank })}` : ""}
+        </div>
+      </div>
+      {badge ? (
+        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${badge.className}`}>
+          {badge.label}
+        </span>
+      ) : null}
+      {/* sr-only Move Up / Move Down — keyboard + assistive-tech fallback; existing tests rely on these */}
+      <div className="sr-only">
+        <button
+          type="button"
+          onClick={() => setGroupOrder(groupId, moveItem(order, index, -1))}
+          disabled={isLocked || index === 0}
+        >
+          {t("wc.groupStage.moveUp")}
+        </button>
+        <button
+          type="button"
+          onClick={() => setGroupOrder(groupId, moveItem(order, index, 1))}
+          disabled={isLocked || index === orderLength - 1}
+        >
+          {t("wc.groupStage.moveDown")}
+        </button>
+      </div>
+    </div>
+  )
 }
 
 function GroupAiInsightPanel({
@@ -259,6 +394,12 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
   const [thirdPlaceError, setThirdPlaceError] = useState<string | null>(null)
   const savingGroupIdsRef = useRef<Set<string>>(new Set())
   const savingThirdPlaceRef = useRef(false)
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -496,70 +637,46 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
                     : t("wc.groupStage.teamCount", { count: order.length })}
                 </span>
               </div>
-              <div className="space-y-2">
-                {order.map((teamId, index) => {
-                  const team = findTeam(group.teams, teamId)
-                  const pick = groupPickForTeam(view, group.id, teamId)
-                  const status = groupRankingResultStatus(view, group.id, teamId)
-                  const badge = resultBadge(status, t, pick?.pointsAwarded ?? 0)
-                  return (
-                    <div
-                      key={teamId}
-                      data-testid={`world-cup-group-pick-result-${group.groupKey}-${teamId}`}
-                      data-result-state={status}
-                      className={`flex flex-wrap items-center gap-2 rounded-xl border bg-black/20 px-2 py-2 sm:flex-nowrap ${resultBorderClass(status)}`}
-                    >
-                      <span className={[
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-black",
-                        index === 0
-                          ? "border border-amber-400/40 bg-amber-400/[0.12] text-amber-200"
-                          : index === 1
-                          ? "border border-white/20 bg-white/[0.08] text-white/80"
-                          : "border border-white/10 bg-white/[0.04] text-white/55",
-                      ].join(" ")}>
-                        {index + 1}
-                      </span>
-                      <WorldCupTeamFlag
-                        teamName={team?.name}
-                        countryCode={team?.fifaCode ?? undefined}
-                        flagUrl={team?.flagUrl ?? undefined}
-                        size="sm"
-                      />
-                      <div className="min-w-0 flex-1">
-                        {/* Team name (team?.name) is intentionally NOT translated — see Phase 5 brief. */}
-                        <div className="truncate text-sm font-bold text-white">{team?.name ?? teamId}</div>
-                        <div className="truncate text-xs text-white/40">
-                          {team?.country ?? t("wc.groupStage.teamFallback")}
-                          {team?.actualRank ? ` · ${t("wc.groupStage.actualRank", { rank: team.actualRank })}` : ""}
-                        </div>
-                      </div>
-                      {badge ? (
-                        <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-black ${badge.className}`}>
-                          {badge.label}
-                        </span>
-                      ) : null}
-                      <div className="grid w-full grid-cols-2 gap-1 sm:flex sm:w-auto sm:shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setGroupOrder(group.id, moveItem(order, index, -1))}
-                          disabled={isLocked || index === 0}
-                          className="min-h-11 rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[10px] font-bold text-white/70 touch-manipulation disabled:opacity-35"
-                        >
-                          {t("wc.groupStage.moveUp")}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setGroupOrder(group.id, moveItem(order, index, 1))}
-                          disabled={isLocked || index === order.length - 1}
-                          className="min-h-11 rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-[10px] font-bold text-white/70 touch-manipulation disabled:opacity-35"
-                        >
-                          {t("wc.groupStage.moveDown")}
-                        </button>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event: DragEndEvent) => {
+                  const { active, over } = event
+                  if (!over || active.id === over.id) return
+                  const oldIndex = order.indexOf(String(active.id))
+                  const newIndex = order.indexOf(String(over.id))
+                  if (oldIndex < 0 || newIndex < 0) return
+                  setGroupOrder(group.id, arrayMove(order, oldIndex, newIndex))
+                }}
+              >
+                <SortableContext items={order} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-2">
+                    {order.map((teamId, index) => {
+                      const team = findTeam(group.teams, teamId)
+                      const pick = groupPickForTeam(view, group.id, teamId)
+                      const status = groupRankingResultStatus(view, group.id, teamId)
+                      const badge = resultBadge(status, t, pick?.pointsAwarded ?? 0)
+                      return (
+                        <SortableTeamRow
+                          key={teamId}
+                          teamId={teamId}
+                          index={index}
+                          orderLength={order.length}
+                          team={team}
+                          status={status}
+                          badge={badge}
+                          groupKey={group.groupKey}
+                          groupId={group.id}
+                          order={order}
+                          isLocked={isLocked}
+                          t={t}
+                          setGroupOrder={setGroupOrder}
+                        />
+                      )
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
               {!hasCompleteTeams ? (
                 <p className="mt-3 rounded-lg border border-amber-300/25 bg-amber-500/10 px-3 py-2 text-xs font-bold text-white/80">
                   {t("wc.groupStage.needsFourTeams", { group: group.displayName })}
