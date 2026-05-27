@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const appendChatHistoryMock = vi.hoisted(() => vi.fn())
 const buildChimmyConversationIdMock = vi.hoisted(() => vi.fn())
-const openaiChatTextMock = vi.hoisted(() => vi.fn())
+const routeTextMock = vi.hoisted(() => vi.fn())
+const buildContextMock = vi.hoisted(() => vi.fn())
+const detectIntentMock = vi.hoisted(() => vi.fn())
 
 vi.mock("server-only", () => ({}))
 
@@ -11,19 +13,57 @@ vi.mock("@/lib/ai-memory/chat-history-store", () => ({
   buildChimmyConversationId: buildChimmyConversationIdMock,
 }))
 
-vi.mock("@/lib/openai-client", () => ({
-  openaiChatText: openaiChatTextMock,
+vi.mock("@/lib/ai/providerRouter", () => ({
+  routeTextCall: routeTextMock,
 }))
+
+vi.mock("@/lib/world-cup/worldCupChimmyContext", () => ({
+  buildWorldCupChimmyContext: buildContextMock,
+}))
+
+vi.mock("@/lib/world-cup/worldCupChimmyIntent", () => ({
+  detectChimmyIntent: detectIntentMock,
+  isLiveDataIntent: (_: string) => false,
+  isScheduleIntent: (_: string) => false,
+}))
+
+const minimalCtx = {
+  challengeId: "c1",
+  poolName: "World Cup Pool",
+  isLocked: false,
+  lockReason: null,
+  participantCount: 0,
+  scoring: {
+    roundOf32Points: 10,
+    roundOf16Points: 20,
+    quarterFinalPoints: 40,
+    semiFinalPoints: 80,
+    finalPoints: 160,
+    championBonusPoints: 320,
+    thirdPlacePoints: 4,
+  },
+  entry: null,
+  liveMatches: [],
+  upcomingMatches: [],
+  recentMatches: [],
+  liveDataStatus: "unavailable" as const,
+  lastSyncedAt: null,
+  locale: null,
+  fetchedAt: new Date().toISOString(),
+}
 
 describe("World Cup Chimmy private reply helper", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     buildChimmyConversationIdMock.mockReturnValue("chimmy:user-1:world-cup:c1")
-    openaiChatTextMock.mockResolvedValue({
+    buildContextMock.mockResolvedValue(minimalCtx)
+    detectIntentMock.mockReturnValue("general_chat")
+    routeTextMock.mockResolvedValue({
       ok: true,
       text: "Lean toward a safer group winner path.",
       model: "gpt-test",
-      baseUrl: "https://api.openai.com/v1",
+      provider: "openai",
+      tokensUsed: 0,
     })
   })
 
@@ -43,14 +83,14 @@ describe("World Cup Chimmy private reply helper", () => {
       provider: "openai",
       model: "gpt-test",
     })
-    expect(openaiChatTextMock).toHaveBeenCalledWith(expect.objectContaining({
+    expect(routeTextMock).toHaveBeenCalledWith(expect.objectContaining({
       messages: expect.arrayContaining([
         expect.objectContaining({ role: "system", content: expect.stringContaining("private AllFantasy World Cup bracket assistant") }),
         expect.objectContaining({ role: "user", content: expect.stringContaining("who should I pick?") }),
       ]),
       skipCache: true,
     }))
-    expect(JSON.stringify(openaiChatTextMock.mock.calls)).not.toMatch(/sk-|OPENAI_API_KEY/i)
+    expect(JSON.stringify(routeTextMock.mock.calls)).not.toMatch(/sk-|OPENAI_API_KEY/i)
     expect(appendChatHistoryMock).toHaveBeenCalledTimes(2)
     expect(appendChatHistoryMock).toHaveBeenCalledWith(expect.objectContaining({
       role: "user",

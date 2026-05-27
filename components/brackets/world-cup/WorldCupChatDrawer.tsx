@@ -1147,6 +1147,34 @@ function ChimmyTab({
         <div ref={msgEndRef} />
       </div>
 
+      {/* Prompt chips */}
+      <div
+        data-testid="wc-drawer-chimmy-chips"
+        className="flex gap-1.5 overflow-x-auto overscroll-contain border-b border-white/[0.06] px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        aria-label="Suggestion chips"
+      >
+        {(
+          [
+            "wc.chat.chimmy.chip.liveNow",
+            "wc.chat.chimmy.chip.playToday",
+            "wc.chat.chimmy.chip.myBracket",
+            "wc.chat.chimmy.chip.risky",
+            "wc.chat.chimmy.chip.poolRank",
+            "wc.chat.chimmy.chip.schedule",
+          ] as const
+        ).map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setPrompt(t(key))}
+            disabled={loading}
+            className="min-h-8 shrink-0 touch-manipulation rounded-full border border-violet-300/20 bg-violet-500/10 px-3 py-1 text-[11px] text-violet-200/80 transition-colors hover:bg-violet-500/20 disabled:opacity-40"
+          >
+            {t(key)}
+          </button>
+        ))}
+      </div>
+
       {/* Composer */}
       <div className="border-t border-white/10 px-3 pb-[env(safe-area-inset-bottom,0px)] pt-2.5">
         <div className="flex gap-1.5">

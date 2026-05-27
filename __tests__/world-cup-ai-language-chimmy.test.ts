@@ -7,12 +7,16 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const openaiMock = vi.hoisted(() => vi.fn())
+const routeTextMock = vi.hoisted(() => vi.fn())
 const appendHistoryMock = vi.hoisted(() => vi.fn())
 const buildConversationIdMock = vi.hoisted(() => vi.fn())
+const buildContextMock = vi.hoisted(() => vi.fn())
+const detectIntentMock = vi.hoisted(() => vi.fn())
 
-vi.mock("@/lib/openai-client", () => ({
-  openaiChatText: openaiMock,
+vi.mock("server-only", () => ({}))
+
+vi.mock("@/lib/ai/providerRouter", () => ({
+  routeTextCall: routeTextMock,
 }))
 
 vi.mock("@/lib/ai-memory/chat-history-store", () => ({
@@ -20,15 +24,49 @@ vi.mock("@/lib/ai-memory/chat-history-store", () => ({
   buildChimmyConversationId: buildConversationIdMock,
 }))
 
+vi.mock("@/lib/world-cup/worldCupChimmyContext", () => ({
+  buildWorldCupChimmyContext: buildContextMock,
+}))
+
+vi.mock("@/lib/world-cup/worldCupChimmyIntent", () => ({
+  detectChimmyIntent: detectIntentMock,
+  isLiveDataIntent: (_: string) => false,
+  isScheduleIntent: (_: string) => false,
+}))
+
+const minimalCtx = {
+  challengeId: "c1",
+  poolName: "World Cup Pool",
+  isLocked: false,
+  lockReason: null,
+  participantCount: 0,
+  scoring: {
+    roundOf32Points: 10, roundOf16Points: 20, quarterFinalPoints: 40,
+    semiFinalPoints: 80, finalPoints: 160, championBonusPoints: 320, thirdPlacePoints: 4,
+  },
+  entry: null,
+  liveMatches: [],
+  upcomingMatches: [],
+  recentMatches: [],
+  liveDataStatus: "unavailable" as const,
+  lastSyncedAt: null,
+  locale: null,
+  fetchedAt: new Date().toISOString(),
+}
+
 describe("generateWorldCupChimmyPrivateReply — AI language instruction", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     buildConversationIdMock.mockReturnValue("chimmy:user-1:world-cup:c1")
     appendHistoryMock.mockResolvedValue(undefined)
-    openaiMock.mockResolvedValue({
+    buildContextMock.mockResolvedValue(minimalCtx)
+    detectIntentMock.mockReturnValue("general_chat")
+    routeTextMock.mockResolvedValue({
       ok: true,
       text: "Here is your bracket advice.",
       model: "gpt-test",
+      provider: "openai",
+      tokensUsed: 0,
     })
   })
 
@@ -43,7 +81,7 @@ describe("generateWorldCupChimmyPrivateReply — AI language instruction", () =>
       challengeName: "Office Cup",
       locale,
     })
-    const call = openaiMock.mock.calls[0]?.[0]
+    const call = routeTextMock.mock.calls[0]?.[0]
     return call?.messages?.[0]?.content as string
   }
 
@@ -79,7 +117,8 @@ describe("generateWorldCupChimmyPrivateReply — AI language instruction", () =>
 
   it("privacy language is present in system prompt", async () => {
     const prompt = await getSystemPrompt("es")
-    expect(prompt).toMatch(/Do not reveal private user data/i)
+    // New prompt: "Do not reveal user IDs, invite codes, emails, or raw DB identifiers."
+    expect(prompt).toMatch(/Do not reveal/i)
     expect(prompt).toMatch(/invite codes/i)
     expect(prompt).toMatch(/other pool members/i)
   })
@@ -103,13 +142,13 @@ describe("generateWorldCupChimmyPrivateReply — AI language instruction", () =>
     expect(conversationIds[0]).toBe("chimmy:user-1:world-cup:c1")
     expect(conversationIds[1]).toBe("chimmy:user-1:world-cup:c1")
 
-    // No call to openai should include user emails or IDs in the system prompt.
-    const systemContent = openaiMock.mock.calls[0]?.[0]?.messages?.[0]?.content as string
-    expect(systemContent).not.toMatch(/user-1|u1@example|@example\.com/i)
+    // No call to AI should include user emails or raw IDs in the system prompt.
+    const systemContent = routeTextMock.mock.calls[0]?.[0]?.messages?.[0]?.content as string
+    expect(systemContent).not.toMatch(/u1@example|@example\.com/i)
   })
 
-  it("returns fallback text when openai fails, without leaking provider details", async () => {
-    openaiMock.mockResolvedValue({ ok: false, error: "timeout", model: null })
+  it("returns fallback text when provider fails, without leaking provider details", async () => {
+    routeTextMock.mockResolvedValue({ ok: false })
 
     const { generateWorldCupChimmyPrivateReply } = await import(
       "@/lib/world-cup/worldCupChimmyPrivateReply"
@@ -128,7 +167,7 @@ describe("generateWorldCupChimmyPrivateReply — AI language instruction", () =>
 
   it("skipCache is true so Chimmy replies are never served from cache", async () => {
     await getSystemPrompt("en")
-    const callArgs = openaiMock.mock.calls[0]?.[0]
+    const callArgs = routeTextMock.mock.calls[0]?.[0]
     expect(callArgs?.skipCache).toBe(true)
   })
 })
