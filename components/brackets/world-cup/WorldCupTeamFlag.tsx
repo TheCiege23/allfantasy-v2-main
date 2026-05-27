@@ -224,9 +224,18 @@ export default function WorldCupTeamFlag({
       normalizeCode(flagCodeFromUrl(flagUrl)),
     [countryCode, flagUrl, teamName]
   )
+  // Compute emoji fallback when:
+  //   a) an explicit emoji/emojiUrl was stored (emojiFromStoredValue), OR
+  //   b) the image failed to load (imageFailed), OR
+  //   c) there is no image URL at all (!imageSrc) — in this case imageFailed
+  //      never becomes true because no <img> is ever rendered, so we must
+  //      eagerly derive the emoji from the inferred country code instead.
   const fallbackEmoji = useMemo(
-    () => emoji || emojiFromStoredValue(flagUrl) || (imageFailed ? emojiFromCode(flagCodeFromUrl(flagUrl) ?? inferredCode) : null),
-    [emoji, flagUrl, imageFailed, inferredCode]
+    () =>
+      emoji ||
+      emojiFromStoredValue(flagUrl) ||
+      (!imageSrc || imageFailed ? emojiFromCode(flagCodeFromUrl(flagUrl) ?? inferredCode) : null),
+    [emoji, flagUrl, imageFailed, imageSrc, inferredCode]
   )
   const baseClass = `inline-flex shrink-0 items-center justify-center rounded-full bg-white/10 ${SIZE_CLASS[size]} ${className}`
 

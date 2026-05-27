@@ -998,6 +998,8 @@ const EN: WorldCupDictionary = {
     "Pick earlier round winners first.",
   "wc.matchup.unpickableTeams": "Pick earlier round winners first.",
   "wc.matchup.unpickableUnknown": "Teams not available yet.",
+  "wc.matchup.scheduleTbd": "Date TBD",
+  "wc.matchup.aiInsightsAria": "AI Insights — Match {{number}}",
   "wc.matchup.ftBadge": "FT",
   "wc.matchup.confidenceTitle": "Confidence bonus",
   "wc.matchup.confidenceHint":
@@ -2241,6 +2243,8 @@ const ES: WorldCupDictionary = {
     "Elige primero los ganadores de rondas previas.",
   "wc.matchup.unpickableTeams": "Elige primero los ganadores de rondas previas.",
   "wc.matchup.unpickableUnknown": "Equipos aún no disponibles.",
+  "wc.matchup.scheduleTbd": "Fecha TBD",
+  "wc.matchup.aiInsightsAria": "Perspectivas IA — Partido {{number}}",
   "wc.matchup.ftBadge": "FT",
   "wc.matchup.confidenceTitle": "Bono de confianza",
   "wc.matchup.confidenceHint":
@@ -3454,6 +3458,8 @@ const ZH: WorldCupDictionary = {
     "請先選出前幾輪的勝者。",
   "wc.matchup.unpickableTeams": "請先選出前幾輪的勝者。",
   "wc.matchup.unpickableUnknown": "球隊尚未確定。",
+  "wc.matchup.scheduleTbd": "日期待定",
+  "wc.matchup.aiInsightsAria": "AI 洞察 — 第 {{number}} 場",
   "wc.matchup.ftBadge": "FT",
   "wc.matchup.confidenceTitle": "信心加分",
   "wc.matchup.confidenceHint":
@@ -4702,6 +4708,8 @@ const FIL: WorldCupDictionary = {
     "Pumili muna ng mga winner sa mga naunang rounds.",
   "wc.matchup.unpickableTeams": "Pumili muna ng mga winner sa mga naunang rounds.",
   "wc.matchup.unpickableUnknown": "Wala pang teams.",
+  "wc.matchup.scheduleTbd": "Petsa TBD",
+  "wc.matchup.aiInsightsAria": "AI Insights — Laban {{number}}",
   "wc.matchup.ftBadge": "FT",
   "wc.matchup.confidenceTitle": "Confidence bonus",
   "wc.matchup.confidenceHint":
@@ -5975,6 +5983,8 @@ const VI: WorldCupDictionary = {
     "Hãy chọn người thắng các vòng trước trước.",
   "wc.matchup.unpickableTeams": "Hãy chọn người thắng các vòng trước trước.",
   "wc.matchup.unpickableUnknown": "Chưa có đội.",
+  "wc.matchup.scheduleTbd": "Ngày TBD",
+  "wc.matchup.aiInsightsAria": "Nhận định AI — Trận {{number}}",
   "wc.matchup.ftBadge": "FT",
   "wc.matchup.confidenceTitle": "Điểm thưởng niềm tin",
   "wc.matchup.confidenceHint":
@@ -6438,4 +6448,40 @@ export function getAiLanguageInstruction(
     default:
       return "English"
   }
+}
+
+/**
+ * Set of every default pool name across all locales — used to detect
+ * names that were auto-assigned at pool creation time in a different locale.
+ *
+ * FIL uses the same string as EN intentionally; duplicates are no-ops in a
+ * Set so no special handling is needed.
+ */
+const ALL_DEFAULT_POOL_NAMES: ReadonlySet<string> = new Set(
+  WORLD_CUP_SUPPORTED_LOCALES.map(
+    (loc) => WORLD_CUP_TRANSLATIONS[loc]["wc.create.poolName.default"] ?? ""
+  ).filter(Boolean)
+)
+
+/**
+ * Localise a pool name that may have been stored in a different locale.
+ *
+ * If `storedName` is identical to any locale's auto-generated default pool
+ * name (e.g. "Grupo de brackets de la Copa del Mundo" created in Spanish),
+ * returns the equivalent default in `locale` instead — so switching the UI
+ * language also updates the pool name display.
+ *
+ * User-customised names (anything that is NOT an exact match of a known
+ * default) are returned unchanged regardless of locale.
+ */
+export function localizePoolName(
+  storedName: string | null | undefined,
+  locale: WorldCupLocale | string | null | undefined
+): string {
+  if (!storedName) return ""
+  if (ALL_DEFAULT_POOL_NAMES.has(storedName)) {
+    const safe = getWorldCupLocale(locale)
+    return WORLD_CUP_TRANSLATIONS[safe]["wc.create.poolName.default"] ?? storedName
+  }
+  return storedName
 }

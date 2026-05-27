@@ -121,7 +121,10 @@ describe("WorldCupMatchupIntelligencePanel AF Pro gating", () => {
 
     await screen.findByTestId("world-cup-matchup-intelligence-panel")
     expect(screen.getByAltText("Brazil flag")).toBeInTheDocument()
-    expect(screen.getByLabelText("France country code FRA")).toBeInTheDocument()
+    // France has no flagUrl here — the fixed fallback now derives the emoji
+    // 🇫🇷 (FRA → FR) instead of the legacy code badge "FRA". Verify the
+    // flag renders in any form (image, emoji, or code) with the correct label.
+    expect(screen.getByRole("img", { name: /France flag/i })).toBeInTheDocument()
   })
 })
 

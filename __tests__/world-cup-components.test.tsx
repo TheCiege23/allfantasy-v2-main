@@ -612,11 +612,28 @@ describe("World Cup mobile polish — matchup card & guided picker", () => {
     expect(screen.getByRole("img", { name: /Brazil flag/i })).toHaveTextContent("🇧🇷")
   })
 
-  it("falls back to a country code badge when no flag URL is available", async () => {
+  it("shows emoji flag when no image URL is available but a country code can be inferred", async () => {
+    // BRA → BR → 🇧🇷 emoji. The fix ensures fallbackEmoji is computed even
+    // when imageSrc is null (previously required imageFailed=true, which
+    // never fires when there is no <img> element to render at all).
     const WorldCupTeamFlag = (await import("@/components/brackets/world-cup/WorldCupTeamFlag")).default
     render(<WorldCupTeamFlag teamName="Brazil" countryCode="BRA" />)
 
-    expect(screen.getByLabelText("Brazil country code BRA")).toHaveTextContent("BRA")
+    const flag = screen.getByRole("img", { name: /Brazil flag/i })
+    expect(flag).toBeInTheDocument()
+    expect(flag).toHaveTextContent("🇧🇷")
+  })
+
+  it("falls back to a country code badge when no image URL and no emoji mapping exists (e.g. Scotland)", async () => {
+    // Scotland (SCO) has no standard Unicode emoji — no GB-SCT support in most environments.
+    // The component should fall back to the 3-letter code badge.
+    const WorldCupTeamFlag = (await import("@/components/brackets/world-cup/WorldCupTeamFlag")).default
+    render(<WorldCupTeamFlag teamName="Scotland" countryCode="SCO" />)
+
+    // Neither image nor emoji should show — code badge is the expected fallback
+    expect(screen.queryByTestId("world-cup-team-flag-image")).toBeNull()
+    expect(screen.queryByTestId("world-cup-team-flag-globe")).toBeNull()
+    expect(screen.getByLabelText(/Scotland country code SCO/i)).toHaveTextContent("SCO")
   })
 
   it("falls back to a globe when no flag data is available", async () => {

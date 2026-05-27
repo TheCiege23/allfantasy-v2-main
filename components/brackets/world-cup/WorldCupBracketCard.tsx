@@ -1,6 +1,6 @@
 "use client"
 import { useMemo } from "react"
-import { Check, Loader2 } from "lucide-react"
+import { Check, Loader2, Sparkles } from "lucide-react"
 import type { WorldCupMatchView, WorldCupPickView } from "@/lib/world-cup/types"
 import {
   hasWorldCupPickSelection,
@@ -33,6 +33,7 @@ export default function WorldCupBracketCard({
   onPick,
   onOpenMatchupPicker,
   isSaving = false,
+  aiInsightsUnlocked = false,
 }: {
   match: WorldCupMatchView
   pick?: WorldCupPickView
@@ -40,6 +41,7 @@ export default function WorldCupBracketCard({
   onPick?: (match: WorldCupMatchView, side: "home" | "away", confidencePoints?: number | null) => void
   onOpenMatchupPicker?: (matchId: string) => void
   isSaving?: boolean
+  aiInsightsUnlocked?: boolean
 }) {
   const { language } = useOptionalLanguage()
   const t = useMemo(() => makeWcT(language), [language])
@@ -72,6 +74,21 @@ export default function WorldCupBracketCard({
     if (isSaving) return "…"
     return null
   })()
+
+  // Compact schedule label shown in the header when match hasn't started yet.
+  // Uses "en" locale so SSR and CSR always produce the same string (no
+  // hydration mismatch from browser-locale differences).
+  const scheduleLabel = useMemo<string | null>(() => {
+    if (isLive || isFinal || isSaving) return null
+    if (!match.startsAt) return t("wc.matchup.scheduleTbd")
+    try {
+      const d = new Date(match.startsAt)
+      // "Jun 12" — compact enough for the 9px header
+      return d.toLocaleDateString("en", { month: "short", day: "numeric" })
+    } catch {
+      return null
+    }
+  }, [match.startsAt, isLive, isFinal, isSaving, t])
 
   function handlePick(side: "home" | "away") {
     if (locked || !pickable || isSaving) return
@@ -133,21 +150,46 @@ export default function WorldCupBracketCard({
           {match.label ?? `M${match.matchNumber}`}
         </button>
 
-        {isSaving ? (
-          <Loader2 className="h-2.5 w-2.5 shrink-0 animate-spin text-white/40" />
-        ) : isLive ? (
-          <span className="flex shrink-0 items-center gap-0.5 text-[8px] font-black text-emerald-300">
-            <span
-              className="mr-0.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"
-              aria-hidden
-            />
-            {statusText}
-          </span>
-        ) : statusText ? (
-          <span className="shrink-0 text-[8px] font-black uppercase tracking-wide text-white/40">
-            {statusText}
-          </span>
-        ) : null}
+        {/* Right-side header indicators: saving spinner → live status → FT → date → AI sparkle */}
+        <div className="flex shrink-0 items-center gap-1">
+          {isSaving ? (
+            <Loader2 className="h-2.5 w-2.5 animate-spin text-white/40" />
+          ) : isLive ? (
+            <span className="flex items-center gap-0.5 text-[8px] font-black text-emerald-300">
+              <span
+                className="mr-0.5 inline-block h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping"
+                aria-hidden
+              />
+              {statusText}
+            </span>
+          ) : statusText ? (
+            <span className="text-[8px] font-black uppercase tracking-wide text-white/40">
+              {statusText}
+            </span>
+          ) : scheduleLabel ? (
+            <span className="text-[8px] font-semibold text-white/30" aria-label={`Kickoff ${scheduleLabel}`}>
+              {scheduleLabel}
+            </span>
+          ) : null}
+
+          {/* AI Insights button — visible for all users; gating is handled inside
+               the guided picker (free users see an upgrade prompt, Pro sees the panel) */}
+          {onOpenMatchupPicker && !isSaving && (
+            <button
+              type="button"
+              onClick={() => onOpenMatchupPicker(match.id)}
+              aria-label={t("wc.matchup.aiInsightsAria", { number: match.matchNumber })}
+              className={[
+                "flex h-3.5 w-3.5 items-center justify-center rounded transition-colors",
+                aiInsightsUnlocked
+                  ? "text-cyan-300/70 hover:text-cyan-200"
+                  : "text-white/20 hover:text-white/45",
+              ].join(" ")}
+            >
+              <Sparkles className="h-2.5 w-2.5" aria-hidden />
+            </button>
+          )}
+        </div>
 
         {/* Screen-reader only: unpickable reason */}
         {!pickable && (

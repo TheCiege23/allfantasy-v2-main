@@ -328,7 +328,12 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
     if (savingGroupIdsRef.current.has(groupId)) return
     const orderedTeamIds = localOrders[groupId] ?? []
     const group = view?.groups.find((row) => row.id === groupId)
-    if (view && sameOrderedValues(orderedTeamIds, orderedTeamIdsForGroup(view, groupId))) {
+    // Only skip the API call if the group is already persisted in the DB with these exact picks.
+    // If the group hasn't been ranked yet (no DB picks), we must call the API even when the
+    // displayed order matches the default seed order — otherwise allGroupsRanked never becomes
+    // true and third-place selection stays locked forever.
+    const alreadyRanked = view ? isGroupRanked(view, groupId) : false
+    if (alreadyRanked && view && sameOrderedValues(orderedTeamIds, orderedTeamIdsForGroup(view, groupId))) {
       setSaveStates((prev) => ({ ...prev, [groupId]: "saved" }))
       return
     }
@@ -580,7 +585,7 @@ export default function WorldCupGroupStagePicks({ challengeId, entryId, onComple
               <button
                 type="button"
                 onClick={() => void saveGroup(group.id)}
-                disabled={isLocked || state === "saving" || !hasCompleteTeams}
+                disabled={isLocked || state === "saving" || state === "saved" || !hasCompleteTeams}
                 className="mt-3 min-h-11 w-full touch-manipulation rounded-xl bg-cyan-300 px-3 py-2 text-xs font-black text-black disabled:cursor-not-allowed disabled:opacity-45"
               >
                 {state === "saving"

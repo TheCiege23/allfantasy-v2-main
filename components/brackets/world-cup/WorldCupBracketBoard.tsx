@@ -1,5 +1,5 @@
 "use client"
-import { Fragment, useEffect, useMemo, useState } from "react"
+import { Fragment, useEffect, useMemo, useRef, useState } from "react"
 import { Trophy } from "lucide-react"
 import type {
   WorldCupChallengeView,
@@ -64,6 +64,7 @@ type ColSharedProps = {
   lockStrategy?: string
   tournamentLockAt?: string | null
   now: Date
+  aiInsightsUnlocked: boolean
 }
 
 function BracketColumn({
@@ -77,6 +78,7 @@ function BracketColumn({
   lockStrategy,
   tournamentLockAt,
   now,
+  aiInsightsUnlocked,
 }: { matches: WorldCupMatchView[]; depth: number } & ColSharedProps) {
   const topOffset = bracketTopOffset(depth)
   const matchGap = bracketMatchGap(depth)
@@ -110,6 +112,7 @@ function BracketColumn({
               onPick={onPick}
               onOpenMatchupPicker={onOpenMatchupPicker}
               isSaving={savingMatchIds?.has(match.id) ?? false}
+              aiInsightsUnlocked={aiInsightsUnlocked}
             />
             {idx < matches.length - 1 && (
               <div style={{ height: matchGap, flexShrink: 0 }} />
@@ -133,7 +136,7 @@ export default function WorldCupBracketBoard({
   onOpenMatchupPicker,
   savingMatchIds,
   isLocked = false,
-  aiInsightsUnlocked = false,  // kept for API compatibility — not used in compact cards
+  aiInsightsUnlocked = false,
   confidenceScoringEnabled = false, // kept for API compatibility
 }: {
   view: WorldCupChallengeView
@@ -158,6 +161,17 @@ export default function WorldCupBracketBoard({
     setNow(new Date())
     const id = window.setInterval(() => setNow(new Date()), 60_000)
     return () => window.clearInterval(id)
+  }, [])
+
+  // Scroll the bracket so it is horizontally centered on first render.
+  // overflow-x-auto anchors to the left by default; scrollLeft = (scrollWidth - clientWidth) / 2
+  // centers the content. This runs once after mount (no deps), which is safe because the
+  // bracket geometry is fixed-pixel and doesn't change after hydration.
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = scrollContainerRef.current
+    if (!el) return
+    el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2
   }, [])
 
   const champion = picks.find((p) => p.round === "final" && hasWorldCupPickSelection(p))
@@ -209,10 +223,12 @@ export default function WorldCupBracketBoard({
     lockStrategy: pickLockStrategy,
     tournamentLockAt: pickLockAt,
     now,
+    aiInsightsUnlocked,
   }
 
   return (
     <div
+      ref={scrollContainerRef}
       data-testid="world-cup-knockout-board-scroll"
       className="min-h-full overflow-x-auto scroll-pt-32 px-3 pb-6 pt-6 sm:px-5 sm:pt-8"
     >
@@ -295,6 +311,7 @@ export default function WorldCupBracketBoard({
                 onPick={onPick}
                 onOpenMatchupPicker={onOpenMatchupPicker}
                 isSaving={savingMatchIds?.has(match.id) ?? false}
+                aiInsightsUnlocked={aiInsightsUnlocked}
               />
             ))}
             {champion?.selectedTeamName && (
@@ -340,6 +357,7 @@ export default function WorldCupBracketBoard({
                     onPick={onPick}
                     onOpenMatchupPicker={onOpenMatchupPicker}
                     isSaving={savingMatchIds?.has(match.id) ?? false}
+                    aiInsightsUnlocked={aiInsightsUnlocked}
                   />
                 </div>
               ))}

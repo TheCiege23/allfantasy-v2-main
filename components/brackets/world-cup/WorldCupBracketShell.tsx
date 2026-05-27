@@ -77,7 +77,7 @@ import {
   type WorldCupChatRichTextSegment,
 } from "@/lib/world-cup/worldCupChatRichText"
 import { worldCupTabToQueryValue, type WorldCupBracketTab } from "@/lib/world-cup/worldCupTabs"
-import { makeWcT } from "@/lib/world-cup/worldCupI18n"
+import { makeWcT, localizePoolName } from "@/lib/world-cup/worldCupI18n"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import WorldCupBracketBoard from "./WorldCupBracketBoard"
@@ -537,6 +537,13 @@ export default function WorldCupBracketShell({
           : initialEntries[0]?.id ?? null
       : null
   const [view, setView] = useState(normalizedInitialView)
+  // Translate the stored pool name when it matches a known auto-generated
+  // default in another locale (e.g. created in ES, now viewed in EN).
+  // User-customised names are returned unchanged.
+  const localizedChallengeName = useMemo(
+    () => localizePoolName(view.challenge.name, wcLanguage),
+    [view.challenge.name, wcLanguage]
+  )
   const [tab, setTab] = useState<Tab>(() => {
     if (
       (defaultTab === "commissioner" || defaultTab === "settings") &&
@@ -2225,7 +2232,7 @@ export default function WorldCupBracketShell({
             ) : (
               <div className="flex min-w-0 items-center gap-2">
                 <h1 className="truncate text-sm font-black leading-tight tracking-tight text-white sm:text-lg lg:text-xl">
-                  {showBoard ? selectedEntry!.name : view.challenge.name}
+                  {showBoard ? selectedEntry!.name : localizedChallengeName}
                 </h1>
                 {!showBoard && (view.isOwner || view.isAdmin) && (
                   <span className="shrink-0 rounded-full border border-amber-300/40 bg-gradient-to-r from-amber-400/20 to-amber-300/[0.08] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] text-white/80 shadow-[0_0_14px_-3px_rgba(251,191,36,0.45)]">
@@ -2252,13 +2259,13 @@ export default function WorldCupBracketShell({
             <p className={`text-[10px] sm:text-[11px] ${saveState === "locked" || saveState === "error" ? "text-white/70" : "text-white/45"}`}>
               {showBoard ? (
                 <>
-                  <span className="block truncate text-white/55">{view.challenge.name}</span>
+                  <span className="block truncate text-white/55">{localizedChallengeName}</span>
                   <span className="mt-0.5 block">
                     {progress.done} of {progress.required} picks · {saveStatus}
                   </span>
                 </>
               ) : (
-                <span className="line-clamp-2">{view.challenge.name}</span>
+                <span className="line-clamp-2">{localizedChallengeName}</span>
               )}
             </p>
             {hasMounted && lockCountdownLabel ? (
@@ -3003,7 +3010,7 @@ export default function WorldCupBracketShell({
 
                 {/* Pool name */}
                 <h2 className="mt-2 truncate text-2xl font-black tracking-tight text-white sm:text-3xl">
-                  {view.challenge.name}
+                  {localizedChallengeName}
                 </h2>
 
                 {/* Participant count + lock countdown */}
@@ -3725,7 +3732,7 @@ export default function WorldCupBracketShell({
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">
-                          {view.challenge.name}
+                          {localizedChallengeName}
                         </span>
                         {completionReview ? (
                           completionReview.isLocked ? (
