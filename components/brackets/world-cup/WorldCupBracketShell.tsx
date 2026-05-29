@@ -2141,7 +2141,7 @@ export default function WorldCupBracketShell({
     // globals.css light-mode rescue layer so muted labels, tab text,
     // and helper copy stay readable on white. Dark + AF (legacy) modes
     // keep the original `bg-[#05070b]` styling unchanged.
-    <div id="world-cup-top" className="mode-readable fixed inset-0 z-50 flex flex-col bg-[#05070b] text-white">
+    <div id="world-cup-top" data-wc-dark className="mode-readable fixed inset-0 z-50 flex flex-col bg-[#05070b] text-white">
       <header className="shrink-0 border-b border-white/10 bg-zinc-950/95 backdrop-blur pt-[env(safe-area-inset-top,0px)]">
         <div className="flex items-center gap-1.5 px-2 py-1.5 sm:gap-2 sm:px-4 sm:py-2">
           {showBoard ? (

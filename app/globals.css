@@ -415,10 +415,25 @@ html[data-mode="light"] .mode-readable [class*="border-white"] {
 }
 
 /* ── World Cup landing: always-dark design ────────────────────────────────────
-   The WC landing page (/brackets/world-cup) marks its <main> with data-wc-dark.
-   These more-specific rules (one extra attribute selector) win over the bulk
-   light-mode overrides above, keeping the premium dark aesthetic intact for
-   users whose DEFAULT_THEME or stored preference resolves to "light".       */
+   WC shell components mark their root element with data-wc-dark. Two rule
+   groups keep the premium dark aesthetic intact in light mode:
+
+   1. Self-protection (specificity 0,3,1 — same as the destructive rules above,
+      but placed LATER so source-order wins): the root element that carries
+      data-wc-dark itself has bg-[#05070b] + text-white. The descendant rules
+      below cannot cover it because an element is never its own descendant.
+
+   2. Descendant protection (specificity 0,4,1 — one extra selector, always
+      wins): covers every child element with a dark-bg or text-white class.  */
+
+/* 1 ─ protect the [data-wc-dark] root element itself */
+html[data-mode="light"] .mode-readable [data-wc-dark] {
+  background-color: #05070b !important;
+  background-image: none !important;
+  color: white !important;
+}
+
+/* 2 ─ protect descendants */
 html[data-mode="light"] .mode-readable [data-wc-dark] [class*="text-white"] {
   color: white !important;
 }

@@ -754,6 +754,7 @@ export default function WorldCupGuidedMatchupPicker({
       role="dialog"
       aria-modal="true"
       aria-label={t("wc.guided.dialogLabel")}
+      data-wc-dark
       className="fixed inset-0 z-[80] flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-[#05070b] pt-[env(safe-area-inset-top)] text-white"
     >
       {/* ── Header ────────────────────────────────────────────────────────── */}
