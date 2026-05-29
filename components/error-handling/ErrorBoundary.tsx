@@ -37,7 +37,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, State> {
 
   render() {
     if (this.state.error) {
-      if (this.props.fallback) return this.props.fallback
+      // Allow callers to pass `fallback={null}` for silent failure (e.g. global
+      // chrome wrappers where a crash should hide the widget, not the whole page).
+      if (this.props.fallback !== undefined) return this.props.fallback ?? null
       return (
         <ErrorFallback
           error={this.state.error}

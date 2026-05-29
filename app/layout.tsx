@@ -226,7 +226,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             match on every route \u2014 even when an upstream proxy strips the
             middleware-injected `x-af-pathname` request header.
           */}
-          <SafeGlobalChrome metaPixelId={metaPixelId} fbAppId={fbAppId} />
+          {/*
+            SafeGlobalChrome is outside the main ErrorBoundaryClient so that a
+            chrome crash (Toaster portal, SW registration, etc.) cannot blank the
+            page. fallback={null} means a crash hides the chrome widget silently
+            rather than replacing it with an amber error UI.
+          */}
+          <ErrorBoundaryClient fallback={null}>
+            <SafeGlobalChrome metaPixelId={metaPixelId} fbAppId={fbAppId} />
+          </ErrorBoundaryClient>
 
           {/* Music widgets deferred until Spotify Web Playback SDK is integrated.
               Set NEXT_PUBLIC_MUSIC_WIDGET_ENABLED=true to re-enable.

@@ -126,14 +126,18 @@ const ACTION_ITEMS: ActionItem[] = [
 export default async function WorldCupBracketsPage() {
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   const userId = session?.user?.id ?? null
+  // Defensive: DB hiccups on cold-start should degrade gracefully (empty list),
+  // not crash the server component and show a blank error page.
   const challenges: WorldCupChallengeSummary[] = userId
-    ? await listUserWorldCupChallenges(userId)
+    ? await listUserWorldCupChallenges(userId).catch(() => [])
     : []
   const { language } = await resolveServerRenderPreferences()
   const t = makeWcT(language)
 
+  // data-wc-dark: marks this element for the globals.css [data-wc-dark] rules that
+  // prevent the DEFAULT_THEME="light" palette overrides from washing out the page.
   return (
-    <main className="mode-readable relative min-h-screen overflow-hidden bg-[#05070b] text-white">
+    <main className="mode-readable relative min-h-screen overflow-hidden bg-[#05070b] text-white" data-wc-dark="">
       {/* ── Atmospheric background ──────────────────────────────────── */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-0">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(20,184,166,0.16),transparent_55%),radial-gradient(ellipse_at_bottom,rgba(67,56,202,0.12),transparent_60%)]" />

@@ -414,6 +414,25 @@ html[data-mode="light"] .mode-readable [class*="border-white"] {
   border-color: var(--border) !important;
 }
 
+/* ── World Cup landing: always-dark design ────────────────────────────────────
+   The WC landing page (/brackets/world-cup) marks its <main> with data-wc-dark.
+   These more-specific rules (one extra attribute selector) win over the bulk
+   light-mode overrides above, keeping the premium dark aesthetic intact for
+   users whose DEFAULT_THEME or stored preference resolves to "light".       */
+html[data-mode="light"] .mode-readable [data-wc-dark] [class*="text-white"] {
+  color: white !important;
+}
+html[data-mode="light"] .mode-readable [data-wc-dark] [class*="bg-[#05070b]"] {
+  background-color: #05070b !important;
+  background-image: none !important;
+}
+html[data-mode="light"] .mode-readable [data-wc-dark] [class*="border-white"] {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+html[data-mode="light"] .mode-readable [data-wc-dark] [class*="bg-black"] {
+  background-color: #000 !important;
+}
+
 html[data-mode="legacy"] .mode-readable [class*="text-black"] {
   color: var(--text) !important;
 }
