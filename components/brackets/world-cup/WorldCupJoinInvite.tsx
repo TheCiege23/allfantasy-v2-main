@@ -99,7 +99,7 @@ export default function WorldCupJoinInvite({ invite }: { invite: InviteInfo }) {
   }, [canJoin, join, requiresJoinPassword, status])
 
   return (
-    <div className="min-h-screen bg-[#05070b] px-4 py-10 text-white">
+    <div data-wc-dark className="min-h-screen bg-[#05070b] px-4 py-10 text-white">
       <div className="mx-auto max-w-md">
         <div className="rounded-xl border border-white/10 bg-white/[0.04] p-6 shadow-2xl shadow-black/40">
           {/* Icon + title */}

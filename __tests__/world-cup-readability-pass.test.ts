@@ -61,7 +61,7 @@ describe("WC readability pass: mode-readable wrappers", () => {
     // The root container for the entire pool dashboard.
     expect(src).toContain('id="world-cup-top"')
     expect(src).toMatch(
-      /id="world-cup-top"\s+className="mode-readable\s/
+      /id="world-cup-top"\s+(?:data-wc-dark\s+)?className="mode-readable\s/
     )
   })
 })
