@@ -1,0 +1,74 @@
+name: World Cup Live Sync
+
+# Replaces the Vercel cron entries in vercel.json (non-functional on Railway).
+# Required GitHub secrets:  WORLD_CUP_CRON_SECRET
+# Required GitHub variables: APP_URL  (e.g. https://your-app.railway.app)
+#
+# Schedule mapping:
+#   */5  * * * *  — live scores + recalculate
+#   */30 * * * *  — standings
+#   15   * * * *  — recalculate (hourly backup)
+#   0    8 * * *  — teams (daily)
+#   30   8 * * *  — fixtures (daily)
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+    - cron: '*/30 * * * *'
+    - cron: '15 * * * *'
+    - cron: '0 8 * * *'
+    - cron: '30 8 * * *'
+  workflow_dispatch:
+    inputs:
+      job:
+        description: 'Cron job: live, standings, teams, fixtures, recalculate, all'
+        required: false
+        default: live
+
+jobs:
+  sync:
+    name: WC Cron Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Live scores + recalculate
+        if: ${{ github.event.schedule == '*/5 * * * *' }}
+        run: |
+          curl --fail --silent --show-error \
+            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=live&provider=apifootball&recalculate=true" \
+            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
+
+      - name: Standings sync
+        if: ${{ github.event.schedule == '*/30 * * * *' }}
+        run: |
+          curl --fail --silent --show-error \
+            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=standings&provider=apifootball" \
+            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
+
+      - name: Recalculate (hourly)
+        if: ${{ github.event.schedule == '15 * * * *' }}
+        run: |
+          curl --fail --silent --show-error \
+            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=recalculate" \
+            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
+
+      - name: Teams sync (daily)
+        if: ${{ github.event.schedule == '0 8 * * *' }}
+        run: |
+          curl --fail --silent --show-error \
+            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=teams&provider=apifootball" \
+            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
+
+      - name: Fixtures sync (daily)
+        if: ${{ github.event.schedule == '30 8 * * *' }}
+        run: |
+          curl --fail --silent --show-error \
+            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=fixtures&provider=apifootball" \
+            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
+
+      - name: Manual dispatch
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          curl --fail --silent --show-error \
+            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=${{ inputs.job }}&provider=apifootball&recalculate=true" \
+            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"

@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import Image from "next/image"
 import { getServerSession } from "next-auth"
@@ -10,6 +11,7 @@ import {
   Lock,
   Plus,
   Radio,
+  Settings,
   Share2,
   Shield,
   Sparkles,
@@ -27,6 +29,25 @@ const WC_VIDEO_SRC = "/videos/brackets/world-cup/af-world-cup-hero.mp4"
 const WC_POSTER_SRC = "/images/brackets/world-cup/af-world-cup-hero-poster.jpg"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "AF World Cup Bracket Challenge | AllFantasy.AI",
+  description:
+    "Predict every match of the FIFA World Cup 2026. Create or join a pool, build your bracket, and compete with friends using AI-powered analytics.",
+  openGraph: {
+    title: "AF World Cup Bracket Challenge",
+    description:
+      "Predict every match of the FIFA World Cup 2026. Create or join a bracket pool and compete with AI-powered analytics.",
+    images: ["/images/brackets/world-cup/af-world-cup-hero-poster.jpg"],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AF World Cup Bracket Challenge",
+    description: "Predict every match of the FIFA World Cup 2026. Join a bracket pool on AllFantasy.AI.",
+    images: ["/images/brackets/world-cup/af-world-cup-hero-poster.jpg"],
+  },
+}
 
 /**
  * AF World Cup Pools Command Center — Phase 7 v3
@@ -128,7 +149,20 @@ export default async function WorldCupBracketsPage() {
         >
           {t("wc.publicHub.backToBrackets")}
         </Link>
-        <LanguageToggle variant="compact" refreshOnChange />
+        <div className="flex items-center gap-2">
+          <LanguageToggle variant="compact" refreshOnChange />
+          {userId && (
+            <Link
+              href="/settings"
+              className="inline-flex min-h-9 min-w-9 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] p-2 text-white/60 transition-colors hover:border-white/20 hover:bg-white/[0.08] hover:text-white"
+              aria-label={t("wc.publicHub.accountSettings")}
+              title={t("wc.publicHub.accountSettings")}
+              data-testid="wc-public-settings-link"
+            >
+              <Settings className="h-4 w-4" />
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* ── Hero: Command Center ─────────────────────────────────────── */}
