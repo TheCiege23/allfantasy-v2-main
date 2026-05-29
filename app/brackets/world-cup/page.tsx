@@ -1,3 +1,4 @@
+import type { Metadata } from "next"
 import Link from "next/link"
 import Image from "next/image"
 import { getServerSession } from "next-auth"
@@ -28,6 +29,25 @@ const WC_VIDEO_SRC = "/videos/brackets/world-cup/af-world-cup-hero.mp4"
 const WC_POSTER_SRC = "/images/brackets/world-cup/af-world-cup-hero-poster.jpg"
 
 export const dynamic = "force-dynamic"
+
+export const metadata: Metadata = {
+  title: "AF World Cup Bracket Challenge | AllFantasy.AI",
+  description:
+    "Predict every match of the FIFA World Cup 2026. Create or join a pool, build your bracket, and compete with friends using AI-powered analytics.",
+  openGraph: {
+    title: "AF World Cup Bracket Challenge",
+    description:
+      "Predict every match of the FIFA World Cup 2026. Create or join a bracket pool and compete with AI-powered analytics.",
+    images: ["/images/brackets/world-cup/af-world-cup-hero-poster.jpg"],
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "AF World Cup Bracket Challenge",
+    description: "Predict every match of the FIFA World Cup 2026. Join a bracket pool on AllFantasy.AI.",
+    images: ["/images/brackets/world-cup/af-world-cup-hero-poster.jpg"],
+  },
+}
 
 /**
  * AF World Cup Pools Command Center — Phase 7 v3

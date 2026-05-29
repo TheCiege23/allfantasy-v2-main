@@ -60,6 +60,19 @@ export type ChimmyUserEntry = {
   knockoutPicks: ChimmyKnockoutPickRow[]
 }
 
+export type ChimmyGroupStandingRow = {
+  groupName: string
+  teamName: string
+  rank: number | null
+  played: number
+  wins: number
+  draws: number
+  losses: number
+  points: number
+  goalDifference: number
+  isThirdPlaceAdvancer: boolean
+}
+
 export type WorldCupChimmyContext = {
   challengeId: string
   poolName: string
@@ -71,6 +84,7 @@ export type WorldCupChimmyContext = {
   liveMatches: ChimmyMatchSummary[]
   upcomingMatches: ChimmyMatchSummary[]
   recentMatches: ChimmyMatchSummary[]
+  groupStandings: ChimmyGroupStandingRow[]
   liveDataStatus: ChimmyLiveDataStatus
   lastSyncedAt: string | null
   locale: string | null
@@ -291,6 +305,41 @@ async function fetchRelevantMatches(challengeId: string): Promise<ChimmyMatchSum
   }
 }
 
+async function fetchGroupStandings(): Promise<ChimmyGroupStandingRow[]> {
+  try {
+    const rows = await (prisma as any).worldCupOfficialGroupStanding.findMany({
+      where: { seasonYear: 2026 },
+      select: {
+        groupName: true,
+        teamName: true,
+        actualRank: true,
+        played: true,
+        wins: true,
+        draws: true,
+        losses: true,
+        points: true,
+        goalDifference: true,
+        isThirdPlaceAdvancer: true,
+      },
+      orderBy: [{ groupName: "asc" }, { actualRank: "asc" }],
+    })
+    return (rows as any[]).map((r): ChimmyGroupStandingRow => ({
+      groupName: String(r.groupName ?? "?"),
+      teamName: String(r.teamName ?? "?"),
+      rank: typeof r.actualRank === "number" ? r.actualRank : null,
+      played: Number(r.played ?? 0),
+      wins: Number(r.wins ?? 0),
+      draws: Number(r.draws ?? 0),
+      losses: Number(r.losses ?? 0),
+      points: Number(r.points ?? 0),
+      goalDifference: Number(r.goalDifference ?? 0),
+      isThirdPlaceAdvancer: Boolean(r.isThirdPlaceAdvancer),
+    }))
+  } catch {
+    return []
+  }
+}
+
 function emptyContext(
   challengeId: string,
   fetchedAt: string,
@@ -307,6 +356,7 @@ function emptyContext(
     liveMatches: [],
     upcomingMatches: [],
     recentMatches: [],
+    groupStandings: [],
     liveDataStatus: "unavailable",
     lastSyncedAt: null,
     locale: locale ?? null,
@@ -332,10 +382,11 @@ export async function buildWorldCupChimmyContext({
 }): Promise<WorldCupChimmyContext> {
   const fetchedAt = new Date().toISOString()
 
-  const [challengeSummary, entry, matches] = await Promise.all([
+  const [challengeSummary, entry, matches, groupStandings] = await Promise.all([
     fetchChallengeSummary(challengeId),
     fetchUserEntry(challengeId, userId),
     fetchRelevantMatches(challengeId),
+    fetchGroupStandings(),
   ])
 
   if (!challengeSummary) {
@@ -372,6 +423,7 @@ export async function buildWorldCupChimmyContext({
     liveMatches,
     upcomingMatches,
     recentMatches,
+    groupStandings,
     liveDataStatus,
     lastSyncedAt,
     locale: locale ?? null,

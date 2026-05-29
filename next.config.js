@@ -64,6 +64,16 @@ const nextConfig = {
       { protocol: "https", hostname: "cdn.nba.com" },
       { protocol: "https", hostname: "img.mlbstatic.com" },
       { protocol: "https", hostname: "ak-static.cms.nba.com" },
+      // World Cup chat + media
+      { protocol: "https", hostname: "res.cloudinary.com" },
+      { protocol: "https", hostname: "media.giphy.com" },
+      { protocol: "https", hostname: "i.giphy.com" },
+      { protocol: "https", hostname: "media.tenor.com" },
+      { protocol: "https", hostname: "c.tenor.com" },
+      { protocol: "https", hostname: "media.api-sports.io" },
+      { protocol: "https", hostname: "flagcdn.com" },
+      { protocol: "https", hostname: "lh3.googleusercontent.com" },
+      { protocol: "https", hostname: "cdn.discordapp.com" },
     ],
   },
 

@@ -36,6 +36,20 @@ import { resolveLanguage } from "@/lib/i18n/constants"
 
 export const runtime = "nodejs"
 
+// In-memory rate limiter for text messages: 5 per 10 s per user.
+// Single-instance guard — adequate for Railway's default single-instance deploy.
+const _textMsgTimestamps = new Map<string, number[]>()
+const TEXT_MSG_WINDOW_MS = 10_000
+const TEXT_MSG_BURST_MAX = 5
+
+function checkAndRecordTextMessageRate(userId: string): boolean {
+  const now = Date.now()
+  const prev = (_textMsgTimestamps.get(userId) ?? []).filter((t) => now - t < TEXT_MSG_WINDOW_MS)
+  if (prev.length >= TEXT_MSG_BURST_MAX) return false
+  _textMsgTimestamps.set(userId, [...prev, now])
+  return true
+}
+
 const MAX_BODY_CHARS = 1000
 const ALLOWED_GIF_PROVIDERS = ["klipy", "tenor", "giphy"] as const
 
@@ -866,6 +880,14 @@ export async function POST(
         { status: 429 }
       )
     }
+  }
+
+  // @all is already commissioner-gated above; skip burst limit for announcements.
+  if (!hasChimmy && !hasAll && !checkAndRecordTextMessageRate(auth.user.id)) {
+    return NextResponse.json(
+      { error: "Too many messages. Please slow down." },
+      { status: 429 }
+    )
   }
 
   const usernameMentions = mentions
