@@ -6,6 +6,7 @@ import {
   CheckCircle2,
   ClipboardList,
   Crown,
+  Flame,
   Lock,
   Share2,
   ShieldCheck,
@@ -91,11 +92,19 @@ const aiCards = [
 
 export default function WorldCupAdLandingPage() {
   return (
-    <main className="min-h-screen overflow-hidden bg-slate-950 text-white">
-      <section className="relative isolate px-4 pb-14 pt-5 sm:px-6 lg:px-8">
+    <main className="min-h-screen overflow-hidden bg-slate-950 pb-24 text-white sm:pb-0">
+      <div className="sticky top-0 z-50 border-b border-cyan-200/10 bg-slate-950/82 px-4 py-2 text-center text-xs font-black uppercase tracking-[0.18em] text-cyan-100 backdrop-blur-xl">
+        <span className="inline-flex items-center gap-2">
+          <Flame className="h-3.5 w-3.5 text-amber-200" />
+          Brackets lock when the tournament starts
+        </span>
+      </div>
+
+      <section className="relative isolate px-4 pb-14 pt-4 sm:px-6 lg:px-8">
         <div aria-hidden className="absolute inset-0 -z-10">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.30),transparent_34%),radial-gradient(circle_at_12%_18%,rgba(250,204,21,0.22),transparent_28%),linear-gradient(180deg,#07111f_0%,#020617_58%,#01030a_100%)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(34,211,238,0.33),transparent_34%),radial-gradient(circle_at_12%_18%,rgba(250,204,21,0.24),transparent_28%),radial-gradient(circle_at_86%_20%,rgba(168,85,247,0.18),transparent_26%),linear-gradient(180deg,#07111f_0%,#020617_58%,#01030a_100%)]" />
           <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.055)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px)] bg-[size:42px_42px] opacity-35 [mask-image:radial-gradient(ellipse_at_center,black,transparent_78%)]" />
+          <div className="absolute left-1/2 top-28 h-72 w-72 -translate-x-1/2 rounded-full bg-cyan-300/10 blur-3xl" />
           <div className="absolute inset-x-[-20%] bottom-[-10rem] h-72 rounded-[50%] border-t border-cyan-200/20 bg-cyan-300/10 blur-sm" />
         </div>
 
@@ -116,7 +125,7 @@ export default function WorldCupAdLandingPage() {
           </div>
         </nav>
 
-        <div className="mx-auto grid max-w-6xl items-center gap-9 pt-10 lg:grid-cols-[1.03fr_0.97fr] lg:pt-16">
+        <div className="mx-auto grid max-w-6xl items-center gap-9 pt-8 lg:grid-cols-[1.03fr_0.97fr] lg:pt-14">
           <div className="text-center lg:text-left">
             <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-emerald-300/30 bg-emerald-300/10 px-3.5 py-1.5 text-[11px] font-black uppercase tracking-[0.20em] text-emerald-200 lg:mx-0">
               <span className="h-2 w-2 rounded-full bg-emerald-300 shadow-[0_0_16px_rgba(110,231,183,0.9)]" />
@@ -130,6 +139,30 @@ export default function WorldCupAdLandingPage() {
             <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-200/82 sm:text-lg lg:mx-0">
               Invite friends, build brackets, track standings, and use Chimmy AI to help predict the tournament. Free to start. No gambling. Just bragging rights.
             </p>
+
+            <div className="mt-6 grid gap-2 rounded-3xl border border-white/10 bg-white/[0.055] p-3 text-left shadow-2xl backdrop-blur sm:max-w-xl lg:max-w-none">
+              <div className="flex items-center gap-3 rounded-2xl bg-slate-950/72 px-4 py-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-cyan-300 text-sm font-black text-slate-950">1</div>
+                <div>
+                  <p className="text-sm font-black">Name your pool</p>
+                  <p className="text-xs text-white/55">Example: Family World Cup Challenge</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-slate-950/72 px-4 py-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-300 text-sm font-black text-slate-950">2</div>
+                <div>
+                  <p className="text-sm font-black">Invite your group</p>
+                  <p className="text-xs text-white/55">Friends, family, coworkers, group chats, soccer fans</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 rounded-2xl bg-slate-950/72 px-4 py-3">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-300 text-sm font-black text-slate-950">3</div>
+                <div>
+                  <p className="text-sm font-black">Make picks before kickoff</p>
+                  <p className="text-xs text-white/55">Brackets, leaderboards, and AI help when you want it</p>
+                </div>
+              </div>
+            </div>
 
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:justify-center lg:justify-start">
               <Link
@@ -205,6 +238,11 @@ export default function WorldCupAdLandingPage() {
 
       <section className="bg-slate-950 px-4 py-12 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-6xl">
+          <div className="mb-6 rounded-[2rem] border border-amber-300/20 bg-amber-300/[0.08] p-5 text-center">
+            <p className="text-sm font-black text-amber-100 sm:text-base">
+              Cold traffic should not have to learn AllFantasy first. This page sends visitors straight to World Cup pools, brackets, and invites.
+            </p>
+          </div>
           <div className="grid gap-4 md:grid-cols-3">
             <Link href={createHref} className="group rounded-3xl border border-cyan-300/25 bg-cyan-300/[0.08] p-6 transition hover:-translate-y-1 hover:bg-cyan-300/[0.12]">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300 text-slate-950"><Trophy className="h-6 w-6" /></div>
@@ -302,6 +340,13 @@ export default function WorldCupAdLandingPage() {
           </div>
         </div>
       </section>
+
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-cyan-200/20 bg-slate-950/92 p-3 shadow-[0_-16px_45px_rgba(0,0,0,0.45)] backdrop-blur-xl sm:hidden">
+        <Link href={createHref} className="flex min-h-13 w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-b from-cyan-200 to-cyan-400 px-5 py-3 text-sm font-black text-slate-950">
+          Create Free World Cup Pool
+          <ArrowRight className="h-4 w-4" />
+        </Link>
+      </div>
     </main>
   )
 }
