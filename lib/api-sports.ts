@@ -104,7 +104,7 @@ function enqueueRequest<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 async function apiSportsFetchInternal<T>(endpoint: string, params?: Record<string, string>, opts?: { bypassRateGuard?: boolean }): Promise<T> {
-  const apiKey = process.env.APISPORTS_API_KEY || process.env.API_SPORTS_KEY;
+  const apiKey = process.env.APISPORTS_API_KEY || process.env.API_SPORTS_KEY || process.env.SPORTS_API_KEY;
   if (!apiKey) {
     throw new Error('APISPORTS_API_KEY not configured');
   }

@@ -30,6 +30,10 @@ import {
   syncNflFoundationSchedule,
   syncNflFoundationSeasonStats,
 } from '../lib/nfl-data-foundation/nflFoundationSync'
+import {
+  assertProviderWriteAllowed,
+  inspectProviderWriteSafety,
+} from '../lib/provider-data-foundation/writeSafety'
 
 type Args = {
   json: boolean
@@ -148,6 +152,17 @@ async function main() {
   const args = parseArgs(process.argv.slice(2))
   const write = args.write && !args.dryRun
   const mode = write ? 'write' : 'dry-run'
+  const writeSafety = write
+    ? assertProviderWriteAllowed({
+        write,
+        targetSport: 'NFL',
+        providerMode: 'rolling_insights_nfl_foundation',
+      })
+    : inspectProviderWriteSafety({
+        write,
+        targetSport: 'NFL',
+        providerMode: 'rolling_insights_nfl_foundation',
+      })
   const riSeason = rollingInsightsSeasonRange(args.season)
   const beforeCoverage = await getCanonicalNflDataCoverage({ season: args.season, week: args.week, prismaClient: prisma })
   const providerCounts = emptyCounts()
@@ -270,6 +285,7 @@ async function main() {
     generatedAt: new Date().toISOString(),
     mode,
     writeModeWasRun: write,
+    writeSafety,
     season: args.season,
     week: args.week,
     rollingInsightsSeason: riSeason,
@@ -295,6 +311,9 @@ async function main() {
   }
 
   console.log(`NFL foundation sync ${mode} for season ${args.season}, week ${args.week}`)
+  console.log(
+    `Write safety: allowed=${writeSafety.allowed} appEnv=${writeSafety.appEnv ?? 'unset'} databaseBranch=${writeSafety.databaseBranch ?? 'unset'} host=${writeSafety.databaseHost ?? 'unset'} database=${writeSafety.databaseName ?? 'unset'}`,
+  )
   console.log(`Before counts: ${JSON.stringify(beforeCoverage.counts)}`)
   console.log(`Provider rows: ${JSON.stringify(providerCounts)}`)
   console.log(
