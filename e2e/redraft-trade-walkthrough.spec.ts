@@ -522,7 +522,9 @@ test.describe('@db Redraft Trade Center walkthrough', () => {
     expect(JSON.stringify(body).toLowerCase()).not.toMatch(/ai|recommend|collusion|cheat|guaranteed/)
 
     // Single player with no published official value → safe unpublished state (no mutation).
-    const single = await page.request.get(`/api/redraft/trades/market-values/never-traded-zzz?leagueId=${leagueId}`)
+    // Consolidated single-player lookup via ?playerId= (the former [playerId] route was removed
+    // to conserve the Vercel route budget).
+    const single = await page.request.get(`/api/redraft/trades/market-values?leagueId=${leagueId}&playerId=never-traded-zzz`)
     expect(single.status()).toBe(200)
     expect((await single.json()).value.published).toBe(false)
   })

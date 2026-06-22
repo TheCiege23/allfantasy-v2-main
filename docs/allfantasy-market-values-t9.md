@@ -64,8 +64,11 @@ upserts the AF value row, and writes an audit row **only on change**.
 adjustmentPercent, confidence, sampleSize, direction, reasons, source:'allfantasy_market', generatedAt }`.
 Returns `null`/unpublished when no row or insufficient. **Never computes/mutates on a user GET.**
 
-## PHASE 5 — Read endpoints (commissioner-gated)
-`GET /api/redraft/trades/market-values?leagueId=` and `…/market-values/[playerId]?leagueId=`. No PII.
+## PHASE 5 — Read endpoint (commissioner-gated)
+A single `GET /api/redraft/trades/market-values?leagueId=` route serves both the published list and
+the single-player lookup via an optional `&playerId=` param (read-only resolver, never mutates). The
+single-player lookup was consolidated onto this route — the former `…/market-values/[playerId]` route
+was removed — to conserve the Vercel route budget (the 2048-route cap). No PII.
 Admin recalc endpoint **deferred** (see audit #9).
 
 ## PHASE 6 — Controlled calculation path
