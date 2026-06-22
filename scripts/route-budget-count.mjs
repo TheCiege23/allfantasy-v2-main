@@ -46,6 +46,23 @@ const DISABLE_NEW = [
   'app/api/ai/decision-log','app/api/ai/validation','app/api/ai/memory/quality',
   'app/api/health/fantasycalc','app/api/health/player-valuations','app/api/system/health',
 ]
+// Added by the route-headroom pass (deferred-mode leftover routes, no live caller).
+const DISABLE_HEADROOM = [
+  'app/api/leagues/[leagueId]/big-brother/ballot','app/api/leagues/[leagueId]/big-brother/cycle',
+  'app/api/leagues/[leagueId]/big-brother/finalists','app/api/leagues/[leagueId]/big-brother/have-not',
+  'app/api/leagues/[leagueId]/big-brother/hoh','app/api/leagues/[leagueId]/big-brother/hoh-room',
+  'app/api/leagues/[leagueId]/big-brother/nominations','app/api/leagues/[leagueId]/big-brother/replacement',
+  'app/api/leagues/[leagueId]/big-brother/veto-challenge','app/api/leagues/[leagueId]/big-brother/veto-decision',
+  'app/api/leagues/[leagueId]/zombie/attach-universe','app/api/leagues/[leagueId]/zombie/can-trade',
+  'app/api/leagues/[leagueId]/zombie/config','app/api/leagues/[leagueId]/zombie/finalize',
+  'app/api/leagues/[leagueId]/zombie/horde-sit-outs',
+  'app/api/leagues/[leagueId]/devy/admin/automation','app/api/leagues/[leagueId]/devy/admin/force-promote',
+  'app/api/leagues/[leagueId]/devy/admin/recalc','app/api/leagues/[leagueId]/devy/admin/regenerate-devy-pool',
+  'app/api/leagues/[leagueId]/devy/admin/regenerate-rookie-pool','app/api/leagues/[leagueId]/devy/admin/reopen-window',
+  'app/api/leagues/[leagueId]/devy/admin/repair-duplicate-rights','app/api/leagues/[leagueId]/devy/admin/revoke-promotion',
+  'app/api/leagues/[leagueId]/devy/audit','app/api/leagues/[leagueId]/devy/outlook',
+  'app/api/leagues/[leagueId]/devy/scoring-presets',
+]
 const KEEP = new Set([
   'app/api/cron/waivers/route.ts',
   'app/api/admin/automation/health/route.ts','app/api/admin/automation/waivers/run/route.ts',
@@ -56,7 +73,12 @@ const KEEP = new Set([
   ]),
 ])
 
-const DISABLE = baseline ? DISABLE_BASE : [...DISABLE_BASE, ...DISABLE_NEW]
+const mainOnly = process.argv.includes('--main') // current main (pre-headroom): BASE + #100
+const DISABLE = baseline
+  ? DISABLE_BASE
+  : mainOnly
+    ? [...DISABLE_BASE, ...DISABLE_NEW]
+    : [...DISABLE_BASE, ...DISABLE_NEW, ...DISABLE_HEADROOM]
 const all = walk(join(root, 'app'))
 const disabled = new Set()
 for (const d of DISABLE) for (const f of walk(join(root, d))) if (!KEEP.has(f)) disabled.add(f)

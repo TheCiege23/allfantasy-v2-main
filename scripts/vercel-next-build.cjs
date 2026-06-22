@@ -113,6 +113,46 @@ const routeDirsToDisable = [
   path.join('app', 'api', 'health', 'fantasycalc'),
   path.join('app', 'api', 'health', 'player-valuations'),
   path.join('app', 'api', 'system', 'health'),
+  // ── Route-headroom pass (2026-06-22) ─────────────────────────────────────
+  // Deferred game modes (big-brother / zombie / devy) are author-declared "not
+  // yet shipped to production"; their page trees + top-level APIs are already
+  // disabled above. These leftover gameplay/commissioner routes under
+  // app/api/leagues/[leagueId]/<mode>/ were missed. Each was individually verified
+  // to have NO live (non-deferred) caller: their only references are the mode's
+  // own excluded pages/components. The LIVE-wired exceptions are deliberately KEPT
+  // (not listed here): big-brother {channels,vote,vote-progress-stream,chimmy-autocomplete,
+  // ai,summary,config,audit,admin,automation/run,finale-vote}, zombie {ai,summary},
+  // devy {config,summary,ai,promotion,admin/overrides} — referenced by the live
+  // dashboard chat, Chimmy (app/api/chat/chimmy), and the specialty-league registry.
+  // Big Brother gameplay (10):
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'ballot'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'cycle'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'finalists'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'have-not'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'hoh'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'hoh-room'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'nominations'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'replacement'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'veto-challenge'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'big-brother', 'veto-decision'),
+  // Zombie gameplay (5):
+  path.join('app', 'api', 'leagues', '[leagueId]', 'zombie', 'attach-universe'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'zombie', 'can-trade'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'zombie', 'config'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'zombie', 'finalize'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'zombie', 'horde-sit-outs'),
+  // Devy commissioner/admin tools (11) — devy mode UI is already excluded:
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'automation'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'force-promote'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'recalc'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'regenerate-devy-pool'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'regenerate-rookie-pool'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'reopen-window'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'repair-duplicate-rights'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'admin', 'revoke-promotion'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'audit'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'outlook'),
+  path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'scoring-presets'),
 ]
 
 const movedFiles = []

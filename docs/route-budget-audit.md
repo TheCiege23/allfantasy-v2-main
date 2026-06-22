@@ -140,3 +140,35 @@ which moves the excluded routes out before `next build`. Verified end‑to‑end
 > `__tests__/route-budget.test.ts` `EXCLUDED_DIRS`/`FILES_KEPT` **in sync** — drift
 > between them is what hid this overflow. Run `node scripts/route-budget-count.mjs`
 > to see the current deployed‑function count before adding routes.
+
+---
+
+## Headroom pass #2 (2026-06-22) — deferred-mode leftover routes
+
+After T9 deployed, `main` sat right at the 2048 cap (zero headroom). This pass frees
+**26 more deployed routes** (≈2048 → ~2022) by build-excluding leftover routes that
+belong to the **already-deferred** game modes (big-brother / zombie / devy — author-
+declared "not yet shipped to production"). Their page trees + top-level APIs were
+already excluded; these gameplay/commissioner routes under
+`app/api/leagues/[leagueId]/<mode>/` were missed.
+
+**Method:** every candidate was individually verified to have **no live (non-deferred)
+caller** — its only references are the mode's own already-excluded pages/components
+(checked across `app/ components/ lib/`, excluding the mode dirs). No broad caller-less
+scan was trusted.
+
+**Excluded (26):**
+- big-brother (10): `ballot, cycle, finalists, have-not, hoh, hoh-room, nominations, replacement, veto-challenge, veto-decision`
+- zombie (5): `attach-universe, can-trade, config, finalize, horde-sit-outs`
+- devy (11): `admin/{automation,force-promote,recalc,regenerate-devy-pool,regenerate-rookie-pool,reopen-window,repair-duplicate-rights,revoke-promotion}, audit, outlook, scoring-presets`
+
+**Deliberately KEPT** (live callers — dashboard chat, Chimmy `app/api/chat/chimmy`, the
+specialty-league registry/home, the live draft room):
+big-brother `{channels, vote, vote-progress-stream, chimmy-autocomplete, ai, summary, config, audit, admin, automation/run, finale-vote}`;
+zombie `{ai, summary}`; devy `{config, summary, ai, promotion, admin/overrides}`.
+
+**Not touched:** World Cup explicit routes (protected/live, even though a `[[...path]]`
+dispatcher exists), `/api/legacy` (referenced by `lib/api/legacy.ts`), any page (deep-link
+risk), and all provider/auth/payment/webhook routes.
+
+Proof: `node scripts/route-budget-count.mjs --main` (before) vs `node scripts/route-budget-count.mjs` (after) → deployed functions **1596 → 1570** (−26). Reversible — files restored after every build; restore when these modes ship.

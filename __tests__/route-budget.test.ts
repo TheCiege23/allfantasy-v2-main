@@ -50,6 +50,22 @@ const EXCLUDED_DIRS = [
   'app/api/platform/service-map', 'app/api/ai/decision-log', 'app/api/ai/validation',
   'app/api/ai/memory/quality',
   'app/api/health/fantasycalc', 'app/api/health/player-valuations', 'app/api/system/health',
+  // Route-headroom pass (2026-06-22): deferred-mode (big-brother/zombie/devy) leftover
+  // gameplay/admin routes with no live caller. Mirrors scripts/vercel-next-build.cjs.
+  'app/api/leagues/[leagueId]/big-brother/ballot', 'app/api/leagues/[leagueId]/big-brother/cycle',
+  'app/api/leagues/[leagueId]/big-brother/finalists', 'app/api/leagues/[leagueId]/big-brother/have-not',
+  'app/api/leagues/[leagueId]/big-brother/hoh', 'app/api/leagues/[leagueId]/big-brother/hoh-room',
+  'app/api/leagues/[leagueId]/big-brother/nominations', 'app/api/leagues/[leagueId]/big-brother/replacement',
+  'app/api/leagues/[leagueId]/big-brother/veto-challenge', 'app/api/leagues/[leagueId]/big-brother/veto-decision',
+  'app/api/leagues/[leagueId]/zombie/attach-universe', 'app/api/leagues/[leagueId]/zombie/can-trade',
+  'app/api/leagues/[leagueId]/zombie/config', 'app/api/leagues/[leagueId]/zombie/finalize',
+  'app/api/leagues/[leagueId]/zombie/horde-sit-outs',
+  'app/api/leagues/[leagueId]/devy/admin/automation', 'app/api/leagues/[leagueId]/devy/admin/force-promote',
+  'app/api/leagues/[leagueId]/devy/admin/recalc', 'app/api/leagues/[leagueId]/devy/admin/regenerate-devy-pool',
+  'app/api/leagues/[leagueId]/devy/admin/regenerate-rookie-pool', 'app/api/leagues/[leagueId]/devy/admin/reopen-window',
+  'app/api/leagues/[leagueId]/devy/admin/repair-duplicate-rights', 'app/api/leagues/[leagueId]/devy/admin/revoke-promotion',
+  'app/api/leagues/[leagueId]/devy/audit', 'app/api/leagues/[leagueId]/devy/outlook',
+  'app/api/leagues/[leagueId]/devy/scoring-presets',
 ]
 
 const FILES_KEPT = [
