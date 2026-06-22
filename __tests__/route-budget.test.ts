@@ -43,12 +43,21 @@ const EXCLUDED_DIRS = [
   'app/api/auth/admin-debug', 'app/api/bracket/workers/health',
   'app/api/ai/analytics/rollup', 'app/api/marketplace/seed',
   'app/api/ai/providers', 'app/api/ai/tools',
+  // Route-budget cleanup (2026-06-22): internal diagnostics/metrics/meta with no
+  // production caller. Mirrors scripts/vercel-next-build.cjs routeDirsToDisable.
+  'app/api/meta/logs', 'app/api/intelligence/snapshot', 'app/api/providers/status',
+  'app/api/chaos-detector', 'app/api/league-health', 'app/api/league-meta',
+  'app/api/platform/service-map', 'app/api/ai/decision-log', 'app/api/ai/validation',
+  'app/api/ai/memory/quality',
+  'app/api/health/fantasycalc', 'app/api/health/player-valuations', 'app/api/system/health',
 ]
 
 const FILES_KEPT = [
   'app/api/cron/_auth.ts', 'app/api/cron/waivers/route.ts',
   'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
+  // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.
+  'app/api/admin/sports/sync/route.ts', 'app/api/admin/fantasy-data/import/route.ts',
 ]
 
 function getProductionSignals(): number {
@@ -180,6 +189,20 @@ describe('Route budget — build-excluded routes have no active production fetch
 
   it('/api/ai/analytics/rollup is not fetched from production source', () => {
     expect(anyCallerOf('/api/ai/analytics/rollup', 'app/api/ai/analytics/')).toBe(false)
+  })
+
+  // Route-budget cleanup (2026-06-22): newly build-excluded internal diagnostics.
+  it('/api/meta/logs is not fetched from production source', () => {
+    expect(anyCallerOf('/api/meta/logs', 'app/api/meta/logs/')).toBe(false)
+  })
+  it('/api/intelligence/snapshot is not fetched from production source', () => {
+    expect(anyCallerOf('/api/intelligence/snapshot', 'app/api/intelligence/snapshot/')).toBe(false)
+  })
+  it('/api/providers/status is not fetched from production source', () => {
+    expect(anyCallerOf('/api/providers/status', 'app/api/providers/status/')).toBe(false)
+  })
+  it('/api/platform/service-map is not fetched from production source', () => {
+    expect(anyCallerOf('/api/platform/service-map', 'app/api/platform/service-map/')).toBe(false)
   })
 })
 
