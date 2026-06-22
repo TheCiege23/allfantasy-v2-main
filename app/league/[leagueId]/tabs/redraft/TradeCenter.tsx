@@ -6,6 +6,7 @@ import { CommissionerReviewPanel } from './CommissionerReviewPanel'
 import { TradeDiscoveryPanel } from './TradeDiscoveryPanel'
 import { TradeBlockPanel } from './TradeBlockPanel'
 import { MarketSnapshotPanel } from './MarketSnapshotPanel'
+import { MarketValuePanel } from './MarketValuePanel'
 import {
   fetchRedraftTradeSettings,
   listTradeProposals,
@@ -193,6 +194,7 @@ export function TradeCenter({
       ) : null}
 
       {isCommissioner || settingsCommissioner ? <MarketSnapshotPanel leagueId={leagueId} /> : null}
+      {isCommissioner || settingsCommissioner ? <MarketValuePanel leagueId={leagueId} /> : null}
 
       {error ? <p className="text-[11px] text-rose-300">{error}</p> : null}
 

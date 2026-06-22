@@ -13273,6 +13273,70 @@ model RedraftTradeInterest {
   @@map("redraft_trade_interests")
 }
 
+/// T9: official AllFantasy-owned market value, computed from internal trade signals and stored
+/// SEPARATELY. Never overwrites provider/ADP/projection/snapshot data. Conservative + reversible
+/// (see AllFantasyMarketValueAudit). Display-only; does not change trade grading by default.
+model AllFantasyMarketPlayerValue {
+  id                  String   @id @default(cuid())
+  sport               String
+  leagueConcept       String
+  scoringFormat       String?
+  playerId            String
+  playerName          String?
+  position            String?
+  team                String?
+  baseValue           Int
+  marketValue         Int
+  adjustmentPercent   Float
+  adjustmentPoints    Int
+  confidence          Int
+  sampleSize          Int
+  acceptedTradeCount  Int      @default(0)
+  rejectedSignalCount Int      @default(0)
+  vetoedSignalCount   Int      @default(0)
+  blockSignalCount    Int      @default(0)
+  interestSignalCount Int      @default(0)
+  recentSignalCount   Int      @default(0)
+  direction           String
+  published           Boolean  @default(false)
+  sourceVersion       String
+  calculationVersion  String
+  reasons             Json     @default("[]")
+  generatedAt         DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([sport, leagueConcept, playerId])
+  @@index([sport, leagueConcept, position])
+  @@index([generatedAt])
+  @@index([confidence])
+  @@index([sampleSize])
+  @@map("allfantasy_market_player_values")
+}
+
+/// T9: append-only audit of every official market value change (reversibility + transparency).
+model AllFantasyMarketValueAudit {
+  id                        String   @id @default(cuid())
+  marketValueId             String?
+  sport                     String
+  leagueConcept             String
+  playerId                  String
+  previousValue             Int?
+  newValue                  Int
+  previousAdjustmentPercent Float?
+  newAdjustmentPercent      Float
+  confidence                Int
+  sampleSize                Int
+  reasonSummary             Json     @default("[]")
+  calculationVersion        String
+  generatedAt               DateTime
+  createdAt                 DateTime @default(now())
+
+  @@index([sport, leagueConcept, playerId])
+  @@index([generatedAt])
+  @@map("allfantasy_market_value_audits")
+}
+
 model RedraftPlayoffRound {
   id          String                  @id
   seasonId    String

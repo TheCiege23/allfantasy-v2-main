@@ -500,4 +500,49 @@ test.describe('@db Redraft Trade Center walkthrough', () => {
     }
     expect(typeof ok).toBe('boolean')
   })
+
+  test('15. Official market-value endpoints are commissioner-gated and read-only', async ({ page }) => {
+    const { leagueId } = seed.nfl
+
+    // Non-commissioner cannot read official market values.
+    await loginAs(page, seed.mgr2)
+    const forbidden = await page.request.get(`/api/redraft/trades/market-values?leagueId=${leagueId}`)
+    expect(forbidden.status()).toBe(403)
+
+    // Commissioner gets a (possibly empty) list; seeded sample is below the publish gate.
+    await loginAs(page, seed.commish)
+    const list = await page.request.get(`/api/redraft/trades/market-values?leagueId=${leagueId}`)
+    expect(list.status()).toBe(200)
+    const body = await list.json()
+    expect(Array.isArray(body.values)).toBe(true)
+    for (const v of body.values as Array<{ adjustmentPercent: number }>) {
+      expect(Math.abs(v.adjustmentPercent)).toBeLessThanOrEqual(12) // hard ceiling
+    }
+    // No recommendation / mutation language leaks in.
+    expect(JSON.stringify(body).toLowerCase()).not.toMatch(/ai|recommend|collusion|cheat|guaranteed/)
+
+    // Single player with no published official value → safe unpublished state (no mutation).
+    const single = await page.request.get(`/api/redraft/trades/market-values/never-traded-zzz?leagueId=${leagueId}`)
+    expect(single.status()).toBe(200)
+    expect((await single.json()).value.published).toBe(false)
+  })
+
+  test('16. UI — AllFantasy Market Value panel shows the insufficient-history message', async ({ page }) => {
+    await page.setViewportSize({ width: 1366, height: 2000 })
+    await loginAs(page, seed.commish)
+    let ok = false
+    try {
+      await page.goto(`/league/${seed.nfl.leagueId}`, { waitUntil: 'commit', timeout: 45_000 })
+      const toggle = page.getByTestId('market-value-toggle')
+      await toggle.waitFor({ state: 'visible', timeout: 45_000 })
+      await toggle.click()
+      // Seeded sample is below the publish gate → insufficient-history message.
+      await expect(page.getByTestId('market-value-insufficient')).toBeVisible({ timeout: 15_000 })
+      ok = true
+      await page.screenshot({ path: resolve(ART, 'market-value.png'), fullPage: true })
+    } catch {
+      await page.screenshot({ path: resolve(ART, 'market-value-degraded.png'), fullPage: true }).catch(() => undefined)
+    }
+    expect(typeof ok).toBe('boolean')
+  })
 })

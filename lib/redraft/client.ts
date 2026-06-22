@@ -322,6 +322,23 @@ export async function removeTradeInterest(interestId: string) {
   return parseJson<{ ok: boolean }>(res)
 }
 
+export type AllFantasyMarketValueRow = {
+  playerId: string
+  playerName: string | null
+  position: string | null
+  baseValue: number
+  marketValue: number
+  adjustmentPercent: number
+  confidence: number
+  sampleSize: number
+  direction: string
+  generatedAt: string
+}
+export async function fetchAllFantasyMarketValues(leagueId: string): Promise<{ sport: string | null; values: AllFantasyMarketValueRow[] }> {
+  const res = await fetch(`/api/redraft/trades/market-values?leagueId=${encodeURIComponent(leagueId)}`, { credentials: 'include' })
+  return parseJson(res)
+}
+
 type JsonHeaders = Record<string, string>
 
 const jsonHeaders: JsonHeaders = {
