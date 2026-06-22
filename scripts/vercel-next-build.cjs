@@ -83,6 +83,36 @@ const routeDirsToDisable = [
   path.join('app', 'api', 'devy'),
   // Debug-only endpoints — no production UI callers; 2 routes freed.
   path.join('app', 'api', 'af-debug'),
+  // ── Route-budget cleanup (2026-06-22) ────────────────────────────────────
+  // Vercel hit the 2048-route cap (2049). The route-budget test already treats
+  // app/admin + app/api/admin as excluded, but this build script never disabled
+  // them, so they shipped and counted toward the cap. Reconcile here.
+  //
+  // Internal staff admin dashboard — not a customer surface. The few admin API
+  // routes with real non-admin/lib callers are preserved via filesToKeep below
+  // (sports/sync, fantasy-data/import, fantasy-data/status) plus the existing
+  // automation keeps. No app/api/admin route is a vercel cron target.
+  path.join('app', 'admin'),
+  path.join('app', 'api', 'admin'),
+  // Internal diagnostics / metrics / status / meta endpoints — verified to have
+  // zero production (non-admin) fetch callers, no cron target, and no Chimmy/AI
+  // tool-router reference. Not external health checks (those — /api/health,
+  // /api/system/health — are intentionally NOT excluded).
+  path.join('app', 'api', 'meta', 'logs'),
+  path.join('app', 'api', 'intelligence', 'snapshot'),
+  path.join('app', 'api', 'providers', 'status'),
+  path.join('app', 'api', 'chaos-detector'),
+  path.join('app', 'api', 'league-health'),
+  path.join('app', 'api', 'league-meta'),
+  path.join('app', 'api', 'platform', 'service-map'),
+  path.join('app', 'api', 'ai', 'decision-log'),
+  path.join('app', 'api', 'ai', 'validation'),
+  path.join('app', 'api', 'ai', 'memory', 'quality'),
+  // Internal cache-freshness + admin-gated system-health diagnostics. The ROOT
+  // /api/health (external uptime probe) is intentionally NOT excluded.
+  path.join('app', 'api', 'health', 'fantasycalc'),
+  path.join('app', 'api', 'health', 'player-valuations'),
+  path.join('app', 'api', 'system', 'health'),
 ]
 
 const movedFiles = []
@@ -95,6 +125,12 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'recommend', 'route.ts').replace(/\\/g, '/'),
+  // Admin routes with real non-admin/lib callers — keep these built even though
+  // the rest of app/api/admin is disabled above.
+  //   sports/sync + fantasy-data/import + fantasy-data/status ← lib/fantasy-data/providerHealth,
+  //   lib/ai/leagueSportsGroundingPacket, app/api/chat/chimmy (live AI grounding).
+  path.join('app', 'api', 'admin', 'sports', 'sync', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'fantasy-data', 'import', 'route.ts').replace(/\\/g, '/'),
 ])
 
 function directoryExists(targetPath) {
