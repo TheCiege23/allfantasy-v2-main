@@ -62,6 +62,7 @@ import { buildDynastyWarRoomContextForChimmy } from '@/lib/dynasty-war-room/dyna
 import { buildKeeperContextForChimmy } from '@/lib/keeper-war-room/keeperChimmyGrounding'
 import { buildBestBallContextForChimmy } from '@/lib/best-ball-war-room/bestBallChimmyGrounding'
 import { buildGuillotineWarRoomContextForChimmy } from '@/lib/guillotine-war-room/guillotineChimmyGrounding'
+import { buildTradeContextForChimmy } from '@/lib/chimmy-trade/tradeChimmyGrounding'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
 import {
   buildChimmyResponseForAssistantMode,
@@ -1752,6 +1753,15 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
                 legacyEnrichmentContext = legacyEnrichmentContext
                   ? `${legacyEnrichmentContext}\n\n${guillotineWarRoomCtx}`
                   : guillotineWarRoomCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              // T10 — grounded trade intelligence (deterministic T2–T9; reuses this route, no new route).
+              const tradeCtx = await buildTradeContextForChimmy(planInput.leagueId, planInput.userId)
+              if (tradeCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}\n\n${tradeCtx}`
+                  : tradeCtx
               }
             } catch { /* non-fatal */ }
           }
