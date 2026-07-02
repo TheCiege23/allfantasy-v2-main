@@ -1,5 +1,6 @@
 import type { CanonicalScheduleRuntimeState } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
 import type { NflRedraftLiveScoringRuntimeState } from '@/lib/scoring-runtime/canonicalNflRedraftScoringRuntime'
+import type { NflRedraftTradeRuntimeState } from '@/lib/trade-runtime/canonicalNflRedraftTradeRuntime'
 import type { NflRedraftWaiverRuntimeState } from '@/lib/waiver-runtime/canonicalNflRedraftWaiverRuntime'
 
 export type RedraftRosterRow = {
@@ -88,6 +89,7 @@ export type RedraftMatchupClient = {
 
 export type RedraftScheduleClient = CanonicalScheduleRuntimeState
 export type RedraftLiveScoringClient = NflRedraftLiveScoringRuntimeState
+export type RedraftTradeRuntimeClient = NflRedraftTradeRuntimeState
 export type RedraftWaiverRuntimeClient = NflRedraftWaiverRuntimeState
 
 export type RedraftWaiverClaimClient = {
@@ -452,6 +454,20 @@ export async function fetchRedraftWaiverRuntime(params: {
   })
   const body = await parseJson<{ waivers?: RedraftWaiverRuntimeClient }>(res)
   return body.waivers ?? null
+}
+
+export async function fetchRedraftTradeRuntime(params: {
+  leagueId: string
+  seasonId?: string | null
+  week?: number | null
+}): Promise<RedraftTradeRuntimeClient | null> {
+  const qs = new URLSearchParams(params.seasonId ? { seasonId: params.seasonId } : { leagueId: params.leagueId })
+  if (params.week != null) qs.set('week', String(params.week))
+  const res = await fetch(`/api/redraft/trade-runtime?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ trades?: RedraftTradeRuntimeClient }>(res)
+  return body.trades ?? null
 }
 
 export async function listTradeProposals(params: {

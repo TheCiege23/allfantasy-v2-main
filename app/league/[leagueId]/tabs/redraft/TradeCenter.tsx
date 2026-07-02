@@ -8,10 +8,12 @@ import { TradeBlockPanel } from './TradeBlockPanel'
 import { MarketSnapshotPanel } from './MarketSnapshotPanel'
 import { MarketValuePanel } from './MarketValuePanel'
 import {
+  fetchRedraftTradeRuntime,
   fetchRedraftTradeSettings,
   listTradeProposals,
   submitTradeVote,
   vetoRedraftTradeProposal,
+  type RedraftTradeRuntimeClient,
   type RedraftRosterRow,
   type RedraftTradeProposal,
   type RedraftTradeSettings,
@@ -67,6 +69,7 @@ export function TradeCenter({
   const [busyProposalId, setBusyProposalId] = useState<string | null>(null)
   const [modalOpen, setModalOpen] = useState(false)
   const [settings, setSettings] = useState<RedraftTradeSettings | null>(null)
+  const [runtime, setRuntime] = useState<RedraftTradeRuntimeClient | null>(null)
   const [faabByRosterId, setFaabByRosterId] = useState<Record<string, number>>({})
   const [settingsCommissioner, setSettingsCommissioner] = useState(false)
   const [discoveryPartnerId, setDiscoveryPartnerId] = useState<string | null>(null)
@@ -85,14 +88,18 @@ export function TradeCenter({
     setLoading(true)
     setError(null)
     try {
-      const rows = await listTradeProposals({ leagueId, seasonId })
+      const [rows, runtimeState] = await Promise.all([
+        listTradeProposals({ leagueId, seasonId }),
+        fetchRedraftTradeRuntime({ leagueId, seasonId, week: currentWeek }).catch(() => null),
+      ])
       setProposals(rows)
+      setRuntime(runtimeState)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load trade proposals')
     } finally {
       setLoading(false)
     }
-  }, [leagueId, seasonId])
+  }, [leagueId, seasonId, currentWeek])
 
   useEffect(() => {
     void refresh()
@@ -190,6 +197,34 @@ export function TradeCenter({
           <span className="rounded border border-white/10 bg-white/[0.03] px-2 py-0.5">
             Pick trading: {settings.draftPickTrading ? 'on (reference-only)' : 'off'}
           </span>
+        </div>
+      ) : null}
+
+      {runtime ? (
+        <div
+          className="grid gap-2 rounded-lg border border-cyan-300/15 bg-cyan-400/[0.06] p-3 text-[11px] text-white/70 sm:grid-cols-4"
+          data-testid="redraft-trade-runtime-summary"
+        >
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">Runtime</p>
+            <p className="mt-1 font-semibold text-white">{runtime.coverage.pendingTrades} pending</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">History</p>
+            <p className="mt-1 font-semibold text-white">{runtime.coverage.transactionCount} records</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">Vote State</p>
+            <p className="mt-1 font-semibold text-white">{runtime.coverage.voteCount} votes</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">Pick Trading</p>
+            <p className="mt-1 font-semibold text-white">
+              {runtime.settings.pickExecutionStatus === 'reference_only'
+                ? 'Reference-only'
+                : runtime.settings.pickExecutionStatus}
+            </p>
+          </div>
         </div>
       ) : null}
 
