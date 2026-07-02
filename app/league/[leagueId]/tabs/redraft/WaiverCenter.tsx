@@ -2,10 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { Loader2, TrendingUp, Zap } from 'lucide-react'
+import { ClipboardList, Loader2, TrendingUp, Zap } from 'lucide-react'
 import { ProjectionChip } from '@/components/sports/ProjectionCard'
 import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
-import { fetchRedraftWaiverClaims, type RedraftWaiverClaimClient } from '@/lib/redraft/client'
+import {
+  fetchRedraftWaiverClaims,
+  fetchRedraftWaiverRuntime,
+  type RedraftWaiverClaimClient,
+  type RedraftWaiverRuntimeClient,
+} from '@/lib/redraft/client'
 
 type WaiverTarget = {
   name: string
@@ -32,6 +37,7 @@ export function WaiverCenter({
 }) {
   const [targets, setTargets] = useState<WaiverTarget[]>([])
   const [claims, setClaims] = useState<RedraftWaiverClaimClient[]>([])
+  const [runtime, setRuntime] = useState<RedraftWaiverRuntimeClient | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -43,16 +49,32 @@ export function WaiverCenter({
     let cancelled = false
     ;(async () => {
       try {
-        const rows = await fetchRedraftWaiverClaims(seasonId, rosterId)
-        if (!cancelled) setClaims(rows)
+        const [rows, waiverRuntime] = await Promise.all([
+          fetchRedraftWaiverClaims(seasonId, rosterId),
+          leagueId
+            ? fetchRedraftWaiverRuntime({
+                leagueId,
+                seasonId,
+                rosterId,
+                includeFreeAgents: false,
+              }).catch(() => null)
+            : Promise.resolve(null),
+        ])
+        if (!cancelled) {
+          setClaims(rows)
+          setRuntime(waiverRuntime)
+        }
       } catch {
-        if (!cancelled) setClaims([])
+        if (!cancelled) {
+          setClaims([])
+          setRuntime(null)
+        }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [seasonId, rosterId])
+  }, [leagueId, seasonId, rosterId])
 
   async function fetchSuggestions() {
     if (!leagueId) return
@@ -95,7 +117,7 @@ export function WaiverCenter({
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <TrendingUp className="h-4 w-4 text-cyan-400" />
-          <h3 className="text-[14px] font-bold text-white">Waiver Wire AI</h3>
+          <h3 className="text-[14px] font-bold text-white">Waiver Center</h3>
         </div>
         <button
           type="button"
@@ -104,7 +126,7 @@ export function WaiverCenter({
           className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500/15 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-500/25 disabled:opacity-50"
         >
           {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
-          {loading ? 'Analyzing...' : 'Get AI Picks'}
+          {loading ? 'Loading...' : 'Find targets'}
         </button>
       </div>
 
@@ -116,8 +138,45 @@ export function WaiverCenter({
 
       {targets.length === 0 && !loading && leagueId && (
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center">
-          <p className="text-sm text-white/40">Click &quot;Get AI Picks&quot; to analyze your league&apos;s waiver wire.</p>
-          <p className="mt-1 text-xs text-white/20">AI will recommend targets based on your roster, injuries, and trends.</p>
+          <p className="text-sm text-white/40">Use the waiver board to review available players and pending moves.</p>
+          <p className="mt-1 text-xs text-white/20">Targets use your league roster and player pool context when available.</p>
+        </div>
+      )}
+
+      {runtime && (
+        <div
+          data-testid="redraft-waiver-runtime-summary"
+          className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-3"
+        >
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ClipboardList className="h-4 w-4 text-emerald-300" />
+              <h4 className="text-[12px] font-bold text-white">Waiver runtime</h4>
+            </div>
+            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] font-bold uppercase text-white/55">
+              {runtime.settings.mode}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
+              <p className="text-[10px] text-white/35">Pending</p>
+              <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.pendingClaims}</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
+              <p className="text-[10px] text-white/35">FAAB teams</p>
+              <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.faabTeams}</p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
+              <p className="text-[10px] text-white/35">Priority</p>
+              <p className="mt-0.5 text-[15px] font-bold text-white">
+                {runtime.priorityOrder.find((row) => row.rosterId === rosterId)?.waiverPriority ?? '-'}
+              </p>
+            </div>
+            <div className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
+              <p className="text-[10px] text-white/35">Transactions</p>
+              <p className="mt-0.5 text-[15px] font-bold text-white">{runtime.coverage.processedTransactions}</p>
+            </div>
+          </div>
         </div>
       )}
 
