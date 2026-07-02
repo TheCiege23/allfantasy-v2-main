@@ -1,3 +1,5 @@
+import type { CanonicalScheduleRuntimeState } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
+
 export type RedraftRosterRow = {
   id: string
   teamName: string | null
@@ -81,6 +83,8 @@ export type RedraftMatchupClient = {
   awayRoster: RedraftRosterRow | null
   lineupSnapshots?: unknown
 }
+
+export type RedraftScheduleClient = CanonicalScheduleRuntimeState
 
 export type RedraftWaiverClaimClient = {
   id: string
@@ -380,6 +384,15 @@ export async function fetchRedraftMatchups(seasonId: string, week: number): Prom
   })
   const body = await parseJson<{ matchups?: RedraftMatchupClient[] }>(res)
   return body.matchups ?? []
+}
+
+export async function fetchRedraftSchedule(leagueId: string, seasonId?: string | null): Promise<RedraftScheduleClient | null> {
+  const qs = new URLSearchParams(seasonId ? { seasonId } : { leagueId })
+  const res = await fetch(`/api/redraft/schedule?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ schedule?: RedraftScheduleClient }>(res)
+  return body.schedule ?? null
 }
 
 export async function fetchRedraftRoster(rosterId: string, week: number): Promise<RedraftRosterClient | null> {

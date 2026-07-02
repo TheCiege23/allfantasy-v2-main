@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRedraftStream } from '@/lib/hooks/useRedraftStream'
 import { MatchupView } from './redraft/MatchupView'
 import { RosterManager } from './redraft/RosterManager'
+import { ScheduleView } from './redraft/ScheduleView'
 import { StandingsView } from './redraft/StandingsView'
 import { TradeCenter } from './redraft/TradeCenter'
 import { WaiverCenter } from './redraft/WaiverCenter'
@@ -11,11 +12,13 @@ import { IDPWaiverSection } from '@/app/idp/components/IDPWaiverSection'
 import {
   fetchRedraftMatchups,
   fetchRedraftRoster,
+  fetchRedraftSchedule,
   fetchRedraftSeason,
   fetchRedraftStandings,
   type RedraftMatchupClient,
   type RedraftRosterClient,
   type RedraftRosterRow,
+  type RedraftScheduleClient,
   type RedraftSeasonClient,
 } from '@/lib/redraft/client'
 
@@ -23,6 +26,7 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
   const [season, setSeason] = useState<RedraftSeasonClient | null>(null)
   const [standings, setStandings] = useState<RedraftRosterRow[]>([])
   const [matchups, setMatchups] = useState<RedraftMatchupClient[]>([])
+  const [schedule, setSchedule] = useState<RedraftScheduleClient | null>(null)
   const [selectedRosterId, setSelectedRosterId] = useState<string | null>(null)
   const [selectedRoster, setSelectedRoster] = useState<RedraftRosterClient | null>(null)
   const [loading, setLoading] = useState(true)
@@ -83,6 +87,25 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
       cancelled = true
     }
   }, [seasonId, currentWeek])
+
+  useEffect(() => {
+    if (!seasonId) {
+      setSchedule(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const nextSchedule = await fetchRedraftSchedule(leagueId, seasonId)
+        if (!cancelled) setSchedule(nextSchedule)
+      } catch {
+        if (!cancelled) setSchedule(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [leagueId, seasonId])
 
   useEffect(() => {
     if (!selectedRosterId) {
@@ -154,6 +177,8 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
       ) : null}
 
       <MatchupView matchup={visibleMatchup} selectedRosterId={selectedRosterId} sport={sport} />
+
+      <ScheduleView schedule={schedule} />
 
       <div className="grid gap-4 lg:grid-cols-2">
         <RosterManager roster={selectedRoster} week={currentWeek} />
