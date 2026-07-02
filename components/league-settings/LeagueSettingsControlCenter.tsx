@@ -22,21 +22,27 @@ export type LeagueSettingsHubTabId =
   | 'waivers'
   | 'trades'
   | 'playoffs'
+  | 'members'
+  | 'notifications'
+  | 'permissions'
   | 'commissioner'
   | 'conceptRules'
   | 'ai'
 
 const TABS: { id: LeagueSettingsHubTabId; label: string; short: string }[] = [
-  { id: 'general', label: 'League', short: 'General' },
-  { id: 'scoring', label: 'Scoring', short: 'Scoring' },
-  { id: 'roster', label: 'Rosters', short: 'Rosters' },
+  { id: 'general', label: 'General', short: 'General' },
   { id: 'draft', label: 'Draft', short: 'Draft' },
+  { id: 'roster', label: 'Roster', short: 'Roster' },
+  { id: 'scoring', label: 'Scoring', short: 'Scoring' },
   { id: 'waivers', label: 'Waivers', short: 'Waivers' },
   { id: 'trades', label: 'Trades', short: 'Trades' },
   { id: 'playoffs', label: 'Playoffs', short: 'Playoffs' },
-  { id: 'commissioner', label: 'Commissioner', short: 'Commish' },
-  { id: 'conceptRules', label: 'Concept rules', short: 'Concept' },
-  { id: 'ai', label: 'AI', short: 'AI' },
+  { id: 'members', label: 'Members', short: 'Members' },
+  { id: 'notifications', label: 'Notifications', short: 'Alerts' },
+  { id: 'permissions', label: 'Permissions', short: 'Perms' },
+  { id: 'commissioner', label: 'Commissioner Intelligence', short: 'Commish' },
+  { id: 'conceptRules', label: 'Advanced Rule Support', short: 'Rules' },
+  { id: 'ai', label: 'Decision OS', short: 'Decision OS' },
 ]
 
 function resolveInitialTab(panel: string | null | undefined): LeagueSettingsHubTabId {
@@ -97,6 +103,17 @@ export function LeagueSettingsControlCenter({
         return <TradesTab {...tabProps} />
       case 'playoffs':
         return <PlayoffsTab {...tabProps} />
+      case 'members':
+        return <CommissionerTab {...tabProps} />
+      case 'notifications':
+        return (
+          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 text-[13px] leading-relaxed text-white/65">
+            <p className="mb-2 text-[14px] font-semibold text-white/85">Notifications</p>
+            <p>Basic league notifications are available in account settings. Weekly League Report controls live under Decision OS for AF Commissioner.</p>
+          </div>
+        )
+      case 'permissions':
+        return <CommissionerTab {...tabProps} />
       case 'commissioner':
         return <CommissionerTab {...tabProps} />
       case 'conceptRules':

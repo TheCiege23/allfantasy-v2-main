@@ -18,6 +18,7 @@ import { assertSettingsEditAllowed } from '@/server/services/commissionerService
 import { logAction } from '@/server/services/auditService'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 
 const DRAFT_TYPES = new Set(['snake', 'linear', '3rd_reversal', 'auction'])
 const ORDER_METHODS = new Set([
@@ -47,6 +48,30 @@ const TIMER_PRESETS = new Set([
 
 const LEAGUE_SPORTS = new Set(['NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'])
 const LEAGUE_LANGUAGES = new Set(['en', 'es'])
+
+const PREMIUM_COMMISSIONER_LEAGUE_PATCH_KEYS = new Set([
+  'aiWaiverSuggestions',
+  'aiTradeAnalysis',
+  'aiLineupHelp',
+  'aiDraftRecs',
+  'aiRecaps',
+  'leagueAiCommissionerAlerts',
+  'aiModeration',
+  'aiPowerRankings',
+])
+
+const PREMIUM_COMMISSIONER_DRAFT_SETTINGS_KEYS = new Set([
+  'aiQueueSuggestions',
+  'aiBestAvailable',
+  'aiRosterGuidance',
+  'aiScarcityAlerts',
+  'aiDraftGrade',
+  'aiSleeperAlerts',
+  'aiByeAwareness',
+  'aiStackSuggestions',
+  'aiRiskUpsideNotes',
+  'aiScope',
+])
 
 /** Keys stored on `LeagueSettings` (draft / draft-room row). */
 export const LEAGUE_SETTINGS_ROW_PATCH_KEYS = new Set([
@@ -92,6 +117,14 @@ function hasLeagueSettingsRowPatch(body: Record<string, unknown>): boolean {
   return Object.keys(body).some((k) => LEAGUE_SETTINGS_ROW_PATCH_KEYS.has(k))
 }
 
+function requestedPremiumCommissionerKeys(body: Record<string, unknown>): string[] {
+  return Object.keys(body).filter(
+    (key) =>
+      PREMIUM_COMMISSIONER_LEAGUE_PATCH_KEYS.has(key) ||
+      PREMIUM_COMMISSIONER_DRAFT_SETTINGS_KEYS.has(key),
+  )
+}
+
 export type LeagueSettingsPatchBody = Record<string, unknown> & { leagueId: string }
 
 /**
@@ -133,11 +166,21 @@ export async function executeLeagueSettingsPatch(
   })
   if (!league) return jsonError('League not found', 404)
 
-  const profile = await prisma.userProfile.findFirst({
-    where: { userId },
-    select: { afCommissionerSub: true },
-  })
-  const hasSub = profile?.afCommissionerSub ?? false
+  const [profile, commissionerEntitlement] = await Promise.all([
+    prisma.userProfile.findFirst({
+      where: { userId },
+      select: { afCommissionerSub: true },
+    }),
+    new EntitlementResolver()
+      .resolveForUser(userId, 'commissioner_ai_tools')
+      .catch(() => ({ hasAccess: false })),
+  ])
+  const hasSub = Boolean(profile?.afCommissionerSub) || Boolean(commissionerEntitlement.hasAccess)
+
+  const premiumCommissionerKeys = requestedPremiumCommissionerKeys(body)
+  if (premiumCommissionerKeys.length > 0 && !hasSub) {
+    return jsonError('AF Commissioner or AF Supreme is required for Commissioner Intelligence and Decision OS settings.', 403)
+  }
 
   if (body.playoffTeams != null) {
     const pt = Number(body.playoffTeams)

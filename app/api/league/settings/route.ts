@@ -7,6 +7,7 @@ import { commissionerLeagueFieldsFromRow } from '@/lib/league/commissioner-leagu
 import { getLeagueRole } from '@/lib/league/permissions'
 import { executeLeagueSettingsPatch } from '@/lib/league/execute-league-settings-patch'
 import { getLeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,7 @@ export async function GET(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return jsonError(gate.status === 404 ? 'League not found' : 'Forbidden', gate.status)
 
-  const [league, userRole, profile, scoringConfig] = await Promise.all([
+  const [league, userRole, profile, commissionerEntitlement, scoringConfig] = await Promise.all([
     prisma.league.findFirst({
       where: { id: leagueId },
       include: {
@@ -43,6 +44,9 @@ export async function GET(req: NextRequest) {
       where: { userId },
       select: { afCommissionerSub: true },
     }),
+    new EntitlementResolver()
+      .resolveForUser(userId, 'commissioner_ai_tools')
+      .catch(() => ({ hasAccess: false })),
     getLeagueScoringConfig(leagueId),
   ])
 
@@ -70,7 +74,7 @@ export async function GET(req: NextRequest) {
     leagueOwnerUserId: league.userId,
     viewerHasTeam,
     survivorFairPlayLimited,
-    hasAfCommissionerSub: profile?.afCommissionerSub ?? false,
+    hasAfCommissionerSub: Boolean(profile?.afCommissionerSub) || Boolean(commissionerEntitlement.hasAccess),
     canEdit,
     /** Raw `League.settings` JSON for commissioner merges (description, schedule prefs, etc.). */
     settingsSnapshot: rawLeagueSettings && typeof rawLeagueSettings === 'object' ? rawLeagueSettings : {},

@@ -57,14 +57,14 @@ export function AiLeagueSettingsPanel({
   return (
     <div className="min-h-0 flex-1 space-y-6 px-6 py-6 text-[13px] text-white/85" data-testid="settings-ai-panel">
       <SettingsPanelHeading
-        title="AI settings"
-        subtitle="League-wide AI features. Deterministic engines still enforce rules; AI explains and recommends."
+        title="Decision OS"
+        subtitle="League-wide intelligence controls. Deterministic engines still enforce rules; recommendations stay explainable."
       />
 
       {!hasCommAccess ? (
         <PremiumGate featureId="commissioner_ai_tools" hasAccess={hasCommAccess} mode="overlay">
           <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-400/25 bg-amber-500/10 px-4 py-3 text-[12px] text-amber-100">
-            <span>AF Commissioner / Pro unlocks advanced league AI controls.</span>
+            <span>AF Commissioner or AF Supreme unlocks Commissioner Intelligence controls.</span>
             <SubscriptionGateBadge
               featureId="commissioner_ai_tools"
               onClick={() => subscriptionGate?.gate('commissioner_ai_tools', { highlightParam: 'ai_tools' })}
@@ -81,7 +81,7 @@ export function AiLeagueSettingsPanel({
         <SettingsSectionLabel>Core</SettingsSectionLabel>
         <div className="space-y-2">
           <SettingsToggleRow
-            label="Chimmy league assistant"
+            label="League helper"
             checked={chimmy}
             disabled={disabled}
             onChange={(v) => {
@@ -90,7 +90,7 @@ export function AiLeagueSettingsPanel({
             }}
           />
           <SettingsToggleRow
-            label="AI waiver suggestions"
+            label="Waiver watchlist"
             checked={waiver}
             disabled={disabled}
             onChange={(v) => {
@@ -99,7 +99,7 @@ export function AiLeagueSettingsPanel({
             }}
           />
           <SettingsToggleRow
-            label="AI trade analysis"
+            label="Trade health"
             checked={trade}
             disabled={disabled}
             onChange={(v) => {
@@ -108,7 +108,7 @@ export function AiLeagueSettingsPanel({
             }}
           />
           <SettingsToggleRow
-            label="AI start / sit help"
+            label="Manager engagement"
             checked={lineup}
             disabled={disabled}
             onChange={(v) => {
@@ -117,7 +117,7 @@ export function AiLeagueSettingsPanel({
             }}
           />
           <SettingsToggleRow
-            label="AI draft recommendations"
+            label="Draft readiness"
             checked={draft}
             disabled={disabled}
             onChange={(v) => {
@@ -126,7 +126,7 @@ export function AiLeagueSettingsPanel({
             }}
           />
           <SettingsToggleRow
-            label="AI recaps & narratives"
+            label="Weekly League Report"
             checked={recaps}
             disabled={disabled}
             onChange={(v) => {
@@ -141,7 +141,7 @@ export function AiLeagueSettingsPanel({
         <SettingsSectionLabel>Commissioner & league ops</SettingsSectionLabel>
         <div className="space-y-2">
           <SettingsToggleRow
-            label="AI commissioner alerts"
+            label="Commissioner Intelligence alerts"
             checked={commAlerts}
             disabled={disabled}
             onChange={(v) => {
@@ -150,7 +150,7 @@ export function AiLeagueSettingsPanel({
             }}
           />
           <SettingsToggleRow
-            label="AI moderation assists"
+            label="Fair Play Monitoring"
             checked={mod}
             disabled={disabled}
             onChange={(v) => {
@@ -159,7 +159,7 @@ export function AiLeagueSettingsPanel({
             }}
           />
           <SettingsToggleRow
-            label="AI power rankings"
+            label="League health rankings"
             checked={pr}
             disabled={disabled}
             onChange={(v) => {

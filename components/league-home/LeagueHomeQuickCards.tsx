@@ -44,7 +44,7 @@ export function LeagueHomeQuickCards({ leagueId, accent, myTeamId = null }: Leag
     },
     {
       label: 'League Chat',
-      hint: 'Chat + Chimmy AI',
+      hint: 'Chat + league guide',
       icon: MessageSquare,
       href: `/league/${leagueId}?openChat=league`,
     },
@@ -64,7 +64,7 @@ export function LeagueHomeQuickCards({ leagueId, accent, myTeamId = null }: Leag
           <Link
             key={c.label}
             href={c.href}
-            className="group relative overflow-hidden rounded-2xl border border-white/[0.08] bg-gradient-to-br from-white/[0.04] to-transparent p-4 text-left transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.06] hover:shadow-[0_12px_40px_-12px_rgba(0,0,0,0.6)]"
+            className="glass-panel group relative overflow-hidden p-4 text-left transition-all duration-300 hover:-translate-y-1 hover:border-brand-primary/25 hover:bg-surface-hover"
           >
             {/* Accent glow on hover */}
             <span
@@ -73,15 +73,15 @@ export function LeagueHomeQuickCards({ leagueId, accent, myTeamId = null }: Leag
               aria-hidden
             />
             <span
-              className={`relative mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-white/[0.06] ${accent.text} shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-colors duration-200 group-hover:bg-white/[0.10]`}
+              className={`relative mb-2 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-surface-muted ${accent.text} shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] transition-colors duration-200 group-hover:bg-surface-hover`}
               aria-hidden
             >
               <Icon className="h-5 w-5" />
             </span>
-            <span className="relative block text-sm font-semibold text-white/90 transition-colors group-hover:text-white">
+            <span className="relative block text-sm font-semibold text-primary transition-colors group-hover:text-primary">
               {c.label}
             </span>
-            <span className="relative mt-0.5 block text-[11px] leading-snug text-white/45">
+            <span className="relative mt-0.5 block text-[11px] leading-snug text-muted">
               {c.hint}
             </span>
           </Link>

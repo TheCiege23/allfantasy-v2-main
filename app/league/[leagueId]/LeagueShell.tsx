@@ -33,6 +33,7 @@ import {
   Settings,
   ScrollText,
   Shield,
+  ShieldCheck,
   ShieldPlus,
   Shirt,
   Skull,
@@ -123,6 +124,7 @@ import {
   SpecialtyLeagueHomeHero,
   type TournamentHeroContext,
 } from '@/components/league-home/SpecialtyLeagueHomeHero'
+import { NflRedraftLeagueHomeDashboard } from '@/components/league-home/NflRedraftLeagueHomeDashboard'
 import { DevyLeagueHomeHero } from '@/components/devy/DevyLeagueHomeHero'
 import { applyMatchupPrimaryTab, shouldUseMatchupInsteadOfDraft } from '@/lib/matchup-center/tabTransition'
 import { MatchupTabContainer } from '@/components/matchup-center/MatchupTabContainer'
@@ -193,7 +195,7 @@ export type LeagueShellProps = {
   league: LeagueShellLeague
   userTeam: LeagueTeam | null
   isOwner: boolean
-  /** Head commissioner or co-commissioner â€” controls âš™ Settings tab. */
+  /** Head commissioner or co-commissioner - controls league settings. */
   isCommissioner: boolean
   /** Head commissioner only (reset draft, co-comm management). */
   isHeadCommissioner: boolean
@@ -208,7 +210,7 @@ export type LeagueShellProps = {
   discordConnected?: boolean
   /** Deep-link prefill for league chat composer (`?zombieChimmy=`). */
   zombieChimmyPrefill?: string | null
-  /** Active dispersal draft â€” show join/setup banner on league home. */
+  /** Active dispersal draft - show join/setup banner on league home. */
   dispersalDraftInProgress?: { draftId: string; status: string } | null
   /** Season snapshot for post-season manager ordering (champion first). */
   seasonSnapshot?: LeagueSeasonSnapshot | null
@@ -305,18 +307,20 @@ export function LeagueShell({
   const tabDefs = useMemo(() => {
     if (nflRedraftCore) {
       const core: TabDef[] = [
+        { id: 'home', label: 'Home' },
         { id: 'draft', label: 'Draft' },
         { id: 'roster', label: 'Roster' },
         { id: 'matchups', label: 'Matchups' },
-        { id: 'players', label: 'Players / Waivers' },
-        { id: 'trades', label: 'Trade Center' },
-        { id: 'war_room', label: 'War Room' },
-        { id: 'league', label: isCommissioner ? 'Commissioner Hub' : 'League' },
+        { id: 'waivers', label: 'Waivers' },
+        { id: 'trades', label: 'Trades' },
+        { id: 'standings', label: 'Standings' },
+        { id: 'league_chat', label: 'League Chat' },
       ]
+      if (isCommissioner) core.push({ id: 'commissioner', label: 'Commissioner' })
       if (isCommissioner) core.push({ id: 'settings', label: '⚙ Settings' })
-      return localizeLeagueTabs(core, t).map((tab) => {
+      return localizeLeagueTabs(core, t).filter((tab) => tab.id !== 'settings').map((tab) => {
         if (tab.id === 'players') return { ...tab, label: 'Players / Waivers' }
-        if (tab.id === 'trades') return { ...tab, label: 'Trade Center' }
+        if (tab.id === 'trades') return { ...tab, label: 'Trades' }
         if (tab.id === 'league' && isCommissioner) return { ...tab, label: 'Commissioner Hub' }
         return tab
       })
@@ -336,42 +340,42 @@ export function LeagueShell({
     if (league.leagueVariant === 'survivor') {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const core: TabDef[] = [
-        { id: 'survivor', label: 'ðŸ Island' },
-        { id: 'survivor_tribal', label: 'ðŸ—³ Tribal' },
-        { id: 'survivor_challenges', label: 'âš¡ Challenges' },
-        { id: 'survivor_chimmy', label: 'ðŸ¤– Chimmy' },
-        { id: 'survivor_exile', label: 'ðŸš Exile' },
-        { id: 'survivor_jury', label: 'âš–ï¸ Jury' },
+        { id: 'survivor', label: 'Island' },
+        { id: 'survivor_tribal', label: 'Tribal' },
+        { id: 'survivor_challenges', label: 'Challenges' },
+        { id: 'survivor_chimmy', label: 'League Guide' },
+        { id: 'survivor_exile', label: 'Exile' },
+        { id: 'survivor_jury', label: 'Jury' },
       ]
       const command: TabDef[] = isCommissioner
-        ? [{ id: 'survivor_command', label: 'ðŸŽ› Command' }]
+        ? [{ id: 'survivor_command', label: 'Command' }]
         : []
       const block = [...core, ...command]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
     }
     if (league.leagueVariant === 'zombie') {
       const idx = base.findIndex((t) => t.id === 'redraft')
-      const z = { id: 'zombie', label: 'ðŸ§Ÿ Zombie' }
+      const z = { id: 'zombie', label: 'Zombie' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), z, ...base.slice(idx + 1)] : [z, ...base]
     }
     if (league.leagueVariant === 'big_brother') {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const core: TabDef[] = [
-        { id: 'big_brother', label: 'ðŸ‘ Big Brother' },
-        { id: 'bb_hoh', label: 'ðŸ‘‘ HOH' },
-        { id: 'bb_veto', label: 'ðŸ›¡ Veto' },
-        { id: 'bb_voting', label: 'ðŸ—³ Voting' },
-        { id: 'bb_jury', label: 'âš– Jury' },
-        { id: 'bb_twists', label: 'âœ¨ Twists' },
-        { id: 'bb_history', label: 'ðŸ“œ History' },
+        { id: 'big_brother', label: 'Big Brother' },
+        { id: 'bb_hoh', label: 'HOH' },
+        { id: 'bb_veto', label: 'Veto' },
+        { id: 'bb_voting', label: 'Voting' },
+        { id: 'bb_jury', label: 'Jury' },
+        { id: 'bb_twists', label: 'Twists' },
+        { id: 'bb_history', label: 'History' },
       ]
-      const command: TabDef[] = isCommissioner ? [{ id: 'bb_command', label: 'ðŸŽ› Command' }] : []
+      const command: TabDef[] = isCommissioner ? [{ id: 'bb_command', label: 'Command' }] : []
       const block = [...core, ...command]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...block, ...base.slice(idx + 1)] : [...block, ...base]
     }
     if (league.leagueVariant === 'idp' || league.leagueVariant === 'dynasty_idp') {
       const idx = base.findIndex((t) => t.id === 'redraft')
-      const idp = { id: 'idp', label: 'ðŸ›¡ IDP' }
+      const idp = { id: 'idp', label: 'IDP' }
       base = idx >= 0 ? [...base.slice(0, idx + 1), idp, ...base.slice(idx + 1)] : [idp, ...base]
     }
     if (league.leagueType === 'keeper' && league.keeperPhaseActive) {
@@ -380,13 +384,13 @@ export function LeagueShell({
     if (league.leagueType === 'dynasty' || league.leagueType === 'devy' || league.leagueType === 'c2c') {
       const idx = base.findIndex((t) => t.id === 'redraft')
       const dynastyTabs: TabDef[] = [
-        { id: 'dynasty', label: 'ðŸ† Dynasty' },
-        { id: 'dynasty_taxi', label: 'ðŸš• Taxi' },
-        { id: 'dynasty_picks', label: 'ðŸ“‹ Picks' },
+        { id: 'dynasty', label: 'Dynasty' },
+        { id: 'dynasty_taxi', label: 'Taxi' },
+        { id: 'dynasty_picks', label: 'Picks' },
       ]
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...dynastyTabs, ...base.slice(idx + 1)] : [...dynastyTabs, ...base]
     }
-    const withSettings = [...base, { id: 'settings', label: 'âš™ Settings' }]
+    const withSettings = [...base, { id: 'settings', label: 'Settings' }]
     return localizeLeagueTabs(applyMatchupPrimaryTab(withSettings, shouldUseMatchupPrimary), t)
   }, [
     nflRedraftCore,
@@ -411,7 +415,7 @@ export function LeagueShell({
   const bigBrotherLandingApplied = useRef(false)
   const predraftLandingApplied = useRef(false)
   // Set once the viewer explicitly picks a tab (click or deep-link). Auto-landing
-  // defaults below must not clobber an explicit choice â€” otherwise a late
+  // defaults below must not clobber an explicit choice - otherwise a late
   // hydration/searchParams render can bounce the user off (e.g.) the War Room tab.
   const userPickedTabRef = useRef(false)
 
@@ -475,17 +479,18 @@ export function LeagueShell({
     nflMatchupLandingApplied.current = true
   }, [league.id, nflRedraftCore, shouldUseMatchupPrimary, tabDefs, searchParams])
 
-  /** Predraft leagues open on Draft/Draft Setup by default when no explicit deep link is provided. */
+  /** Non-G32 predraft leagues open on Draft/Draft Setup by default when no explicit deep link is provided. */
   useEffect(() => {
     const deepLink = searchParams?.get('view') ?? searchParams?.get('tab')
     if (userPickedTabRef.current) return
     if (deepLink?.trim()) return
+    if (nflRedraftCore) return
     if (!isPredraftLifecycle || predraftLandingApplied.current) return
     const ids = new Set(tabDefs.map((t) => t.id))
     if (ids.has('draft')) setActiveTab('draft')
     else if (ids.has('home')) setActiveTab('home')
     predraftLandingApplied.current = true
-  }, [isPredraftLifecycle, tabDefs, searchParams])
+  }, [isPredraftLifecycle, nflRedraftCore, tabDefs, searchParams])
 
   /** First load per league navigation: guillotine leagues open on the Guillotine hub (once per visit). */
   useEffect(() => {
@@ -949,15 +954,15 @@ export function LeagueShell({
   }, [searchParams, pathname, router, league.id, openLeagueSettingsModal])
 
   /**
-   * Slice H â€” listen for the navigation-free `af-pre-draft-fix-action`
+   * Slice H - listen for the navigation-free `af-pre-draft-fix-action`
    * CustomEvent the draft-room PreDraftWizard fires when a commissioner
    * clicks a "Fix" button. The wizard's host (`DraftRoomPageClient`) cannot
    * mount `LeagueSettingsModal` (a different route owns it), so it
    * dispatches the event and closes itself; this listener picks it up on
    * the dashboard side and opens the modal at the right panel.
    *
-   * Scoped to this league only â€” a draft-room event from a different
-   * league is ignored. No router navigation, no `window.location` â€”
+   * Scoped to this league only - a draft-room event from a different
+   * league is ignored. No router navigation, no `window.location` -
    * Commit E's unified-state contract is preserved on both sides.
    */
   useEffect(() => {
@@ -1267,11 +1272,11 @@ export function LeagueShell({
                 >
                   <span>
                     {dispersalDraftInProgress.status === 'in_progress'
-                      ? 'Dispersal draft in progress â€” join the draft room to make picks.'
-                      : 'Dispersal draft open â€” continue setup or open the draft room.'}
+                      ? 'Dispersal draft in progress - join the draft room to make picks.'
+                      : 'Dispersal draft open - continue setup or open the draft room.'}
                   </span>
                   <span className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2">
-                    {dispersalDraftInProgress.status === 'in_progress' ? 'Join draft room â†’' : 'Open â†’'}
+                    {dispersalDraftInProgress.status === 'in_progress' ? 'Join draft room ->' : 'Open ->'}
                   </span>
                 </Link>
               </div>
@@ -1286,14 +1291,14 @@ export function LeagueShell({
             {/* Live scores strip */}
             <LeagueLiveStrip sport={String(league.sport)} />
 
-            {/* League story card â€” shown on league tab */}
+            {/* League story card - shown on league tab */}
             {activeTab === 'league' && (
               <div className="px-4 pt-3">
                 <LeagueStoryCard leagueId={league.id} sport={String(league.sport)} />
               </div>
             )}
 
-            {/* Renew League banner â€” shown to commissioner when season ends */}
+            {/* Renew League banner - shown to commissioner when season ends */}
             <RenewLeagueBanner
               leagueId={league.id}
               currentSeason={Number(selectedLeague.season ?? new Date().getFullYear())}
@@ -1325,6 +1330,7 @@ export function LeagueShell({
               seasonSnapshot={seasonSnapshot}
               leagueDashboard={leagueDashboard}
               onOpenLeagueSettingsModal={openLeagueSettingsModal}
+              onSelectTab={setActiveTab}
               isPredraftLifecycle={isPredraftLifecycle}
               draftDateIso={draftDateIso}
             />
@@ -1602,6 +1608,7 @@ function LeagueTabRouter({
   seasonSnapshot,
   leagueDashboard,
   onOpenLeagueSettingsModal,
+  onSelectTab,
   isPredraftLifecycle,
   draftDateIso,
 }: {
@@ -1622,6 +1629,7 @@ function LeagueTabRouter({
   seasonSnapshot: LeagueSeasonSnapshot | null
   leagueDashboard: LeagueDashboardView
   onOpenLeagueSettingsModal: (initialPanel?: string | null) => void
+  onSelectTab: (tabId: string) => void
   isPredraftLifecycle: boolean
   draftDateIso: string | null
 }) {
@@ -1774,18 +1782,16 @@ function LeagueTabRouter({
 
   switch (activeTab) {
     case 'home':
-      if (isPredraftLifecycle) return renderPredraftDraftSetup()
       return (
-        <DraftTab
+        <NflRedraftLeagueHomeDashboard
           league={selectedLeague}
-          teams={teamSlots}
-          isOwner={isOwner}
+          leagueId={leagueId}
+          teamSlots={teamSlots}
+          userTeamName={userTeam?.teamName ?? null}
           isCommissioner={isCommissioner}
-          inviteToken={inviteToken}
-          idpLeagueUi={idpLeagueActive}
-          seasonSnapshot={seasonSnapshot}
-          standingsPresentation={leagueDashboard.standings}
-          onOpenLeagueSettings={onOpenLeagueSettingsModal}
+          draftDateIso={draftDateIso}
+          onOpenSettings={onOpenLeagueSettingsModal}
+          onOpenTab={onSelectTab}
         />
       )
     case 'matchups':
@@ -1902,6 +1908,43 @@ function LeagueTabRouter({
           userTeam={userTeam ? { id: userTeam.id, teamName: userTeam.teamName } : null}
         />
       )
+    case 'league_chat':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6" data-testid="g32-league-chat-tab">
+          <section className="rounded-3xl border border-cyan-500/15 bg-white/[0.035] p-5">
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5 text-cyan-200" aria-hidden />
+              <h2 className="text-xl font-black text-white">League Chat</h2>
+            </div>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
+              League chat is visible in the left panel on desktop and opens from the chat button on mobile. Use it for
+              draft coordination, announcements, and quick league guide questions.
+            </p>
+          </section>
+        </div>
+      )
+    case 'commissioner':
+      if (!isCommissioner) {
+        return (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6">
+            <section className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 text-sm text-white/55">
+              Commissioner controls are only available to the commissioner or a co-commissioner.
+            </section>
+          </div>
+        )
+      }
+      return (
+        <NflRedraftLeagueHomeDashboard
+          league={selectedLeague}
+          leagueId={leagueId}
+          teamSlots={teamSlots}
+          userTeamName={userTeam?.teamName ?? null}
+          isCommissioner
+          draftDateIso={draftDateIso}
+          onOpenSettings={onOpenLeagueSettingsModal}
+          onOpenTab={onSelectTab}
+        />
+      )
     case 'players':
       return (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 lg:px-6">
@@ -1966,6 +2009,8 @@ const LEAGUE_TAB_NAV_ICONS: Record<string, LucideIcon> = {
   roster: ClipboardList,
   squad: Users,
   league: Shield,
+  league_chat: MessageSquare,
+  commissioner: ShieldCheck,
   players: Shirt,
   waivers: ClipboardList,
   trend: LineChart,
@@ -2082,9 +2127,9 @@ function LeagueHeader({
   c2cConfig?: C2CConfigClient | null
   isCommissioner?: boolean
   onOpenCommissionerSettings?: () => void
-  /** Survivor format â€” show quick links + Commissioner entry (same pattern as Devy/C2C). */
+  /** Survivor format - show quick links + Commissioner entry (same pattern as Devy/C2C). */
   survivorLeagueActive?: boolean
-  /** Zombie format â€” horde hub quick links + Commissioner. */
+  /** Zombie format - horde hub quick links + Commissioner. */
   zombieLeagueActive?: boolean
   idpCapEnabled?: boolean
   capSummary?: {
@@ -2215,13 +2260,13 @@ function LeagueHeader({
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {idpLeagueActive ? (
-              <span className="idp-creator-badge flex-shrink-0 whitespace-nowrap">âœ¦ Created by TheCiege</span>
+              <span className="idp-creator-badge flex-shrink-0 whitespace-nowrap">* Created by TheCiege</span>
             ) : null}
             {c2cLeagueActive && c2cConfig ? (
               <>
                 {c2cConfig.createdByTheCiege !== false ? (
                   <span className="c2c-creator-badge flex-shrink-0 whitespace-nowrap" data-testid="c2c-creator-badge">
-                    âœ¦ Created by TheCiege
+                    * Created by TheCiege
                   </span>
                 ) : null}
                 <span
@@ -2244,7 +2289,7 @@ function LeagueHeader({
                   }}
                   data-testid="c2c-dynasty-pill"
                 >
-                  Dynasty Â· C2C
+                  Dynasty · C2C
                 </span>
               </>
             ) : null}
@@ -2254,7 +2299,7 @@ function LeagueHeader({
                   className="devy-creator-badge flex-shrink-0 whitespace-nowrap"
                   data-testid="devy-creator-badge"
                 >
-                  âœ¦ Created by TheCiege
+                  * Created by TheCiege
                 </span>
                 <span
                   className="flex-shrink-0 rounded-full border border-white/[0.1] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/90"
@@ -2263,7 +2308,7 @@ function LeagueHeader({
                   }}
                   data-testid="devy-dynasty-pill"
                 >
-                  Dynasty Â· Devy
+                  Dynasty · Devy
                 </span>
               </>
             ) : null}
@@ -2326,12 +2371,12 @@ function LeagueHeader({
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--devy-active)' }} />
                   {devyBucketStats.active} NFL
                 </span>
-                <span className="text-white/25">Â·</span>
+                <span className="text-white/25">·</span>
                 <span className="inline-flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--devy-taxi)' }} />
                   {devyBucketStats.taxi} Taxi
                 </span>
-                <span className="text-white/25">Â·</span>
+                <span className="text-white/25">·</span>
                 <span className="inline-flex items-center gap-1">
                   <span className="h-1.5 w-1.5 rounded-full" style={{ background: 'var(--devy-devy)' }} />
                   {devyBucketStats.devy} Devy

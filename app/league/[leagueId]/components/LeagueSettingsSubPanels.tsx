@@ -77,7 +77,7 @@ export type SubPanelContext = {
   isHeadCommissioner: boolean
   sleeperMemberMap: SleeperMemberMap
   onGoToDraftTab: () => void
-  /** From `/api/league/settings` when available — powers IDP AI panel gating. */
+  /** From `/api/league/settings` when available - powers IDP Intelligence panel gating. */
   hasAfCommissionerSub?: boolean
 }
 
@@ -1781,14 +1781,14 @@ function parseNameList(raw: string): { name: string }[] {
 function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContext }) {
   const { handleApiResponse } = useAfSubGate('commissioner_ai_tools')
   const titles: Record<string, string> = {
-    'ai-chimmy-setup': 'Chimmy league setup',
-    'ai-power-rankings': 'AI power rankings',
-    'ai-trade': 'AI trade analyzer',
-    'ai-waiver': 'AI waiver wire',
-    'ai-recap': 'AI weekly recap',
-    'ai-draft-help': 'AI draft assistant',
-    'ai-matchup': 'AI matchup preview',
-    'ai-trash': 'AI trash talk',
+    'ai-chimmy-setup': 'League helper setup',
+    'ai-power-rankings': 'League health rankings',
+    'ai-trade': 'Trade health review',
+    'ai-waiver': 'Waiver watchlist',
+    'ai-recap': 'Weekly League Report',
+    'ai-draft-help': 'Draft guide',
+    'ai-matchup': 'Matchup prep',
+    'ai-trash': 'Rivalry prompt',
   }
 
   const [loading, setLoading] = useState(false)
@@ -1857,7 +1857,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
           }
           break
         default:
-          throw new Error('Unknown AI panel')
+          throw new Error('Unknown Decision OS panel')
       }
 
       const res = await fetch(endpoint, {
@@ -1881,7 +1881,7 @@ function AiFeaturePanel({ panelId, ctx }: { panelId: string; ctx: SubPanelContex
 
   return (
     <div className="space-y-3">
-      <p className="text-[13px] text-white/70">{titles[panelId] ?? 'AI tool'}</p>
+      <p className="text-[13px] text-white/70">{titles[panelId] ?? 'Decision OS tool'}</p>
 
       {panelId === 'ai-trade' ? (
         <div className="space-y-2">

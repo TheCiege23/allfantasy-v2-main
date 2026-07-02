@@ -146,6 +146,20 @@ export function LeagueConceptIntroGate({
   }, [leagueId])
 
   useEffect(() => {
+    const onReplay = (event: Event) => {
+      if (!introEnabled || !videoSrc) return
+      const detail = (event as CustomEvent<{ leagueId?: string }>).detail
+      if (detail?.leagueId && detail.leagueId !== leagueId) return
+      setOpen(true)
+    }
+
+    window.addEventListener('af:replay-league-intro', onReplay)
+    return () => {
+      window.removeEventListener('af:replay-league-intro', onReplay)
+    }
+  }, [introEnabled, leagueId, videoSrc])
+
+  useEffect(() => {
     if (!shouldCheck) {
       setOpen(false)
       return

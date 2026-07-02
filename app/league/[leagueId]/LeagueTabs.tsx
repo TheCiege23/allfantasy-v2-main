@@ -5,32 +5,34 @@
 }
 
 /**
- * Football redraft compact shell.
+ * Football redraft League Home shell.
  * Mock draft and live draft are actions inside Draft, not primary tabs.
- * Players and Waivers are one combined tab.
+ * Commissioner is permission-aware and is only shown to commissioner roles.
  */
 export const NFL_REDRAFT_CORE_TAB_IDS = [
+  'home',
   'draft',
   'roster',
   'matchups',
-  'players',
+  'waivers',
   'trades',
-  'war_room',
-  'league',
-  'settings',
+  'standings',
+  'league_chat',
+  'commissioner',
 ] as const
 
 export type NflRedraftCoreTabId = (typeof NFL_REDRAFT_CORE_TAB_IDS)[number]
 
 const FOOTBALL_REDRAFT_COMPACT_TABS: TabDef[] = [
+  { id: 'home', label: 'Home' },
   { id: 'draft', label: 'Draft' },
   { id: 'roster', label: 'Roster' },
   { id: 'matchups', label: 'Matchups' },
-  { id: 'players', label: 'Players / Waivers' },
-  { id: 'trades', label: 'Trade Center' },
-  { id: 'war_room', label: 'War Room' },
-  { id: 'league', label: 'Commissioner Hub' },
-  { id: 'settings', label: '⚙ Settings' },
+  { id: 'waivers', label: 'Waivers' },
+  { id: 'trades', label: 'Trades' },
+  { id: 'standings', label: 'Standings' },
+  { id: 'league_chat', label: 'League Chat' },
+  { id: 'commissioner', label: 'Commissioner' },
 ]
 
 const NFL_TABS: TabDef[] = FOOTBALL_REDRAFT_COMPACT_TABS
@@ -49,7 +51,7 @@ const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'scores', label: 'Scores' },
   { id: 'finance', label: 'Finance' },
   { id: 'war_room', label: 'War Room' },
-  { id: 'ai_coaching', label: 'AI Coaching' },
+  { id: 'ai_coaching', label: 'Manager Intelligence' },
   { id: 'history', label: 'History' },
 ]
 
@@ -65,7 +67,7 @@ const SOCCER_TABS: TabDef[] = [
   { id: 'table', label: 'Table' },
   { id: 'finance', label: 'Finance' },
   { id: 'war_room', label: 'War Room' },
-  { id: 'ai_coaching', label: 'AI Coaching' },
+  { id: 'ai_coaching', label: 'Manager Intelligence' },
   { id: 'history', label: 'History' },
 ]
 
@@ -79,7 +81,7 @@ const PGA_TABS: TabDef[] = [
   { id: 'schedule', label: 'Schedule' },
   { id: 'finance', label: 'Finance' },
   { id: 'war_room', label: 'War Room' },
-  { id: 'ai_coaching', label: 'AI Coaching' },
+  { id: 'ai_coaching', label: 'Manager Intelligence' },
   { id: 'history', label: 'History' },
 ]
 
@@ -118,6 +120,8 @@ const LEAGUE_TAB_I18N_KEY: Record<string, string> = {
   team: 'league.tab.team',
   roster: 'league.tab.roster',
   league: 'league.tab.league',
+  league_chat: 'league.tab.leagueChat',
+  commissioner: 'league.tab.commissioner',
   players: 'league.tab.players',
   waivers: 'league.tab.waivers',
   trend: 'league.tab.trend',
