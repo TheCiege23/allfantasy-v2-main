@@ -10,11 +10,13 @@ import { TradeCenter } from './redraft/TradeCenter'
 import { WaiverCenter } from './redraft/WaiverCenter'
 import { IDPWaiverSection } from '@/app/idp/components/IDPWaiverSection'
 import {
+  fetchRedraftLiveScoring,
   fetchRedraftMatchups,
   fetchRedraftRoster,
   fetchRedraftSchedule,
   fetchRedraftSeason,
   fetchRedraftStandings,
+  type RedraftLiveScoringClient,
   type RedraftMatchupClient,
   type RedraftRosterClient,
   type RedraftRosterRow,
@@ -26,6 +28,7 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
   const [season, setSeason] = useState<RedraftSeasonClient | null>(null)
   const [standings, setStandings] = useState<RedraftRosterRow[]>([])
   const [matchups, setMatchups] = useState<RedraftMatchupClient[]>([])
+  const [liveScoring, setLiveScoring] = useState<RedraftLiveScoringClient | null>(null)
   const [schedule, setSchedule] = useState<RedraftScheduleClient | null>(null)
   const [selectedRosterId, setSelectedRosterId] = useState<string | null>(null)
   const [selectedRoster, setSelectedRoster] = useState<RedraftRosterClient | null>(null)
@@ -68,25 +71,28 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     let cancelled = false
     ;(async () => {
       try {
-        const [rows, weeklyMatchups] = await Promise.all([
+        const [rows, weeklyMatchups, scoring] = await Promise.all([
           fetchRedraftStandings(seasonId),
           fetchRedraftMatchups(seasonId, currentWeek),
+          fetchRedraftLiveScoring({ leagueId, seasonId, week: currentWeek }),
         ])
         if (!cancelled) {
           setStandings(rows)
           setMatchups(weeklyMatchups)
+          setLiveScoring(scoring)
         }
       } catch {
         if (!cancelled) {
           setStandings([])
           setMatchups([])
+          setLiveScoring(null)
         }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [seasonId, currentWeek])
+  }, [leagueId, seasonId, currentWeek])
 
   useEffect(() => {
     if (!seasonId) {
@@ -135,6 +141,16 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     )
   }, [matchups, selectedRosterId])
 
+  const visibleLiveMatchup = useMemo(() => {
+    const liveMatchups = liveScoring?.matchups ?? []
+    if (!selectedRosterId) return liveMatchups[0] ?? null
+    return (
+      liveMatchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId) ??
+      liveMatchups[0] ??
+      null
+    )
+  }, [liveScoring, selectedRosterId])
+
   return (
     <div className="space-y-4 px-4 py-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -176,7 +192,12 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
         </div>
       ) : null}
 
-      <MatchupView matchup={visibleMatchup} selectedRosterId={selectedRosterId} sport={sport} />
+      <MatchupView
+        matchup={visibleMatchup}
+        liveMatchup={visibleLiveMatchup}
+        selectedRosterId={selectedRosterId}
+        sport={sport}
+      />
 
       <ScheduleView schedule={schedule} />
 

@@ -1,4 +1,5 @@
 import type { CanonicalScheduleRuntimeState } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
+import type { NflRedraftLiveScoringRuntimeState } from '@/lib/scoring-runtime/canonicalNflRedraftScoringRuntime'
 
 export type RedraftRosterRow = {
   id: string
@@ -85,6 +86,7 @@ export type RedraftMatchupClient = {
 }
 
 export type RedraftScheduleClient = CanonicalScheduleRuntimeState
+export type RedraftLiveScoringClient = NflRedraftLiveScoringRuntimeState
 
 export type RedraftWaiverClaimClient = {
   id: string
@@ -393,6 +395,20 @@ export async function fetchRedraftSchedule(leagueId: string, seasonId?: string |
   })
   const body = await parseJson<{ schedule?: RedraftScheduleClient }>(res)
   return body.schedule ?? null
+}
+
+export async function fetchRedraftLiveScoring(params: {
+  leagueId: string
+  seasonId?: string | null
+  week?: number | null
+}): Promise<RedraftLiveScoringClient | null> {
+  const qs = new URLSearchParams(params.seasonId ? { seasonId: params.seasonId } : { leagueId: params.leagueId })
+  if (params.week != null) qs.set('week', String(params.week))
+  const res = await fetch(`/api/redraft/live-scoring?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ scoring?: RedraftLiveScoringClient }>(res)
+  return body.scoring ?? null
 }
 
 export async function fetchRedraftRoster(rosterId: string, week: number): Promise<RedraftRosterClient | null> {

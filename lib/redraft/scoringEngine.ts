@@ -1,5 +1,6 @@
 import type { SportConfig } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { getPlatformEvents, EVENT } from '@/lib/events'
 import { calculateOfficialTeamScore, leagueUsesDevyEngine } from '@/lib/devy/scoringEligibilityEngine'
 import { leagueUsesC2CEngine, updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import {
@@ -9,6 +10,8 @@ import {
   tryGetSportConfig,
 } from '@/lib/sportConfig'
 import type { ScoringCategory } from '@/lib/sportConfig/types'
+import { bridgeUiRulesToEngineCategoryPoints } from '@/lib/nfl-scoring/scoringKeyBridge'
+import { isNflRedraftScoringStarterSlot } from '@/lib/scoring-runtime'
 import type { StatCategoryRow } from './types'
 
 export function calculateFantasyPoints(
@@ -34,13 +37,25 @@ function bonusBaseYardsKey(catKey: string): string | null {
   return null
 }
 
-function pointsForCategory(cat: ScoringCategory, rawStats: Record<string, number>): number {
+export function pointsForCategory(cat: ScoringCategory, rawStats: Record<string, number>): number {
   const pts = cat.defaultPoints
   if (cat.minForBonus != null) {
     const base = bonusBaseYardsKey(cat.key)
     if (!base) return 0
     const yards = rawStats[base] ?? 0
     return yards >= cat.minForBonus ? pts : 0
+  }
+  // Threshold-tier categories (team-defense points/yards allowed): award the
+  // tier's points when the single tier stat falls within [tierMin, tierMax].
+  // The stat must be present — a real 0 (shutout) is a valid tier value, so
+  // distinguish "absent" from "0" via a key check rather than `?? 0`.
+  if (cat.tierStatKey != null) {
+    if (!(cat.tierStatKey in rawStats)) return 0
+    const value = rawStats[cat.tierStatKey]
+    if (!Number.isFinite(value)) return 0
+    const min = cat.tierMin ?? Number.NEGATIVE_INFINITY
+    const max = cat.tierMax ?? Number.POSITIVE_INFINITY
+    return value >= min && value <= max ? pts : 0
   }
   const raw = rawStats[cat.key] ?? 0
   if (cat.unit === 'per_yard' || cat.unit === 'per_inning') {
@@ -49,7 +64,7 @@ function pointsForCategory(cat: ScoringCategory, rawStats: Record<string, number
   return raw * pts
 }
 
-function applyScoringPresetToRecPoints(
+export function applyScoringPresetToRecPoints(
   categories: ScoringCategory[],
   preset: string,
   overrides: Record<string, number>,
@@ -62,12 +77,61 @@ function applyScoringPresetToRecPoints(
   return categories.map((c) => (c.key === 'rec' ? { ...c, defaultPoints: recPts } : c))
 }
 
+/**
+ * Pure scorer: sum fantasy points for one player's raw weekly stats against a
+ * resolved scoring-category list, honoring per-category commissioner overrides
+ * and yardage-threshold bonuses. This is the authoritative scoring math; both
+ * the live engine (`calculateScoreFromSportConfig`) and the contract tests run
+ * through it so what we test is exactly what scores.
+ */
+export function scoreStatsWithCategories(
+  categories: ScoringCategory[],
+  rawStats: Record<string, number>,
+  overrides: Record<string, number> = {},
+): number {
+  let sum = 0
+  for (const cat of categories) {
+    const mult = overrides[cat.key] ?? cat.defaultPoints
+    sum += pointsForCategory({ ...cat, defaultPoints: mult }, rawStats)
+  }
+  return sum
+}
+
+/**
+ * Slots that NEVER count toward a matchup score. Mirrors the non-starter set in
+ * `lineupValidation` (BENCH/BN/IR/TAXI/DEVY/RESERVE) so scoring and lineup rules
+ * agree: previously only bench/taxi/devy were excluded, which let an IR- or
+ * reserve-slotted player's points leak into the starter total.
+ */
+/**
+ * Scoring-side starter classification: only true starter slots count toward a
+ * matchup score. Exported so the contract test can prove bench/IR/taxi/devy/
+ * reserve players never contribute points.
+ */
+export function isScoringStarterSlot(slotType: string | null | undefined): boolean {
+  return isNflRedraftScoringStarterSlot(slotType)
+}
+
 type SportConfigBlob = Record<string, unknown>
 
 function readSportConfig(league: { settings: unknown }): SportConfigBlob {
   const s = league.settings as Record<string, unknown> | null | undefined
   const raw = s?.sportConfig
   return raw && typeof raw === 'object' && raw !== null ? (raw as SportConfigBlob) : {}
+}
+
+/**
+ * Legacy fallback (R1): derive engine overrides from `settings.nfl_scoring_config`
+ * (the UI store) when the canonical `sportConfig.categoryPoints` is absent — so
+ * leagues last saved before the UI→engine bridge still score their commissioner
+ * settings. Only fires when categoryPoints is empty.
+ */
+function bridgeLegacyNflScoringConfig(league: { settings: unknown }): Record<string, number> {
+  const s = league.settings as Record<string, unknown> | null | undefined
+  const legacy = s?.nfl_scoring_config as Record<string, unknown> | undefined
+  const rules = legacy?.rules as Record<string, number> | undefined
+  if (!rules || typeof rules !== 'object') return {}
+  return bridgeUiRulesToEngineCategoryPoints(rules)
 }
 
 function togglesFromSportConfig(sc: SportConfigBlob): string[] {
@@ -86,6 +150,7 @@ export async function calculateScoreFromSportConfig(
   _playerId: string,
   _week: number,
   rawStats: Record<string, number>,
+  position?: string | null,
 ): Promise<number> {
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
@@ -102,19 +167,39 @@ export async function calculateScoreFromSportConfig(
   const expanded = expandSportConfigToggles(toggles)
   let categories = getScoringCategories(cfg.sport, expanded)
   const preset = String(sc.scoringPreset ?? 'PPR')
-  const overrides =
+  // R1 precedence: the canonical engine store wins. For legacy leagues that only
+  // have the UI store (`nfl_scoring_config`, written before the bridge existed),
+  // derive engine overrides from it so their commissioner scoring is honored too.
+  let overrides =
     typeof sc.categoryPoints === 'object' && sc.categoryPoints !== null
       ? (sc.categoryPoints as Record<string, number>)
       : {}
+  if (Object.keys(overrides).length === 0) {
+    overrides = bridgeLegacyNflScoringConfig(league)
+  }
   categories = applyScoringPresetToRecPoints(categories, preset, overrides)
 
-  let sum = 0
-  for (const cat of categories) {
-    const mult = overrides[cat.key] ?? cat.defaultPoints
-    const c = { ...cat, defaultPoints: mult }
-    sum += pointsForCategory(c, rawStats)
-  }
-  return sum
+  const effectiveStats = applyTePremiumStat(categories, rawStats, position)
+  return scoreStatsWithCategories(categories, effectiveStats, overrides)
+}
+
+/**
+ * TE Premium fix: the `te_premium` category scores off a `te_premium` count, but
+ * the NFL stat normalizer never emits that key — so the toggle was inert. Inject
+ * it (= receptions) for TEs ONLY, and only when the te_premium category is active
+ * (TE_PREMIUM enabled). Non-TEs and TEP-off leagues are unaffected, so this is
+ * backward-compatible. Position is supplied by the roster row at every call site.
+ */
+export function applyTePremiumStat(
+  categories: ScoringCategory[],
+  rawStats: Record<string, number>,
+  position?: string | null,
+): Record<string, number> {
+  const isTe = String(position ?? '').trim().toUpperCase() === 'TE'
+  if (!isTe) return rawStats
+  if (!categories.some((c) => c.key === 'te_premium')) return rawStats
+  const receptions = rawStats.rec ?? rawStats.receptions ?? 0
+  return { ...rawStats, te_premium: receptions }
 }
 
 export type RosterScoreSummary = {
@@ -133,11 +218,6 @@ export type MatchupScoreUpdateSummary = {
   awayScore: number
   isComplete: boolean
   missingPlayerIds: string[]
-}
-
-function isStarterSlot(slotType: string | null | undefined): boolean {
-  const slot = String(slotType ?? '').toLowerCase()
-  return slot !== 'bench' && slot !== 'taxi' && slot !== 'devy'
 }
 
 async function scoreRosterStarters(args: {
@@ -165,7 +245,7 @@ async function scoreRosterStarters(args: {
       droppedAt: null,
     },
   })
-  const activeStarters = starters.filter((p) => isStarterSlot(p.slotType))
+  const activeStarters = starters.filter((p: (typeof starters)[number]) => isScoringStarterSlot(p.slotType))
 
   let pts = 0
   let scoredStarterCount = 0
@@ -193,6 +273,7 @@ async function scoreRosterStarters(args: {
       p.playerId,
       args.week,
       row.stats as Record<string, number>,
+      p.position,
     )
     scoredStarterCount += 1
     if (!row.isFinalized) allFinal = false
@@ -275,6 +356,44 @@ export async function updateMatchupScores(matchupId: string): Promise<MatchupSco
     },
   })
 
+  // G15.2b/G15.3 — best-effort, never throws.
+  //  • matchup.finalized: once per matchup (deterministic key), on final result.
+  //  • matchup.updated: only when the score actually CHANGED (compared to the prior
+  //    persisted score) so high-frequency no-op recalcs don't flood the log. Safe to
+  //    wire now that the G15.3 relay drains the outbox.
+  //  • score.updated (per-player) stays DEFERRED — per-player-per-sync volume would grow
+  //    the permanent domain_events log unbounded; needs coalescing/retention (G15.4+).
+  const isFinal = isComplete && home.allFinal && away.allFinal
+  const scoreChanged = home.points !== m.homeScore || away.points !== m.awayScore
+  if (isFinal) {
+    const winnerRosterId =
+      home.points > away.points ? homeRosterId : away.points > home.points ? awayRosterId : null
+    await getPlatformEvents().emit(EVENT.MATCHUP_FINALIZED, {
+      leagueId,
+      seasonId: seasonRowId,
+      sport: season.sport ?? null,
+      leagueConcept: 'redraft',
+      actor: { type: 'system' },
+      source: 'engine:scoring',
+      period: { kind: 'week', index: week },
+      idempotencyKey: `matchup.finalized:${matchupId}`,
+      subjects: [{ kind: 'matchup', id: matchupId }],
+      payload: { matchupId, homeScore: home.points, awayScore: away.points, winnerRosterId: winnerRosterId ?? undefined },
+    })
+  } else if (scoreChanged) {
+    await getPlatformEvents().emit(EVENT.MATCHUP_UPDATED, {
+      leagueId,
+      seasonId: seasonRowId,
+      sport: season.sport ?? null,
+      leagueConcept: 'redraft',
+      actor: { type: 'system' },
+      source: 'engine:scoring',
+      period: { kind: 'week', index: week },
+      subjects: [{ kind: 'matchup', id: matchupId }],
+      payload: { matchupId },
+    })
+  }
+
   return {
     matchupId,
     week,
@@ -304,6 +423,6 @@ export async function recalculateMatchupsForSeasonWeek(
   return { updated: summaries.length, incomplete, summaries }
 }
 
-export async function lockPlayersAtGameStart(_sport: string, _week: number): Promise<void> {
-  // Placeholder: wire to live stats provider (Rolling Insights / sport APIs).
-}
+// Lineup locking now lives in `lib/redraft/lineupLock.ts`, derived from the real
+// game schedule at request time (no flag-flipping job needed). The former
+// `lockPlayersAtGameStart` no-op stub was removed when G1 was implemented.
