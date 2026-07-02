@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { advancePlayoffWinners } from '@/lib/redraft/playoffEngine'
+import { advanceNflRedraftPlayoffRuntimeRound } from '@/lib/playoff-runtime'
 
 export const dynamic = 'force-dynamic'
 
@@ -29,7 +29,9 @@ async function canManageLeague(leagueId: string, userId: string): Promise<boolea
  * Body: { seasonId: string; week: number }
  *
  * Advances winners from completed playoff matchups into the next round.
- * Commissioner-only. Idempotent — safe to call multiple times per week.
+ * Commissioner-only. Idempotent - safe to call multiple times per week.
+ * Legacy route contract used advancePlayoffWinners from playoffEngine; G40
+ * delegates the route to the canonical NFL redraft playoff runtime.
  */
 export async function POST(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -58,8 +60,30 @@ export async function POST(req: NextRequest) {
   if (!season) return NextResponse.json({ error: 'Season not found' }, { status: 404 })
 
   const allowed = await canManageLeague(season.leagueId, userId)
-  if (!allowed) return NextResponse.json({ error: 'Forbidden — commissioner only' }, { status: 403 })
+  if (!allowed) return NextResponse.json({ error: 'Forbidden - commissioner only' }, { status: 403 })
 
-  const result = await advancePlayoffWinners(seasonId, week)
-  return NextResponse.json(result)
+  try {
+    const result = await advanceNflRedraftPlayoffRuntimeRound({
+      seasonId,
+      week,
+      actorUserId: userId,
+    })
+    return NextResponse.json({
+      seasonId,
+      week,
+      advanced: result.ok ? result.advancedRosterIds.length : 0,
+      skipped: 0,
+      blocked: result.ok ? [] : result.blockedMatchupIds.map((matchupId) => ({ matchupId, reason: result.message })),
+      status: result.ok
+        ? result.status === 'championship_ready'
+          ? 'ready_for_champion_finalization'
+          : result.status
+        : result.code.toLowerCase(),
+      result,
+    })
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Failed to advance playoff round'
+    const status = message.includes('not_found') ? 404 : message.includes('not_nfl_redraft') ? 400 : 409
+    return NextResponse.json({ error: message }, { status })
+  }
 }

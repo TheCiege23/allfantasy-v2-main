@@ -1,7 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { finalizeRedraftSeason, generatePlayoffs } from '@/lib/redraft/client'
+import { useCallback, useEffect, useState } from 'react'
+import {
+  fetchRedraftPlayoffRuntime,
+  finalizeRedraftSeason,
+  generatePlayoffs,
+  type RedraftPlayoffRuntimeClient,
+} from '@/lib/redraft/client'
 
 export function StandingsView({
   rows,
@@ -28,6 +33,29 @@ export function StandingsView({
   const [finalizeBusy, setFinalizeBusy] = useState(false)
   const [finalizeResult, setFinalizeResult] = useState<string | null>(null)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
+  const [runtime, setRuntime] = useState<RedraftPlayoffRuntimeClient | null>(null)
+  const [runtimeLoading, setRuntimeLoading] = useState(false)
+  const [runtimeError, setRuntimeError] = useState<string | null>(null)
+
+  const refreshRuntime = useCallback(async () => {
+    if (!seasonId) {
+      setRuntime(null)
+      return
+    }
+    setRuntimeLoading(true)
+    setRuntimeError(null)
+    try {
+      setRuntime(await fetchRedraftPlayoffRuntime({ seasonId }))
+    } catch (e) {
+      setRuntimeError(e instanceof Error ? e.message : 'Failed to load playoff runtime')
+    } finally {
+      setRuntimeLoading(false)
+    }
+  }, [seasonId])
+
+  useEffect(() => {
+    void refreshRuntime()
+  }, [refreshRuntime])
 
   const onFinalize = async () => {
     if (!seasonId) return
@@ -45,6 +73,7 @@ export function StandingsView({
       } else {
         setFinalizeError(`Cannot finalize: ${res.status.replace(/_/g, ' ')}`)
       }
+      await refreshRuntime()
     } catch (e) {
       setFinalizeError(e instanceof Error ? e.message : 'Failed to finalize season')
     } finally {
@@ -65,6 +94,7 @@ export function StandingsView({
       } else {
         setResult('Playoff bracket generated.')
       }
+      await refreshRuntime()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to generate playoffs')
     } finally {
@@ -108,6 +138,8 @@ export function StandingsView({
         {finalizeError ? <span className="text-[11px] text-rose-300">{finalizeError}</span> : null}
       </div>
 
+      <PlayoffRuntimePanel runtime={runtime} loading={runtimeLoading} error={runtimeError} />
+
       <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
         <table className="w-full text-left text-[12px] text-white/80">
         <thead className="border-b border-white/[0.08] bg-white/[0.04] text-[10px] uppercase text-white/45">
@@ -138,4 +170,143 @@ export function StandingsView({
       </div>
     </div>
   )
+}
+
+function PlayoffRuntimePanel({
+  runtime,
+  loading,
+  error,
+}: {
+  runtime: RedraftPlayoffRuntimeClient | null
+  loading: boolean
+  error: string | null
+}) {
+  if (loading && !runtime) {
+    return (
+      <div
+        data-testid="redraft-playoff-runtime"
+        className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 text-[11px] text-white/55"
+      >
+        Loading playoff runtime...
+      </div>
+    )
+  }
+
+  if (error && !runtime) {
+    return (
+      <div
+        data-testid="redraft-playoff-runtime"
+        className="rounded-xl border border-rose-400/20 bg-rose-500/10 p-3 text-[11px] text-rose-200"
+      >
+        {error}
+      </div>
+    )
+  }
+
+  if (!runtime) return null
+
+  const champion = runtime.teams.find((team) => team.rosterId === runtime.bracket.championRosterId)
+  const rounds = runtime.bracket.rounds
+  const firstRoundByes = runtime.seeds.slice(0, runtime.settings.firstRoundByes)
+
+  return (
+    <section
+      data-testid="redraft-playoff-runtime"
+      className="grid gap-3 rounded-xl border border-white/[0.08] bg-white/[0.035] p-3 text-[12px] text-white/75 md:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]"
+    >
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full border border-white/10 bg-white/10 px-2 py-1 text-[10px] uppercase tracking-[0.16em] text-white/50">
+            Playoff runtime
+          </span>
+          <span className="rounded-full border border-emerald-300/20 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200">
+            {runtime.bracket.status.replace(/_/g, ' ')}
+          </span>
+          {runtime.bracket.locked ? (
+            <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-2 py-1 text-[10px] text-amber-200">
+              Locked
+            </span>
+          ) : null}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <RuntimeMetric label="Teams" value={runtime.settings.playoffTeamCount} />
+          <RuntimeMetric label="Rounds" value={runtime.settings.roundCount} />
+          <RuntimeMetric label="Start" value={`Week ${runtime.settings.playoffStartWeek}`} />
+          <RuntimeMetric label="Byes" value={runtime.settings.firstRoundByes} />
+        </div>
+
+        {runtime.bracket.generated ? (
+          <div data-testid="redraft-playoff-seeds" className="space-y-1">
+            <p className="text-[10px] uppercase tracking-[0.16em] text-white/40">Qualified seeds</p>
+            <div className="flex flex-wrap gap-1.5">
+              {runtime.seeds.map((seed) => (
+                <span key={seed.rosterId} className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[11px] text-white/75">
+                  {seed.seed}. {seed.displayName}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div data-testid="redraft-playoff-empty" className="rounded-lg border border-dashed border-white/12 bg-black/15 p-3 text-[11px] text-white/55">
+            Playoff qualification is available from standings. Generate a bracket when regular-season results are ready.
+          </div>
+        )}
+
+        {firstRoundByes.length ? (
+          <p className="text-[11px] text-white/50">
+            First-round byes: {firstRoundByes.map((seed) => seed.displayName).join(', ')}
+          </p>
+        ) : null}
+
+        {champion ? (
+          <p data-testid="redraft-playoff-champion" className="rounded-lg border border-amber-300/20 bg-amber-400/10 p-3 text-[12px] font-semibold text-amber-100">
+            Champion crowned: {champion.displayName}
+          </p>
+        ) : null}
+      </div>
+
+      <div data-testid="redraft-playoff-bracket" className="grid gap-2">
+        {rounds.length ? (
+          rounds.map((round) => (
+            <div key={round.roundId} className="rounded-lg border border-white/[0.08] bg-black/15 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="font-semibold text-white/80">{round.roundName}</p>
+                <span className="text-[10px] uppercase tracking-[0.14em] text-white/38">{round.status}</span>
+              </div>
+              <div className="grid gap-1.5">
+                {round.matchups.map((matchup) => (
+                  <div key={matchup.matchupId} className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 text-[11px]">
+                    <span className="truncate text-white/70">{teamName(runtime, matchup.homeRosterId, matchup.homeSeed)}</span>
+                    <span className="text-white/35">vs</span>
+                    <span className="truncate text-right text-white/70">{teamName(runtime, matchup.awayRosterId, matchup.awaySeed)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="rounded-lg border border-dashed border-white/12 bg-black/15 p-3 text-[11px] text-white/55">
+            No bracket rows are stored yet.
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+function RuntimeMetric({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-lg border border-white/[0.08] bg-black/15 p-2">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-white/38">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-white/85">{value}</p>
+    </div>
+  )
+}
+
+function teamName(runtime: RedraftPlayoffRuntimeClient, rosterId: string | null, seed: number | null) {
+  if (!rosterId) return seed ? `Seed ${seed} bye` : 'TBD'
+  const team = runtime.teams.find((row) => row.rosterId === rosterId)
+  const prefix = seed ? `${seed}. ` : ''
+  return `${prefix}${team?.displayName ?? rosterId.slice(0, 6)}`
 }
