@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { CreateLeagueVideoTile } from '@/components/create-league-v2/CreateLeagueVideoTile'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
@@ -28,7 +29,9 @@ import {
   getDefaultScoringPresetId,
   listScoringPresetOptions,
 } from '@/lib/league-creation-preset/scoring-presets'
-import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
+import { LEAGUE_TYPE_MEDIA, SPORT_MEDIA } from '@/lib/create-league-v2/theme'
+import { getDraftTypeMedia } from '@/lib/league-media/draftTypeMedia'
+import type { DraftTypeId, LeagueTypeId } from '@/lib/league-creation-wizard/types'
 
 type WizardStep = 'sport' | 'basics' | 'draft' | 'summary' | 'review'
 
@@ -292,24 +295,17 @@ export function SportStep({ state, onChange }: Pick<WizardProps, 'state' | 'onCh
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {SUPPORTED_SPORTS.map((sport) => {
           const selected = state.sport === sport
+          const media = SPORT_MEDIA[sport]
           return (
-            <button
+            <CreateLeagueVideoTile
               key={sport}
-              type="button"
-              onClick={() => onChange(nextStateForSport(state, sport))}
-              className={cx(
-                'min-h-24 rounded-2xl border p-4 text-left transition',
-                selected
-                  ? 'border-violet-500 bg-violet-600 text-white shadow-lg shadow-violet-600/20'
-                  : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] hover:border-violet-400',
-              )}
-              data-testid={`g30-sport-${sport}`}
-            >
-              <span className="block text-lg font-black">{t(`createLeague.sport.${sport.toLowerCase()}`)}</span>
-              <span className={cx('mt-2 block text-xs', selected ? 'text-white/75' : 'text-[color:var(--text-tertiary)]')}>
-                {t('createLeague.g30.sport.cardHint')}
-              </span>
-            </button>
+              title={t(`createLeague.sport.${sport.toLowerCase()}`)}
+              hint={t('createLeague.g30.sport.cardHint')}
+              selected={selected}
+              media={media}
+              onSelect={() => onChange(nextStateForSport(state, sport))}
+              testId={`g30-sport-${sport}`}
+            />
           )
         })}
       </div>
@@ -331,24 +327,18 @@ export function LeagueBasicsStep({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {typeOptions.map((leagueType) => {
           const selected = getEffectiveLeagueType(state) === leagueType
+          const media = LEAGUE_TYPE_MEDIA[leagueType]
           return (
-            <button
+            <CreateLeagueVideoTile
               key={leagueType}
-              type="button"
-              onClick={() => onChange(nextStateForLeagueType(state, leagueType))}
-              className={cx(
-                'min-h-20 rounded-2xl border p-4 text-left transition',
-                selected
-                  ? 'border-violet-500 bg-violet-600 text-white shadow-lg shadow-violet-600/20'
-                  : 'border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] hover:border-violet-400',
-              )}
-              data-testid={`g30-league-type-${leagueType}`}
-            >
-              <span className="block text-sm font-black">{getLeagueTypeLabel(t, leagueType)}</span>
-              <span className={cx('mt-1 block text-xs', selected ? 'text-white/75' : 'text-[color:var(--text-tertiary)]')}>
-                {t(`createLeague.g30.leagueType.${leagueType}.hint`)}
-              </span>
-            </button>
+              title={getLeagueTypeLabel(t, leagueType)}
+              hint={t(`createLeague.g30.leagueType.${leagueType}.hint`)}
+              selected={selected}
+              media={media}
+              onSelect={() => onChange(nextStateForLeagueType(state, leagueType))}
+              className="min-h-20"
+              testId={`g30-league-type-${leagueType}`}
+            />
           )
         })}
       </div>
@@ -421,6 +411,29 @@ export function DraftStep({
   return (
     <section className="space-y-5" data-testid="g30-draft-step">
       <StepHeader title={t('createLeague.g30.draft.title')} body={t('createLeague.g30.draft.body')} />
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3" aria-label={t('createLeague.g30.draftType.label')}>
+        {draftTypes.map((option) => {
+          const media = getDraftTypeMedia(option.id as DraftTypeId)
+          const selected = state.draftType === option.id
+          const video = media.selectionVideo || undefined
+          return (
+            <CreateLeagueVideoTile
+              key={option.id}
+              title={option.label}
+              hint={option.hint}
+              eyebrow={t('createLeague.g30.draftType.label')}
+              selected={selected}
+              media={{
+                video,
+                poster: media.thumbnail,
+              }}
+              onSelect={() => onChange({ draftType: option.id as WizardDraftType })}
+              className="min-h-28"
+              testId={`g31-draft-type-${option.id}`}
+            />
+          )
+        })}
+      </div>
       <div className="grid gap-4 md:grid-cols-2">
         <label className="space-y-2">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
