@@ -51,6 +51,11 @@ type SignalTemplate = {
 }
 
 const EVENT_SIGNAL_TEMPLATES: Partial<Record<CanonicalLeagueRuntimeEventType, SignalTemplate>> = {
+  'draft.scheduled': {
+    kind: 'draft_readiness',
+    title: 'Draft scheduled',
+    summary: 'A scheduled draft event is available for readiness and commissioner planning.',
+  },
   'settings.updated': {
     kind: 'rules_change',
     title: 'League rules changed',
@@ -66,10 +71,70 @@ const EVENT_SIGNAL_TEMPLATES: Partial<Record<CanonicalLeagueRuntimeEventType, Si
     title: 'Draft activity detected',
     summary: 'Draft picks are flowing through the league runtime.',
   },
+  'draft.pick.submitted': {
+    kind: 'draft_readiness',
+    title: 'Draft pick submitted',
+    summary: 'A draft pick submission is available as deterministic draft activity evidence.',
+  },
+  'draft.queue.selected': {
+    kind: 'draft_readiness',
+    title: 'Queued player selected',
+    summary: 'A user queue drove a draft selection through the runtime.',
+  },
+  'draft.autopick': {
+    kind: 'draft_readiness',
+    title: 'Auto-pick used',
+    summary: 'The runtime made an auto-pick from queue or deterministic draft rules.',
+  },
+  'draft.substitute_pick': {
+    kind: 'draft_readiness',
+    title: 'Substitute manager pick used',
+    summary: 'A commissioner-enabled substitute manager pick is available for transparency review.',
+  },
+  'draft.player_drafted': {
+    kind: 'draft_readiness',
+    title: 'Player drafted',
+    summary: 'A drafted player event is available as roster-construction evidence.',
+  },
+  'draft.manager.disconnected': {
+    kind: 'commissioner_action',
+    title: 'Manager disconnected',
+    summary: 'A manager disconnect event is available for commissioner draft-health review.',
+  },
+  'draft.manager.reconnected': {
+    kind: 'league_health',
+    title: 'Manager reconnected',
+    summary: 'A manager reconnected to the draft runtime.',
+  },
+  'draft.recommendation.viewed': {
+    kind: 'roster_guidance',
+    title: 'Smart Recommendation viewed',
+    summary: 'A manager viewed a deterministic draft recommendation.',
+  },
+  'draft.trade_opportunity.generated': {
+    kind: 'trade_health',
+    title: 'Draft trade opportunity generated',
+    summary: 'A draft trade opportunity was generated from runtime context.',
+  },
+  'draft.chat.message': {
+    kind: 'league_health',
+    title: 'Draft chat activity',
+    summary: 'Draft chat activity is available as league engagement evidence.',
+  },
+  'draft.chat.mirrored': {
+    kind: 'league_health',
+    title: 'Draft event mirrored to league chat',
+    summary: 'A draft milestone was mirrored to league chat.',
+  },
   'draft.completed': {
     kind: 'draft_readiness',
     title: 'Draft completed',
     summary: 'The draft runtime reports completion, so roster and matchup preparation can rely on drafted rosters.',
+  },
+  'draft.recap.generated': {
+    kind: 'draft_readiness',
+    title: 'Draft recap generated',
+    summary: 'A deterministic draft recap is available from completed draft evidence.',
   },
   'lineup.updated': {
     kind: 'roster_guidance',
