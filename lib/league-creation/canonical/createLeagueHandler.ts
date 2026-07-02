@@ -24,6 +24,11 @@ import {
 import { normalizeDraftTypeForEngineValidation } from '@/lib/draft-types/draftTypeRegistry'
 import { buildFantasyLeagueLeadMetaEvent } from '@/lib/meta-funnel-events'
 import { trackMetaServerEvent } from '@/lib/meta-capi'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import {
+  findPremiumCreateSettingKeys,
+  hasAfCommissionerCreateEntitlement,
+} from '@/lib/league-creation/canonical/premiumCreateSettingsGate'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -140,6 +145,30 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
       },
       { status: 403 }
     )
+  }
+
+  const premiumCreateKeys = findPremiumCreateSettingKeys(validated.data.conceptSetup)
+  if (premiumCreateKeys.length > 0) {
+    const entitlement = await new EntitlementResolver().resolveSnapshot(
+      resolvedUser.appUserId,
+      session.user.email,
+    )
+
+    if (!hasAfCommissionerCreateEntitlement(entitlement)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'AF Commissioner is required for advanced setup',
+          errors: [
+            {
+              path: 'conceptSetup.advancedSetup',
+              message: 'Upgrade to AF Commissioner before saving premium advanced setup.',
+            },
+          ],
+        },
+        { status: 403 },
+      )
+    }
   }
 
   const exec = await executeCanonicalLeagueCreation({
