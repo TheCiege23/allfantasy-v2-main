@@ -5,6 +5,12 @@
 import type { UnifiedPlayerProductView } from '@/lib/player-data/unifiedPlayerProductView'
 import type { NormalizedCollegeClass } from '@/lib/draft-room/collegeClass'
 import type { ProviderFallbackDiagnostics } from '@/lib/player-data/providerFallbackDiagnostics'
+import { getTeamLogo } from '@/lib/players/getTeamLogo'
+import { safeTeamDefenseDisplayName } from '@/lib/redraft/teamDefenseIdentity'
+import {
+  buildNflRedraftCanonicalPlayer,
+  type NflRedraftCanonicalPlayer,
+} from '@/lib/player-data/nflRedraftCanonicalPlayer'
 
 export type UnifiedPlayerWireDto = {
   id: string
@@ -13,6 +19,8 @@ export type UnifiedPlayerWireDto = {
   team: string | null
   sport: string
   headshotUrl: string | null
+  imageUrl: string | null
+  teamLogoUrl: string | null
   injuryStatus: string | null
   fantasyPointsPerGame: number | null
   projectedPoints: number | null
@@ -31,6 +39,8 @@ export type UnifiedPlayerWireDto = {
   projectionsSource: string | null
   normalizedStats: Record<string, unknown>
   normalizedProjections: Record<string, unknown>
+  /** Canonical NFL redraft player snapshot for draft, roster, waiver, trade, and matchup projections. */
+  nflRedraft?: NflRedraftCanonicalPlayer | null
   /** Nested snapshot for AI / advanced clients */
   product: {
     unified: UnifiedPlayerProductView['unified']
@@ -46,17 +56,29 @@ export type { ProviderFallbackDiagnostics }
 
 export function serializeUnifiedPlayerForApi(entry: UnifiedPlayerProductView): UnifiedPlayerWireDto {
   const u = entry.unified
+  const displayAssets =
+    entry.display?.assets && typeof entry.display.assets === 'object'
+      ? (entry.display.assets as { teamLogoUrl?: string | null })
+      : null
+  const teamLogoUrl =
+    displayAssets?.teamLogoUrl ?? getTeamLogo(u.teamAbbr ?? u.team, String(u.sport))
+  const nflRedraft = buildNflRedraftCanonicalPlayer(entry, { teamLogoUrl })
   const diag =
     'providerFallbackDiagnostics' in entry && entry.providerFallbackDiagnostics
       ? entry.providerFallbackDiagnostics
       : undefined
   return {
     id: u.playerId,
-    name: u.fullName,
+    // Team defenses are named from their canonical id (e.g. nfl:def:KC → "KC
+    // Defense") even when the normalized-player foundation has no entry — reusable
+    // across all league types; offensive names pass through untouched.
+    name: safeTeamDefenseDisplayName(u.playerId, u.fullName),
     position: u.position || null,
     team: u.teamAbbr ?? u.team,
     sport: String(u.sport),
     headshotUrl: u.headshotUrl,
+    imageUrl: u.headshotUrl,
+    teamLogoUrl,
     injuryStatus: u.injuryStatus,
     fantasyPointsPerGame: u.fantasyPointsPerGame,
     projectedPoints: u.projectedPoints,
@@ -74,6 +96,7 @@ export function serializeUnifiedPlayerForApi(entry: UnifiedPlayerProductView): U
     projectionsSource: u.projectionsSource,
     normalizedStats: u.normalizedStats,
     normalizedProjections: u.normalizedProjections,
+    ...(nflRedraft ? { nflRedraft } : {}),
     product: {
       unified: u,
       yearsExp: entry.yearsExp ?? null,

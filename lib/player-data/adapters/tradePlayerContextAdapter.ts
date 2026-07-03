@@ -11,6 +11,7 @@ export type TradePlayerEvidenceSlice = {
   team: string | null
   sport: string
   headshotUrl: string | null
+  teamLogoUrl: string | null
   injuryStatus: string | null
   adp: number | null
   aiAdp: number | null
@@ -26,14 +27,21 @@ export type TradePlayerEvidenceSlice = {
   aiAdpSource: string | null
   experienceSource: string | null
   lowConfidence: boolean
+  dataFallbacks: string[]
+  staleDataWarnings: string[]
+  canonicalLastUpdatedAt: string | null
   missingDataNote?: string
 }
 
 export function tradeEvidenceFromUnifiedWire(row: UnifiedPlayerWireDto): TradePlayerEvidenceSlice {
+  const canonical = row.nflRedraft ?? null
   const missing: string[] = []
-  if (!row.headshotUrl) missing.push('image')
-  if (row.injuryStatus == null || String(row.injuryStatus).trim() === '') missing.push('injury')
+  if (!canonical?.media.headshot.url && !row.headshotUrl) missing.push('image')
+  if ((canonical?.injury.designation ?? row.injuryStatus) == null || String(canonical?.injury.designation ?? row.injuryStatus).trim() === '') missing.push('injury')
   if (!row.normalizedStats || Object.keys(row.normalizedStats).length <= 2) missing.push('stats')
+  for (const field of canonical?.dataFreshness.missingFields ?? []) {
+    if (!missing.includes(field)) missing.push(field)
+  }
   const u = row.product?.unified as
     | {
         profileSource?: string | null
@@ -43,27 +51,31 @@ export function tradeEvidenceFromUnifiedWire(row: UnifiedPlayerWireDto): TradePl
         rookieSource?: string | null
       }
     | undefined
-  const injuryPresent = row.injuryStatus != null && String(row.injuryStatus).trim() !== ''
+  const injuryPresent = (canonical?.injury.designation ?? row.injuryStatus) != null && String(canonical?.injury.designation ?? row.injuryStatus).trim() !== ''
   return {
     playerId: row.id,
     name: row.name,
     position: row.position,
     team: row.team,
     sport: row.sport,
-    headshotUrl: row.headshotUrl,
-    injuryStatus: row.injuryStatus,
+    headshotUrl: canonical?.media.headshot.url ?? row.headshotUrl,
+    teamLogoUrl: canonical?.media.teamLogo.url ?? row.teamLogoUrl,
+    injuryStatus: canonical?.injury.designation ?? row.injuryStatus,
     adp: row.adp,
     aiAdp: row.aiAdp,
-    projectedPoints: row.projectedPoints,
+    projectedPoints: canonical?.currentProjection.weeklyProjectedPoints ?? row.projectedPoints,
     fantasyPointsPerGame: row.fantasyPointsPerGame,
     profileSource: row.profileSource,
     statsSource: row.statsSource,
     projectionsSource: row.projectionsSource,
-    injurySource: injuryPresent ? u?.profileSource ?? row.profileSource ?? null : null,
+    injurySource: injuryPresent ? canonical?.injury.source ?? u?.profileSource ?? row.profileSource ?? null : null,
     adpSource: row.adp != null ? u?.adpSource ?? null : null,
     aiAdpSource: row.aiAdp != null ? u?.aiAdpSource ?? null : null,
     experienceSource: u?.yearsExpSource ?? u?.rookieSource ?? u?.profileSource ?? row.profileSource ?? null,
-    lowConfidence: row.lowConfidence === true,
+    lowConfidence: row.lowConfidence === true || Boolean(canonical?.fallbacks.length),
+    dataFallbacks: canonical?.fallbacks.map((fallback) => fallback.field) ?? [],
+    staleDataWarnings: canonical?.dataFreshness.staleWarnings ?? [],
+    canonicalLastUpdatedAt: canonical?.lastUpdatedAt ?? null,
     missingDataNote: missing.length ? `missing: ${missing.join(', ')}` : undefined,
   }
 }
@@ -83,6 +95,7 @@ export function tradeEvidenceBlockForPrompt(rows: UnifiedPlayerWireDto[], label:
       e.statsSource ? `statsSrc=${e.statsSource}` : null,
       e.experienceSource ? `expSrc=${e.experienceSource}` : null,
       e.lowConfidence ? 'lowConfidence' : null,
+      e.staleDataWarnings.length ? `stale=${e.staleDataWarnings.length}` : null,
       e.missingDataNote ?? null,
     ].filter(Boolean)
     return bits.join(' · ')

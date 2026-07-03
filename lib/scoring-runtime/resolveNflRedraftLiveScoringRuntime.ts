@@ -4,6 +4,8 @@ import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import { validateRedraftLineup } from '@/lib/redraft/lineupValidation'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
+import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import {
   applyNflRedraftStatCorrection,
   buildNflRedraftLiveScoringRuntimeState,
@@ -203,6 +205,18 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
         where: { playerId: { in: playerIds }, week, season: season.season, sport: { in: sports } },
       })
     : []
+  const unifiedRows = playerIds.length
+    ? await getNormalizedPlayerData({
+        surface: 'matchup',
+        leagueId: season.leagueId,
+        playerIds,
+        limit: Math.max(playerIds.length, 1),
+      }).catch(() => [])
+    : []
+  const unifiedById = new Map(unifiedRows.map((row) => {
+    const wire = serializeUnifiedPlayerForApi(row)
+    return [wire.id, wire] as const
+  }))
   const scoreRows: NflRedraftRuntimeScoreInput[] = scores.map((score) => ({
     playerId: score.playerId,
     sport: score.sport,
@@ -213,17 +227,29 @@ export async function resolveNflRedraftLiveScoringRuntime(input: {
   }))
 
   const teamInputs: NflRedraftRuntimeTeamInput[] = rosters.map((roster) => {
-    const players = roster.players.map((player) => ({
-      rosterId: roster.id,
-      playerId: player.playerId,
-      playerName: player.playerName,
-      position: player.position,
-      team: player.team,
-      sport: player.sport,
-      slotType: player.slotType,
-      injuryStatus: player.injuryStatus,
-      isLocked: player.isLocked,
-    }))
+    const players = roster.players.map((player) => {
+      const unified = unifiedById.get(player.playerId)
+      const canonical = unified?.nflRedraft ?? null
+      return {
+        rosterId: roster.id,
+        playerId: player.playerId,
+        playerName: canonical?.displayName ?? player.playerName,
+        position: canonical?.fantasyPosition ?? player.position,
+        team: canonical?.teamAbbr ?? player.team,
+        sport: player.sport,
+        slotType: player.slotType,
+        injuryStatus: canonical?.injury.designation ?? unified?.injuryStatus ?? player.injuryStatus,
+        providerInjuryLabel: canonical?.injury.designation ?? unified?.injuryStatus ?? null,
+        activeStatus: canonical?.activeStatus ?? null,
+        isLocked: player.isLocked,
+        headshotUrl: canonical?.media.headshot.url ?? unified?.headshotUrl ?? null,
+        teamLogoUrl: canonical?.media.teamLogo.url ?? unified?.teamLogoUrl ?? null,
+        projectedPoints: canonical?.currentProjection.weeklyProjectedPoints ?? unified?.projectedPoints ?? null,
+        playerDataLastUpdatedAt: canonical?.lastUpdatedAt ?? null,
+        playerDataWarnings: canonical?.dataFreshness.staleWarnings ?? [],
+        canonicalNflRedraft: canonical,
+      }
+    })
     const validation = validateRedraftLineup({
       sport: season.sport,
       week,

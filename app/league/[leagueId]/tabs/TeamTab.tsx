@@ -40,6 +40,14 @@ import {
 } from '@/app/league/[leagueId]/tabs/team-tab-roster-helpers'
 import type { RosterLegalityFullResult } from '@/lib/roster-legality/types'
 import dynamic from 'next/dynamic'
+import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import {
+  buildDisplayPlayerMap,
+  resolveDisplayPlayer,
+  type DisplayPlayerMap,
+  type DisplayPlayerRecord,
+} from '@/lib/player-data/adapters/redraftDisplayPlayers'
+import { teamDefenseDisplayNameFromId } from '@/lib/redraft/teamDefenseIdentity'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -110,6 +118,7 @@ export type TeamTabProps = {
 type DbRosterPayload = {
   source?: 'db'
   roster: unknown
+  unifiedRoster?: UnifiedPlayerWireDto[]
   rosterId?: string
   faabRemaining?: number
   slotLimits?: { starters: number; bench: number; ir: number; taxi: number; devy: number } | null
@@ -281,6 +290,27 @@ function slotBadgeClass(slot: string): string {
   return 'border-white/15 bg-white/10 text-white/60'
 }
 
+function displayPlayerStatusText(player: DisplayPlayerRecord): string {
+  const injury = player.injuryStatus?.trim()
+  if (injury) return injury
+  const active = player.activeStatus?.trim()
+  return active || 'Active'
+}
+
+function displayPlayerStatusTextClass(status: string): string {
+  const normalized = status.toLowerCase()
+  if (/\bout\b|\bir\b|inactive|suspend|pup|injured reserve/.test(normalized)) return 'text-rose-300'
+  if (/questionable|doubtful|limited|injur|probable/.test(normalized)) return 'text-amber-300'
+  return 'text-emerald-300'
+}
+
+function displayPlayerStatusDotClass(status: string): string {
+  const normalized = status.toLowerCase()
+  if (/\bout\b|\bir\b|inactive|suspend|pup|injured reserve/.test(normalized)) return 'bg-rose-400'
+  if (/questionable|doubtful|limited|injur|probable/.test(normalized)) return 'bg-amber-300'
+  return 'bg-emerald-400'
+}
+
 function buildNflRedraftRosterChimmyPrompt(args: {
   playerName: string
   teamAbbr: string
@@ -321,7 +351,7 @@ function PlayerDetailSheet({
   playerId: string
   slotLabel?: string
   sport: string
-  players: PlayerMap
+  players: DisplayPlayerMap
   week: number
   season: number
   onClose: () => void
@@ -330,9 +360,12 @@ function PlayerDetailSheet({
   canReplaceInLineup?: boolean
   onOpenReplace?: () => void
 }) {
-  const resolved = resolvePlayerName(playerId, players)
-  const pos = resolved.position || 'â€”'
-  const baseline = placeholderBaselineProjection(playerId)
+  const resolved = resolveDisplayPlayer(playerId, players)
+  const pos = resolved.position || '-'
+  const projection = resolved.projectedPoints ?? placeholderBaselineProjection(playerId)
+  const statusText = displayPlayerStatusText(resolved)
+  const statusTextClass = displayPlayerStatusTextClass(statusText)
+  const statusDotClass = displayPlayerStatusDotClass(statusText)
   const showCrest = isWeatherSensitiveSport(sport)
 
   // Close on Escape key
@@ -345,13 +378,13 @@ function PlayerDetailSheet({
   }, [onClose])
 
   const statusDot =
-    pos === 'DEF' || pos === 'DST' || pos === 'K'
+    (pos === 'DEF' || pos === 'DST' || pos === 'K') && !resolved.injuryStatus && !resolved.activeStatus
       ? null
       : (
         <span
-          className="h-2 w-2 rounded-full bg-emerald-400"
-          title="Status (Active â€” live injury feed coming soon)"
-          aria-label="Active"
+          className={`h-2 w-2 rounded-full ${statusDotClass}`}
+          title={`Status: ${statusText}`}
+          aria-label={statusText}
         />
       )
 
@@ -380,10 +413,11 @@ function PlayerDetailSheet({
         <div className="flex items-start gap-3 px-5 pb-3 pt-2">
           <div className="relative shrink-0">
             <PlayerHeadshot
-              sleeperId={playerId}
+              playerId={playerId}
               sport={sport}
               useResolver={String(sport ?? '').trim().toUpperCase() === 'NFL'}
               playerName={resolved.name}
+              headshotUrl={resolved.headshotUrl ?? resolved.imageUrl ?? null}
               position={resolved.position}
               espnId={players[playerId]?.espn_id}
               nbaId={players[playerId]?.nba_id}
@@ -398,7 +432,12 @@ function PlayerDetailSheet({
               <span className={`rounded-md border px-1.5 py-0.5 text-[10px] font-bold ${positionBadgeClass(pos)}`}>{pos}</span>
               {resolved.team && resolved.team !== 'FA' ? (
                 <span className="flex items-center gap-1">
-                  <TeamLogo teamAbbr={resolved.team} sport={sport} size={14} />
+                  <TeamLogo
+                    teamAbbr={resolved.team}
+                    sport={sport}
+                    logoUrl={resolved.teamLogoUrl ?? null}
+                    size={14}
+                  />
                   {resolved.team}
                 </span>
               ) : <span className="text-white/35">Free Agent</span>}
@@ -423,7 +462,7 @@ function PlayerDetailSheet({
           <div className="flex flex-col items-center gap-0.5 bg-[#111827] px-3 py-3">
             <span className="text-[10px] font-bold uppercase tracking-wide text-white/35">Proj</span>
             <span className="text-[18px] font-bold text-white/90">
-              {baseline > 0 ? baseline.toFixed(1) : 'â€”'}
+              {projection > 0 ? projection.toFixed(1) : '-'}
             </span>
             {showCrest ? (
               <span className="text-[9px] text-white/30">via AF</span>
@@ -436,11 +475,11 @@ function PlayerDetailSheet({
           </div>
           <div className="flex flex-col items-center gap-0.5 bg-[#111827] px-3 py-3">
             <span className="text-[10px] font-bold uppercase tracking-wide text-white/35">Status</span>
-            <span className="flex items-center gap-1 text-[12px] font-semibold text-emerald-300">
+            <span className={`flex items-center gap-1 text-[12px] font-semibold ${statusTextClass}`}>
               <Activity className="h-3 w-3" />
-              Active
+              {statusText}
             </span>
-            <span className="text-[9px] text-white/25">injury feed</span>
+            <span className="text-[9px] text-white/25">provider status</span>
           </div>
         </div>
 
@@ -710,7 +749,7 @@ function RosterRow({
 }: {
   playerId: string
   sport: string
-  players: PlayerMap
+  players: DisplayPlayerMap
   playersLoading: boolean
   onPlayerClick: (id: string, slotLabel?: string) => void
   slotLabel?: string
@@ -746,13 +785,16 @@ function RosterRow({
     )
   }
 
-  const resolved = resolvePlayerName(playerId, players)
-  const label = playersLoading ? `Player ${playerId.slice(-4)}` : resolved.name
-  const pos = resolved.position || 'â€”'
+  const resolved = resolveDisplayPlayer(playerId, players)
+  const teamDefLabel = teamDefenseDisplayNameFromId(playerId)
+  const label = teamDefLabel ?? (playersLoading ? `Player ${playerId.slice(-4)}` : resolved.name)
+  const pos = resolved.position || '-'
   const showTeam = resolved.team && resolved.team !== 'FA'
   const leftBadge = slotLabel ?? pos
   const badgeClass = slotLabel ? slotBadgeClass(slotLabel) : positionBadgeClass(pos)
-  const baseline = placeholderBaselineProjection(playerId)
+  const baseline = resolved.projectedPoints ?? placeholderBaselineProjection(playerId)
+  const statusText = displayPlayerStatusText(resolved)
+  const statusDotClass = displayPlayerStatusDotClass(statusText)
   const crestSport = sport
   const showCrest = isWeatherSensitiveSport(crestSport)
 
@@ -781,10 +823,11 @@ function RosterRow({
       </span>
       <div className="relative shrink-0">
         <PlayerHeadshot
-          sleeperId={playerId}
+          playerId={playerId}
           sport={sport}
           useResolver={String(sport ?? '').trim().toUpperCase() === 'NFL'}
           playerName={label}
+          headshotUrl={resolved.headshotUrl ?? resolved.imageUrl ?? null}
           position={resolved.position}
           espnId={players[playerId]?.espn_id}
           nbaId={players[playerId]?.nba_id}
@@ -793,8 +836,8 @@ function RosterRow({
           variant="round"
         />
         <span
-          className="absolute bottom-0 right-0 h-2 w-2 rounded-full border border-[#0a1228] bg-white/25"
-          title="Injury status (coming soon)"
+          className={`absolute bottom-0 right-0 h-2 w-2 rounded-full border border-[#0a1228] ${statusDotClass}`}
+          title={`Status: ${statusText}`}
           aria-hidden
         />
       </div>
@@ -809,11 +852,16 @@ function RosterRow({
               <span className="text-white/25">Â·</span>
               {showTeam ? (
                 <>
-                  <TeamLogo teamAbbr={resolved.team} sport={sport} size={16} />
+                  <TeamLogo
+                    teamAbbr={resolved.team}
+                    sport={sport}
+                    logoUrl={resolved.teamLogoUrl ?? null}
+                    size={16}
+                  />
                   <span className="text-white/45">{resolved.team}</span>
                 </>
               ) : (
-                <span>â€”</span>
+                <span>-</span>
               )}
             </>
           )}
@@ -942,7 +990,7 @@ export function TeamTab({
 }: TeamTabProps) {
   const router = useRouter()
   const resolvedSport = sport ?? league.sport
-  const { players, loading: playersLoading } = useSleeperPlayers(resolvedSport)
+  const { players: sleeperPlayers, loading: sleeperPlayersLoading } = useSleeperPlayers(resolvedSport)
   const isSleeper = league.platform === 'sleeper'
   const [week, setWeek] = useState(1)
   const [weekMenuOpen, setWeekMenuOpen] = useState(false)
@@ -1014,10 +1062,24 @@ export function TeamTab({
     [league],
   )
 
+  const players = useMemo(
+    () =>
+      buildDisplayPlayerMap(
+        sleeperPlayers,
+        payload && payload.source !== 'sleeper' ? payload.unifiedRoster ?? [] : [],
+      ),
+    [sleeperPlayers, payload],
+  )
+
+  const playersLoading =
+    payload && payload.source !== 'sleeper' && (payload.unifiedRoster?.length ?? 0) > 0
+      ? false
+      : sleeperPlayersLoading
+
   const buildChimmyProps = useCallback(
     (playerId: string, rosterSlotLabel: string) => {
       if (!nflRedraftCoreRoster || !playerId?.trim()) return {}
-      const resolved = resolvePlayerName(playerId, players)
+      const resolved = resolveDisplayPlayer(playerId, players)
       return {
         chimmyNote: chimmyNotesByPlayer[playerId] ?? '',
         onChimmyNoteChange: (v: string) =>
@@ -1028,8 +1090,8 @@ export function TeamTab({
             source: 'roster',
             prompt: buildNflRedraftRosterChimmyPrompt({
               playerName: resolved.name,
-              teamAbbr: resolved.team && resolved.team !== 'FA' ? resolved.team : 'â€”',
-              position: resolved.position || 'â€”',
+              teamAbbr: resolved.team && resolved.team !== 'FA' ? resolved.team : '-',
+              position: resolved.position || '-',
               rosterSlot: rosterSlotLabel,
               leagueName: String(league.name ?? 'League'),
               userQuestion: chimmyNotesByPlayer[playerId] ?? '',

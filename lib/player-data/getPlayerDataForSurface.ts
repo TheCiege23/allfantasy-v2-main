@@ -8,6 +8,7 @@ import type { PoolPlayerRecord, SportType } from '@/lib/sport-teams/types'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
+import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import {
   buildUnifiedPlayerProductView,
   type PlayerDataSurface,
@@ -71,6 +72,182 @@ async function batchAugmentsFromSportsPlayerRecords(
 
 function sportDbKey(leagueSport: LeagueSport | string): string {
   return String(leagueSport).toUpperCase()
+}
+
+type CanonicalMediaSeed = {
+  recordId: string
+  name: string
+  team: string | null
+  position: string | null
+  sport: string
+  recordHeadshotUrl?: string | null
+  recordHeadshotUrlSm?: string | null
+  recordHeadshotUrlLg?: string | null
+  recordLogoUrl?: string | null
+}
+
+type CanonicalMedia = {
+  headshotUrl: string | null
+  teamLogoUrl: string | null
+}
+
+function isHttpUrl(value: unknown): value is string {
+  return /^https?:\/\//i.test(String(value ?? '').trim())
+}
+
+function normalizeMediaKey(name: string, team: string | null, position: string | null): string {
+  return `${String(name ?? '').trim().toLowerCase()}|${String(team ?? '').trim().toUpperCase()}|${String(position ?? '').trim().toUpperCase()}`
+}
+
+function normalizeLooseMediaKey(name: string, position: string | null): string {
+  return `${String(name ?? '').trim().toLowerCase()}|${String(position ?? '').trim().toUpperCase()}`
+}
+
+function sportsPlayerSourceRank(source: string | null | undefined): number {
+  const normalized = String(source ?? '').trim().toLowerCase()
+  if (normalized === 'thesportsdb') return 60
+  if (normalized === 'clearsports') return 50
+  if (normalized === 'api_sports' || normalized === 'api-sports') return 40
+  if (normalized === 'rolling_insights') return 30
+  if (normalized === 'sleeper') return 20
+  if (normalized === 'backfill') return 10
+  return 0
+}
+
+function chooseBestSportsPlayerRow<T extends { imageUrl?: string | null; source?: string | null }>(
+  current: T | undefined,
+  candidate: T,
+): T {
+  if (!current) return candidate
+  const currentScore = sportsPlayerSourceRank(current.source) + (isHttpUrl(current.imageUrl) ? 1_000 : 0)
+  const candidateScore = sportsPlayerSourceRank(candidate.source) + (isHttpUrl(candidate.imageUrl) ? 1_000 : 0)
+  return candidateScore > currentScore ? candidate : current
+}
+
+function pickRecordHeadshot(seed: CanonicalMediaSeed): string | null {
+  const preferred = [seed.recordHeadshotUrl, seed.recordHeadshotUrlLg, seed.recordHeadshotUrlSm]
+  for (const value of preferred) {
+    if (isHttpUrl(value)) return value
+  }
+  return null
+}
+
+async function batchLoadCanonicalPlayerMedia(
+  sport: string,
+  seeds: CanonicalMediaSeed[],
+): Promise<Map<string, CanonicalMedia>> {
+  const out = new Map<string, CanonicalMedia>()
+  const normalizedSport = sportDbKey(sport)
+  const rawIds = [...new Set(
+    seeds
+      .map((seed) => {
+        const token = String(seed.recordId ?? '').trim()
+        if (!token) return null
+        const idx = token.indexOf(':')
+        return idx >= 0 ? token.slice(idx + 1) : token
+      })
+      .filter((value): value is string => Boolean(value)),
+  )]
+  const names = [...new Set(seeds.map((seed) => seed.name).filter(Boolean))]
+
+  const [sportsPlayerRows, fantasyPlayerRows] = await Promise.all([
+    prisma.sportsPlayer
+      .findMany({
+        where: {
+          sport: normalizedSport,
+          OR: [
+            ...(rawIds.length > 0 ? [{ externalId: { in: rawIds } }, { sleeperId: { in: rawIds } }] : []),
+            ...(names.length > 0 ? [{ name: { in: names } }] : []),
+          ],
+        },
+        select: {
+          externalId: true,
+          sleeperId: true,
+          name: true,
+          team: true,
+          position: true,
+          imageUrl: true,
+          source: true,
+        },
+      })
+      .catch(() => []),
+    (prisma as any).fantasyPlayer
+      ?.findMany({
+        where: {
+          sport: normalizedSport,
+          ...(names.length > 0 ? { fullName: { in: names } } : {}),
+        },
+        select: {
+          fullName: true,
+          team: true,
+          position: true,
+          headshotUrl: true,
+        },
+      })
+      .catch(() => []) ?? Promise.resolve([]),
+  ])
+
+  const sportsPlayerByExternalId = new Map<string, (typeof sportsPlayerRows)[number]>()
+  const sportsPlayerByStrictKey = new Map<string, (typeof sportsPlayerRows)[number]>()
+  const sportsPlayerByLooseKey = new Map<string, (typeof sportsPlayerRows)[number]>()
+  for (const row of sportsPlayerRows) {
+    const strictKey = normalizeMediaKey(row.name, row.team, row.position)
+    const looseKey = normalizeLooseMediaKey(row.name, row.position)
+    const externalIds = [row.externalId, row.sleeperId].filter((value): value is string => Boolean(value))
+    for (const externalId of externalIds) {
+      sportsPlayerByExternalId.set(
+        externalId,
+        chooseBestSportsPlayerRow(sportsPlayerByExternalId.get(externalId), row),
+      )
+    }
+    sportsPlayerByStrictKey.set(
+      strictKey,
+      chooseBestSportsPlayerRow(sportsPlayerByStrictKey.get(strictKey), row),
+    )
+    sportsPlayerByLooseKey.set(
+      looseKey,
+      chooseBestSportsPlayerRow(sportsPlayerByLooseKey.get(looseKey), row),
+    )
+  }
+
+  const fantasyPlayerByStrictKey = new Map<string, string>()
+  const fantasyPlayerByLooseKey = new Map<string, string>()
+  for (const row of fantasyPlayerRows as Array<{
+    fullName: string
+    team: string | null
+    position: string | null
+    headshotUrl: string | null
+  }>) {
+    if (!isHttpUrl(row.headshotUrl)) continue
+    const strictKey = normalizeMediaKey(row.fullName, row.team, row.position)
+    const looseKey = normalizeLooseMediaKey(row.fullName, row.position)
+    if (!fantasyPlayerByStrictKey.has(strictKey)) fantasyPlayerByStrictKey.set(strictKey, row.headshotUrl)
+    if (!fantasyPlayerByLooseKey.has(looseKey)) fantasyPlayerByLooseKey.set(looseKey, row.headshotUrl)
+  }
+
+  for (const seed of seeds) {
+    const rawIdToken = String(seed.recordId ?? '').trim()
+    const rawId = rawIdToken.includes(':') ? rawIdToken.slice(rawIdToken.indexOf(':') + 1) : rawIdToken
+    const strictKey = normalizeMediaKey(seed.name, seed.team, seed.position)
+    const looseKey = normalizeLooseMediaKey(seed.name, seed.position)
+    const sportsPlayerMatch =
+      (rawId ? sportsPlayerByExternalId.get(rawId) : undefined) ??
+      sportsPlayerByStrictKey.get(strictKey) ??
+      sportsPlayerByLooseKey.get(looseKey)
+    const sportsPlayerHeadshot =
+      sportsPlayerMatch && isHttpUrl(sportsPlayerMatch.imageUrl) ? sportsPlayerMatch.imageUrl : null
+    const fantasyPlayerHeadshot =
+      fantasyPlayerByStrictKey.get(strictKey) ?? fantasyPlayerByLooseKey.get(looseKey) ?? null
+    const recordHeadshot = pickRecordHeadshot(seed)
+    out.set(seed.recordId, {
+      headshotUrl: sportsPlayerHeadshot ?? fantasyPlayerHeadshot ?? recordHeadshot,
+      teamLogoUrl:
+        (isHttpUrl(seed.recordLogoUrl) ? seed.recordLogoUrl : null) ??
+        getTeamLogo(seed.team, normalizedSport),
+    })
+  }
+
+  return out
 }
 
 export async function getPlayerDataForSurface(
@@ -173,26 +350,46 @@ export async function getPlayerDataForSurface(
       ids = ids.slice(0, limit)
 
       const sportKey = sportDbKey(league.sport)
+      const rows = await prisma.sportsPlayerRecord.findMany({
+        where: { id: { in: ids }, sport: sportKey },
+        select: {
+          id: true,
+          sport: true,
+          name: true,
+          team: true,
+          position: true,
+          stats: true,
+          projections: true,
+          dataSource: true,
+          headshotSource: true,
+          injuryStatus: true,
+          adp: true,
+          headshotUrl: true,
+          headshotUrlSm: true,
+          headshotUrlLg: true,
+          logoUrl: true,
+        },
+      })
+      const rowById = new Map(rows.map((row) => [row.id, row]))
+      const mediaById = await batchLoadCanonicalPlayerMedia(
+        sportKey,
+        rows.map((row) => ({
+          recordId: row.id,
+          name: row.name,
+          team: row.team,
+          position: row.position,
+          sport: row.sport,
+          recordHeadshotUrl: row.headshotUrl,
+          recordHeadshotUrlSm: row.headshotUrlSm,
+          recordHeadshotUrlLg: row.headshotUrlLg,
+          recordLogoUrl: row.logoUrl,
+        })),
+      )
       const out: UnifiedPlayerProductView[] = []
       for (const id of ids) {
-        const row = await prisma.sportsPlayerRecord.findUnique({
-          where: { id },
-          select: {
-            id: true,
-            sport: true,
-            name: true,
-            team: true,
-            position: true,
-            stats: true,
-            projections: true,
-            dataSource: true,
-            headshotSource: true,
-            injuryStatus: true,
-            adp: true,
-            headshotUrl: true,
-          },
-        })
+        const row = rowById.get(id)
         if (!row || sportDbKey(row.sport) !== sportKey) continue
+        const media = mediaById.get(row.id)
 
         const syntheticPoolRow: PoolPlayerRecord = {
           player_id: row.id,
@@ -207,7 +404,9 @@ export async function getPlayerDataForSurface(
           external_source_id: null,
           secondary_positions: [],
           metadata: {
-            imageUrl: row.headshotUrl,
+            imageUrl: media?.headshotUrl ?? null,
+            headshotUrl: media?.headshotUrl ?? null,
+            teamLogoUrl: media?.teamLogoUrl ?? null,
           },
         }
 
@@ -243,12 +442,47 @@ export async function getPlayerDataForSurface(
         })
         if (!league?.sport) return []
         const sportKey = sportDbKey(league.sport)
+        const ids = input.playerIds.slice(0, limit)
+        const rows = await prisma.sportsPlayerRecord.findMany({
+          where: { id: { in: ids }, sport: sportKey },
+          select: {
+            id: true,
+            sport: true,
+            name: true,
+            team: true,
+            position: true,
+            stats: true,
+            projections: true,
+            dataSource: true,
+            headshotSource: true,
+            injuryStatus: true,
+            adp: true,
+            headshotUrl: true,
+            headshotUrlSm: true,
+            headshotUrlLg: true,
+            logoUrl: true,
+          },
+        })
+        const rowById = new Map(rows.map((row) => [row.id, row]))
+        const mediaById = await batchLoadCanonicalPlayerMedia(
+          sportKey,
+          rows.map((row) => ({
+            recordId: row.id,
+            name: row.name,
+            team: row.team,
+            position: row.position,
+            sport: row.sport,
+            recordHeadshotUrl: row.headshotUrl,
+            recordHeadshotUrlSm: row.headshotUrlSm,
+            recordHeadshotUrlLg: row.headshotUrlLg,
+            recordLogoUrl: row.logoUrl,
+          })),
+        )
         const out: UnifiedPlayerProductView[] = []
-        for (const id of input.playerIds.slice(0, limit)) {
-          const row = await prisma.sportsPlayerRecord.findUnique({
-            where: { id },
-          })
+        for (const id of ids) {
+          const row = rowById.get(id)
           if (!row || sportDbKey(row.sport) !== sportKey) continue
+          const media = mediaById.get(row.id)
           const syntheticPoolRow: PoolPlayerRecord = {
             player_id: row.id,
             sport_type: league.sport as SportType,
@@ -261,7 +495,11 @@ export async function getPlayerDataForSurface(
             injury_status: row.injuryStatus,
             external_source_id: null,
             secondary_positions: [],
-            metadata: { imageUrl: row.headshotUrl },
+            metadata: {
+              imageUrl: media?.headshotUrl ?? null,
+              headshotUrl: media?.headshotUrl ?? null,
+              teamLogoUrl: media?.teamLogoUrl ?? null,
+            },
           }
           out.push(
             normalizePoolRowToUnified(syntheticPoolRow, league.sport, {

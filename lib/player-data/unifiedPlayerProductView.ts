@@ -124,6 +124,77 @@ function safeRecord(input: unknown): Record<string, unknown> {
   return {}
 }
 
+function numericValue(input: unknown): number | null {
+  if (typeof input === 'number' && Number.isFinite(input)) return input
+  if (typeof input === 'string' && input.trim()) {
+    const parsed = Number(input)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return null
+}
+
+function readLoosePath(source: unknown, path: string): unknown {
+  let current: unknown = source
+  for (const part of path.split('.')) {
+    const record = safeRecord(current)
+    if (!(part in record)) return undefined
+    current = record[part]
+  }
+  return current
+}
+
+function firstNumeric(source: unknown, keys: string[]): number | null {
+  for (const key of keys) {
+    const value = numericValue(readLoosePath(source, key))
+    if (value != null) return value
+  }
+  return null
+}
+
+function resolveProjectionNumbers(
+  entry: NormalizedDraftEntry,
+  projectionJson: Record<string, unknown>,
+): {
+  weeklyProjectedPoints: number | null
+  seasonProjectedPoints: number | null
+  restOfSeasonProjectedPoints: number | null
+  floor: number | null
+  ceiling: number | null
+  rank: number | null
+  positionalRank: number | null
+} {
+  const splits = safeRecord(entry.nflDraftProjectionSplits)
+  return {
+    weeklyProjectedPoints:
+      firstNumeric(projectionJson, [
+        'weeklyProjectedPoints',
+        'weeklyProjection',
+        'projectedPointsPerGame',
+        'projectedFantasyPoints',
+        'fantasyPointsWeekly',
+        'weekProjection',
+        'projectedPoints',
+      ]) ?? firstNumeric(splits, ['projectedPointsPerGame', 'weeklyProjectedPoints', 'weeklyProjection']),
+    seasonProjectedPoints:
+      firstNumeric(projectionJson, [
+        'seasonProjectedPoints',
+        'seasonProjection',
+        'projectedSeasonPoints',
+        'projectedPointsSeason',
+      ]) ?? firstNumeric(splits, ['projectedPoints', 'seasonProjectedPoints', 'seasonProjection']),
+    restOfSeasonProjectedPoints: firstNumeric(projectionJson, [
+      'restOfSeasonProjectedPoints',
+      'restOfSeason',
+      'rosProjection',
+      'remainingProjectedPoints',
+    ]),
+    floor: firstNumeric(projectionJson, ['floor', 'floorProjection']),
+    ceiling: firstNumeric(projectionJson, ['ceiling', 'ceilingProjection']),
+    rank: firstNumeric(projectionJson, ['rank', 'overallRank', 'ecr']),
+    positionalRank: firstNumeric(projectionJson, ['positionalRank', 'positionRank', 'posRank']),
+  }
+}
+
 function flattenStatSnapshot(entry: NormalizedDraftEntry): Record<string, unknown> {
   const s = entry.display.stats
   const base: Record<string, unknown> = {
@@ -161,14 +232,16 @@ export function buildUnifiedMeta(
   const pid = String(display.playerId ?? entry.playerId ?? entry.name)
   const teamAbbr = meta.teamAbbreviation ?? null
   const teamModel = display.team
-  const headshotUrl = display.assets?.headshotUrl ?? null
-  const imgClass = classifyAvatarSource(headshotUrl)
+  const resolvedHeadshotUrl = display.assets?.headshotUrl ?? null
+  const imgClass = classifyAvatarSource(resolvedHeadshotUrl)
+  const headshotUrl = imgClass === 'headshot' ? resolvedHeadshotUrl : null
   const imageSource =
     imgClass === 'headshot' ? 'http_headshot' : imgClass === 'synthesized' ? 'synthesized_placeholder' : imgClass
 
   const spr = augment?.sportsPlayerRecord
   const statsJson = spr?.stats != null ? safeRecord(spr.stats) : {}
   const projJson = spr?.projections != null ? safeRecord(spr.projections) : {}
+  const projectionNumbers = resolveProjectionNumbers(entry, projJson)
 
   const soccerLeague =
     augment?.soccerLeague ??
@@ -201,13 +274,34 @@ export function buildUnifiedMeta(
   }
   const mergedProj: Record<string, unknown> = {
     projectionSource: entry.projectionSource ?? display.stats.projectionSource ?? null,
+    ...(entry.nflDraftProjectionSplits && typeof entry.nflDraftProjectionSplits === 'object'
+      ? { nflDraftProjectionSplits: entry.nflDraftProjectionSplits as unknown }
+      : {}),
     ...(Object.keys(projJson).length > 0 ? { cacheProjections: projJson } : {}),
+    ...(projectionNumbers.weeklyProjectedPoints != null
+      ? { weeklyProjectedPoints: projectionNumbers.weeklyProjectedPoints }
+      : {}),
+    ...(projectionNumbers.seasonProjectedPoints != null
+      ? { seasonProjectedPoints: projectionNumbers.seasonProjectedPoints }
+      : {}),
+    ...(projectionNumbers.restOfSeasonProjectedPoints != null
+      ? { restOfSeasonProjectedPoints: projectionNumbers.restOfSeasonProjectedPoints }
+      : {}),
+    ...(projectionNumbers.floor != null ? { floor: projectionNumbers.floor } : {}),
+    ...(projectionNumbers.ceiling != null ? { ceiling: projectionNumbers.ceiling } : {}),
+    ...(projectionNumbers.rank != null ? { rank: projectionNumbers.rank } : {}),
+    ...(projectionNumbers.positionalRank != null ? { positionalRank: projectionNumbers.positionalRank } : {}),
   }
 
   const profileSource = spr?.dataSource?.trim() || null
   const statsSource = spr?.dataSource?.trim() || (spr?.stats ? 'sports_players.stats' : null)
   const projectionsSource =
-    spr?.dataSource?.trim() || (spr?.projections ? 'sports_players.projections' : null)
+    spr?.dataSource?.trim() ||
+    (spr?.projections
+      ? 'sports_players.projections'
+      : entry.nflDraftProjectionSplits
+        ? 'draft_pool.projections'
+        : null)
   const rookieSource = nflRookie?.source ?? null
   const adpSource = entry.adp != null ? 'pool_adp' : null
   const aiAdpSource = entry.aiAdp != null ? 'ai_adp' : null
@@ -285,7 +379,7 @@ export function buildUnifiedMeta(
     adp: entry.adp ?? spr?.adp ?? null,
     aiAdp: entry.aiAdp ?? null,
     aiAdpSampleSize: entry.aiAdpSampleSize ?? null,
-    projectedPoints: display.stats.fantasyPointsPerGame ?? null,
+    projectedPoints: projectionNumbers.weeklyProjectedPoints,
     fantasyPointsPerGame: display.stats.fantasyPointsPerGame ?? null,
     normalizedStats: mergedStats,
     normalizedProjections: mergedProj,

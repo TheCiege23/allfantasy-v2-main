@@ -14,6 +14,7 @@ import {
   normalizeNflTeamDefenseWeeklyStats,
   normalizeNflWeeklyStats,
 } from './nflStatNormalization'
+import type { NflRedraftCanonicalPlayer } from '@/lib/player-data/nflRedraftCanonicalPlayer'
 
 export const NFL_REDRAFT_STAT_CORRECTION_VERSION_KEY = '__af_correction_version'
 
@@ -39,6 +40,14 @@ export type NflRedraftRuntimePlayerInput = {
   slotType: string
   injuryStatus?: string | null
   isLocked?: boolean | null
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
+  activeStatus?: string | null
+  providerInjuryLabel?: string | null
+  projectedPoints?: number | null
+  playerDataLastUpdatedAt?: string | null
+  playerDataWarnings?: string[]
+  canonicalNflRedraft?: NflRedraftCanonicalPlayer | null
 }
 
 export type NflRedraftRuntimeScoreInput = {
@@ -78,6 +87,14 @@ export type NflRedraftPlayerScore = {
   team: string | null
   slotType: string
   section: 'starter' | 'bench' | 'ir'
+  headshotUrl: string | null
+  teamLogoUrl: string | null
+  injuryStatus: string | null
+  activeStatus: string | null
+  projectedPoints: number | null
+  playerDataLastUpdatedAt: string | null
+  playerDataWarnings: string[]
+  canonicalNflRedraft: NflRedraftCanonicalPlayer | null
   fantasyPoints: number
   stats: Record<string, number>
   breakdown: Record<string, number>
@@ -368,6 +385,14 @@ export function buildNflRedraftTeamScore(input: {
       team: player.team ?? null,
       slotType: player.slotType,
       section: scoringSection(player.slotType),
+      headshotUrl: player.headshotUrl ?? null,
+      teamLogoUrl: player.teamLogoUrl ?? null,
+      injuryStatus: player.providerInjuryLabel ?? player.injuryStatus ?? null,
+      activeStatus: player.activeStatus ?? null,
+      projectedPoints: player.projectedPoints ?? null,
+      playerDataLastUpdatedAt: player.playerDataLastUpdatedAt ?? null,
+      playerDataWarnings: player.playerDataWarnings ?? [],
+      canonicalNflRedraft: player.canonicalNflRedraft ?? null,
       fantasyPoints: calculation.points,
       stats: normalizedStats,
       breakdown: calculation.breakdown,

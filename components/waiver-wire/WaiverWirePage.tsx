@@ -1102,6 +1102,7 @@ export default function WaiverWirePage({
                       position: row.position,
                       team: row.team,
                       headshotUrl: row.displayHeadshotUrl ?? row.headshotUrl,
+                      teamLogoUrl: row.displayTeamLogoUrl ?? row.teamLogoUrl,
                       injuryStatus: row.displayInjury ?? row.injuryStatus,
                       experienceSummary: row.experienceSummary,
                       projectedPoints: row.displayProjection,

@@ -42,21 +42,42 @@ export async function GET(req: NextRequest) {
   const search = req.nextUrl.searchParams?.get('search')?.trim() ?? null
   const position = normalizePosition(req.nextUrl.searchParams?.get('position'))
   const teamId = req.nextUrl.searchParams?.get('teamId')?.trim() || null
+  const playerId = req.nextUrl.searchParams?.get('playerId')?.trim() || null
   const limit = Math.min(800, Math.max(1, Number(req.nextUrl.searchParams?.get('limit') ?? '200') || 200))
   const includeDiagnostics = resolveIncludePlayerDataDiagnostics(req.nextUrl.searchParams)
 
   const rows = await getNormalizedPlayerData({
-    surface: 'waivers',
+    surface: playerId ? 'player_card' : 'waivers',
     leagueId: season.leagueId,
-    limit,
-    waiverSearch: search,
-    waiverPosition: position,
-    waiverTeamId: teamId,
+    limit: playerId ? 1 : limit,
+    playerIds: playerId ? [playerId] : undefined,
+    waiverSearch: playerId ? undefined : search,
+    waiverPosition: playerId ? undefined : position,
+    waiverTeamId: playerId ? undefined : teamId,
     soccerLeague: soccerLeagueHintFromLeagueSettings(season.league.settings ?? null) ?? undefined,
     includeProviderFallbackDiagnostics: includeDiagnostics,
   })
 
   const players = rows.map(serializeUnifiedPlayerForApi)
+  if (playerId) {
+    const player = players[0] ?? null
+    const canonical = player?.nflRedraft ?? null
+    return NextResponse.json({
+      player,
+      playerData: canonical,
+      canonicalNflRedraft: canonical,
+      projections: canonical?.currentProjection ?? null,
+      injury: canonical?.injury ?? null,
+      news: canonical?.news ?? null,
+      media: canonical?.media ?? null,
+      seasonId: season.id,
+      leagueId: season.leagueId,
+      sport: season.sport,
+      seasonYear: season.season,
+      source: 'normalized_player_data',
+    })
+  }
+
   const rookies = players.filter((player) => player.product.isRookie === true)
   const veterans = players.filter((player) => player.product.isRookie !== true)
 

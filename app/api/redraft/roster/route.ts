@@ -16,6 +16,9 @@ import {
   getCanonicalNflPlayerByNameTeam,
   getCanonicalNflPlayerContext,
 } from '@/lib/nfl-data-foundation'
+import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
+import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
 
 export const dynamic = 'force-dynamic'
@@ -343,18 +346,58 @@ export async function GET(req: NextRequest) {
     }),
   )
   const players = await hydrateCurrentInjuryStatuses(scoredPlayers, roster.season.season, week)
+  const unifiedRosterRows = await getNormalizedPlayerData({
+    surface: 'roster',
+    leagueId: lookup.season.leagueId,
+    userId,
+    playerIds: players.map((player) => player.playerId).filter(Boolean),
+    limit: Math.max(players.length, 1),
+  }).catch(() => [])
+  const unifiedRoster = unifiedRosterRows.map(serializeUnifiedPlayerForApi)
+  const unifiedById = new Map(unifiedRoster.map((row) => [row.id, row]))
+  const hydratedPlayers = players.map((player) => {
+    const unified = unifiedById.get(player.playerId)
+    const canonical = unified?.nflRedraft ?? null
+    const canonicalProjection = canonical?.currentProjection ?? null
+    const teamLogoUrl = canonical?.media.teamLogo.url ?? unified?.teamLogoUrl ?? getTeamLogo(player.team, player.sport)
+    const headshotUrl = canonical?.media.headshot.url ?? unified?.headshotUrl ?? null
+    return {
+      ...player,
+      playerName: canonical?.displayName ?? player.playerName,
+      position: canonical?.fantasyPosition ?? player.position,
+      team: canonical?.teamAbbr ?? player.team,
+      injuryStatus: canonical?.injury.designation ?? unified?.injuryStatus ?? player.injuryStatus,
+      providerInjuryLabel: canonical?.injury.designation ?? unified?.injuryStatus ?? null,
+      activeStatus: canonical?.activeStatus ?? null,
+      weeklyProjection: canonicalProjection?.weeklyProjectedPoints ?? player.weeklyProjection,
+      restOfSeasonProjection: canonicalProjection?.restOfSeasonProjectedPoints ?? player.restOfSeasonProjection,
+      floorProjection: canonicalProjection?.floor ?? player.floorProjection,
+      ceilingProjection: canonicalProjection?.ceiling ?? player.ceilingProjection,
+      projectionSource: canonicalProjection?.source ?? player.projectionSource,
+      adp: canonical?.adp ?? unified?.adp ?? null,
+      rank: canonical?.rank ?? null,
+      positionalRank: canonical?.positionalRank ?? null,
+      playerDataLastUpdatedAt: canonical?.lastUpdatedAt ?? null,
+      playerDataWarnings: canonical?.dataFreshness.staleWarnings ?? [],
+      canonicalNflRedraft: canonical,
+      headshotUrl,
+      imageUrl: unified?.imageUrl ?? headshotUrl,
+      teamLogoUrl,
+    }
+  })
   const lineupValidation = buildLineupValidation({
     sport: roster.season.sport,
     week,
-    players,
+    players: hydratedPlayers,
   })
 
   return NextResponse.json({
     roster: {
       ...roster,
-      players,
+      players: hydratedPlayers,
       lineupValidation,
     },
+    unifiedRoster,
     week,
     ...(process.env.NODE_ENV === 'development'
       ? {

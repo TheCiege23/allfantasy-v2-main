@@ -3,6 +3,7 @@ import type { NflRedraftPlayoffRuntimeState } from '@/lib/playoff-runtime/canoni
 import type { NflRedraftLiveScoringRuntimeState } from '@/lib/scoring-runtime/canonicalNflRedraftScoringRuntime'
 import type { NflRedraftTradeRuntimeState } from '@/lib/trade-runtime/canonicalNflRedraftTradeRuntime'
 import type { NflRedraftWaiverRuntimeState } from '@/lib/waiver-runtime/canonicalNflRedraftWaiverRuntime'
+import type { NflRedraftCanonicalPlayer } from '@/lib/player-data/nflRedraftCanonicalPlayer'
 
 export type RedraftRosterRow = {
   id: string
@@ -43,7 +44,12 @@ export type RedraftRosterPlayerClient = {
   slotType: string
   isLocked?: boolean | null
   injuryStatus: string | null
+  providerInjuryLabel?: string | null
+  activeStatus?: string | null
   byeWeek?: number | null
+  headshotUrl?: string | null
+  imageUrl?: string | null
+  teamLogoUrl?: string | null
   weeklyProjection?: number | null
   restOfSeasonProjection?: number | null
   floorProjection?: number | null
@@ -51,6 +57,12 @@ export type RedraftRosterPlayerClient = {
   projectionConfidenceScore?: number | null
   projectionConfidenceLevel?: 'high' | 'medium' | 'low' | 'none' | null
   projectionSource?: string | null
+  adp?: number | null
+  rank?: number | null
+  positionalRank?: number | null
+  playerDataLastUpdatedAt?: string | null
+  playerDataWarnings?: string[]
+  canonicalNflRedraft?: NflRedraftCanonicalPlayer | null
   weeklyScore: RedraftWeeklyScore | null
 }
 

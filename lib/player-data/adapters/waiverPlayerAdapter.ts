@@ -8,7 +8,9 @@ import type { PlayerDataAdapterFlags } from '@/lib/player-data/adapters/adapterT
 export type WaiverPlayerAdapted = UnifiedPlayerWireDto & {
   /** Convenience for rows/cards */
   displayHeadshotUrl: string | null
+  displayTeamLogoUrl: string | null
   displayInjury: string | null
+  displayStatus: string | null
   displayProjection: number | null
   displayAdp: number | null
   displayAiAdp: number | null
@@ -82,15 +84,21 @@ function buildSeasonStatsSummary(stats: Record<string, unknown> | null | undefin
 function buildDataQualityLabels(row: UnifiedPlayerWireDto): string[] {
   const labels: string[] = []
   const sport = String(row.sport ?? '').toUpperCase()
+  const canonical = row.nflRedraft ?? null
   if (row.adp != null) labels.push('Provider ADP')
   if (row.aiAdp != null) labels.push('AF ADP')
   else labels.push('AF ADP coming soon')
-  if (row.projectedPoints != null) labels.push('Projection source')
+  if (canonical?.currentProjection.unavailable === false || row.projectedPoints != null) labels.push('Projection source')
   else labels.push('Fallback projection')
-  if (!isUsableSource(row.statsSource) && buildSeasonStatsSummary(row.normalizedStats).length === 0) {
+  if (
+    canonical?.dataFreshness.stats === 'missing' ||
+    (!isUsableSource(row.statsSource) && buildSeasonStatsSummary(row.normalizedStats).length === 0)
+  ) {
     labels.push('Missing stats')
   }
-  if (row.lowConfidence) labels.push('Limited confidence')
+  if (canonical?.dataFreshness.media === 'missing') labels.push('Missing media')
+  if (canonical?.dataFreshness.staleWarnings.length) labels.push('Stale provider data')
+  if (row.lowConfidence || Boolean(canonical?.fallbacks.length)) labels.push('Limited confidence')
   if (sport === 'NCAAF') labels.push('NCAAF limited data')
   return [...new Set(labels)]
 }
@@ -99,22 +107,34 @@ export function adaptWaiverWirePlayer(
   row: UnifiedPlayerWireDto,
   _flags?: PlayerDataAdapterFlags,
 ): WaiverPlayerAdapted {
+  const canonical = row.nflRedraft ?? null
   const statsSummary = buildSeasonStatsSummary(row.normalizedStats)
   return {
     ...row,
-    displayHeadshotUrl: row.headshotUrl ?? null,
-    displayInjury: row.injuryStatus ?? null,
+    displayHeadshotUrl: canonical?.media.headshot.url ?? row.headshotUrl ?? null,
+    displayTeamLogoUrl: canonical?.media.teamLogo.url ?? row.teamLogoUrl ?? null,
+    displayInjury: canonical?.injury.designation ?? row.injuryStatus ?? null,
+    displayStatus: canonical?.activeStatus ?? null,
     displayProjection:
-      row.projectedPoints != null && Number.isFinite(Number(row.projectedPoints))
-        ? Number(row.projectedPoints)
-        : null,
+      canonical?.currentProjection.weeklyProjectedPoints != null &&
+      Number.isFinite(Number(canonical.currentProjection.weeklyProjectedPoints))
+        ? Number(canonical.currentProjection.weeklyProjectedPoints)
+        : row.projectedPoints != null && Number.isFinite(Number(row.projectedPoints))
+          ? Number(row.projectedPoints)
+          : null,
     displayAdp: row.adp != null && Number.isFinite(Number(row.adp)) ? Number(row.adp) : null,
     displayAiAdp: row.aiAdp != null && Number.isFinite(Number(row.aiAdp)) ? Number(row.aiAdp) : null,
     displayByeWeek:
-      row.product?.byeWeek != null && Number.isFinite(Number(row.product.byeWeek))
-        ? Number(row.product.byeWeek)
-        : null,
-    projectionSourceLabel: formatSourceLabel('Projection', row.projectionsSource, 'Fallback projection'),
+      canonical?.byeWeek != null && Number.isFinite(Number(canonical.byeWeek))
+        ? Number(canonical.byeWeek)
+        : row.product?.byeWeek != null && Number.isFinite(Number(row.product.byeWeek))
+          ? Number(row.product.byeWeek)
+          : null,
+    projectionSourceLabel: formatSourceLabel(
+      'Projection',
+      canonical?.currentProjection.source ?? row.projectionsSource,
+      'Fallback projection',
+    ),
     adpSourceLabel: row.adp != null ? 'Provider ADP' : 'Missing ADP',
     statsSourceLabel: formatSourceLabel('Stats', row.statsSource, 'Missing stats'),
     dataQualityLabels: buildDataQualityLabels(row),

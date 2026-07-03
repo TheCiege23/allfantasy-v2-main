@@ -14,6 +14,7 @@ type Props = {
     position: string | null
     team: string | null
     headshotUrl?: string | null
+    teamLogoUrl?: string | null
     injuryStatus?: string | null
     experienceSummary?: string | null
     projectedPoints?: number | null
@@ -115,7 +116,7 @@ export default function WaiverPlayerRow({
   const team = player.team || "FA"
   const normalizedSport = String(sport ?? "NFL").toUpperCase()
   const trend = typeof trendScore === "number" ? trendScore : 0
-  const logo = player.team ? teamLogoUrl(player.team, sport ?? "NFL") : ""
+  const logo = player.teamLogoUrl || (player.team ? teamLogoUrl(player.team, sport ?? "NFL") : "")
   const posColor = positionColor(pos, normalizedSport)
   const detailsHref = `/player-comparison?player=${encodeURIComponent(player.name)}&sport=${encodeURIComponent(normalizedSport)}`
   const sourceLabels = useMemo(() => {
