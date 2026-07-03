@@ -7,15 +7,16 @@ import { fetchJsonWithRetry } from '@/lib/error-handling'
 import {
   getNotificationsEndpoint,
   getNotificationReadEndpoint,
-  NOTIFICATIONS_READ_ALL_ENDPOINT,
+  getNotificationsReadAllEndpoint,
 } from '@/lib/notification-center'
 import { addStateRefreshListener } from '@/lib/state-consistency/state-events'
 
 export function useNotifications(
   limit = 8,
-  options?: { usePlaceholders?: boolean }
+  options?: { usePlaceholders?: boolean; leagueId?: string | null }
 ) {
   const usePlaceholders = options?.usePlaceholders ?? true
+  const leagueId = options?.leagueId ?? null
   const [notifications, setNotifications] = useState<PlatformNotification[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -24,7 +25,7 @@ export function useNotifications(
     setLoading(true)
     try {
       const json = await fetchJsonWithRetry<{ notifications?: PlatformNotification[] }>(
-        getNotificationsEndpoint(limit),
+        getNotificationsEndpoint(limit, { leagueId }),
         { cache: 'no-store' },
         { maxAttempts: 3, context: 'notifications' }
       )
@@ -36,7 +37,7 @@ export function useNotifications(
     } finally {
       setLoading(false)
     }
-  }, [limit, usePlaceholders])
+  }, [limit, usePlaceholders, leagueId])
 
   useEffect(() => {
     let mounted = true
@@ -75,12 +76,12 @@ export function useNotifications(
   const markAllAsRead = useCallback(async () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     try {
-      await fetch(NOTIFICATIONS_READ_ALL_ENDPOINT, { method: 'PATCH' })
+      await fetch(getNotificationsReadAllEndpoint({ leagueId }), { method: 'PATCH' })
       await load()
     } catch {
       await load()
     }
-  }, [load])
+  }, [leagueId, load])
 
   return { notifications, loading, error, markAsRead, markAllAsRead, refresh: load }
 }

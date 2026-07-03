@@ -3,7 +3,6 @@
 import Link from 'next/link'
 import {
   Activity,
-  Bell,
   CalendarClock,
   CheckCircle2,
   ClipboardList,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { useEntitlements } from '@/hooks/useEntitlements'
+import { RedraftCommunicationPanel } from '@/components/redraft/RedraftCommunicationPanel'
 
 type NflRedraftLeagueHomeDashboardProps = {
   league: UserLeague
@@ -354,16 +354,11 @@ export function NflRedraftLeagueHomeDashboard({
         </section>
       )}
 
-      <section className="mt-5 rounded-3xl border border-white/[0.08] bg-black/20 p-4" data-testid="g32-league-activity">
-        <div className="flex items-center gap-2">
-          <Bell className="h-5 w-5 text-violet-200" aria-hidden />
-          <h3 className="text-base font-black text-white">League activity</h3>
-        </div>
-        <p className="mt-2 text-sm leading-6 text-white/55">
-          Activity will populate from draft actions, roster moves, waivers, trades, matchup results, and commissioner
-          announcements. No live activity is shown until the league creates it.
-        </p>
-      </section>
+      <RedraftCommunicationPanel
+        leagueId={leagueId}
+        isCommissioner={isCommissioner}
+        onOpenChat={() => onOpenTab('league_chat')}
+      />
     </div>
   )
 }
