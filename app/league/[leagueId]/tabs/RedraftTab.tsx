@@ -155,9 +155,9 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     <div className="space-y-4 px-4 py-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-bold text-white">Redraft</h2>
+          <h2 className="text-[15px] font-bold text-white">Season Hub</h2>
           <p className="text-[11px] text-white/45">
-            NFL redraft scoring uses cached weekly stats, PlayerWeeklyScore, and league matchup records.
+            Track matchups, rosters, waivers, trades, standings, and playoffs from one place.
           </p>
         </div>
         {season?.rosters?.length ? (
@@ -180,49 +180,54 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
 
       {loading ? (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-[12px] text-white/50">
-          Loading redraft season...
+          Getting your NFL redraft season ready...
         </div>
       ) : error ? (
         <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 p-4 text-[12px] text-rose-100">
-          {error}
+          We could not load this redraft season. Refresh and try again. {error}
         </div>
       ) : !season ? (
         <div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-4 text-[12px] text-amber-100">
-          No active redraft season is connected to this league yet.
+          Draft results have not been finalized into a redraft season yet. Once the draft is complete, rosters, schedule, waivers, trades, and standings will appear here.
         </div>
       ) : null}
 
-      <MatchupView
-        matchup={visibleMatchup}
-        liveMatchup={visibleLiveMatchup}
-        selectedRosterId={selectedRosterId}
-        sport={sport}
-      />
+      {loading || error || !season ? null : (
+        <>
 
-      <ScheduleView schedule={schedule} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RosterManager roster={selectedRoster} week={currentWeek} />
-        <div className="space-y-3">
-          <WaiverCenter
-            seasonId={seasonId}
-            leagueId={leagueId}
-            rosterId={selectedRosterId}
+          <MatchupView
+            matchup={visibleMatchup}
+            liveMatchup={visibleLiveMatchup}
+            selectedRosterId={selectedRosterId}
             sport={sport}
           />
-          {idpLeagueUi ? <IDPWaiverSection leagueId={leagueId} week={currentWeek} /> : null}
-        </div>
-      </div>
 
-      <TradeCenter
-        leagueId={leagueId}
-        seasonId={seasonId}
-        standings={standings}
-        currentWeek={currentWeek}
-        myRosterId={selectedRosterId}
-      />
+          <ScheduleView schedule={schedule} />
 
-      <StandingsView rows={standings} seasonId={seasonId} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <RosterManager roster={selectedRoster} week={currentWeek} />
+            <div className="space-y-3">
+              <WaiverCenter
+                seasonId={seasonId}
+                leagueId={leagueId}
+                rosterId={selectedRosterId}
+                sport={sport}
+              />
+              {idpLeagueUi ? <IDPWaiverSection leagueId={leagueId} week={currentWeek} /> : null}
+            </div>
+          </div>
+
+          <TradeCenter
+            leagueId={leagueId}
+            seasonId={seasonId}
+            standings={standings}
+            currentWeek={currentWeek}
+            myRosterId={selectedRosterId}
+          />
+
+          <StandingsView rows={standings} seasonId={seasonId} />
+        </>
+      )}
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/league-access'
+import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import {
   actOnNflRedraftTradeProposal,
   castNflRedraftTradeVote,
@@ -130,6 +131,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
   }
 
+  const parsedWeek = parseOptionalRedraftPositiveInteger(week, 'week')
+  if (!parsedWeek.ok) return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
+
   const leagueId = await leagueIdFromInput({ seasonId, leagueId: leagueIdParam })
   if (!leagueId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const member = await assertLeagueMember(leagueId, userId)
@@ -139,7 +143,7 @@ export async function GET(req: NextRequest) {
   const resolved = await resolveNflRedraftTradeRuntime({
     seasonId,
     leagueId,
-    week: week != null ? Number(week) : null,
+    week: parsedWeek.value,
   })
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400

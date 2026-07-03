@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/league-access'
+import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
 import {
   advanceNflRedraftScheduleWeek,
@@ -73,7 +74,7 @@ export async function POST(req: NextRequest) {
     seasonId?: string
     leagueId?: string
     action?: ScheduleAction
-    week?: number
+    week?: number | string
     regenerate?: boolean
     commissionerOverride?: boolean
   }
@@ -111,7 +112,9 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === 'recalculate_standings') {
-    const week = Math.max(1, Math.floor(Number(body.week ?? gate.season.currentWeek) || 1))
+    const parsedWeek = parseOptionalRedraftPositiveInteger(body.week ?? gate.season.currentWeek, 'week')
+    if (!parsedWeek.ok) return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
+    const week = parsedWeek.value ?? gate.season.currentWeek
     await updateStandings(gate.season.id, week)
     const resolved = await resolveNflRedraftScheduleRuntime({ seasonId: gate.season.id })
     return NextResponse.json({
@@ -129,10 +132,12 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  const parsedWeek = parseOptionalRedraftPositiveInteger(body.week, 'week')
+  if (!parsedWeek.ok) return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
   const advanced = await advanceNflRedraftScheduleWeek({
     seasonId: gate.season.id,
     action,
-    week: body.week,
+    week: parsedWeek.value ?? undefined,
     actorUserId: userId,
     commissionerOverride: body.commissionerOverride === true,
   })

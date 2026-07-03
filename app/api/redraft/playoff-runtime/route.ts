@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueCommissioner, assertLeagueMember } from '@/lib/league/league-access'
+import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 import {
   advanceNflRedraftPlayoffRuntimeRound,
   finalizeNflRedraftPlayoffRuntimeSeason,
@@ -24,8 +25,8 @@ type PlayoffRuntimeBody = {
   action?: PlayoffRuntimeAction
   seasonId?: string
   leagueId?: string
-  week?: number | null
-  playoffTeams?: number | null
+  week?: number | string | null
+  playoffTeams?: number | string | null
   regenerate?: boolean
   lockBracket?: boolean
   matchupId?: string
@@ -74,6 +75,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
   }
 
+  const parsedWeek = parseOptionalRedraftPositiveInteger(week, 'week')
+  if (!parsedWeek.ok) return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
+
   const leagueId = await leagueIdFromInput({ seasonId, leagueId: leagueIdParam })
   if (!leagueId) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const member = await assertLeagueMember(leagueId, userId)
@@ -83,7 +87,7 @@ export async function GET(req: NextRequest) {
   const resolved = await resolveNflRedraftPlayoffRuntime({
     seasonId,
     leagueId,
-    week: week != null ? Number(week) : null,
+    week: parsedWeek.value,
   })
   if (!resolved.ok) {
     const status = resolved.reason === 'season_not_found' || resolved.reason === 'league_not_found' ? 404 : 400
@@ -113,9 +117,11 @@ export async function POST(request: Request) {
 
   try {
     if (action === 'generate_bracket' || action === 'regenerate_bracket') {
+      const parsedPlayoffTeams = parseOptionalRedraftPositiveInteger(body.playoffTeams, 'playoffTeams')
+      if (!parsedPlayoffTeams.ok) return NextResponse.json({ error: parsedPlayoffTeams.error }, { status: 400 })
       const result = await generateNflRedraftPlayoffRuntimeBracket({
         seasonId,
-        playoffTeams: body.playoffTeams,
+        playoffTeams: parsedPlayoffTeams.value,
         regenerate: action === 'regenerate_bracket' || body.regenerate !== false,
         lockBracket: body.lockBracket,
         actorUserId: userId,
@@ -124,9 +130,11 @@ export async function POST(request: Request) {
     }
 
     if (action === 'advance_round') {
+      const parsedWeek = parseOptionalRedraftPositiveInteger(body.week, 'week')
+      if (!parsedWeek.ok) return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
       const result = await advanceNflRedraftPlayoffRuntimeRound({
         seasonId,
-        week: body.week,
+        week: parsedWeek.value,
         actorUserId: userId,
       })
       return NextResponse.json({ ok: result.ok, result }, { status: result.ok ? 200 : 409 })
