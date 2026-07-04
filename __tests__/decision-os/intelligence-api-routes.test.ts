@@ -263,6 +263,69 @@ describe('auth — test key defaults', () => {
 })
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Phase L1 — API Security Hardening: Production must reject every
+// unregistered key, closing the dev-mode test-key fallback specifically
+// in Production while leaving Preview/Development unaffected.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('auth — Production environment hardening (Phase L1)', () => {
+  it('unknown test key is rejected (401) when VERCEL_ENV=production', async () => {
+    enableApi()
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const r = await platformIntelligenceHandler(makeCtx(TEST_KEY_BASIC), makeProvider())
+    expect(r.status).toBe(401)
+    expect((r.body as IntelligenceApiError).code).toBe('UNAUTHORIZED')
+  })
+
+  it('unknown live key is still rejected (401) when VERCEL_ENV=production — unaffected, already strict', async () => {
+    enableApi()
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const r = await platformIntelligenceHandler(makeCtx('afk_live_unknownkey1234567'), makeProvider())
+    expect(r.status).toBe(401)
+    expect((r.body as IntelligenceApiError).code).toBe('UNAUTHORIZED')
+  })
+
+  it('a registered test key still resolves its mapped tier in production — hardening only removes the fallback, not registered keys', async () => {
+    enableApi()
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const r = await platformIntelligenceHandler(makeCtx(TEST_KEY_PLATFORM), makeProvider())
+    expect(r.status).toBe(200)
+    expect((r.body as { meta: { tier: string } }).meta.tier).toBe('platform')
+  })
+
+  it('a registered live key still resolves its mapped tier in production', async () => {
+    enableApi()
+    vi.stubEnv('VERCEL_ENV', 'production')
+    const r = await platformIntelligenceHandler(makeCtx(LIVE_KEY_PLATFORM), makeProvider())
+    expect(r.status).toBe(200)
+    expect((r.body as { meta: { tier: string } }).meta.tier).toBe('platform')
+  })
+
+  it('the dev-mode fallback still works when VERCEL_ENV=preview — Preview is unaffected', async () => {
+    enableApi()
+    vi.stubEnv('VERCEL_ENV', 'preview')
+    const r = await platformIntelligenceHandler(makeCtx(TEST_KEY_BASIC), makeProvider())
+    expect(r.status).toBe(200)
+    expect((r.body as { meta: { tier: string } }).meta.tier).toBe('basic')
+  })
+
+  it('the dev-mode fallback still works when VERCEL_ENV=development — Development is unaffected', async () => {
+    enableApi()
+    vi.stubEnv('VERCEL_ENV', 'development')
+    const r = await platformIntelligenceHandler(makeCtx(TEST_KEY_BASIC), makeProvider())
+    expect(r.status).toBe(200)
+    expect((r.body as { meta: { tier: string } }).meta.tier).toBe('basic')
+  })
+
+  it('the dev-mode fallback still works when VERCEL_ENV is entirely unset (local dev) — unchanged from before this hardening', async () => {
+    enableApi()
+    const r = await platformIntelligenceHandler(makeCtx(TEST_KEY_BASIC), makeProvider())
+    expect(r.status).toBe(200)
+    expect((r.body as { meta: { tier: string } }).meta.tier).toBe('basic')
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Scope gating — platformIntelligenceHandler
 // ─────────────────────────────────────────────────────────────────────────────
 
