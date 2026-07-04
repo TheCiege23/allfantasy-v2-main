@@ -17,6 +17,21 @@ function readCookieDataMode(): CommissionerDataMode {
   return normalizeDataMode(match?.[1])
 }
 
+export interface DataModeIndicatorProps {
+  /**
+   * Server-resolved (isSiteAdmin() against the real session, in
+   * app/commissioner-os/layout.tsx) — never trust a client-supplied value
+   * for this decision. Defaults to false so every existing non-admin call
+   * site is unaffected. This only controls whether the *switcher* is
+   * visible/usable; it is not the real security boundary — each live.ts's
+   * own canAccessLiveDecisionOSData() check (lib/commissioner-os/liveModeAccess.ts)
+   * is what actually gates real data, so a client-side attempt to force
+   * this prop true would still get the honest placeholder, never real
+   * intelligence.
+   */
+  isAdmin?: boolean
+}
+
 /**
  * Deliberately unmissable and deliberately not shown in production — this
  * exists so engineering/QA/design can switch data sources at a glance, not
@@ -24,15 +39,20 @@ function readCookieDataMode(): CommissionerDataMode {
  * switch is intentional and acceptable here (unlike theme switching,
  * which must be instant for real users); mode changes are rare, dev/QA-
  * only actions, not something worth a reactive Context system for.
+ *
+ * The one exception: the existing site-admin allowlist (isSiteAdmin(),
+ * lib/auth/admin.ts) can still see and use this in production, so that
+ * "live" mode can be verified end-to-end without exposing the switcher to
+ * real customers. See GATE_OPENING_PLAN.md, Option C.
  */
-export function DataModeIndicator() {
+export function DataModeIndicator({ isAdmin = false }: DataModeIndicatorProps) {
   const [mode, setMode] = useState<CommissionerDataMode>(DEFAULT_DATA_MODE)
 
   useEffect(() => {
     setMode(readCookieDataMode())
   }, [])
 
-  if (process.env.NODE_ENV === 'production') return null
+  if (process.env.NODE_ENV === 'production' && !isAdmin) return null
 
   function handleChange(next: CommissionerDataMode) {
     document.cookie = `${DATA_MODE_COOKIE_KEY}=${next}; path=/; max-age=31536000`

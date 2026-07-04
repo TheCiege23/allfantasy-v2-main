@@ -1,4 +1,7 @@
 import type { Metadata } from 'next'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { isSiteAdmin } from '@/lib/auth/admin'
 import { CommissionerOSProviders } from '@/components/commissioner-os/providers/CommissionerOSProviders'
 import { CommissionerSidebar } from '@/components/commissioner-os/shell/CommissionerSidebar'
 import { CommissionerHeader } from '@/components/commissioner-os/shell/CommissionerHeader'
@@ -36,11 +39,18 @@ export const metadata: Metadata = {
  */
 export default async function CommissionerOSLayout({ children }: { children: React.ReactNode }) {
   const adapter = await getDecisionOSAdapter()
-  const [indexResponse, notificationsResponse, notificationsSummaryResponse] = await Promise.all([
+  const [indexResponse, notificationsResponse, notificationsSummaryResponse, session] = await Promise.all([
     adapter.search.getIndex(),
     adapter.notifications.getNotifications(),
     adapter.notifications.getSummary(),
+    getServerSession(authOptions),
   ])
+  // Reuses the existing site-admin allowlist (lib/auth/admin.ts) to let
+  // DataModeIndicator's switcher stay visible for that one allowlisted
+  // account in production — see GATE_OPENING_PLAN.md, Option C. This is
+  // UI visibility only; canAccessLiveDecisionOSData() in each live.ts is
+  // the real gate on whether real data can render.
+  const isDataModeAdmin = isSiteAdmin(session?.user ?? null)
 
   return (
     <CommissionerOSProviders>
@@ -55,7 +65,10 @@ export default async function CommissionerOSLayout({ children }: { children: Rea
       <div className="flex min-h-screen" style={{ background: 'var(--bg)' }}>
         <CommissionerSidebar />
         <div className="flex min-w-0 flex-1 flex-col">
-          <CommissionerHeader unreadNotificationCount={notificationsSummaryResponse.data?.unreadCount ?? 0} />
+          <CommissionerHeader
+            unreadNotificationCount={notificationsSummaryResponse.data?.unreadCount ?? 0}
+            isDataModeAdmin={isDataModeAdmin}
+          />
           <main className="flex-1">
             <div className="px-4 pt-2 sm:px-6 lg:px-8">
               <CommissionerBreadcrumbs />

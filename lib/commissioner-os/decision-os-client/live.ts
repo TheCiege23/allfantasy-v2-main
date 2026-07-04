@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { callDecisionOS } from '../adapter/transport'
 import { isLiveReady } from '../liveReadiness'
+import { canAccessLiveDecisionOSData } from '../liveModeAccess'
 import { resolveActiveLeagueId } from '../resolveActiveLeagueId'
 import type { CommissionerErrorContract, CommissionerModuleId } from '../contracts'
 import type { SeverityTier } from '../tokens/colors'
@@ -136,6 +137,9 @@ export const liveDecisionOSClient: DecisionOSClient = {
     if (!(await isLiveReady('mission-control'))) {
       return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp: new Date().toISOString() }
     }
+    if (!(await canAccessLiveDecisionOSData())) {
+      return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp: new Date().toISOString() }
+    }
     const timestamp = new Date().toISOString()
     const leagueId = await resolveActiveLeagueId()
     if (!leagueId) {
@@ -174,6 +178,9 @@ export const liveDecisionOSClient: DecisionOSClient = {
     if (!(await isLiveReady('mission-control'))) {
       return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp: new Date().toISOString() }
     }
+    if (!(await canAccessLiveDecisionOSData())) {
+      return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp: new Date().toISOString() }
+    }
     const timestamp = new Date().toISOString()
     const leagueId = await resolveActiveLeagueId()
     if (!leagueId) {
@@ -201,6 +208,9 @@ export const liveDecisionOSClient: DecisionOSClient = {
 
   async getMissionControlKpis() {
     if (!(await isLiveReady('mission-control'))) {
+      return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp: new Date().toISOString() }
+    }
+    if (!(await canAccessLiveDecisionOSData())) {
       return { data: null, error: notYetIntegrated('mission-control'), source: 'live', timestamp: new Date().toISOString() }
     }
     const timestamp = new Date().toISOString()

@@ -26,10 +26,18 @@ vi.mock("@/lib/commissioner-os/adapter/transport", () => ({ callDecisionOS: call
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/commissioner-os/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
 
+const canAccessLiveDecisionOSDataMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/commissioner-os/liveModeAccess", () => ({ canAccessLiveDecisionOSData: canAccessLiveDecisionOSDataMock }))
+
 import { liveDecisionOSClient } from "@/lib/commissioner-os/decision-os-client/live"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Every existing "real data" test below predates the admin gate and is
+  // implicitly exercising an authorized caller's path — default it on here
+  // so those tests keep proving what they always proved. The dedicated
+  // "admin gating" describe block below overrides this per-test.
+  canAccessLiveDecisionOSDataMock.mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -79,6 +87,48 @@ describe("Mission Control live.ts — isLiveReady gating (today's real, default 
     expect(result.data).toBeNull()
     expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "mission-control" })
     expect(callDecisionOSMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("Mission Control live.ts — admin-only gating (Gate Opening Plan, Option C)", () => {
+  beforeEach(() => {
+    isLiveReadyMock.mockResolvedValue(true)
+  })
+
+  it("getLeagueHealthSummary: not-yet-integrated placeholder when isLiveReady is true but the caller is not admin, without touching session/prisma/transport", async () => {
+    canAccessLiveDecisionOSDataMock.mockResolvedValue(false)
+    const result = await liveDecisionOSClient.getLeagueHealthSummary()
+    expect(result.data).toBeNull()
+    expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "mission-control", retryable: false })
+    expect(getServerSessionMock).not.toHaveBeenCalled()
+    expect(prismaMock.roster.findMany).not.toHaveBeenCalled()
+    expect(callDecisionOSMock).not.toHaveBeenCalled()
+  })
+
+  it("getManagerHighlights: not-yet-integrated placeholder when isLiveReady is true but the caller is not admin", async () => {
+    canAccessLiveDecisionOSDataMock.mockResolvedValue(false)
+    const result = await liveDecisionOSClient.getManagerHighlights()
+    expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "mission-control" })
+    expect(callDecisionOSMock).not.toHaveBeenCalled()
+  })
+
+  it("getMissionControlKpis: not-yet-integrated placeholder when isLiveReady is true but the caller is not admin", async () => {
+    canAccessLiveDecisionOSDataMock.mockResolvedValue(false)
+    const result = await liveDecisionOSClient.getMissionControlKpis()
+    expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "mission-control" })
+    expect(callDecisionOSMock).not.toHaveBeenCalled()
+  })
+
+  it("getLeagueHealthSummary: proceeds to the transport when isLiveReady is true and the caller is admin", async () => {
+    canAccessLiveDecisionOSDataMock.mockResolvedValue(true)
+    withActiveLeague()
+    mockByPath({
+      [LEAGUE_URL]: { data: { data: { leagueEngagementScore: 91.6, healthNarrative: { engagementSummary: "Stable", topConcern: null, standoutSignal: null } } }, error: null },
+      [TREND_URL]: { data: { data: { available: true, direction: "up", scoreDelta: 6 } }, error: null },
+    })
+    const result = await liveDecisionOSClient.getLeagueHealthSummary()
+    expect(result.error).toBeNull()
+    expect(callDecisionOSMock).toHaveBeenCalled()
   })
 })
 

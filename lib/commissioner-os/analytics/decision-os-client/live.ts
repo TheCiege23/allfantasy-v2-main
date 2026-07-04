@@ -1,5 +1,6 @@
 import { callDecisionOS } from '../../adapter/transport'
 import { isLiveReady } from '../../liveReadiness'
+import { canAccessLiveDecisionOSData } from '../../liveModeAccess'
 import { resolveActiveLeagueId } from '../../resolveActiveLeagueId'
 import type { AnalyticsClient, AnalyticsKpi, AnalyticsTrendSeries, LeagueAnalyticsSnapshot } from './types'
 
@@ -118,6 +119,9 @@ export const liveAnalyticsClient: AnalyticsClient = {
     if (!(await isLiveReady('analytics'))) {
       return { data: null, error: notYetIntegrated(), source: 'live', timestamp: new Date().toISOString() }
     }
+    if (!(await canAccessLiveDecisionOSData())) {
+      return { data: null, error: notYetIntegrated(), source: 'live', timestamp: new Date().toISOString() }
+    }
     const timestamp = new Date().toISOString()
     const leagueId = await resolveActiveLeagueId()
     if (!leagueId) {
@@ -156,6 +160,9 @@ export const liveAnalyticsClient: AnalyticsClient = {
 
   async getSummary() {
     if (!(await isLiveReady('analytics'))) {
+      return { data: null, error: notYetIntegrated(), source: 'live', timestamp: new Date().toISOString() }
+    }
+    if (!(await canAccessLiveDecisionOSData())) {
       return { data: null, error: notYetIntegrated(), source: 'live', timestamp: new Date().toISOString() }
     }
     const timestamp = new Date().toISOString()

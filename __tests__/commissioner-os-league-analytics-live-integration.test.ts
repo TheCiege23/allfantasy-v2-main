@@ -25,10 +25,18 @@ vi.mock("@/lib/commissioner-os/adapter/transport", () => ({ callDecisionOS: call
 const isLiveReadyMock = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/commissioner-os/liveReadiness", () => ({ isLiveReady: isLiveReadyMock }))
 
+const canAccessLiveDecisionOSDataMock = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/commissioner-os/liveModeAccess", () => ({ canAccessLiveDecisionOSData: canAccessLiveDecisionOSDataMock }))
+
 import { liveAnalyticsClient } from "@/lib/commissioner-os/analytics/decision-os-client/live"
 
 beforeEach(() => {
   vi.clearAllMocks()
+  // Every existing "real data" test below predates the admin gate and is
+  // implicitly exercising an authorized caller's path — default it on here
+  // so those tests keep proving what they always proved. The dedicated
+  // "admin gating" describe block below overrides this per-test.
+  canAccessLiveDecisionOSDataMock.mockResolvedValue(true)
 })
 
 afterEach(() => {
@@ -91,6 +99,38 @@ describe("League Analytics live.ts — isLiveReady gating", () => {
     expect(result.data).toBeNull()
     expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "analytics" })
     expect(callDecisionOSMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("League Analytics live.ts — admin-only gating (Gate Opening Plan, Option C)", () => {
+  beforeEach(() => {
+    isLiveReadyMock.mockResolvedValue(true)
+  })
+
+  it("getSnapshot: not-yet-integrated placeholder when isLiveReady is true but the caller is not admin, without ever touching prisma/transport", async () => {
+    canAccessLiveDecisionOSDataMock.mockResolvedValue(false)
+    const result = await liveAnalyticsClient.getSnapshot()
+    expect(result.data).toBeNull()
+    expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "analytics", retryable: false })
+    expect(prismaMock.roster.findMany).not.toHaveBeenCalled()
+    expect(callDecisionOSMock).not.toHaveBeenCalled()
+  })
+
+  it("getSummary: not-yet-integrated placeholder when isLiveReady is true but the caller is not admin", async () => {
+    canAccessLiveDecisionOSDataMock.mockResolvedValue(false)
+    const result = await liveAnalyticsClient.getSummary()
+    expect(result.data).toBeNull()
+    expect(result.error).toMatchObject({ category: "upstream_unavailable", moduleId: "analytics" })
+    expect(callDecisionOSMock).not.toHaveBeenCalled()
+  })
+
+  it("getSnapshot: proceeds to the transport when isLiveReady is true and the caller is admin", async () => {
+    canAccessLiveDecisionOSDataMock.mockResolvedValue(true)
+    withActiveLeague()
+    mockByPath({ "/league/trend": TREND_AVAILABLE, "/league": LEAGUE_INTEL })
+    const result = await liveAnalyticsClient.getSnapshot()
+    expect(result.error).toBeNull()
+    expect(callDecisionOSMock).toHaveBeenCalled()
   })
 })
 

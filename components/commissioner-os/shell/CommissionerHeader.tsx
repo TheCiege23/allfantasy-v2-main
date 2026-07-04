@@ -9,6 +9,8 @@ import { DataModeIndicator } from '@/components/commissioner-os/demo-mode/DataMo
 export interface CommissionerHeaderProps {
   /** Fetched once by the layout via adapter.notifications.getSummary() — the header never counts unread notifications itself. */
   unreadNotificationCount?: number
+  /** Server-resolved isSiteAdmin() from the layout — see DataModeIndicator's own doc comment. */
+  isDataModeAdmin?: boolean
 }
 
 /**
@@ -16,7 +18,7 @@ export interface CommissionerHeaderProps {
  * profile, per the Design Language & Experience System §3. Sticky at every
  * breakpoint, fixed height, never grows with page content.
  */
-export function CommissionerHeader({ unreadNotificationCount = 0 }: CommissionerHeaderProps) {
+export function CommissionerHeader({ unreadNotificationCount = 0, isDataModeAdmin = false }: CommissionerHeaderProps) {
   const { toggleSidebar, sidebarCollapsed, toggleMobileSidebar } = useCommissionerLayout()
   const { openService } = useCommissionerPlatform()
 
@@ -58,7 +60,7 @@ export function CommissionerHeader({ unreadNotificationCount = 0 }: Commissioner
 
       <div className="flex-1" />
 
-      <DataModeIndicator />
+      <DataModeIndicator isAdmin={isDataModeAdmin} />
 
       <button
         type="button"
