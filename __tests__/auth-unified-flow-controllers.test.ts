@@ -82,7 +82,9 @@ describe('Unified auth flow controllers', () => {
   })
 
   it('returns provider fallback copy for pending providers', () => {
-    expect(getProviderFallbackMessage('facebook')).toContain('not configured')
+    // Facebook is manually suspended pending Meta platform review, not "unconfigured" —
+    // see lib/auth/SocialProviderResolver.ts's MANUALLY_SUSPENDED_PROVIDERS.
+    expect(getProviderFallbackMessage('facebook')).toContain('Meta platform review')
     expect(getProviderFallbackMessage('google')).toContain('not configured')
   })
 
