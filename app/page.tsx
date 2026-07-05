@@ -29,40 +29,43 @@ import {
 } from '@/lib/seo'
 
 export const metadata: Metadata = buildSeoMeta({
-  title: 'AllFantasy.ai — AI-Powered Fantasy Sports | NFL, NBA, NHL, MLB & More',
+  title: 'AllFantasy — Fantasy Football, College Football & Fantasy Sports Leagues',
   description:
-    'AllFantasy.ai is the AI-powered fantasy sports platform for serious managers. Analyze trades, dominate waivers, draft smarter, and win your league across NFL, NBA, NHL, MLB, NCAA, and Soccer.',
+    'AllFantasy is the fantasy sports platform built for commissioners and managers. Create a league, draft, trade, manage waivers, and score matchups for fantasy football, college football, NBA, NHL, MLB, and soccer — all season long.',
   canonicalPath: '/',
-  openGraphTitle: 'AllFantasy.ai — Fantasy Sports With AI Superpowers',
+  openGraphTitle: 'AllFantasy — Fantasy Starts Here. Win All Season.',
   openGraphDescription:
-    'The AI-powered fantasy sports platform for serious managers. Trade analysis, waiver AI, draft assistant, dynasty tools, and more.',
-  twitterTitle: 'AllFantasy.ai — Fantasy Sports With AI Superpowers',
-  twitterDescription: 'The AI-powered fantasy sports platform for serious managers.',
+    'Create your league, draft your team, and run your season. Fantasy football, college football, NBA, NHL, MLB, and soccer leagues built for commissioners and managers.',
+  twitterTitle: 'AllFantasy — Fantasy Starts Here. Win All Season.',
+  twitterDescription:
+    'The fantasy sports platform for commissioners and managers. Fantasy football, college football, and every major fantasy sport.',
   imagePath: '/af-crest.png',
   keywords: [
-    'AI fantasy sports',
-    'fantasy football AI',
-    'fantasy basketball',
-    'trade analyzer AI',
-    'waiver wire AI',
-    'draft assistant',
-    'dynasty fantasy',
-    'devy fantasy',
+    'fantasy football',
+    'college fantasy football',
+    'NCAAF fantasy football',
+    'fantasy commissioner tools',
+    'fantasy league management',
+    'fantasy football draft',
+    'fantasy trades',
+    'waiver wire',
+    'fantasy sports',
+    'create a fantasy league',
     'AllFantasy',
   ],
 })
 
 const HOME_WEBPAGE_SCHEMA = getWebPageSchema({
-  name: 'AllFantasy.ai',
+  name: 'AllFantasy',
   description:
-    'AI-powered fantasy sports platform for NFL, NBA, NHL, MLB, NCAA, and Soccer with trade analysis, waiver tools, draft help, and league management.',
+    'Fantasy sports platform for commissioners and managers — create leagues, draft, trade, manage waivers, and score matchups across fantasy football, college football, NBA, NHL, MLB, and soccer.',
   url: '/',
 })
 
 const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
-  name: 'AllFantasy.ai',
+  name: 'AllFantasy',
   description:
-    'AI-powered fantasy sports platform for serious managers with trade analyzer, waiver wire AI, draft assistant, and Chimmy AI coaching.',
+    'Fantasy sports platform with league creation, drafting, trading, waivers, scoring, and commissioner tools for fantasy football, college football, and every major fantasy sport.',
   url: 'https://allfantasy.ai/',
   applicationCategory: 'SportsApplication',
 })
