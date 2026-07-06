@@ -185,17 +185,25 @@ export async function assertWaiverClaimEligibility(input: WaiverClaimEligibility
   }
 
   const ev = await evaluateLegalityForProjectedRoster({ id: roster.id, leagueId, playerData: roster.playerData }, projected)
-  if (ev && !ev.result.isLegal) {
-    const ir = ev.result.irViolations.length
-    const taxi = ev.result.taxiViolations.length
-    const devy = ev.result.devyViolations.length
-    if (ir || taxi || devy) {
-      throw new Error(
-        'You must resolve IR, taxi, or devy slot issues before this transaction. ' +
-          (ev.result.blockingReasons[0]?.message ?? ''),
-      )
+  if (ev) {
+    // `isLegal` folds in the whole-roster weekly lineup lock (e.g. "Mon-Tue" football_weekly
+    // policy), which exists to freeze STARTER edits during game windows. A free-agent add/drop
+    // doesn't touch the starting lineup, and a locked player being dropped is already blocked
+    // precisely above via `computePerPlayerKickoffLocks`. Treating the blanket weekly lock as
+    // blocking here would fail every waiver add for ~2 of every 7 days, all season, regardless
+    // of whether the move ever touched a starter slot.
+    const blocking = ev.result.blockingReasons.filter((r) => r.code !== 'LEAGUE_LINEUP_LOCK_ACTIVE')
+    if (blocking.length > 0) {
+      const ir = ev.result.irViolations.length
+      const taxi = ev.result.taxiViolations.length
+      const devy = ev.result.devyViolations.length
+      if (ir || taxi || devy) {
+        throw new Error(
+          'You must resolve IR, taxi, or devy slot issues before this transaction. ' + (blocking[0]?.message ?? ''),
+        )
+      }
+      throw new Error(blocking[0]?.message ?? 'This transaction would leave your roster in an illegal state.')
     }
-    throw new Error(ev.result.blockingReasons[0]?.message ?? 'This transaction would leave your roster in an illegal state.')
   }
 }
 
