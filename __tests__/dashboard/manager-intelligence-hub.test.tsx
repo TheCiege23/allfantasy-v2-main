@@ -17,17 +17,21 @@ vi.stubGlobal('fetch', fetchMock)
 interface RouteHandlers {
   standings?: unknown
   teamHealth?: unknown
+  weeklyOutlook?: unknown
 }
 function ok(body: unknown) {
   return { ok: true, status: 200, json: async () => body }
 }
-// Route each request by URL so League Context and Team Health can be controlled
-// independently. Handlers are RAW response bodies — routeFetch wraps them in the
-// Response-like shape useResource expects. Defaults: standings empty, TH flag-off.
+// Route each request by URL so each module can be controlled independently.
+// Handlers are RAW response bodies — routeFetch wraps them in the Response-like
+// shape useResource expects. Defaults: standings empty, TH + WO flag-off.
 function routeFetch(handlers: RouteHandlers = {}) {
   fetchMock.mockImplementation(async (url: string) => {
     if (typeof url === 'string' && url.includes('/team-health')) {
       return ok(handlers.teamHealth ?? { enabled: false })
+    }
+    if (typeof url === 'string' && url.includes('/weekly-outlook')) {
+      return ok(handlers.weeklyOutlook ?? { enabled: false })
     }
     if (typeof url === 'string' && url.includes('/standings')) {
       return ok(handlers.standings ?? { standings: [], season: 2025 })
@@ -147,11 +151,79 @@ describe('ManagerIntelligenceHub — Team Health module states (Phase 2)', () =>
   })
 })
 
-describe('ManagerIntelligenceHub — honest placeholders', () => {
-  it('renders "expanding soon" placeholders for the sections without a clean reusable source', () => {
+describe('ManagerIntelligenceHub — Weekly Outlook module states (Phase 3)', () => {
+  it('renders a quiet "expanding soon" note when the Weekly Outlook server flag is off', async () => {
+    routeFetch({ weeklyOutlook: { enabled: false } })
     render(<ManagerIntelligenceHub leagueId="L1" />)
-    expect(screen.getByText(/Matchup, projected difficulty, and schedule — expanding soon\./i)).toBeTruthy()
+    expect(await screen.findByTestId('weekly-outlook-disabled')).toBeTruthy()
+  })
+
+  it('renders an honest empty state when enabled but there is no roster/matchup data', async () => {
+    routeFetch({ weeklyOutlook: { enabled: true } })
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    expect(await screen.findByTestId('weekly-outlook-empty')).toBeTruthy()
+  })
+
+  it('renders the deterministic outlook (margin, readiness, projection, summary) when data is present', async () => {
+    routeFetch({
+      weeklyOutlook: {
+        enabled: true,
+        data: {
+          version: 'manager-weekly-outlook.v1',
+          derivedAt: '2026-10-01T00:00:00.000Z',
+          week: 5,
+          matchupState: 'scheduled',
+          opponentName: 'The Rivals',
+          projectedPointsFor: 110.5,
+          projectedPointsAgainst: 100,
+          projectedMargin: 'favored',
+          lineupReadiness: 'ready',
+          schedulePressure: 'normal',
+          summary: 'Your Week 5 matchup against The Rivals projects as favored. Your lineup appears ready.',
+          caveats: [],
+        },
+      },
+    })
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    expect(await screen.findByTestId('weekly-outlook-content')).toBeTruthy()
+    expect(screen.getByText(/projects as favored/i)).toBeTruthy()
+    expect(screen.getByText('Favored')).toBeTruthy()
+    // "The Rivals" appears in both the projected line and the summary sentence.
+    expect(screen.getAllByText(/The Rivals/).length).toBeGreaterThan(0)
+  })
+
+  it('shows honest caveats when the outlook has them', async () => {
+    routeFetch({
+      weeklyOutlook: {
+        enabled: true,
+        data: {
+          version: 'manager-weekly-outlook.v1',
+          derivedAt: '2026-10-01T00:00:00.000Z',
+          week: 5,
+          matchupState: 'unavailable',
+          opponentName: null,
+          projectedPointsFor: null,
+          projectedPointsAgainst: null,
+          projectedMargin: 'unknown',
+          lineupReadiness: 'ready',
+          schedulePressure: 'normal',
+          summary: 'No matchup is scheduled for your team yet. Your lineup appears ready.',
+          caveats: ['No matchup data is available for this week yet.'],
+        },
+      },
+    })
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    expect(await screen.findByTestId('weekly-outlook-caveats')).toBeTruthy()
+    expect(screen.getByText(/No matchup data is available/i)).toBeTruthy()
+  })
+})
+
+describe('ManagerIntelligenceHub — honest placeholders', () => {
+  it('renders an "expanding soon" placeholder for the one section still without a clean source', () => {
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    // Only Transaction Readiness remains a static placeholder after Phase 3.
     expect(screen.getByText(/Waiver availability, roster flexibility, and bench pressure — expanding soon\./i)).toBeTruthy()
+    expect(screen.getByTestId('hub-transaction-readiness')).toBeTruthy()
   })
 })
 

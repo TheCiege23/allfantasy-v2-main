@@ -18,10 +18,12 @@
  *   - League Context          → reuses GET /api/app/leagues/[id]/standings
  *   - Current Team Health     → Phase 2 deterministic ManagerTeamHealthV1 contract
  *                               via GET /api/app/leagues/[id]/team-health
+ *   - Weekly Outlook          → Phase 3 deterministic ManagerWeeklyOutlookV1 contract
+ *                               via GET /api/app/leagues/[id]/weekly-outlook
  * Sections whose only existing sources are AI/recommendation endpoints or that
  * need a new backend aggregation (out of scope for now) render an honest
  * "expanding soon" placeholder — never a fabricated summary:
- *   - Weekly Outlook · Transaction Readiness
+ *   - Transaction Readiness
  *
  * Gated by NEXT_PUBLIC_MANAGER_INTELLIGENCE_HUB_ENABLED (default off → the hub
  * shows a quiet "not available" state so nothing ships before it's ready).
@@ -32,6 +34,7 @@ import { ManagerReplayInsightsCard } from '@/components/dashboard/ManagerReplayI
 // Type-only import from the pure types module (no runtime/server deps reach the
 // client bundle). Do NOT import from the barrel — it re-exports the DB resolver.
 import type { ManagerTeamHealthV1 } from '@/lib/decision-os/manager-intelligence/team-health/types'
+import type { ManagerWeeklyOutlookV1 } from '@/lib/decision-os/manager-intelligence/weekly-outlook/types'
 
 // ── generic fetch resource (adapted from CommissionerIntelligenceHub) ─────────
 // Note: unlike the commissioner hub's endpoints (which wrap in `{ data }`), the
@@ -160,14 +163,19 @@ interface TeamHealthResponse {
   data?: ManagerTeamHealthV1
 }
 
-type Tone = 'good' | 'warn' | 'bad'
+type Tone = 'good' | 'warn' | 'bad' | 'neutral'
 function toneClass(tone: Tone): string {
   if (tone === 'good') return 'bg-emerald-400/10 text-emerald-300 ring-emerald-400/20'
   if (tone === 'warn') return 'bg-amber-400/10 text-amber-300 ring-amber-400/20'
+  if (tone === 'neutral') return 'bg-white/5 text-white/60 ring-white/15'
   return 'bg-red-400/10 text-red-300 ring-red-400/20'
 }
 function Chip({ label, tone }: { label: string; tone: Tone }) {
   return <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ring-1 ${toneClass(tone)}`}>{label}</span>
+}
+/** Render a chip only when the value maps to a tone (null tone → nothing). */
+function OptionalChip({ label, tone }: { label: string; tone: Tone | null }) {
+  return tone ? <Chip label={label} tone={tone} /> : null
 }
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
@@ -236,6 +244,108 @@ function TeamHealthModule({ leagueId }: { leagueId: string }) {
   )
 }
 
+// ── Weekly Outlook module (Phase 3 — deterministic display contract) ──────────
+// Consumes the internal, session-authed, display-only Weekly Outlook route.
+// `{ enabled, data? }`: flag off → "expanding soon"; enabled + no data → empty;
+// data → the observational outlook (matchup state, margin, lineup readiness).
+
+interface WeeklyOutlookResponse {
+  enabled: boolean
+  data?: ManagerWeeklyOutlookV1
+}
+
+const STATE_LABEL: Record<ManagerWeeklyOutlookV1['matchupState'], string> = {
+  scheduled: 'Scheduled',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  unavailable: 'No matchup',
+}
+const MARGIN_TONE: Record<ManagerWeeklyOutlookV1['projectedMargin'], Tone | null> = {
+  favored: 'good',
+  close: 'neutral',
+  underdog: 'bad',
+  unknown: null,
+}
+const MARGIN_LABEL: Record<ManagerWeeklyOutlookV1['projectedMargin'], string> = {
+  favored: 'Favored',
+  close: 'Close',
+  underdog: 'Underdog',
+  unknown: '',
+}
+const READINESS_TONE: Record<ManagerWeeklyOutlookV1['lineupReadiness'], Tone | null> = {
+  ready: 'good',
+  needs_attention: 'warn',
+  incomplete: 'bad',
+  unknown: null,
+}
+const READINESS_LABEL: Record<ManagerWeeklyOutlookV1['lineupReadiness'], string> = {
+  ready: 'Lineup: ready',
+  needs_attention: 'Lineup: needs attention',
+  incomplete: 'Lineup: incomplete',
+  unknown: '',
+}
+
+function WeeklyOutlookModule({ leagueId }: { leagueId: string }) {
+  const r = useResource<WeeklyOutlookResponse>(`/api/app/leagues/${encodeURIComponent(leagueId)}/weekly-outlook`)
+  if (r.status !== 'ok') {
+    return (
+      <HubCard title="Weekly Outlook" testId="hub-weekly-outlook">
+        <StateMessage status={r.status} />
+      </HubCard>
+    )
+  }
+  if (!r.data?.enabled) {
+    return (
+      <HubCard title="Weekly Outlook" testId="hub-weekly-outlook">
+        <p className="text-xs text-white/40" data-testid="weekly-outlook-disabled">
+          Matchup, projected difficulty, and schedule — expanding soon.
+        </p>
+      </HubCard>
+    )
+  }
+  const w = r.data.data
+  if (!w) {
+    return (
+      <HubCard title="Weekly Outlook" testId="hub-weekly-outlook">
+        <p className="text-xs text-white/45" data-testid="weekly-outlook-empty">No matchup data yet.</p>
+      </HubCard>
+    )
+  }
+  const hasProjection = w.projectedPointsFor != null && w.projectedPointsAgainst != null
+  return (
+    <HubCard title="Weekly Outlook" testId="hub-weekly-outlook">
+      <div className="space-y-2.5" data-testid="weekly-outlook-content">
+        <div className="flex items-center justify-between text-[11px] text-white/40">
+          <span>{w.week != null ? `Week ${w.week}` : 'This week'}</span>
+          <span>{STATE_LABEL[w.matchupState]}</span>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <OptionalChip label={MARGIN_LABEL[w.projectedMargin]} tone={MARGIN_TONE[w.projectedMargin]} />
+          <OptionalChip label={READINESS_LABEL[w.lineupReadiness]} tone={READINESS_TONE[w.lineupReadiness]} />
+          {w.schedulePressure === 'high' ? <Chip label="Schedule: high" tone="warn" /> : null}
+        </div>
+        {hasProjection ? (
+          <p className="text-xs text-white/70">
+            Projected <span className="font-medium text-white/85">{w.projectedPointsFor}</span> –{' '}
+            <span className="font-medium text-white/85">{w.projectedPointsAgainst}</span>
+            {w.opponentName ? <span className="text-white/45"> vs {w.opponentName}</span> : null}
+          </p>
+        ) : w.opponentName ? (
+          <p className="text-xs text-white/45">vs {w.opponentName}</p>
+        ) : null}
+        <p className="text-xs text-white/55">{w.summary}</p>
+        {w.caveats.length > 0 ? (
+          <ul className="space-y-0.5" data-testid="weekly-outlook-caveats">
+            {w.caveats.map((c, i) => (
+              <li key={i} className="text-[11px] text-white/35">• {c}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </HubCard>
+  )
+}
+
 // ── Hub ───────────────────────────────────────────────────────────────────────
 
 export function ManagerIntelligenceHub({ leagueId }: { leagueId: string }) {
@@ -260,11 +370,7 @@ export function ManagerIntelligenceHub({ leagueId }: { leagueId: string }) {
 
       <div className="grid gap-4 md:grid-cols-2" data-testid="manager-hub-grid">
         <LeagueContextModule leagueId={leagueId} />
-        <ComingSoon
-          title="Weekly Outlook"
-          testId="hub-weekly-outlook"
-          note="Matchup, projected difficulty, and schedule — expanding soon."
-        />
+        <WeeklyOutlookModule leagueId={leagueId} />
         <TeamHealthModule leagueId={leagueId} />
         <ComingSoon
           title="Transaction Readiness"
