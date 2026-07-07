@@ -171,6 +171,15 @@ export type LeagueTradeHistoryItem = {
   timestamp: string
   sent: LeagueTradeAsset[]
   received: LeagueTradeAsset[]
+  /** Real `AfLeagueTrade.status` (e.g. 'pending', 'awaiting_commissioner', 'accepted').
+   *  Optional so pre-existing Sleeper-sourced rows (which never set this) keep working. */
+  status?: string
+  /** True when the viewer is this league's commissioner and can approve/veto. */
+  viewerIsCommissioner?: boolean
+  /** True when the viewer is the receiving roster on this trade (can accept/reject). */
+  viewerIsReceiver?: boolean
+  /** True when the viewer is the proposing roster on this trade (can cancel). */
+  viewerIsProposer?: boolean
 }
 
 export type LeagueTradeBlockItem = {
