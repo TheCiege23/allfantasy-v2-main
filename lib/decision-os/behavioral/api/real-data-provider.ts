@@ -27,7 +27,10 @@ import {
   loadLeagueTradeRows  as defaultLoadLeagueTradeRows,
   loadRosterMoveRows   as defaultLoadRosterMoveRows,
   loadDraftRows        as defaultLoadDraftRows,
+  loadLeagueImportSignals as defaultLoadLeagueImportSignals,
 } from '../port'
+import type { RawImportSignals } from '../port'
+import { extendLookbackForImport, type ImportSignalsInput } from '../import-signals'
 import {
   mapWaiverClaimsToEvents,
   mapLeagueTradesToEvents,
@@ -69,6 +72,13 @@ export interface RealDataProviderDeps {
   }>
   /** Read-only: returns league ids ordered most-recent-first, up to `take` entries. */
   findLeagueIds(take: number): Promise<{ id: string }[]>
+  /**
+   * Phase 5.2 wire-up — read-only Sleeper `ImportRun`/`ImportWarning` signals
+   * for a league. Returns an empty shape when no import exists. Overridable
+   * for tests. Failures inside the loader are caught by `buildLeaguePipeline`
+   * so a resolver hiccup can never fail the intelligence pipeline itself.
+   */
+  loadLeagueImportSignals(leagueId: string): Promise<RawImportSignals>
 }
 
 const defaultDeps: RealDataProviderDeps = {
@@ -76,6 +86,7 @@ const defaultDeps: RealDataProviderDeps = {
   loadLeagueTradeRows: defaultLoadLeagueTradeRows,
   loadRosterMoveRows:  defaultLoadRosterMoveRows,
   loadDraftRows:       defaultLoadDraftRows,
+  loadLeagueImportSignals: defaultLoadLeagueImportSignals,
   findLeagueIds: (take) =>
     defaultPrisma.league.findMany({
       orderBy: { createdAt: 'desc' },
@@ -111,10 +122,16 @@ async function loadAllLeagueEvents(
   ]
 }
 
-function buildLeaguePipeline(
-  leagueId:    string,
-  events:      BehavioralEvent[],
-  lookback:    number,
+/**
+ * Phase 5.2 — the pure derivation core (kept in a separate helper so it stays
+ * unit-testable without any DB access). Consumers pass in already-loaded
+ * `events` + optional `importSignals`.
+ */
+function derivePipeline(
+  leagueId:       string,
+  events:         BehavioralEvent[],
+  lookback:       number,
+  importSignals:  ImportSignalsInput | null,
 ): {
   leagueIntelligence:    LeagueBehavioralIntelligence
   managerIntelligences:  ManagerBehavioralIntelligence[]
@@ -127,8 +144,49 @@ function buildLeaguePipeline(
       return deriveManagerBehavioralIntelligence(facts, events)
     })
 
-  const leagueIntelligence = deriveLeagueBehavioralIntelligence(leagueFacts, managerIntelligences)
+  const leagueIntelligence = deriveLeagueBehavioralIntelligence(
+    leagueFacts,
+    managerIntelligences,
+    new Date(),
+    importSignals,
+  )
   return { leagueIntelligence, managerIntelligences }
+}
+
+/**
+ * Phase 5.2 — orchestrator: loads import signals via the port, extends the
+ * lookback if a recent import falls outside it (wire-up A), and calls the
+ * pure derivation core. A loader failure is defensively swallowed so the
+ * pipeline continues without a dataQuality signal (never `503`s a live-game
+ * pipeline because an ImportRun query hiccupped).
+ */
+async function buildLeaguePipeline(
+  leagueId:    string,
+  events:      BehavioralEvent[],
+  lookback:    number,
+  deps:        RealDataProviderDeps,
+): Promise<{
+  leagueIntelligence:    LeagueBehavioralIntelligence
+  managerIntelligences:  ManagerBehavioralIntelligence[]
+}> {
+  let importSignals: ImportSignalsInput | null = null
+  try {
+    const raw = await deps.loadLeagueImportSignals(leagueId)
+    importSignals = {
+      lastImportedAt: raw.lastImportedAt,
+      warningCountsBySeverity: raw.warningCountsBySeverity,
+      latestRunIncomplete: raw.latestRunIncomplete,
+    }
+  } catch {
+    // Defensive: an ImportRun query failure must never break live-game intelligence.
+    importSignals = null
+  }
+  // Wire-up A — clamp/extend the lookback so a fresh import isn't excluded.
+  const effectiveLookback = extendLookbackForImport(
+    lookback,
+    importSignals?.lastImportedAt ?? null,
+  )
+  return derivePipeline(leagueId, events, effectiveLookback, importSignals)
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -160,7 +218,7 @@ export function createRealDataProvider(
         const lookback = lookbackDays()
         const since    = sinceDate(lookback)
         const events   = await loadAllLeagueEvents(leagueId, since, d)
-        const { leagueIntelligence } = buildLeaguePipeline(leagueId, events, lookback)
+        const { leagueIntelligence } = await buildLeaguePipeline(leagueId, events, lookback, d)
         return leagueIntelligence
       } catch {
         return null
@@ -175,7 +233,7 @@ export function createRealDataProvider(
         // Reuses the same buildLeaguePipeline getLeagueIntelligence already calls —
         // this is the managerIntelligences half of that pipeline's result, previously
         // computed and discarded. No new derivation, no second computation.
-        const { managerIntelligences } = buildLeaguePipeline(leagueId, events, lookback)
+        const { managerIntelligences } = await buildLeaguePipeline(leagueId, events, lookback, d)
         return managerIntelligences
       } catch {
         return null
@@ -201,7 +259,7 @@ export function createRealDataProvider(
         const results = await Promise.allSettled(
           leagues.map(async ({ id: leagueId }) => {
             const events = await loadAllLeagueEvents(leagueId, since, d)
-            const pipeline = buildLeaguePipeline(leagueId, events, lookback)
+            const pipeline = await buildLeaguePipeline(leagueId, events, lookback, d)
             return { events, ...pipeline }
           }),
         )

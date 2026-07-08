@@ -17,6 +17,7 @@
 
 import type { LeagueBehavioralFacts } from './facts'
 import type { ManagerBehavioralIntelligence } from './manager-intelligence'
+import { deriveImportDataQuality, type ImportDataQuality, type ImportSignalsInput } from './import-signals'
 
 // ── League engagement tier ────────────────────────────────────────────────────
 
@@ -186,6 +187,15 @@ export interface LeagueBehavioralIntelligence {
   warnings: string[]
   /** ISO 8601 timestamp of when this intelligence was derived. */
   derivedAt: string
+  /**
+   * Phase 5.2 wire-up B — import provenance / data-quality signal derived from
+   * the persisted `ImportRun` + `ImportWarning` pipeline (Sleeper). Absent for
+   * leagues with no completed Sleeper import — the honest empty state. When
+   * present, consumers can surface "some imported data is incomplete" instead
+   * of implying perfect state. Additive: consumers that don't destructure it
+   * are unaffected.
+   */
+  dataQuality?: ImportDataQuality
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
@@ -236,6 +246,12 @@ export function deriveLeagueBehavioralIntelligence(
   facts: LeagueBehavioralFacts,
   managerIntelligences: ManagerBehavioralIntelligence[],
   now: Date = new Date(),
+  /**
+   * Phase 5.2 wire-up B — optional import signals from the persisted `ImportRun`
+   * + `ImportWarning` pipeline. Backward-compatible: undefined = no signal
+   * (the intelligence's `dataQuality` field will be absent).
+   */
+  importSignals: ImportSignalsInput | null = null,
 ): LeagueBehavioralIntelligence {
   const totalManagers = managerIntelligences.length
 
@@ -506,5 +522,8 @@ export function deriveLeagueBehavioralIntelligence(
     lookbackDays: facts.lookbackDays,
     warnings,
     derivedAt: now.toISOString(),
+    // Phase 5.2 wire-up B — surface the import-provenance signal when the
+    // resolver populated one. Absent when the league has no completed import.
+    dataQuality: deriveImportDataQuality(importSignals),
   }
 }

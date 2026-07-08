@@ -373,3 +373,74 @@ export async function loadDraftRows(
 
   return { session: rawSession, picks: rawPicks }
 }
+
+// ── Phase 5.2 Wire-up A + B ──────────────────────────────────────────────────
+//
+// Port function for the Sleeper import provenance signal. Follows the same
+// read-only invariants as the other loaders: no writes, no external calls, no
+// mutations.
+
+export interface RawImportSignals {
+  /** Sleeper is the reference provider; provider filter enforced here so the
+      Decision OS behavioral layer stays honest to the audit's scope. */
+  provider: 'sleeper'
+  /** Latest ImportRun.completedAt for the league. Null when no run exists. */
+  lastImportedAt: Date | null
+  /** True when the latest run's status is NOT `completed` (running/failed). */
+  latestRunIncomplete: boolean
+  /** Counts of persisted ImportWarning rows for the league by severity. */
+  warningCountsBySeverity: {
+    error: number
+    warn: number
+    info: number
+  }
+}
+
+const IMPORT_SIGNAL_EMPTY: RawImportSignals = {
+  provider: 'sleeper',
+  lastImportedAt: null,
+  latestRunIncomplete: false,
+  warningCountsBySeverity: { error: 0, warn: 0, info: 0 },
+}
+
+/**
+ * Load Sleeper import-run + warning signals for a league. Returns an empty
+ * shape (`lastImportedAt: null`) when no ImportRun exists. Read-only; sorted
+ * to find the most recent run only.
+ */
+export async function loadLeagueImportSignals(
+  leagueId: string,
+): Promise<RawImportSignals> {
+  const latestRun = await prisma.importRun.findFirst({
+    where: { leagueId, provider: 'sleeper' },
+    orderBy: { startedAt: 'desc' },
+    select: { status: true, completedAt: true },
+  })
+
+  if (!latestRun) return IMPORT_SIGNAL_EMPTY
+
+  const counts = await prisma.importWarning.groupBy({
+    by: ['severity'],
+    where: { leagueId },
+    _count: { _all: true },
+  })
+
+  const warningCountsBySeverity = {
+    error: 0,
+    warn: 0,
+    info: 0,
+  }
+  for (const c of counts) {
+    const key = c.severity as 'error' | 'warn' | 'info'
+    if (key === 'error' || key === 'warn' || key === 'info') {
+      warningCountsBySeverity[key] = c._count._all
+    }
+  }
+
+  return {
+    provider: 'sleeper',
+    lastImportedAt: latestRun.status === 'completed' ? latestRun.completedAt : null,
+    latestRunIncomplete: latestRun.status !== 'completed',
+    warningCountsBySeverity,
+  }
+}
