@@ -9,7 +9,7 @@
  *      never an AI/recommendation endpoint.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { CommissionerIntelligenceHub } from '@/components/commissioner-intelligence/CommissionerIntelligenceHub'
 
 type Route = { status: number; body?: unknown }
@@ -77,5 +77,40 @@ describe('CommissionerIntelligenceHub — proof surface (Phase 1 audit)', () => 
       expect(url).toMatch(allowed)
       expect(url).not.toMatch(/\/api\/(ai|ai-tools)|waiver-recs|trade-finder|recommend|analyzer|matchup-prep/i)
     }
+  })
+})
+
+describe('CommissionerIntelligenceHub — demo readiness (Phase 2)', () => {
+  it('renders ALL FIVE modules with live-like data plus a back-to-league CTA', async () => {
+    installFetch(REALISTIC)
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    expect(await screen.findByTestId('activity-content')).toBeTruthy()
+    expect(await screen.findByTestId('health-content')).toBeTruthy()
+    expect(await screen.findByTestId('action-items-content')).toBeTruthy()
+    expect(await screen.findByTestId('audit-feed-content')).toBeTruthy()
+    expect(await screen.findByTestId('story-content-weekly_recap')).toBeTruthy()
+    const cta = screen.getByTestId('commissioner-hub-back-cta')
+    expect(cta.getAttribute('href')).toBe('/league/L')
+  })
+
+  it('leaks no raw manager/provider IDs and shows no placeholder copy on the demo surface', async () => {
+    installFetch(REALISTIC)
+    const { container } = render(<CommissionerIntelligenceHub leagueId="L" />)
+    await screen.findByTestId('audit-feed-content')
+    await screen.findByTestId('action-items-content')
+    const text = container.textContent ?? ''
+    expect(/\d{10,}/.test(text)).toBe(false) // no long numeric provider/Sleeper IDs
+    expect(text).not.toMatch(/managerKeys|platformUserId|payload/i)
+    expect(text).not.toMatch(/coming soon|expanding soon|placeholder/i)
+  })
+
+  it('keeps upgrade + commissioner-only states honest alongside populated modules', async () => {
+    installFetch({ ...REALISTIC, '/health': { status: 402 } })
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    // Activity still renders while Health honestly shows the upgrade state.
+    expect(await screen.findByTestId('activity-content')).toBeTruthy()
+    const health = await screen.findByTestId('module-health')
+    expect(within(health).getByTestId('state-upgrade')).toBeInTheDocument()
+    expect(within(health).queryByTestId('health-content')).toBeNull()
   })
 })

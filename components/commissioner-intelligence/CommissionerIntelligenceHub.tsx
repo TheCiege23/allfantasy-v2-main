@@ -109,7 +109,7 @@ function useResource<T>(url: string): Resource<T> {
 }
 
 // ── Shared UI ────────────────────────────────────────────────────────────────
-const card = 'rounded-xl border border-white/10 bg-[#0a1328] p-4'
+const card = 'rounded-xl border border-white/10 bg-[#0a1328] p-4 transition-colors hover:border-white/20'
 const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleString() : '—')
 
 function Card({ title, children, testId }: { title: string; children: React.ReactNode; testId: string }) {
@@ -122,7 +122,14 @@ function Card({ title, children, testId }: { title: string; children: React.Reac
 }
 
 function StateMessage({ status, commissionerOnly }: { status: ResourceStatus; commissionerOnly?: boolean }) {
-  if (status === 'loading') return <p className="text-xs text-white/50" data-testid="state-loading">Loading…</p>
+  if (status === 'loading') {
+    return (
+      <div className="space-y-2" data-testid="state-loading" role="status" aria-label="Loading">
+        <div className="h-2.5 w-2/3 animate-pulse rounded bg-white/10" />
+        <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/10" />
+      </div>
+    )
+  }
   if (status === 'forbidden' || status === 'not_found' || status === 'unauthorized') {
     return (
       <p className="text-xs text-white/45" data-testid="state-restricted">
@@ -322,15 +329,40 @@ function StoriesModule({ leagueId }: { leagueId: string }) {
 export function CommissionerIntelligenceHub({ leagueId }: { leagueId: string }) {
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-8 text-white" data-testid="commissioner-intelligence-hub">
-      <div>
-        <h1 className="text-xl font-semibold">Commissioner Intelligence</h1>
-        <p className="text-xs text-white/45">Read-only league activity, health, and action items.</p>
-      </div>
+      <header className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">Commissioner Intelligence</h1>
+            <p className="mt-0.5 text-xs text-white/45">
+              A read-only view of your league’s activity, health, action items, stories, and event
+              timeline — grounded in your league’s own recorded events.
+            </p>
+          </div>
+          <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-medium text-white/55 ring-1 ring-white/10">
+            Observations, not actions
+          </span>
+        </div>
+      </header>
+
       <ActivityModule leagueId={leagueId} />
       <HealthModule leagueId={leagueId} />
       <ActionItemsModule leagueId={leagueId} />
       <StoriesModule leagueId={leagueId} />
       <AuditFeedModule leagueId={leagueId} />
+
+      <footer className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
+        <p className="text-[11px] text-white/35">
+          Every module is a read-only observation of your league’s own activity — never a prescribed
+          commissioner action.
+        </p>
+        <a
+          href={`/league/${encodeURIComponent(leagueId)}`}
+          className="shrink-0 text-[11px] font-medium text-cyan-300/90 hover:underline"
+          data-testid="commissioner-hub-back-cta"
+        >
+          Back to league →
+        </a>
+      </footer>
     </main>
   )
 }
