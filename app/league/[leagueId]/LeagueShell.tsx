@@ -69,7 +69,7 @@ import {
   localizeLeagueTabs,
   type TabDef,
 } from './LeagueTabs'
-import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { isNflRedraftCoreDashboardFromUserLeague, isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { DraftTab } from './tabs/DraftTab'
 import { TeamTab } from './tabs/TeamTab'
 import { LeagueTab } from './tabs/LeagueTab'
@@ -94,6 +94,7 @@ import { CommissionerSettingsModal } from './components/CommissionerSettingsModa
 import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
 import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
 import { RedraftTab } from './tabs/RedraftTab'
+import { RedraftStandingsPlayoffsView } from './tabs/redraft/RedraftStandingsPlayoffsView'
 import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
@@ -1936,6 +1937,9 @@ function LeagueTabRouter({
         />
       )
     case 'standings':
+      if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
+        return <RedraftStandingsPlayoffsView leagueId={leagueId} isCommissioner={isCommissioner} />
+      }
       return (
         <StandingsTab league={selectedLeague} tabLabel={tabLabel} idpLeagueUi={idpLeagueActive} />
       )
