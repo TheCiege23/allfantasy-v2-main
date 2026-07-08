@@ -46,6 +46,11 @@ const REALISTIC: Record<string, Route | ((url: string) => Route)> = {
     status: 200,
     body: { enabled: true, data: { version: 'commissioner-trade-review.v1', derivedAt: '2026-11-15T00:00:00.000Z', pendingTradeCount: 2, recentTradeCount: 3, reviewWindowCount: 1, voteCount: 4, tradeActivity: 'normal', reviewWorkload: 'requires_review', summary: '2 trades are currently pending review. There is 1 open review window. Trade activity has been steady recently.', caveats: [] } },
   },
+  // Phase 6 — default-off commissioner-scoped rule/settings route.
+  '/rule-settings': {
+    status: 200,
+    body: { enabled: true, data: { version: 'commissioner-rule-settings.v1', derivedAt: '2026-11-20T00:00:00.000Z', leagueFormat: 'advanced', rosterComplexity: 'complex', scoringComplexity: 'complex', transactionPolicy: 'reviewed', playoffConfiguration: 'custom', settingsHighlights: ['12-team league', 'Half-PPR scoring', 'FAAB waivers', 'Superflex', 'IDP'], caveats: [], summary: 'This league uses an advanced configuration. It includes a 12-team league, Half-PPR scoring, and FAAB waivers.', source: 'settings_snapshot' } },
+  },
   '/preview': (url: string) => {
     const type = new URL('http://x' + url.slice(url.indexOf('/api'))).searchParams.get('type') ?? ''
     if (type === 'commissioner_summary' || type === 'health_narrative') return { status: 403 }
@@ -79,7 +84,7 @@ describe('CommissionerIntelligenceHub — proof surface (Phase 1 audit)', () => 
     expect(calledUrls.length).toBeGreaterThan(0)
     // Allowed: the G15.5 intelligence/story routes + the Phase-4 commissioner
     // trade-review route. Never an AI/recommendation endpoint.
-    const allowed = /\/api\/(v1\/(intelligence\/leagues\/[^/]+\/(activity|health|action-items|audit-feed)|stories\/leagues\/[^/]+\/preview)|app\/leagues\/[^/]+\/commissioner\/trade-review)/
+    const allowed = /\/api\/(v1\/(intelligence\/leagues\/[^/]+\/(activity|health|action-items|audit-feed)|stories\/leagues\/[^/]+\/preview)|app\/leagues\/[^/]+\/commissioner\/(trade-review|rule-settings))/
     for (const url of calledUrls) {
       expect(url).toMatch(allowed)
       expect(url).not.toMatch(/\/api\/(ai|ai-tools)|waiver-recs|trade-finder|trades\/analyze|trade\/ai-decision|trade-builder|recommend|analyzer|matchup-prep/i)
@@ -88,13 +93,14 @@ describe('CommissionerIntelligenceHub — proof surface (Phase 1 audit)', () => 
 })
 
 describe('CommissionerIntelligenceHub — demo readiness (Phase 2)', () => {
-  it('renders ALL SIX modules with live-like data plus a back-to-league CTA', async () => {
+  it('renders ALL SEVEN modules with live-like data plus a back-to-league CTA', async () => {
     installFetch(REALISTIC)
     render(<CommissionerIntelligenceHub leagueId="L" />)
     expect(await screen.findByTestId('activity-content')).toBeTruthy()
     expect(await screen.findByTestId('health-content')).toBeTruthy()
     expect(await screen.findByTestId('action-items-content')).toBeTruthy()
     expect(await screen.findByTestId('trade-review-content')).toBeTruthy()
+    expect(await screen.findByTestId('rule-settings-content')).toBeTruthy()
     expect(await screen.findByTestId('audit-feed-content')).toBeTruthy()
     expect(await screen.findByTestId('story-content-weekly_recap')).toBeTruthy()
     const cta = screen.getByTestId('commissioner-hub-back-cta')
@@ -154,5 +160,41 @@ describe('CommissionerIntelligenceHub — Trade Review module (Phase 4)', () => 
       expect(text).not.toContain(banned)
     }
     expect(/\d{10,}/.test(text)).toBe(false)
+  })
+})
+
+describe('CommissionerIntelligenceHub — Rule Settings module (Phase 6)', () => {
+  it('renders a quiet "expanding soon" note when the rule-settings flag is off', async () => {
+    installFetch({ ...REALISTIC, '/rule-settings': { status: 200, body: { enabled: false } } })
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    expect(await screen.findByTestId('rule-settings-disabled')).toBeTruthy()
+  })
+
+  it('renders an honest empty state when enabled but no league row', async () => {
+    installFetch({ ...REALISTIC, '/rule-settings': { status: 200, body: { enabled: true } } })
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    expect(await screen.findByTestId('rule-settings-empty')).toBeTruthy()
+  })
+
+  it('shows a commissioner-only state for a non-commissioner (403), never settings data', async () => {
+    installFetch({ ...REALISTIC, '/rule-settings': { status: 403 } })
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    const rs = await screen.findByTestId('module-rule-settings')
+    expect(within(rs).getByTestId('state-restricted').textContent).toContain('Commissioner only')
+    expect(within(rs).queryByTestId('rule-settings-content')).toBeNull()
+  })
+
+  it('DESCRIBES configuration (highlights + summary), never judges or recommends', async () => {
+    installFetch(REALISTIC)
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    const content = await screen.findByTestId('rule-settings-content')
+    const text = (content.textContent ?? '').toLowerCase()
+    expect(text).toMatch(/advanced configuration/)
+    expect(text).toMatch(/superflex/)
+    for (const banned of ['should change', 'unfair', 'poorly configured', 'bad rule', 'managers will dislike', 'recommend', 'ban this']) {
+      expect(text).not.toContain(banned)
+    }
+    // no raw settings JSON in the rendered UI
+    expect(content.textContent ?? '').not.toMatch(/[{}]|positionMultipliers|scoringRules/)
   })
 })

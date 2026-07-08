@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 // Type-only import from the pure types module (no server/prisma deps reach the
 // client bundle). Do NOT import from the barrel — it re-exports the DB resolver.
 import type { CommissionerTradeReviewV1 } from '@/lib/decision-os/commissioner-intelligence/trade-review/types'
+import type { CommissionerRuleSettingsV1 } from '@/lib/decision-os/commissioner-intelligence/rule-settings/types'
 
 // ── Contract types (mirror /api/v1/intelligence DTOs) ────────────────────────
 interface ActivitySummary {
@@ -415,6 +416,89 @@ function TradeReviewModule({ leagueId }: { leagueId: string }) {
   )
 }
 
+// ── Rule Settings (Phase 6 — descriptive configuration, never judgment) ───────
+// Consumes the internal, session-authed, commissioner-scoped, default-off route
+// `{ enabled, data? }`. Renders WITH data even for import-only leagues (settings
+// are stored config, not DomainEvent projections).
+interface RuleSettingsResponse {
+  enabled: boolean
+  data?: CommissionerRuleSettingsV1
+}
+
+function RuleSettingsContent({ data }: { data: CommissionerRuleSettingsV1 }) {
+  const neutral = 'text-white/70'
+  const attention = data.playoffConfiguration === 'needs_review' ? 'text-amber-300' : 'text-white/70'
+  const field = (label: string, value: string, cls = neutral) => (
+    <span className={`text-xs ${cls}`}>
+      <span className="text-white/40">{label}</span> <span className="capitalize">{value.replace(/_/g, ' ')}</span>
+    </span>
+  )
+  return (
+    <div className="space-y-3" data-testid="rule-settings-content">
+      <div className="flex flex-wrap gap-x-5 gap-y-1">
+        {field('Format', data.leagueFormat)}
+        {field('Roster', data.rosterComplexity)}
+        {field('Scoring', data.scoringComplexity)}
+        {field('Transactions', data.transactionPolicy)}
+        {field('Playoff', data.playoffConfiguration, attention)}
+      </div>
+      {data.settingsHighlights.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5" data-testid="rule-settings-highlights">
+          {data.settingsHighlights.map((h, i) => (
+            <span key={i} className="rounded-md border border-white/[0.08] bg-black/20 px-2 py-0.5 text-[11px] text-white/70">{h}</span>
+          ))}
+        </div>
+      ) : null}
+      <p className="text-xs text-white/60">{data.summary}</p>
+      {data.caveats.length > 0 ? (
+        <ul className="space-y-0.5" data-testid="rule-settings-caveats">
+          {data.caveats.map((c, i) => (
+            <li key={i} className="text-[11px] text-white/35">• {c}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+function RuleSettingsModule({ leagueId }: { leagueId: string }) {
+  const [state, setState] = useState<{ status: ResourceStatus; body?: RuleSettingsResponse }>({ status: 'loading' })
+  useEffect(() => {
+    let active = true
+    setState({ status: 'loading' })
+    fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/commissioner/rule-settings`, { cache: 'no-store' })
+      .then(async (res) => {
+        const s = statusFromHttp(res.status)
+        if (s === 'ok') {
+          const body = (await res.json().catch(() => ({}))) as RuleSettingsResponse
+          if (active) setState({ status: 'ok', body })
+        } else if (active) {
+          setState({ status: s })
+        }
+      })
+      .catch(() => {
+        if (active) setState({ status: 'error' })
+      })
+    return () => {
+      active = false
+    }
+  }, [leagueId])
+
+  return (
+    <Card title="Rule Settings" testId="module-rule-settings">
+      {state.status !== 'ok' ? (
+        <StateMessage status={state.status} commissionerOnly />
+      ) : !state.body?.enabled ? (
+        <p className="text-xs text-white/40" data-testid="rule-settings-disabled">League configuration summary — expanding soon.</p>
+      ) : !state.body.data ? (
+        <p className="text-xs text-white/45" data-testid="rule-settings-empty">No settings available yet.</p>
+      ) : (
+        <RuleSettingsContent data={state.body.data} />
+      )}
+    </Card>
+  )
+}
+
 export function CommissionerIntelligenceHub({ leagueId }: { leagueId: string }) {
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-8 text-white" data-testid="commissioner-intelligence-hub">
@@ -437,6 +521,7 @@ export function CommissionerIntelligenceHub({ leagueId }: { leagueId: string }) 
       <HealthModule leagueId={leagueId} />
       <ActionItemsModule leagueId={leagueId} />
       <TradeReviewModule leagueId={leagueId} />
+      <RuleSettingsModule leagueId={leagueId} />
       <StoriesModule leagueId={leagueId} />
       <AuditFeedModule leagueId={leagueId} />
 
