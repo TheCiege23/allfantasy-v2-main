@@ -523,9 +523,6 @@ export function DraftRoomPageClient({
     draftPool === null && poolReadiness?.ready === false
       ? 'Preparing player pool...'
       : 'Loading player pool...'
-  const startDraftBlocked =
-    draftRoomState.canStart &&
-    (poolReadiness?.ready === false || poolFetching || !draftPool || draftPool.entries.length === 0)
   const effectiveDraftSport = draftPool?.sport ?? sport
 
   const draftedNames = useMemo(
@@ -927,6 +924,11 @@ export function DraftRoomPageClient({
   )
 
   const canDraft = draftRoomState.canDraft
+  // NFL redraft beta: hoisted below the draftRoomState declaration to fix an inherited
+  // temporal-dead-zone crash (was used at ~L527 before its L897 declaration on main).
+  const startDraftBlocked =
+    draftRoomState.canStart &&
+    (poolReadiness?.ready === false || poolFetching || !draftPool || draftPool.entries.length === 0)
 
   useEffect(() => {
     if (!session) return
