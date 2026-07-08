@@ -165,6 +165,11 @@ Full assessment: `NFL_REDRAFT_BETA_GO_NO_GO.md` §"CI triage". Highlights:
 - ✅ **After the fix: `Landing Perf Budget` build PASS, `Vercel – allfantasy-v2-main` deploy PASS**,
   Platform Backend Deploy Readiness PASS, DB-First API Boundary PASS — the branch builds + deploys.
 - **Environment-only:** `Vercel – allfantasy-v2` "Account is blocked" (repo-wide; same on #156).
+- **Second branch-caused regression (found by inspection + fixed):** the Phase-6 tile-gating updated the
+  *unit* test but missed the **e2e** spec `e2e/g32-nfl-redraft-league-home.spec.ts`, whose free-manager
+  case still asserted the now-hidden "Locked Manager Intelligence preview" / "AF Pro preview". Updated it
+  to assert the section is **absent** for free users (consistent with the unit test + the gating). The
+  other "AF Pro preview" test hits are unrelated features (world-cup / bracket-create), not this change.
 - **Inherited-main (not beta):** `Playwright (onboarding-activation)` (fails on #137/#131 too; branch
   touches no onboarding files) + the 7 redraft unit failures (proven identical on the `main` baseline).
-- Playwright core suites re-verified after the fix (see PR comment for the final line).
+- Playwright core suites re-verified after both fixes (see PR comment for the final line).

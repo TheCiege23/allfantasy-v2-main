@@ -130,11 +130,15 @@ The branch was pushed and **draft PR #166** opened. CI classified:
 | 7 redraft unit failures (`core-tab-bar`×4, `smoke-blockers`×1, `core-contract`×2) | ❌ fail | **inherited/stale** (proven identical on the `main` baseline) |
 | `Playwright (core 1–3/3)`, `referral-growth-db`, EN/ES parity | re-verified after the build fix | — |
 
-**Branch-caused build regression (found + fixed):** the G30–G44 cherry-pick missed transitive infra
-deps (`f89240bbf` prod modules + `lib/events/*` event foundation + `leagueTabSync`) → `next build`
-failed with `Module not found`. Fixed by transplanting the **beta-clean** infra (commits `c4b1b3812`,
-`6d79abb63`); build + Vercel deploy now green. **No other branch-caused failures** — everything else is
-environment-only or inherited/stale, and none of them are required checks.
+**Branch-caused regressions (found + fixed — 2):**
+1. **Build:** the G30–G44 cherry-pick missed transitive infra deps (`f89240bbf` prod modules +
+   `lib/events/*` event foundation + `leagueTabSync`) → `next build` failed with `Module not found`.
+   Fixed by transplanting the **beta-clean** infra (`c4b1b3812`, `6d79abb63`); build + Vercel deploy green.
+2. **e2e:** the Phase-6 tile-gating updated the unit test but missed `e2e/g32-nfl-redraft-league-home.spec.ts`
+   (free-manager case still asserted the hidden "Locked Manager Intelligence preview"). Fixed to assert the
+   section is absent for free users.
+
+Everything else is environment-only or inherited/stale, and none of those are required checks.
 
 **Net:** the sole required check passes, the branch builds + deploys, and there are **no untriaged or
 branch-caused blockers**. PR stays **draft** — live non-prod core-loop + mobile QA (runbook §3) still

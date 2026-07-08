@@ -60,7 +60,7 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
     await expect(page.getByTestId('g32-active-tab')).toContainText('league_chat')
   })
 
-  test('free manager mobile view keeps Commissioner hidden and Manager Intelligence locked', async ({ page }) => {
+  test('free manager mobile view keeps Commissioner hidden and shows no Intelligence/Decision OS surface', async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await routeEntitlements(page, [])
     await gotoHarness(page, '?role=manager')
@@ -68,8 +68,10 @@ test.describe('@g32 @nfl-redraft league home overhaul', () => {
     await expect(page.getByTestId('g32-nfl-redraft-home')).toBeVisible()
     await expect(page.getByRole('navigation', { name: 'G32 league tabs' }).getByRole('button', { name: 'Commissioner' })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Draft HQ' }).first()).toBeVisible()
-    await expect(page.getByTestId('g32-manager-intelligence-section')).toContainText('Locked Manager Intelligence preview')
-    await expect(page.getByTestId('g32-manager-intelligence-section')).toContainText('AF Pro preview')
+    // free-beta: the Manager Intelligence / Decision OS surface is gated behind entitlement — a
+    // free manager must see none of it (no locked-preview teaser, no parked-product naming)
+    await expect(page.getByTestId('g32-manager-intelligence-section')).toHaveCount(0)
+    await expect(page.getByText('AF Pro preview')).toHaveCount(0)
     await expect(page.getByTestId('g32-chat-visibility-card')).toBeVisible()
   })
 
