@@ -1,3 +1,5 @@
+import type { NflRedraftPlayoffRuntimeState } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
+
 export type RedraftRosterRow = {
   id: string
   teamName: string | null
@@ -371,6 +373,22 @@ export async function fetchRedraftStandings(seasonId: string): Promise<RedraftRo
   })
   const body = await parseJson<{ rosters?: RedraftRosterRow[] }>(res)
   return body.rosters ?? []
+}
+
+export type RedraftPlayoffRuntimeClient = NflRedraftPlayoffRuntimeState
+
+export async function fetchRedraftPlayoffRuntime(params: {
+  leagueId?: string | null
+  seasonId?: string | null
+  week?: number | null
+}): Promise<RedraftPlayoffRuntimeClient | null> {
+  const qs = new URLSearchParams(params.seasonId ? { seasonId: params.seasonId } : { leagueId: params.leagueId ?? '' })
+  if (params.week != null) qs.set('week', String(params.week))
+  const res = await fetch(`/api/redraft/playoff-runtime?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ playoffs?: RedraftPlayoffRuntimeClient }>(res)
+  return body.playoffs ?? null
 }
 
 export async function fetchRedraftMatchups(seasonId: string, week: number): Promise<RedraftMatchupClient[]> {
