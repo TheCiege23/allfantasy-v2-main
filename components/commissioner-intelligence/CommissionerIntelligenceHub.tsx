@@ -12,6 +12,9 @@
  * intelligence modules.
  */
 import { useCallback, useEffect, useState } from 'react'
+// Type-only import from the pure types module (no server/prisma deps reach the
+// client bundle). Do NOT import from the barrel — it re-exports the DB resolver.
+import type { CommissionerTradeReviewV1 } from '@/lib/decision-os/commissioner-intelligence/trade-review/types'
 
 // ── Contract types (mirror /api/v1/intelligence DTOs) ────────────────────────
 interface ActivitySummary {
@@ -326,6 +329,92 @@ function StoriesModule({ leagueId }: { leagueId: string }) {
   )
 }
 
+// ── Trade Review (Phase 4 — deterministic review-WORKLOAD, not fairness) ──────
+// Consumes the internal, session-authed, commissioner-scoped, default-off route
+// `{ enabled, data? }`. flag off → "expanding soon"; enabled + no data → empty;
+// data → observational workload (pending / recent / review windows / votes).
+interface TradeReviewResponse {
+  enabled: boolean
+  data?: CommissionerTradeReviewV1
+}
+
+const TR_ACTIVITY_COLOR: Record<CommissionerTradeReviewV1['tradeActivity'], string> = {
+  quiet: 'text-white/40',
+  normal: 'text-emerald-300',
+  active: 'text-cyan-300',
+  unknown: 'text-white/40',
+}
+const TR_WORKLOAD: Record<CommissionerTradeReviewV1['reviewWorkload'], { color: string; label: string }> = {
+  none: { color: 'text-white/40', label: 'None' },
+  watch: { color: 'text-amber-300', label: 'Watch' },
+  requires_review: { color: 'text-red-300', label: 'Requires review' },
+  unknown: { color: 'text-white/40', label: 'Unknown' },
+}
+
+function TradeReviewContent({ data }: { data: CommissionerTradeReviewV1 }) {
+  const wl = TR_WORKLOAD[data.reviewWorkload]
+  return (
+    <div className="space-y-3" data-testid="trade-review-content">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-white/70">
+        <span><span className="text-white/40">Pending</span> {data.pendingTradeCount}</span>
+        <span><span className="text-white/40">Recent (14d)</span> {data.recentTradeCount}</span>
+        <span><span className="text-white/40">Review windows</span> {data.reviewWindowCount}</span>
+        <span><span className="text-white/40">Votes</span> {data.voteCount}</span>
+      </div>
+      <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+        <span className={`font-semibold capitalize ${TR_ACTIVITY_COLOR[data.tradeActivity]}`}>Activity: {data.tradeActivity}</span>
+        <span className={`font-semibold ${wl.color}`}>Workload: {wl.label}</span>
+      </div>
+      <p className="text-xs text-white/60">{data.summary}</p>
+      {data.caveats.length > 0 ? (
+        <ul className="space-y-0.5" data-testid="trade-review-caveats">
+          {data.caveats.map((c, i) => (
+            <li key={i} className="text-[11px] text-white/35">• {c}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
+function TradeReviewModule({ leagueId }: { leagueId: string }) {
+  const [state, setState] = useState<{ status: ResourceStatus; body?: TradeReviewResponse }>({ status: 'loading' })
+  useEffect(() => {
+    let active = true
+    setState({ status: 'loading' })
+    fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/commissioner/trade-review`, { cache: 'no-store' })
+      .then(async (res) => {
+        const s = statusFromHttp(res.status)
+        if (s === 'ok') {
+          const body = (await res.json().catch(() => ({}))) as TradeReviewResponse
+          if (active) setState({ status: 'ok', body })
+        } else if (active) {
+          setState({ status: s })
+        }
+      })
+      .catch(() => {
+        if (active) setState({ status: 'error' })
+      })
+    return () => {
+      active = false
+    }
+  }, [leagueId])
+
+  return (
+    <Card title="Trade Review" testId="module-trade-review">
+      {state.status !== 'ok' ? (
+        <StateMessage status={state.status} commissionerOnly />
+      ) : !state.body?.enabled ? (
+        <p className="text-xs text-white/40" data-testid="trade-review-disabled">Trade-review workload — expanding soon.</p>
+      ) : !state.body.data ? (
+        <p className="text-xs text-white/45" data-testid="trade-review-empty">No trade data yet.</p>
+      ) : (
+        <TradeReviewContent data={state.body.data} />
+      )}
+    </Card>
+  )
+}
+
 export function CommissionerIntelligenceHub({ leagueId }: { leagueId: string }) {
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-4 py-8 text-white" data-testid="commissioner-intelligence-hub">
@@ -347,6 +436,7 @@ export function CommissionerIntelligenceHub({ leagueId }: { leagueId: string }) 
       <ActivityModule leagueId={leagueId} />
       <HealthModule leagueId={leagueId} />
       <ActionItemsModule leagueId={leagueId} />
+      <TradeReviewModule leagueId={leagueId} />
       <StoriesModule leagueId={leagueId} />
       <AuditFeedModule leagueId={leagueId} />
 

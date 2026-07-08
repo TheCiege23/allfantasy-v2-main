@@ -41,6 +41,11 @@ const REALISTIC: Record<string, Route | ((url: string) => Route)> = {
     ] },
   },
   '/audit-feed': { status: 200, body: { data: [{ eventId: 'e1', type: 'transaction.trade.accepted', summary: 'Trade accepted', occurredAt: '2026-11-01T00:00:00.000Z', actorType: 'user' }], meta: { nextCursor: null } } },
+  // Phase 4 — default-off commissioner-scoped route ({ enabled, data? } envelope).
+  '/trade-review': {
+    status: 200,
+    body: { enabled: true, data: { version: 'commissioner-trade-review.v1', derivedAt: '2026-11-15T00:00:00.000Z', pendingTradeCount: 2, recentTradeCount: 3, reviewWindowCount: 1, voteCount: 4, tradeActivity: 'normal', reviewWorkload: 'requires_review', summary: '2 trades are currently pending review. There is 1 open review window. Trade activity has been steady recently.', caveats: [] } },
+  },
   '/preview': (url: string) => {
     const type = new URL('http://x' + url.slice(url.indexOf('/api'))).searchParams.get('type') ?? ''
     if (type === 'commissioner_summary' || type === 'health_narrative') return { status: 403 }
@@ -72,21 +77,24 @@ describe('CommissionerIntelligenceHub — proof surface (Phase 1 audit)', () => 
     await screen.findByTestId('audit-feed-content')
     await screen.findByTestId('story-card-weekly_recap')
     expect(calledUrls.length).toBeGreaterThan(0)
-    const allowed = /\/api\/v1\/(intelligence\/leagues\/[^/]+\/(activity|health|action-items|audit-feed)|stories\/leagues\/[^/]+\/preview)/
+    // Allowed: the G15.5 intelligence/story routes + the Phase-4 commissioner
+    // trade-review route. Never an AI/recommendation endpoint.
+    const allowed = /\/api\/(v1\/(intelligence\/leagues\/[^/]+\/(activity|health|action-items|audit-feed)|stories\/leagues\/[^/]+\/preview)|app\/leagues\/[^/]+\/commissioner\/trade-review)/
     for (const url of calledUrls) {
       expect(url).toMatch(allowed)
-      expect(url).not.toMatch(/\/api\/(ai|ai-tools)|waiver-recs|trade-finder|recommend|analyzer|matchup-prep/i)
+      expect(url).not.toMatch(/\/api\/(ai|ai-tools)|waiver-recs|trade-finder|trades\/analyze|trade\/ai-decision|trade-builder|recommend|analyzer|matchup-prep/i)
     }
   })
 })
 
 describe('CommissionerIntelligenceHub — demo readiness (Phase 2)', () => {
-  it('renders ALL FIVE modules with live-like data plus a back-to-league CTA', async () => {
+  it('renders ALL SIX modules with live-like data plus a back-to-league CTA', async () => {
     installFetch(REALISTIC)
     render(<CommissionerIntelligenceHub leagueId="L" />)
     expect(await screen.findByTestId('activity-content')).toBeTruthy()
     expect(await screen.findByTestId('health-content')).toBeTruthy()
     expect(await screen.findByTestId('action-items-content')).toBeTruthy()
+    expect(await screen.findByTestId('trade-review-content')).toBeTruthy()
     expect(await screen.findByTestId('audit-feed-content')).toBeTruthy()
     expect(await screen.findByTestId('story-content-weekly_recap')).toBeTruthy()
     const cta = screen.getByTestId('commissioner-hub-back-cta')
@@ -112,5 +120,39 @@ describe('CommissionerIntelligenceHub — demo readiness (Phase 2)', () => {
     const health = await screen.findByTestId('module-health')
     expect(within(health).getByTestId('state-upgrade')).toBeInTheDocument()
     expect(within(health).queryByTestId('health-content')).toBeNull()
+  })
+})
+
+describe('CommissionerIntelligenceHub — Trade Review module (Phase 4)', () => {
+  it('renders a quiet "expanding soon" note when the trade-review flag is off', async () => {
+    installFetch({ ...REALISTIC, '/trade-review': { status: 200, body: { enabled: false } } })
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    expect(await screen.findByTestId('trade-review-disabled')).toBeTruthy()
+  })
+
+  it('renders an honest empty state when enabled but the league has no trade data', async () => {
+    installFetch({ ...REALISTIC, '/trade-review': { status: 200, body: { enabled: true } } })
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    expect(await screen.findByTestId('trade-review-empty')).toBeTruthy()
+  })
+
+  it('shows a commissioner-only state for a non-commissioner (403), never trade data', async () => {
+    installFetch({ ...REALISTIC, '/trade-review': { status: 403 } })
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    const tr = await screen.findByTestId('module-trade-review')
+    expect(within(tr).getByTestId('state-restricted').textContent).toContain('Commissioner only')
+    expect(within(tr).queryByTestId('trade-review-content')).toBeNull()
+  })
+
+  it('renders review WORKLOAD (counts + summary), never a fairness/veto/collusion verdict', async () => {
+    installFetch(REALISTIC)
+    render(<CommissionerIntelligenceHub leagueId="L" />)
+    const content = await screen.findByTestId('trade-review-content')
+    const text = (content.textContent ?? '').toLowerCase()
+    expect(text).toMatch(/pending review/)
+    for (const banned of ['veto', 'unfair', 'collusion', 'cheat', 'won the trade', 'accept this', 'reject this', 'recommend']) {
+      expect(text).not.toContain(banned)
+    }
+    expect(/\d{10,}/.test(text)).toBe(false)
   })
 })
