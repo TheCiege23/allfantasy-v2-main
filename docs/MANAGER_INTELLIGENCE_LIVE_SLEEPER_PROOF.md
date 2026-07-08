@@ -114,14 +114,20 @@ are read-only by construction).
 
 ## How to run the real live pass (in a proper non-prod env)
 
+Follow the step-by-step **[Non-Prod Validation Runbook](./MANAGER_INTELLIGENCE_NONPROD_VALIDATION_RUNBOOK.md)**
+(environment requirements, approved test league, module + API checklists, and the demo script).
+In short:
+
 1. Point a **local or explicitly-approved non-prod** `DATABASE_URL` at a database that contains
    the imported Sleeper league (re-run the Decision OS F.0 non-prod import runner if needed to
    seed `theciege24` / "KBI Smoke Black").
 2. Export the six flags above in that environment.
-3. `npm run dev`, sign in as a member of the imported league, open
+3. (Optional, safe) run the read-only readiness probe — it refuses on prod-like targets:
+   `NONPROD_VALIDATION_ACK=true MANAGER_VALIDATION_LEAGUE_ID=<id> npx tsx scripts/manager-intelligence/validate-nonprod-readonly.ts`
+4. `npm run dev`, sign in as a member of the imported league, open
    `/league/<leagueId>/manager-hub`.
-4. Walk each module and record: data present? empty state? null/bad-data behavior? rendering
-   correct? observational (no rec language)? no raw IDs? Capture screenshots into this doc.
+5. Walk each module and record results in the runbook: data present? empty state? null/bad-data
+   behavior? rendering correct? observational (no rec language)? no raw IDs? Capture screenshots.
 
 ---
 
