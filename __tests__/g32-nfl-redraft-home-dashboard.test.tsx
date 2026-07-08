@@ -68,14 +68,15 @@ describe('G32 NFL redraft league home dashboard', () => {
     entitlements.hasCommissioner = false
   })
 
-  it('shows the free manager Draft HQ with a locked Manager Intelligence preview', () => {
+  it('shows the free manager Draft HQ with NO Manager Intelligence / Decision OS surface (free beta)', () => {
     renderHome()
 
     expect(screen.getAllByRole('heading', { name: 'Draft HQ' })[0]).toBeInTheDocument()
-    expect(screen.getByTestId('g32-manager-intelligence-section')).toHaveTextContent('Locked Manager Intelligence preview')
-    expect(screen.getByText('AF Pro preview')).toBeInTheDocument()
-    expect(screen.getByText('Ask Chimmy')).toBeInTheDocument()
-    expect(screen.getByText('League helper')).toBeInTheDocument()
+    // free-beta users must not see parked-product ("Intelligence"/"Decision OS") naming
+    expect(screen.queryByTestId('g32-manager-intelligence-section')).not.toBeInTheDocument()
+    expect(screen.queryByText('AF Pro preview')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Manager Intelligence/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Decision OS/)).not.toBeInTheDocument()
   })
 
   it('unlocks Manager Intelligence for AF Pro users', () => {
@@ -88,14 +89,14 @@ describe('G32 NFL redraft league home dashboard', () => {
     expect(screen.getByText(/Personal Decision OS panel/)).toBeInTheDocument()
   })
 
-  it('shows commissioner HQ and premium Commissioner Intelligence preview for free commissioners', () => {
+  it('shows commissioner HQ with NO Commissioner Intelligence / Decision OS surface for free commissioners (free beta)', () => {
     renderHome({ commissioner: true })
 
     expect(screen.getByRole('heading', { name: 'Commissioner HQ' })).toBeInTheDocument()
-    expect(screen.getByTestId('g32-commissioner-intelligence-section')).toHaveTextContent(
-      'Locked Commissioner Intelligence preview',
-    )
-    expect(screen.getByText('AF Commissioner preview')).toBeInTheDocument()
+    // free-beta users must not see parked-product ("Intelligence"/"Decision OS") naming
+    expect(screen.queryByTestId('g32-commissioner-intelligence-section')).not.toBeInTheDocument()
+    expect(screen.queryByText('AF Commissioner preview')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Commissioner Intelligence/)).not.toBeInTheDocument()
   })
 
   it('unlocks the command center for AF Commissioner or Supreme users', () => {

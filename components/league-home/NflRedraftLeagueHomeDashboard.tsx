@@ -324,7 +324,11 @@ export function NflRedraftLeagueHomeDashboard({
         </div>
       </section>
 
+      {/* NFL redraft free beta: gate the Manager/Commissioner Intelligence surfaces on entitlement so
+          free-beta users never see parked-product ("Intelligence"/"Decision OS") naming. Entitled
+          users (none in the free beta) still get the sections. */}
       {isCommissioner ? (
+        hasCommissionerIntelligence ? (
         <section className="mt-5" data-testid="g32-commissioner-intelligence-section">
           <div className="mb-3 flex items-center gap-2">
             <HeartPulse className="h-5 w-5 text-violet-200" aria-hidden />
@@ -338,7 +342,9 @@ export function NflRedraftLeagueHomeDashboard({
             ))}
           </div>
         </section>
+        ) : null
       ) : (
+        hasManagerIntelligence ? (
         <section className="mt-5" data-testid="g32-manager-intelligence-section">
           <div className="mb-3 flex items-center gap-2">
             <Activity className="h-5 w-5 text-violet-200" aria-hidden />
@@ -352,6 +358,7 @@ export function NflRedraftLeagueHomeDashboard({
             ))}
           </div>
         </section>
+        ) : null
       )}
 
       <RedraftCommunicationPanel
