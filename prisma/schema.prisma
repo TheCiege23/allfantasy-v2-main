@@ -16125,3 +16125,30 @@ model WaiverWatchlist {
   @@index([leagueId, userId])
   @@map("waiver_watchlists")
 }
+
+/// Decision OS Phase A — provider-neutral imported/external-league activity.
+/// Deliberately NOT coupled to AppUser/League/Roster (external managers have no AF account).
+/// Idempotency key = externalSourceKey (the normalizer's deterministic natural key).
+model DecisionOsImportedActivity {
+  id                       String   @id @default(uuid())
+  externalSourceKey        String   @unique
+  provider                 String
+  providerLeagueId         String
+  afLeagueId               String?
+  activityType             String
+  providerEventId          String?
+  occurredAt               DateTime
+  externalManagerId        String?
+  stableExternalManagerKey String?
+  appUserId                String?
+  rosterId                 String?
+  payload                  Json?
+  normalized               Json
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([afLeagueId, activityType])
+  @@index([providerLeagueId, activityType])
+  @@index([occurredAt])
+  @@map("decision_os_imported_activity")
+}

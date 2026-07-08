@@ -95,6 +95,46 @@ table, and an external-manager-friendly path for trades** (either nullable `prop
 external-manager columns, or a dedicated imported-activity model the behavioral reader also consumes).
 That migration + its verification require an approved non-prod DB.
 
+## 2c. Increment 3 — dedicated imported-activity model + Prisma adapter + behavioral read (landed)
+
+Implements the user's architecture decision: a **dedicated provider-neutral model** the behavioral
+reader also consumes — `afLeagueTrade` untouched, **no AppUser accounts fabricated**.
+
+- **Model + migration:** `DecisionOsImportedActivity` (`prisma/schema.prisma`, mapped to
+  `decision_os_imported_activity`; migration `prisma/migrations/20260708000000_decision_os_imported_activity/`).
+  Unique **`externalSourceKey`** = the normalizer's natural key (the idempotency constraint);
+  provider / providerLeagueId / nullable `afLeagueId`; activityType; occurredAt; **manager identity
+  as data, not FKs** (externalManagerId, stableExternalManagerKey, nullable appUserId/rosterId);
+  `payload` (provider source) + `normalized` (Decision OS attribution: `managerKeys`,
+  `hasExternalOnlyManager`). Deliberately no FK coupling to AF-native tables.
+- **Prisma adapter:** `lib/decision-os/ingestion/prismaImportedActivityStore.ts` implements the
+  Increment-2 `ImportedActivityStore` port against a **narrow injected delegate** (the shape of
+  `prisma.decisionOsImportedActivity`) — type-checks + unit-tests without regenerating the client;
+  never fabricates AF ids (`afLeagueId`/`appUserId`/`rosterId` stay null until real mapping exists).
+- **Behavioral read (additive):** `lib/decision-os/behavioral/importedActivityToEvents.ts` converts
+  rows → `BehavioralEvent[]` (`source: 'import'`, provenance-only provider identity, reduced
+  completeness + `actorConfidence: 'inferred'` for external-only managers — honest). **Trade
+  attribution keeps league counts correct:** proposer → `trade_created`, counterparties →
+  `trade_accepted` (a 2-manager trade = 1 league trade, both managers attributed).
+  `real-data-provider.ts` gains a `loadImportedActivityRows` dep merged additively in
+  `loadAllLeagueEvents`; the default loader **degrades to `[]`** (try/catch + delegate-existence
+  check) so AF-native behavior is untouched until the model is generated/migrated.
+- **Tests:** `__tests__/decision-os/imported-activity-persistence.test.ts` — **7/7**: no duplicate
+  rows on re-ingest (Prisma adapter over a fake delegate); external-only managers persist with
+  `appUserId: null`; imported activity **appears in behavioral facts** (league trade count = 1 for a
+  2-manager trade; external manager in `activeManagerIds`); **AF-native counts unchanged/additive**;
+  honest skips (unknown type / no managers / bad timestamp). Full decision-os ingestion suite
+  **24/24**; a wiring regression I introduced in `intelligence-api-provider-selection.test.ts` was
+  found and fixed (default loader made fully defensive) — now **33/33**.
+- **Real-DB idempotency proof (non-prod, per the DB decision):** ran the migration DDL on a
+  **throwaway Neon project** (`decision-os-phaseA-verify`, isolated): first ingest → `inserted:
+  true`; **re-ingest of the same natural key → same row id, `inserted: false` (UPDATE)**; final state
+  exactly 1 trade row + 1 waiver row, both `appUserId = null`. Idempotency + external-only
+  persistence proven on real Postgres. **No production or shared DB touched.**
+
+**Skipped-by-design this increment:** `prisma generate` against a shared env (other sessions hold the
+client), the Sleeper emitter (Increment 4), and AF-league/manager mapping enrichment (Increment 4).
+
 ## 3. What remains (the bulk — grounded next steps)
 
 | # | Work | Notes / blocker |

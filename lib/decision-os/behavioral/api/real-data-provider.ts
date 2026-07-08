@@ -34,6 +34,10 @@ import {
   mapRosterMovesToEvents,
   mapDraftRowsToEvents,
 } from '../mappers'
+import {
+  mapImportedActivityRowsToEvents,
+  type ImportedActivityEventRow,
+} from '../importedActivityToEvents'
 import { assembleManagerBehavioralFacts, assembleLeagueBehavioralFacts } from '../assemble'
 import { deriveManagerBehavioralIntelligence }  from '../manager-intelligence'
 import { deriveLeagueBehavioralIntelligence }   from '../league-intelligence'
@@ -69,6 +73,31 @@ export interface RealDataProviderDeps {
   }>
   /** Read-only: returns league ids ordered most-recent-first, up to `take` entries. */
   findLeagueIds(take: number): Promise<{ id: string }[]>
+  /** Read-only: imported/external-league activity rows for a league (Increment 3, additive). */
+  loadImportedActivityRows(leagueId: string, since?: Date): Promise<ImportedActivityEventRow[]>
+}
+
+/**
+ * Default imported-activity loader. Degrades honestly: if the `decisionOsImportedActivity`
+ * model isn't generated/migrated yet, returns [] so AF-native behavior is unchanged (never crashes).
+ */
+async function defaultLoadImportedActivityRows(leagueId: string, since?: Date): Promise<ImportedActivityEventRow[]> {
+  try {
+    const delegate = (defaultPrisma as unknown as {
+      decisionOsImportedActivity?: { findMany(args: unknown): Promise<ImportedActivityEventRow[]> }
+    })?.decisionOsImportedActivity
+    if (!delegate || typeof delegate.findMany !== 'function') return []
+    return await delegate.findMany({
+      where: {
+        OR: [{ afLeagueId: leagueId }, { providerLeagueId: leagueId }],
+        ...(since ? { occurredAt: { gte: since } } : {}),
+      },
+      orderBy: { occurredAt: 'desc' },
+    })
+  } catch {
+    // Model not generated/migrated yet, or read failed → degrade honestly; AF-native reads are unaffected.
+    return []
+  }
 }
 
 const defaultDeps: RealDataProviderDeps = {
@@ -76,6 +105,7 @@ const defaultDeps: RealDataProviderDeps = {
   loadLeagueTradeRows: defaultLoadLeagueTradeRows,
   loadRosterMoveRows:  defaultLoadRosterMoveRows,
   loadDraftRows:       defaultLoadDraftRows,
+  loadImportedActivityRows: defaultLoadImportedActivityRows,
   findLeagueIds: (take) =>
     defaultPrisma.league.findMany({
       orderBy: { createdAt: 'desc' },
@@ -97,17 +127,21 @@ async function loadAllLeagueEvents(
   since:    Date,
   deps:     RealDataProviderDeps,
 ): Promise<BehavioralEvent[]> {
-  const [waiverRows, tradeRows, rosterMoveRows, draftData] = await Promise.all([
+  const [waiverRows, tradeRows, rosterMoveRows, draftData, importedRows] = await Promise.all([
     deps.loadWaiverClaimRows(leagueId, since),
     deps.loadLeagueTradeRows(leagueId, since),
     deps.loadRosterMoveRows(leagueId, since),
     deps.loadDraftRows(leagueId),
+    deps.loadImportedActivityRows(leagueId, since),
   ])
   return [
+    // AF-native events (unchanged)
     ...mapWaiverClaimsToEvents(waiverRows),
     ...mapLeagueTradesToEvents(tradeRows),
     ...mapRosterMovesToEvents(rosterMoveRows),
     ...mapDraftRowsToEvents(draftData.session, draftData.picks),
+    // Imported/external-league events (Increment 3, additive — external-only managers included)
+    ...mapImportedActivityRowsToEvents(importedRows).events,
   ]
 }
 
