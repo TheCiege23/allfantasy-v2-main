@@ -172,4 +172,9 @@ Full assessment: `NFL_REDRAFT_BETA_GO_NO_GO.md` §"CI triage". Highlights:
   other "AF Pro preview" test hits are unrelated features (world-cup / bracket-create), not this change.
 - **Inherited-main (not beta):** `Playwright (onboarding-activation)` (fails on #137/#131 too; branch
   touches no onboarding files) + the 7 redraft unit failures (proven identical on the `main` baseline).
-- Playwright core suites re-verified after both fixes (see PR comment for the final line).
+- **Playwright core 1–3/3 = inherited-main (not this branch):** the shards fail/stall on
+  `relation "league_create_options_catalog" does not exist` — a table the create-league code (on
+  `main`) queries but the CI test schema never creates; red on #137/#131 too; the ~48-min runtimes are
+  that DB-error timeout loop. Not a required check; a separate main CI-health follow-up. (The g32 e2e
+  fix above was still a real branch regression worth fixing, independent of this inherited failure.)
+- Final CI triage posted to PR #166 as a comment.

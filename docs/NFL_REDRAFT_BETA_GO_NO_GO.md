@@ -128,7 +128,8 @@ The branch was pushed and **draft PR #166** opened. CI classified:
 | `Vercel – allfantasy-v2` ("Account is blocked") | ❌ fail | **environment-only** (repo-wide; identical on #156) |
 | `Playwright (onboarding-activation)` | ❌ fail | **inherited-main** (fails on #137/#131; branch touches no onboarding files) |
 | 7 redraft unit failures (`core-tab-bar`×4, `smoke-blockers`×1, `core-contract`×2) | ❌ fail | **inherited/stale** (proven identical on the `main` baseline) |
-| `Playwright (core 1–3/3)`, `referral-growth-db`, EN/ES parity | re-verified after the build fix | — |
+| `Playwright (referral-growth-db)`, `retention-engagement`, EN/ES parity | ✅ PASS | — |
+| `Playwright (core 1–3/3)` | ❌ fail/stall | **inherited-main** — `relation "league_create_options_catalog" does not exist` (create-league code is on `main`; red on #137/#131; ~48-min DB-error timeout loop). Not required; tracked as a separate main CI-health item |
 
 **Branch-caused regressions (found + fixed — 2):**
 1. **Build:** the G30–G44 cherry-pick missed transitive infra deps (`f89240bbf` prod modules +
