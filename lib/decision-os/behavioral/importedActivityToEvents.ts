@@ -18,7 +18,8 @@
  *   in `skipped`.
  */
 
-import type { BehavioralEvent, BehavioralEventType } from './events/types'
+import type { BehavioralEvent } from './events/types'
+import type { BehavioralEventType } from './events/taxonomy'
 import type { ImportedActivityType } from '../ingestion/importedActivityNormalizer'
 
 /** Read shape of a persisted imported-activity row (subset the mapper needs). Decoupled from Prisma. */

@@ -1,8 +1,10 @@
 # Decision OS Phase A — Implementation (in progress)
 
 **Status: implementation BEGUN (freeze lifted by the user; OS is the sole focus).** Increments 1
-(normalization seam) and 2 (idempotent persistence writer) are landed. Every claim below is
-code-verified; nothing is fabricated, and no NFL-Redraft / Start-Draft / PR-#166 work is touched.
+(normalization seam), 2 (idempotent persistence writer), 3 (dedicated imported-activity model +
+Prisma adapter + additive behavioral read), and 4 (Sleeper emitter + end-to-end ingestion) are
+landed. Every claim below is code-verified; nothing is fabricated, and no NFL-Redraft / Start-Draft
+/ PR-#166 work is touched.
 
 **Branch:** `g15-event-foundation` (where Decision OS lives) · **Date:** 2026-07-08.
 
@@ -133,7 +135,67 @@ reader also consumes — `afLeagueTrade` untouched, **no AppUser accounts fabric
   persistence proven on real Postgres. **No production or shared DB touched.**
 
 **Skipped-by-design this increment:** `prisma generate` against a shared env (other sessions hold the
-client), the Sleeper emitter (Increment 4), and AF-league/manager mapping enrichment (Increment 4).
+client), the Sleeper emitter (landed in Increment 4 below), and AF-league/manager mapping enrichment
+(still open — see §3).
+
+## 2d. Increment 4 — Sleeper emitter + end-to-end ingestion (landed)
+
+Wires **real Sleeper API shapes** (the same `SleeperTransactionRaw` / `SleeperDraftPickRaw` /
+`SleeperRosterRaw` types the production Sleeper adapter already uses) into the Increment 1–3
+pipeline, provider-specific parsing kept strictly separate from the provider-neutral seam.
+
+- **`lib/decision-os/ingestion/sleeperActivityEmitter.ts`:**
+  - `buildRosterOwnerMap` — `roster_id → Sleeper owner user_id`, mirroring the exact convention the
+    production `SleeperRosterMapper` uses (trimmed `owner_id`, `null` for an orphan roster — never
+    fabricated).
+  - `emitSleeperTransactionActivity` — maps `type: 'trade'|'waiver'|'free_agent'` → `trade`/`waiver`/
+    `roster_move`; **skips (with a reason) any other transaction type, and any non-`'complete'`
+    status** (pending/vetoed transactions are never treated as having happened).
+  - `emitSleeperDraftPickActivity` — keys a pick by `${draft_id ?? season}:${pick_no}` (pick_no alone
+    repeats across drafts/seasons); **skips picks with neither `draft_id` nor `season`** as
+    ambiguous. **`occurredAt` is supplied by the caller or left `null` — never invented** (Sleeper's
+    per-pick payload carries no per-pick timestamp); a `null` flows to the normalizer, which skips it
+    honestly (`MISSING_OCCURRED_AT`).
+  - `ingestSleeperImportedActivity` — the single entry point: emitter → `normalizeImportedActivityBatch`
+    → `writeImportedActivity` → `ImportedActivityStore`. This is what a Sleeper backfill/sync job calls.
+- **Three independent honest-degradation layers**, each reporting its own reason (no single layer is
+  trusted to catch everything): emitter (shape-level: unsupported type / not-complete / ambiguous
+  draft context) → normalizer (seam-level: missing id / timestamp / manager) → writer/store
+  (persistence-level: constraint violations).
+- **Tests — `__tests__/decision-os/sleeper-imported-activity-emitter.test.ts` — 11/11:** a real trade
+  transaction end-to-end (emit → normalize → write → persisted row → `BehavioralEvent[]` → league
+  facts, proposer/counterparty attribution correct, league trade count = 1); a real waiver end-to-end;
+  idempotent repeated ingestion (3 passes, stable row count); external-only manager persistence; an
+  orphan roster never fabricates an attribution; unsupported transaction type / non-complete status /
+  ambiguous draft pick all skip with clear reasons; a draft pick with real context but no supplied
+  timestamp is honestly dropped (never fabricated); a draft pick with a real supplied timestamp
+  persists correctly. **Full decision-os ingestion + regression suite: 68/68.**
+- **Bug found by this increment's full-repo typecheck (fixed):** `importedActivityToEvents.ts`
+  (Increment 3) imported `BehavioralEventType` from `./events/types`, but that type is defined in
+  `./events/taxonomy` and only re-exported nowhere — a real type error vitest's transpile-only runner
+  never caught (it doesn't validate type-only imports). Fixed the import path; **0 Decision OS /
+  ingestion errors** in the full-repo typecheck afterward (repo-wide baseline errors are pre-existing
+  and unrelated — world-cup/tournament files, none touched by this workstream).
+- **Real-DB proof (non-prod, reused the Increment 3 throwaway Neon project per the user's
+  instruction):** ran `ingestSleeperImportedActivity` (the actual production code, not a shortcut)
+  against realistically-shaped Sleeper fixtures (a trade + a waiver, one AF-linked manager + one
+  external-only manager) via `InMemoryImportedActivityStore` to compute the exact persisted values,
+  then applied the adapter's identical `INSERT … ON CONFLICT DO UPDATE` semantics to Neon project
+  `cool-lab-87438174`: first ingest → 2 new rows; **re-ingest of the same natural keys → same row
+  ids, `inserted: false`**; final state on that (shared-with-Increment-3) table = 4 rows total (2
+  trade + 2 waiver, the other 2 from Increment 3's proof), **all 4 with `appUserId = null`** — no
+  AppUser ever fabricated, across two increments' worth of proof. **No production or shared DB
+  touched.** *(Honesty note: there is no network/API access in this environment to pull a live
+  Sleeper league — "real Sleeper activity" here means realistically-shaped Sleeper API payloads,
+  matching the production adapter's exact types, run through the real unmodified pipeline code; it
+  is not a live API pull.)*
+
+**Not done this increment (honest gaps for Increment 5+):** wiring `ingestSleeperImportedActivity`
+into the actual `SleeperHistoricalBackfillService` call site (so it runs automatically after a real
+import, not just from a test harness); AF-league/appUserId mapping enrichment (so `afLeagueId` and
+`appUserId` populate once identity mappings exist, flipping those managers from `inferred` to
+`confirmed`); a live end-to-end pass against a real Sleeper league's live API response (blocked on
+network access + a real non-prod league to point at).
 
 ## 3. What remains (the bulk — grounded next steps)
 
