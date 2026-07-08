@@ -139,4 +139,97 @@ describe("World Cup cron sync route", () => {
       provider: "apifootball",
     })
   })
+
+  it("recalculate returns 200 with per-challenge ok:true and leaderboard counts on success", async () => {
+    serviceMocks.prisma.worldCupBracketChallenge.findMany.mockResolvedValue([{ id: "c1" }, { id: "c2" }])
+    serviceMocks.recalculateWorldCupChallenge
+      .mockResolvedValueOnce([{ entryId: "e1" }, { entryId: "e2" }])
+      .mockResolvedValueOnce([])
+    const { GET } = await import("@/app/api/brackets/world-cup/cron/sync/route")
+
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/world-cup/cron/sync?job=recalculate", "cron-secret"))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.result.recalculated).toEqual([
+      { challengeId: "c1", ok: true, leaderboardCount: 2 },
+      { challengeId: "c2", ok: true, leaderboardCount: 0 },
+    ])
+    expect(body.result.recalculateSummary).toEqual({ attempted: 2, succeeded: 2, failed: 0 })
+    expect(serviceMocks.recalculateWorldCupChallenge).toHaveBeenCalledTimes(2)
+  })
+
+  it("recalculate does NOT fail the whole cron when one challenge throws (200 + per-challenge failure detail)", async () => {
+    serviceMocks.prisma.worldCupBracketChallenge.findMany.mockResolvedValue([{ id: "good" }, { id: "bad" }])
+    serviceMocks.recalculateWorldCupChallenge.mockImplementation(async (id) => {
+      if (id === "bad") throw new Error("PrismaClientKnownRequestError: foreign key constraint failed on entry")
+      return [{ entryId: "e1" }]
+    })
+    const { GET } = await import("@/app/api/brackets/world-cup/cron/sync/route")
+
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/world-cup/cron/sync?job=recalculate", "cron-secret"))
+    const body = await response.json()
+
+    // The scheduled workflow uses `curl --fail`; a partial per-challenge failure must stay 2xx.
+    expect(response.status).toBe(200)
+    expect(body.ok).toBe(true)
+    const results = body.result.recalculated as Array<Record<string, unknown>>
+    expect(results).toContainEqual({ challengeId: "good", ok: true, leaderboardCount: 1 })
+    const bad = results.find((r) => r.challengeId === "bad") as Record<string, unknown>
+    expect(bad.ok).toBe(false)
+    expect(bad.error).toBe("database_write_failed")
+    expect(String(bad.message)).toContain("foreign key constraint failed")
+    expect(body.result.recalculateSummary).toEqual({ attempted: 2, succeeded: 1, failed: 1 })
+  })
+
+  it("recalculate sanitizes secrets in per-challenge error messages", async () => {
+    serviceMocks.prisma.worldCupBracketChallenge.findMany.mockResolvedValue([{ id: "leaky" }])
+    serviceMocks.recalculateWorldCupChallenge.mockRejectedValue(
+      new Error("fetch failed https://api.example.com/x?key=SUPERSECRET123 network error")
+    )
+    const { GET } = await import("@/app/api/brackets/world-cup/cron/sync/route")
+
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/world-cup/cron/sync?job=recalculate", "cron-secret"))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(JSON.stringify(body)).not.toContain("SUPERSECRET123")
+    expect(JSON.stringify(body)).toContain("[redacted]")
+  })
+
+  it("recalculate still returns a real 500 when loading challenge IDs fails (route-level DB failure)", async () => {
+    serviceMocks.prisma.worldCupBracketChallenge.findMany.mockRejectedValue(new Error("prisma: connection timed out"))
+    const { GET } = await import("@/app/api/brackets/world-cup/cron/sync/route")
+
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/world-cup/cron/sync?job=recalculate", "cron-secret"))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body.ok).toBe(false)
+    expect(body.error).toBe("database_write_failed")
+    expect(serviceMocks.recalculateWorldCupChallenge).not.toHaveBeenCalled()
+  })
+
+  it("recalculate honors dryRun without invoking the recalculation service", async () => {
+    serviceMocks.prisma.worldCupBracketChallenge.findMany.mockResolvedValue([{ id: "c1" }])
+    const { GET } = await import("@/app/api/brackets/world-cup/cron/sync/route")
+
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/world-cup/cron/sync?job=recalculate&dryRun=true", "cron-secret"))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.result.recalculated).toEqual([{ challengeId: "c1", ok: true, leaderboardCount: null }])
+    expect(body.result.recalculateSummary).toEqual({ attempted: 1, succeeded: 1, failed: 0 })
+    expect(serviceMocks.recalculateWorldCupChallenge).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid job input with 400 (unchanged) and never runs recalculation", async () => {
+    const { GET } = await import("@/app/api/brackets/world-cup/cron/sync/route")
+
+    const response = await GET(req("https://www.allfantasy.ai/api/brackets/world-cup/cron/sync?job=bogus", "cron-secret"))
+
+    expect(response.status).toBe(400)
+    expect(serviceMocks.recalculateWorldCupChallenge).not.toHaveBeenCalled()
+  })
 })
