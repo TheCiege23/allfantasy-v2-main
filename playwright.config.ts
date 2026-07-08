@@ -107,6 +107,12 @@ export default defineConfig({
         process.env.POSTGRES_URL_NON_POOLING ??
         '',
       PLAYWRIGHT_E2E: '1',
+      // `/api/auth/login` validates the admin password against ADMIN_PASSWORD / ADMIN_PASSWORD_HASH.
+      // The E2E admin helper (`loginAsAdmin`) posts `process.env.ADMIN_PASSWORD ?? 'admin123'`, so the
+      // dev server needs a matching value or every @admin spec 401s. This is E2E-only — production sets
+      // the real ADMIN_PASSWORD via secrets and this config is never used in production, so auth
+      // behavior is unchanged; it just gives the local/CI test server a known admin password.
+      ADMIN_PASSWORD: process.env.ADMIN_PASSWORD ?? 'admin123',
     },
   },
 });
