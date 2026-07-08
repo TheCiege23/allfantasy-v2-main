@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
+import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
@@ -149,4 +151,99 @@ export async function POST(request: Request) {
     const status = message.includes('not found') ? 404 : 500
     return NextResponse.json({ ok: false, error: message }, { status })
   }
+}
+
+type SeasonScoreResult =
+  | { seasonId: string; ok: true; week: number; scoresUpserted: number }
+  | { seasonId: string; ok: true; skipped: true; reason: string }
+  | { seasonId: string; ok: false; error: string }
+
+/**
+ * GET /api/redraft/score-sync — the scheduled automated weekly scoring tick.
+ *
+ * Vercel crons issue GET (see `vercel.json` `/api/redraft/score-sync`), so this is
+ * what actually runs on schedule. It enumerates every ACTIVE redraft season and
+ * runs the native scoring pipeline for each —
+ *   syncPlayerWeeklyScoresForRedraftSeason -> recalculateMatchupsForSeasonWeek -> updateStandings
+ * — isolating per-season failures so one broken league never blocks the rest.
+ * Non-NFL sports are skipped honestly (weekly stat sync is wired for NFL only) —
+ * never marked as a false success. The survivor/zombie/c2c automation bridge still
+ * runs (best-effort) so those formats keep their tick. Returns HTTP 200 with a
+ * per-season breakdown even on partial failure; a real 500 only when the run cannot
+ * start at all (e.g. the active-season enumeration query fails).
+ */
+export async function GET(request: Request) {
+  // Vercel cron sends `Authorization: Bearer ${CRON_SECRET}`; accept the cron secret
+  // first, then fall back to admin/bearer for manual triggers.
+  if (!requireCronAuth(request as unknown as NextRequest)) {
+    const gate = await requireAdminOrBearer(request)
+    if (!gate.ok) return gate.res
+  }
+
+  const startedAt = Date.now()
+
+  let seasons: { id: string; leagueId: string; sport: string; currentWeek: number | null }[]
+  try {
+    seasons = await prisma.redraftSeason.findMany({
+      where: { status: 'active' },
+      select: { id: true, leagueId: true, sport: true, currentWeek: true },
+      take: 200,
+    })
+  } catch (error) {
+    // Route-level fatal: could not even enumerate active seasons.
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : 'Failed to load active redraft seasons' },
+      { status: 500 },
+    )
+  }
+
+  const results: SeasonScoreResult[] = []
+  let succeeded = 0
+  let failed = 0
+  let skipped = 0
+
+  for (const season of seasons) {
+    // Weekly PlayerWeeklyScore sync is wired for NFL only; skip other sports without
+    // pretending they synced.
+    if (String(season.sport).toUpperCase() !== 'NFL') {
+      results.push({ seasonId: season.id, ok: true, skipped: true, reason: 'non_nfl_sport' })
+      skipped += 1
+      continue
+    }
+    try {
+      const summary = await syncPlayerWeeklyScoresForRedraftSeason({ seasonId: season.id, actorId: 'cron' })
+      await recalculateMatchupsForSeasonWeek(summary.seasonId, summary.week)
+      await updateStandings(summary.seasonId, summary.week)
+      results.push({ seasonId: season.id, ok: true, week: summary.week, scoresUpserted: summary.scoresUpserted })
+      succeeded += 1
+    } catch (error) {
+      console.error('[redraft-score-sync cron] season scoring failed', {
+        seasonId: season.id,
+        message: error instanceof Error ? error.message : String(error),
+      })
+      results.push({
+        seasonId: season.id,
+        ok: false,
+        error: error instanceof Error ? error.message : 'season scoring failed',
+      })
+      failed += 1
+    }
+  }
+
+  // Keep the survivor/zombie/c2c automation tick alive (best-effort; never fails the redraft run).
+  const legacy = await runLegacyAutomationBridge().catch((e) => ({
+    error: e instanceof Error ? e.message : 'automation bridge failed',
+  }))
+
+  return NextResponse.json({
+    ok: true,
+    attempted: seasons.length,
+    succeeded,
+    failed,
+    skipped,
+    seasons: results,
+    legacy,
+    durationMs: Date.now() - startedAt,
+    ranAt: new Date().toISOString(),
+  })
 }
