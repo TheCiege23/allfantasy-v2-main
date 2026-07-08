@@ -111,3 +111,20 @@ test assertions above want a refresh. These are `main`-wide issues, not beta blo
 - **Next (Phase 5, needs approval):** run the human QA runbook (§3 of the Landing & QA Runbook) in an
   approved non-prod env; decide the two boundary items in §4; then a push/PR decision — each a
   separate, explicit go-ahead.
+
+## 9. Phase 5 addendum — pre-push hardening audit (2026-07-08)
+
+Full release-candidate assessment: **[`NFL_REDRAFT_BETA_GO_NO_GO.md`](./NFL_REDRAFT_BETA_GO_NO_GO.md)** →
+verdict **GO WITH CONDITIONS**. Highlights:
+- **Zero slice regressions — PROVEN.** Ran the 7 failing assertions on a fresh `origin/main` baseline
+  worktree: **identical 7 failures** (same names + line numbers). All are inherited-main / stale-test.
+- **Free-beta core loop is ungated** — draft/waiver/trades/playoffs/matchup/roster routes are all
+  free-open; the only entitlement 403 is the create *advanced-options* gate (standard free creation
+  unaffected). No G49E premium enforcement present.
+- **Boundary:** the 2 `lib/decision-os/*` files are verified **pure infra** (no I/O/AI/DB; types-only
+  imports; consumed by the G34 draft runtime) — namespace collision, not the parked product; recommend
+  keep + optional follow-up rename. No parked hub/Replay/Trade-Learning surfaces reachable.
+- **One flagged boundary-appearance item:** the home dashboard's locked "Manager/Commissioner
+  Intelligence / Decision OS" **upsell teaser tiles** (non-navigable for free users) — recommend
+  hiding/gating for the free beta (product decision; not auto-changed).
+- Core routes are real (not stubs); all runtime libs present.
