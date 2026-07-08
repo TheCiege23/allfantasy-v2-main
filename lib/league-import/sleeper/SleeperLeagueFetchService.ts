@@ -131,24 +131,36 @@ export async function fetchSleeperLeagueForImport(
   )
   if (!league?.league_id) return null
 
-  const [users, rosters, currentDraftPicks, tradedPicksRaw] = await Promise.all([
-    fetchSleeperJson<SleeperImportPayload['users']>(`${SLEEPER_BASE}/league/${cleanId}/users`, {
-      warnings,
-      label: 'league users',
-    }),
-    fetchSleeperJson<SleeperImportPayload['rosters']>(`${SLEEPER_BASE}/league/${cleanId}/rosters`, {
-      warnings,
-      label: 'league rosters',
-    }),
-    fetchLeagueDraftPicks(cleanId, league.season),
-    // Block F — future traded draft picks (`/league/{id}/traded_picks`). Empty [] is
-    // a legitimate result (no picks currently traded), NOT a warning. The resilient
-    // fetcher records a warning only on 5xx/timeout after retries.
-    fetchSleeperJson<SleeperImportPayload['tradedPicks']>(
-      `${SLEEPER_BASE}/league/${cleanId}/traded_picks`,
-      { warnings, label: 'traded picks' },
-    ),
-  ])
+  const [users, rosters, currentDraftPicks, tradedPicksRaw, winnersBracketRaw, losersBracketRaw] =
+    await Promise.all([
+      fetchSleeperJson<SleeperImportPayload['users']>(`${SLEEPER_BASE}/league/${cleanId}/users`, {
+        warnings,
+        label: 'league users',
+      }),
+      fetchSleeperJson<SleeperImportPayload['rosters']>(`${SLEEPER_BASE}/league/${cleanId}/rosters`, {
+        warnings,
+        label: 'league rosters',
+      }),
+      fetchLeagueDraftPicks(cleanId, league.season),
+      // Block F — future traded draft picks (`/league/{id}/traded_picks`). Empty [] is
+      // a legitimate result (no picks currently traded), NOT a warning. The resilient
+      // fetcher records a warning only on 5xx/timeout after retries.
+      fetchSleeperJson<SleeperImportPayload['tradedPicks']>(
+        `${SLEEPER_BASE}/league/${cleanId}/traded_picks`,
+        { warnings, label: 'traded picks' },
+      ),
+      // Block G — winners playoff bracket (`/league/{id}/winners_bracket`). Empty [] is
+      // legitimate (playoffs not yet started / no bracket); only 5xx/timeout warns.
+      fetchSleeperJson<SleeperImportPayload['winnersBracket']>(
+        `${SLEEPER_BASE}/league/${cleanId}/winners_bracket`,
+        { warnings, label: 'winners bracket' },
+      ),
+      // Block G — losers (consolation) playoff bracket (`/league/{id}/losers_bracket`).
+      fetchSleeperJson<SleeperImportPayload['losersBracket']>(
+        `${SLEEPER_BASE}/league/${cleanId}/losers_bracket`,
+        { warnings, label: 'losers bracket' },
+      ),
+    ])
 
   // Phase 2.3 — weekly matchup + transaction fetches run in parallel (were sequential,
   // up to 36 blocking round-trips). Promise.all preserves order; a failed week records a
@@ -250,6 +262,10 @@ export async function fetchSleeperLeagueForImport(
     // resilient fetcher returns null on unrecoverable failures; treat that as
     // "no traded picks known" so downstream code never explodes.
     tradedPicks: Array.isArray(tradedPicksRaw) ? tradedPicksRaw : undefined,
+    // Block G — pass through the raw winners/losers brackets. Same null-safety:
+    // a null (unrecoverable fetch) collapses to undefined ("bracket unknown").
+    winnersBracket: Array.isArray(winnersBracketRaw) ? winnersBracketRaw : undefined,
+    losersBracket: Array.isArray(losersBracketRaw) ? losersBracketRaw : undefined,
     playerMap,
     previousSeasons,
     fetchWarnings: warnings.length > 0 ? warnings : undefined,

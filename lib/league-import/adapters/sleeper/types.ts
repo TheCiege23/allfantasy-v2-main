@@ -90,6 +90,33 @@ export interface SleeperDraftPickRaw {
 }
 
 /**
+ * Block G — Sleeper `/v1/league/{leagueId}/winners_bracket` and `/losers_bracket`
+ * row shape.
+ *
+ * Sleeper's field semantics (per the shipping Sleeper API + verified against real
+ * completed dynasty leagues during the fidelity audit):
+ *   - `r`: round number (1 = first round of the playoffs)
+ *   - `m`: matchup number within the bracket (global; unique per bracket)
+ *   - `t1`, `t2`: team roster IDs (integers, matching `SleeperRosterRaw.roster_id`)
+ *   - `w`, `l`: winner / loser roster IDs (set once the matchup completes)
+ *   - `p`: final placement (present only on placement matchups: 1=championship,
+ *          3=third-place, 5=fifth-place, etc.)
+ *   - `t1_from`, `t2_from`: reference to a prior matchup whose winner (`w`) or
+ *          loser (`l`) advances to this slot. Preserves the tournament chain.
+ */
+export interface SleeperPlayoffBracketRaw {
+  r: number
+  m: number
+  t1?: number | null
+  t2?: number | null
+  w?: number | null
+  l?: number | null
+  p?: number | null
+  t1_from?: { w?: number; l?: number }
+  t2_from?: { w?: number; l?: number }
+}
+
+/**
  * Block F — Sleeper `/v1/league/{leagueId}/traded_picks` row shape.
  *
  * Sleeper's field semantics (verified against real leagues during the fidelity audit):
@@ -118,6 +145,10 @@ export interface SleeperImportPayload {
   draftPicks?: SleeperDraftPickRaw[]
   /** Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`). */
   tradedPicks?: SleeperTradedPickRaw[]
+  /** Block G — Sleeper `/league/{id}/winners_bracket`. Absent = provider didn't fetch it. */
+  winnersBracket?: SleeperPlayoffBracketRaw[]
+  /** Block G — Sleeper `/league/{id}/losers_bracket`. Absent = provider didn't fetch it. */
+  losersBracket?: SleeperPlayoffBracketRaw[]
   playerMap?: Record<string, { name: string; position: string; team: string }>
   previousSeasons?: Array<{ season: string; league: SleeperLeagueRaw }>
   /**

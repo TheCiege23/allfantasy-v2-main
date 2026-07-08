@@ -8,6 +8,7 @@ import type {
   CanonicalImportBundle,
   ImportProvider,
   NormalizedImportResult,
+  NormalizedPlayoffBracket,
   NormalizedTradedPick,
 } from './types'
 
@@ -171,6 +172,91 @@ export async function persistTradedPicks(
       skipped++
     }
   }
+  return { written, skipped }
+}
+
+/**
+ * Block G — persist a normalized playoff bracket (winners + losers) as import-domain
+ * JSON on the League row, keyed by season.
+ *
+ * Design note: the audit named `redraft_playoff_brackets` (`RedraftPlayoffBracket`)
+ * as the natural target, but that table — and every table beneath it
+ * (`RedraftPlayoffRound`, `RedraftPlayoffMatchup`) — is keyed through `RedraftSeason`,
+ * which imported leagues do not have. Creating a `RedraftSeason` to unlock that table
+ * would pull an imported (often historical/reference) league into the live redraft
+ * runtime — ~15+ surfaces (playoffEngine, waiverEngine, standings routes, Chimmy AI,
+ * matchup-preview, etc.) resolve behavior by `redraftSeason` existence/status. That
+ * is exactly the kind of unrelated-refactor / redraft-runtime coupling Block G's
+ * scope explicitly excludes.
+ *
+ * Instead, the bracket is stored on `leagues.settings.importedPlayoffBrackets`, a
+ * plain JSON object keyed by season string. This:
+ *   - Requires zero schema changes (same JSONB column every other Tier 0 block uses).
+ *   - Never touches the redraft runtime or any table it reads.
+ *   - Gets natural, structural dedup: writing the same season key REPLACES the prior
+ *     value wholesale — there is no way for two writes to the same season to produce
+ *     two bracket rows (unlike an array, which would need row-level dedup logic).
+ *
+ * Non-fatal by convention: caller wraps this in try/catch, matching the existing
+ * gap-fill / traded-picks persistence pattern above.
+ */
+export async function persistPlayoffBracket(
+  leagueId: string,
+  bracket: NormalizedPlayoffBracket,
+): Promise<{ written: number; skipped: number }> {
+  if (!bracket || typeof bracket.season !== 'number' || !Array.isArray(bracket.matchups)) {
+    return { written: 0, skipped: 0 }
+  }
+
+  let written = 0
+  let skipped = 0
+  const validMatchups: NormalizedPlayoffBracket['matchups'] = []
+  for (const m of bracket.matchups) {
+    if (
+      !m ||
+      (m.bracket_type !== 'winners' && m.bracket_type !== 'losers') ||
+      typeof m.round !== 'number' ||
+      typeof m.matchup_id !== 'number'
+    ) {
+      skipped++
+      continue
+    }
+    validMatchups.push(m)
+    written++
+  }
+
+  const current = (
+    await prisma.league.findUnique({
+      where: { id: leagueId },
+      select: { settings: true },
+    })
+  )?.settings as Record<string, unknown> | null
+
+  const existingBrackets =
+    current && typeof current === 'object' && !Array.isArray(current)
+      ? ((current.importedPlayoffBrackets as Record<string, unknown> | undefined) ?? {})
+      : {}
+
+  await prisma.league.update({
+    where: { id: leagueId },
+    data: {
+      settings: {
+        ...(current ?? {}),
+        importedPlayoffBrackets: {
+          ...existingBrackets,
+          // Keyed by season: re-importing the same season REPLACES the entry
+          // wholesale rather than appending — the single source of dedup safety
+          // for this persistence path.
+          [String(bracket.season)]: {
+            season: bracket.season,
+            matchups: validMatchups,
+            persistedAt: new Date().toISOString(),
+          },
+        },
+      } as Prisma.InputJsonValue,
+    },
+  })
+
   return { written, skipped }
 }
 
@@ -419,6 +505,18 @@ export async function persistImportedLeagueFromNormalization(
       await persistTradedPicks(league.id, normalized.traded_picks)
     } catch (err) {
       console.warn(`[ImportedLeagueCommitService] ${provider} traded-pick persist non-fatal:`, err)
+    }
+  }
+
+  // Block G — persist the current-season playoff bracket. `playoff_bracket` is
+  // present (possibly with an empty `matchups` array) whenever the provider
+  // fetched brackets at all; `undefined` means brackets weren't fetched, so
+  // there's nothing to persist. Non-fatal, matching the traded-picks pattern above.
+  if (normalized.playoff_bracket) {
+    try {
+      await persistPlayoffBracket(league.id, normalized.playoff_bracket)
+    } catch (err) {
+      console.warn(`[ImportedLeagueCommitService] ${provider} playoff-bracket persist non-fatal:`, err)
     }
   }
 

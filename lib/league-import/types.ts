@@ -174,6 +174,36 @@ export interface NormalizedTradedPick {
   previous_owner_roster_id?: string
 }
 
+/**
+ * Block G — one normalized playoff bracket matchup (winners OR losers bracket).
+ *
+ * Roster IDs are provider-native strings (Sleeper "1".."12"), matching
+ * `league_teams.externalId`. Any of team1 / team2 / winner / loser may be null
+ * when Sleeper hasn't resolved that slot yet (an unplayed matchup, or a slot fed
+ * from a prior matchup's winner/loser that hasn't completed).
+ */
+export interface NormalizedPlayoffBracketMatchup {
+  bracket_type: 'winners' | 'losers'
+  round: number
+  matchup_id: number
+  team1_roster_id: string | null
+  team2_roster_id: string | null
+  winner_roster_id: string | null
+  loser_roster_id: string | null
+  /** Final placement (1=championship, 3=third place, …); present only on placement games. */
+  placement?: number | null
+}
+
+/**
+ * Block G — normalized playoff bracket for a single season, combining the winners
+ * (championship) and losers (consolation) brackets into one structure. Persisted as
+ * import-domain JSON (no redraft-runtime coupling — see `persistPlayoffBracket`).
+ */
+export interface NormalizedPlayoffBracket {
+  season: number
+  matchups: NormalizedPlayoffBracketMatchup[]
+}
+
 /** Normalized standings entry. */
 export interface NormalizedStandingsEntry {
   source_team_id: string
@@ -228,6 +258,12 @@ export interface NormalizedImportResult {
    * exposes them but no picks are currently in a traded state.
    */
   traded_picks?: NormalizedTradedPick[]
+  /**
+   * Block G — current-season playoff bracket (Sleeper winners + losers brackets).
+   * Absent = provider didn't fetch brackets; present-with-empty-matchups = fetched
+   * but no bracket exists yet (playoffs not started).
+   */
+  playoff_bracket?: NormalizedPlayoffBracket
   transactions: NormalizedTransaction[]
   standings: NormalizedStandingsEntry[]
   player_map: Record<string, { name: string; position: string; team: string }>

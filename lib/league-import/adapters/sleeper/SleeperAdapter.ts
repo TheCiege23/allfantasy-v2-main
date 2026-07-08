@@ -6,6 +6,7 @@ import { SleeperScoringMapper } from './SleeperScoringMapper'
 import { SleeperScheduleMapper } from './SleeperScheduleMapper'
 import { SleeperHistoryMapper } from './SleeperHistoryMapper'
 import { mapSleeperTradedPicks } from './SleeperTradedPicksMapper'
+import { mapSleeperPlayoffBracket } from './SleeperPlayoffBracketMapper'
 import type { SleeperImportPayload } from './types'
 
 export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
@@ -30,6 +31,9 @@ export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
     // provider didn't include the field on this payload (fetch failure or
     // pre-Block-F caller); empty array = no picks currently in a traded state.
     const tradedPicks = raw.tradedPicks !== undefined ? mapSleeperTradedPicks(raw) : undefined
+    // Block G — normalize winners + losers playoff brackets. Returns undefined when
+    // the provider fetched neither bracket (legacy transfer paths / pre-Block-G callers).
+    const playoffBracket = mapSleeperPlayoffBracket(raw)
     const rosterCount = rosters.length
     const rostersWithPlayers = rosters.filter((roster) => (roster.player_ids?.length ?? 0) > 0).length
     const previousSeasonCount = raw.previousSeasons?.length ?? 0
@@ -57,6 +61,7 @@ export const SleeperAdapter: ILeagueImportAdapter<SleeperImportPayload> = {
       schedule,
       draft_picks: history.draft_picks,
       traded_picks: tradedPicks,
+      playoff_bracket: playoffBracket,
       transactions: history.transactions,
       standings: history.standings,
       player_map: raw.playerMap ?? {},
