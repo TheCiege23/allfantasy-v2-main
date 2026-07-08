@@ -4,6 +4,10 @@
 personal Manager Intelligence → league Commissioner Intelligence → Chimmy's historical context —
 with the safety boundary intact (observations, never unsafe recommendations).
 
+> For the **partner/investor pitch** version (narrative + scene-by-scene talk track), see
+> [DECISION_OS_DEMO_STORYBOARD.md](./DECISION_OS_DEMO_STORYBOARD.md). This doc is the operational
+> runbook (flags, routes, prerequisites); that one is the presentation.
+
 **Status:** **Ready to demo** with seeded / live-like data. **NOT** yet validated against approved
 non-prod live Sleeper data — see [Live-validation status](#live-validation-status). Nothing here
 claims a live pass happened.
