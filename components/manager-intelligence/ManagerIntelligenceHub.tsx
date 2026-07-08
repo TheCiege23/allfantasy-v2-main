@@ -13,17 +13,18 @@
  * observational input among many — not the centrepiece — and the validation→
  * recommendation boundary stays intact (every section is descriptive/display).
  *
- * Sections wired to a clean, existing/deterministic, non-recommendation source:
+ * All five modules are wired to a clean, existing/deterministic, non-recommendation
+ * source — the hub has no remaining placeholders:
  *   - Historical Intelligence → reuses the Phase 20/21 <ManagerReplayInsightsCard>
  *   - League Context          → reuses GET /api/app/leagues/[id]/standings
  *   - Current Team Health     → Phase 2 deterministic ManagerTeamHealthV1 contract
  *                               via GET /api/app/leagues/[id]/team-health
  *   - Weekly Outlook          → Phase 3 deterministic ManagerWeeklyOutlookV1 contract
  *                               via GET /api/app/leagues/[id]/weekly-outlook
- * Sections whose only existing sources are AI/recommendation endpoints or that
- * need a new backend aggregation (out of scope for now) render an honest
- * "expanding soon" placeholder — never a fabricated summary:
- *   - Transaction Readiness
+ *   - Transaction Readiness   → Phase 4 deterministic ManagerTransactionReadinessV1
+ *                               via GET /api/app/leagues/[id]/transaction-readiness
+ * Every section stays descriptive/display-only; none consumes an AI/recommendation
+ * endpoint (the validation→recommendation boundary is the platform's core rule).
  *
  * Gated by NEXT_PUBLIC_MANAGER_INTELLIGENCE_HUB_ENABLED (default off → the hub
  * shows a quiet "not available" state so nothing ships before it's ready).
@@ -35,6 +36,7 @@ import { ManagerReplayInsightsCard } from '@/components/dashboard/ManagerReplayI
 // client bundle). Do NOT import from the barrel — it re-exports the DB resolver.
 import type { ManagerTeamHealthV1 } from '@/lib/decision-os/manager-intelligence/team-health/types'
 import type { ManagerWeeklyOutlookV1 } from '@/lib/decision-os/manager-intelligence/weekly-outlook/types'
+import type { ManagerTransactionReadinessV1 } from '@/lib/decision-os/manager-intelligence/transaction-readiness/types'
 
 // ── generic fetch resource (adapted from CommissionerIntelligenceHub) ─────────
 // Note: unlike the commissioner hub's endpoints (which wrap in `{ data }`), the
@@ -100,15 +102,6 @@ function StateMessage({ status }: { status: ResourceStatus }) {
     return <p className="text-xs text-white/45">Not available.</p>
   }
   return <p className="text-xs text-red-300/80">Could not load. Try again.</p>
-}
-
-/** Honest placeholder for a section whose data has no clean, existing, non-recommendation client source yet. */
-function ComingSoon({ title, testId, note }: { title: string; testId: string; note: string }) {
-  return (
-    <HubCard title={title} testId={testId}>
-      <p className="text-xs text-white/40">{note}</p>
-    </HubCard>
-  )
 }
 
 // ── League Context module (reuses the existing standings endpoint) ────────────
@@ -346,6 +339,93 @@ function WeeklyOutlookModule({ leagueId }: { leagueId: string }) {
   )
 }
 
+// ── Transaction Readiness module (Phase 4 — deterministic display contract) ───
+// Consumes the internal, session-authed, display-only Transaction Readiness route.
+// `{ enabled, data? }`: flag off → "expanding soon"; enabled + no data → empty;
+// data → the observational readiness picture (pressure, bench flexibility, counts).
+
+interface TransactionReadinessResponse {
+  enabled: boolean
+  data?: ManagerTransactionReadinessV1
+}
+
+const TXN_PRESSURE_TONE: Record<ManagerTransactionReadinessV1['rosterPressure'], Tone | null> = {
+  low: 'good',
+  moderate: 'warn',
+  high: 'bad',
+  unknown: null,
+}
+const TXN_PRESSURE_LABEL: Record<ManagerTransactionReadinessV1['rosterPressure'], string> = {
+  low: 'Pressure: low',
+  moderate: 'Pressure: moderate',
+  high: 'Pressure: high',
+  unknown: '',
+}
+const TXN_FLEX_TONE: Record<ManagerTransactionReadinessV1['benchFlexibility'], Tone | null> = {
+  flexible: 'good',
+  limited: 'warn',
+  tight: 'bad',
+  unknown: null,
+}
+const TXN_FLEX_LABEL: Record<ManagerTransactionReadinessV1['benchFlexibility'], string> = {
+  flexible: 'Bench: flexible',
+  limited: 'Bench: limited',
+  tight: 'Bench: tight',
+  unknown: '',
+}
+
+function TransactionReadinessModule({ leagueId }: { leagueId: string }) {
+  const r = useResource<TransactionReadinessResponse>(`/api/app/leagues/${encodeURIComponent(leagueId)}/transaction-readiness`)
+  if (r.status !== 'ok') {
+    return (
+      <HubCard title="Transaction Readiness" testId="hub-transaction-readiness">
+        <StateMessage status={r.status} />
+      </HubCard>
+    )
+  }
+  if (!r.data?.enabled) {
+    return (
+      <HubCard title="Transaction Readiness" testId="hub-transaction-readiness">
+        <p className="text-xs text-white/40" data-testid="transaction-readiness-disabled">
+          Waiver availability, roster flexibility, and bench pressure — expanding soon.
+        </p>
+      </HubCard>
+    )
+  }
+  const t = r.data.data
+  if (!t) {
+    return (
+      <HubCard title="Transaction Readiness" testId="hub-transaction-readiness">
+        <p className="text-xs text-white/45" data-testid="transaction-readiness-empty">No roster data yet.</p>
+      </HubCard>
+    )
+  }
+  return (
+    <HubCard title="Transaction Readiness" testId="hub-transaction-readiness">
+      <div className="space-y-2.5" data-testid="transaction-readiness-content">
+        <div className="flex flex-wrap gap-1.5">
+          <OptionalChip label={TXN_PRESSURE_LABEL[t.rosterPressure]} tone={TXN_PRESSURE_TONE[t.rosterPressure]} />
+          <OptionalChip label={TXN_FLEX_LABEL[t.benchFlexibility]} tone={TXN_FLEX_TONE[t.benchFlexibility]} />
+        </div>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          <Stat label="Bench" value={t.benchCount} />
+          <Stat label="Reserves" value={t.reserveCount} />
+          <Stat label="On IR" value={t.injuredReserveCount} />
+          <Stat label="Open slots" value={t.rosterOpenings} />
+        </dl>
+        <p className="text-xs text-white/55">{t.summary}</p>
+        {t.caveats.length > 0 ? (
+          <ul className="space-y-0.5" data-testid="transaction-readiness-caveats">
+            {t.caveats.map((c, i) => (
+              <li key={i} className="text-[11px] text-white/35">• {c}</li>
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </HubCard>
+  )
+}
+
 // ── Hub ───────────────────────────────────────────────────────────────────────
 
 export function ManagerIntelligenceHub({ leagueId }: { leagueId: string }) {
@@ -372,11 +452,7 @@ export function ManagerIntelligenceHub({ leagueId }: { leagueId: string }) {
         <LeagueContextModule leagueId={leagueId} />
         <WeeklyOutlookModule leagueId={leagueId} />
         <TeamHealthModule leagueId={leagueId} />
-        <ComingSoon
-          title="Transaction Readiness"
-          testId="hub-transaction-readiness"
-          note="Waiver availability, roster flexibility, and bench pressure — expanding soon."
-        />
+        <TransactionReadinessModule leagueId={leagueId} />
       </div>
     </div>
   )

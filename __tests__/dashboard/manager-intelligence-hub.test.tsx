@@ -18,13 +18,14 @@ interface RouteHandlers {
   standings?: unknown
   teamHealth?: unknown
   weeklyOutlook?: unknown
+  transactionReadiness?: unknown
 }
 function ok(body: unknown) {
   return { ok: true, status: 200, json: async () => body }
 }
 // Route each request by URL so each module can be controlled independently.
 // Handlers are RAW response bodies — routeFetch wraps them in the Response-like
-// shape useResource expects. Defaults: standings empty, TH + WO flag-off.
+// shape useResource expects. Defaults: standings empty, TH + WO + TR flag-off.
 function routeFetch(handlers: RouteHandlers = {}) {
   fetchMock.mockImplementation(async (url: string) => {
     if (typeof url === 'string' && url.includes('/team-health')) {
@@ -32,6 +33,9 @@ function routeFetch(handlers: RouteHandlers = {}) {
     }
     if (typeof url === 'string' && url.includes('/weekly-outlook')) {
       return ok(handlers.weeklyOutlook ?? { enabled: false })
+    }
+    if (typeof url === 'string' && url.includes('/transaction-readiness')) {
+      return ok(handlers.transactionReadiness ?? { enabled: false })
     }
     if (typeof url === 'string' && url.includes('/standings')) {
       return ok(handlers.standings ?? { standings: [], season: 2025 })
@@ -218,12 +222,64 @@ describe('ManagerIntelligenceHub — Weekly Outlook module states (Phase 3)', ()
   })
 })
 
-describe('ManagerIntelligenceHub — honest placeholders', () => {
-  it('renders an "expanding soon" placeholder for the one section still without a clean source', () => {
+describe('ManagerIntelligenceHub — Transaction Readiness module states (Phase 4)', () => {
+  it('renders a quiet "expanding soon" note when the Transaction Readiness server flag is off', async () => {
+    routeFetch({ transactionReadiness: { enabled: false } })
     render(<ManagerIntelligenceHub leagueId="L1" />)
-    // Only Transaction Readiness remains a static placeholder after Phase 3.
-    expect(screen.getByText(/Waiver availability, roster flexibility, and bench pressure — expanding soon\./i)).toBeTruthy()
-    expect(screen.getByTestId('hub-transaction-readiness')).toBeTruthy()
+    expect(await screen.findByTestId('transaction-readiness-disabled')).toBeTruthy()
+  })
+
+  it('renders an honest empty state when enabled but the user has no roster data', async () => {
+    routeFetch({ transactionReadiness: { enabled: true } })
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    expect(await screen.findByTestId('transaction-readiness-empty')).toBeTruthy()
+  })
+
+  it('renders the deterministic readiness (pressure, flexibility, counts, summary) when data is present', async () => {
+    routeFetch({
+      transactionReadiness: {
+        enabled: true,
+        data: {
+          version: 'manager-transaction-readiness.v1',
+          derivedAt: '2026-10-08T00:00:00.000Z',
+          rosterPressure: 'high',
+          benchFlexibility: 'tight',
+          injuryPressure: 'high',
+          byePressure: 'low',
+          rosterOpenings: 0,
+          reserveCount: 2,
+          injuredReserveCount: 1,
+          benchCount: 1,
+          summary: 'Your roster has high transaction pressure this week. Bench flexibility is tight.',
+          caveats: ['Open-slot counts use the format default roster size (no league-configured limit found).'],
+        },
+      },
+    })
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    expect(await screen.findByTestId('transaction-readiness-content')).toBeTruthy()
+    expect(screen.getByText(/high transaction pressure/i)).toBeTruthy()
+    expect(screen.getByText('Pressure: high')).toBeTruthy()
+    expect(screen.getByText('Bench: tight')).toBeTruthy()
+    expect(screen.getByTestId('transaction-readiness-caveats')).toBeTruthy()
+  })
+})
+
+describe('ManagerIntelligenceHub — no remaining placeholders (Phase 4 complete)', () => {
+  it('renders all five real modules and no "expanding soon" static placeholder card', async () => {
+    // Every module has data → none is in its flag-off "expanding soon" state.
+    routeFetch({
+      standings: { standings: [{ rank: 1, teamName: 'Alpha', wins: 1, losses: 0, pointsFor: 100 }], season: 2025 },
+      teamHealth: { enabled: true, data: { version: 'manager-team-health.v1', derivedAt: 'x', starterCount: 9, availableStarterCount: 9, injuredStarterCount: 0, questionableStarterCount: 0, byeWeekStarterCount: 0, benchAvailability: 'healthy', rosterCompleteness: 'excellent', summary: 'All good.' } },
+      weeklyOutlook: { enabled: true, data: { version: 'manager-weekly-outlook.v1', derivedAt: 'x', week: 5, matchupState: 'scheduled', opponentName: 'Rivals', projectedPointsFor: 110, projectedPointsAgainst: 100, projectedMargin: 'favored', lineupReadiness: 'ready', schedulePressure: 'normal', summary: 'Favored.', caveats: [] } },
+      transactionReadiness: { enabled: true, data: { version: 'manager-transaction-readiness.v1', derivedAt: 'x', rosterPressure: 'low', benchFlexibility: 'flexible', injuryPressure: 'low', byePressure: 'low', rosterOpenings: 1, reserveCount: 6, injuredReserveCount: 0, benchCount: 6, summary: 'Low pressure.', caveats: [] } },
+    })
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    expect(await screen.findByTestId('league-context-content')).toBeTruthy()
+    expect(await screen.findByTestId('team-health-content')).toBeTruthy()
+    expect(await screen.findByTestId('weekly-outlook-content')).toBeTruthy()
+    expect(await screen.findByTestId('transaction-readiness-content')).toBeTruthy()
+    // No "expanding soon" copy anywhere once every module has data.
+    expect(screen.queryByText(/expanding soon/i)).toBeNull()
   })
 })
 
