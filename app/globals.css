@@ -259,6 +259,39 @@
 }
 
 .af-dashboard-topbar {
+  /* Dashboard V2 Phase 3.9A — the dashboard is a deliberately dark "command center"
+     (its body/cards are fixed-dark in every app theme). Re-scope the dark-mode design
+     tokens onto the top bar so the bar AND every theme-token-driven control inside it
+     (title, language/theme toggles, rank badge, DashboardHeaderControls) stay
+     dark-consistent and readable even in light ("Claro") theme, instead of inheriting a
+     washed-out white bar. Scoped to this dashboard-only class — does not touch AppShell
+     or the global theme. */
+  --bg: #000000;
+  --panel: #0a0a0a;
+  --panel2: #141414;
+  --border: rgba(255, 255, 255, 0.1);
+  --text: rgba(255, 255, 255, 0.92);
+  --muted: rgba(255, 255, 255, 0.68);
+  --muted2: rgba(255, 255, 255, 0.48);
+  --accent: #7c3aed;
+  --accent-cyan: #67e8f9;
+  --accent-cyan-strong: #22d3ee;
+  --accent-emerald: #6ee7b7;
+  --accent-emerald-strong: #34d399;
+  --accent-amber: #fcd34d;
+  --accent-amber-strong: #f59e0b;
+  --accent-red: #fca5a5;
+  --accent-red-strong: #ef4444;
+  --accent-purple: #c084fc;
+  --subtle-bg: rgba(255, 255, 255, 0.1);
+  --badge-text-amber: #fde68a;
+  --badge-text-cyan: #a5f3fc;
+  --badge-text-emerald: #a7f3d0;
+  --badge-text-red: #fecaca;
+  --dropdown-bg: #111827;
+  --dropdown-text: rgba(255, 255, 255, 0.92);
+  color-scheme: dark;
+
   background:
     radial-gradient(circle at 8% 0%, color-mix(in srgb, var(--accent-cyan) 14%, transparent), transparent 34%),
     color-mix(in srgb, var(--panel) 96%, transparent);
