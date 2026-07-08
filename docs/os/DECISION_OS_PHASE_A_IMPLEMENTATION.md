@@ -2,9 +2,9 @@
 
 **Status: implementation BEGUN (freeze lifted by the user; OS is the sole focus).** Increments 1
 (normalization seam), 2 (idempotent persistence writer), 3 (dedicated imported-activity model +
-Prisma adapter + additive behavioral read), and 4 (Sleeper emitter + end-to-end ingestion) are
-landed. Every claim below is code-verified; nothing is fabricated, and no NFL-Redraft / Start-Draft
-/ PR-#166 work is touched.
+Prisma adapter + additive behavioral read), 4 (Sleeper emitter + end-to-end ingestion), and 5
+(scheduled snapshot capture + trend history) are landed. Every claim below is code-verified; nothing
+is fabricated, and no NFL-Redraft / Start-Draft / PR-#166 / Mission Control / UI work is touched.
 
 **Branch:** `g15-event-foundation` (where Decision OS lives) · **Date:** 2026-07-08.
 
@@ -190,40 +190,111 @@ pipeline, provider-specific parsing kept strictly separate from the provider-neu
   matching the production adapter's exact types, run through the real unmodified pipeline code; it
   is not a live API pull.)*
 
-**Not done this increment (honest gaps for Increment 5+):** wiring `ingestSleeperImportedActivity`
-into the actual `SleeperHistoricalBackfillService` call site (so it runs automatically after a real
-import, not just from a test harness); AF-league/appUserId mapping enrichment (so `afLeagueId` and
-`appUserId` populate once identity mappings exist, flipping those managers from `inferred` to
-`confirmed`); a live end-to-end pass against a real Sleeper league's live API response (blocked on
-network access + a real non-prod league to point at).
+**Not done in Increment 4 (closed or re-scoped below):** wiring `ingestSleeperImportedActivity` into
+the actual `SleeperHistoricalBackfillService` call site; AF-league/appUserId mapping enrichment;
+a live end-to-end pass against a real Sleeper league's live API (still open — see §3).
+
+## 2e. Increment 5 — scheduled snapshot capture + trend history (landed)
+
+**Scope, as directed: snapshot capture + trend history only.** No Mission Control, no dashboard
+visuals, no customer-facing UI.
+
+- **Cadence assumption (explicit, documented, minimal):** snapshots bucket by **UTC calendar day**
+  (`cadence: 'daily'`, the only supported cadence right now). `derivePeriodKey` is a small `switch`
+  so a coarser/finer cadence can be added later without redesigning capture or storage.
+- **`lib/decision-os/snapshot/behavioralSnapshotCapture.ts`** — pure, deterministic point-in-time
+  capture of the Increment 1–4 behavioral pipeline's own outputs
+  (`assembleLeagueBehavioralFacts`/`assembleManagerBehavioralFacts`, unchanged). Same
+  `(events, capturedAt, lookbackDays)` → structurally identical snapshot, always (the pure-layer
+  idempotency proof). An empty event stream yields an **honestly-zeroed** league snapshot
+  (`eventCount: 0`, `completeness: 0`, `warnings: ['no_events']`) and **zero** manager snapshots —
+  never skipped, never fabricated.
+- **`lib/decision-os/snapshot/behavioralSnapshotStore.ts`** — provider-neutral port (mirrors the
+  Increment 2 pattern), idempotent by `(leagueId, managerId, periodKey)`; `InMemoryBehavioralSnapshotStore`
+  reference impl doubles as the DB-adapter contract + test double. Re-running the same period
+  converges to one row (re-run safety); a new period appends a new row (that append-over-time
+  **is** the trend history).
+- **`lib/decision-os/snapshot/behavioralSnapshotWriter.ts`** — `captureAndWriteBehavioralSnapshots`
+  orchestrator: capture → upsert the league snapshot + every active manager's snapshot.
+- **`lib/decision-os/snapshot/behavioralTrend.ts`** — minimal, honestly-scoped trend derivation:
+  a chronological time series of each snapshot's own top-level metrics + a first-vs-last delta.
+  Deliberately **not** a dashboard/forecast/visualization (out of scope).
+- **Schema (justified, additive-only):** no existing model fit — `IntelligenceLeagueSnapshot` is a
+  single-row-per-league "latest state" (no history) built on the unrelated G15 DomainEvent
+  projection; `EngineSnapshot`/`GlobalMetaSnapshot`/`RankingsSnapshot`/etc. are all cache-expiry or
+  fantasy-domain-specific with the wrong unique-key shape. Added **`DecisionOsBehavioralSnapshot`**
+  (`prisma/migrations/20260708010000_decision_os_behavioral_snapshot/`), unique on
+  `(leagueId, managerId, periodKey)`, **no FK coupling to AF-native tables** (same principle as
+  Increment 3 — `managerId` is a string, so external-only manager keys work with no AppUser).
+  ⚠ **Postgres gotcha caught before it shipped:** a UNIQUE index on a *nullable* column doesn't
+  enforce uniqueness against NULL (NULL ≠ NULL in a btree unique index) — that would have silently
+  broken idempotency for league-scope rows. Fixed by using a stable non-null sentinel
+  (`managerId String @default("__league__")`) at the DB column, mapped to/from `null` **only** in
+  `prismaBehavioralSnapshotStore.ts` — the pure/domain layers never see the sentinel.
+- **`lib/decision-os/snapshot/prismaBehavioralSnapshotStore.ts`** — Prisma adapter over a narrow
+  delegate (Increment 3 pattern). Uses an **explicit `findUnique`-before-`upsert`** check for
+  created-vs-updated — deliberately **not** inferring it from `createdAt === updatedAt` (an initial
+  version did this and a test caught it failing: two upserts issued back-to-back — the literal
+  "cron fires twice" re-run-safety scenario — can land in the same millisecond and misreport
+  `'created'` twice; timestamp comparison is not a safe idempotency signal).
+- **Tests — `__tests__/decision-os/behavioral-snapshot-capture.test.ts` — 10/10:** cadence bucketing;
+  deterministic pure capture; empty-data honesty; store idempotency + 3-pass re-run safety; a new
+  period appending (not overwriting) at both league and manager scope; trend derivation (chronological
+  order, dedupe-by-period last-write-wins, empty input, delta); Prisma-adapter idempotency +
+  sentinel-mapping; and **Sleeper preserved as the first validation source** — a real Sleeper trade
+  flows Sleeper → `ingestSleeperImportedActivity` (Increment 4) → `mapImportedActivityRowsToEvents`
+  (Increment 3) → `captureAndWriteBehavioralSnapshots` (this increment), landing a correct league
+  trade count (1, not double-counted) and a per-manager trend row for the **external-only** manager
+  (no AF account). **Full decision-os suite: 78/78.**
+- **Real-DB proof (non-prod, reused the same throwaway Neon project again):** applied the migration
+  to `cool-lab-87438174`; inserted a day-1 league snapshot → new row; **re-ingested the identical
+  snapshot → same row id, no duplicate** (idempotency); inserted a day-2 snapshot (2 events,
+  `totalTradeCount: 2`) → a **second, distinct row** (trend history growing, not overwritten);
+  inserted an empty league's snapshot → persisted **honestly** (`eventCount: 0`, `completeness: 0`,
+  `warnings: ["no_events"]`), never skipped. Trend query confirms the chronological
+  `2026-07-08 → 2026-07-09` ordering with `eventCount` correctly increasing `1 → 2`. **No production
+  or shared DB touched.**
+- **Full-repo typecheck:** 158 errors baseline (unchanged from Increment 4), **zero in any Increment
+  5 file** — including a real bug this increment's typecheck caught in its own new adapter code
+  (a union-narrowing cast in `rowToRecord`), fixed before commit.
+
+**Not done this increment (by design — out of scope per the user's directive):** Mission Control,
+League Analytics, any dashboard/trend visualization, any customer-facing UI, and wiring the snapshot
+job into an actual cron/scheduler (the writer is scheduler-ready — any caller that invokes it once
+per day satisfies the cadence — but no scheduler was added, since none was requested).
 
 ## 3. What remains (the bulk — grounded next steps)
 
 | # | Work | Notes / blocker |
 | --- | --- | --- |
-| Do #1/#3 | ~~DB-write layer~~ **Increment 2 landed the port + writer + fake-store tests.** Remaining = **concrete Prisma adapter** for `ImportedActivityStore` + the **schema migration** (unique `externalSourceKey`/`naturalKey` column per table; external-manager trade path — see §2b) | Needs an **approved non-prod DB** to apply the migration + run the DB-level idempotency test (Deliverable #2 full). I will not write speculative rows or fabricate AppUser accounts into a shared schema. |
-| Do #1 | **Adapter emitters:** Sleeper `transaction`/draft → `RawImportedActivity` (trade/waiver/roster/draft) | Extend `lib/league-import/adapters/sleeper/**`; `ImportProvider` enum currently `sleeper/espn/yahoo/fantrax/mfl/fleaflicker` — **"The Replacements" must be added to it** (one-line, then an adapter). |
-| Do #4 | **Repeatable snapshot-capture job** for league intelligence trends | Today snapshot capture is manual; needs a scheduled/idempotent path (Deliverable #3: trend-ready history test). |
-| Do #5 | **Surface alignment:** re-point **League Health** off its separate `monitorLeagueHealth` onto the behavioral pipeline; consolidate **Recommendations**; **Mission Control + League Analytics do not exist** and must be built on the same outputs; enable `DECISION_OS_INTELLIGENCE_API_PROVIDER=real` per-league behind a parity gate | Deliverable #4: surface-consistency test. |
+| Do #1 | Wire `ingestSleeperImportedActivity` into the real `SleeperHistoricalBackfillService` call site (today it's invoked from tests/a harness, not the production import flow) | Needs the production import flow's call site + a decision on error handling for a real import run. |
+| Do #1 | AF-league/appUserId mapping enrichment (so `afLeagueId`/`appUserId` populate once identity mappings exist, flipping managers from `inferred` to `confirmed`) | Uses the existing `ExternalIdentityMapper`; no new infra needed. |
+| Do #1 | Add `"the_replacements"` to `ImportProvider` + build its adapter | Explicitly deferred until that workstream starts (per instruction). |
+| Do #4 | ~~Repeatable snapshot-capture job~~ **Increment 5 landed capture + trend history.** Remaining: wire a real scheduler/cron to call `captureAndWriteBehavioralSnapshots` once per day per league (the writer itself is scheduler-ready) | No scheduler was added this increment (not requested; avoids scope creep into ops/infra decisions). |
+| Do #5 | **Surface alignment:** re-point **League Health** off its separate `monitorLeagueHealth` onto the behavioral pipeline; consolidate **Recommendations**; **build Mission Control + League Analytics** on top of the snapshot/trend data; enable `DECISION_OS_INTELLIGENCE_API_PROVIDER=real` per-league behind a parity gate | The next phase, per the user's own Increment-5 kickoff: "Recommended Increment 5 after this: scheduled snapshot capture and trend history, **then Commissioner OS surface alignment**." |
 
 ## 4. How this supports Commissioner OS licensing
 
 Commissioner OS is meant to run on **external** platforms' leagues (The Replacements, Yahoo, ESPN, …).
-That only works if imported activity becomes **real, idempotent, fully-attributed** Decision OS input —
-which is exactly what this seam guarantees: a licensee can re-sync a league safely (idempotent keys),
-and **every** manager shows activity, not just those with AllFantasy accounts (external identity). That
-is the difference between a demo and a licensable per-league intelligence product.
+That only works if imported activity becomes **real, idempotent, fully-attributed** Decision OS input,
+and if that input compounds into **trend history** a commissioner can actually see change over time —
+which is exactly what Increments 1–5 guarantee together: a licensee can re-sync a league safely
+(idempotent keys), every manager shows activity regardless of AF account (external identity), and the
+resulting behavioral facts accumulate into a real, queryable trend per league and per manager. That is
+the difference between a demo and a licensable per-league intelligence product.
 
 ## 5. What The Replacements demo can show — honestly
 
-- **Today (this increment):** the ingestion seam is proven to turn real provider activity into stable,
-  attributable, **non-fabricated** records — idempotent on re-sync, with all managers (AF or not) keyed.
-- **After the next increment (DB wiring + Sleeper emitters):** imported Replacements/Sleeper trades,
-  waivers, and roster moves populate the tables Decision OS reads → real trade/waiver/roster
-  intelligence appears alongside draft intelligence, and the currently-empty surfaces fill in with
-  **real** values. Until then, those surfaces continue to **honestly degrade** (empty, not faked).
+- **Today (through Increment 5):** real provider activity (proven with Sleeper-shaped data) converts
+  into idempotent, fully-attributed behavioral events, and those events compound into a **real,
+  idempotent, growing trend history** per league and per manager — including managers with no
+  AllFantasy account. No visualization exists yet; the data underneath one is now real and provable.
+- **After Increment 6 (surface alignment):** League Health, Recommendations, Mission Control, and
+  League Analytics would read this same trend data instead of divergent/absent sources, and the
+  currently-empty surfaces would fill in with **real** values. Until then, those surfaces continue to
+  **honestly degrade** (empty, not faked).
 
 ## 6. Boundaries honored
-- No fake/demo intelligence; honest degradation throughout.
-- No NFL-Redraft beta, Start-Draft, PR-#166, AF-hosted-league, or DFS-OS work.
-- Reused existing identity infrastructure instead of duplicating it.
+- No fake/demo intelligence; honest degradation throughout (proven for empty leagues in Increment 5).
+- No NFL-Redraft beta, Start-Draft, PR-#166, AF-hosted-league, DFS-OS, Mission Control, or UI work.
+- Reused existing identity infrastructure and architectural patterns instead of duplicating them.

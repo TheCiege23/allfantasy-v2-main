@@ -16152,3 +16152,28 @@ model DecisionOsImportedActivity {
   @@index([occurredAt])
   @@map("decision_os_imported_activity")
 }
+
+/// Decision OS Phase A Increment 5 — provider-neutral behavioral snapshot trend history.
+/// Deliberately NOT coupled to AppUser/League/Roster (external managers have no AF account).
+/// managerId uses a stable non-null sentinel ("__league__") for league-scope rows because a
+/// UNIQUE index on a nullable column does not enforce uniqueness against NULL in Postgres.
+model DecisionOsBehavioralSnapshot {
+  id           String   @id @default(uuid())
+  leagueId     String
+  managerId    String   @default("__league__")
+  scope        String
+  cadence      String
+  periodKey    String
+  capturedAt   DateTime
+  lookbackDays Int?
+  eventCount   Int
+  completeness Int
+  facts        Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([leagueId, managerId, periodKey])
+  @@index([leagueId, scope, periodKey])
+  @@index([leagueId, managerId, capturedAt])
+  @@map("decision_os_behavioral_snapshot")
+}
