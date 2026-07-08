@@ -333,7 +333,7 @@ export function NflRedraftLeagueHomeDashboard({
           <div className="mb-3 flex items-center gap-2">
             <HeartPulse className="h-5 w-5 text-violet-200" aria-hidden />
             <h3 className="text-base font-black text-white">
-              {hasCommissionerIntelligence ? 'League Intelligence' : 'Locked Commissioner Intelligence preview'}
+              League Intelligence
             </h3>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
@@ -349,7 +349,7 @@ export function NflRedraftLeagueHomeDashboard({
           <div className="mb-3 flex items-center gap-2">
             <Activity className="h-5 w-5 text-violet-200" aria-hidden />
             <h3 className="text-base font-black text-white">
-              {hasManagerIntelligence ? 'Manager Intelligence' : 'Locked Manager Intelligence preview'}
+              Manager Intelligence
             </h3>
           </div>
           <div className="grid gap-3 md:grid-cols-3">
