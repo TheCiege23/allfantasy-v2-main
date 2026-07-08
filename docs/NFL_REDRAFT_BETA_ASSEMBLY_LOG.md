@@ -128,3 +128,21 @@ verdict **GO WITH CONDITIONS**. Highlights:
   Intelligence / Decision OS" **upsell teaser tiles** (non-navigable for free users) — recommend
   hiding/gating for the free beta (product decision; not auto-changed).
 - Core routes are real (not stubs); all runtime libs present.
+
+## 10. Phase 6 addendum — pre-push cleanup + PR readiness (2026-07-08)
+
+Resolved the Phase 5 GO-WITH-CONDITIONS items; branch is now push/PR-ready (local only, still not pushed).
+- **Rebased** `nfl-redraft-beta` onto current `origin/main` (`cef05c2af`) — clean, no conflicts (main's
+  new commits were sleeper-import/docs, no redraft overlap). Branch `[behind 0]`.
+- **Gated the home-dashboard Intelligence tiles** — the two G32 Intelligence sections now render only
+  when entitled (`hasManagerIntelligence`/`hasCommissionerIntelligence`); free-beta users see neither,
+  so no "Manager/Commissioner Intelligence", "Decision OS", "AF Pro/Commissioner preview", or "Ask
+  Chimmy" naming appears. Deleted the now-dead "Locked … preview" header strings. Updated the two
+  free-user `g32` test assertions to require the sections be **absent** (8/8 pass). No feature removed;
+  entitled path preserved.
+- **Re-verified** on the rebased+cleaned branch: `g32` (8/8) + PlayerStatCard (pass); the **same 7
+  inherited/stale failures**, zero new; draft-room TDZ still fixed (use = decl); all 10 core tabs still
+  render real components; touched-file typecheck clean; boundary guards clean (no off-limits commits;
+  only the 2 `lib/decision-os` infra deps + the `premiumCreateSettingsGate` option-gate remain, both
+  documented).
+- **Prepared** (not opened) the PR description: `NFL_REDRAFT_BETA_PR_SUMMARY.md`.
