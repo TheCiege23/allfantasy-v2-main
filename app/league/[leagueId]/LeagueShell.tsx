@@ -2,6 +2,8 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { normalizeOpenChatQueryParam } from '@/lib/dashboard/open-chat-query'
+import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/client'
+import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
 import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
 import { createPortal } from 'react-dom'
@@ -26,6 +28,7 @@ import {
   LineChart,
   ListOrdered,
   Lock,
+  MessageSquare,
   Repeat2,
   RotateCcw,
   Scale,
@@ -70,7 +73,7 @@ import {
   localizeLeagueTabs,
   type TabDef,
 } from './LeagueTabs'
-import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { isNflRedraftCoreDashboardFromUserLeague, isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { DraftTab } from './tabs/DraftTab'
 import { TeamTab } from './tabs/TeamTab'
 import { LeagueTab } from './tabs/LeagueTab'
@@ -95,6 +98,7 @@ import { CommissionerSettingsModal } from './components/CommissionerSettingsModa
 import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeamCap'
 import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
 import { RedraftTab } from './tabs/RedraftTab'
+import { RedraftStandingsPlayoffsView } from './tabs/redraft/RedraftStandingsPlayoffsView'
 import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
@@ -161,7 +165,7 @@ function weekFromLeagueSettings(settings: unknown): number | null {
 
 function prismaLeagueToUserLeague(
   l: League,
-  extra?: { draftDate?: string | null },
+  extra?: { draftDate?: string | null; redraftCurrentWeek?: number | null },
 ): UserLeague {
   const sport = normalizeToSupportedSport(String(l.sport)) ?? DEFAULT_SPORT
   const settings = (l.settings as Record<string, unknown> | undefined) ?? undefined
@@ -175,7 +179,11 @@ function prismaLeagueToUserLeague(
     teamCount: l.leagueSize ?? 10,
     season: l.season ?? new Date().getFullYear(),
     status: l.status ?? undefined,
-    currentWeek: weekFromLeagueSettings(l.settings) ?? undefined,
+    // Only override when a real RedraftSeason.currentWeek was resolved by the
+    // caller (nflRedraftCore leagues); otherwise preserve the exact prior
+    // behavior (`undefined` when settings carry no week) so non-redraft
+    // league types (zombie/survivor/etc.) are unaffected.
+    currentWeek: extra?.redraftCurrentWeek ?? weekFromLeagueSettings(l.settings) ?? undefined,
     isDynasty: l.isDynasty,
     settings,
     avatarUrl: l.avatarUrl ?? undefined,
@@ -304,6 +312,35 @@ export function LeagueShell({
     ],
   )
 
+  // The real "current week" — and whether the league has actually completed
+  // its draft — for an nflRedraftCore league lives on `RedraftSeason`, not
+  // `League.settings`/`lifecycleState`. Fetch it once the league resolves as
+  // redraft-core so Roster/Matchups/Standings default to the active week
+  // instead of week 1, and so League Home can tell a genuinely pre-draft
+  // league (no `RedraftSeason` row yet — `syncCompletedDraftToRedraftSeason`
+  // only creates one after the draft finalizes) apart from an in-season one.
+  const [redraftSeason, setRedraftSeason] = useState<RedraftSeasonClient | null>(null)
+  useEffect(() => {
+    if (!nflRedraftCore) {
+      setRedraftSeason(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const season = await fetchRedraftSeason(league.id)
+        if (!cancelled) setRedraftSeason(season)
+      } catch {
+        if (!cancelled) setRedraftSeason(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [nflRedraftCore, league.id])
+  const redraftCurrentWeek = redraftSeason?.currentWeek ?? null
+  const hasActiveRedraftSeason = redraftSeason != null
+
   const tabDefs = useMemo(() => {
     if (nflRedraftCore) {
       const core: TabDef[] = [
@@ -418,6 +455,10 @@ export function LeagueShell({
   // defaults below must not clobber an explicit choice - otherwise a late
   // hydration/searchParams render can bounce the user off (e.g.) the War Room tab.
   const userPickedTabRef = useRef(false)
+  // The ?view= value this shell itself last wrote from activeTab. The URL->tab effect ignores this
+  // echo so it never fights the tab->URL effect (the Draft/League flicker). External deep-links /
+  // back-forward carry a different value and are still honored. See lib/league/leagueTabSync.
+  const lastSyncedViewRef = useRef<string | null>(null)
 
   useEffect(() => {
     guillotineLandingApplied.current = false
@@ -426,6 +467,7 @@ export function LeagueShell({
     bigBrotherLandingApplied.current = false
     predraftLandingApplied.current = false
     userPickedTabRef.current = false
+    lastSyncedViewRef.current = null
   }, [league.id])
 
   /** Explicit tab selection (user click). Records the choice so auto-landing
@@ -562,6 +604,10 @@ export function LeagueShell({
     const raw = view ?? tabParam
     if (!raw) return
     const key = raw.trim().toLowerCase()
+    // Ignore our own URL echo: if this ?view= is the value we just mirrored from activeTab,
+    // re-applying it would swap activeTab<->URL every render (the Draft/League flicker). Only
+    // external navigations / deep-links (a different value) drive a tab change here.
+    if (!shouldApplyIncomingView(key, lastSyncedViewRef.current)) return
     const sportU = String(league.sport ?? '').toUpperCase()
     const intelligenceFallback = sportU === 'NFL' || sportU === 'NCAAF' ? 'trend' : 'players'
     const map: Record<string, string> = {
@@ -647,6 +693,10 @@ export function LeagueShell({
     // Redraft Settings is modal-driven. Do not persist it as ?view=settings,
     // because the settings deep-link effect treats that URL as "open modal".
     if (nflRedraftCore && activeTab === 'settings') return
+
+    // activeTab is the single source of truth; mirror it into ?view= one-way and remember what we
+    // wrote so the URL->tab effect ignores this echo (prevents the activeTab<->URL swap flicker).
+    lastSyncedViewRef.current = activeTab
 
     const next = new URLSearchParams(searchParams?.toString() ?? '')
     if (next.get('view') === activeTab) return
@@ -779,8 +829,8 @@ export function LeagueShell({
   }, [devyConfig, league.id, userId])
 
   const selectedLeague = useMemo(
-    () => prismaLeagueToUserLeague(league, { draftDate: draftDateIso }),
-    [league, draftDateIso],
+    () => prismaLeagueToUserLeague(league, { draftDate: draftDateIso, redraftCurrentWeek }),
+    [league, draftDateIso, redraftCurrentWeek],
   )
 
   const rosterWalletByPlatformUserId = useMemo(() => {
@@ -1333,6 +1383,7 @@ export function LeagueShell({
               onSelectTab={setActiveTab}
               isPredraftLifecycle={isPredraftLifecycle}
               draftDateIso={draftDateIso}
+              hasActiveRedraftSeason={hasActiveRedraftSeason}
             />
           </div>
         </main>
@@ -1573,7 +1624,7 @@ export function LeagueShell({
                 rel="noopener noreferrer"
                 className="mt-4 inline-flex text-[13px] font-semibold text-cyan-400 hover:text-cyan-300"
               >
-                Open league in Sleeper â†’
+                Open league in Sleeper {'->'}
               </a>
             ) : null}
             <button
@@ -1611,6 +1662,7 @@ function LeagueTabRouter({
   onSelectTab,
   isPredraftLifecycle,
   draftDateIso,
+  hasActiveRedraftSeason,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -1632,6 +1684,7 @@ function LeagueTabRouter({
   onSelectTab: (tabId: string) => void
   isPredraftLifecycle: boolean
   draftDateIso: string | null
+  hasActiveRedraftSeason: boolean
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -1790,6 +1843,7 @@ function LeagueTabRouter({
           userTeamName={userTeam?.teamName ?? null}
           isCommissioner={isCommissioner}
           draftDateIso={draftDateIso}
+          hasActiveRedraftSeason={hasActiveRedraftSeason}
           onOpenSettings={onOpenLeagueSettingsModal}
           onOpenTab={onSelectTab}
         />
@@ -1941,6 +1995,7 @@ function LeagueTabRouter({
           userTeamName={userTeam?.teamName ?? null}
           isCommissioner
           draftDateIso={draftDateIso}
+          hasActiveRedraftSeason={hasActiveRedraftSeason}
           onOpenSettings={onOpenLeagueSettingsModal}
           onOpenTab={onSelectTab}
         />
@@ -1979,6 +2034,9 @@ function LeagueTabRouter({
         />
       )
     case 'standings':
+      if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
+        return <RedraftStandingsPlayoffsView leagueId={leagueId} isCommissioner={isCommissioner} />
+      }
       return (
         <StandingsTab league={selectedLeague} tabLabel={tabLabel} idpLeagueUi={idpLeagueActive} />
       )
@@ -2277,7 +2335,7 @@ function LeagueHeader({
                   <span className="flex items-center bg-violet-600/45 px-2 text-violet-50">
                     {c2cSportPairShort(c2cConfig.sportPair).left}
                   </span>
-                  <span className="flex items-center px-1 text-white/50">â†”</span>
+                  <span className="flex items-center px-1 text-white/50">{'<->'}</span>
                   <span className="flex items-center bg-blue-600/45 px-2 text-blue-50">
                     {c2cSportPairShort(c2cConfig.sportPair).right}
                   </span>

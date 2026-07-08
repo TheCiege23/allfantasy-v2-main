@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
+  advancePlayoffRound,
   fetchRedraftPlayoffRuntime,
   finalizeRedraftSeason,
   generatePlayoffs,
@@ -11,6 +12,7 @@ import {
 export function StandingsView({
   rows,
   seasonId,
+  isCommissioner = false,
 }: {
   rows: {
     id: string
@@ -25,6 +27,7 @@ export function StandingsView({
     streak?: string | null
   }[]
   seasonId: string | null
+  isCommissioner?: boolean
 }) {
   const [playoffTeams, setPlayoffTeams] = useState<number>(Math.min(6, Math.max(2, rows.length || 6)))
   const [busy, setBusy] = useState(false)
@@ -33,6 +36,9 @@ export function StandingsView({
   const [finalizeBusy, setFinalizeBusy] = useState(false)
   const [finalizeResult, setFinalizeResult] = useState<string | null>(null)
   const [finalizeError, setFinalizeError] = useState<string | null>(null)
+  const [advanceBusy, setAdvanceBusy] = useState(false)
+  const [advanceMsg, setAdvanceMsg] = useState<string | null>(null)
+  const [advanceError, setAdvanceError] = useState<string | null>(null)
   const [runtime, setRuntime] = useState<RedraftPlayoffRuntimeClient | null>(null)
   const [runtimeLoading, setRuntimeLoading] = useState(false)
   const [runtimeError, setRuntimeError] = useState<string | null>(null)
@@ -102,41 +108,120 @@ export function StandingsView({
     }
   }
 
+  // Derive playoff lifecycle state from the canonical runtime (never fabricated).
+  const bracket = runtime?.bracket ?? null
+  const generated = bracket?.generated ?? false
+  const bracketComplete = bracket?.status === 'complete' || Boolean(bracket?.championRosterId)
+  const rounds = bracket?.rounds ?? []
+  const activeRoundIndex = rounds.findIndex((r) => r.status === 'active')
+  const activeRound = activeRoundIndex >= 0 ? rounds[activeRoundIndex] : null
+  const activeRoundResolved = Boolean(
+    activeRound && activeRound.matchups.every((m) => m.bye || Boolean(m.winnerRosterId)),
+  )
+  const allRoundsComplete = generated && rounds.length > 0 && !activeRound
+  const advanceWeek = runtime ? runtime.settings.playoffStartWeek + Math.max(0, activeRoundIndex) : 0
+
+  const onAdvance = async () => {
+    if (!seasonId || !activeRound) return
+    setAdvanceBusy(true)
+    setAdvanceError(null)
+    setAdvanceMsg(null)
+    try {
+      const res = await advancePlayoffRound({ seasonId, week: advanceWeek })
+      if (res.status === 'ready_for_champion_finalization' || res.status === 'championship_ready') {
+        setAdvanceMsg('Championship ready — finalize to crown the champion.')
+      } else if ((res.advanced ?? 0) > 0 || res.status === 'round_complete') {
+        setAdvanceMsg(`Round advanced (${res.advanced} team${res.advanced === 1 ? '' : 's'}).`)
+      } else if (res.blocked && res.blocked.length > 0) {
+        setAdvanceError('Round is not ready to advance — resolve all matchups first.')
+      } else {
+        setAdvanceMsg(`Advance status: ${String(res.status).replace(/_/g, ' ')}`)
+      }
+      await refreshRuntime()
+    } catch (e) {
+      setAdvanceError(e instanceof Error ? e.message : 'Failed to advance round')
+    } finally {
+      setAdvanceBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3">
-        <p className="text-[11px] text-white/55">Playoffs</p>
-        <input
-          type="number"
-          aria-label="Playoff team count"
-          min={2}
-          max={Math.max(2, rows.length)}
-          value={playoffTeams}
-          onChange={(e) => setPlayoffTeams(Math.max(2, Math.min(Number(e.target.value) || 2, Math.max(2, rows.length))))}
-          className="w-20 rounded border border-white/15 bg-black/30 px-2 py-1 text-[11px] text-white"
-        />
-        <button
-          type="button"
-          onClick={() => void onGenerate()}
-          disabled={!seasonId || busy || rows.length < 2}
-          className="rounded bg-white/80 px-2 py-1 text-[11px] font-semibold text-black disabled:opacity-50"
+      {isCommissioner ? (
+        <div
+          data-testid="redraft-playoff-commissioner-controls"
+          className="flex flex-wrap items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.03] p-3"
         >
-          {busy ? 'Generating...' : 'Generate Bracket'}
-        </button>
-        {result ? <span className="text-[11px] text-emerald-300">{result}</span> : null}
-        {error ? <span className="text-[11px] text-rose-300">{error}</span> : null}
-        <span className="ml-auto" />
-        <button
-          type="button"
-          onClick={() => void onFinalize()}
-          disabled={!seasonId || finalizeBusy}
-          className="rounded border border-white/20 bg-white/10 px-2 py-1 text-[11px] font-semibold text-white/80 disabled:opacity-50"
-        >
-          {finalizeBusy ? 'Finalizing...' : 'Finalize Season'}
-        </button>
-        {finalizeResult ? <span className="text-[11px] text-amber-300">{finalizeResult}</span> : null}
-        {finalizeError ? <span className="text-[11px] text-rose-300">{finalizeError}</span> : null}
-      </div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/45">Playoffs</p>
+
+          {!generated ? (
+            <>
+              <input
+                type="number"
+                aria-label="Playoff team count"
+                min={2}
+                max={Math.max(2, rows.length)}
+                value={playoffTeams}
+                onChange={(e) => setPlayoffTeams(Math.max(2, Math.min(Number(e.target.value) || 2, Math.max(2, rows.length))))}
+                className="w-20 rounded border border-white/15 bg-black/30 px-2 py-1 text-[11px] text-white"
+              />
+              <button
+                type="button"
+                data-testid="redraft-generate-bracket"
+                onClick={() => void onGenerate()}
+                disabled={!seasonId || busy || rows.length < 2}
+                className="rounded bg-white/80 px-2 py-1 text-[11px] font-semibold text-black disabled:opacity-50"
+              >
+                {busy ? 'Generating...' : 'Generate Bracket'}
+              </button>
+              {result ? <span className="text-[11px] text-emerald-300">{result}</span> : null}
+              {error ? <span className="text-[11px] text-rose-300">{error}</span> : null}
+            </>
+          ) : null}
+
+          {generated && activeRound && !bracketComplete ? (
+            <>
+              <button
+                type="button"
+                data-testid="redraft-advance-round"
+                onClick={() => void onAdvance()}
+                disabled={!seasonId || advanceBusy || !activeRoundResolved}
+                title={activeRoundResolved ? undefined : 'Resolve this round’s matchups before advancing.'}
+                className="rounded bg-emerald-400/85 px-2 py-1 text-[11px] font-semibold text-black disabled:opacity-50"
+              >
+                {advanceBusy ? 'Advancing...' : `Advance ${activeRound.roundName}`}
+              </button>
+              {!activeRoundResolved ? (
+                <span className="text-[11px] text-white/45">Resolve matchups to advance.</span>
+              ) : null}
+              {advanceMsg ? <span className="text-[11px] text-emerald-300">{advanceMsg}</span> : null}
+              {advanceError ? <span className="text-[11px] text-rose-300">{advanceError}</span> : null}
+            </>
+          ) : null}
+
+          {generated && allRoundsComplete && !bracketComplete ? (
+            <>
+              <button
+                type="button"
+                data-testid="redraft-finalize-season"
+                onClick={() => void onFinalize()}
+                disabled={!seasonId || finalizeBusy}
+                className="rounded border border-amber-300/40 bg-amber-400/15 px-2 py-1 text-[11px] font-semibold text-amber-100 disabled:opacity-50"
+              >
+                {finalizeBusy ? 'Finalizing...' : 'Finalize Season'}
+              </button>
+              {finalizeResult ? <span className="text-[11px] text-amber-300">{finalizeResult}</span> : null}
+              {finalizeError ? <span className="text-[11px] text-rose-300">{finalizeError}</span> : null}
+            </>
+          ) : null}
+
+          {bracketComplete ? (
+            <span data-testid="redraft-playoff-complete" className="text-[11px] font-semibold text-amber-200">
+              {finalizeResult ?? 'Season finalized — champion crowned.'}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
 
       <PlayoffRuntimePanel runtime={runtime} loading={runtimeLoading} error={runtimeError} />
 

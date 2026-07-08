@@ -620,3 +620,20 @@ export async function generatePlayoffs(payload: {
     summary?: { playoffTeams: number; bracketSize: number; byes: number; rounds: number }
   }>(res)
 }
+
+export async function advancePlayoffRound(payload: { seasonId: string; week: number }) {
+  const res = await fetch('/api/redraft/playoffs/advance', {
+    method: 'POST',
+    credentials: 'include',
+    headers: jsonHeaders,
+    body: JSON.stringify(payload),
+  })
+  return parseJson<{
+    seasonId: string
+    week: number
+    advanced: number
+    skipped: number
+    blocked: Array<{ matchupId: string; reason: string }>
+    status: string
+  }>(res)
+}
