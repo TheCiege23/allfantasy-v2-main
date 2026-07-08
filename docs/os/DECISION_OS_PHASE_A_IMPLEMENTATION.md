@@ -1,8 +1,8 @@
 # Decision OS Phase A — Implementation (in progress)
 
-**Status: implementation BEGUN (freeze lifted by the user; OS is the sole focus).** This records the
-first landed increment and the grounded plan for the rest. Every claim below is code-verified; nothing
-is fabricated, and no NFL-Redraft / Start-Draft / PR-#166 work is touched.
+**Status: implementation BEGUN (freeze lifted by the user; OS is the sole focus).** Increments 1
+(normalization seam) and 2 (idempotent persistence writer) are landed. Every claim below is
+code-verified; nothing is fabricated, and no NFL-Redraft / Start-Draft / PR-#166 work is touched.
 
 **Branch:** `g15-event-foundation` (where Decision OS lives) · **Date:** 2026-07-08.
 
@@ -58,11 +58,48 @@ deterministic idempotent keys (same event ⇒ same key across runs; duplicate re
 AF-vs-external-only identity keying, honest degradation for all three skip reasons, and provider-openness.
 (This is the unit-level half of Deliverable #2; the DB-level idempotency test lands with the write layer.)
 
+## 2b. Increment 2 — idempotent activity persistence writer (landed)
+
+Consumes the Increment-1 seam and persists it idempotently, keeping **pure transformation separate
+from DB writes** via a port (the preferred shape):
+
+- **`lib/decision-os/ingestion/importedActivityStore.ts`** — the provider-neutral persistence port
+  (`ImportedActivityStore.upsertByNaturalKey`, idempotent by `naturalKey`), a `PersistedActivityRecord`
+  shape, and an `InMemoryImportedActivityStore` reference implementation (idempotent by construction —
+  doubles as the DB-adapter contract and the test double).
+- **`lib/decision-os/ingestion/importedActivityWriter.ts`** — `writeImportedActivity(normalized[], store)`
+  orchestrator: re-runnable, order-independent, returns an honest summary (created/updated/**skipped +
+  reasons**, external-only-manager count, per-activity-type counts). No Prisma, no provider parsing.
+- **`__tests__/decision-os/imported-activity-writer.test.ts` — 6/6 passing:** first write creates /
+  re-write updates (count stable, no duplication); repeated ingestion incl. in-batch duplicates
+  **converges to identical persisted state**; **external-only managers persist** (attributed via
+  `stable_key`, no AF account); and a constrained store **surfaces skips honestly** (simulating the
+  `afLeagueTrade` AppUser-FK constraint below) without fabricating rows.
+
+### ⚠ Critical schema finding (reshapes Increment 3)
+
+The seven pipeline-input tables are **AF-hosted-league tables coupled to AllFantasy accounts/entities**,
+which the concrete Prisma adapter must contend with:
+
+| Table | Idempotency key today | External-manager blocker |
+| --- | --- | --- |
+| `DraftPick` | ✅ `@@unique([sessionId, overall])` + already populated by import | needs `DraftSession` FK |
+| `WaiverClaim` | ❌ none (uuid id only) | requires `rosterId` (Roster FK); `userId` is nullable ✅ |
+| `AfRosterMoveHistory` | ❌ none (cuid id only) | requires `rosterId`; `actorUserId` nullable ✅ |
+| `AfLeagueTrade` (+`AfLeagueTradeItem`) | ❌ none | **`proposedByUserId` is a REQUIRED `AppUser` FK** → an external-only manager **cannot** be written here without an AF account |
+
+So even *with* a non-prod DB, external-league trades cannot land in `afLeagueTrade` as-is, and no table
+except `DraftPick` can be upserted idempotently by `naturalKey` without a schema change. **Increment 3
+must therefore add, via migration: a unique `externalSourceKey` (= `naturalKey`) column per target
+table, and an external-manager-friendly path for trades** (either nullable `proposedByUserId` +
+external-manager columns, or a dedicated imported-activity model the behavioral reader also consumes).
+That migration + its verification require an approved non-prod DB.
+
 ## 3. What remains (the bulk — grounded next steps)
 
 | # | Work | Notes / blocker |
 | --- | --- | --- |
-| Do #1/#3 | **DB-write layer:** upsert `normalized` activity into the 4 behavioral-input tables by `naturalKey` | Needs an **approved non-prod DB** to land + test writes (I will not write speculative rows into a shared schema). This is the DB-level idempotency test (Deliverable #2 full). |
+| Do #1/#3 | ~~DB-write layer~~ **Increment 2 landed the port + writer + fake-store tests.** Remaining = **concrete Prisma adapter** for `ImportedActivityStore` + the **schema migration** (unique `externalSourceKey`/`naturalKey` column per table; external-manager trade path — see §2b) | Needs an **approved non-prod DB** to apply the migration + run the DB-level idempotency test (Deliverable #2 full). I will not write speculative rows or fabricate AppUser accounts into a shared schema. |
 | Do #1 | **Adapter emitters:** Sleeper `transaction`/draft → `RawImportedActivity` (trade/waiver/roster/draft) | Extend `lib/league-import/adapters/sleeper/**`; `ImportProvider` enum currently `sleeper/espn/yahoo/fantrax/mfl/fleaflicker` — **"The Replacements" must be added to it** (one-line, then an adapter). |
 | Do #4 | **Repeatable snapshot-capture job** for league intelligence trends | Today snapshot capture is manual; needs a scheduled/idempotent path (Deliverable #3: trend-ready history test). |
 | Do #5 | **Surface alignment:** re-point **League Health** off its separate `monitorLeagueHealth` onto the behavioral pipeline; consolidate **Recommendations**; **Mission Control + League Analytics do not exist** and must be built on the same outputs; enable `DECISION_OS_INTELLIGENCE_API_PROVIDER=real` per-league behind a parity gate | Deliverable #4: surface-consistency test. |
