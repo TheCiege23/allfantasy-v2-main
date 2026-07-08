@@ -19,13 +19,14 @@ interface RouteHandlers {
   teamHealth?: unknown
   weeklyOutlook?: unknown
   transactionReadiness?: unknown
+  replayInsights?: unknown
 }
 function ok(body: unknown) {
   return { ok: true, status: 200, json: async () => body }
 }
 // Route each request by URL so each module can be controlled independently.
 // Handlers are RAW response bodies — routeFetch wraps them in the Response-like
-// shape useResource expects. Defaults: standings empty, TH + WO + TR flag-off.
+// shape useResource expects. Defaults: standings empty, all modules flag-off.
 function routeFetch(handlers: RouteHandlers = {}) {
   fetchMock.mockImplementation(async (url: string) => {
     if (typeof url === 'string' && url.includes('/team-health')) {
@@ -36,6 +37,9 @@ function routeFetch(handlers: RouteHandlers = {}) {
     }
     if (typeof url === 'string' && url.includes('/transaction-readiness')) {
       return ok(handlers.transactionReadiness ?? { enabled: false })
+    }
+    if (typeof url === 'string' && url.includes('/replay-insights')) {
+      return ok(handlers.replayInsights ?? { enabled: false })
     }
     if (typeof url === 'string' && url.includes('/standings')) {
       return ok(handlers.standings ?? { standings: [], season: 2025 })
@@ -288,6 +292,129 @@ describe('ManagerIntelligenceHub — responsive layout', () => {
     render(<ManagerIntelligenceHub leagueId="L1" />)
     const grid = screen.getByTestId('manager-hub-grid')
     expect(grid.className).toContain('grid')
+    expect(grid.className).toContain('md:grid-cols-2')
+  })
+})
+
+describe('ManagerIntelligenceHub — live Sleeper proof pass (Phase 5)', () => {
+  // Realistic, Sleeper-import-shaped payloads for ALL five modules with every
+  // flag on — the demo surface as a real imported league would render it. (Team
+  // names avoid the banned-token list on purpose; the scan polices the hub's own
+  // copy, not user-chosen names.)
+  const LIVE = {
+    standings: {
+      season: 2025,
+      standings: [
+        { rank: 1, teamName: 'KBI Smoke Black', wins: 10, losses: 3, pointsFor: 1642.8 },
+        { rank: 2, teamName: 'Gridiron Goblins', wins: 9, losses: 4, pointsFor: 1601.4 },
+        { rank: 3, teamName: 'Coastal Crushers', wins: 8, losses: 5, pointsFor: 1555.9 },
+      ],
+    },
+    teamHealth: {
+      enabled: true,
+      data: {
+        version: 'manager-team-health.v1', derivedAt: '2026-12-01T00:00:00.000Z',
+        starterCount: 9, availableStarterCount: 7, injuredStarterCount: 1, questionableStarterCount: 1,
+        byeWeekStarterCount: 0, benchAvailability: 'thin', rosterCompleteness: 'good',
+        summary: '1 projected starter is currently unavailable, and 1 starter is questionable. Bench depth looks thin.',
+      },
+    },
+    weeklyOutlook: {
+      enabled: true,
+      data: {
+        version: 'manager-weekly-outlook.v1', derivedAt: '2026-12-01T00:00:00.000Z',
+        week: 14, matchupState: 'scheduled', opponentName: 'Gridiron Goblins',
+        projectedPointsFor: 121.6, projectedPointsAgainst: 118.9, projectedMargin: 'close',
+        lineupReadiness: 'needs_attention', schedulePressure: 'normal',
+        summary: 'Your Week 14 matchup against Gridiron Goblins projects as close. Your lineup needs attention.',
+        caveats: [],
+      },
+    },
+    transactionReadiness: {
+      enabled: true,
+      data: {
+        version: 'manager-transaction-readiness.v1', derivedAt: '2026-12-01T00:00:00.000Z',
+        rosterPressure: 'moderate', benchFlexibility: 'limited', injuryPressure: 'moderate', byePressure: 'low',
+        rosterOpenings: 0, reserveCount: 4, injuredReserveCount: 1, benchCount: 4,
+        summary: 'Your roster has moderate transaction pressure this week. Bench flexibility appears limited.',
+        caveats: [],
+      },
+    },
+    replayInsights: {
+      enabled: true,
+      data: {
+        scope: 'league', version: 'manager-replay-insight.v1', derivedAt: '2026-12-01T00:00:00.000Z',
+        tradesAnalyzed: 14, tradesWithLineupData: 9, validationSource: 'decision_replay_correlation',
+        insights: [
+          { insightId: 'starter_impact_trades', category: 'starter_impact_trades', headline: 'Starter-impact trades tended to land in your favor', detail: 'Historically your bigger trades converted into real lineup value.', displayValue: '+', sentiment: 'positive', confidence: 'moderate', sampleSize: 5, caveat: null },
+          { insightId: 'bench_depth_trades', category: 'bench_depth_trades', headline: 'Bench-depth moves mostly stayed on your bench', detail: 'Depth acquisitions rarely reached your starting lineup.', displayValue: '~', sentiment: 'neutral', confidence: 'low', sampleSize: 3, caveat: 'Limited sample.' },
+        ],
+      },
+    },
+  }
+
+  beforeEach(() => {
+    // All server module flags are simulated via the mocked route payloads; the
+    // replay card additionally needs its own CLIENT flag on to fetch/render.
+    vi.stubEnv('NEXT_PUBLIC_MANAGER_REPLAY_INSIGHTS_DASHBOARD_ENABLED', 'true')
+    routeFetch(LIVE)
+  })
+
+  async function renderLiveAndSettle() {
+    render(<ManagerIntelligenceHub leagueId="L1" />)
+    await screen.findByTestId('replay-insight-grid')
+    await screen.findByTestId('league-context-content')
+    await screen.findByTestId('team-health-content')
+    await screen.findByTestId('weekly-outlook-content')
+    await screen.findByTestId('transaction-readiness-content')
+  }
+
+  it('renders all FIVE real modules with live-like imported-league data', async () => {
+    await renderLiveAndSettle()
+    expect(screen.getByTestId('replay-insight-grid')).toBeTruthy()
+    expect(screen.getByTestId('league-context-content')).toBeTruthy()
+    expect(screen.getByTestId('team-health-content')).toBeTruthy()
+    expect(screen.getByTestId('weekly-outlook-content')).toBeTruthy()
+    expect(screen.getByTestId('transaction-readiness-content')).toBeTruthy()
+    expect(screen.getByText(/KBI Smoke Black/)).toBeTruthy()
+  })
+
+  it('shows NO placeholder / "expanding soon" copy on the live demo surface', async () => {
+    await renderLiveAndSettle()
+    // None of the four grid modules is in its flag-off placeholder state, and the
+    // hub is not in its disabled state.
+    expect(screen.queryByText(/expanding soon/i)).toBeNull()
+    expect(screen.queryByTestId('manager-hub-disabled')).toBeNull()
+    expect(screen.queryByTestId('weekly-outlook-disabled')).toBeNull()
+    expect(screen.queryByTestId('team-health-disabled')).toBeNull()
+    expect(screen.queryByTestId('transaction-readiness-disabled')).toBeNull()
+  })
+
+  it('renders NO recommendation / advice language anywhere in the hub', async () => {
+    await renderLiveAndSettle()
+    const text = (document.body.textContent ?? '').toLowerCase()
+    // Bare "recommend" is intentionally NOT scanned: the replay panel legitimately
+    // says it is "not recommendations for future moves." Scan imperative phrasing.
+    for (const banned of [/\badd\b/, /\bdrop\b/, /\bwaiver\b/, /\bpickup\b/, /\bclaim\b/, /\btarget\b/, /\bsit\b/, /\bstart\b/, /trade for/, /i recommend/, /we recommend/, /you should/]) {
+      expect(banned.test(text)).toBe(false)
+    }
+  })
+
+  it('renders NO raw provider/Sleeper IDs (no 10+ digit runs)', async () => {
+    await renderLiveAndSettle()
+    expect(/\d{10,}/.test(document.body.textContent ?? '')).toBe(false)
+  })
+
+  it('offers a clear "Back to league" CTA', async () => {
+    await renderLiveAndSettle()
+    const cta = screen.getByTestId('manager-hub-back-cta')
+    expect(cta.getAttribute('href')).toBe('/league/L1')
+  })
+
+  it('keeps a responsive grid (1 column mobile → 2 columns at md)', async () => {
+    await renderLiveAndSettle()
+    const grid = screen.getByTestId('manager-hub-grid')
+    expect(grid.className).toContain('grid-cols-1')
     expect(grid.className).toContain('md:grid-cols-2')
   })
 })

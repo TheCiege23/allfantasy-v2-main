@@ -88,16 +88,31 @@ function useResource<T>(url: string): Resource<T> {
 // ── shared UI ─────────────────────────────────────────────────────────────────
 
 function HubCard({ title, testId, children }: { title: string; testId: string; children: React.ReactNode }) {
+  // min-height + items-stretch on the grid keeps cards visually aligned in the
+  // demo; flex column pins the title and lets content fill.
   return (
-    <section className="rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4" data-testid={testId}>
+    <section
+      className="flex min-h-[148px] flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-4 transition-colors hover:border-white/[0.14]"
+      data-testid={testId}
+    >
       <h3 className="mb-3 text-sm font-semibold text-white/90">{title}</h3>
-      {children}
+      <div className="flex-1">{children}</div>
     </section>
   )
 }
 
+/** Consistent loading skeleton (keeps role="status" for a11y + tests). */
+function LoadingSkeleton() {
+  return (
+    <div className="space-y-2" role="status" aria-label="Loading">
+      <div className="h-2.5 w-2/3 animate-pulse rounded bg-white/10" />
+      <div className="h-2.5 w-1/2 animate-pulse rounded bg-white/10" />
+    </div>
+  )
+}
+
 function StateMessage({ status }: { status: ResourceStatus }) {
-  if (status === 'loading') return <p className="text-xs text-white/50" role="status">Loading…</p>
+  if (status === 'loading') return <LoadingSkeleton />
   if (status === 'forbidden' || status === 'not_found' || status === 'unauthorized') {
     return <p className="text-xs text-white/45">Not available.</p>
   }
@@ -439,21 +454,42 @@ export function ManagerIntelligenceHub({ leagueId }: { leagueId: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 px-4 py-6" data-testid="manager-intelligence-hub">
-      <header>
-        <h2 className="text-lg font-black text-white">Manager Intelligence</h2>
-        <p className="mt-0.5 text-xs text-white/45">Everything worth your attention this week, in one place. Observations, not advice.</p>
+    <div className="mx-auto max-w-4xl space-y-5 px-4 py-6" data-testid="manager-intelligence-hub">
+      <header className="space-y-2">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-black tracking-tight text-white">Manager Intelligence</h2>
+          <span className="shrink-0 rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-medium text-white/55 ring-1 ring-white/10">
+            Observations, not advice
+          </span>
+        </div>
+        <p className="text-xs text-white/45">
+          A unified read on your team this week — health, matchup, roster readiness, league context, and historical
+          signal, all grounded in your league’s own data.
+        </p>
       </header>
 
       {/* Historical Intelligence — reuses the replay panel unchanged (Phase 20/21). */}
       <ManagerReplayInsightsCard leagueId={leagueId} />
 
-      <div className="grid gap-4 md:grid-cols-2" data-testid="manager-hub-grid">
+      <div className="grid grid-cols-1 items-stretch gap-4 md:grid-cols-2" data-testid="manager-hub-grid">
         <LeagueContextModule leagueId={leagueId} />
         <WeeklyOutlookModule leagueId={leagueId} />
         <TeamHealthModule leagueId={leagueId} />
         <TransactionReadinessModule leagueId={leagueId} />
       </div>
+
+      <footer className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-3">
+        <p className="text-[11px] text-white/35">
+          Every signal is a descriptive summary of your league’s own data — not a prescription of which moves to make.
+        </p>
+        <a
+          href={`/league/${encodeURIComponent(leagueId)}`}
+          className="shrink-0 text-[11px] font-medium text-cyan-300/90 hover:underline"
+          data-testid="manager-hub-back-cta"
+        >
+          Back to league →
+        </a>
+      </footer>
     </div>
   )
 }
