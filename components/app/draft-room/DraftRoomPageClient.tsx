@@ -523,9 +523,6 @@ export function DraftRoomPageClient({
     draftPool === null && poolReadiness?.ready === false
       ? 'Preparing player pool...'
       : 'Loading player pool...'
-  const startDraftBlocked =
-    draftRoomState.canStart &&
-    (poolReadiness?.ready === false || poolFetching || !draftPool || draftPool.entries.length === 0)
   const effectiveDraftSport = draftPool?.sport ?? sport
 
   const draftedNames = useMemo(
@@ -927,6 +924,15 @@ export function DraftRoomPageClient({
   )
 
   const canDraft = draftRoomState.canDraft
+
+  // `startDraftBlocked` reads `draftRoomState` (the useMemo declared just above), so
+  // it must live after that declaration. Declaring it earlier (near the top of the
+  // component) tripped a temporal dead zone — `ReferenceError: Cannot access
+  // 'draftRoomState' before initialization` — that crashed the draft room at render.
+  // It is only consumed far below (the start-draft button's disabled state).
+  const startDraftBlocked =
+    draftRoomState.canStart &&
+    (poolReadiness?.ready === false || poolFetching || !draftPool || draftPool.entries.length === 0)
 
   useEffect(() => {
     if (!session) return
