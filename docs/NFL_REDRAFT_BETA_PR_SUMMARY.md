@@ -1,10 +1,20 @@
-# PR (prepared, NOT opened) — NFL Redraft free closed-beta core loop
+# PR body — NFL Redraft free closed-beta core loop
 
-> Ready-to-use PR description for `nfl-redraft-beta` → `main`. **Not opened.** Open only on explicit
-> approval, e.g. `gh pr create --base main --head nfl-redraft-beta --title "..." --body-file docs/NFL_REDRAFT_BETA_PR_SUMMARY.md --draft`.
+> **OPENED as draft PR #166** (base `main`, head `nfl-redraft-beta`). This file is the source-of-truth
+> PR description; keep it in sync with the live PR body.
 
-**Title:** `NFL Redraft — free closed-beta core loop (G30–G44 + trades/playoffs UI + P0 fix)`
-**Base:** `main` (`cef05c2af`) · **Head:** `nfl-redraft-beta` (23 commits, rebased, `[behind 0]`)
+**Title:** `NFL Redraft Beta — free closed-beta core loop (G30–G44 + trades/playoffs UI + P0 fix)`
+**Base:** `main` · **Head:** `nfl-redraft-beta` (26 commits) · **Draft PR:** #166
+
+## CI status (2026-07-08)
+
+- ✅ **Required check `Draft Room Regression` = PASS** (this branch fixes the `main` TDZ crash).
+- ✅ **`next build` + Vercel `allfantasy-v2-main` deploy = PASS** after fixing a branch build regression
+  (the G30–G44 slice had missed transitive infra deps — restored beta-clean in commits `c4b1b3812` +
+  `6d79abb63`: `f89240bbf` prod modules + `lib/events/*` event foundation + `leagueTabSync`).
+- **Environment-only:** `Vercel – allfantasy-v2` "Account is blocked" (repo-wide).
+- **Inherited/stale (not this branch):** `Playwright (onboarding-activation)` + the 7 redraft unit
+  failures below (proven identical on the `main` baseline). None are required checks.
 
 ## Scope
 

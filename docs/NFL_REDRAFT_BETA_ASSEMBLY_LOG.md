@@ -146,3 +146,25 @@ Resolved the Phase 5 GO-WITH-CONDITIONS items; branch is now push/PR-ready (loca
   only the 2 `lib/decision-os` infra deps + the `premiumCreateSettingsGate` option-gate remain, both
   documented).
 - **Prepared** (not opened) the PR description: `NFL_REDRAFT_BETA_PR_SUMMARY.md`.
+
+## 11. Phase 7 / 7B / 7C addendum — pushed draft PR #166 + CI triage (2026-07-08)
+
+Pushed `nfl-redraft-beta` and opened **draft PR #166** (base `main`, head `nfl-redraft-beta`, draft).
+Full assessment: `NFL_REDRAFT_BETA_GO_NO_GO.md` §"CI triage". Highlights:
+
+- ✅ **Required check `Draft Room Regression` = PASS** — the TDZ fix turned green the sole merge-gating
+  check (it is red on `main`). (Only required check per branch protection.)
+- **Found + fixed a real branch-caused build regression.** The `next build` (Landing Perf Budget) first
+  failed with `Module not found` — the G30–G44 cherry-pick had missed transitive infra deps. Root cause:
+  earlier g15 commits that predate the series. **Fixed (2 commits):**
+  - `c4b1b3812` — cherry-pick `f89240bbf` ("commit missing prod modules"): live-scoring / production-health
+    / team-defense / `nfl-scoring/scoringKeyBridge` (~37 files; beta-clean, no off-limits).
+  - `6d79abb63` — transplant `lib/events/*` (event foundation, G15.1–G15.3; only depends on `@/lib/prisma`)
+    + `lib/league/leagueTabSync.ts` (from `c6be83352`).
+  - Verified locally: **zero missing `@/` modules** + **zero dangling relative imports** across all changed files.
+- ✅ **After the fix: `Landing Perf Budget` build PASS, `Vercel – allfantasy-v2-main` deploy PASS**,
+  Platform Backend Deploy Readiness PASS, DB-First API Boundary PASS — the branch builds + deploys.
+- **Environment-only:** `Vercel – allfantasy-v2` "Account is blocked" (repo-wide; same on #156).
+- **Inherited-main (not beta):** `Playwright (onboarding-activation)` (fails on #137/#131 too; branch
+  touches no onboarding files) + the 7 redraft unit failures (proven identical on the `main` baseline).
+- Playwright core suites re-verified after the fix (see PR comment for the final line).

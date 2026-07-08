@@ -113,5 +113,29 @@ assertions.
 the prepared PR description (`NFL_REDRAFT_BETA_PR_SUMMARY.md`), which states the 7 inherited/stale
 failures + the 2 `lib/decision-os` infra files + "structural verification only; no live DB." **Open
 the PR for review, but do not invite real users** until a live non-prod core-loop + mobile QA pass
-(runbook §3) is GREEN. **NO GO** would require a core-loop blocker — none exists. **This branch is
-still local — awaiting explicit push approval.**
+(runbook §3) is GREEN. **NO GO** would require a core-loop blocker — none exists.
+
+## CI triage (draft PR #166 — pushed 2026-07-08)
+
+The branch was pushed and **draft PR #166** opened. CI classified:
+
+| Check | Result | Class |
+| --- | --- | --- |
+| **Draft Room Regression** (only *required* check) | ✅ **PASS** | branch **fixes** the `main` TDZ failure |
+| `Landing Perf Budget` / `next build` | ✅ PASS (after fix) | first failed = **branch build regression → FIXED** (missing modules) |
+| `Vercel – allfantasy-v2-main` deploy | ✅ PASS (after fix) | was the same build error → cleared |
+| Platform Backend Deploy Readiness, DB-First API Boundary | ✅ PASS | — |
+| `Vercel – allfantasy-v2` ("Account is blocked") | ❌ fail | **environment-only** (repo-wide; identical on #156) |
+| `Playwright (onboarding-activation)` | ❌ fail | **inherited-main** (fails on #137/#131; branch touches no onboarding files) |
+| 7 redraft unit failures (`core-tab-bar`×4, `smoke-blockers`×1, `core-contract`×2) | ❌ fail | **inherited/stale** (proven identical on the `main` baseline) |
+| `Playwright (core 1–3/3)`, `referral-growth-db`, EN/ES parity | re-verified after the build fix | — |
+
+**Branch-caused build regression (found + fixed):** the G30–G44 cherry-pick missed transitive infra
+deps (`f89240bbf` prod modules + `lib/events/*` event foundation + `leagueTabSync`) → `next build`
+failed with `Module not found`. Fixed by transplanting the **beta-clean** infra (commits `c4b1b3812`,
+`6d79abb63`); build + Vercel deploy now green. **No other branch-caused failures** — everything else is
+environment-only or inherited/stale, and none of them are required checks.
+
+**Net:** the sole required check passes, the branch builds + deploys, and there are **no untriaged or
+branch-caused blockers**. PR stays **draft** — live non-prod core-loop + mobile QA (runbook §3) still
+gates ready-for-review / user invites. **Awaiting explicit approval to mark ready or merge.**
