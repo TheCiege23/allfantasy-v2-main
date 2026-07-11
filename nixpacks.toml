@@ -1,8 +1,8 @@
 [phases.setup]
 # Keep Railway on the same major Node version as package.json engines and .nvmrc.
-# Nixpacks selects Node by major version; package.json/.nvmrc keep the local
-# floor at 20.19.0 while Railway resolves the current Node 20 package.
-nixPkgs = ["nodejs_20", "openssl"]
+# Nixpacks selects Node by major version; package.json ("24.x") and .nvmrc ("24")
+# pin the major to 24 while Railway resolves the current Node 24 package.
+nixPkgs = ["nodejs_24", "openssl"]
 
 [phases.install]
 cmds = ["npm ci"]

@@ -75,7 +75,7 @@ Vercel project inspection:
 - Root directory: `.`
 - Framework: Next.js
 - Project Node setting: `24.x`
-- Current repo engines: `node >=20.19.0 <21`
+- Current repo engines: `node 24.x`
 
 Domain inspection:
 
@@ -221,11 +221,12 @@ npm run vercel-build
 
 That happens because the package defines a `vercel-build` script.
 
-The project setting reports Node `24.x`, while current `package.json` constrains
-Node to `>=20.19.0 <21`. Previous Vercel logs from related deployments show
-Vercel can honor package engine constraints over the project setting. Before
-activation, the build log for current `main` should be checked to confirm the
-actual runtime resolves to Node 20.
+The project setting reports Node `24.x`. `package.json` engines is now `24.x`
+as well, so the package constraint and the project setting agree and the build
+resolves to Node 24. (Historically engines was `>=20.19.0 <21`, and because
+Vercel honors package engine constraints over the project setting, the runtime
+resolved to Node 20 despite the `24.x` project setting; the engines bump removes
+that override.)
 
 ## Cron And Import Architecture
 
