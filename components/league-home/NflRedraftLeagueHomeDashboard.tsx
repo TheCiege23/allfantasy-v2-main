@@ -19,6 +19,7 @@ import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { RedraftCommunicationPanel } from '@/components/redraft/RedraftCommunicationPanel'
 import { ManagerReplayInsightsCard } from '@/components/dashboard/ManagerReplayInsightsCard'
+import UserOsCardConnected from '@/components/decision-os/UserOsCardConnected'
 
 type NflRedraftLeagueHomeDashboardProps = {
   league: UserLeague
@@ -83,7 +84,7 @@ function Card({
 
   if (tile.href) {
     return (
-      <Link href={tile.href} data-testid={testId} className="block h-full">
+      <Link href={tile.href} data-testid={testId} className="block h-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55">
         {content}
       </Link>
     )
@@ -91,7 +92,7 @@ function Card({
 
   if (tile.onClick) {
     return (
-      <button type="button" onClick={tile.onClick} data-testid={testId} className="block h-full">
+      <button type="button" onClick={tile.onClick} data-testid={testId} className="block h-full w-full rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/55">
         {content}
       </button>
     )
@@ -136,6 +137,8 @@ export function NflRedraftLeagueHomeDashboard({
   onOpenTab,
 }: NflRedraftLeagueHomeDashboardProps) {
   const entitlements = useEntitlements()
+  const isNcaaf = String(league.sport ?? '').toUpperCase() === 'NCAAF'
+  const footballLabel = isNcaaf ? 'NCAAF' : 'NFL'
   const hasManagerIntelligence = entitlements.hasPro || entitlements.hasSupreme
   const hasCommissionerIntelligence = entitlements.hasCommissioner || entitlements.hasSupreme
   // `claimedByUserId` is set only when a real manager has claimed the slot (the
@@ -221,7 +224,9 @@ export function NflRedraftLeagueHomeDashboard({
           },
           {
             title: 'Your roster',
-            body: 'Set your lineup, check bye weeks and injuries, and manage your bench.',
+            body: isNcaaf
+              ? 'Set your lineup, review player status and upcoming games, and manage your bench.'
+              : 'Set your lineup, check bye weeks and injuries, and manage your bench.',
             meta: teamLabel,
             cta: 'Open Roster',
             onClick: () => onOpenTab('roster'),
@@ -285,9 +290,9 @@ export function NflRedraftLeagueHomeDashboard({
       locked: !hasManagerIntelligence,
     },
     {
-      title: 'Ask Chimmy',
-      body: 'Use Chimmy as a league guide or draft guide when you need rule help or quick context.',
-      meta: 'League helper',
+      title: 'Ask League Coach',
+      body: 'Use League Coach for rule guidance, draft preparation, and quick league context.',
+      meta: 'Decision support',
     },
   ]
 
@@ -338,7 +343,7 @@ export function NflRedraftLeagueHomeDashboard({
         <div className="relative flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-3xl">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-violet-200/75">
-              NFL Redraft League Home
+              {footballLabel} Redraft League Home
             </p>
             <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">{headline}</h2>
             <p className="mt-2 text-sm leading-6 text-white/58">{subtitle}</p>
@@ -445,6 +450,15 @@ export function NflRedraftLeagueHomeDashboard({
           </div>
         </section>
       )}
+
+      {/* Phase 36 — Manager OS reachability fix: NFL/NCAAF leagues previously had
+          zero path to UserOsCard (they don't use the 'league' tab that carries it
+          for other sports). Reuses the same real card + real
+          /api/decision-os/user-os route LeagueTab.tsx already uses for other
+          sports — always the session user's own team, commissioner or not. */}
+      <div className="mt-5" data-testid="g36-manager-os-section">
+        <UserOsCardConnected leagueId={leagueId} variant="league" />
+      </div>
 
       {/* Phase 20 — read-only, display-only replay-backed Trade Impact Insights
           for this manager/team. Renders nothing unless

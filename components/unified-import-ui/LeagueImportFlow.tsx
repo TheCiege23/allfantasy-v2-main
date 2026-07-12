@@ -5,20 +5,20 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { HelpCircle, ChevronDown } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import CanonicalImportSummaryCard, { type CanonicalPreview } from '@/components/league-import/CanonicalImportSummaryCard'
 import { UnifiedImportPanel } from '@/components/UnifiedImportPanel'
 import {
   fetchImportPreview,
   submitImportCreation,
+  discoverProviderLeagues,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import type { ImportProvider } from '@/lib/league-import/types'
 import type { LegacyPlatformTab } from '@/lib/import/importSearchParams'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
-import { useLegacySleeperImport } from '@/hooks/useLegacySleeperImport'
-import { LegacyImportLoadingScreen } from '@/components/unified-import-ui/LegacyImportLoadingScreen'
 import { LegacyImportResults } from '@/components/unified-import-ui/LegacyImportResults'
 
-const PREVIEW_PROVIDERS: ImportProvider[] = ['espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker']
+const PREVIEW_PROVIDERS: ImportProvider[] = ['sleeper', 'espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker']
 
 export type { LegacyPlatformTab }
 
@@ -37,8 +37,13 @@ export type LeagueImportFlowProps = {
   initialLeagueSourceId?: string
 }
 
+// All five tabs, including Sleeper, route through the same canonical
+// preview -> commit pipeline (`/api/leagues/import/preview` + `/commit`) —
+// there is no provider-specific special case here. Legacy Sleeper
+// profile/career-history import remains a deliberately separate product
+// surface (`components/rankings/LegacyRankingsImportPanel.tsx`), not a
+// branch of this commissioner-import flow.
 function tabToImportProvider(tab: LegacyPlatformTab): ImportProvider | null {
-  if (tab === 'sleeper') return null
   return tab
 }
 
@@ -58,28 +63,28 @@ export function LeagueImportFlow({
   const router = useRouter()
   const [tab, setTab] = useState<LegacyPlatformTab>(defaultProvider)
 
-  const sleeperHook = useLegacySleeperImport()
-  const {
-    username: sleeperUsername,
-    setUsername: setSleeperUsername,
-    phase: sleeperPhase,
-    progress: sleeperProgress,
-    error: sleeperError,
-    bootLoading: sleeperBootLoading,
-    statusMessage: sleeperStatusMessage,
-    startImport: startSleeperImport,
-    reset: resetSleeper,
-  } = sleeperHook
-
-  const [resultsKind, setResultsKind] = useState<'idle' | 'legacy_sleeper' | 'league_created'>('idle')
-  const [legacyResultUsername, setLegacyResultUsername] = useState<string | null>(null)
+  const [resultsKind, setResultsKind] = useState<'idle' | 'league_created'>('idle')
   const [leagueSuccess, setLeagueSuccess] = useState<{
     leagueId: string
     leagueName: string
     sport: string
   } | null>(null)
 
+  // Sleeper account discovery: username -> the same canonical discover route
+  // used by the (currently unused-elsewhere) generic discovery service. This
+  // is the "League discovery" affordance for Sleeper specifically — Sleeper
+  // is the only provider with a working discovery endpoint today
+  // (`/api/leagues/import/discover`); other providers keep manual ID entry.
+  const [sleeperUsername, setSleeperUsername] = useState(initialSleeperUsername)
+  const [discoveringLeagues, setDiscoveringLeagues] = useState(false)
+  const [discoveryError, setDiscoveryError] = useState<string | null>(null)
+  const [discoveredLeagues, setDiscoveredLeagues] = useState<
+    Array<{ sourceId: string; name: string; sport: string; season: string; totalTeams?: number; isDynasty?: boolean }> | null
+  >(null)
+  const [sleeperSelectedSourceId, setSleeperSelectedSourceId] = useState<string | null>(null)
+
   const [loadingProvider, setLoadingProvider] = useState<ImportProvider | null>(null)
+  const [failedPreview, setFailedPreview] = useState<{ provider: ImportProvider; sourceInput: string } | null>(null)
   const [previewInfo, setPreviewInfo] = useState<{
     provider: ImportProvider
     sourceInput: string
@@ -93,14 +98,36 @@ export function LeagueImportFlow({
   useEffect(() => {
     const pre = initialSleeperUsername.trim()
     if (pre) setSleeperUsername(pre)
-  }, [initialSleeperUsername, setSleeperUsername])
+  }, [initialSleeperUsername])
 
-  useEffect(() => {
-    if (sleeperPhase === 'complete' && sleeperUsername.trim()) {
-      setLegacyResultUsername(sleeperUsername.trim())
-      setResultsKind('legacy_sleeper')
+  async function discoverSleeperLeagues(e: React.FormEvent) {
+    e.preventDefault()
+    const username = sleeperUsername.trim()
+    if (!username) return
+    setDiscoveringLeagues(true)
+    setDiscoveryError(null)
+    setDiscoveredLeagues(null)
+    setSleeperSelectedSourceId(null)
+    try {
+      const result = await discoverProviderLeagues('sleeper', username)
+      if (!result.ok) {
+        throw new Error(result.error || 'Could not find leagues for that Sleeper username.')
+      }
+      const data = result.data as {
+        leagues?: Array<{ sourceId: string; name: string; sport: string; season: string; totalTeams?: number; isDynasty?: boolean }>
+      }
+      setDiscoveredLeagues(data?.leagues ?? [])
+    } catch (e: unknown) {
+      setDiscoveryError(e instanceof Error ? e.message : 'Could not find leagues for that Sleeper username.')
+    } finally {
+      setDiscoveringLeagues(false)
     }
-  }, [sleeperPhase, sleeperUsername])
+  }
+
+  function selectDiscoveredSleeperLeague(sourceId: string) {
+    setSleeperSelectedSourceId(sourceId)
+    void runPreview('sleeper', sourceId)
+  }
 
   const commissionerSupport = useMemo(
     () =>
@@ -122,17 +149,21 @@ export function LeagueImportFlow({
   }, [activeImportProvider])
 
   const unifiedInitialInputs = useMemo(() => {
+    if (activeImportProvider === 'sleeper' && sleeperSelectedSourceId) {
+      return { sleeper: sleeperSelectedSourceId } as Partial<Record<ImportProvider, string>>
+    }
     if (!initialLeagueSourceId.trim() || !activeImportProvider) return undefined
     return { [activeImportProvider]: initialLeagueSourceId.trim() } as Partial<
       Record<ImportProvider, string>
     >
-  }, [initialLeagueSourceId, activeImportProvider])
+  }, [initialLeagueSourceId, activeImportProvider, sleeperSelectedSourceId])
 
   async function runPreview(provider: ImportProvider, sourceInput: string) {
     setLoadingProvider(provider)
     setFormError(null)
     setPreviewInfo(null)
     setConflict(null)
+    setFailedPreview(null)
     try {
       const preview = await fetchImportPreview(provider, sourceInput)
       if (!preview.ok) {
@@ -147,6 +178,7 @@ export function LeagueImportFlow({
       setPreviewInfo({ provider, sourceInput, leagueName, canonical })
     } catch (e: unknown) {
       setFormError(e instanceof Error ? e.message : t('import.error.generic'))
+      setFailedPreview({ provider, sourceInput })
     } finally {
       setLoadingProvider(null)
     }
@@ -190,17 +222,7 @@ export function LeagueImportFlow({
     }
   }
 
-  async function onSleeperSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setFormError(null)
-    if (!sleeperUsername.trim()) return
-    await startSleeperImport(sleeperUsername)
-  }
-
-  const showSleeperLoading =
-    tab === 'sleeper' && (sleeperPhase === 'importing' || sleeperBootLoading)
-
-  const hideMainChrome = resultsKind === 'legacy_sleeper' || resultsKind === 'league_created'
+  const hideMainChrome = resultsKind === 'league_created'
 
   const backButtonLabel = returnTo.includes('dashboard') ? 'Back to dashboard' : 'Back'
   const backButtonClass =
@@ -242,29 +264,6 @@ export function LeagueImportFlow({
 
   return (
     <div className={rootShellClassName}>
-      {showSleeperLoading && (
-        <LegacyImportLoadingScreen
-          progress={sleeperBootLoading ? 8 : sleeperProgress}
-          platformLabel="Sleeper"
-          statusMessage={sleeperStatusMessage}
-          seasonSpan={null}
-        />
-      )}
-
-      {resultsKind === 'legacy_sleeper' && legacyResultUsername && (
-        <LegacyImportResults
-          variant="legacy_sleeper"
-          returnTo={returnTo}
-          sleeperUsername={legacyResultUsername}
-          onImportAnother={() => {
-            resetSleeper()
-            setLegacyResultUsername(null)
-            setResultsKind('idle')
-          }}
-          onCompleteRedirect={onCompleteRedirect}
-        />
-      )}
-
       {resultsKind === 'league_created' && leagueSuccess && (
         <LegacyImportResults
           variant="league_created"
@@ -304,7 +303,7 @@ export function LeagueImportFlow({
             </span>
           </h1>
           <p className="relative mx-auto mt-3 max-w-xl text-center text-white/60">
-            Build your legacy profile or import a league using the same engines as AF Legacy and rankings.
+            Bring your Sleeper, ESPN, Yahoo, Fantrax, or MFL league into AllFantasy as a real, playable league.
           </p>
           <p className="relative mt-2 text-center text-[13px] text-white/40">
             {t('import.settingsLink')}{' '}
@@ -320,9 +319,9 @@ export function LeagueImportFlow({
           <div className="p-6 sm:p-8">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h2 className="text-2xl font-black tracking-tight text-white">Build Your Legacy Profile</h2>
+                <h2 className="text-2xl font-black tracking-tight text-white">Import your league</h2>
                 <p className="mt-1 text-sm text-white/60">
-                  Choose your platform — Sleeper powers full career rank import and legacy score.
+                  Choose your platform, then preview and confirm before we create your league.
                 </p>
               </div>
               <span className="hidden shrink-0 rounded-full border border-emerald-500/20 bg-emerald-500/[0.08] px-2.5 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-300 sm:inline-block">
@@ -408,61 +407,95 @@ export function LeagueImportFlow({
             </div>
 
             {tab === 'sleeper' && (
-              <form onSubmit={(e) => void onSleeperSubmit(e)} className="mt-8 space-y-4">
+              <form onSubmit={(e) => void discoverSleeperLeagues(e)} className="mt-8 space-y-4">
                 <div>
                   <div className="mb-2 flex items-center justify-between">
                     <label htmlFor="import-sleeper-username" className="text-[11px] font-black uppercase tracking-[0.18em] text-white/60">
                       Sleeper Username
                     </label>
-                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/35">Step 2 of 2</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider text-white/35">Discover leagues from account</span>
                   </div>
-                  {/*
-                    Premium input: dashboard focus-ring (2px cyan glow), tabular
-                    padding, and larger min-height for mobile touch targets.
-                  */}
-                  <input
-                    id="import-sleeper-username"
-                    type="text"
-                    value={sleeperUsername}
-                    onChange={(e) => setSleeperUsername(e.target.value)}
-                    placeholder="your_username"
-                    autoFocus={autoFocus && mode !== 'embedded'}
-                    autoComplete="username"
-                    className="w-full rounded-2xl border border-white/10 bg-black/30 px-4 py-3.5 text-[15px] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 disabled:opacity-60"
-                    disabled={sleeperBootLoading || sleeperPhase === 'importing'}
-                  />
+                  <div className="flex gap-2">
+                    <input
+                      id="import-sleeper-username"
+                      type="text"
+                      value={sleeperUsername}
+                      onChange={(e) => setSleeperUsername(e.target.value)}
+                      placeholder="your_username"
+                      autoFocus={autoFocus && mode !== 'embedded'}
+                      autoComplete="username"
+                      className="flex-1 rounded-2xl border border-white/10 bg-black/30 px-4 py-3.5 text-[15px] text-white placeholder:text-white/25 focus:border-cyan-400/60 focus:outline-none focus:ring-2 focus:ring-cyan-400/25 disabled:opacity-60"
+                      disabled={discoveringLeagues}
+                    />
+                    <button
+                      type="submit"
+                      disabled={discoveringLeagues || !sleeperUsername.trim()}
+                      className="warroom-pressable shrink-0 rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 text-sm font-black text-white shadow-[0_10px_40px_-15px_rgba(34,211,238,0.75)] disabled:opacity-40 disabled:shadow-none"
+                      data-testid="import-sleeper-discover-cta"
+                    >
+                      {discoveringLeagues ? 'Loading preview...' : 'Find my leagues'}
+                    </button>
+                  </div>
                   <p className="mt-2 text-[11px] text-white/45">
-                    Public league history only — same pipeline as{' '}
-                    <Link href="/af-legacy" className="text-cyan-400/90 underline">
-                      AF Legacy
-                    </Link>
-                    .
+                    Or paste a Sleeper league ID directly below if you already know it.
                   </p>
                 </div>
-                {(sleeperPhase === 'failed' || formError) && (
+                {discoveryError && (
                   <div
                     role="alert"
                     className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/[0.08] px-3 py-2.5 text-sm text-red-200"
                   >
                     <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-300" aria-hidden />
-                    <span>{sleeperError || formError}</span>
+                    <span>{discoveryError}</span>
                   </div>
                 )}
-                <button
-                  type="submit"
-                  disabled={sleeperBootLoading || !sleeperUsername.trim()}
-                  className="warroom-pressable w-full rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 py-3.5 text-base font-black text-white shadow-[0_10px_40px_-15px_rgba(34,211,238,0.75)] disabled:opacity-40 disabled:shadow-none"
-                  data-testid="import-build-legacy-cta"
-                >
-                  {sleeperBootLoading ? 'Starting…' : 'Build My Legacy Profile'}
-                </button>
+                {discoveredLeagues && discoveredLeagues.length === 0 && !discoveryError && (
+                  <p className="text-[13px] text-white/50">No leagues found for that username this season.</p>
+                )}
+                {discoveredLeagues && discoveredLeagues.length > 0 && (
+                  <div className="space-y-2" data-testid="import-sleeper-discovered-leagues">
+                    {discoveredLeagues.map((league) => {
+                      const isThisLoading = discoveringLeagues === false && loadingProvider === 'sleeper' && sleeperSelectedSourceId === league.sourceId
+                      const thisPreviewed = previewInfo?.provider === 'sleeper' && previewInfo.sourceInput === league.sourceId
+                      return (
+                        <button
+                          key={league.sourceId}
+                          type="button"
+                          onClick={() => selectDiscoveredSleeperLeague(league.sourceId)}
+                          disabled={isThisLoading}
+                          className={`warroom-pressable flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left ${
+                            sleeperSelectedSourceId === league.sourceId
+                              ? 'border-cyan-400/50 bg-cyan-500/[0.10]'
+                              : 'border-white/10 bg-black/20 hover:border-white/25'
+                          }`}
+                        >
+                          <span>
+                            <span className="block text-sm font-bold text-white">{league.name}</span>
+                            <span className="block text-[11px] text-white/50">
+                              {league.sport.toUpperCase()} · {league.season}
+                              {league.totalTeams ? ` · ${league.totalTeams} teams` : ''}
+                            </span>
+                          </span>
+                          {isThisLoading ? (
+                            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-cyan-300" aria-hidden />
+                          ) : thisPreviewed ? (
+                            <span className="shrink-0 text-[11px] font-bold text-emerald-300">Preview loaded — see below</span>
+                          ) : null}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
               </form>
             )}
 
-            {tab !== 'sleeper' && activeImportProvider && (
+            {activeImportProvider && (
               <div className="mt-8 space-y-4">
                 <p className="text-sm text-white/55">
-                  Import a league from {tab} into AllFantasy (preview + confirm). Connect accounts in{' '}
+                  {tab === 'sleeper'
+                    ? 'Import one Sleeper league into AllFantasy with a preview and confirmation. '
+                    : `Import a league from ${tab} into AllFantasy (preview + confirm). `}
+                  Connect accounts in{' '}
                   <Link href="/settings" className="text-cyan-400 underline">
                     Settings
                   </Link>{' '}
@@ -474,6 +507,17 @@ export function LeagueImportFlow({
                   loadingProvider={loadingProvider}
                   initialInputs={unifiedInitialInputs}
                 />
+                {(loadingProvider || committing) && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] p-3 text-[13px] text-cyan-100"
+                  >
+                    {committing
+                      ? 'Creating your league and saving imported settings, members, and rosters…'
+                      : `Checking ${loadingProvider} league access and preparing a safe preview…`}
+                  </div>
+                )}
                 {previewInfo && previewInfo.provider === activeImportProvider && (
                   <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
                     <p className="mb-1 text-[15px] font-semibold text-cyan-200">{t('import.previewLoaded')}</p>
@@ -512,8 +556,24 @@ export function LeagueImportFlow({
                 )}
                 {formError && (
                   <div className="rounded-xl border border-red-500/20 bg-red-500/10 p-3 text-[13px] text-red-300">
-                    <HelpCircle className="mr-1 inline h-4 w-4" />
-                    {formError}
+                    <p>
+                      <HelpCircle className="mr-1 inline h-4 w-4" />
+                      {formError}
+                    </p>
+                    <p className="mt-1 text-[12px] text-red-200/75">
+                      Confirm the league ID and required provider connection, then try again. No league is created until
+                      you confirm a successful preview.
+                    </p>
+                    {failedPreview && failedPreview.provider === activeImportProvider ? (
+                      <button
+                        type="button"
+                        disabled={loadingProvider !== null || committing}
+                        onClick={() => void runPreview(failedPreview.provider, failedPreview.sourceInput)}
+                        className="mt-2 rounded-full border border-red-300/30 px-3 py-1 text-[11px] font-bold text-red-100 hover:bg-red-300/10 disabled:opacity-40"
+                      >
+                        Retry preview
+                      </button>
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -557,9 +617,9 @@ export function LeagueImportFlow({
         <div className="mt-10 rounded-xl border border-white/8 bg-white/[0.04] p-4 text-[12px] text-white/45">
           <p className="font-semibold text-white/60">What happens next</p>
           <ul className="mt-2 list-disc space-y-1 pl-5">
-            <li>Sleeper: import runs as a tracked job — loading steps follow real progress.</li>
-            <li>Other platforms: preview your league, then commit to create or link it.</li>
-            <li>Use “Go to dashboard” so rankings widgets pull fresh `/api/user/rank` data.</li>
+            <li>Sleeper: find your leagues by username, or paste a league ID directly.</li>
+            <li>Every platform: preview your league, then confirm to create it.</li>
+            <li>Only the league&apos;s commissioner can complete the import.</li>
           </ul>
         </div>
       </div>

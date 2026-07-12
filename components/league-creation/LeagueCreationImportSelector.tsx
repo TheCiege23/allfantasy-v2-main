@@ -33,7 +33,7 @@ export function LeagueCreationImportSelector({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="create">Create New AF League — set sport, scoring, and size manually</SelectItem>
-          <SelectItem value="import">Import Existing League — import from Sleeper, ESPN, Yahoo, Fantrax, or MFL</SelectItem>
+          <SelectItem value="import">Import Existing League — choose a supported provider</SelectItem>
         </SelectContent>
       </Select>
     </div>

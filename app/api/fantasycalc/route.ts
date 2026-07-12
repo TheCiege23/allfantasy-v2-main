@@ -2,11 +2,11 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server';
 import { 
   compareTradeValues,
+  getCanonicalValuationSnapshot,
   getTopPlayers,
   getTrendingPlayers,
   FantasyCalcSettings
-} from '@/lib/fantasycalc';
-import { readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db';
+} from '@/lib/player-valuations/canonicalPlayerValuations';
 import { resolveNflRedraftCanonicalFantasyValuation } from '@/lib/nfl-provider/nflRedraftProviderCertification';
 
 export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasycalc" })(async (request: NextRequest) => {
@@ -54,13 +54,13 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
       });
     }
     
-    const cached = await readFantasyCalcValuesFromDb(settings, { allowStale: true });
+    const cached = await getCanonicalValuationSnapshot(settings);
     const players = cached.players;
 
     if (!players.length) {
       return NextResponse.json(
         {
-          error: 'FantasyCalc valuation cache is empty. Run sync-fantasycalc-valuations to ingest latest data.',
+          error: 'Canonical player valuations are currently unavailable.',
           settings,
         },
         { status: 503 }
@@ -79,10 +79,10 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
       return NextResponse.json({ 
         players: filtered.slice(0, limit), 
         total: filtered.length, 
-        source: cached.stale ? 'fantasycalc-directory-db-stale' : 'fantasycalc-directory-db',
+        source: cached.source,
         stale: cached.stale,
-        syncedAt: cached.syncedAt,
-        expiresAt: cached.expiresAt,
+        syncedAt: cached.sourceTimestampIso,
+        fallbackUsed: cached.fallbackUsed,
       });
     }
 
@@ -91,10 +91,10 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
       return NextResponse.json({
         players: topPlayers,
         settings,
-        source: cached.stale ? 'fantasycalc-db-stale' : 'fantasycalc-db',
+        source: cached.source,
         stale: cached.stale,
-        syncedAt: cached.syncedAt,
-        expiresAt: cached.expiresAt,
+        syncedAt: cached.sourceTimestampIso,
+        fallbackUsed: cached.fallbackUsed,
       });
     }
     
@@ -105,10 +105,10 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
         players: trending,
         direction,
         settings,
-        source: cached.stale ? 'fantasycalc-db-stale' : 'fantasycalc-db',
+        source: cached.source,
         stale: cached.stale,
-        syncedAt: cached.syncedAt,
-        expiresAt: cached.expiresAt,
+        syncedAt: cached.sourceTimestampIso,
+        fallbackUsed: cached.fallbackUsed,
       });
     }
     
@@ -120,10 +120,10 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
         players: filtered.slice(0, limit),
         total: filtered.length,
         settings,
-        source: cached.stale ? 'fantasycalc-db-stale' : 'fantasycalc-db',
+        source: cached.source,
         stale: cached.stale,
-        syncedAt: cached.syncedAt,
-        expiresAt: cached.expiresAt,
+        syncedAt: cached.sourceTimestampIso,
+        fallbackUsed: cached.fallbackUsed,
       });
     }
     
@@ -131,10 +131,10 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
       players: players.slice(0, limit),
       total: players.length,
       settings,
-      source: cached.stale ? 'fantasycalc-db-stale' : 'fantasycalc-db',
+      source: cached.source,
       stale: cached.stale,
-      syncedAt: cached.syncedAt,
-      expiresAt: cached.expiresAt,
+      syncedAt: cached.sourceTimestampIso,
+      fallbackUsed: cached.fallbackUsed,
     });
     
   } catch (error) {
@@ -159,12 +159,12 @@ export const POST = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyc
       ppr 
     };
     
-    const cached = await readFantasyCalcValuesFromDb(settings, { allowStale: true });
+    const cached = await getCanonicalValuationSnapshot(settings);
     const players = cached.players;
     if (!players.length) {
       return NextResponse.json(
         {
-          error: 'FantasyCalc valuation cache is empty. Run sync-fantasycalc-valuations to ingest latest data.',
+          error: 'Canonical player valuations are currently unavailable.',
           settings,
         },
         { status: 503 }
@@ -175,10 +175,10 @@ export const POST = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyc
     return NextResponse.json({ 
       ...comparison, 
       settings,
-      source: cached.stale ? 'FantasyCalc DB (stale)' : 'FantasyCalc DB',
+      source: cached.source,
       stale: cached.stale,
-      syncedAt: cached.syncedAt,
-      expiresAt: cached.expiresAt,
+      syncedAt: cached.sourceTimestampIso,
+      fallbackUsed: cached.fallbackUsed,
       note: 'Values based on ~1 million real fantasy football trades'
     });
     

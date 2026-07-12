@@ -1,4 +1,4 @@
-import { getPickValue } from '@/lib/fantasycalc'
+import { getPickValue } from '@/lib/player-valuations/canonicalPlayerValuations'
 import type { DynastyLeagueContext, DraftPickValueBreakdown, FuturePickAsset } from './types'
 
 export function valueFuturePicks(

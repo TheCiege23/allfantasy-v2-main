@@ -5,8 +5,6 @@ import {
   clearAPISportsDiagnostics,
   getAPISportsDiagnostics,
   syncAPISportsTeamsToDb,
-  syncAPISportsGamesToDb,
-  syncAPISportsInjuriesToDb,
   syncAPISportsPlayersToIdentityMap,
   syncAPISportsStandingsToDb,
 } from '@/lib/api-sports';
@@ -20,6 +18,16 @@ import {
 } from '@/lib/api-football'
 import { syncClearSportsToDb } from '@/lib/clear-sports'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
+import { prisma } from '@/lib/prisma'
+import { syncNflRedraftCronCanonicalCache } from '@/lib/nfl-provider/nflRedraftCronCanonicalSync'
+import {
+  projectCanonicalNflInjuries,
+  projectCanonicalNflScores,
+} from '@/lib/nfl-provider/nflRedraftCanonicalScoreInjuryProjector'
+import {
+  syncLegacyNcaafInjuries,
+  syncLegacyNcaafScores,
+} from '@/lib/ncaaf-provider/legacyApiSportsIngestion'
 
 export const POST = withApiUsage({ endpoint: "/api/sports/sync", tool: "SportsSync" })(async (request: NextRequest) => {
   /**
@@ -86,17 +94,35 @@ export const POST = withApiUsage({ endpoint: "/api/sports/sync", tool: "SportsSy
       }
 
       if (syncType === 'all' || syncType === 'schedule' || syncType === 'games') {
-        clearAPISportsDiagnostics()
-        const gameCount = await syncAPISportsGamesToDb({ season, sport: apiSportsSport });
-        results[`${asKeyPrefix}_games`] = { synced: gameCount, sport: apiSportsSport };
-        diagnostics[`${asKeyPrefix}_games`] = getAPISportsDiagnostics()
+        if (apiSportsSport === 'NFL') {
+          let gameCount = 0
+          const canonical = await syncNflRedraftCronCanonicalCache(
+            { job: 'import-scores', sport: 'NFL', season },
+            { afterCacheWrite: async ({ resolution }) => { gameCount = await projectCanonicalNflScores(resolution, prisma) } },
+          )
+          results[`${asKeyPrefix}_games`] = { synced: gameCount, sport: apiSportsSport, canonical }
+        } else {
+          clearAPISportsDiagnostics()
+          const gameCount = await syncLegacyNcaafScores(season)
+          results[`${asKeyPrefix}_games`] = { synced: gameCount, sport: apiSportsSport }
+          diagnostics[`${asKeyPrefix}_games`] = getAPISportsDiagnostics()
+        }
       }
 
       if (syncType === 'all' || syncType === 'injuries') {
-        clearAPISportsDiagnostics()
-        const injuryCount = await syncAPISportsInjuriesToDb({ season, sport: apiSportsSport });
-        results[`${asKeyPrefix}_injuries`] = { synced: injuryCount, sport: apiSportsSport };
-        diagnostics[`${asKeyPrefix}_injuries`] = getAPISportsDiagnostics()
+        if (apiSportsSport === 'NFL') {
+          let injuryCount = 0
+          const canonical = await syncNflRedraftCronCanonicalCache(
+            { job: 'import-injuries', sport: 'NFL', season },
+            { afterCacheWrite: async ({ resolution }) => { injuryCount = await projectCanonicalNflInjuries(resolution, prisma) } },
+          )
+          results[`${asKeyPrefix}_injuries`] = { synced: injuryCount, sport: apiSportsSport, canonical }
+        } else {
+          clearAPISportsDiagnostics()
+          const injuryCount = await syncLegacyNcaafInjuries(season)
+          results[`${asKeyPrefix}_injuries`] = { synced: injuryCount, sport: apiSportsSport }
+          diagnostics[`${asKeyPrefix}_injuries`] = getAPISportsDiagnostics()
+        }
       }
 
       if (syncType === 'all' || syncType === 'standings') {

@@ -7,6 +7,7 @@ import {
   type RedraftRosterRow,
 } from '@/lib/redraft/client'
 import { StandingsView } from './StandingsView'
+import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
 /**
  * Real standings + playoffs surface for the nflRedraftCore Standings tab.
@@ -62,30 +63,41 @@ export function RedraftStandingsPlayoffsView({
 
   if (loading) {
     return (
-      <div data-testid="redraft-standings-loading" className="p-5 text-[12px] text-white/55">
-        Loading standings…
+      <div className="p-4">
+        <LeagueSurfaceState
+          kind="loading"
+          title="Loading standings"
+          description="Calculating records, points, and playoff position from the latest completed results."
+          testId="redraft-standings-loading"
+        />
       </div>
     )
   }
 
   if (error) {
     return (
-      <div data-testid="redraft-standings-error" className="p-5 text-[12px] text-rose-300">
-        {error}
+      <div className="p-4">
+        <LeagueSurfaceState
+          kind="error"
+          title="Standings unavailable"
+          description="We could not load the standings. Refresh the page and try again."
+          actionLabel="Retry standings"
+          onAction={() => window.location.reload()}
+          testId="redraft-standings-error"
+        />
       </div>
     )
   }
 
   if (noSeason) {
     return (
-      <div
-        data-testid="redraft-standings-no-season"
-        className="flex flex-1 flex-col items-center justify-center gap-2 p-8 text-center"
-      >
-        <p className="text-[14px] font-semibold text-white/60">Standings &amp; Playoffs</p>
-        <p className="max-w-[280px] text-[11px] text-white/40">
-          Standings and the playoff bracket appear once the draft is finalized into an active redraft season.
-        </p>
+      <div className="p-4">
+        <LeagueSurfaceState
+          kind="empty"
+          title="Standings begin after the draft"
+          description="Records and the playoff bracket appear once the draft is finalized into an active season."
+          testId="redraft-standings-no-season"
+        />
       </div>
     )
   }

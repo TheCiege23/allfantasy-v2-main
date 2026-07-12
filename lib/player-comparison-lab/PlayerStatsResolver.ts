@@ -14,7 +14,7 @@ import { normalizePlayerName } from '@/lib/team-abbrev';
 import {
   getPlayerValuesForNames,
   type FantasyCalcSettings,
-} from '@/lib/fantasycalc';
+} from '@/lib/player-valuations/canonicalPlayerValuations';
 import type {
   ResolvedPlayerStats,
   HistoricalSeasonRow,

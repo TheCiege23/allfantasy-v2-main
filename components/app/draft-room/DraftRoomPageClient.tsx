@@ -2803,6 +2803,11 @@ export function DraftRoomPageClient({
     [queue, session?.picks, handleQueueSave],
   )
 
+  const handleClearQueue = useCallback(() => {
+    setQueue([])
+    void handleQueueSave([])
+  }, [handleQueueSave])
+
   const handleReorderQueue = useCallback(
     (fromIndex: number, toIndex: number) => {
       const drafted = new Set(session?.picks?.map((p) => normalizeDraftedPlayerName(p.playerName)) ?? [])
@@ -3841,6 +3846,7 @@ export function DraftRoomPageClient({
           playerMetaById={queuePlayerMetaById}
           canDraft={canDraft}
           onRemove={handleRemoveFromQueue}
+          onClear={handleClearQueue}
           onReorder={handleReorderQueue}
           onDraftFromQueue={canDraft && queueFiltered.length > 0 ? handleDraftFromQueue : undefined}
           onAiReorder={handleAiReorderQueue}
@@ -3877,6 +3883,7 @@ export function DraftRoomPageClient({
       queueFiltered,
       draftHelperBadgeCount,
       handleRemoveFromQueue,
+      handleClearQueue,
       handleReorderQueue,
       handleDraftFromQueue,
       handleAiReorderQueue,

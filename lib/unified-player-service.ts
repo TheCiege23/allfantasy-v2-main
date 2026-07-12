@@ -1,6 +1,6 @@
 import { prisma } from './prisma'
 import { normalizeTeamAbbrev, normalizePosition, normalizePlayerName, playerNamesMatch } from './team-abbrev'
-import { fetchFantasyCalcValues, type FantasyCalcPlayer } from './fantasycalc'
+import { fetchFantasyCalcValues, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { findMultiADP, getConsensusADP, type ADPConsensus } from './multi-platform-adp'
 import { getTeamLogoUrl as resolveTeamLogoUrl } from './player-media-urls'
 

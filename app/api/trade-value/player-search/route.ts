@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { searchPlayers } from '@/lib/data/players'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'

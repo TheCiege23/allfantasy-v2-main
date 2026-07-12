@@ -18,6 +18,10 @@ import { normalizeNflRedraftProviderGameContext } from '@/lib/player-data/nflRed
 import { normalizeNflRedraftProviderLiveScoringContext } from '@/lib/player-data/nflRedraftLiveScoringContext'
 import { normalizeNflRedraftProviderPlayerIntelligence } from '@/lib/player-data/nflRedraftPlayerIntelligence'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import {
+  normalizeNflInjuryRow,
+  normalizeNflScoreRow,
+} from '@/lib/nfl-provider/nflRedraftScoreInjuryCanonical'
 
 export const NFL_REDRAFT_PRODUCTION_PROVIDER_WIRING_MODEL_VERSION =
   'nfl-redraft-production-provider-wiring-v1' as const
@@ -34,6 +38,12 @@ export type NflRedraftProductionProviderRequest = {
   leagueImportId?: string | number | null
   cacheKey?: string | null
   cacheFreshness?: 'available' | 'missing' | 'stale' | 'unknown'
+  valuationSettings?: {
+    isDynasty: boolean
+    numQbs: 1 | 2
+    numTeams: number
+    ppr: 0 | 0.5 | 1
+  }
   configOverrides?: Partial<Record<NflRedraftProviderNodeId, Partial<NflRedraftProviderNodeConfig>>>
   policyOverrides?: Partial<Record<NflRedraftProviderOrchestratorCapability, Partial<NflRedraftProviderCapabilityPolicy>>>
 }
@@ -146,7 +156,7 @@ export function listNflRedraftExistingProviderIntegrations(): NflRedraftExisting
     {
       providerId: 'rolling_insights',
       integrationName: 'Rolling Insights DB/cache and live/schedule wrappers',
-      capabilities: ['player_identity', 'schedule', 'live_stats', 'standings', 'headshots', 'logos'],
+      capabilities: ['player_identity', 'schedule', 'scores', 'live_stats', 'injuries', 'standings', 'headshots', 'logos'],
       existingWrapper: 'lib/sports-live-scores-service.ts, lib/providers/rollingInsightsNflFieldMap.ts, SportsPlayer/SportsGame cache',
       realProductionIntegration: true,
       deferredReason: null,
@@ -154,7 +164,7 @@ export function listNflRedraftExistingProviderIntegrations(): NflRedraftExisting
     {
       providerId: 'api_sports',
       integrationName: 'API-Sports NFL client',
-      capabilities: ['player_identity', 'schedule', 'standings', 'headshots', 'logos', 'news'],
+      capabilities: ['player_identity', 'schedule', 'scores', 'injuries', 'standings', 'headshots', 'logos', 'news'],
       existingWrapper: 'lib/api-sports.ts',
       realProductionIntegration: true,
       deferredReason: null,
@@ -210,7 +220,7 @@ export function listNflRedraftExistingProviderIntegrations(): NflRedraftExisting
     {
       providerId: 'canonical_cache',
       integrationName: 'Canonical SportsDataCache fallback',
-      capabilities: ['player_identity', 'schedule', 'live_stats', 'standings', 'fantasy_valuations', 'weather', 'news'],
+      capabilities: ['player_identity', 'schedule', 'scores', 'live_stats', 'injuries', 'standings', 'fantasy_valuations', 'weather', 'news'],
       existingWrapper: 'SportsDataCache',
       realProductionIntegration: true,
       deferredReason: null,
@@ -218,7 +228,7 @@ export function listNflRedraftExistingProviderIntegrations(): NflRedraftExisting
     {
       providerId: 'runtime',
       integrationName: 'AllFantasy runtime fallback',
-      capabilities: ['live_stats', 'standings'],
+      capabilities: ['scores', 'live_stats', 'injuries', 'standings'],
       existingWrapper: 'NFL Redraft runtime state',
       realProductionIntegration: true,
       deferredReason: null,
@@ -431,6 +441,26 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
           integrationName: 'fetchRollingInsightsScheduleSeason',
         })
       },
+      scores: async (request) => {
+        const { fetchRollingInsightsScoreboard } = await import('@/lib/sports-live-scores-service')
+        const rows = await fetchRollingInsightsScoreboard('NFL')
+        const fetchedAtIso = new Date().toISOString()
+        const scores = (rows as unknown[])
+          .map((row) => normalizeNflScoreRow(row, {
+            fetchedAtIso,
+            season: numberOrNull(request.season),
+            week: numberOrNull(request.week),
+          }))
+          .filter((row): row is NonNullable<typeof row> => Boolean(row))
+        if (scores.length === 0) return null
+        return makeResult({
+          providerId: 'rolling_insights',
+          capability: request.capability,
+          canonicalData: { scores },
+          fetchedAtIso,
+          integrationName: 'fetchRollingInsightsScoreboard',
+        })
+      },
       live_stats: async (request) => {
         const { fetchRollingInsightsScoreboard } = await import('@/lib/sports-live-scores-service')
         const rows = await fetchRollingInsightsScoreboard('NFL')
@@ -484,6 +514,48 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
           canonicalData: canonical as unknown as Record<string, unknown>,
           fetchedAtIso: new Date().toISOString(),
           integrationName: week ? 'fetchAPISportsGamesByWeek' : 'fetchAPISportsGames',
+        })
+      },
+      scores: async (request) => {
+        const { fetchAPISportsGamesByWeek, fetchAPISportsGames } = await import('@/lib/api-sports')
+        const week = requestWeek(request)
+        const rows = week
+          ? await fetchAPISportsGamesByWeek(requestSeason(request), week, { sport: 'NFL' })
+          : await fetchAPISportsGames(requestSeason(request), { sport: 'NFL' })
+        const fetchedAtIso = new Date().toISOString()
+        const scores = (rows as unknown[])
+          .map((row) => normalizeNflScoreRow(row, {
+            fetchedAtIso,
+            season: numberOrNull(request.season),
+            week: numberOrNull(request.week),
+          }))
+          .filter((row): row is NonNullable<typeof row> => Boolean(row))
+        if (scores.length === 0) return null
+        return makeResult({
+          providerId: 'api_sports',
+          capability: request.capability,
+          canonicalData: { scores },
+          fetchedAtIso,
+          integrationName: week ? 'fetchAPISportsGamesByWeek' : 'fetchAPISportsGames',
+        })
+      },
+      injuries: async (request) => {
+        const { fetchAPISportsInjuriesViaTeamFanout } = await import('@/lib/api-sports')
+        const rows = await fetchAPISportsInjuriesViaTeamFanout(requestSeason(request), { sport: 'NFL' })
+        const fetchedAtIso = new Date().toISOString()
+        const injuries = (rows as unknown[])
+          .map((row) => normalizeNflInjuryRow(row, { fetchedAtIso }))
+          .filter((row): row is NonNullable<typeof row> => Boolean(row))
+        if (injuries.length === 0) return null
+        return makeResult({
+          providerId: 'api_sports',
+          capability: request.capability,
+          canonicalData: { injuries },
+          fetchedAtIso,
+          warnings: injuries.some((row) => row.confidence !== 'resolved')
+            ? ['Some injury rows lack a resolved AllFantasy player id; provider reference and normalized name were preserved.']
+            : [],
+          integrationName: 'fetchAPISportsInjuriesViaTeamFanout',
         })
       },
       standings: async (request) => {
@@ -590,8 +662,17 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
       fantasy_valuations: async (request) => {
         const { getFantasyCalcValuesDbFirst } = await import('@/lib/fantasycalc-db')
         const { findPlayerByName, findPlayerBySleeperId } = await import('@/lib/fantasycalc')
-        const settings = { isDynasty: false, numQbs: 1, numTeams: 12, ppr: 1 } as const
+        const settings = request.valuationSettings ?? { isDynasty: false, numQbs: 1, numTeams: 12, ppr: 1 } as const
         const players = await getFantasyCalcValuesDbFirst(settings)
+        if (!request.allFantasyPlayerId && !request.playerName) {
+          return makeResult({
+            providerId: 'fantasycalc',
+            capability: request.capability,
+            canonicalData: { valuationRecords: players },
+            fetchedAtIso: new Date().toISOString(),
+            integrationName: 'getFantasyCalcValuesDbFirst',
+          })
+        }
         const player = request.allFantasyPlayerId
           ? findPlayerBySleeperId(players, request.allFantasyPlayerId)
           : request.playerName
@@ -701,7 +782,9 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
     canonical_cache: {
       player_identity: async (request) => readCanonicalCache(request),
       schedule: async (request) => readCanonicalCache(request),
+      scores: async (request) => readCanonicalCache(request),
       live_stats: async (request) => readCanonicalCache(request),
+      injuries: async (request) => readCanonicalCache(request),
       standings: async (request) => readCanonicalCache(request),
       fantasy_valuations: async (request) => readCanonicalCache(request),
       weather: async (request) => readCanonicalCache(request),
@@ -737,6 +820,15 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
       news: async (request) => hiddenResult(request),
     },
     runtime: {
+      scores: async (request) => makeResult({
+        providerId: 'runtime',
+        capability: request.capability,
+        canonicalData: { preservedRuntime: true, unavailableProviderData: true },
+        fetchedAtIso: new Date().toISOString(),
+        fallbackUsed: true,
+        terminal: true,
+        integrationName: 'AllFantasy runtime fallback',
+      }),
       live_stats: async (request) => makeResult({
         providerId: 'runtime',
         capability: request.capability,
@@ -747,6 +839,15 @@ export function buildNflRedraftProductionProviderAdapters(): NflRedraftProductio
         integrationName: 'AllFantasy runtime fallback',
       }),
       standings: async (request) => makeResult({
+        providerId: 'runtime',
+        capability: request.capability,
+        canonicalData: { preservedRuntime: true, unavailableProviderData: true },
+        fetchedAtIso: new Date().toISOString(),
+        fallbackUsed: true,
+        terminal: true,
+        integrationName: 'AllFantasy runtime fallback',
+      }),
+      injuries: async (request) => makeResult({
         providerId: 'runtime',
         capability: request.capability,
         canonicalData: { preservedRuntime: true, unavailableProviderData: true },
@@ -953,7 +1054,9 @@ export function assertNoMonthToMonthProviderRequiredForRuntime(): {
   const runtimeCapabilities: NflRedraftProviderOrchestratorCapability[] = [
     'player_identity',
     'schedule',
+    'scores',
     'live_stats',
+    'injuries',
     'standings',
     'league_import',
   ]

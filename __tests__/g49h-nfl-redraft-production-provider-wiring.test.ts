@@ -63,7 +63,7 @@ describe('G49H NFL redraft production provider wiring', () => {
   it('keeps runtime capabilities from requiring month-to-month providers', () => {
     expect(assertNoMonthToMonthProviderRequiredForRuntime()).toMatchObject({
       ok: true,
-      checkedCapabilities: ['player_identity', 'schedule', 'live_stats', 'standings', 'league_import'],
+      checkedCapabilities: ['player_identity', 'schedule', 'scores', 'live_stats', 'injuries', 'standings', 'league_import'],
     })
   })
 

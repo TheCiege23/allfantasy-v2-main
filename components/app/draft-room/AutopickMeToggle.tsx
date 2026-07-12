@@ -47,12 +47,10 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
         })
 
         if (!res.ok) {
-          const data = await res.json().catch(() => ({})) as { error?: string }
           const msg =
-            data?.error ??
-            (res.status === 403
-              ? 'AF Pro required to enable AI queue auto-pick.'
-              : 'Failed to save preference.')
+            res.status === 403
+              ? 'AF Pro is required to enable Smart Queue auto-pick.'
+              : 'Auto-pick preference was not saved. Try again.'
           throw new Error(msg)
         }
 
@@ -120,7 +118,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
             title={isProEligible ? undefined : 'AF Pro required'}
             onClick={() => {
               if (!isProEligible) {
-                setError('AF Pro required to enable AI queue auto-pick.')
+                setError('AF Pro is required to enable Smart Queue auto-pick.')
                 return
               }
               void save(true, 'ai_queue')
@@ -131,7 +129,7 @@ export function AutopickMeToggle({ viewerAutopick, leagueId, onUpdate }: Autopic
                 : 'border-white/15 text-white/45 hover:border-white/25 hover:text-white/70'
             } ${!isProEligible ? 'cursor-not-allowed opacity-45' : ''}`}
           >
-            AI Queue{!isProEligible ? ' (Pro)' : ''}
+            Smart Queue{!isProEligible ? ' (Pro)' : ''}
           </button>
         </>
       ) : null}

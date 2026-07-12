@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
-import { fetchFantasyCalcValues, FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { findPlayerInCSV, getPlayerValue as getCSVPlayerValue, getPlayerECR, CSVPlayerValue } from '@/lib/player-values-csv'
 import { getConsensusADP } from '@/lib/multi-platform-adp'
 

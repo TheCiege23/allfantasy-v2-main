@@ -1308,7 +1308,7 @@ export default function WaiverWirePage({
       {!lockedTab && (
       <section id="waiver-ai-engine-panel" className="rounded-xl border border-cyan-500/20 bg-black/20 p-4" data-testid="waiver-ai-engine-panel">
         <InContextMonetizationCard
-          title="Waiver AI access"
+          title="Waiver guidance access"
           featureId="ai_waivers"
           tokenRuleCodes={["ai_waiver_engine_run"]}
           className="mb-3"
@@ -1316,13 +1316,13 @@ export default function WaiverWirePage({
         />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-cyan-100">Waiver AI Engine</h2>
+            <h2 className="text-sm font-semibold text-cyan-100">Waiver Decision Support</h2>
             <p className="mt-1 text-xs text-white/60">
-              Deterministic waiver pickups scored from available players and team-needs context, with optional AI explanation.
+              Waiver options scored from available players and team-needs context, with an optional Coach explanation.
             </p>
             {!aiAssistantEnabled && !aiAvailabilityLoading && (
               <p className="mt-1 text-[11px] text-amber-200">
-                AI assistant is disabled. Deterministic waiver scoring remains available.
+                Coach explanations are unavailable. Instant waiver scoring remains available.
               </p>
             )}
           </div>
@@ -1335,7 +1335,7 @@ export default function WaiverWirePage({
               className="rounded border-white/30 bg-black/40"
               data-testid="waiver-ai-engine-explanation-toggle"
             />
-            AI explanation {!aiAssistantEnabled && !aiAvailabilityLoading ? '(disabled)' : ''}
+            Coach explanation {!aiAssistantEnabled && !aiAvailabilityLoading ? '(unavailable)' : ''}
           </label>
         </div>
 
@@ -1469,7 +1469,7 @@ export default function WaiverWirePage({
             className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-500/20 transition-colors"
           >
             <MessageSquare className="h-3.5 w-3.5" />
-            {aiAssistantEnabled ? "Get AI waiver help" : "Open deterministic waiver guidance"}
+            {aiAssistantEnabled ? "Get waiver guidance" : "Open instant waiver guidance"}
           </Link>
         </div>
       </section>

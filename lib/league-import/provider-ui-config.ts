@@ -12,13 +12,15 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   available: boolean;
   /** True if the import UI can discover leagues from an account identifier. */
   supportsDiscovery?: boolean;
+  /** Sports proven by the provider fetch/normalization source path. */
+  supportedSports: readonly ('NFL' | 'NCAAF')[];
 }[] = [
-  { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true },
-  { provider: 'espn', label: 'ESPN', available: true },
-  { provider: 'yahoo', label: 'Yahoo', available: true },
-  { provider: 'fantrax', label: 'Fantrax', available: true },
-  { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: true },
-  { provider: 'fleaflicker', label: 'Fleaflicker', available: true },
+  { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
+  { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
+  { provider: 'yahoo', label: 'Yahoo', available: true, supportedSports: ['NFL'] },
+  { provider: 'fantrax', label: 'Fantrax', available: true, supportedSports: ['NFL', 'NCAAF'] },
+  { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: true, supportedSports: ['NFL'] },
+  { provider: 'fleaflicker', label: 'Fleaflicker', available: true, supportedSports: ['NFL'] },
 ];
 
 export function getImportProviderLabel(provider: ImportProvider): string {
@@ -33,4 +35,8 @@ export function supportsImportProviderDiscovery(provider: ImportProvider): boole
   return IMPORT_PROVIDER_UI_OPTIONS.some(
     (o) => o.provider === provider && o.available && o.supportsDiscovery === true,
   );
+}
+
+export function getImportProviderSupportedSports(provider: ImportProvider): readonly ('NFL' | 'NCAAF')[] {
+  return IMPORT_PROVIDER_UI_OPTIONS.find((option) => option.provider === provider)?.supportedSports ?? [];
 }

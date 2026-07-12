@@ -1455,7 +1455,6 @@ export default function MockDraftSleeperRoomClient({
                 value: settings.draftType,
                 options: [
                   { value: 'snake', label: 'Snake' },
-                  { value: 'auction', label: 'Auction' },
                   { value: 'linear', label: 'Linear' },
                 ],
                 onChange: (value) => setSettings((current) => ({ ...current, draftType: value })),

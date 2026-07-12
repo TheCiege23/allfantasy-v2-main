@@ -18,11 +18,18 @@ import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersi
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-import/commissionerGate'
+import {
+  runSleeperImportValidation,
+  toImportWarningRecords,
+  type SleeperImportValidationResult,
+} from '@/lib/league-import/sleeper/SleeperImportValidation'
+import type { SleeperImportPayload } from '@/lib/league-import/adapters/sleeper/types'
 
 function mapImportCommitErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
+  if (code === 'NORMALIZATION_FAILED') return 422
   return 500
 }
 
@@ -76,6 +83,12 @@ export async function POST(req: NextRequest) {
       : undefined,
   })
   if (!gate.ok) {
+    if (gate.notFound) {
+      return NextResponse.json(
+        { error: gate.reason ?? 'League not found.', code: 'LEAGUE_NOT_FOUND' },
+        { status: 404 },
+      )
+    }
     return NextResponse.json(
       {
         error: gate.reason ?? 'Commissioner verification failed.',
@@ -100,12 +113,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const canonical = buildCanonicalImportBundle(result.normalized)
+    let validation: SleeperImportValidationResult | undefined
+    if (provider === 'sleeper') {
+      try {
+        validation = await runSleeperImportValidation(result.rawPayload as SleeperImportPayload, auth.userId)
+      } catch (validationError) {
+        console.warn('[import commit] Sleeper validation failed (import still proceeds):', validationError)
+      }
+    }
+    const additionalWarnings = validation ? toImportWarningRecords(validation.findings) : undefined
     const { persisted, runId } = await persistImportWithCanonicalAudit({
       userId: auth.userId,
       provider,
       normalized: result.normalized,
       canonical,
       allowUpdateExisting: Boolean(body.force),
+      additionalWarnings,
     })
 
     // Stamp the attestation on the new league so the gate is auditable.
@@ -119,14 +142,19 @@ export async function POST(req: NextRequest) {
       }).catch(() => {})
     }
 
-    return NextResponse.json({
-      leagueId: persisted.league.id,
-      name: persisted.league.name,
-      sport: persisted.league.sport,
-      league: persisted.league,
-      historicalBackfill: persisted.historicalBackfill,
-      importRunId: runId,
-    })
+    return NextResponse.json(
+      {
+        leagueId: persisted.league.id,
+        name: persisted.league.name,
+        sport: persisted.league.sport,
+        league: persisted.league,
+        historicalBackfill: persisted.historicalBackfill,
+        importRunId: runId,
+        replayed: Boolean(persisted.existed),
+        validation,
+      },
+      { status: persisted.existed ? 200 : 201 },
+    )
   } catch (error) {
     if (error instanceof ImportedLeagueConflictError) {
       return NextResponse.json(

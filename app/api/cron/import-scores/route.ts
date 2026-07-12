@@ -16,12 +16,11 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import {
-  syncAPISportsGamesToDb,
-  clearAPISportsDiagnostics,
-  getAPISportsDiagnostics,
-} from "@/lib/api-sports"
 import { prisma } from "@/lib/prisma"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { syncNflRedraftCronCanonicalCache } from "@/lib/nfl-provider/nflRedraftCronCanonicalSync"
+import { projectCanonicalNflScores } from "@/lib/nfl-provider/nflRedraftCanonicalScoreInjuryProjector"
+import { syncLegacyNcaafScores } from "@/lib/ncaaf-provider/legacyApiSportsIngestion"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
@@ -36,7 +35,9 @@ function resolveSport(param: string | null): "NFL" | "NCAAF" {
 async function isGated(sport: string): Promise<boolean> {
   try {
     const row = await prisma.sportsGame.findFirst({
-      where: { sport, source: "api_sports" },
+      where: sport === "NFL"
+        ? { sport, source: { in: ["rolling_insights", "api_sports"] } }
+        : { sport, source: "api_sports" },
       orderBy: { fetchedAt: "desc" },
       select: { fetchedAt: true },
     })
@@ -66,9 +67,28 @@ async function handle(req: NextRequest) {
       })
     }
 
-    clearAPISportsDiagnostics()
-    const count = await syncAPISportsGamesToDb({ season, sport })
-    const diagnostics = getAPISportsDiagnostics()
+    let count = 0
+    let canonicalSync: Awaited<ReturnType<typeof syncNflRedraftCronCanonicalCache>> | null = null
+    if (sport === "NFL") {
+      canonicalSync = await withSyncJobRun(
+        { jobName: "cron-import-scores", sport, provider: "canonical-orchestrator", trigger: "cron" },
+        () => syncNflRedraftCronCanonicalCache(
+          { job: "import-scores", sport, season },
+          {
+            afterCacheWrite: async ({ resolution }) => {
+              count = await projectCanonicalNflScores(resolution, prisma)
+            },
+          },
+        ),
+        () => ({ rowsWritten: count }),
+      )
+    } else {
+      count = await withSyncJobRun(
+        { jobName: "cron-import-scores", sport, provider: "api-sports-ncaaf-legacy", trigger: "cron" },
+        () => syncLegacyNcaafScores(season),
+        (rows) => ({ rowsWritten: typeof rows === "number" ? rows : 0 }),
+      )
+    }
 
     return NextResponse.json({
       ok: true,
@@ -76,7 +96,7 @@ async function handle(req: NextRequest) {
       sport,
       season: season ?? "current",
       synced: count,
-      diagnostics,
+      canonicalSync,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })

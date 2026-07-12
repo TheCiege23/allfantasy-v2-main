@@ -96,6 +96,7 @@
     "gate:draft:tests": "npx vitest run __tests__/draft/",
     "gate:draft:full": "node scripts/draft-launch-gate.mjs",
     "test:redraft": "vitest run __tests__/redraft/ __tests__/nfl-redraft- __tests__/redraft-",
+    "certify:invited-mvp:source": "vitest run --config vitest.invited-mvp.config.ts --pool=threads --maxWorkers=1",
     "gate:nfl-redraft-launch:runtime": "node scripts/redraft-launch-gate.mjs --runtime",
     "gate:nfl-redraft-launch:strict": "node scripts/redraft-launch-gate.mjs --strict",
     "gate:nfl-redraft-launch": "npm run gate:nfl-redraft-launch:strict",

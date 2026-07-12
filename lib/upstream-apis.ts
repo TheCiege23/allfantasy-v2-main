@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { FantasyCalcPlayer, FantasyCalcSettings } from './fantasycalc'
+import type { FantasyCalcPlayer, FantasyCalcSettings } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { readCache, writeCache } from './enrichment-cache'
 
 type PrismaLike = typeof prisma
@@ -1104,7 +1104,7 @@ export async function fetchFantasyCalcPlayerAndPickWeights(
     findPlayerBySleeperId,
     getDetailedTier,
     getPickValue,
-  } = await import('./fantasycalc')
+  } = await import('@/lib/player-valuations/canonicalPlayerValuations')
 
   const fullSettings: FantasyCalcSettings = {
     isDynasty: partialSettings?.isDynasty ?? true,

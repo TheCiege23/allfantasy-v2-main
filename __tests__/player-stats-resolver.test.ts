@@ -52,7 +52,7 @@ vi.mock("@/lib/prisma", () => ({
   },
 }))
 
-vi.mock("@/lib/fantasycalc", () => ({
+vi.mock("@/lib/player-valuations/canonicalPlayerValuations", () => ({
   getPlayerValuesForNames: mockGetPlayerValuesForNames,
 }))
 

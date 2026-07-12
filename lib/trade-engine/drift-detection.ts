@@ -1,6 +1,6 @@
 import { prisma } from '../prisma'
 import { Prisma } from '@prisma/client'
-import { fetchFantasyCalcValues, FantasyCalcPlayer } from '../fantasycalc'
+import { fetchFantasyCalcValues, FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { resolveCurrentTradeLearningSeason } from './season-resolver'
 
 export type DriftSeverity = 'ok' | 'info' | 'warn' | 'critical'

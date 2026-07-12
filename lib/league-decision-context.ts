@@ -20,7 +20,7 @@
 
 import { SleeperRoster, SleeperLeague, SleeperPlayer, getAllPlayers, getLeagueType } from './sleeper-client'
 import { parseSleeperRosterPositions } from './trade-engine/sleeper-converter'
-import { fetchFantasyCalcValues, findPlayerByName, FantasyCalcPlayer } from './fantasycalc'
+import { fetchFantasyCalcValues, findPlayerByName, FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 
 export type Position = 'QB' | 'RB' | 'WR' | 'TE' | 'K' | 'DEF'
 const SKILL_POSITIONS: Position[] = ['QB', 'RB', 'WR', 'TE']

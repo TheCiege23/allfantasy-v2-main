@@ -4,6 +4,7 @@ const {
   getServerSessionMock,
   leagueFindFirstMock,
   leagueFindUniqueMock,
+  leagueUpdateMock,
   leagueWaiverSettingsFindUniqueMock,
   leagueWaiverSettingsUpsertMock,
   leagueCreateMock,
@@ -18,6 +19,7 @@ const {
   getServerSessionMock: vi.fn(),
   leagueFindFirstMock: vi.fn(),
   leagueFindUniqueMock: vi.fn(),
+  leagueUpdateMock: vi.fn(),
   leagueWaiverSettingsFindUniqueMock: vi.fn(),
   leagueWaiverSettingsUpsertMock: vi.fn(),
   leagueCreateMock: vi.fn(),
@@ -48,6 +50,7 @@ vi.mock('@/lib/prisma', () => ({
       findFirst: leagueFindFirstMock,
       findUnique: leagueFindUniqueMock,
       create: leagueCreateMock,
+      update: leagueUpdateMock,
     },
     leagueWaiverSettings: {
       findUnique: leagueWaiverSettingsFindUniqueMock,
@@ -156,6 +159,15 @@ describe('POST /api/league/create sport defaults integration', () => {
       id: `league-${String(data.sport).toLowerCase()}`,
       name: data.name,
       sport: data.sport,
+    }))
+    leagueUpdateMock.mockImplementation(async ({ where, data }: any) => ({
+      id: where.id,
+      name: 'Test League',
+      sport: String(where.id).replace(/^league-/i, '').toUpperCase(),
+      leagueVariant: null,
+      leagueSize: 12,
+      settings: data.settings ?? {},
+      ...data,
     }))
 
     getCreationPayloadAndSettingsMock.mockImplementation((sport: string) => ({
@@ -597,7 +609,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'devy',
               format_id: 'devy',
-              draft_type: 'devy_snake',
+              draft_type: 'snake',
               requested_draft_type: 'devy_snake',
             })
           )
@@ -615,7 +627,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'c2c',
               format_id: 'c2c',
-              draft_type: 'c2c_snake',
+              draft_type: 'snake',
               requested_draft_type: 'c2c_snake',
             })
           )
@@ -668,7 +680,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'devy',
               format_id: 'devy',
-              draft_type: 'devy_auction',
+              draft_type: 'auction',
               requested_draft_type: 'devy_auction',
             })
           )
@@ -686,7 +698,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'c2c',
               format_id: 'c2c',
-              draft_type: 'c2c_auction',
+              draft_type: 'auction',
               requested_draft_type: 'c2c_auction',
             })
           )
@@ -954,7 +966,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'devy',
               format_id: 'devy',
-              draft_type: 'devy_snake',
+              draft_type: 'snake',
               requested_draft_type: 'devy_snake',
             })
           )
@@ -972,7 +984,7 @@ describe('POST /api/league/create sport defaults integration', () => {
             expect.objectContaining({
               league_type: 'c2c',
               format_id: 'c2c',
-              draft_type: 'c2c_auction',
+              draft_type: 'auction',
               requested_draft_type: 'c2c_auction',
             })
           )

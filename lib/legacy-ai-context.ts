@@ -540,7 +540,7 @@ function resolvePlayer(
 
 function inferCalcSettings(
   user: LegacyUserPayload
-): Partial<import('./fantasycalc').FantasyCalcSettings> {
+): Partial<import('@/lib/player-valuations/canonicalPlayerValuations').FantasyCalcSettings> {
   const latestSeason = getLatestSeason(user.leagues)
 
   const currentLeagues = user.leagues.filter(

@@ -1,4 +1,4 @@
-import type { FantasyCalcPlayer } from '@/lib/fantasycalc'
+import type { FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { computePlayerVorp, estimatePPGFromValue, type LeagueRosterConfig } from '@/lib/vorp-engine'
 import { computePlayerDemandScore, type LeagueDemandIndex } from './league-demand-index'
 

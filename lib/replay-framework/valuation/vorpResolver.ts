@@ -13,7 +13,7 @@
  * this pipeline already has.
  */
 import { computePlayerVorp, type LeagueRosterConfig } from '@/lib/vorp-engine'
-import type { FantasyCalcPlayer } from '@/lib/fantasycalc'
+import type { FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 
 /**
  * Derives a real `LeagueRosterConfig` from the league's actual

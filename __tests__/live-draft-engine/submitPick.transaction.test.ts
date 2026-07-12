@@ -306,6 +306,60 @@ describe('PickSubmissionService.submitPick (mocked Prisma transaction)', () => {
     expect(ctx.store.picks).toHaveLength(1)
   })
 
+  it('returns the committed pick for an identical retry without duplicating the mutation', async () => {
+    const input = {
+      leagueId: 'league-1',
+      playerName: 'Retry Player',
+      position: 'WR',
+      playerId: 'retry-player-1',
+      rosterId: 'roster-a',
+      madeByUserId: 'user-a',
+      source: 'user' as const,
+      expectedOverall: 1,
+    }
+
+    const first = await submitPick(input)
+    const replay = await submitPick(input)
+
+    expect(first.success).toBe(true)
+    expect(first.idempotentReplay).toBeUndefined()
+    expect(replay).toMatchObject({
+      success: true,
+      idempotentReplay: true,
+      snapshot: first.snapshot,
+    })
+    expect(ctx.store.picks).toHaveLength(1)
+  })
+
+  it('does not treat a conflicting player at the expected slot as an idempotent retry', async () => {
+    ctx.store.picks.push({
+      id: 'committed-1',
+      sessionId: 'session-1',
+      overall: 1,
+      round: 1,
+      slot: 1,
+      rosterId: 'roster-a',
+      playerName: 'Committed Player',
+      position: 'RB',
+      playerId: 'committed-player-1',
+    })
+
+    const result = await submitPick({
+      leagueId: 'league-1',
+      playerName: 'Different Player',
+      position: 'WR',
+      playerId: 'different-player-1',
+      rosterId: 'roster-a',
+      expectedOverall: 1,
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.code).toBe(DRAFT_PICK_STALE_OVERALL)
+    expect(result.idempotentReplay).toBeUndefined()
+    expect(ctx.store.picks).toHaveLength(1)
+    expect(ctx.prisma.$transaction).not.toHaveBeenCalled()
+  })
+
   it('rejects duplicate fill of same overall (race) with RACE_RETRY', async () => {
     // Outer read: board still open at overall 1. Inner tx: another writer filled slot 1 first
     // (picksCountAtSubmit mismatch → "Draft state changed").

@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod'
-import type { FantasyCalcPlayer } from '@/lib/fantasycalc'
+import type { FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import type { PlayerAnalytics } from '@/lib/player-analytics'
 import type { AgeCurve, VolatilityProfile, PositionScarcity } from '@/lib/trade-engine/sport-tuning-registry'
 import type { PlayerValueAdjustment } from '@/lib/trade-engine/news-impact-engine'

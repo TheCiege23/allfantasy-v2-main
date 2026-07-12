@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { pricePlayer, pricePick, compositeScore, compositeTotal, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import { computeValueFairness } from '@/lib/lineup-optimizer'
 import { computeTradeDrivers } from '@/lib/trade-engine/trade-engine'

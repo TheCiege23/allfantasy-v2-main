@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { fetchFantasyCalcValues, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueUsers } from '@/lib/sleeper-client'
 
 interface PositionData {

@@ -24,10 +24,10 @@ export function DraftHelperIntelligence({
   recommendationOverlay = null,
 }: DraftHelperIntelligenceProps) {
   const features = [
-    { name: 'Chimmy Ready', active: aiFeatureStatus?.chimmyReady, icon: Bot },
-    { name: 'Live Brain', active: aiFeatureStatus?.liveBrainReady, icon: Zap },
-    { name: 'AI ADP', active: aiFeatureStatus?.aiAdpEnabled, icon: TrendingUp },
-    { name: 'Queue Reorder', active: aiFeatureStatus?.queueReorderEnabled, icon: TrendingUp },
+    { name: 'Draft assistant', active: aiFeatureStatus?.chimmyReady, icon: Bot },
+    { name: 'Live recommendations', active: aiFeatureStatus?.liveBrainReady, icon: Zap },
+    { name: 'Market rankings', active: aiFeatureStatus?.aiAdpEnabled, icon: TrendingUp },
+    { name: 'Smart queue', active: aiFeatureStatus?.queueReorderEnabled, icon: TrendingUp },
   ]
 
   const activeFeatures = features.filter((f) => f.active)
@@ -76,7 +76,7 @@ export function DraftHelperIntelligence({
         <div>
           <h5 className="text-xs font-semibold text-slate-400 mb-2 flex items-center gap-1">
             <Zap className="w-3 h-3" />
-            Active Features
+            Draft assist
           </h5>
           <div className="flex flex-wrap gap-1">
             {activeFeatures.map((feature) => (
@@ -124,7 +124,10 @@ export function DraftHelperIntelligence({
 
       {!activeFeatures.length && !headlines.length && !injuries.length && (
         <div className="text-center py-4 text-slate-500">
-          <p className="text-xs">No intelligence available</p>
+          <p className="text-xs font-medium text-slate-300">Draft guidance is getting ready</p>
+          <p className="mt-1 text-[10px] leading-relaxed text-slate-500">
+            Recommendations and player context will appear here when enough draft data is available.
+          </p>
         </div>
       )}
     </div>

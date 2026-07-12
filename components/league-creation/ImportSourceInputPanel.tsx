@@ -4,7 +4,11 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Info } from 'lucide-react';
-import { getImportProviderLabel, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config';
+import {
+  getImportProviderLabel,
+  getImportProviderSupportedSports,
+  isImportProviderAvailable,
+} from '@/lib/league-import/provider-ui-config';
 import type { ImportProvider } from '@/lib/league-import/types';
 
 export interface ImportSourceInputPanelProps {
@@ -63,6 +67,7 @@ export function ImportSourceInputPanel({
     label: `${getImportProviderLabel(provider)} ID`,
     placeholder: 'Enter league or connection ID',
   };
+  const supportedSports = getImportProviderSupportedSports(provider);
 
   if (!available) {
     return (
@@ -101,6 +106,9 @@ export function ImportSourceInputPanel({
       {config.help && (
         <p className="text-xs text-white/50">{config.help}</p>
       )}
+      <p className="text-xs text-white/50">
+        MVP sport support: {supportedSports.length > 0 ? supportedSports.join(' and ') : 'not certified'}.
+      </p>
     </div>
   );
 }

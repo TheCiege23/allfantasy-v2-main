@@ -1,9 +1,9 @@
-﻿import 'server-only'
+import 'server-only'
 
 import type { SportsPlayerRecord } from '@prisma/client'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { getPlayer, searchPlayers } from '@/lib/data/players'
-import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import {
   pricePlayer,
   pricePick,

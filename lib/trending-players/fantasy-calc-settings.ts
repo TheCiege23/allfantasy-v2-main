@@ -1,4 +1,4 @@
-import type { FantasyCalcSettings } from '@/lib/fantasycalc'
+import type { FantasyCalcSettings } from '@/lib/player-valuations/canonicalPlayerValuations'
 import type { LoadedTradeLeague } from '@/lib/trade-value-console/league-loader'
 
 export function fantasyCalcSettingsFromLeague(league: LoadedTradeLeague | null): FantasyCalcSettings {

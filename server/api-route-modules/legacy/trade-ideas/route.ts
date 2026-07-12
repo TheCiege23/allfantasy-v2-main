@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
-import { getPlayerValuesForNames, FantasyCalcSettings } from '@/lib/fantasycalc'
+import { getPlayerValuesForNames, FantasyCalcSettings } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/sleeper-client'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'

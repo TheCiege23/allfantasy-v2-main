@@ -1,11 +1,13 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { NextRequest, NextResponse } from 'next/server'
+import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
+import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
 import { prisma } from '@/lib/prisma'
 import { preferencesToPrompt } from '@/lib/trade-quiz-data'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { getComprehensiveLearningContext } from '@/lib/comprehensive-trade-learning'
 import { getPreAnalysisStatus } from '@/lib/trade-pre-analysis'
 import { runTradeEngine, runAssistOrchestrator } from '@/lib/trade-engine'
@@ -277,7 +279,17 @@ function safeStr(v: any) {
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/league-analyze", tool: "LegacyTradeLeagueAnalyze" })(async (req: NextRequest) => {
   try {
-    const body = await req.json()
+    const auth = requireAuthOrOrigin(req)
+    if (!auth.authenticated) {
+      return forbiddenResponse(auth.error || 'Unauthorized')
+    }
+
+    let body: any
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+    }
     const leagueId = safeStr(body.league_id)
     const sleeperUsernameRaw = safeStr(body.sleeper_username)
     const sleeperUsername = sleeperUsernameRaw.toLowerCase()
@@ -285,6 +297,25 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/league-analyze",
 
     if (!leagueId) return NextResponse.json({ error: 'Missing league_id' }, { status: 400 })
     if (!sleeperUsername) return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
+
+    const rateLimit = consumeRateLimit({
+      scope: 'ai',
+      action: 'legacy_trade_league_analyze',
+      sleeperUsername,
+      ip: getClientIp(req),
+      maxRequests: 20,
+      windowMs: 60_000,
+    })
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        {
+          error: 'Rate limit exceeded. Please try again later.',
+          retryAfterSec: rateLimit.retryAfterSec,
+          remaining: rateLimit.remaining,
+        },
+        { status: 429, headers: { 'Retry-After': String(rateLimit.retryAfterSec) } },
+      )
+    }
 
     const sport: Sport = sportRaw === 'nba' ? 'nba' : 'nfl'
 

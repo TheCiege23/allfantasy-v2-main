@@ -71,19 +71,31 @@ export type NflRedraftCronCanonicalSyncDeps = {
     deps?: NflRedraftProductionProviderDependencies,
   ) => Promise<NflRedraftProductionProviderResolution>
   providerDeps?: NflRedraftProductionProviderDependencies
+  afterCacheWrite?: (input: {
+    job: NflRedraftCronCanonicalJob
+    sport: string
+    season: string
+    week: string | null
+    resolution: NflRedraftProductionProviderResolution
+  }) => Promise<void>
 }
 
-const DEFAULT_TTL_MS: Record<Exclude<NflRedraftCronCanonicalJob, 'import-injuries'>, number> = {
-  'import-scores': 1000 * 60 * 5,
-  'import-schedules': 1000 * 60 * 60 * 24,
-  'import-standings': 1000 * 60 * 15,
+const IN_SEASON_TTL_MS = 1000 * 60 * 30
+const OFFSEASON_TTL_MS = 1000 * 60 * 60 * 4
+const LIVE_SCORE_TTL_MS = 1000 * 60 * 5
+
+function defaultTtlMs(job: NflRedraftCronCanonicalJob, now: Date): number {
+  if (job === 'import-scores') return LIVE_SCORE_TTL_MS
+  const month = now.getUTCMonth() + 1
+  const inSeason = month >= 8 || month <= 2
+  return inSeason ? IN_SEASON_TTL_MS : OFFSEASON_TTL_MS
 }
 
-const CAPABILITY_BY_JOB: Record<NflRedraftCronCanonicalJob, NflRedraftProviderOrchestratorCapability | null> = {
-  'import-scores': 'live_stats',
+const CAPABILITY_BY_JOB: Record<NflRedraftCronCanonicalJob, NflRedraftProviderOrchestratorCapability> = {
+  'import-scores': 'scores',
   'import-schedules': 'schedule',
   'import-standings': 'standings',
-  'import-injuries': null,
+  'import-injuries': 'injuries',
 }
 
 function normalizeSport(value: string | null | undefined): string {
@@ -100,7 +112,7 @@ function normalizeWeek(value: string | number | null | undefined): string | null
 }
 
 export function buildNflRedraftCronCanonicalCacheKey(input: {
-  job: Exclude<NflRedraftCronCanonicalJob, 'import-injuries'>
+  job: NflRedraftCronCanonicalJob
   season: string
   week?: string | null
   teamAbbr?: string | null
@@ -209,27 +221,8 @@ export async function syncNflRedraftCronCanonicalCache(
     })
   }
 
-  if (!capability) {
-    return result({
-      job: input.job,
-      sport,
-      season,
-      week,
-      status: 'deferred',
-      capability: null,
-      cacheKey: null,
-      selectedProvider: null,
-      freshnessStatus: 'missing',
-      fallbackUsed: false,
-      cacheUsed: false,
-      expiresAtIso: null,
-      warnings: ['G49G does not expose a standalone injury capability; do not redesign provider architecture in RC1.'],
-      deferredReason: 'missing_orchestrator_injury_capability',
-    })
-  }
-
   const cacheKey = input.cacheKey ?? buildNflRedraftCronCanonicalCacheKey({
-    job: input.job as Exclude<NflRedraftCronCanonicalJob, 'import-injuries'>,
+    job: input.job,
     season,
     week,
     teamAbbr: input.teamAbbr,
@@ -270,7 +263,7 @@ export async function syncNflRedraftCronCanonicalCache(
     })
   }
 
-  const ttlMs = input.ttlMs ?? DEFAULT_TTL_MS[input.job as Exclude<NflRedraftCronCanonicalJob, 'import-injuries'>]
+  const ttlMs = input.ttlMs ?? defaultTtlMs(input.job, now)
   const expiresAt = new Date(now.getTime() + ttlMs)
   const cache = deps.prisma?.sportsDataCache ?? await defaultSportsDataCache()
   if (!cache) {
@@ -305,6 +298,14 @@ export async function syncNflRedraftCronCanonicalCache(
       expiresAt,
       createdAt: now,
     },
+  })
+
+  await deps.afterCacheWrite?.({
+    job: input.job,
+    sport,
+    season,
+    week,
+    resolution,
   })
 
   return result({

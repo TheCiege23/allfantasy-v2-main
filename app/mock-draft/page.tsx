@@ -12,7 +12,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = buildMetadata(
   getSEOPageConfig('mock-draft') ?? {
     title: 'Mock Drafts – AllFantasy',
-    description: 'Create, run, and share unlimited AllFantasy mock drafts with AI-powered insights.',
+    description: 'Create, run, and share AllFantasy mock drafts with Draft Assist insights.',
     canonical: 'https://allfantasy.ai/mock-draft',
   }
 )
@@ -67,7 +67,7 @@ export default async function MockDraftPage({ searchParams }: MockDraftPageProps
               AllFantasy Mock Drafts
             </h1>
             <p className="mt-2 text-sm text-white/60 sm:text-base">
-              Run a full Sleeper-style AI mock room with league import, real manager slots, and shareable results.
+              Practice in an AllFantasy mock room with league import, real manager slots, Draft Assist, and shareable results.
             </p>
           </div>
           <MockDraftSleeperRoomClient initialLeagueId={initialLeagueId} initialSport={initialSport} />

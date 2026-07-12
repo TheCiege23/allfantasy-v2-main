@@ -1,5 +1,5 @@
 import { getHistoricalPlayerValue, getHistoricalPickValueWeighted } from './historical-values';
-import { fetchFantasyCalcValues, findPlayerByName, FantasyCalcPlayer } from './fantasycalc';
+import { fetchFantasyCalcValues, findPlayerByName, FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations';
 import { pickValue } from './pick-valuation';
 import { computePlayerVorp as computePlayerVorpEngine, computePickVorp as computePickVorpEngine, LeagueRosterConfig } from './vorp-engine';
 import { isIdpPosition, isKickerPosition } from './idp-kicker-values';

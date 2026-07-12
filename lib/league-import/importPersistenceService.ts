@@ -4,7 +4,7 @@
 
 import { createHash } from 'crypto'
 import { prisma } from '@/lib/prisma'
-import type { ImportProvider, NormalizedImportResult } from '@/lib/league-import/types'
+import type { ImportProvider, ImportWarningRecord, NormalizedImportResult } from '@/lib/league-import/types'
 import type { CanonicalImportBundle } from '@/lib/league-import/types'
 import {
   persistImportedLeagueFromNormalization,
@@ -48,6 +48,7 @@ export async function persistImportWithCanonicalAudit(input: {
   normalized: NormalizedImportResult
   canonical: CanonicalImportBundle
   allowUpdateExisting?: boolean
+  additionalWarnings?: ImportWarningRecord[]
 }): Promise<{
   persisted: PersistImportedLeagueResult
   runId: string
@@ -115,7 +116,7 @@ export async function persistImportWithCanonicalAudit(input: {
       },
     })
 
-    for (const w of input.canonical.warnings) {
+    for (const w of [...input.canonical.warnings, ...(input.additionalWarnings ?? [])]) {
       await prisma.importWarning.create({
         data: {
           runId: run.id,

@@ -96,6 +96,12 @@ export async function POST(req: NextRequest) {
         : undefined
 
     if (slotConfig !== undefined || body?.useSession) {
+      if (draftType === 'auction') {
+        return NextResponse.json(
+          { error: 'Auction mock drafts are not available in the live mock room yet.' },
+          { status: 400 },
+        )
+      }
       const snapshot = await createMockDraftSession(session.user.id, {
         leagueId: leagueId || undefined,
         settings: {
@@ -169,4 +175,3 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || 'Internal server error' }, { status: 500 })
   }
 }
-

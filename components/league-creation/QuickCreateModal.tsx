@@ -161,14 +161,14 @@ export function QuickCreateModal({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg font-bold">
             <Sparkles className="h-5 w-5 text-cyan-400" />
-            Quick Create with AI
+            Guided Quick Create
           </DialogTitle>
         </DialogHeader>
 
         {!settings ? (
           <div className="space-y-4">
             <p className="text-xs text-white/50">
-              Describe what kind of league you want and AI will set everything up for you.
+              Describe the league you want and Coach will prepare settings for your review.
             </p>
 
             <textarea
@@ -212,7 +212,7 @@ export function QuickCreateModal({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* AI Summary */}
+            {/* Guided settings summary */}
             <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-4 py-3">
               <p className="text-[13px] text-cyan-100">{settings.summary}</p>
             </div>
