@@ -14,6 +14,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { syncNFLDepthChartsToDb } from "@/lib/rolling-insights"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -25,7 +26,11 @@ async function handle(req: NextRequest) {
   const startedAt = Date.now()
 
   try {
-    const count = await syncNFLDepthChartsToDb({ season })
+    const count = await withSyncJobRun(
+      { jobName: "cron-import-depth-charts", sport: "NFL", provider: "rolling-insights", trigger: "cron" },
+      () => syncNFLDepthChartsToDb({ season }),
+      (rows) => ({ rowsWritten: typeof rows === "number" ? rows : 0 }),
+    )
 
     return NextResponse.json({
       ok: true,

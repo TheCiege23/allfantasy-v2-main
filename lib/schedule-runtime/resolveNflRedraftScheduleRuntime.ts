@@ -334,13 +334,22 @@ export async function advanceNflRedraftScheduleWeek(input: {
   })
   if (!transition.ok) return { ok: false, code: transition.code, message: transition.message }
 
-  await prisma.redraftSeason.update({
-    where: { id: input.seasonId },
+  // Conditional update guarded on the exact prior state the transition was computed
+  // from — a bare `update` here is a read-then-write race: two concurrent
+  // invocations could both read the same currentWeek/status, both compute a valid
+  // transition, and the second write would silently clobber the first's intended
+  // effect (found via direct call-graph audit, mirroring the same class of defect
+  // physically reproduced and fixed in the FAAB settlement path this same phase).
+  const claimed = await prisma.redraftSeason.updateMany({
+    where: { id: input.seasonId, currentWeek: resolved.state.currentWeek, status: resolved.state.status },
     data: {
       status: transition.nextStatus,
       currentWeek: transition.currentWeek,
     },
   })
+  if (claimed.count === 0) {
+    return { ok: false, code: 'CONCURRENT_MODIFICATION', message: 'Season state changed before this transition could be applied. Retry.' }
+  }
 
   if (input.action === 'complete_week' || input.action === 'advance_week') {
     await updateStandings(input.seasonId, input.week ?? resolved.state.currentWeek)

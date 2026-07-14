@@ -153,6 +153,7 @@ export function useCommissionerActions({
             })
             if (priorSession) setSession(priorSession)
             // Trigger pool warming in background so the next retry is fast.
+            void fetchSession()
             void fetchDraftPool()
             return { ok: false, error: msg }
           }

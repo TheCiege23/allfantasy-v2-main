@@ -42,7 +42,7 @@ describe('LeagueShell — af-pre-draft-fix-action listener', () => {
    * starts at the documenting comment "Slice H — listen for" and ends at
    * the next `useEffect` / function boundary.
    */
-  const sliceStart = src.indexOf('Slice H — listen for')
+  const sliceStart = src.indexOf('Slice H')
   const sliceEndNeedle = '}, [league.id, openLeagueSettingsModal])'
   const sliceEnd = sliceStart >= 0 ? src.indexOf(sliceEndNeedle, sliceStart) : -1
   const sliceBody =

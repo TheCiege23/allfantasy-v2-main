@@ -2,7 +2,7 @@ import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
 import { DEFAULT_SPORT } from '@/lib/sport-scope';
 import { getAllPlayers, SleeperPlayer } from './sleeper-client';
-import { fetchFantasyCalcValues, FantasyCalcPlayer, findPlayerByName } from './fantasycalc';
+import { fetchFantasyCalcValues, FantasyCalcPlayer, findPlayerByName } from '@/lib/player-valuations/canonicalPlayerValuations';
 
 export interface PlatformLeagueInfo {
   name: string;

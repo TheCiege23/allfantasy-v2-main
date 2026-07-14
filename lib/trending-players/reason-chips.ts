@@ -1,4 +1,4 @@
-import type { FantasyCalcPlayer } from '@/lib/fantasycalc'
+import type { FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import type { TrendReasonChip, TrendTypeId } from './types'
 
 export function chipsFromFantasyCalc(p: FantasyCalcPlayer, trendType: TrendTypeId): TrendReasonChip[] {

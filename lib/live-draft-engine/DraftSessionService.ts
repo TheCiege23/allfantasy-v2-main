@@ -5,6 +5,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { getPlatformEvents, EVENT } from '@/lib/events'
+import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
 import { logAction } from '@/server/services/auditService'
 import {
   type ApplyPostDraftLifecycleResult,
@@ -1110,7 +1111,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
 
     /** Idempotent: board already finalized in DB — outer callers may heal artifacts. */
     if (session.status === 'completed') {
-      return { ok: true as const, transitioned: false as const, lifecycle: null, sessionId: session.id }
+      return { ok: true as const, transitioned: false as const, lifecycle: null, sessionId: session.id, activatesLeague: session.sessionKind !== 'mock' }
     }
 
     const totalPicks = session.rounds * session.teamCount
@@ -1136,48 +1137,71 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
       },
     })
 
-    const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
-    return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id }
+    const activatesLeague = session.sessionKind !== 'mock'
+    const lifecycle = activatesLeague
+      ? await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId, session.id)
+      : null
+
+    await tx.leagueAuditLog.create({
+      data: {
+        leagueId,
+        userId: null,
+        actionType: 'draft_completed',
+        entityType: 'draft_session',
+        entityId: session.id,
+        beforeState: { status: session.status },
+        afterState: { status: 'completed' },
+        metadata: {
+          idempotencyKey: `draft-complete:${session.id}`,
+          source: 'engine:draft-complete',
+          sessionKind: session.sessionKind,
+          activatesLeague,
+        },
+      },
+    })
+    await getPlatformEvents().emitInTx(tx, EVENT.DRAFT_COMPLETED, {
+      leagueId,
+      idempotencyKey: `draft.completed:${session.id}`,
+      source: 'engine:draft-complete',
+      subjects: [{ kind: 'draft', id: session.id }],
+      payload: { draftId: session.id, pickCount: pickRows.length },
+    })
+
+    return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id, activatesLeague }
   })
 
   if (!outcome.ok) return false
 
-  if (outcome.lifecycle?.applied && outcome.lifecycle.commissionerUserId && outcome.lifecycle.from != null && outcome.lifecycle.to != null) {
-    void logAction({
-      leagueId,
-      userId: outcome.lifecycle.commissionerUserId,
-      actionType: 'lifecycle_transition',
-      entityType: 'league',
-      entityId: leagueId,
-      beforeState: { lifecycleState: outcome.lifecycle.from },
-      afterState: { lifecycleState: outcome.lifecycle.to },
-      metadata: { source: 'draft_completion' },
-    }).catch(() => {})
+
+  let artifactsReady = !outcome.activatesLeague
+  if (outcome.activatesLeague) {
+    try {
+      const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
+      await runPostDraftFinalizationArtifacts(leagueId)
+      artifactsReady = true
+    } catch (err) {
+      console.error('[completeDraftSession] post-draft artifacts failed', {
+        leagueId,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 
-  try {
-    const { runPostDraftFinalizationArtifacts } = await import('@/lib/live-draft-engine/postDraftFinalizeArtifacts')
-    await runPostDraftFinalizationArtifacts(leagueId)
-  } catch (err) {
-    console.error('[completeDraftSession] post-draft artifacts failed', {
-      leagueId,
-      error: err instanceof Error ? err.message : String(err),
-    })
-  }
-
-  if (outcome.transitioned) {
-    // G12: emit DRAFT_COMPLETED for ALL league types. Previously only Redraft leagues
-    // emitted this event (from syncCompletedDraftToRedraftSeason). SEASON_ACTIVATED is
-    // still emitted from the Redraft path for the season-specific payload.
-    const draftId = outcome.sessionId
-    getPlatformEvents().emit(EVENT.DRAFT_COMPLETED, {
-      leagueId,
-      idempotencyKey: `draft.completed:${draftId}`,
-      source: 'engine:draft-complete',
-      subjects: [{ kind: 'draft', id: draftId }],
-      payload: { draftId },
-    }).catch(() => {})
-
+  if (outcome.transitioned && artifactsReady) {
+    if (outcome.activatesLeague) {
+      await publishLeagueFanoutEvent({
+        leagueId,
+        eventType: 'draft_completed',
+        title: 'Draft complete',
+        message: 'The draft is complete. Rosters and the season schedule are now available.',
+        category: 'league_announcements',
+        visibility: 'all_members',
+        meta: { draftId: outcome.sessionId },
+        dedupeKey: `draft-complete:${outcome.sessionId}`,
+        actionHref: `/league/${leagueId}?tab=draft`,
+        actionLabel: 'View draft board',
+      })
+    }
     // G12-3 FINDING: survivor bootstrap is hardcoded here. Self-gates via isSurvivorLeague()
     // so non-survivor leagues pay only a fast DB read. Future work: subscribe to DRAFT_COMPLETED
     // on the event bus instead (remove this direct call once subscriber wiring is in place).
@@ -1192,7 +1216,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     })
   }
 
-  return true
+  return artifactsReady
 }
 
 /**

@@ -15,14 +15,14 @@ export function MatchupInsightsPanel({
   onStartSit?: () => void
 }) {
   return (
-    <div className="space-y-2 rounded-2xl border border-white/[0.1] bg-[#0a1228]/80 p-3">
+    <div className="space-y-2 rounded-2xl border border-subtle bg-surface p-3">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/50">AI & insights</h3>
+        <h3 className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted">AI & insights</h3>
         {partialData ? (
-          <span className="text-[10px] text-amber-200/80">Partial data — refreshing sources…</span>
+          <span className="text-[10px] text-amber-200/80">Partial data - refreshing sources…</span>
         ) : null}
       </div>
-      <div className="space-y-2 text-[12px] leading-snug text-white/75">
+      <div className="space-y-2 text-[12px] leading-snug text-secondary">
         <p>
           <span className="font-semibold text-cyan-200/90">Edge: </span>
           {insights.matchupEdge}
@@ -37,13 +37,13 @@ export function MatchupInsightsPanel({
         </p>
         <p>
           <span className="font-semibold text-cyan-200/90">Risk: </span>
-          <span className="uppercase tracking-wide text-white/60">{insights.riskLevel}</span>
-          <span className="text-white/50"> — volatility heuristic from projections vs actuals.</span>
+          <span className="uppercase tracking-wide text-secondary">{insights.riskLevel}</span>
+          <span className="text-muted"> - volatility heuristic from projections vs actuals.</span>
         </p>
         <p>
           <span className="font-semibold text-cyan-200/90">Swing players: </span>
         </p>
-        <ul className="list-disc space-y-1 pl-4 text-[11px] text-white/70">
+        <ul className="list-disc space-y-1 pl-4 text-[11px] text-secondary">
           {insights.swingPlayers.map((line, i) => (
             <li key={i}>{line}</li>
           ))}
@@ -57,7 +57,7 @@ export function MatchupInsightsPanel({
           {insights.injuryNews}
         </p>
       </div>
-      <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
+      <div className="mt-3 flex flex-wrap gap-2 border-t border-subtle pt-3">
         <Link
           href={`/league/${leagueId}?tab=waivers`}
           className="rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-medium text-cyan-200 hover:bg-cyan-500/20"

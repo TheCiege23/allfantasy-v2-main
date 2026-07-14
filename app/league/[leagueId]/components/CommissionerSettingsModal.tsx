@@ -6,6 +6,7 @@ import type { CommissionerSettingsFormData } from '@/lib/league/commissioner-lea
 import { useAutosave } from '@/lib/hooks/useAutosave'
 import { LeagueSettingsPanel } from './settings/LeagueSettingsPanel'
 import { PlaceholderPanel } from './settings/PlaceholderPanel'
+import { TeamSettingsPanel } from './settings/TeamSettingsPanel'
 import { PlayoffSettingsPanel } from './settings/PlayoffSettingsPanel'
 import { TradeSettingsPanel } from './settings/TradeSettingsPanel'
 import { WaiverLeagueSettingsPanel } from './settings/WaiverLeagueSettingsPanel'
@@ -364,7 +365,7 @@ export function CommissionerSettingsModal({
               debouncedSave={debouncedSave}
             />
           ) : activeTab === 'team' ? (
-            <PlaceholderPanel title="Team Settings" subtitle="Names, logos, and owner assignment." />
+            <TeamSettingsPanel leagueId={leagueId} canEdit={canEdit} />
           ) : activeTab === 'roster' ? (
             <RosterComplianceSettingsPanel initialData={initialData} canEdit={canEdit} debouncedSave={debouncedSave} />
           ) : activeTab === 'scoring' ? (

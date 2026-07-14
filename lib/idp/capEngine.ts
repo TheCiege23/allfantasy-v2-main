@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import type { IDPDeadMoney, IDPSalaryRecord } from '@prisma/client'
+import type { IDPDeadMoney, IDPSalaryRecord, Prisma } from '@prisma/client'
 
 export type CapSummary = {
   totalCap: number
@@ -745,6 +745,46 @@ export async function applyRedraftTradeCapTransfers(
   for (const r of rosterIds) {
     await refreshCapProjections(leagueId, r)
   }
+}
+
+export type RedraftTradeCapTransferResult = {
+  moved: number
+  transactionIds: string[]
+}
+
+export async function applyRedraftTradeCapTransfersInTransaction(
+  tx: Prisma.TransactionClient,
+  leagueId: string,
+  proposerRosterId: string,
+  receiverRosterId: string,
+  proposerOffers: TradeOfferJson,
+  receiverOffers: TradeOfferJson,
+): Promise<RedraftTradeCapTransferResult> {
+  const cfg = await tx.iDPCapConfig.findUnique({ where: { leagueId } })
+  if (!cfg) return { moved: 0, transactionIds: [] }
+  const directions = [
+    ...extractPlayerIdsFromOffers(proposerOffers).map((playerId) => ({ playerId, fromRosterId: proposerRosterId, toRosterId: receiverRosterId })),
+    ...extractPlayerIdsFromOffers(receiverOffers).map((playerId) => ({ playerId, fromRosterId: receiverRosterId, toRosterId: proposerRosterId })),
+  ]
+  let moved = 0
+  const transactionIds: string[] = []
+  for (const direction of directions) {
+    const rec = await tx.iDPSalaryRecord.findFirst({ where: { leagueId, rosterId: direction.fromRosterId, playerId: direction.playerId, status: { in: [...ACTIVE_STATUSES] } } })
+    if (!rec) continue
+    await tx.iDPSalaryRecord.update({ where: { id: rec.id }, data: { rosterId: direction.toRosterId } })
+    // Individual creates (not createMany) so each row's id can be captured into
+    // the trade execution snapshot's dependencies.sourceTransactionIds — required
+    // for reversal preflight to detect IDP cap dependencies (Part 9 IDP_CAP_DEPENDENCY).
+    const tradeOut = await tx.iDPCapTransaction.create({ data:
+      { leagueId, rosterId: direction.fromRosterId, playerId: rec.playerId, playerName: rec.playerName, isDefensive: rec.isDefensive, transactionType: 'trade_out', salary: rec.salary, contractYears: rec.yearsRemaining, deadMoneyCreated: 0, capImpact: -rec.salary, season: cfg.season },
+    })
+    const tradeIn = await tx.iDPCapTransaction.create({ data:
+      { leagueId, rosterId: direction.toRosterId, playerId: rec.playerId, playerName: rec.playerName, isDefensive: rec.isDefensive, transactionType: 'trade_in', salary: rec.salary, contractYears: rec.yearsRemaining, deadMoneyCreated: 0, capImpact: rec.salary, season: cfg.season },
+    })
+    transactionIds.push(tradeOut.id, tradeIn.id)
+    moved += 1
+  }
+  return { moved, transactionIds }
 }
 
 export async function expireContractsForNewSeason(

@@ -335,7 +335,9 @@ function buildRetentionDistribution(
   leagues: LeagueBehavioralIntelligence[],
   managers: ManagerBehavioralIntelligence[],
 ): PlatformRetentionDistribution {
-  const mc = { critical: 0, high: 0, medium: 0, low: 0 }
+  // Phase 36: insufficient_data counted separately so it never silently inflates any of the
+  // four real risk tiers below — a manager with no real evidence either way is none of them.
+  const mc = { critical: 0, high: 0, medium: 0, low: 0, insufficient_data: 0 }
   for (const m of managers) mc[m.retentionRisk]++
   const tm = managers.length
 

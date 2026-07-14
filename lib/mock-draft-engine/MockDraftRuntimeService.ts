@@ -291,10 +291,12 @@ function playerKey(playerName: string, position: string) {
   return `${playerName.trim().toLowerCase()}|${position.trim().toUpperCase()}`
 }
 
-async function loadPool(settings: MockDraftSettings): Promise<DraftPlayer[]> {
+export async function loadMockDraftPlayerPool(settings: MockDraftSettings): Promise<DraftPlayer[]> {
   const target = settings.numTeams * settings.rounds + 120
   const sport = normalizeToSupportedSport(settings.sport)
-  if (sport === 'NFL' || sport === 'NCAAF') {
+  // The legacy live ADP feed is NFL-only. NCAAF must always resolve through
+  // the sport-aware pool so pro players can never leak into a college draft.
+  if (sport === 'NFL') {
     const adp = await getLiveADP(settings.leagueType === 'dynasty' ? 'dynasty' : 'redraft', target).catch(() => [])
     if (adp.length > 0) {
       return adp.map((row) => ({
@@ -321,7 +323,7 @@ async function chooseCpuPlayer(
   manager: string,
   overall: number
 ): Promise<DraftPlayer> {
-  const pool = await loadPool(settings)
+  const pool = await loadMockDraftPlayerPool(settings)
   const drafted = new Set(results.map((pick) => playerKey(pick.playerName, pick.position)))
   const available = pool.filter((player) => !drafted.has(playerKey(player.name, player.position)))
   if (available.length === 0) {

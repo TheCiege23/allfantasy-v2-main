@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo, useState } from 'react'
-import { ListOrdered, GripVertical, X, Zap, UserMinus, Play, ChevronDown } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { ListOrdered, GripVertical, X, Zap, UserMinus, Play, ChevronDown, Trash2 } from 'lucide-react'
 import type { QueueEntry } from '@/lib/live-draft-engine/types'
 import { DRAFT_ROOM } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
@@ -25,6 +25,7 @@ export type QueuePanelProps = {
   >
   canDraft: boolean
   onRemove: (index: number) => void
+  onClear?: () => void
   onReorder: (fromIndex: number, toIndex: number) => void
   onDraftFromQueue?: (entry: QueueEntry) => void
   onAiReorder?: () => void
@@ -57,6 +58,7 @@ export function QueuePanel({
   playerMetaById,
   canDraft,
   onRemove,
+  onClear,
   onReorder,
   onDraftFromQueue,
   onAiReorder,
@@ -81,8 +83,9 @@ export function QueuePanel({
   const [searchQuery, setSearchQuery] = useState('')
   const [positionFilter, setPositionFilter] = useState('ALL')
   const [sortMode, setSortMode] = useState<QueueSortMode>('queue')
+  const [confirmClear, setConfirmClear] = useState(false)
 
-  const resolveMeta = (entry: QueueEntry) => {
+  const resolveMeta = useCallback((entry: QueueEntry) => {
     const fromMap =
       entry.playerId && playerMetaById ? playerMetaById[entry.playerId] : undefined
     const fromEntry = entry as QueueEntry & {
@@ -99,7 +102,7 @@ export function QueuePanel({
       injuryStatus: fromMap?.injuryStatus ?? null,
       experienceBadge: fromMap?.experienceBadge ?? null,
     }
-  }
+  }, [playerMetaById])
 
   const formatNumber = (value: number | null | undefined) => {
     if (value == null || !Number.isFinite(value)) return null
@@ -145,7 +148,7 @@ export function QueuePanel({
       const bm = resolveMeta(b.entry)
       return safeValue(am.aiAdp) - safeValue(bm.aiAdp)
     })
-  }, [queueWithIndex, positionFilter, normalizedQuery, sortMode])
+  }, [queueWithIndex, positionFilter, normalizedQuery, sortMode, resolveMeta])
 
   const canReorderVisually =
     sortMode === 'queue' &&
@@ -168,27 +171,76 @@ export function QueuePanel({
         <div className="flex items-center gap-2">
           <ListOrdered className="h-3.5 w-3.5 text-cyan-400" />
           <span className="text-xs font-semibold uppercase tracking-[0.12em] text-white/92">Queue</span>
+          <span
+            className="inline-flex min-w-5 items-center justify-center rounded-full border border-cyan-300/25 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold text-cyan-100"
+            aria-label={`${queue.length} ${queue.length === 1 ? 'player' : 'players'} queued`}
+            data-testid="draft-queue-count"
+          >
+            {queue.length}
+          </span>
         </div>
-        <label className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-white/75">
-          <input
-            type="checkbox"
-            checked={autoPickFromQueue}
-            onChange={(e) => {
-              if (analyticsLeagueId) {
-                sendProductAnalyticsBeacon(DRAFT_ROOM.AUTOPICK_QUEUE, {
-                  leagueId: analyticsLeagueId,
-                  enabled: e.target.checked,
-                })
-              }
-              onAutoPickFromQueueChange(e.target.checked)
-            }}
-            disabled={!autoPickEnabled}
-            data-testid="draft-queue-autopick-toggle-header"
-            className="h-3 w-3 rounded border-white/20"
-          />
-          Auto-pick
-        </label>
+        <div className="flex items-center gap-1.5">
+          {onClear && queue.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setConfirmClear(true)}
+              className="inline-flex min-h-[36px] min-w-[36px] items-center justify-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/45"
+              aria-label="Clear draft queue"
+              data-testid="draft-queue-clear"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          <label className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border border-white/[0.08] bg-[#0d1428] px-2 py-0.5 text-[9px] uppercase tracking-[0.12em] text-white/75">
+            <input
+              type="checkbox"
+              checked={autoPickFromQueue}
+              onChange={(e) => {
+                if (analyticsLeagueId) {
+                  sendProductAnalyticsBeacon(DRAFT_ROOM.AUTOPICK_QUEUE, {
+                    leagueId: analyticsLeagueId,
+                    enabled: e.target.checked,
+                  })
+                }
+                onAutoPickFromQueueChange(e.target.checked)
+              }}
+              disabled={!autoPickEnabled}
+              data-testid="draft-queue-autopick-toggle-header"
+              className="h-3 w-3 rounded border-white/20"
+            />
+            Auto-pick
+          </label>
+        </div>
       </div>
+      {confirmClear ? (
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 border-b border-amber-300/20 bg-amber-500/[0.08] px-2.5 py-2 text-[11px] text-amber-100"
+          role="alert"
+          data-testid="draft-queue-clear-confirmation"
+        >
+          <span>Clear all {queue.length} queued {queue.length === 1 ? 'player' : 'players'}?</span>
+          <span className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setConfirmClear(false)}
+              className="min-h-[36px] rounded-lg border border-white/15 px-3 font-semibold text-white/75 hover:bg-white/10"
+            >
+              Keep queue
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirmClear(false)
+                onClear?.()
+              }}
+              className="min-h-[36px] rounded-lg border border-amber-300/35 bg-amber-500/15 px-3 font-semibold text-amber-50 hover:bg-amber-500/25"
+              data-testid="draft-queue-clear-confirm"
+            >
+              Clear queue
+            </button>
+          </span>
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-1 border-b border-white/[0.06] p-1 sm:grid-cols-2 lg:grid-cols-3">
         <input
           type="search"

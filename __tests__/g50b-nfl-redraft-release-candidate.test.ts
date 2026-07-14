@@ -109,20 +109,28 @@ describe('G50B NFL redraft release candidate RC1', () => {
     expect(safeText(persisted)).not.toContain('client_secret')
   })
 
-  it('defers injury cron canonical sync instead of inventing a provider capability', async () => {
-    const result = await syncNflRedraftCronCanonicalCache({
-      job: 'import-injuries',
-      sport: 'NFL',
-      season: '2026',
-    })
+  it('syncs injuries through the first-class canonical capability', async () => {
+    const upsert = vi.fn().mockResolvedValue({})
+    const result = await syncNflRedraftCronCanonicalCache(
+      {
+        job: 'import-injuries',
+        sport: 'NFL',
+        season: '2026',
+      },
+      {
+        now: () => new Date('2026-09-13T20:00:00.000Z'),
+        prisma: { sportsDataCache: { upsert } },
+        resolveProviderCapability: vi.fn(async () => resolution('injuries')),
+      },
+    )
 
     expect(result).toMatchObject({
-      status: 'deferred',
-      capability: null,
-      cacheKey: null,
-      deferredReason: 'missing_orchestrator_injury_capability',
+      status: 'synced',
+      capability: 'injuries',
+      selectedProvider: 'rolling_insights',
+      deferredReason: null,
     })
-    expect(result.warnings.join(' ')).toContain('standalone injury capability')
+    expect(upsert).toHaveBeenCalledOnce()
   })
 
   it('skips non-NFL cron canonical sync because G50B is scoped to AF NFL Redraft only', async () => {

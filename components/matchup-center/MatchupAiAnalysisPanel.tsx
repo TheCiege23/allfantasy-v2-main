@@ -17,12 +17,12 @@ export function MatchupAiAnalysisPanel({
   onRun: () => void
 }) {
   return (
-    <div className="rounded-2xl border border-violet-400/20 bg-[#0a1228]/90 p-3">
+    <div className="rounded-2xl border border-brand-decision/20 bg-surface p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-violet-300/90" />
-          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/55">AI matchup breakdown</h3>
-          <span className="text-[10px] text-white/35">{sport}</span>
+          <h3 className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted">AI matchup breakdown</h3>
+          <span className="text-[10px] text-muted">{sport}</span>
         </div>
         <button
           type="button"
@@ -39,7 +39,7 @@ export function MatchupAiAnalysisPanel({
       {error ? <p className="mt-2 text-[12px] text-red-200/90">{error}</p> : null}
 
       {result ? (
-        <div className="mt-3 space-y-2 text-[12px] leading-snug text-white/80">
+        <div className="mt-3 space-y-2 text-[12px] leading-snug text-secondary">
           <p>
             <span className="font-semibold text-violet-200/90">Summary: </span>
             {result.summary}
@@ -47,7 +47,7 @@ export function MatchupAiAnalysisPanel({
           <p>
             <span className="font-semibold text-violet-200/90">Edge: </span>
             {result.edge.headline}{' '}
-            <span className="text-white/45">
+            <span className="text-muted">
               ({result.edge.side === 'left' ? 'you' : result.edge.side === 'right' ? 'opp' : 'toss-up'} ·{' '}
               {result.edge.confidencePct}%)
             </span>
@@ -57,10 +57,10 @@ export function MatchupAiAnalysisPanel({
             {(result.upsetProbability * 100).toFixed(0)}% implied upset range vs projections
           </p>
           {result.keyPlayers.length > 0 ? (
-            <ul className="list-disc space-y-1 pl-4 text-[11px] text-white/70">
+            <ul className="list-disc space-y-1 pl-4 text-[11px] text-secondary">
               {result.keyPlayers.map((k, i) => (
                 <li key={i}>
-                  <span className="font-medium text-white/85">{k.name}</span> — {k.note}
+                  <span className="font-medium text-primary">{k.name}</span> - {k.note}
                 </li>
               ))}
             </ul>
@@ -83,15 +83,15 @@ export function MatchupAiAnalysisPanel({
             <span className="font-semibold text-amber-200/85">If you need upside → </span>
             {result.scenarios.ifNeedUpside}
           </p>
-          <p className="text-[10px] text-white/45">{result.winProbabilityNotes}</p>
-          <p className="text-[10px] text-white/35">
+          <p className="text-[10px] text-muted">{result.winProbabilityNotes}</p>
+          <p className="text-[10px] text-muted">
             Providers: OA {result.providers.openai} · DS {result.providers.deepseek} · Grok {result.providers.grok}.{' '}
             {result.dataNotes}
           </p>
         </div>
       ) : (
-        <p className="mt-2 text-[11px] text-white/40">
-          Uses DeepSeek + Grok (xAI) + OpenAI on server — grounded in your lineup and scoring context.
+        <p className="mt-2 text-[11px] text-muted">
+          Uses DeepSeek + Grok (xAI) + OpenAI on server - grounded in your lineup and scoring context.
         </p>
       )}
     </div>

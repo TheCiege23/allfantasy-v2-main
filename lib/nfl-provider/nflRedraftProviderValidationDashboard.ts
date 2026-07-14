@@ -274,7 +274,7 @@ export function listNflRedraftLegacyDirectProviderAudit(): NflRedraftLegacyDirec
       riskLevel: 'medium',
       migrateNow: false,
       suggestedCanonicalReplacement: 'Use G49H live_stats resolver or a provider-sync job that writes canonical cache first.',
-      notes: 'Cron/import path is not customer UI, but it bypasses the orchestrator as a sync entry point.',
+      notes: 'G50 migrated NFL score ingestion through the canonical score capability and cache handoff.',
     },
     {
       routeOrFile: 'app/api/cron/import-schedules/route.ts',
@@ -282,7 +282,7 @@ export function listNflRedraftLegacyDirectProviderAudit(): NflRedraftLegacyDirec
       riskLevel: 'medium',
       migrateNow: false,
       suggestedCanonicalReplacement: 'Use G49H schedule resolver and canonical SportsDataCache handoff.',
-      notes: 'Safe to defer until import jobs are migrated as a group.',
+      notes: 'G50 migrated the NFL API-Sports schedule supplement through the canonical schedule capability.',
     },
     {
       routeOrFile: 'app/api/cron/import-standings/route.ts',
@@ -298,7 +298,7 @@ export function listNflRedraftLegacyDirectProviderAudit(): NflRedraftLegacyDirec
       riskLevel: 'medium',
       migrateNow: false,
       suggestedCanonicalReplacement: 'Route provider injury import through G49H canonical player intelligence cache.',
-      notes: 'Enhancement data should remain optional and stale-aware.',
+      notes: 'G50 migrated NFL injury ingestion through the canonical injury capability and cache handoff.',
     },
     {
       routeOrFile: 'app/api/sports/sync/route.ts',
@@ -306,7 +306,7 @@ export function listNflRedraftLegacyDirectProviderAudit(): NflRedraftLegacyDirec
       riskLevel: 'medium',
       migrateNow: false,
       suggestedCanonicalReplacement: 'Split sync into provider adapters that feed the G49H canonical cache path.',
-      notes: 'Broad admin sync surface; migrate after redraft-specific callers are settled.',
+      notes: 'NFL game and injury branches migrated in G50; team, standings, and identity operations remain a broader legacy admin surface.',
     },
     {
       routeOrFile: 'app/api/sports/weather/route.ts',
@@ -327,10 +327,10 @@ export function listNflRedraftLegacyDirectProviderAudit(): NflRedraftLegacyDirec
     {
       routeOrFile: 'app/api/fantasycalc/route.ts',
       providerUsed: 'FantasyCalc',
-      riskLevel: 'medium',
+      riskLevel: 'low',
       migrateNow: false,
       suggestedCanonicalReplacement: 'Use G49H fantasy_valuations resolver with canonical cache before hidden fallback.',
-      notes: 'G49J migrated single-player valuation lookup; list, trending, and trade comparison legacy shapes remain deferred.',
+      notes: 'G51 migrated single-player, list, directory, trending, comparison, rankings, trade, waiver, replay, and shared runtime consumers through the canonical valuation gateway.',
     },
     {
       routeOrFile: 'app/api/redraft/*',

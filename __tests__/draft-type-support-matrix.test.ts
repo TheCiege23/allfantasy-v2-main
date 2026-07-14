@@ -106,7 +106,12 @@ describe('draft type support matrix', () => {
   })
 
   it('isDraftTypeAllowedForConceptAndSport mirrors getDraftTypesForConceptAndSport', () => {
-    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'slow_draft')).toBe(false)
+    // slow_draft + mock_draft are valid redraft draft types (added with the
+    // NFL/NCAAF redraft defaults). The mirror must accept them.
+    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'slow_draft')).toBe(true)
+    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'mock_draft')).toBe(true)
+    // Specialty/format-scoped ids outside the redraft family are still rejected.
+    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'devy_snake')).toBe(false)
     expect(isDraftTypeAllowedForConceptAndSport('NFL', 'salary_cap', 'snake')).toBe(false)
   })
 })

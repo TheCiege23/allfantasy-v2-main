@@ -6,15 +6,20 @@ const getServerSessionMock = vi.fn()
 const assertLeagueMemberMock = vi.fn()
 const validateRedraftTradeCapMock = vi.fn()
 const applyRedraftTradeCapTransfersMock = vi.fn()
+const refreshCapProjectionsMock = vi.fn()
 const enqueueCollusionScanMock = vi.fn()
+const emitInTxMock = vi.fn(async () => ({ eventId: 'event-trade-executed' }))
+const emitMock = vi.fn(async () => ({ eventId: 'event-compat' }))
 
 const prismaMock = {
   redraftTradeProposal: {
     findMany: vi.fn(),
     create: vi.fn(),
     findUnique: vi.fn(),
+    findUniqueOrThrow: vi.fn(),
     findFirst: vi.fn(),
     update: vi.fn(),
+    updateMany: vi.fn(),
   },
   redraftTradeAsset: {
     createMany: vi.fn(),
@@ -29,12 +34,14 @@ const prismaMock = {
     findFirst: vi.fn(),
     create: vi.fn(),
     update: vi.fn(),
+    upsert: vi.fn(async ({ create }: any) => create),
   },
   redraftLeagueTrade: {
     create: vi.fn(),
   },
   redraftSeason: {
     findFirst: vi.fn(),
+    findUnique: vi.fn(),
   },
   redraftRoster: {
     findFirst: vi.fn(),
@@ -44,8 +51,12 @@ const prismaMock = {
     count: vi.fn(async () => 2),
   },
   redraftRosterPlayer: {
+    findMany: vi.fn(),
     updateMany: vi.fn(),
   },
+  iDPSalaryRecord: { findMany: vi.fn(async () => []) },
+  tradeExecutionSnapshot: { create: vi.fn(async ({ data }: any) => data) },
+  leagueAuditLog: { create: vi.fn(async ({ data }: any) => data) },
   // T2 value snapshot capture (best-effort in the route; defaults keep the contract test focused).
   adpDataRecord: {
     findMany: vi.fn(async () => []),
@@ -53,6 +64,9 @@ const prismaMock = {
   redraftTradeValueSnapshot: {
     create: vi.fn(async () => ({})),
     findUnique: vi.fn(async () => null),
+  },
+  redraftTradeMarketEvent: {
+    create: vi.fn(async () => ({})),
   },
   redraftPlayoffBracket: {
     upsert: vi.fn(),
@@ -94,6 +108,8 @@ vi.mock('@/lib/league/league-access', () => ({
 vi.mock('@/lib/idp/capEngine', () => ({
   validateRedraftTradeCap: validateRedraftTradeCapMock,
   applyRedraftTradeCapTransfers: applyRedraftTradeCapTransfersMock,
+  applyRedraftTradeCapTransfersInTransaction: applyRedraftTradeCapTransfersMock,
+  refreshCapProjections: refreshCapProjectionsMock,
 }))
 
 vi.mock('@/lib/integrity/enqueueCollusionScan', () => ({
@@ -102,6 +118,11 @@ vi.mock('@/lib/integrity/enqueueCollusionScan', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: prismaMock,
+}))
+
+vi.mock('@/lib/events', () => ({
+  EVENT: { TRADE_ACCEPTED: 'transaction.trade.accepted', TRADE_PROCESSED: 'transaction.trade.processed', TRADE_EXECUTED: 'transaction.trade.executed', IDP_CAP_PROJECTION_REFRESH_REQUESTED: 'idp.cap_projection_refresh_requested' },
+  getPlatformEvents: () => ({ emit: emitMock, emitInTx: emitInTxMock }),
 }))
 
 describe('Redraft trade proposals route contract', () => {
@@ -124,7 +145,9 @@ describe('Redraft trade proposals route contract', () => {
   })
 
   it('creates a normalized proposal with assets', async () => {
-    prismaMock.redraftSeason.findFirst.mockResolvedValueOnce({ id: 's-1', leagueId: 'l-1' })
+    prismaMock.redraftSeason.findFirst.mockResolvedValueOnce({ id: 's-1', leagueId: 'l-1', currentWeek: 1, sport: 'NFL', season: 2026 })
+    prismaMock.league.findUnique.mockResolvedValueOnce({ id: 'l-1', settings: {}, tradeReviewHours: 48, tradeDeadlineWeek: null, draftPickTrading: false, lockAllMoves: false, bestBallMode: false, guillotineMode: false })
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValueOnce([{ rosterId: 'r-1', playerId: 'p-1', isLocked: false, addedAt: new Date(0), acquisitionType: 'drafted' }])
     prismaMock.redraftRoster.findFirst
       .mockResolvedValueOnce({ id: 'r-1', ownerId: 'u-1' })
       .mockResolvedValueOnce({ id: 'r-2', ownerId: 'u-2' })
@@ -151,7 +174,7 @@ describe('Redraft trade proposals route contract', () => {
         proposerRosterId: 'r-1',
         receiverRosterId: 'r-2',
         reason: 'Need RB depth',
-        assets: [{ fromRosterId: 'r-1', toRosterId: 'r-2', assetType: 'future_consideration' }],
+        assets: [{ fromRosterId: 'r-1', toRosterId: 'r-2', assetType: 'player', playerId: 'p-1' }],
       },
     })
 
@@ -168,8 +191,36 @@ describe('Redraft trade votes route contract', () => {
     getServerSessionMock.mockResolvedValue({ user: { id: 'u-2' } })
     assertLeagueMemberMock.mockResolvedValue({ ok: true, status: 200 })
     validateRedraftTradeCapMock.mockResolvedValue({ ok: true })
-    applyRedraftTradeCapTransfersMock.mockResolvedValue(undefined)
+    applyRedraftTradeCapTransfersMock.mockResolvedValue({ moved: 0, transactionIds: [] })
+    refreshCapProjectionsMock.mockResolvedValue(undefined)
     enqueueCollusionScanMock.mockResolvedValue(undefined)
+    prismaMock.redraftTradeProposal.updateMany.mockResolvedValue({ count: 1 })
+    prismaMock.redraftTradeProposal.findUniqueOrThrow.mockImplementation(async ({ where }: { where: { id: string } }) => ({
+      id: where.id,
+      status: 'accepted',
+    }))
+    prismaMock.redraftSeason.findUnique.mockResolvedValue({
+      id: 's-1',
+      sport: 'NFL',
+      season: 2026,
+      currentWeek: 1,
+    })
+    prismaMock.league.findUnique.mockResolvedValue({
+      scoring: 'ppr',
+      tradeReviewHours: 48,
+    })
+    prismaMock.redraftRoster.count.mockResolvedValue(2)
+    prismaMock.redraftRoster.findMany.mockResolvedValue([])
+    prismaMock.redraftRosterPlayer.findMany.mockResolvedValue([])
+    prismaMock.redraftRoster.findUnique.mockResolvedValue({
+      id: 'r-1',
+      wins: 0,
+      losses: 0,
+      ties: 0,
+      pointsFor: 0,
+      playoffSeed: null,
+      players: [],
+    })
   })
 
   it('accepts a pending proposal by receiver owner', async () => {

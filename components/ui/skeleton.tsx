@@ -10,7 +10,7 @@ function Skeleton({
   if (variant === "pulse") {
     return (
       <div
-        className={cn("animate-pulse rounded-md bg-[color:var(--subtle-bg)]", className)}
+        className={cn("animate-pulse rounded-md bg-surface-muted", className)}
         {...props}
       />
     )
@@ -18,7 +18,7 @@ function Skeleton({
 
   return (
     <div
-      className={cn("relative overflow-hidden rounded-md bg-[color:var(--subtle-bg)]", className)}
+      className={cn("relative overflow-hidden rounded-md bg-surface-muted", className)}
       {...props}
     >
       <div className="animate-shimmer absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.07] to-transparent" />

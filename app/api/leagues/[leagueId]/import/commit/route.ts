@@ -19,6 +19,12 @@ import {
   applyImportedLeagueToExistingLeague,
   type ExistingLeagueImportApplyOptions,
 } from '@/lib/league-import/LeagueImportToExistingService'
+import {
+  runSleeperImportValidation,
+  toImportWarningRecords,
+  type SleeperImportValidationResult,
+} from '@/lib/league-import/sleeper/SleeperImportValidation'
+import type { SleeperImportPayload } from '@/lib/league-import/adapters/sleeper/types'
 
 export const dynamic = 'force-dynamic'
 
@@ -100,12 +106,26 @@ export async function POST(
       apply,
       canonicalBundle: canonical,
     })
+
+    // Provider-specific validation, never gating the commit — see
+    // SleeperImportValidation.ts. A reporting-layer failure here is logged and
+    // swallowed so it can never block a real, valid import into this league.
+    let validation: SleeperImportValidationResult | undefined
+    if (provider === 'sleeper') {
+      try {
+        validation = await runSleeperImportValidation(result.rawPayload as SleeperImportPayload, userId)
+      } catch (err) {
+        console.warn('[import commit existing league] Sleeper validation failed (import still proceeds):', err)
+      }
+    }
+
     const audit = await recordCanonicalImportAuditForExistingLeague({
       userId,
       leagueId,
       provider,
       normalized: result.normalized,
       canonical,
+      additionalWarnings: validation ? toImportWarningRecords(validation.findings) : undefined,
     })
 
     void import('@/lib/league-events/publisher')
@@ -138,6 +158,7 @@ export async function POST(
         reviewReasons: canonical.reviewReasons,
         warnings: canonical.warnings,
       },
+      validation,
     })
   } catch (e) {
     return NextResponse.json(

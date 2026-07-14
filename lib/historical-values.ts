@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { fetchFantasyCalcValues, findPlayerByName } from './fantasycalc';
+import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/player-valuations/canonicalPlayerValuations';
 import { pickValue } from './pick-valuation';
 
 const DATA_DIR = path.join(process.cwd(), 'data', 'historical-values');

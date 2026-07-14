@@ -3,7 +3,7 @@ import {
   fetchFantasyCalcValues, 
   findPlayerByName,
   FantasyCalcPlayer 
-} from './fantasycalc';
+} from '@/lib/player-valuations/canonicalPlayerValuations';
 import {
   calculateDynastyScore,
   findPlayerTier,

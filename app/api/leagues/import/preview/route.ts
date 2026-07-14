@@ -21,6 +21,7 @@ function mapImportPreviewErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
+  if (code === 'NORMALIZATION_FAILED') return 422
   return 500
 }
 
@@ -33,7 +34,12 @@ export async function POST(req: NextRequest) {
   let body: {
     provider?: string
     sourceId?: string
-    attestation?: { accepted?: boolean; statement?: string }
+    attestation?: {
+      accepted?: boolean
+      statement?: string
+      confirmedProvider?: string
+      confirmedSourceLeagueId?: string
+    }
   }
   try {
     body = await req.json()
@@ -65,10 +71,21 @@ export async function POST(req: NextRequest) {
     provider,
     sourceLeagueId: sourceId,
     attestation: body.attestation?.accepted
-      ? { accepted: true, statement: body.attestation.statement }
+      ? {
+          accepted: true,
+          statement: body.attestation.statement,
+          confirmedProvider: resolveProvider(body.attestation.confirmedProvider ?? '') ?? undefined,
+          confirmedSourceLeagueId: body.attestation.confirmedSourceLeagueId,
+        }
       : undefined,
   })
   if (!gate.ok) {
+    if (gate.notFound) {
+      return NextResponse.json(
+        { error: gate.reason ?? 'League not found.', code: 'LEAGUE_NOT_FOUND' },
+        { status: 404 },
+      )
+    }
     return NextResponse.json(
       {
         error: gate.reason ?? 'Commissioner verification failed.',

@@ -20,6 +20,11 @@ export const FantraxLeagueMapper: IExternalLeagueMapper<FantraxImportPayload> = 
           : null,
       scoring: inferredScoring,
       isDynasty: source.league.isDevy,
+      // Same fix as Sleeper/ESPN/Yahoo/MFL: `League.status` has no DB default,
+      // so a missing value here leaves imported leagues invisible on Dashboard.
+      // Fantrax's real signal is a season-year comparison (`FantraxImportLeague.isFinished`),
+      // consistent with a CSV snapshot upload — there is no live in-season flag.
+      status: source.league.isFinished ? 'complete' : 'in_season',
       playoff_team_count: undefined,
       regular_season_length: source.schedule.length > 0 ? source.schedule.length : undefined,
       schedule_unit: 'week',

@@ -6,6 +6,7 @@
 import type { League, LeagueLifecycleState, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { logAction } from '@/server/services/auditService'
+import { EVENT, getPlatformEvents } from '@/lib/events'
 
 export type LeagueLifecycleAction =
   | 'draft_pick'
@@ -40,8 +41,8 @@ export type LeagueLifecycleAction =
   | 'legacy_view'
 
 const TRANSITIONS: Record<LeagueLifecycleState, LeagueLifecycleState[]> = {
-  setup: ['pre_draft', 'archived'],
-  pre_draft: ['drafting', 'setup', 'archived'],
+  setup: ['pre_draft', 'post_draft', 'archived'],
+  pre_draft: ['drafting', 'post_draft', 'setup', 'archived'],
   drafting: ['post_draft', 'pre_draft', 'archived'],
   post_draft: ['in_season', 'drafting', 'archived'],
   in_season: ['playoffs', 'completed', 'drafting', 'archived'],
@@ -179,6 +180,13 @@ export function normalizeLifecycleState(raw: string | null | undefined): LeagueL
   const s = String(raw || 'in_season') as LeagueLifecycleState
   if (s in TRANSITIONS) return s
   return 'in_season'
+}
+
+/** Strict parser for mutation boundaries; compatibility reads may still normalize legacy values. */
+export function parseLifecycleStateForWrite(raw: unknown): LeagueLifecycleState | null {
+  if (typeof raw !== 'string') return null
+  const value = raw.trim() as LeagueLifecycleState
+  return value in TRANSITIONS ? value : null
 }
 
 export function isOffseasonState(state: LeagueLifecycleState): boolean {
@@ -472,6 +480,84 @@ export function resolveLifecycleTransitionAfterDraftCompletes(
   return { target, force: true }
 }
 
+export type TransactionalLifecycleTransitionResult = {
+  applied: boolean
+  from: LeagueLifecycleState
+  to: LeagueLifecycleState
+  eventId?: string
+}
+
+/**
+ * Canonical transaction port for engine-owned lifecycle changes. State, immutable
+ * audit evidence, and the durable outbox event commit or roll back together.
+ */
+export async function transitionLeagueStateInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    leagueId: string
+    nextState: LeagueLifecycleState
+    actorUserId?: string | null
+    source: string
+    idempotencyKey: string
+    metadata?: Record<string, unknown>
+  },
+): Promise<TransactionalLifecycleTransitionResult> {
+  const league = await tx.league.findUnique({
+    where: { id: input.leagueId },
+    select: { lifecycleState: true, lifecycleMetadata: true },
+  })
+  if (!league) throw new Error('League not found')
+
+  const current = getLeagueLifecycleState(league)
+  if (current === input.nextState) {
+    return { applied: false, from: current, to: current }
+  }
+  const allowed = validateTransition(current, input.nextState)
+  if (!allowed.ok) throw new Error(allowed.reason)
+
+  const changedAt = new Date().toISOString()
+  await tx.league.update({
+    where: { id: input.leagueId },
+    data: {
+      lifecycleState: input.nextState,
+      lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
+        lastTransitionAt: changedAt,
+        lastTransitionFrom: current,
+        transitionSource: input.source,
+        transitionIdempotencyKey: input.idempotencyKey,
+        ...(input.metadata ?? {}),
+      }),
+    },
+  })
+
+  await tx.leagueAuditLog.create({
+    data: {
+      leagueId: input.leagueId,
+      userId: input.actorUserId ?? null,
+      actionType: 'league_lifecycle_changed',
+      entityType: 'league',
+      entityId: input.leagueId,
+      beforeState: { lifecycleState: current },
+      afterState: { lifecycleState: input.nextState },
+      metadata: {
+        source: input.source,
+        idempotencyKey: input.idempotencyKey,
+        ...(input.metadata ?? {}),
+      },
+    },
+  })
+
+  const event = await getPlatformEvents().emitInTx(tx, EVENT.LEAGUE_LIFECYCLE_CHANGED, {
+    leagueId: input.leagueId,
+    actor: { type: input.actorUserId ? 'commissioner' : 'system', id: input.actorUserId ?? null },
+    idempotencyKey: input.idempotencyKey,
+    source: input.source,
+    subjects: [{ kind: 'league', id: input.leagueId }],
+    payload: { leagueId: input.leagueId, from: current, to: input.nextState },
+  })
+
+  return { applied: true, from: current, to: input.nextState, eventId: event.eventId }
+}
 export type ApplyPostDraftLifecycleResult = {
   applied: boolean
   from?: LeagueLifecycleState
@@ -486,35 +572,38 @@ export type ApplyPostDraftLifecycleResult = {
 export async function applyPostDraftLifecycleInTransaction(
   tx: Prisma.TransactionClient,
   leagueId: string,
+  draftId: string,
 ): Promise<ApplyPostDraftLifecycleResult> {
   const league = await tx.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, userId: true, lifecycleState: true, lifecycleMetadata: true },
+    select: { id: true, userId: true, lifecycleState: true },
   })
-  if (!league) {
-    return { applied: false }
-  }
+  if (!league) return { applied: false }
 
   const current = getLeagueLifecycleState(league)
   const resolved = resolveLifecycleTransitionAfterDraftCompletes(current)
   if (!resolved) {
     return { applied: false, from: current, commissionerUserId: league.userId }
   }
+  if (resolved.force) {
+    throw new Error(`Draft completion cannot transition from ${current} to ${resolved.target}`)
+  }
 
-  const { target } = resolved
-  await tx.league.update({
-    where: { id: leagueId },
-    data: {
-      lifecycleState: target,
-      lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
-        lastTransitionAt: new Date().toISOString(),
-        lastTransitionFrom: current,
-        draftCompletionAuto: true,
-      }),
-    },
+  const transition = await transitionLeagueStateInTransaction(tx, {
+    leagueId,
+    nextState: resolved.target,
+    actorUserId: league.userId,
+    source: 'engine:draft-complete',
+    idempotencyKey: `lifecycle:draft-complete:${draftId}`,
+    metadata: { draftId, draftCompletionAuto: true },
   })
 
-  return { applied: true, from: current, to: target, commissionerUserId: league.userId }
+  return {
+    applied: transition.applied,
+    from: transition.from,
+    to: transition.to,
+    commissionerUserId: league.userId,
+  }
 }
 
 /**

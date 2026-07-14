@@ -33,16 +33,72 @@ async function cfbdFetch<T>(path: string, params?: Record<string, string>): Prom
   return (await response.json()) as T
 }
 
+/**
+ * CFBD roster positions that map to fantasy-relevant slots. CFBD rosters
+ * include the full two-deep (OL/DL/etc.); we only seed offensive skill + K so
+ * the NCAAF player pool mirrors the fantasy roster in `configs/ncaaf.ts`.
+ */
+const CFBD_FANTASY_POSITIONS = new Set(['QB', 'RB', 'FB', 'WR', 'TE', 'K', 'PK', 'ATH'])
+
+export type CfbdPlayerSeed = {
+  id: string
+  name: string
+  team: string
+  position: string
+  jersey: number | null
+  classYear: number | null
+  height: number | null
+  weight: number | null
+  source: 'cfbd'
+}
+
+/**
+ * Pure: map raw CFBD `/roster` rows into fantasy-relevant player seeds. Accepts
+ * both the current camelCase and legacy snake_case field shapes, and filters to
+ * offensive skill positions + K so the NCAAF pool matches the fantasy roster.
+ */
+export function mapCfbdRosterToPlayerSeeds(rows: Array<Record<string, unknown>> | null | undefined): CfbdPlayerSeed[] {
+  return (rows ?? [])
+    .map((p): CfbdPlayerSeed => {
+      const first = String(p.firstName ?? p.first_name ?? '').trim()
+      const last = String(p.lastName ?? p.last_name ?? '').trim()
+      const name = `${first} ${last}`.trim()
+      const position = String(p.position ?? '').trim().toUpperCase()
+      const externalId = String(p.id ?? '').trim()
+      const team = String(p.team ?? '').trim()
+      return {
+        id: externalId || `${name}-${team}`,
+        name,
+        team,
+        position,
+        jersey: typeof p.jersey === 'number' ? p.jersey : null,
+        classYear: typeof p.year === 'number' ? p.year : null,
+        height: typeof p.height === 'number' ? p.height : null,
+        weight: typeof p.weight === 'number' ? p.weight : null,
+        source: 'cfbd',
+      }
+    })
+    .filter((p) => p.name && p.team && CFBD_FANTASY_POSITIONS.has(p.position))
+}
+
 export const cfbdProvider: ApiProvider = {
   name: 'cfbd',
   supports: ({ sport, dataType }: ApiFetchParams) =>
-    toApiChainSport(sport as string) === 'ncaaf' && ['teams', 'games', 'schedule'].includes(dataType),
+    toApiChainSport(sport as string) === 'ncaaf' && ['teams', 'games', 'schedule', 'players'].includes(dataType),
   async fetch({ dataType, query = {} }: ApiFetchParams) {
     const season = typeof query.season === 'string' && query.season.trim()
       ? query.season.trim()
       : currentSeason()
 
     switch (dataType) {
+      case 'players': {
+        // GET /roster?year=&classification=fbs — all FBS players for the season.
+        const rows = await cfbdFetch<Array<Record<string, unknown>>>('/roster', {
+          year: season,
+          classification: 'fbs',
+        })
+        return mapCfbdRosterToPlayerSeeds(rows)
+      }
       case 'teams': {
         const rows = await cfbdFetch<Array<Record<string, unknown>>>('/teams/fbs', { year: season })
         return (rows ?? []).map((team) => ({

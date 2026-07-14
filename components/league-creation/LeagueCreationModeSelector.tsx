@@ -58,7 +58,7 @@ export function LeagueCreationModeSelector({
           }`}
         >
           <p className="text-xl font-black text-white">Import Existing League</p>
-          <p className="text-sm text-white/65">Sleeper, ESPN, Yahoo, Fantrax, or MFL</p>
+          <p className="text-sm text-white/65">Choose from the supported providers shown in the next step</p>
         </button>
       </div>
       <Label className="text-cyan-300">League creation</Label>
@@ -76,7 +76,7 @@ export function LeagueCreationModeSelector({
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="create">Build New League - set sport, scoring, size, and options manually</SelectItem>
-          <SelectItem value="import">Import Existing League - import from Sleeper, ESPN, Yahoo, Fantrax, or MFL</SelectItem>
+          <SelectItem value="import">Import Existing League - choose a supported provider</SelectItem>
         </SelectContent>
       </Select>
     </div>

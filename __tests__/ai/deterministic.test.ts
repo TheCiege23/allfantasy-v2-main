@@ -22,7 +22,7 @@ const fetchFantasyCalcValuesMock = vi.hoisted(() => vi.fn())
 const getEnrichedNewsFeedMock = vi.hoisted(() => vi.fn())
 const getCachedGameWeatherMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@/lib/fantasycalc', () => ({
+vi.mock('@/lib/player-valuations/canonicalPlayerValuations', () => ({
   fetchFantasyCalcValues: fetchFantasyCalcValuesMock,
   findPlayerByName: (players: any[], name: string) =>
     players.find((row) => row.player.name.toLowerCase() === name.toLowerCase()) ?? null,

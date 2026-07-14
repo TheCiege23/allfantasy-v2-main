@@ -142,7 +142,7 @@ function normalizeMflPositionLabel(value: string): string {
     .toUpperCase()
 }
 
-function parseMflSourceInput(sourceInput: string): { leagueId: string; season: number } {
+export function parseMflSourceInput(sourceInput: string): { leagueId: string; season: number } {
   const trimmed = sourceInput.trim()
   if (!trimmed) {
     throw new MflImportLeagueNotFoundError('MFL league ID is required.')
@@ -291,6 +291,46 @@ async function fetchMflEndpoint(args: {
   }
 
   return parsed
+}
+
+/**
+ * Import Security Closure phase — real membership verification. MFL's real
+ * `TYPE=myleagues` export (confirmed live via a direct, unauthenticated
+ * call: `{"leagues":{}}` for no key, a real structured envelope, not a 404)
+ * returns exactly the leagues+franchise the API key's own owner is
+ * associated with — the only real signal MFL exposes for "is this key
+ * actually linked to a member of this league." It does NOT expose a
+ * commissioner/admin flag (confirmed absent from every real MFL response
+ * shape this codebase's own franchise parser already handles) — that
+ * remains a user-attested claim, handled by `commissionerGate.ts`'s
+ * existing attestation mechanism, not fabricated as provider-verified here.
+ */
+export async function fetchMflUserLeagues(
+  apiKey: string,
+  season: number,
+): Promise<Array<{ leagueId: string; franchiseId: string | null }>> {
+  const params = new URLSearchParams({ TYPE: 'myleagues', APIKEY: apiKey, JSON: '1' })
+  const url = `https://api.myfantasyleague.com/${season}/export?${params.toString()}`
+  const response = await fetch(url, {
+    cache: 'no-store',
+    headers: {
+      Accept: 'application/json, text/xml;q=0.9, */*;q=0.8',
+      'User-Agent': 'Mozilla/5.0 (compatible; AllFantasy/1.0)',
+    },
+  })
+  const body = await response.text()
+  const parsed = parseMflApiBody(body)
+  const message = resolveMflErrorMessage(parsed, body)
+  if (!response.ok || message) {
+    throwMflApiFailure(response.status, message || body || response.statusText)
+  }
+  const entries = toArray(parsed?.leagues?.league)
+  return entries
+    .map((entry) => ({
+      leagueId: stringifyMflValue(entry, ['league_id', 'id']),
+      franchiseId: stringifyMflValue(entry, ['franchise_id', 'franchiseId']) || null,
+    }))
+    .filter((entry) => entry.leagueId)
 }
 
 async function discoverMflPreviousSeasons(args: {

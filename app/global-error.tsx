@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
+import { captureException } from "@/lib/error-tracking"
 
 /**
  * Root-level global error boundary.
@@ -26,6 +27,7 @@ export default function GlobalError({
       digest: error?.digest,
       stack: error?.stack?.slice(0, 600),
     })
+    captureException(error, { context: "global-error", digest: error?.digest })
   }, [error])
 
   const bodyStyle = {

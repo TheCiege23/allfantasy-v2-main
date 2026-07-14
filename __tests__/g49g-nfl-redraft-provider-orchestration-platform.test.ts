@@ -90,7 +90,7 @@ describe('G49G NFL redraft provider orchestration platform', () => {
     expect(summaries.find((summary) => summary.providerId === 'api_sports')).toMatchObject({
       status: 'DEGRADED',
       healthReason: 'rate limit pressure',
-      activeFallbackCount: 5,
+      activeFallbackCount: 7,
     })
     expectNoCanonicalLeak(summaries)
   })

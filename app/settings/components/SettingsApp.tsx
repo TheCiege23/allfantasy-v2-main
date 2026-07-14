@@ -58,7 +58,7 @@ export default function SettingsApp({
 
   if (loading && !profile) {
     return (
-      <div className="min-h-[100dvh] bg-[#0d1117] px-4 py-8">
+      <div className="min-h-[100dvh] bg-app px-4 py-8 text-primary">
         <LoadingStateRenderer label={t("settings.loading")} testId="settings-loading-state" />
       </div>
     )
@@ -66,7 +66,7 @@ export default function SettingsApp({
 
   if (!loading && !profile) {
     return (
-      <div className="min-h-[100dvh] bg-[#0d1117] px-4 py-8">
+      <div className="min-h-[100dvh] bg-app px-4 py-8 text-primary">
         <ErrorStateRenderer
           title={t("settings.errorTitle")}
           message={error ?? t("settings.errorMessage")}

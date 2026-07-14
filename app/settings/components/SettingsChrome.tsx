@@ -78,7 +78,7 @@ export function SettingsChrome({
         type="button"
         onClick={() => onTabChange(tab.id)}
         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-          active ? 'font-semibold' : 'font-medium hover:bg-white/[0.04]'
+          active ? 'font-semibold' : 'font-medium hover:bg-surface-hover'
         } ${
           mobile ? 'shrink-0 whitespace-nowrap' : ''
         } ${active ? 'border-l-2 border-cyan-400' : 'border-l-2 border-transparent'}`}
@@ -104,30 +104,22 @@ export function SettingsChrome({
 
   return (
     <div
-      className="flex min-h-[100dvh] flex-col"
-      style={{ background: 'var(--bg)', color: 'var(--text)' }}
+      className="flex min-h-[100dvh] flex-col bg-app text-primary"
     >
       <header
-        className="flex shrink-0 items-center gap-3 border-b px-4 py-3"
-        style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
+        className="flex shrink-0 items-center gap-3 border-b border-subtle bg-app px-4 py-3"
       >
         <button
           type="button"
           onClick={() => router.push('/dashboard')}
-          className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition hover:opacity-90"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'var(--panel2)',
-            color: 'var(--text)',
-          }}
+          className="inline-flex items-center gap-2 rounded-lg border border-subtle bg-surface-muted px-3 py-2 text-sm font-medium text-primary transition hover:bg-surface-hover"
           data-testid="settings-home"
         >
           <Home className="h-5 w-5" style={{ color: 'var(--accent-cyan-strong)' }} strokeWidth={2} />
           {t('settings.home')}
         </button>
         <h1
-          className="text-lg font-bold tracking-tight"
-          style={{ color: 'var(--text)' }}
+          className="text-lg font-bold tracking-tight text-primary"
         >
           {t('settings.title')}
         </h1>
@@ -135,8 +127,7 @@ export function SettingsChrome({
 
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <nav
-          className="flex shrink-0 gap-0.5 overflow-x-auto border-b px-2 py-2 md:hidden"
-          style={{ borderColor: 'var(--border)' }}
+          className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-subtle px-2 py-2 md:hidden"
           aria-label={t('settings.aria.sections')}
         >
           {SETTINGS_NAV.map((tab) => (
@@ -145,13 +136,11 @@ export function SettingsChrome({
         </nav>
 
         <aside
-          className="hidden w-60 shrink-0 flex-col border-r p-3 md:flex"
-          style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
+          className="hidden w-60 shrink-0 flex-col border-r border-subtle bg-app p-3 md:flex"
           aria-label={t('settings.aria.navigation')}
         >
           <div
-            className="rounded-xl border p-2"
-            style={{ borderColor: 'var(--border)', background: 'var(--panel)' }}
+            className="rounded-xl border border-subtle bg-surface p-2"
           >
             {SETTINGS_NAV.map((tab) => (
               <NavButton key={tab.id} tab={tab} />
@@ -161,8 +150,7 @@ export function SettingsChrome({
 
         <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-10">
           <div
-            className="mx-auto max-w-3xl rounded-2xl border p-5 shadow-xl sm:p-8"
-            style={{ borderColor: 'var(--border)', background: 'var(--panel2)' }}
+            className="mx-auto max-w-3xl rounded-2xl border border-subtle bg-surface p-5 shadow-soft sm:p-8"
           >
             {children}
           </div>

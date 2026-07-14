@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import type { FantasyCalcSettings } from '@/lib/fantasycalc'
+import type { FantasyCalcSettings } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { getFantasyCalcCacheHealth, readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
 
 export const dynamic = 'force-dynamic'

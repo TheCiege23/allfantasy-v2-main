@@ -8,6 +8,7 @@ export const maxDuration = 30
 export async function POST(req: NextRequest) {
   const gate = await requireAfSub()
   if (gate instanceof Response) return gate
+  const userId = gate
 
   let body: { tradeId?: string }
   try {
@@ -19,6 +20,8 @@ export async function POST(req: NextRequest) {
   const tradeId = body.tradeId?.trim()
   if (!tradeId) return NextResponse.json({ error: 'tradeId required' }, { status: 400 })
 
-  const analysis = await analyzeTrade(tradeId)
+  const analysis = await analyzeTrade(userId, tradeId)
+  if (!analysis) return NextResponse.json({ error: 'Trade not found' }, { status: 404 })
+
   return NextResponse.json({ analysis })
 }

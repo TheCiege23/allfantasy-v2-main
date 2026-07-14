@@ -8,8 +8,9 @@ describe('Default Roster Settings by Sport', () => {
     const slotNames = nfl.slots.map((s) => s.slotName)
 
     expect(slotNames).toEqual(
-      expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'FLEX', 'K', 'DST', 'BENCH', 'IR'])
+      expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'DEF', 'BENCH', 'IR'])
     )
+    expect(slotNames).not.toContain('DST')
     expect(nfl.totalBenchSlots).toBeGreaterThan(0)
     expect(nfl.totalIRSlots).toBeGreaterThan(0)
   })
@@ -47,8 +48,9 @@ describe('Default Roster Settings by Sport', () => {
     const slotNames = ncaaf.slots.map((s) => s.slotName)
 
     expect(slotNames).toEqual(
-      expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'FLEX', 'SUPERFLEX', 'K', 'DST', 'BENCH'])
+      expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'DEF', 'BENCH', 'IR'])
     )
+    expect(slotNames).not.toContain('DST')
     expect(ncaaf.totalBenchSlots).toBeGreaterThan(0)
   })
 
@@ -61,7 +63,8 @@ describe('Default Roster Settings by Sport', () => {
   })
 
   it('returns sport-aware positions for draft room filtering', () => {
-    expect(getPositionsForSport('NFL')).toEqual(expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'K', 'DST']))
+    expect(getPositionsForSport('NFL')).toEqual(expect.arrayContaining(['QB', 'RB', 'WR', 'TE', 'DEF']))
+    expect(getPositionsForSport('NFL')).not.toContain('DST')
     expect(getPositionsForSport('NBA')).toEqual(expect.arrayContaining(['PG', 'SG', 'SF', 'PF', 'C']))
     expect(getPositionsForSport('MLB')).toEqual(expect.arrayContaining(['SP', 'RP', 'OF', 'C']))
     expect(getPositionsForSport('NHL')).toEqual(expect.arrayContaining(['C', 'LW', 'RW', 'D', 'G']))

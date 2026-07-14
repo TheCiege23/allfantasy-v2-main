@@ -2,6 +2,8 @@ import type { RedraftRoster } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { tryGetSportConfig } from '@/lib/sportConfig'
 import { getPlatformEvents, EVENT } from '@/lib/events'
+import { transitionLeagueStateInTransaction } from '@/server/services/leagueLifecycleService'
+import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
 import type { PlayoffStructure } from './types'
 
 /** Bracket shape defaults from centralized sport config (commissioner can override). */
@@ -426,39 +428,71 @@ export async function finalizeRedraftSeasonChampion(
       data: { status: 'complete' },
     })
 
-    // Transition league lifecycle to completed
-    await (tx as typeof prisma).league.update({
-      where: { id: season.leagueId },
-      data: { lifecycleState: 'completed' },
+    const lifecycle = await transitionLeagueStateInTransaction(tx, {
+      leagueId: season.leagueId,
+      nextState: 'completed',
+      actorUserId: recordedByUserId,
+      source: 'engine:playoff-champion',
+      idempotencyKey: `lifecycle:champion-finalize:${seasonId}:${bracket.id}`,
+      metadata: { seasonId, playoffBracketId: bracket.id, championRosterId },
+    })
+
+    await tx.leagueAuditLog.create({
+      data: {
+        leagueId: season.leagueId,
+        userId: recordedByUserId,
+        actionType: 'champion_finalized',
+        entityType: 'redraft_season',
+        entityId: seasonId,
+        beforeState: { seasonStatus: season.status, bracketStatus: bracket.status },
+        afterState: { seasonStatus: 'complete', bracketStatus: 'complete', championRosterId },
+        metadata: {
+          idempotencyKey: `champion-finalize:${seasonId}:${bracket.id}`,
+          playoffBracketId: bracket.id,
+          lifecycleBefore: lifecycle.from,
+          lifecycleAfter: lifecycle.to,
+        },
+      },
+    })
+
+    const events = getPlatformEvents()
+    await events.emitInTx(tx, EVENT.CHAMPION_CROWNED, {
+      leagueId: season.leagueId,
+      seasonId,
+      actor: { type: 'commissioner', id: recordedByUserId },
+      idempotencyKey: `champion.crowned:${seasonId}`,
+      source: 'engine:playoff',
+      subjects: [
+        { kind: 'season', id: seasonId },
+        { kind: 'roster', id: championRosterId },
+        { kind: 'playoff_bracket', id: bracket.id },
+      ],
+      payload: { seasonId, championRosterId, championUserId: championUserId ?? undefined },
+    })
+    await events.emitInTx(tx, EVENT.SEASON_COMPLETED, {
+      leagueId: season.leagueId,
+      seasonId,
+      actor: { type: 'commissioner', id: recordedByUserId },
+      idempotencyKey: `season.completed:${seasonId}`,
+      source: 'engine:playoff',
+      subjects: [{ kind: 'season', id: seasonId }],
+      payload: { seasonId },
     })
   })
 
-  // G15.2 — publish (best-effort, post-commit; never throws, never affects the result).
-  // Reached only on first finalize (re-finalize returns early above), so the
-  // deterministic idempotency keys yield exactly one event per season.
-  const events = getPlatformEvents()
-  await events.emit(EVENT.CHAMPION_CROWNED, {
+  await publishLeagueFanoutEvent({
     leagueId: season.leagueId,
-    seasonId,
-    actor: { type: 'system', id: recordedByUserId },
-    idempotencyKey: `champion.crowned:${seasonId}`,
-    source: 'engine:playoff',
-    subjects: [
-      { kind: 'season', id: seasonId },
-      { kind: 'roster', id: championRosterId },
-    ],
-    payload: { seasonId, championRosterId, championUserId: championUserId ?? undefined },
+    eventType: 'champion_finalized',
+    title: 'League champion crowned',
+    message: `The season is complete. ${championTeamName ?? 'The winning franchise'} has been crowned league champion.`,
+    category: 'league_announcements',
+    visibility: 'all_members',
+    actorUserId: recordedByUserId,
+    meta: { seasonId, playoffBracketId: bracket.id, championRosterId },
+    dedupeKey: `champion-finalize:${seasonId}:${bracket.id}`,
+    actionHref: `/league/${season.leagueId}?tab=standings`,
+    actionLabel: 'View season results',
   })
-  await events.emit(EVENT.SEASON_COMPLETED, {
-    leagueId: season.leagueId,
-    seasonId,
-    actor: { type: 'system', id: recordedByUserId },
-    idempotencyKey: `season.completed:${seasonId}`,
-    source: 'engine:playoff',
-    subjects: [{ kind: 'season', id: seasonId }],
-    payload: { seasonId },
-  })
-
   return {
     ...base,
     alreadyFinalized: false,

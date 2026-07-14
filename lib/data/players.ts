@@ -6,11 +6,23 @@ import { DATA_TTLS, isFreshDate, triggerBackgroundRefresh } from '@/lib/data/sha
 import { runInjuryImporter } from '@/lib/workers/injury-importer'
 import { runNewsImporter } from '@/lib/workers/news-importer'
 import { runSportsDataImporter } from '@/lib/workers/sports-data-importer'
+import { requestPlayerImportRefresh, requestPlayerNewsRefresh } from '@/lib/workers/sports-data-import-coordinator'
+
+// Phase 21 rollback flag. Default OFF (existing synchronous-await behavior), matching
+// this codebase's established convention for behavior-changing flags (Waiver/Trade shadow
+// flags all default off). Set to 'true' to enable non-blocking refresh on a cache miss.
+function isNonBlockingRefreshEnabled(): boolean {
+  return process.env.PLAYER_LOOKUP_NON_BLOCKING_REFRESH === 'true'
+}
 
 export async function getPlayer(playerId: string) {
   let row = await prisma.sportsPlayerRecord.findUnique({ where: { id: playerId } })
   if (!row) {
     const sport = normalizeToSupportedSport(playerId.split(':')[0] || undefined)
+    if (isNonBlockingRefreshEnabled()) {
+      requestPlayerImportRefresh(sport, 'get_player_miss')
+      return null
+    }
     await runSportsDataImporter({ sports: [sport] })
     row = await prisma.sportsPlayerRecord.findUnique({ where: { id: playerId } })
     return row
@@ -38,6 +50,10 @@ export async function searchPlayers(query: string, sport: string) {
   })
 
   if (rows.length === 0) {
+    if (isNonBlockingRefreshEnabled()) {
+      requestPlayerImportRefresh(normalizedSport, 'search_players_miss')
+      return rows
+    }
     await runSportsDataImporter({ sports: [normalizedSport] })
     rows = await prisma.sportsPlayerRecord.findMany({
       where: {
@@ -66,6 +82,10 @@ export async function getPlayersByTeam(team: string, sport: string) {
   })
 
   if (rows.length === 0) {
+    if (isNonBlockingRefreshEnabled()) {
+      requestPlayerImportRefresh(normalizedSport, 'get_players_by_team_miss')
+      return rows
+    }
     await runSportsDataImporter({ sports: [normalizedSport] })
     rows = await prisma.sportsPlayerRecord.findMany({
       where: {
@@ -122,6 +142,10 @@ export async function getPlayerNews(playerId: string, limit: number = 10) {
   })
 
   if (rows.length === 0) {
+    if (isNonBlockingRefreshEnabled()) {
+      requestPlayerNewsRefresh('get_player_news_miss')
+      return rows
+    }
     await runNewsImporter()
     rows = await prisma.playerNewsRecord.findMany({
       where: {

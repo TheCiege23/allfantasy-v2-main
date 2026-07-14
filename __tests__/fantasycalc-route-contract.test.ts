@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createMockNextRequest } from '@/__tests__/helpers/createMockNextRequest'
 
-const readFantasyCalcValuesFromDbMock = vi.hoisted(() => vi.fn())
+const getCanonicalValuationSnapshotMock = vi.hoisted(() => vi.fn())
 
-vi.mock('@/lib/fantasycalc-db', () => ({
-  readFantasyCalcValuesFromDb: readFantasyCalcValuesFromDbMock,
+vi.mock('@/lib/player-valuations/canonicalPlayerValuations', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@/lib/player-valuations/canonicalPlayerValuations')>(),
+  getCanonicalValuationSnapshot: getCanonicalValuationSnapshotMock,
 }))
 
 const samplePlayers = [
@@ -86,11 +87,13 @@ describe('FantasyCalc route contract', () => {
   })
 
   it('returns values payload from DB cache', async () => {
-    readFantasyCalcValuesFromDbMock.mockResolvedValueOnce({
+    getCanonicalValuationSnapshotMock.mockResolvedValueOnce({
       players: samplePlayers,
+      source: 'canonical_provider',
       stale: false,
-      syncedAt: '2026-04-08T00:00:00.000Z',
-      expiresAt: '2026-04-08T06:00:00.000Z',
+      sourceTimestampIso: '2026-04-08T00:00:00.000Z',
+      fallbackUsed: false,
+      cacheUsed: false,
     })
 
     const { GET } = await import('@/app/api/fantasycalc/route')
@@ -99,18 +102,20 @@ describe('FantasyCalc route contract', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.source).toBe('fantasycalc-db')
+    expect(body.source).toBe('canonical_provider')
     expect(body.stale).toBe(false)
     expect(body.players).toHaveLength(2)
     expect(body.players[0].player.name).toBe('Justin Jefferson')
   })
 
   it('returns stale metadata when cache is stale fallback', async () => {
-    readFantasyCalcValuesFromDbMock.mockResolvedValueOnce({
+    getCanonicalValuationSnapshotMock.mockResolvedValueOnce({
       players: samplePlayers,
+      source: 'canonical_cache',
       stale: true,
-      syncedAt: '2026-04-07T00:00:00.000Z',
-      expiresAt: '2026-04-07T06:00:00.000Z',
+      sourceTimestampIso: '2026-04-07T00:00:00.000Z',
+      fallbackUsed: true,
+      cacheUsed: true,
     })
 
     const { GET } = await import('@/app/api/fantasycalc/route')
@@ -119,17 +124,19 @@ describe('FantasyCalc route contract', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body.source).toBe('fantasycalc-db-stale')
+    expect(body.source).toBe('canonical_cache')
     expect(body.stale).toBe(true)
     expect(body.players).toHaveLength(1)
   })
 
   it('returns 503 when cache is empty', async () => {
-    readFantasyCalcValuesFromDbMock.mockResolvedValueOnce({
+    getCanonicalValuationSnapshotMock.mockResolvedValueOnce({
       players: [],
+      source: 'unavailable',
       stale: false,
-      syncedAt: null,
-      expiresAt: null,
+      sourceTimestampIso: null,
+      fallbackUsed: false,
+      cacheUsed: false,
     })
 
     const { GET } = await import('@/app/api/fantasycalc/route')
@@ -138,15 +145,17 @@ describe('FantasyCalc route contract', () => {
 
     expect(res.status).toBe(503)
     const body = await res.json()
-    expect(body.error).toContain('cache is empty')
+    expect(body.error).toContain('unavailable')
   })
 
   it('compares trade values from DB-backed data', async () => {
-    readFantasyCalcValuesFromDbMock.mockResolvedValueOnce({
+    getCanonicalValuationSnapshotMock.mockResolvedValueOnce({
       players: samplePlayers,
+      source: 'canonical_provider',
       stale: false,
-      syncedAt: '2026-04-08T00:00:00.000Z',
-      expiresAt: '2026-04-08T06:00:00.000Z',
+      sourceTimestampIso: '2026-04-08T00:00:00.000Z',
+      fallbackUsed: false,
+      cacheUsed: false,
     })
 
     const { POST } = await import('@/app/api/fantasycalc/route')
@@ -164,6 +173,6 @@ describe('FantasyCalc route contract', () => {
     expect(body.sideATotal).toBe(9500)
     expect(body.sideBTotal).toBe(9100)
     expect(body.winner).toBe('EVEN')
-    expect(body.source).toBe('FantasyCalc DB')
+    expect(body.source).toBe('canonical_provider')
   })
 })

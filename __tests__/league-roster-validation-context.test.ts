@@ -36,6 +36,26 @@ describe('League-level roster validation context', () => {
     expect(canAddLbToIdpFlex.allowed).toBe(true)
   })
 
+  it('keeps standard NFL redraft from accepting IDP-only slots', () => {
+    const standardWithIdpSlot = validateRoster(
+      'NFL',
+      [{ playerId: '8', position: 'LB', slotName: 'IDP_FLEX' }],
+      'standard'
+    )
+
+    expect(standardWithIdpSlot.valid).toBe(false)
+    expect(standardWithIdpSlot.errors).toContain('Unknown slot: IDP_FLEX')
+
+    const canAddLbToStandardIdpFlex = canAddPlayerToSlot(
+      'NFL',
+      'IDP_FLEX',
+      'LB',
+      [],
+      'standard'
+    )
+    expect(canAddLbToStandardIdpFlex.allowed).toBe(false)
+  })
+
   it('enforces NCAAB sport-aware slot eligibility', () => {
     const validNcaabRoster = validateRoster('NCAAB', [
       { playerId: '10', position: 'G', slotName: 'G' },

@@ -57,8 +57,15 @@ describe('GET /api/waiver-wire/leagues/[leagueId]/players', () => {
   })
 
   it('uses shared league pool resolver and filters by rostered internal/external ids', async () => {
-    getRosterPlayerIdsMock.mockReturnValue(['slp-rostered-1'])
+    getRosterPlayerIdsMock.mockReturnValue(['player-rostered-internal', 'slp-rostered-1'])
     getPlayerPoolForLeagueMock.mockResolvedValue([
+      {
+        player_id: 'player-rostered-internal',
+        full_name: 'Rostered Internal Defender',
+        position: 'S',
+        team_abbreviation: 'BUF',
+        external_source_id: null,
+      },
       {
         player_id: 'player-1',
         full_name: 'Rostered Defender',
@@ -98,7 +105,27 @@ describe('GET /api/waiver-wire/leagues/[leagueId]/players', () => {
       position: 'DE',
       team: 'KC',
     })
-    expect(data.rosteredCount).toBe(1)
+    expect(data.rosteredCount).toBe(2)
+  })
+
+  it('returns a safe empty response when the shared player pool is empty', async () => {
+    getPlayerPoolForLeagueMock.mockResolvedValue([])
+
+    const { GET } = await import('@/app/api/waiver-wire/leagues/[leagueId]/players/route')
+    const req = {
+      nextUrl: new URL('http://localhost/api/waiver-wire/leagues/l1/players'),
+    } as any
+
+    const res = await GET(req, { params: { leagueId: 'l1' } })
+    expect(res.status).toBe(200)
+    const data = await res.json()
+
+    expect(getPlayerPoolForLeagueMock).toHaveBeenCalledWith('l1', 'NFL', {
+      limit: 800,
+      position: undefined,
+      teamId: undefined,
+    })
+    expect(data).toEqual({ players: [], rosteredCount: 0 })
   })
 
   it('rejects cross-sport query overrides to prevent player pool leakage', async () => {

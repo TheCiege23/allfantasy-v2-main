@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
-import { type FantasyCalcPlayer } from '@/lib/fantasycalc'
-import { readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
+import {
+  getCanonicalValuationSnapshot,
+  type FantasyCalcPlayer,
+} from '@/lib/player-valuations/canonicalPlayerValuations'
 import { prisma } from '@/lib/prisma'
 import { computeAllDevyIntelMetrics } from '@/lib/devy-intel'
 import { getCFBPlayerStats } from '@/lib/cfb-player-data'
@@ -295,12 +297,12 @@ export async function GET(req: Request) {
     } catch { /* trending data is optional */ }
 
     if (filter === 'all' || filter === 'nfl') {
-      const cached = await readFantasyCalcValuesFromDb({
+      const cached = await getCanonicalValuationSnapshot({
         isDynasty: true,
         numQbs: 2,
         numTeams: 12,
         ppr: 1,
-      }, { allowStale: true })
+      })
       const fcPlayers = cached.players
 
       for (const p of fcPlayers) {

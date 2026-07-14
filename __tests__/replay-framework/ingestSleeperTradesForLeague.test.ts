@@ -37,7 +37,7 @@ vi.mock('@/lib/sleeper-client', () => ({
   getPlayerName: (players: any, id: string) => players?.[id]?.full_name ?? id,
 }))
 
-vi.mock('@/lib/fantasycalc', () => ({
+vi.mock('@/lib/player-valuations/canonicalPlayerValuations', () => ({
   fetchFantasyCalcValues: mockFetchFantasyCalcValues,
   findPlayerBySleeperId: () => null,
   getPickValue: () => 100,

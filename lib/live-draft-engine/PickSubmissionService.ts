@@ -63,6 +63,42 @@ export interface SubmitPickResult {
   error?: string
   code?: 'ROSTER_CONFIGURATION_INCOMPLETE' | PickAuthorityCode
   snapshot?: { sessionId: string; overall: number; pickLabel: string; rosterId: string }
+  /** True when a retried request matched the pick already committed at expectedOverall. */
+  idempotentReplay?: boolean
+}
+
+function normalizePickIdentity(value: string | null | undefined): string {
+  return String(value ?? '').trim().toLowerCase()
+}
+
+async function resolveCommittedPickReplay(
+  input: SubmitPickInput,
+): Promise<SubmitPickResult['snapshot'] | null> {
+  if (input.expectedOverall == null) return null
+  const session = await prisma.draftSession.findUnique({
+    where: { leagueId: input.leagueId },
+    include: { picks: { orderBy: { overall: 'asc' } } },
+  })
+  if (!session) return null
+
+  const committed = session.picks.find((pick) => (
+    pick.overall === input.expectedOverall && !isDraftPickRowEmpty(pick)
+  ))
+  if (!committed) return null
+
+  const playerMatches = input.playerId && committed.playerId
+    ? input.playerId === committed.playerId
+    : normalizePickIdentity(input.playerName) === normalizePickIdentity(committed.playerName)
+      && normalizePickIdentity(input.position) === normalizePickIdentity(committed.position)
+  const rosterMatches = input.rosterId == null || input.rosterId === committed.rosterId
+  if (!playerMatches || !rosterMatches) return null
+
+  return {
+    sessionId: session.id,
+    overall: committed.overall,
+    pickLabel: `${committed.round}.${committed.slot.toString().padStart(2, '0')}`,
+    rosterId: committed.rosterId,
+  }
 }
 
 async function resolveCurrentOverallForStalePreflight(leagueId: string): Promise<number | null> {
@@ -543,6 +579,10 @@ export async function submitPick(input: SubmitPickInput): Promise<SubmitPickResu
   if (input.expectedOverall != null) {
     const currentOverall = await resolveCurrentOverallForStalePreflight(input.leagueId)
     if (currentOverall != null && currentOverall !== input.expectedOverall) {
+      const replay = await resolveCommittedPickReplay(input)
+      if (replay) {
+        return { success: true, snapshot: replay, idempotentReplay: true }
+      }
       return {
         success: false,
         error: 'Draft board moved; refresh and retry.',

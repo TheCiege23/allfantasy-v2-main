@@ -1,0 +1,1782 @@
+﻿
+===== lib\live-draft-engine\RosterAssignmentService.ts =====
+/**
+ * Roster assignment: after a pick (or on draft complete), update roster state.
+ * Draft picks are stored in DraftPick; this service appends to Roster.playerData or
+ * a draft snapshot for "current drafted roster view" and final persist on completion.
+ */
+
+import { prisma } from '@/lib/prisma'
+import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
+import { buildLineupSectionsFromPicks } from '@/lib/post-draft/buildStartersFromPicks'
+import { buildPlayerDataFromSections } from '@/lib/roster/LineupTemplateValidation'
+import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+
+export interface AssignedPlayer {
+  playerName: string
+  position: string
+  team?: string | null
+  playerId?: string | null
+  byeWeek?: number | null
+}
+
+function hasExistingLineup(playerData: unknown): boolean {
+  if (!playerData || typeof playerData !== 'object') return false
+  const data = playerData as Record<string, unknown>
+  const starters = data.starters
+  if (Array.isArray(starters) && starters.some((s) => typeof s === 'string' && s.trim().length > 0)) {
+    return true
+  }
+  const sections = data.lineup_sections
+  if (sections && typeof sections === 'object' && !Array.isArray(sections)) {
+    const starterList = (sections as Record<string, unknown>).starters
+    if (Array.isArray(starterList) && starterList.length > 0) return true
+  }
+  return false
+}
+
+/**
+ * Append a single pick to the roster's draft snapshot (in-memory or stored).
+ * For "current drafted roster view" the client can derive from picks by rosterId.
+ * Optional: persist a draft_roster_snapshot JSON on League or Roster for quick read.
+ */
+export async function appendPickToRosterDraftSnapshot(
+  leagueId: string,
+  rosterId: string,
+  player: AssignedPlayer
+): Promise<void> {
+  const roster = await prisma.roster.findFirst({
+    where: { leagueId, id: rosterId },
+  })
+  if (!roster) return
+  const data = (roster.playerData as Record<string, unknown>) ?? {}
+  const draftPicks = (data.draftPicks as AssignedPlayer[]) ?? []
+  draftPicks.push(player)
+  await prisma.roster.update({
+    where: { id: rosterId },
+    data: { playerData: { ...data, draftPicks } },
+  })
+}
+
+/** Roll-up counts from {@link finalizeRosterAssignments} (idempotent sync). */
+export type FinalizeRosterAssignmentsSummary = {
+  teamsSynced: number
+  playersSynced: number
+  skippedPlayers: number
+  missingRosterRows: number
+}
+
+const EMPTY_FINALIZE_SUMMARY: FinalizeRosterAssignmentsSummary = {
+  teamsSynced: 0,
+  playersSynced: 0,
+  skippedPlayers: 0,
+  missingRosterRows: 0,
+}
+
+/**
+ * On draft completion: merge draft picks into each roster's playerData AND
+ * materialize a starter/bench lineup using the league's sport-aware roster
+ * template. Greedy fill in draft order with FLEX/SUPERFLEX spillover; writes
+ * both the legacy `starters` id list and the structured `lineup_sections`
+ * block so `lib/scoring/scoring-engine.ts:extractStarterIds` can score week 1.
+ *
+ * Existing lineups (manual edits, prior materialization) are NOT overwritten â€”
+ * this is safe to re-run idempotently.
+ */
+export async function finalizeRosterAssignments(
+  leagueId: string,
+  draftId?: string,
+): Promise<FinalizeRosterAssignmentsSummary> {
+  const session = await prisma.draftSession.findFirst({
+    where: { leagueId, ...(draftId ? { id: draftId } : {}) },
+    include: { picks: { orderBy: { overall: 'asc' } } },
+  })
+  if (!session || session.status !== 'completed') return EMPTY_FINALIZE_SUMMARY
+
+  const rosterPayload = await getLeagueDraftTemplatePayload(leagueId).catch(() => null)
+  const rosterTemplate = rosterPayload?.template ?? null
+
+  let skippedPlayers = 0
+  const byRoster = new Map<string, AssignedPlayer[]>()
+  for (const p of session.picks) {
+    if (
+      isDraftPickRowEmpty({
+        playerName: p.playerName,
+        position: p.position,
+        pickMetadata: (p as { pickMetadata?: unknown | null }).pickMetadata ?? null,
+      })
+    ) {
+      skippedPlayers += 1
+      continue
+    }
+    const list = byRoster.get(p.rosterId) ?? []
+    list.push({
+      playerName: p.playerName,
+      position: p.position,
+      team: p.team,
+      playerId: p.playerId,
+      byeWeek: p.byeWeek,
+    })
+    byRoster.set(p.rosterId, list)
+  }
+
+  const playersSynced = [...byRoster.values()].reduce((acc, list) => acc + list.length, 0)
+  let teamsSynced = 0
+  let missingRosterRows = 0
+
+  for (const [rosterId, players] of byRoster) {
+    const roster = await prisma.roster.findFirst({
+      where: { leagueId, id: rosterId },
+    })
+    if (!roster) {
+      missingRosterRows += 1
+      continue
+    }
+    const data = (roster.playerData as Record<string, unknown>) ?? {}
+
+    // Always refresh the flat draftPicks audit trail.
+    let nextPlayerData: Record<string, unknown> = { ...data, draftPicks: players }
+
+    // Only materialize a starter lineup when the roster doesn't already have
+    // one â€” commissioner manual edits or a re-run of finalization must not
+    // clobber user-configured lineups.
+    if (rosterTemplate && !hasExistingLineup(data)) {
+      const sections = buildLineupSectionsFromPicks(
+        players.map((p) => ({
+          playerId: p.playerId ?? null,
+          playerName: p.playerName,
+          position: p.position,
+          team: p.team ?? null,
+        })),
+        rosterTemplate,
+      )
+      nextPlayerData = {
+        ...buildPlayerDataFromSections(nextPlayerData, sections),
+        draftPicks: players,
+      }
+    }
+
+    await prisma.roster.update({
+      where: { id: rosterId },
+      data: { playerData: nextPlayerData },
+    })
+    teamsSynced += 1
+  }
+
+  return { teamsSynced, playersSynced, skippedPlayers, missingRosterRows }
+}
+
+
+===== lib\live-draft-engine\postDraftFinalizeArtifacts.ts =====
+/**
+ * Post-draft artifacts after DraftSession is marked completed: roster materialization + persisted grades.
+ * Kept separate from DraftSessionService to avoid circular imports with ranking/draft-grade code.
+ */
+
+import { prisma } from '@/lib/prisma'
+
+const POST_DRAFT_ARTIFACT_STABLE_THROTTLE_MS = 60_000
+const MAX_THROTTLE_KEYS = 200
+
+const postDraftArtifactThrottleGlobal = globalThis as typeof globalThis & {
+  __afPostDraftArtifactOkAt?: Map<string, number>
+}
+
+const postDraftArtifactOkAt =
+  postDraftArtifactThrottleGlobal.__afPostDraftArtifactOkAt ??
+  (postDraftArtifactThrottleGlobal.__afPostDraftArtifactOkAt = new Map<string, number>())
+
+function prunePostDraftArtifactThrottle() {
+  if (postDraftArtifactOkAt.size <= MAX_THROTTLE_KEYS) return
+  const entries = [...postDraftArtifactOkAt.entries()].sort((a, b) => a[1] - b[1])
+  for (let i = 0; i < postDraftArtifactOkAt.size - MAX_THROTTLE_KEYS; i += 1) {
+    postDraftArtifactOkAt.delete(entries[i]![0])
+  }
+}
+
+/**
+ * Apply finalized draft picks to league rosters and persist draft grades from the completed session snapshot.
+ * Idempotent: safe to call multiple times (roster merge rules + grade upserts).
+ * Grades must not fail silently â€” callers log; live polls use {@link syncPostDraftArtifactsIfCompletedThrottled} to retry.
+ */
+export async function runPostDraftFinalizationArtifacts(leagueId: string): Promise<void> {
+  const { finalizeRosterAssignments } = await import('@/lib/live-draft-engine/RosterAssignmentService')
+  await finalizeRosterAssignments(leagueId)
+  const { computeAndPersistDraftRankings } = await import('@/lib/post-draft-manager-ranking')
+  await computeAndPersistDraftRankings(leagueId)
+}
+
+/**
+ * After completion: (re)materialize rosters + grades from the persisted draft board.
+ * Throttled on success to avoid redundant work on every poll; on failure the throttle entry is cleared so the next request retries.
+ */
+export async function syncPostDraftArtifactsIfCompletedThrottled(leagueId: string): Promise<void> {
+  const session = await prisma.draftSession.findUnique({
+    where: { leagueId },
+    select: { status: true },
+  })
+  if (session?.status !== 'completed') return
+
+  const now = Date.now()
+  const lastOk = postDraftArtifactOkAt.get(leagueId)
+  if (lastOk != null && now - lastOk < POST_DRAFT_ARTIFACT_STABLE_THROTTLE_MS) {
+    return
+  }
+
+  try {
+    await runPostDraftFinalizationArtifacts(leagueId)
+    postDraftArtifactOkAt.set(leagueId, Date.now())
+    prunePostDraftArtifactThrottle()
+  } catch (err) {
+    postDraftArtifactOkAt.delete(leagueId)
+    console.error('[syncPostDraftArtifactsIfCompletedThrottled] failed', {
+      leagueId,
+      error: err instanceof Error ? err.message : String(err),
+    })
+  }
+}
+
+/**
+ * Self-heal: all picks exist but session still `in_progress` / `paused` (e.g. completion step failed mid-flight).
+ * Calls `completeDraftSession` which is idempotent when already completed.
+ */
+export async function repairDraftCompletionIfBoardFull(leagueId: string): Promise<boolean> {
+  const session = await prisma.draftSession.findUnique({
+    where: { leagueId },
+    select: { id: true, status: true, rounds: true, teamCount: true },
+  })
+  if (!session || session.status === 'completed') return false
+  const totalPicks = session.rounds * session.teamCount
+  const rows = await prisma.draftPick.findMany({
+    where: { sessionId: session.id },
+    select: { overall: true, playerName: true, position: true, pickMetadata: true },
+  })
+  const { isDraftBoardFull } = await import('@/lib/live-draft-engine/draftPickEmpty')
+  if (!isDraftBoardFull(rows as any, totalPicks)) return false
+
+  const { completeDraftSession } = await import('@/lib/live-draft-engine/DraftSessionService')
+  return completeDraftSession(leagueId)
+}
+
+
+===== server\services\leagueLifecycleService.ts =====
+/**
+ * League lifecycle state machine: validates actions and safe transitions for canonical leagues.
+ * Integrates with settings snapshots, engines, and commissioner overrides (see `commissionerService.ts`).
+ */
+
+import type { League, LeagueLifecycleState, Prisma } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
+import { logAction } from '@/server/services/auditService'
+
+export type LeagueLifecycleAction =
+  | 'draft_pick'
+  | 'draft_commissioner_control'
+  | 'draft_start'
+  | 'waiver_claim_submit'
+  | 'waiver_process_run'
+  | 'scoring_process_week'
+  | 'scoring_correction'
+  | 'standings_view'
+  | 'standings_manual_edit'
+  | 'settings_edit_general'
+  | 'settings_edit_scoring'
+  | 'settings_edit_roster'
+  | 'settings_edit_draft'
+  | 'settings_edit_waivers'
+  | 'settings_edit_trades'
+  | 'settings_edit_playoffs'
+  | 'settings_edit_commissioner'
+  | 'settings_edit_concept_rules'
+  | 'settings_edit_ai'
+  | 'automation_run'
+  | 'roster_edit'
+  | 'trade_act'
+  | 'import_sync'
+  | 'league_archive'
+  | 'league_lock_toggle'
+  | 'renewal_initiate'
+  | 'renewal_confirm'
+  | 'renewal_execute'
+  | 'succession_initiate'
+  | 'legacy_view'
+
+const TRANSITIONS: Record<LeagueLifecycleState, LeagueLifecycleState[]> = {
+  setup: ['pre_draft', 'archived'],
+  pre_draft: ['drafting', 'setup', 'archived'],
+  drafting: ['post_draft', 'pre_draft', 'archived'],
+  post_draft: ['in_season', 'drafting', 'archived'],
+  in_season: ['playoffs', 'completed', 'drafting', 'archived'],
+  playoffs: ['completed', 'in_season', 'archived'],
+  completed: ['offseason', 'archived', 'in_season'],
+  offseason: ['renewal_pending', 'setup', 'archived'],
+  renewal_pending: ['setup', 'archived'],
+  archived: [],
+}
+
+/** Actions allowed without commissioner override for each lifecycle phase. */
+const ACTIONS: Record<LeagueLifecycleState, Set<LeagueLifecycleAction>> = {
+  setup: new Set([
+    'settings_edit_general',
+    'settings_edit_scoring',
+    'settings_edit_roster',
+    'settings_edit_draft',
+    'settings_edit_waivers',
+    'settings_edit_trades',
+    'settings_edit_playoffs',
+    'settings_edit_commissioner',
+    'settings_edit_concept_rules',
+    'settings_edit_ai',
+    'import_sync',
+    'draft_commissioner_control',
+    'league_archive',
+    'league_lock_toggle',
+  ]),
+  pre_draft: new Set([
+    'settings_edit_general',
+    'settings_edit_scoring',
+    'settings_edit_roster',
+    'settings_edit_draft',
+    'settings_edit_waivers',
+    'settings_edit_trades',
+    'settings_edit_playoffs',
+    'settings_edit_commissioner',
+    'settings_edit_concept_rules',
+    'settings_edit_ai',
+    'draft_start',
+    'draft_commissioner_control',
+    'import_sync',
+    'league_archive',
+    'league_lock_toggle',
+  ]),
+  drafting: new Set([
+    'draft_pick',
+    'draft_commissioner_control',
+    'settings_edit_draft',
+    'settings_edit_commissioner',
+    'league_lock_toggle',
+  ]),
+  post_draft: new Set([
+    'settings_edit_general',
+    'settings_edit_draft',
+    'settings_edit_commissioner',
+    'settings_edit_waivers',
+    'import_sync',
+    'automation_run',
+    'league_archive',
+    'league_lock_toggle',
+  ]),
+  in_season: new Set([
+    'waiver_claim_submit',
+    'waiver_process_run',
+    'scoring_process_week',
+    'standings_view',
+    'roster_edit',
+    'trade_act',
+    'settings_edit_general',
+    'settings_edit_roster',
+    'settings_edit_waivers',
+    'settings_edit_trades',
+    'settings_edit_playoffs',
+    'settings_edit_commissioner',
+    'settings_edit_ai',
+    'automation_run',
+    'import_sync',
+    'scoring_correction',
+    'standings_manual_edit',
+    'league_lock_toggle',
+    'league_archive',
+  ]),
+  playoffs: new Set([
+    'waiver_claim_submit',
+    'waiver_process_run',
+    'scoring_process_week',
+    'standings_view',
+    'roster_edit',
+    'trade_act',
+    'settings_edit_general',
+    'settings_edit_roster',
+    'settings_edit_waivers',
+    'settings_edit_trades',
+    'settings_edit_playoffs',
+    'settings_edit_commissioner',
+    'settings_edit_ai',
+    'automation_run',
+    'scoring_correction',
+    'standings_manual_edit',
+    'league_lock_toggle',
+    'league_archive',
+  ]),
+  completed: new Set([
+    'standings_view',
+    'settings_edit_commissioner',
+    'league_archive',
+    'league_lock_toggle',
+    'legacy_view',
+    'renewal_initiate',
+  ]),
+  offseason: new Set([
+    'standings_view',
+    'settings_edit_commissioner',
+    'league_archive',
+    'league_lock_toggle',
+    'legacy_view',
+    'renewal_initiate',
+    'succession_initiate',
+  ]),
+  renewal_pending: new Set([
+    'standings_view',
+    'settings_edit_commissioner',
+    'league_archive',
+    'league_lock_toggle',
+    'legacy_view',
+    'renewal_confirm',
+    'renewal_execute',
+    'succession_initiate',
+  ]),
+  archived: new Set(['standings_view', 'legacy_view']),
+}
+
+export function normalizeLifecycleState(raw: string | null | undefined): LeagueLifecycleState {
+  const s = String(raw || 'in_season') as LeagueLifecycleState
+  if (s in TRANSITIONS) return s
+  return 'in_season'
+}
+
+export function isOffseasonState(state: LeagueLifecycleState): boolean {
+  return state === 'offseason' || state === 'renewal_pending' || state === 'completed'
+}
+
+export function isRenewalEligible(state: LeagueLifecycleState): boolean {
+  return state === 'completed' || state === 'offseason'
+}
+
+export function getLeagueLifecycleState(league: Pick<League, 'lifecycleState'>): LeagueLifecycleState {
+  return league.lifecycleState ?? 'in_season'
+}
+
+export function validateTransition(
+  current: LeagueLifecycleState,
+  next: LeagueLifecycleState,
+): { ok: true } | { ok: false; reason: string } {
+  if (current === next) {
+    return { ok: false, reason: 'Already in requested state' }
+  }
+  const allowed = TRANSITIONS[current] ?? []
+  if (!allowed.includes(next)) {
+    return {
+      ok: false,
+      reason: `Cannot transition from ${current} to ${next}`,
+    }
+  }
+  return { ok: true }
+}
+
+export function isActionAllowed(
+  action: LeagueLifecycleAction,
+  state: LeagueLifecycleState,
+  opts?: { commissionerOverride?: boolean; roleIsElevated?: boolean },
+): boolean {
+  if (opts?.commissionerOverride && opts?.roleIsElevated) {
+    return true
+  }
+  const set = ACTIONS[state]
+  return Boolean(set?.has(action))
+}
+
+export function getAllowedActions(league: Pick<League, 'lifecycleState' | 'locked' | 'emergencyPaused'>): {
+  state: LeagueLifecycleState
+  actions: LeagueLifecycleAction[]
+  locked: boolean
+  emergencyPaused: boolean
+} {
+  const state = getLeagueLifecycleState(league)
+  const list = [...(ACTIONS[state] ?? new Set())]
+  return {
+    state,
+    actions: list,
+    locked: league.locked ?? false,
+    emergencyPaused: league.emergencyPaused ?? false,
+  }
+}
+
+export type TransitionResult =
+  | { ok: true; league: League }
+  | { ok: false; error: string; code: 'INVALID' | 'FORBIDDEN' }
+
+export async function transitionLeagueState(
+  leagueId: string,
+  nextState: LeagueLifecycleState,
+  actorUserId: string,
+  opts?: { force?: boolean; metadata?: Record<string, unknown> },
+): Promise<TransitionResult> {
+  const league = await prisma.league.findUnique({ where: { id: leagueId } })
+  if (!league) return { ok: false, error: 'League not found', code: 'FORBIDDEN' }
+
+  const current = getLeagueLifecycleState(league)
+  const check = opts?.force ? { ok: true as const } : validateTransition(current, nextState)
+  if (!check.ok) {
+    return { ok: false, error: check.reason, code: 'INVALID' }
+  }
+
+  const before = { lifecycleState: current }
+  const updated = await prisma.league.update({
+    where: { id: leagueId },
+    data: {
+      lifecycleState: nextState,
+      lifecycleMetadata: {
+        ...(typeof league.lifecycleMetadata === 'object' && league.lifecycleMetadata !== null
+          ? (league.lifecycleMetadata as Record<string, unknown>)
+          : {}),
+        lastTransitionAt: new Date().toISOString(),
+        lastTransitionFrom: current,
+        ...(opts?.metadata ?? {}),
+      } as import('@prisma/client').Prisma.InputJsonValue,
+    },
+  })
+
+  await logAction({
+    leagueId,
+    userId: actorUserId,
+    actionType: 'lifecycle_transition',
+    entityType: 'league',
+    entityId: leagueId,
+    beforeState: before,
+    afterState: { lifecycleState: nextState },
+    metadata: { force: Boolean(opts?.force) },
+  })
+
+  void import('@/lib/league-events/publisher')
+    .then(({ publishLeagueFanoutEvent }) =>
+      publishLeagueFanoutEvent({
+        leagueId,
+        eventType: 'lifecycle_transition',
+        title: 'League phase updated',
+        message: `Your league is now in ${String(nextState).replace(/_/g, ' ')}.`,
+        category: 'league_announcements',
+        visibility: 'all_members',
+        actorUserId,
+        meta: { from: current, to: nextState, force: Boolean(opts?.force) },
+        dedupeKey: `lifecycle:${leagueId}:${current}->${nextState}`,
+      }),
+    )
+    .catch(() => {})
+
+  return { ok: true, league: updated }
+}
+
+/**
+ * When the draft session is live (in progress or paused) but the league row is still
+ * `pre_draft` or `setup`, lifecycle gates block `draft_pick`. Sync league lifecycle so
+ * picks and automation match an active draft (e.g. after `startDraftSession` without a
+ * separate transition route).
+ */
+export async function ensureDraftingLifecycleForActiveSession(
+  leagueId: string,
+  actorUserId?: string | null,
+): Promise<void> {
+  try {
+    const [league, draftSession] = await Promise.all([
+      prisma.league.findUnique({
+        where: { id: leagueId },
+        select: { lifecycleState: true, userId: true },
+      }),
+      prisma.draftSession.findUnique({
+        where: { leagueId },
+        select: { status: true },
+      }),
+    ])
+    if (!league || !draftSession) return
+
+    const draftLive =
+      draftSession.status === 'in_progress' || draftSession.status === 'paused'
+    if (!draftLive) return
+
+    const actor = (actorUserId && String(actorUserId).trim()) || league.userId || 'system'
+    const state = getLeagueLifecycleState(league)
+
+    if (state === 'drafting') return
+
+    if (state === 'pre_draft') {
+      const r = await transitionLeagueState(leagueId, 'drafting', actor)
+      if (!r.ok) console.warn('[ensureDraftingLifecycleForActiveSession] pre_draftâ†’drafting', r.error)
+      return
+    }
+
+    if (state === 'setup') {
+      const toPre = await transitionLeagueState(leagueId, 'pre_draft', actor)
+      if (toPre.ok) {
+        const toDraft = await transitionLeagueState(leagueId, 'drafting', actor)
+        if (!toDraft.ok) console.warn('[ensureDraftingLifecycleForActiveSession] pre_draftâ†’drafting', toDraft.error)
+      } else {
+        const forced = await transitionLeagueState(leagueId, 'drafting', actor, { force: true })
+        if (!forced.ok) console.warn('[ensureDraftingLifecycleForActiveSession] setup fallback', forced.error)
+      }
+    }
+  } catch (e) {
+    console.warn('[ensureDraftingLifecycleForActiveSession] non-fatal', e)
+  }
+}
+
+export async function loadLeagueForLifecycle(leagueId: string) {
+  return prisma.league.findUnique({
+    where: { id: leagueId },
+    select: {
+      id: true,
+      userId: true,
+      lifecycleState: true,
+      locked: true,
+      emergencyPaused: true,
+      lifecycleMetadata: true,
+      status: true,
+    },
+  })
+}
+
+export type LifecycleGateError = { status: number; error: string; code: string }
+
+export async function assertLifecycleActionAllowed(
+  leagueId: string,
+  action: LeagueLifecycleAction,
+  userId: string,
+  opts?: { commissionerOverride?: boolean; isElevatedCommissioner?: boolean },
+): Promise<{ ok: true } | { ok: false; err: LifecycleGateError }> {
+  const row = await loadLeagueForLifecycle(leagueId)
+  if (!row) {
+    return { ok: false, err: { status: 404, error: 'League not found', code: 'NOT_FOUND' } }
+  }
+
+  const state = getLeagueLifecycleState(row as Pick<League, 'lifecycleState'>)
+  const elevated = Boolean(opts?.isElevatedCommissioner)
+
+  if (row.emergencyPaused && !elevated && action !== 'standings_view') {
+    return {
+      ok: false,
+      err: {
+        status: 423,
+        error: 'League is emergency-paused. Only commissioners can act.',
+        code: 'EMERGENCY_PAUSE',
+      },
+    }
+  }
+
+  if (
+    row.locked &&
+    !elevated &&
+    action !== 'standings_view' &&
+    action !== 'settings_edit_commissioner'
+  ) {
+    return {
+      ok: false,
+      err: {
+        status: 423,
+        error: 'League is locked. Use commissioner tools or override.',
+        code: 'LEAGUE_LOCKED',
+      },
+    }
+  }
+
+  const allowed = isActionAllowed(action, state, {
+    commissionerOverride: opts?.commissionerOverride,
+    roleIsElevated: elevated,
+  })
+
+  if (!allowed) {
+    return {
+      ok: false,
+      err: {
+        status: 400,
+        error: `Action "${action}" is not allowed in lifecycle state "${state}"`,
+        code: 'LIFECYCLE_BLOCKED',
+      },
+    }
+  }
+
+  return { ok: true }
+}
+
+// â”€â”€ Draft completion â†” lifecycle (dashboard Matchup tab) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+
+function mergeLifecycleMetadata(
+  existing: Prisma.JsonValue | null | undefined,
+  patch: Record<string, unknown>,
+): Prisma.InputJsonValue {
+  const base =
+    existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? (existing as Record<string, unknown>)
+      : {}
+  return { ...base, ...patch } as Prisma.InputJsonValue
+}
+
+/**
+ * When every pick is in, move the league to `post_draft` so `LeagueShell` promotes Matchup over Draft.
+ * Uses a forced transition when the state machine does not allow setup/pre_draft â†’ post_draft directly,
+ * since a completed draft is authoritative.
+ */
+export function resolveLifecycleTransitionAfterDraftCompletes(
+  current: LeagueLifecycleState,
+): { target: LeagueLifecycleState; force: boolean } | null {
+  if (
+    current === 'post_draft' ||
+    current === 'in_season' ||
+    current === 'playoffs' ||
+    current === 'completed' ||
+    current === 'archived'
+  ) {
+    return null
+  }
+
+  const target: LeagueLifecycleState = 'post_draft'
+  const check = validateTransition(current, target)
+  if (check.ok) {
+    return { target, force: false }
+  }
+  return { target, force: true }
+}
+
+export type ApplyPostDraftLifecycleResult = {
+  applied: boolean
+  from?: LeagueLifecycleState
+  to?: LeagueLifecycleState
+  commissionerUserId?: string
+}
+
+/**
+ * Idempotent: if the league is already post_draft or later, no update.
+ * Call inside the same transaction that marks `DraftSession` completed.
+ */
+export async function applyPostDraftLifecycleInTransaction(
+  tx: Prisma.TransactionClient,
+  leagueId: string,
+): Promise<ApplyPostDraftLifecycleResult> {
+  const league = await tx.league.findUnique({
+    where: { id: leagueId },
+    select: { id: true, userId: true, lifecycleState: true, lifecycleMetadata: true },
+  })
+  if (!league) {
+    return { applied: false }
+  }
+
+  const current = getLeagueLifecycleState(league)
+  const resolved = resolveLifecycleTransitionAfterDraftCompletes(current)
+  if (!resolved) {
+    return { applied: false, from: current, commissionerUserId: league.userId }
+  }
+
+  const { target } = resolved
+  await tx.league.update({
+    where: { id: leagueId },
+    data: {
+      lifecycleState: target,
+      lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
+        lastTransitionAt: new Date().toISOString(),
+        lastTransitionFrom: current,
+        draftCompletionAuto: true,
+      }),
+    },
+  })
+
+  return { applied: true, from: current, to: target, commissionerUserId: league.userId }
+}
+
+/**
+ * When a commissioner resets an in-app draft after completion, move lifecycle back toward draft so
+ * the Draft tab can lead again. Only downgrades from `post_draft` â†’ `drafting` (valid transition).
+ */
+export function resolveLifecycleTransitionAfterDraftReset(
+  current: LeagueLifecycleState,
+): LeagueLifecycleState | null {
+  if (current !== 'post_draft') return null
+  const check = validateTransition(current, 'drafting')
+  return check.ok ? 'drafting' : null
+}
+
+export async function applyDraftingLifecycleOnDraftResetInTransaction(
+  tx: Prisma.TransactionClient,
+  leagueId: string,
+): Promise<ApplyPostDraftLifecycleResult> {
+  const league = await tx.league.findUnique({
+    where: { id: leagueId },
+    select: { id: true, userId: true, lifecycleState: true, lifecycleMetadata: true },
+  })
+  if (!league) {
+    return { applied: false }
+  }
+
+  const current = getLeagueLifecycleState(league)
+  const next = resolveLifecycleTransitionAfterDraftReset(current)
+  if (!next) {
+    return { applied: false, from: current, commissionerUserId: league.userId }
+  }
+
+  await tx.league.update({
+    where: { id: leagueId },
+    data: {
+      lifecycleState: next,
+      lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
+        lastTransitionAt: new Date().toISOString(),
+        lastTransitionFrom: current,
+        draftResetAuto: true,
+      }),
+    },
+  })
+
+  return { applied: true, from: current, to: next, commissionerUserId: league.userId }
+}
+
+
+===== app\api\redraft\season\route.ts =====
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { assertLeagueMember } from '@/lib/league/league-access'
+import { generateSchedule } from '@/lib/redraft/scheduleEngine'
+import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
+import { tryGetSportConfig } from '@/lib/sportConfig'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const seasonId = req.nextUrl.searchParams?.get('seasonId')?.trim()
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  if (!seasonId && !leagueId) {
+    return NextResponse.json({ error: 'seasonId or leagueId required' }, { status: 400 })
+  }
+
+  const season = await prisma.redraftSeason.findFirst({
+    where: seasonId ? { id: seasonId } : { leagueId: leagueId! },
+    orderBy: seasonId ? undefined : { createdAt: 'desc' },
+    include: { rosters: true },
+  })
+  if (!season) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const gate = await assertLeagueMember(season.leagueId, userId)
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+
+  return NextResponse.json({ season })
+}
+
+export async function POST(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  let body: {
+    leagueId?: string
+    sport?: string
+    season?: number
+    totalWeeks?: number
+    playoffStartWeek?: number
+    playoffTeams?: number
+    medianGame?: boolean
+    waiverType?: string
+    waiverBudget?: number
+  }
+  try {
+    body = (await req.json()) as typeof body
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const leagueId = body.leagueId?.trim()
+  if (!leagueId) return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+
+  const gate = await assertLeagueMember(leagueId, userId)
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+
+  const league = await prisma.league.findFirst({
+    where: { id: leagueId },
+    include: { teams: true },
+  })
+  if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+
+  const sportKey = body.sport
+    ? leagueSportToConfigSport(body.sport)
+    : leagueSportToConfigSport(String(league.sport))
+  const cfg = tryGetSportConfig(sportKey)
+  const seasonYear = body.season ?? league.season
+  const totalWeeks = body.totalWeeks ?? cfg?.defaultSeasonWeeks ?? 17
+  const playoffStartWeek = body.playoffStartWeek ?? cfg?.defaultPlayoffStartWeek ?? 15
+  const medianGame = body.medianGame ?? league.medianGame ?? false
+
+  const redraft = await prisma.$transaction(async (tx) => {
+    const rs = await tx.redraftSeason.create({
+      data: {
+        leagueId,
+        sport: sportKey,
+        season: seasonYear,
+        status: 'setup',
+        totalWeeks,
+        playoffStartWeek,
+        currentWeek: 0,
+        medianGame,
+      },
+    })
+
+    const pendingGuillotine = await tx.guillotineSeason.findFirst({
+      where: { leagueId, redraftSeasonId: null, season: seasonYear },
+      select: { id: true },
+      orderBy: { createdAt: 'desc' },
+    })
+    if (pendingGuillotine?.id) {
+      await tx.guillotineSeason.update({
+        where: { id: pendingGuillotine.id },
+        data: { redraftSeasonId: rs.id },
+      })
+    }
+
+    const rosters: { id: string }[] = []
+    for (const t of league.teams) {
+      const ownerId = t.claimedByUserId ?? league.userId
+      const r = await tx.redraftRoster.create({
+        data: {
+          seasonId: rs.id,
+          leagueId,
+          ownerId,
+          ownerName: t.ownerName,
+          teamName: t.teamName,
+          avatarUrl: t.avatarUrl,
+        },
+      })
+      rosters.push({ id: r.id })
+    }
+
+    const slots = generateSchedule(rosters, totalWeeks, playoffStartWeek, sportKey, { medianGame })
+    for (const s of slots) {
+      if (s.type === 'median') continue
+      await tx.redraftMatchup.create({
+        data: {
+          seasonId: rs.id,
+          leagueId,
+          week: s.week,
+          type: 'regular',
+          homeRosterId: s.home,
+          awayRosterId: s.away,
+          isMedianMatchup: false,
+        },
+      })
+    }
+
+    await tx.league.update({
+      where: { id: leagueId },
+      data: { season: seasonYear },
+    })
+
+    return tx.redraftSeason.findFirst({
+      where: { id: rs.id },
+      include: { rosters: true, schedule: true },
+    })
+  })
+
+  return NextResponse.json({ season: redraft })
+}
+
+
+
+===== app\api\redraft\roster\route.ts =====
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { assertLeagueMember } from '@/lib/league/league-access'
+import { buildPlayerKey } from '@/lib/adp/computeAllFantasyAdp'
+import { buildAllFantasyProjection } from '@/lib/redraft/projectionEngine'
+import { calculateScoreFromSportConfig } from '@/lib/redraft/scoringEngine'
+import {
+  applyRedraftLineupMoves,
+  validateRedraftLineup,
+  type RedraftLineupPlayer,
+  type RedraftLineupValidationResult,
+} from '@/lib/redraft/lineupValidation'
+import {
+  getCanonicalNflPlayerByNameTeam,
+  getCanonicalNflPlayerContext,
+} from '@/lib/nfl-data-foundation'
+
+export const dynamic = 'force-dynamic'
+
+type RosterPlayerRow = RedraftLineupPlayer & {
+  weeklyScore?: unknown
+}
+
+type PlayerWeeklyScoreRow = {
+  playerId: string
+  sport: string
+  stats: Record<string, unknown>
+  fantasyPts: number
+  isFinalized: boolean
+}
+
+type SportsInjuryRow = {
+  sport: string
+  playerId: string | null
+  playerName: string
+  status: string | null
+}
+
+type RedraftRosterRouteRow = {
+  id: string
+  leagueId: string
+  ownerId: string
+  players: RosterPlayerRow[]
+  season: {
+    season: number
+    sport: string
+    currentWeek?: number | null
+    totalWeeks?: number | null
+  }
+  [key: string]: unknown
+}
+
+function playerInjuryKey(player: { playerId?: string | null; playerName?: string | null; sport?: string | null }) {
+  const sport = String(player.sport ?? '').toUpperCase()
+  const playerId = String(player.playerId ?? '').trim()
+  if (playerId) return `${sport}:id:${playerId}`
+  return `${sport}:name:${String(player.playerName ?? '').trim().toLowerCase()}`
+}
+
+async function hydrateCurrentInjuryStatuses<T extends RosterPlayerRow>(
+  players: T[],
+  season: number,
+  week: number,
+): Promise<T[]> {
+  if (players.length === 0) return players
+  const playerIds = players.map((p) => p.playerId).filter(Boolean)
+  const playerNames = players.map((p) => p.playerName).filter(Boolean)
+  const sports = Array.from(new Set(players.map((p) => p.sport).filter(Boolean)))
+  const rows = (await prisma.sportsInjury.findMany({
+    where: {
+      sport: { in: sports },
+      expiresAt: { gte: new Date() },
+      AND: [
+        { OR: [{ playerId: { in: playerIds } }, { playerName: { in: playerNames } }] },
+        ...(Number.isFinite(season) ? [{ OR: [{ season }, { season: null }] }] : []),
+        ...(Number.isFinite(week) ? [{ OR: [{ week }, { week: null }] }] : []),
+      ],
+    },
+    orderBy: [{ fetchedAt: 'desc' }],
+    take: Math.max(50, players.length * 3),
+  })) as SportsInjuryRow[]
+
+  const statusByKey = new Map<string, string | null>()
+  for (const row of rows) {
+    const idKey = playerInjuryKey(row)
+    if (!statusByKey.has(idKey)) statusByKey.set(idKey, row.status ?? null)
+    const nameKey = `${String(row.sport ?? '').toUpperCase()}:name:${String(row.playerName ?? '').trim().toLowerCase()}`
+    if (!statusByKey.has(nameKey)) statusByKey.set(nameKey, row.status ?? null)
+  }
+
+  return players.map((player) => {
+    const status = statusByKey.get(playerInjuryKey(player))
+    return status ? { ...player, injuryStatus: status } : player
+  })
+}
+
+function buildLineupValidation(args: {
+  sport: string
+  week: number
+  players: RedraftLineupPlayer[]
+  previousPlayers?: RedraftLineupPlayer[]
+  extraIssues?: Parameters<typeof validateRedraftLineup>[0]['extraIssues']
+}): RedraftLineupValidationResult {
+  return validateRedraftLineup(args)
+}
+
+export async function GET(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const rosterId = req.nextUrl.searchParams?.get('rosterId')?.trim()
+  const week = Number(req.nextUrl.searchParams?.get('week') ?? '1')
+  if (!rosterId) return NextResponse.json({ error: 'rosterId required' }, { status: 400 })
+
+  const roster = (await prisma.redraftRoster.findFirst({
+    where: { id: rosterId },
+    include: { players: true, season: true },
+  })) as RedraftRosterRouteRow | null
+  if (!roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const gate = await assertLeagueMember(roster.leagueId, userId)
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+
+  const playerIds = roster.players.map((p) => p.playerId)
+  const sports = Array.from(new Set(roster.players.map((p) => p.sport).filter(Boolean)))
+  const seasonString = String(roster.season.season)
+  let scores: PlayerWeeklyScoreRow[] = []
+  let fantasyProjectionRows: FantasyProjectionRow[] = []
+  let afProjectionRows: AfProjectionRow[] = []
+  let seasonStatRows: SeasonStatsRow[] = []
+  let adpRows: Array<{ playerKey: string | null; averageOverallPick: number }> = []
+  if (playerIds.length) {
+    ;[
+      scores,
+      fantasyProjectionRows,
+      afProjectionRows,
+      seasonStatRows,
+      adpRows,
+    ] = await Promise.all([
+      prisma.playerWeeklyScore.findMany({
+        where: {
+          playerId: { in: playerIds },
+          week,
+          season: roster.season.season,
+          sport: { in: sports },
+        },
+      }) as Promise<PlayerWeeklyScoreRow[]>,
+      prisma.fantasyProjection
+        .findMany({
+          where: {
+            playerId: { in: playerIds },
+            week,
+            season: seasonString,
+            sport: { in: sports },
+          },
+          select: { playerId: true, sport: true, projectedPoints: true, fetchedAt: true },
+        })
+        .catch(() => []) as Promise<FantasyProjectionRow[]>,
+      prisma.aFProjectionSnapshot
+        .findMany({
+          where: {
+            playerId: { in: playerIds },
+            week,
+            season: roster.season.season,
+            sport: { in: sports },
+          },
+          orderBy: { computedAt: 'desc' },
+          select: { playerId: true, sport: true, afProjection: true, confidenceLevel: true, computedAt: true },
+        })
+        .catch(() => []) as Promise<AfProjectionRow[]>,
+      prisma.playerSeasonStats
+        .findMany({
+          where: {
+            playerId: { in: playerIds },
+            season: seasonString,
+            seasonType: 'regular',
+            sport: { in: sports },
+          },
+          orderBy: [{ source: 'desc' }, { fetchedAt: 'desc' }],
+          select: {
+            playerId: true,
+            sport: true,
+            fantasyPointsPerGame: true,
+            gamesPlayed: true,
+            stats: true,
+            fetchedAt: true,
+            source: true,
+          },
+        })
+        .catch(() => []) as Promise<SeasonStatsRow[]>,
+      prisma.allFantasyAdpSnapshot
+        .findMany({
+          where: {
+            sport: { in: sports },
+            leagueType: 'redraft',
+            season: seasonString,
+          },
+          select: { playerKey: true, averageOverallPick: true },
+          orderBy: { averageOverallPick: 'asc' },
+          take: 4000,
+        })
+        .catch(() => []) as Promise<Array<{ playerKey: string | null; averageOverallPick: number }>>,
+    ])
+  }
+  const scoreByPlayer = new Map(scores.map((score) => [`${score.playerId}:${score.sport}`, score]))
+  const projectionByPlayer = new Map(fantasyProjectionRows.map((row) => [`${row.playerId}:${row.sport}`, row]))
+  const afProjectionByPlayer = new Map<string, AfProjectionRow>()
+  for (const row of afProjectionRows) {
+    const key = `${row.playerId}:${row.sport}`
+    if (!afProjectionByPlayer.has(key)) afProjectionByPlayer.set(key, row)
+  }
+  const seasonStatsByPlayer = new Map<string, SeasonStatsRow>()
+  for (const row of seasonStatRows) {
+    const key = `${row.playerId}:${row.sport}`
+    const existing = seasonStatsByPlayer.get(key)
+    const rowIsRi = row.source === 'rolling_insights'
+    const existingIsRi = existing?.source === 'rolling_insights'
+    if (!existing || (rowIsRi && !existingIsRi) || (rowIsRi === existingIsRi && row.fetchedAt > existing.fetchedAt)) {
+      seasonStatsByPlayer.set(key, row)
+    }
+  }
+  const adpByPlayerKey = new Map<string, number>()
+  for (const row of adpRows) {
+    if (row.playerKey && !adpByPlayerKey.has(row.playerKey)) {
+      adpByPlayerKey.set(row.playerKey, row.averageOverallPick)
+    }
+  }
+
+  const scoredPlayers = await Promise.all(
+    roster.players.map(async (player) => {
+      const weeklyScore = scoreByPlayer.get(`${player.playerId}:${player.sport}`) ?? null
+      const projectionKey = `${player.playerId}:${player.sport}`
+      const providerProjection = projectionByPlayer.get(projectionKey)
+      const afProjection = afProjectionByPlayer.get(projectionKey)
+      const seasonStats = seasonStatsByPlayer.get(projectionKey)
+      const adp = adpByPlayerKey.get(buildPlayerKey(player.playerName, player.position)) ?? null
+      const projection = buildAllFantasyProjection({
+        playerId: player.playerId,
+        playerName: player.playerName,
+        sport: player.sport,
+        position: player.position,
+        team: player.team,
+        currentWeek: week,
+        totalWeeks: roster.season.totalWeeks ?? 17,
+        byeWeek: player.byeWeek,
+        injuryStatus: player.injuryStatus,
+        adp,
+        providerWeeklyProjection: providerProjection?.projectedPoints ?? null,
+        allFantasyWeeklyProjection: afProjection?.afProjection ?? null,
+        allFantasyConfidenceLevel: afProjection?.confidenceLevel ?? null,
+        rollingInsightsFantasyPointsPerGame: seasonStats?.fantasyPointsPerGame ?? null,
+        rollingInsightsGamesPlayed: seasonStats?.gamesPlayed ?? null,
+        rollingInsightsStats: seasonStats?.stats ?? null,
+      })
+      const canonical =
+        String(player.sport).toUpperCase() === 'NFL'
+          ? (await getCanonicalNflPlayerContext(player.playerId, {
+              season: roster.season.season,
+              week,
+            }).catch(() => null)) ??
+            (await getCanonicalNflPlayerByNameTeam(player.playerName, player.team, {
+              position: player.position,
+              season: roster.season.season,
+              week,
+            }).catch(() => null))
+          : null
+      const weeklyProjection = canonical?.projection?.projectedPoints ?? projection.weeklyProjection
+      const restOfSeasonProjection = canonical?.projection?.restOfSeason ?? projection.restOfSeasonProjection
+      const floorProjection = canonical?.projection?.floor ?? projection.floorProjection
+      const ceilingProjection = canonical?.projection?.ceiling ?? projection.ceilingProjection
+      const projectionConfidenceScore = canonical?.projection?.confidence ?? projection.confidenceScore
+      const projectionConfidenceLevel = canonical?.projection?.confidenceLevel ?? projection.confidenceLevel
+      const projectionSource = canonical?.projection?.projectionSource ?? projection.source
+      const availabilityWarnings = [
+        player.isLocked ? 'Player is locked for the current scoring period.' : null,
+        canonical?.byeWeek === week || player.byeWeek === week ? 'Player is on bye this week.' : null,
+        canonical?.injuryStatus ? `Injury status: ${canonical.injuryStatus}.` : null,
+      ].filter(Boolean)
+      const projectionFields = {
+        weeklyProjection,
+        restOfSeasonProjection,
+        floorProjection,
+        ceilingProjection,
+        projectionConfidenceScore,
+        projectionConfidenceLevel,
+        projectionSource,
+        startSitRecommendation: {
+          recommendation:
+            player.isLocked
+              ? 'locked'
+              : weeklyProjection == null
+                ? 'needs-data'
+                : weeklyProjection >= 10
+                  ? 'start'
+                  : 'bench',
+          projectedPoints: weeklyProjection,
+          confidence: projectionConfidenceScore,
+          warnings: availabilityWarnings,
+        },
+        canonicalNfl: canonical
+          ? {
+              playerId: canonical.playerId,
+              providerIds: canonical.providerIds,
+              projection: canonical.projection,
+              injuryStatus: canonical.injuryStatus,
+              byeWeek: canonical.byeWeek,
+              depthChartRole: canonical.depthChartRole,
+              dataSources: canonical.dataSources,
+              staleDataWarnings: canonical.staleDataWarnings,
+            }
+          : undefined,
+      }
+      if (!weeklyScore) return { ...player, weeklyScore: null, ...projectionFields }
+      return {
+        ...player,
+        ...projectionFields,
+        weeklyScore: {
+          ...weeklyScore,
+          fantasyPts: await calculateScoreFromSportConfig(
+            roster.leagueId,
+            player.playerId,
+            week,
+            weeklyScore.stats as Record<string, number>,
+          ),
+        },
+      }
+    }),
+  )
+  const players = await hydrateCurrentInjuryStatuses(scoredPlayers, roster.season.season, week)
+  const lineupValidation = buildLineupValidation({
+    sport: roster.season.sport,
+    week,
+    players,
+  })
+
+  return NextResponse.json({
+    roster: {
+      ...roster,
+      players,
+      lineupValidation,
+    },
+    week,
+  })
+}
+
+type FantasyProjectionRow = {
+  playerId: string
+  sport: string
+  projectedPoints: number
+  fetchedAt: Date
+}
+
+type AfProjectionRow = {
+  playerId: string
+  sport: string
+  afProjection: number
+  confidenceLevel: string
+  computedAt: Date
+}
+
+type SeasonStatsRow = {
+  playerId: string
+  sport: string
+  fantasyPointsPerGame: number | null
+  gamesPlayed: number | null
+  stats: unknown
+  fetchedAt: Date
+  source: string
+}
+
+export async function PATCH(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  let body: { rosterId?: string; week?: number; moves?: { playerId: string; fromSlot?: string; toSlot: string }[] }
+  try {
+    body = (await req.json()) as typeof body
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const rosterId = body.rosterId?.trim()
+  if (!rosterId || !body.moves?.length) {
+    return NextResponse.json({ error: 'rosterId and moves required' }, { status: 400 })
+  }
+
+  const roster = (await prisma.redraftRoster.findFirst({
+    where: { id: rosterId },
+    include: { players: true, season: true },
+  })) as RedraftRosterRouteRow | null
+  if (!roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const week = Math.max(1, Math.floor(Number(body.week ?? roster.season.currentWeek ?? 1) || 1))
+  const currentPlayers = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
+  const applied = applyRedraftLineupMoves(currentPlayers, body.moves)
+  const lineupValidation = buildLineupValidation({
+    sport: roster.season.sport,
+    week,
+    players: applied.players,
+    previousPlayers: currentPlayers,
+    extraIssues: applied.issues,
+  })
+
+  if (!lineupValidation.ok) {
+    return NextResponse.json(
+      {
+        error: 'Illegal lineup',
+        validation: lineupValidation,
+      },
+      { status: 422 },
+    )
+  }
+
+  await prisma.$transaction(
+    body.moves.map((m) =>
+      prisma.redraftRosterPlayer.updateMany({
+        where: { rosterId, playerId: m.playerId, droppedAt: null },
+        data: { slotType: m.toSlot },
+      }),
+    ),
+  )
+
+  const updated = (await prisma.redraftRoster.findFirst({
+    where: { id: rosterId },
+    include: { players: true, season: true },
+  })) as RedraftRosterRouteRow | null
+
+  const updatedPlayers = updated
+    ? await hydrateCurrentInjuryStatuses(updated.players, updated.season.season, week)
+    : []
+  const updatedValidation = updated
+    ? buildLineupValidation({ sport: updated.season.sport, week, players: updatedPlayers })
+    : lineupValidation
+
+  return NextResponse.json({
+    roster: updated
+      ? {
+          ...updated,
+          players: updatedPlayers,
+          lineupValidation: updatedValidation,
+        }
+      : updated,
+    validation: updatedValidation,
+  })
+}
+
+
+===== app\api\leagues\[leagueId]\draft\post-draft-summary\route.ts =====
+/**
+ * GET: Return deterministic post-draft summary (pick log, teams, value/reach, budget, keeper, devy).
+ * Auth: canAccessLeagueDraft. Returns 404 when draft is not completed.
+ */
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { buildPostDraftSummary, ensurePostDraftFinalized } from '@/lib/post-draft'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(
+  _req: Request,
+  ctx: { params: Promise<{ leagueId: string }> }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { leagueId } = await ctx.params
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+  const allowed = await canAccessLeagueDraft(leagueId, userId)
+  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  try {
+    await ensurePostDraftFinalized(leagueId).catch((e) => {
+      console.error('[draft/post-draft-summary] ensurePostDraftFinalized', leagueId, e)
+    })
+    const summary = await buildPostDraftSummary(leagueId)
+    if (!summary) return NextResponse.json({ error: 'Draft not completed or no session' }, { status: 404 })
+    return NextResponse.json(summary)
+  } catch (e) {
+    console.error('[draft/post-draft-summary GET]', e)
+    return NextResponse.json(
+      { error: (e as Error).message ?? 'Server error' },
+      { status: 500 }
+    )
+  }
+}
+
+
+===== app\api\leagues\[leagueId]\draft\replay\route.ts =====
+/**
+ * GET: Deterministic draft replay payload (pick log + metadata) for completed drafts.
+ * Auth: canAccessLeagueDraft.
+ */
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { buildPostDraftSummary, ensurePostDraftFinalized } from '@/lib/post-draft'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(
+  _req: Request,
+  ctx: { params: Promise<{ leagueId: string }> }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { leagueId } = await ctx.params
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+  const allowed = await canAccessLeagueDraft(leagueId, userId)
+  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  try {
+    await ensurePostDraftFinalized(leagueId).catch(() => {})
+    const summary = await buildPostDraftSummary(leagueId)
+    if (!summary) return NextResponse.json({ error: 'Draft not completed or no session' }, { status: 404 })
+    return NextResponse.json({
+      leagueId: summary.leagueId,
+      leagueName: summary.leagueName,
+      sport: summary.sport,
+      draftType: summary.draftType,
+      rounds: summary.rounds,
+      teamCount: summary.teamCount,
+      pickCount: summary.pickCount,
+      pickLog: summary.pickLog,
+    })
+  } catch (e) {
+    console.error('[draft/replay GET]', e)
+    return NextResponse.json(
+      { error: (e as Error).message ?? 'Server error' },
+      { status: 500 }
+    )
+  }
+}
+
+
+===== app\api\leagues\[leagueId]\draft\recap\route.ts =====
+/**
+ * POST: Generate AI draft recap for a completed draft.
+ * Auth: canAccessLeagueDraft.
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { openaiChatText } from '@/lib/openai-client'
+import { getProviderStatus } from '@/lib/provider-config'
+import {
+  buildDraftExecutionMetadata,
+  evaluateAIInvocationPolicy,
+  withTimeout,
+} from '@/lib/draft-automation-policy'
+import { buildDeterministicPostDraftRecap, type PostDraftRecapSections } from '@/lib/post-draft'
+import {
+  API_CACHE_TTL,
+  dedupeInFlight,
+  getApiCached,
+  setApiCached,
+} from '@/lib/api-performance'
+
+export const dynamic = 'force-dynamic'
+const DRAFT_RECAP_CACHE_CONTROL = 'private, max-age=60, stale-while-revalidate=120'
+
+function parseAiSectionOverrides(input: string): Partial<PostDraftRecapSections> | null {
+  const trimmed = input.trim()
+  const jsonCandidate = trimmed.startsWith('{')
+    ? trimmed
+    : trimmed.match(/\{[\s\S]*\}/)?.[0] ?? null
+  if (!jsonCandidate) return null
+  try {
+    const parsed = JSON.parse(jsonCandidate) as Record<string, unknown>
+    const overrides: Partial<PostDraftRecapSections> = {}
+    if (typeof parsed.leagueNarrativeRecap === 'string') overrides.leagueNarrativeRecap = parsed.leagueNarrativeRecap
+    if (typeof parsed.strategyRecap === 'string') overrides.strategyRecap = parsed.strategyRecap
+    if (typeof parsed.bestWorstValueExplanation === 'string') overrides.bestWorstValueExplanation = parsed.bestWorstValueExplanation
+    if (typeof parsed.chimmyDraftDebrief === 'string') overrides.chimmyDraftDebrief = parsed.chimmyDraftDebrief
+    return Object.keys(overrides).length > 0 ? overrides : null
+  } catch {
+    return null
+  }
+}
+
+function hashString(input: string): string {
+  let hash = 2166136261
+  for (let index = 0; index < input.length; index += 1) {
+    hash ^= input.charCodeAt(index)
+    hash +=
+      (hash << 1) +
+      (hash << 4) +
+      (hash << 7) +
+      (hash << 8) +
+      (hash << 24)
+  }
+  return (hash >>> 0).toString(16)
+}
+
+function jsonFromCacheEntry(entry: { body: unknown; status: number; headers: Record<string, string> }) {
+  const response = NextResponse.json(entry.body, { status: entry.status })
+  for (const [header, value] of Object.entries(entry.headers)) {
+    response.headers.set(header, value)
+  }
+  if (!entry.headers['Cache-Control']) {
+    response.headers.set('Cache-Control', DRAFT_RECAP_CACHE_CONTROL)
+  }
+  return response
+}
+
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ leagueId: string }> }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { leagueId } = await ctx.params
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+  const allowed = await canAccessLeagueDraft(leagueId, userId)
+  if (!allowed) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  const body = await req.json().catch(() => ({}))
+  const includeAiExplanation = Boolean(
+    body?.includeAiExplanation ?? body?.include_ai_explanation ?? false
+  )
+  const deterministicCacheKey = `draft_recap_det:${leagueId}`
+  const cachedDeterministic = !includeAiExplanation ? getApiCached(deterministicCacheKey) : null
+  if (cachedDeterministic) {
+    return jsonFromCacheEntry(cachedDeterministic)
+  }
+
+  try {
+    const deterministic = await buildDeterministicPostDraftRecap(leagueId)
+    if (!deterministic) {
+      return NextResponse.json({ error: 'Draft is not completed' }, { status: 400 })
+    }
+    const deterministicSections = deterministic.sections
+    const deterministicRecap = deterministicSections.leagueNarrativeRecap
+
+    if (!includeAiExplanation) {
+      const deterministicResponse = {
+        recap: deterministicRecap,
+        deterministicRecap,
+        sections: deterministicSections,
+        fallback: false,
+        execution: buildDraftExecutionMetadata({
+          feature: 'post_draft_summary_calculations',
+          aiUsed: false,
+          aiEligible: false,
+          reasonCode: 'deterministic_recap_default',
+        }),
+      }
+      setApiCached(deterministicCacheKey, deterministicResponse, {
+        ttlMs: API_CACHE_TTL.DEFAULT,
+        status: 200,
+        headers: { 'Cache-Control': DRAFT_RECAP_CACHE_CONTROL },
+      })
+      const response = NextResponse.json(deterministicResponse)
+      response.headers.set('Cache-Control', DRAFT_RECAP_CACHE_CONTROL)
+      return response
+    }
+
+    const invocation = evaluateAIInvocationPolicy({
+      feature: 'explain_draft_recap',
+      scopeId: leagueId,
+      requestAI: includeAiExplanation,
+      aiEnabled: true,
+      providerAvailable: getProviderStatus().anyAi,
+    })
+
+    if (invocation.decision !== 'allow_ai') {
+      return NextResponse.json({
+        recap: deterministicRecap,
+        deterministicRecap,
+        fallback: true,
+        execution: buildDraftExecutionMetadata({
+          feature: 'explain_draft_recap',
+          aiUsed: false,
+          aiEligible: invocation.canShowAIButton,
+          reasonCode: invocation.reasonCode,
+          fallbackToDeterministic: true,
+        }),
+      })
+    }
+
+    const aiCacheFingerprint = hashString(
+      JSON.stringify({
+        leagueId: deterministic.leagueId,
+        sections: deterministicSections,
+      })
+    )
+    const aiCacheKey = `draft_recap_ai:${leagueId}:${aiCacheFingerprint}`
+    const cachedAi = getApiCached(aiCacheKey)
+    if (cachedAi) {
+      return jsonFromCacheEntry(cachedAi)
+    }
+
+    const aiResponse = await dedupeInFlight(aiCacheKey, async () => {
+      const hotCachedAi = getApiCached(aiCacheKey)
+      if (hotCachedAi) return hotCachedAi.body as Record<string, unknown>
+
+      const aiResult = await withTimeout(
+        openaiChatText({
+          messages: [
+            {
+              role: 'system',
+              content: 'You are a concise fantasy sports analyst and Chimmy assistant. Rewrite draft recap sections in a calm, factual tone. Return STRICT JSON only with keys: leagueNarrativeRecap, strategyRecap, bestWorstValueExplanation, chimmyDraftDebrief. Do not include markdown fences or extra keys.',
+            },
+            {
+              role: 'user',
+              content: JSON.stringify({
+                leagueId: deterministic.leagueId,
+                leagueName: deterministic.leagueName,
+                sport: deterministic.sport,
+                deterministicSections,
+                teamGradeExplanations: deterministicSections.teamGradeExplanations.slice(0, 6),
+              }),
+            },
+          ],
+          temperature: 0.5,
+          maxTokens: 600,
+        }),
+        invocation.maxLatencyMs
+      )
+
+      if (!aiResult.ok || !aiResult.value.ok) {
+        const fallbackResponse = {
+          recap: deterministicRecap,
+          deterministicRecap,
+          sections: deterministicSections,
+          fallback: true,
+          execution: buildDraftExecutionMetadata({
+            feature: 'explain_draft_recap',
+            aiUsed: false,
+            aiEligible: invocation.canShowAIButton,
+            reasonCode: !aiResult.ok ? 'ai_timeout_deterministic_fallback' : 'ai_error_deterministic_fallback',
+            fallbackToDeterministic: true,
+          }),
+        }
+        // Short-lived fallback cache prevents burst retries from over-calling providers.
+        setApiCached(aiCacheKey, fallbackResponse, {
+          ttlMs: API_CACHE_TTL.SHORT,
+          status: 200,
+          headers: { 'Cache-Control': DRAFT_RECAP_CACHE_CONTROL },
+        })
+        return fallbackResponse
+      }
+
+      const aiOverrides = parseAiSectionOverrides(aiResult.value.text)
+      const sections: PostDraftRecapSections = aiOverrides
+        ? { ...deterministicSections, ...aiOverrides }
+        : {
+            ...deterministicSections,
+            leagueNarrativeRecap: aiResult.value.text.trim(),
+          }
+      const responsePayload = {
+        recap: sections.leagueNarrativeRecap,
+        deterministicRecap,
+        sections,
+        deterministicSections,
+        fallback: false,
+        execution: buildDraftExecutionMetadata({
+          feature: 'explain_draft_recap',
+          aiUsed: true,
+          aiEligible: true,
+          reasonCode: 'ai_recap_generated',
+        }),
+      }
+      setApiCached(aiCacheKey, responsePayload, {
+        ttlMs: API_CACHE_TTL.MEDIUM,
+        status: 200,
+        headers: { 'Cache-Control': DRAFT_RECAP_CACHE_CONTROL },
+      })
+      return responsePayload
+    })
+
+    const response = NextResponse.json(aiResponse)
+    response.headers.set('Cache-Control', DRAFT_RECAP_CACHE_CONTROL)
+    return response
+  } catch (e) {
+    console.error('[draft/recap POST]', e)
+    return NextResponse.json(
+      { error: (e as Error).message ?? 'Server error' },
+      { status: 500 }
+    )
+  }
+}
+

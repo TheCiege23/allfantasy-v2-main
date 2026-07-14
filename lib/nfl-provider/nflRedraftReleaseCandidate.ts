@@ -246,29 +246,24 @@ export function buildNflRedraftReleaseCandidateReport(input: {
     baseCertificationVersion: base.modelVersion,
     resolvedLaunchBlockers: [
       'Added canonical cron cache sync hook for import-scores, import-schedules, and import-standings.',
+      'Added first-class canonical score and injury capabilities and NFL cron adoption.',
       'Added RC1 production checklist and go/no-go report.',
       'Preserved canonical provider architecture and facts-only premium boundary.',
     ],
     remainingLaunchBlockers: [
       'Full repo TypeScript/build cleanup remains outside the safe G50B touched-file scope.',
       'Full seeded Playwright journey still needs a stable local/staging environment.',
-      'import-injuries requires a future canonical injury capability or explicit mapping decision.',
       'Live provider smoke requires staging credentials and network access.',
     ],
     knownTechnicalDebt: [
       'Cron route adoption should be staged after existing dirty telemetry changes are reconciled.',
-      'FantasyCalc trade/value-history legacy API shapes still need versioned canonical migration.',
-      'API-Sports injury/venue canonical sync remains future provider hardening work.',
+      'The legacy /api/fantasycalc URL remains as a provider-neutral compatibility alias pending a versioned canonical URL.',
+      'API-Sports venue enrichment remains future provider hardening work.',
       'Provider trace persistence and alert thresholds remain observability hardening.',
     ],
     cronCanonicalSync: {
-      safeJobs: ['import-scores', 'import-schedules', 'import-standings'],
-      deferredJobs: [
-        {
-          job: 'import-injuries',
-          reason: 'G49G/G49H do not expose a standalone injury capability; adding one would be provider architecture expansion.',
-        },
-      ],
+      safeJobs: ['import-scores', 'import-schedules', 'import-standings', 'import-injuries'],
+      deferredJobs: [],
       lastResults: cronResults,
     },
     productionChecklist,
@@ -277,7 +272,7 @@ export function buildNflRedraftReleaseCandidateReport(input: {
       ? 'NO_GO_FOR_PUBLIC_LAUNCH'
       : 'GO_FOR_RC1_INTERNAL',
     recommendedPreLaunchActions: [
-      'Wire the canonical cron sync hook into the four cron routes after reconciling existing dirty telemetry changes.',
+      'Complete live credential certification for the four canonical cron paths.',
       'Run full seeded Playwright certification across commissioner and manager journeys.',
       'Run staging live-provider smoke for Rolling Insights, FantasyCalc, TheSportsDB, API-Sports, and OpenWeather.',
       'Clear repo-wide TypeScript/build blockers before public launch.',

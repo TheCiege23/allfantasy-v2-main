@@ -17,6 +17,17 @@ export type ResolvedLeagueTradeSettings = {
   draftPickTradingAllowed: boolean
   devyTradingAllowed: boolean
   c2cTradingAllowed: boolean
+  processingMode: 'immediate' | 'commissioner_review' | 'league_vote'
+  reviewWindowMinutes: number
+  maxAssetsPerSide: number | null
+  recentlyAddedRestrictionHours: number | null
+  allowFutureDraftPicks: false
+  allowConditionalTrades: false
+  playerLockPolicy: 'individual_game_time'
+  requireRosterLegality: true
+  settingsVersion: string
+  scoringVersion: string
+  source: 'persisted_league_settings'
 }
 
 function num(v: unknown, fallback: number): number {
@@ -73,6 +84,15 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
   const leagueType = String(league.leagueType ?? '').toLowerCase()
   const devyTradingAllowed = leagueType.includes('devy') || Boolean(ext.devyTrading ?? true)
   const c2cTradingAllowed = leagueType.includes('c2c') || Boolean(ext.c2cTrading ?? true)
+  const configuredMax = num(comm.maxTradeAssetsPerSide ?? ext.maxTradeAssetsPerSide, 0)
+  const maxAssetsPerSide = configuredMax > 0 ? Math.floor(configuredMax) : null
+  const configuredRecentHours = num(comm.recentlyAddedTradeRestrictionHours ?? ext.recentlyAddedTradeRestrictionHours, 0)
+  const recentlyAddedRestrictionHours = configuredRecentHours > 0 ? Math.floor(configuredRecentHours) : null
+  const processingMode = tradeReviewMode === 'instant'
+    ? 'immediate'
+    : tradeReviewMode === 'league_vote'
+      ? 'league_vote'
+      : 'commissioner_review'
 
   return {
     tradeReviewMode,
@@ -85,7 +105,39 @@ export function resolveLeagueTradeSettings(league: League): ResolvedLeagueTradeS
     draftPickTradingAllowed,
     devyTradingAllowed,
     c2cTradingAllowed,
+    processingMode,
+    reviewWindowMinutes: tradeReviewHours * 60,
+    maxAssetsPerSide,
+    recentlyAddedRestrictionHours,
+    allowFutureDraftPicks: false,
+    allowConditionalTrades: false,
+    playerLockPolicy: 'individual_game_time',
+    requireRosterLegality: true,
+    settingsVersion: String(league.settingsSnapshotVersion ?? 'legacy'),
+    scoringVersion: String(league.scoringPresetId ?? league.scoring ?? 'legacy'),
+    source: 'persisted_league_settings',
   }
+}
+
+export function toRedraftProposalGovernance(settings: ResolvedLeagueTradeSettings, eligibleRosterCount: number) {
+  const vetoMode = settings.tradeReviewMode === 'league_vote'
+    ? 'league_vote'
+    : settings.tradeReviewMode === 'instant'
+      ? 'no_veto'
+      : 'commissioner'
+  const vetoThreshold = Math.max(1, Math.ceil(Math.max(1, eligibleRosterCount) * settings.vetoThresholdPercent / 100))
+  return {
+    source: settings.source,
+    processingMode: settings.processingMode,
+    vetoMode,
+    vetoThreshold,
+    vetoThresholdPercent: settings.vetoThresholdPercent,
+    reviewWindowMinutes: settings.reviewWindowMinutes,
+    tradeDeadlineWeek: settings.tradeDeadlineWeek,
+    maxAssetsPerSide: settings.maxAssetsPerSide,
+    settingsVersion: settings.settingsVersion,
+    scoringVersion: settings.scoringVersion,
+  } as const
 }
 
 export function isPastTradeDeadline(league: League, currentWeek: number | null): boolean {

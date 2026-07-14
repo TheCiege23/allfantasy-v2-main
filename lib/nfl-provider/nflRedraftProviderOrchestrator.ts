@@ -5,12 +5,14 @@ export const NFL_REDRAFT_PROVIDER_ORCHESTRATOR_MODEL_VERSION = 'nfl-redraft-prov
 export type NflRedraftProviderOrchestratorCapability =
   | 'fantasy_valuations'
   | 'headshots'
+  | 'injuries'
   | 'league_import'
   | 'live_stats'
   | 'logos'
   | 'news'
   | 'player_identity'
   | 'schedule'
+  | 'scores'
   | 'standings'
   | 'weather'
 
@@ -135,7 +137,7 @@ export const NFL_REDRAFT_PROVIDER_NODE_CONFIG: Record<NflRedraftProviderNodeId, 
     priority: 1,
     required: true,
     subscriptionType: 'backbone',
-    capabilities: ['player_identity', 'schedule', 'live_stats', 'standings', 'headshots', 'logos'],
+    capabilities: ['player_identity', 'schedule', 'scores', 'live_stats', 'injuries', 'standings', 'headshots', 'logos'],
     state: 'ACTIVE',
     healthReason: null,
     lastSuccessfulSyncIso: null,
@@ -148,7 +150,7 @@ export const NFL_REDRAFT_PROVIDER_NODE_CONFIG: Record<NflRedraftProviderNodeId, 
     priority: 20,
     required: false,
     subscriptionType: 'monthly',
-    capabilities: ['player_identity', 'schedule', 'standings', 'headshots', 'logos', 'news'],
+    capabilities: ['player_identity', 'schedule', 'scores', 'injuries', 'standings', 'headshots', 'logos', 'news'],
     state: 'UNKNOWN',
     healthReason: 'Monthly enhancement provider; availability is subscription-dependent.',
     lastSuccessfulSyncIso: null,
@@ -239,7 +241,7 @@ export const NFL_REDRAFT_PROVIDER_NODE_CONFIG: Record<NflRedraftProviderNodeId, 
     priority: 90,
     required: false,
     subscriptionType: 'monthly',
-    capabilities: ['live_stats', 'news', 'schedule', 'headshots'],
+    capabilities: ['scores', 'live_stats', 'injuries', 'news', 'schedule', 'headshots'],
     state: 'DISABLED',
     healthReason: 'Legacy licensed provider slot retained for compatibility.',
     lastSuccessfulSyncIso: null,
@@ -252,7 +254,7 @@ export const NFL_REDRAFT_PROVIDER_NODE_CONFIG: Record<NflRedraftProviderNodeId, 
     priority: 900,
     required: false,
     subscriptionType: 'cache',
-    capabilities: ['player_identity', 'schedule', 'live_stats', 'standings', 'fantasy_valuations', 'weather', 'news'],
+    capabilities: ['player_identity', 'schedule', 'scores', 'live_stats', 'injuries', 'standings', 'fantasy_valuations', 'weather', 'news'],
     state: 'ACTIVE',
     healthReason: null,
     lastSuccessfulSyncIso: null,
@@ -265,7 +267,7 @@ export const NFL_REDRAFT_PROVIDER_NODE_CONFIG: Record<NflRedraftProviderNodeId, 
     priority: 910,
     required: false,
     subscriptionType: 'runtime',
-    capabilities: ['live_stats', 'standings'],
+    capabilities: ['scores', 'live_stats', 'injuries', 'standings'],
     state: 'ACTIVE',
     healthReason: null,
     lastSuccessfulSyncIso: null,
@@ -364,10 +366,32 @@ export const NFL_REDRAFT_PROVIDER_CAPABILITY_POLICIES: Record<
     allowStaleCache: true,
     userFacing: true,
   },
+  scores: {
+    capability: 'scores',
+    preferredProvider: 'rolling_insights',
+    secondaryProvider: 'api_sports',
+    thirdProvider: null,
+    cacheFallback: 'canonical_cache',
+    runtimeFallback: 'runtime',
+    unavailableBehavior: 'preserve_runtime_without_field',
+    allowStaleCache: true,
+    userFacing: true,
+  },
   live_stats: {
     capability: 'live_stats',
     preferredProvider: 'rolling_insights',
     secondaryProvider: null,
+    thirdProvider: null,
+    cacheFallback: 'canonical_cache',
+    runtimeFallback: 'runtime',
+    unavailableBehavior: 'preserve_runtime_without_field',
+    allowStaleCache: true,
+    userFacing: true,
+  },
+  injuries: {
+    capability: 'injuries',
+    preferredProvider: 'rolling_insights',
+    secondaryProvider: 'api_sports',
     thirdProvider: null,
     cacheFallback: 'canonical_cache',
     runtimeFallback: 'runtime',

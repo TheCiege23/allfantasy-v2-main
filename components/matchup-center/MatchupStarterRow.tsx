@@ -20,19 +20,19 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
 
   return (
     <div className={`flex min-w-0 flex-1 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
-      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/[0.06]">
+      <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border border-subtle bg-surface-muted">
         {side.headshotUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={side.headshotUrl} alt="" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-white/35">
+          <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-muted">
             {side.name.slice(0, 2).toUpperCase()}
           </div>
         )}
       </div>
       <div className="min-w-0">
         <div
-          className={`flex items-center gap-1 truncate text-[12px] font-semibold text-white ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}
+          className={`flex items-center gap-1 truncate text-[12px] font-semibold text-primary ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}
         >
           {side.aiInsight ? (
             <span
@@ -45,7 +45,7 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
           ) : null}
           <span className="truncate">{side.name}</span>
         </div>
-        <div className={`flex items-center gap-1 truncate text-[10px] text-white/45 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
+        <div className={`flex items-center gap-1 truncate text-[10px] text-muted ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
           {side.gameStatus === 'live' ? (
             <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 animate-pulse" aria-label="Live" />
           ) : null}
@@ -55,7 +55,7 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
           </span>
         </div>
         {side.newsBlurb ? (
-          <div className={`truncate text-[9px] text-white/35 ${align === 'right' ? 'text-right' : ''}`}>{side.newsBlurb}</div>
+          <div className={`truncate text-[9px] text-muted ${align === 'right' ? 'text-right' : ''}`}>{side.newsBlurb}</div>
         ) : null}
         {side.aiInsight ? (
           <div className={`truncate text-[9px] text-cyan-200/70 ${align === 'right' ? 'text-right' : ''}`}>{side.aiInsight}</div>
@@ -73,14 +73,14 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
       </div>
       <div className={`shrink-0 text-right ${align === 'right' ? 'text-left' : ''}`}>
         <div className="relative">
-          <div className="text-sm font-bold tabular-nums text-white">{side.currentPoints.toFixed(1)}</div>
+          <div className="text-sm font-bold tabular-nums text-primary">{side.currentPoints.toFixed(1)}</div>
           {delta !== null ? (
             <span className="absolute -top-3 left-0 animate-[fade-out_2.5s_ease-out_forwards] text-[9px] font-bold text-emerald-300">
               +{delta.toFixed(1)}
             </span>
           ) : null}
         </div>
-        <div className="text-[10px] text-white/40">Proj {side.projectedPoints.toFixed(1)}</div>
+        <div className="text-[10px] text-muted">Proj {side.projectedPoints.toFixed(1)}</div>
       </div>
     </div>
   )
@@ -99,7 +99,7 @@ export function MatchupStarterRow({
   onStartSit?: (a: MatchupPlayerSlot, b: MatchupPlayerSlot) => void
 }) {
   return (
-    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 border-b border-white/[0.06] py-2.5">
+    <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 border-b border-subtle py-2.5">
       {left ? <PlayerCell side={left} align="left" /> : <div className="opacity-40" />}
       <div className="flex flex-col items-center gap-1 px-1">
         <span className="rounded-md border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-100/95">

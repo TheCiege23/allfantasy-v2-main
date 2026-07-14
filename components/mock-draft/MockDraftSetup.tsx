@@ -26,7 +26,6 @@ const LEAGUE_TYPES: { value: MockLeagueType; label: string }[] = [
 const DRAFT_TYPES: { value: MockDraftType; label: string }[] = [
   { value: 'snake', label: 'Snake' },
   { value: 'linear', label: 'Linear' },
-  { value: 'auction', label: 'Auction' },
 ]
 
 const SCORING_FORMATS: { value: MockScoringFormat; label: string }[] = [

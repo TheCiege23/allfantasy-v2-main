@@ -7,7 +7,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { readCache, writeCache } from '@/lib/enrichment-cache'
-import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { getPlayerAnalytics } from '@/lib/player-analytics'
 import {
   getAgeCurve,
@@ -277,7 +277,7 @@ export async function invalidateOutlookCache(
     const stable = JSON.stringify(cacheParams)
     const hash = crypto.createHash('sha256').update(stable).digest('hex').slice(0, 16)
     const key = `player_outlook:${hash}`
-    await prisma.sportsDataCache.delete({ where: { cacheKey: key } }).catch(() => {})
+    await prisma.sportsDataCache.deleteMany({ where: { cacheKey: key } }).catch(() => {})
   } catch {
     // Non-fatal
   }

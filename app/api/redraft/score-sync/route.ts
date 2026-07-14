@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
+import type { NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
+import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
@@ -9,9 +11,13 @@ import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { runRedraftSeasonScoring } from '@/lib/redraft/redraftSeasonScoringRunner'
+import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+const REDRAFT_SCORE_SYNC_JOB = 'cron-redraft-score-sync'
 
 type ScoreSyncBody = {
   leagueId?: string
@@ -149,4 +155,79 @@ export async function POST(request: Request) {
     const status = message.includes('not found') ? 404 : 500
     return NextResponse.json({ ok: false, error: message }, { status })
   }
+}
+
+/**
+ * GET /api/redraft/score-sync — the scheduled Vercel cron entry point.
+ *
+ * Vercel crons issue GET requests, so this is what actually runs on schedule.
+ * It enumerates every ACTIVE redraft season and runs the scoring pipeline
+ * (sync weekly scores → recalc matchups → update standings) for each, isolating
+ * per-season failures so one broken league never blocks the rest. NCAAF (and any
+ * non-NFL sport) is skipped with a dataWarning because weekly stat sync is wired
+ * for NFL only — never marked as a false success. The survivor/zombie/c2c
+ * automation bridge still runs (best-effort) so those formats keep their tick.
+ */
+export async function GET(request: Request) {
+  // Vercel cron sends `Authorization: Bearer ${CRON_SECRET}`. requireCronAuth
+  // accepts that (it checks CRON_SECRET / LEAGUE_CRON_SECRET); requireAdminOrBearer
+  // alone rejected the cron because CRON_SECRET !== ADMIN_PASSWORD. Accept the
+  // cron secret first, then fall back to admin/bearer for manual triggers.
+  if (!requireCronAuth(request as unknown as NextRequest)) {
+    const gate = await requireAdminOrBearer(request)
+    if (!gate.ok) return gate.res
+  }
+
+  const startedAt = Date.now()
+
+  let report
+  try {
+    report = await withSyncJobRun(
+      { jobName: REDRAFT_SCORE_SYNC_JOB, trigger: 'cron' },
+      async () => {
+        const seasons = await prisma.redraftSeason.findMany({
+          where: { status: 'active' },
+          select: { id: true, leagueId: true, sport: true, currentWeek: true },
+          take: 200,
+        })
+        return runRedraftSeasonScoring(seasons, {
+          syncSeason: async (season) => {
+            const summary = await syncPlayerWeeklyScoresForRedraftSeason({ seasonId: season.id, actorId: 'cron' })
+            return {
+              seasonId: summary.seasonId,
+              week: summary.week,
+              scoresUpserted: summary.scoresUpserted,
+              warnings: summary.warnings ?? [],
+            }
+          },
+          recalcMatchups: (seasonId, week) => recalculateMatchupsForSeasonWeek(seasonId, week),
+          updateStandings: (seasonId, week) => updateStandings(seasonId, week),
+        })
+      },
+      (r) => ({
+        rowsWritten: r.totalScoresUpserted,
+        warnings: r.dataWarnings.map((w) => w.warning),
+        errors: r.failed.map((f) => f.error),
+        status: r.failedCount > 0 ? 'partial' : 'success',
+        metadata: { processedCount: r.processedCount, skippedCount: r.skippedCount },
+      }),
+    )
+  } catch (error) {
+    return NextResponse.json(
+      { ok: false, error: error instanceof Error ? error.message : 'Redraft score-sync failed' },
+      { status: 500 },
+    )
+  }
+
+  // Preserve the survivor/zombie/c2c cron tick (best-effort; never fails the redraft run).
+  const legacy = await runLegacyAutomationBridge().catch((e) => ({
+    error: e instanceof Error ? e.message : 'automation bridge failed',
+  }))
+
+  return NextResponse.json({
+    ...report,
+    legacy,
+    durationMs: Date.now() - startedAt,
+    ranAt: new Date().toISOString(),
+  })
 }

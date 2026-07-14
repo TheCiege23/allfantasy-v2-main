@@ -154,6 +154,12 @@ export const EspnAdapter: ILeagueImportAdapter<EspnImportPayload> = {
         rosterSize,
         scoring: scoringFormat,
         isDynasty,
+        // Same fix as SleeperLeagueMapper (Phase OS-C5): `League.status` has no DB
+        // default, so a missing value here leaves imported leagues invisible on
+        // Dashboard. ESPN has no direct status string — `raw.league.isFinished`
+        // (derived from `status.finalScoringPeriod` vs. current matchup period)
+        // is the real, honest signal ESPN's API actually exposes.
+        status: raw.league.isFinished ? 'complete' : 'in_season',
         playoff_team_count: raw.settings?.playoffTeamCount ?? raw.league.playoffTeamCount ?? undefined,
         regular_season_length:
           raw.settings?.regularSeasonMatchupCount ??

@@ -402,7 +402,13 @@ function DraftBoardInner({
           : 'relative flex flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-gradient-to-b from-[#070f22] via-[#060d1e] to-[#050a14] shadow-[0_20px_60px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.04)]'
       }
       data-testid="draft-board"
+      aria-label={`${boardModeLabel} draft board`}
     >
+      <p className="sr-only" aria-live="polite" data-testid="draft-board-live-status">
+        {currentOverallPick == null
+          ? 'No active pick.'
+          : `Pick ${currentOverallPick} is now on the clock${currentOwnerSlot == null ? '.' : ` for draft slot ${currentOwnerSlot}.`}`}
+      </p>
       <div
         className={`pointer-events-none absolute inset-x-3 top-0 h-px bg-gradient-to-r ${rs ? 'via-cyan-300/35' : 'via-cyan-400/20'} from-transparent to-transparent`}
         aria-hidden
@@ -454,6 +460,7 @@ function DraftBoardInner({
                 data-testid="draft-board-prev-round"
                 onClick={() => setSelectedRound((prev) => Math.max(1, prev - 1))}
                 disabled={!navigation.canGoPrev}
+                aria-label="Previous draft round"
                 className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[10px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
                 <ChevronLeft className="h-3.5 w-3.5" />
@@ -476,6 +483,7 @@ function DraftBoardInner({
                 data-testid="draft-board-next-round"
                 onClick={() => setSelectedRound((prev) => Math.min(rounds, prev + 1))}
                 disabled={!navigation.canGoNext}
+                aria-label="Next draft round"
                 className="rounded-lg border border-white/20 bg-black/35 px-2 py-1 text-[10px] text-white/80 shadow-sm transition duration-150 hover:border-cyan-300/35 hover:bg-white/12 active:scale-95 disabled:opacity-40"
               >
                 <ChevronRight className="h-3.5 w-3.5" />
@@ -632,9 +640,10 @@ function DraftBoardInner({
               {orderedSlots.map((entry) => (
                 <div
                   key={entry.rosterId}
-                  className={`group relative flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 transition duration-150 ${
+                className={`group relative flex h-10 min-w-0 flex-col items-center justify-center gap-0.5 px-0.5 transition duration-150 ${
                     currentOwnerSlot === entry.slot ? 'text-cyan-100' : 'text-white/85'
                   }`}
+                  aria-current={currentOwnerSlot === entry.slot ? 'true' : undefined}
                 >
                   <span
                     className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-[9px] font-bold uppercase tracking-[0.03em] shadow-sm ${

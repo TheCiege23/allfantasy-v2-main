@@ -6,8 +6,13 @@ import { withApiUsage } from '@/lib/telemetry/usage'
 import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { runTradeConsoleAnalysis } from '@/lib/trade-value-console/runTradeConsoleAnalysis'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
-import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
+import type { TradeConsoleAnalyzeInput, TradeConsolePlayerLine } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
+import {
+  shouldRunSharedTradeShadowCompare,
+  runSharedTradeValueShadowCompare,
+} from '@/lib/decision-os/trade/sharedServiceTradeValueShadowCompare'
+import type { TradeValueConsoleAssetInput } from '@/lib/shared-services/trade/TradeValueConsoleShadowService'
 
 const assetSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -68,7 +73,9 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         userId,
         sportFilter: parsed.data.sportFilter as TradeConsoleAnalyzeInput['sportFilter'],
       }
+      const analysisStart = Date.now()
       const out = await runTradeConsoleAnalysis(payload)
+      const authoritativeDurationMs = Date.now() - analysisStart
 
       if (!out.ok) {
         const status =
@@ -80,6 +87,37 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
                 ? httpStatusForLeagueToolCode(out.code)
                 : 400
         return NextResponse.json(out, { status })
+      }
+
+      // Phase 18 — Trade Value Console shadow-compare (lib/shared-services/trade).
+      // Additive only, never alters the response above. Compares each real
+      // player asset's identity (and, secondarily, market value) against the
+      // canonical PlayerIdentityResolver — see
+      // lib/shared-services/trade/TradeValueConsoleShadowService.ts for why
+      // this is scoped to identity/value rather than a full fairness-score
+      // comparison. Deliberately awaited, not fire-and-forget — same
+      // serverless-safety reasoning as the Waiver seam (Phase 12).
+      if (shouldRunSharedTradeShadowCompare(process.env, { leagueId: parsed.data.leagueId ?? null })) {
+        try {
+          const isRealPlayerLine = (line: TradeConsolePlayerLine) =>
+            line.pricedSource === 'fantasycalc' || line.pricedSource === 'sports_db'
+          const assets: TradeValueConsoleAssetInput[] = [...out.players.give, ...out.players.get]
+            .filter(isRealPlayerLine)
+            .map((line) => ({
+              name: line.name,
+              position: line.position || null,
+              team: line.team || null,
+              sport: line.sport || undefined,
+              authoritativeMarketValue: line.marketValue,
+            }))
+          await runSharedTradeValueShadowCompare({
+            leagueId: parsed.data.leagueId ?? null,
+            assets,
+            authoritativeDurationMs,
+          })
+        } catch {
+          // Defense in depth only — runSharedTradeValueShadowCompare itself never throws.
+        }
       }
 
       return NextResponse.json(out)

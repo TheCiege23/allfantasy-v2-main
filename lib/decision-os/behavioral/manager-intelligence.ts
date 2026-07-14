@@ -26,8 +26,16 @@ export type ParticipationTier = 'elite' | 'active' | 'moderate' | 'passive' | 'i
 
 // ── Retention risk ────────────────────────────────────────────────────────────
 
-/** Estimated likelihood this manager will disengage or ghost the league. */
-export type ManagerRetentionRisk = 'low' | 'medium' | 'high' | 'critical'
+/**
+ * Estimated likelihood this manager will disengage or ghost the league.
+ * `insufficient_data` is distinct from `critical`: it means the LEAGUE itself has
+ * zero recorded activity for ANY manager (a data-coverage gap, e.g. activity
+ * ingestion never ran for this league), so this manager's own zero-event count
+ * carries no real evidence either way. `critical` is reserved for a manager with
+ * zero events in a league where OTHER managers DO have recorded activity — real,
+ * relative evidence of genuine disengagement, not merely absence of data.
+ */
+export type ManagerRetentionRisk = 'low' | 'medium' | 'high' | 'critical' | 'insufficient_data'
 
 // ── Engagement level ──────────────────────────────────────────────────────────
 
@@ -222,8 +230,20 @@ function computeRetentionRisk(
   facts: ManagerBehavioralFacts,
   daysSinceLastActivity: number | null,
   participationTier: ParticipationTier,
+  leagueEventCount: number,
 ): { risk: ManagerRetentionRisk; reasons: string[] } {
   if (facts.eventCount === 0) {
+    // Phase 36: the league itself has zero recorded activity for ANY manager —
+    // real evidence of a data-coverage gap (e.g. activity ingestion never ran
+    // for this league), not evidence this specific manager is disengaged.
+    if (leagueEventCount === 0) {
+      return {
+        risk: 'insufficient_data',
+        reasons: [
+          'No activity has been recorded for this league yet, so engagement cannot be assessed. This does not mean the manager is inactive.',
+        ],
+      }
+    }
     return {
       risk: 'critical',
       reasons: ['Manager has never taken any recorded action in the league'],
@@ -444,6 +464,7 @@ export function deriveManagerBehavioralIntelligence(
     facts,
     daysSinceLastActivity,
     participationTier,
+    events.length,
   )
 
   // ── Nudges ────────────────────────────────────────────────────────────────

@@ -19,7 +19,7 @@ const NOW = new Date('2026-07-09T12:00:00Z')
 
 function availableSnapshot(o: {
   leagueId: string
-  retentionRisk?: 'low' | 'medium' | 'high' | 'critical'
+  retentionRisk?: 'low' | 'medium' | 'high' | 'critical' | 'insufficient_data'
   isInactive?: boolean
   recommendationCount?: number
 }): UserOsSnapshot {
@@ -134,6 +134,34 @@ describe('resolveManagerCommandCenterSnapshot', () => {
     expect(snapshot.atRiskLeagueCount).toBe(1)
     expect(snapshot.healthyLeagueCount).toBe(0)
     expect(snapshot.attentionQueue.find((s) => s.type === 'manager_engagement_risk')).toBeDefined()
+  })
+
+  // Phase 36: real bug found via real .env.test execution — a league with insufficient_data
+  // retention risk still carries isInactive: true (a separate, legitimately-computed field from
+  // deriveManagerBehavioralIntelligence), and the old `AT_RISK_RETENTION.has(...) || isInactive`
+  // check bucketed it as at-risk anyway, defeating the whole point of the insufficient_data fix.
+  // A real 8-league user showed atRiskLeagueCount: 8/8 even after the retentionRisk fix landed,
+  // until this bucketing logic was also corrected.
+  it('does not bucket insufficient_data leagues as at-risk, even when isInactive is true', async () => {
+    mockResolve.mockResolvedValueOnce(
+      availableSnapshot({ leagueId: 'L1', retentionRisk: 'insufficient_data', isInactive: true }),
+    )
+    const snapshot = await resolveManagerCommandCenterSnapshot('user-1', ['L1'], NOW)
+    expect(snapshot.atRiskLeagueCount).toBe(0)
+    expect(snapshot.healthyLeagueCount).toBe(0)
+    expect(snapshot.insufficientDataLeagueCount).toBe(1)
+  })
+
+  it('totalLeagues always equals the sum of all four buckets (no silent count mismatch)', async () => {
+    mockResolve
+      .mockResolvedValueOnce(availableSnapshot({ leagueId: 'L1', retentionRisk: 'low' }))
+      .mockResolvedValueOnce(availableSnapshot({ leagueId: 'L2', retentionRisk: 'critical' }))
+      .mockResolvedValueOnce(availableSnapshot({ leagueId: 'L3', retentionRisk: 'insufficient_data', isInactive: true }))
+      .mockResolvedValueOnce(unavailableSnapshot('L4'))
+    const snapshot = await resolveManagerCommandCenterSnapshot('user-1', ['L1', 'L2', 'L3', 'L4'], NOW)
+    expect(
+      snapshot.healthyLeagueCount + snapshot.atRiskLeagueCount + snapshot.unavailableLeagueCount + snapshot.insufficientDataLeagueCount,
+    ).toBe(snapshot.totalLeagues)
   })
 
   it('derives real attention signals from each league\'s own real UserOsSnapshot data', async () => {

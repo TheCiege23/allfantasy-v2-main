@@ -10,7 +10,7 @@ import {
   SleeperUser,
   SleeperPlayoffBracket,
 } from '../sleeper-client'
-import { fetchFantasyCalcValues, FantasyCalcPlayer, FantasyCalcSettings, getValuationCacheAgeMs } from '../fantasycalc'
+import { fetchFantasyCalcValues, FantasyCalcPlayer, FantasyCalcSettings, getValuationCacheAgeMs } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { prisma } from '../prisma'
 import { getWeekStatsFromCache } from './sleeper-matchup-cache'
 import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../idp-kicker-values'

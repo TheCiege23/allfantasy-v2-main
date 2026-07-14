@@ -213,7 +213,7 @@ describe('Fantrax import API routes', () => {
       })
 
       const res = await POST(req as any)
-      expect(res.status).toBe(200)
+      expect(res.status).toBe(201)
       await expect(res.json()).resolves.toEqual({
         leagueId: 'league-new',
         name: 'Fantrax Commit League',
@@ -225,6 +225,7 @@ describe('Fantrax import API routes', () => {
         },
         historicalBackfill: { status: 'queued' },
         importRunId: 'import-run-1',
+        replayed: false,
       })
       expect(persistImportWithCanonicalAuditMock).toHaveBeenCalledWith(
         expect.objectContaining({

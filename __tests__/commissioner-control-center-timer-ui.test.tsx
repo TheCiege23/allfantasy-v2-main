@@ -100,19 +100,23 @@ describe('CommissionerControlCenterModal — timer UI (Slice B.1)', () => {
     expect(unit.value).toBe('seconds')
   })
 
-  it('Undo last pick opens a confirm prompt and sends resetTimer=true when commissioner picks "Undo and reset timer"', () => {
+  it('Undo last pick opens a reason prompt and sends audited reason on confirm', () => {
     const { onAction } = renderModal(15)
     fireEvent.click(screen.getByTestId('draft-commissioner-undo'))
     expect(screen.getByTestId('draft-commissioner-undo-prompt')).toBeTruthy()
-    fireEvent.click(screen.getByTestId('draft-commissioner-undo-confirm-reset'))
-    expect(onAction).toHaveBeenCalledWith('undo_pick', { resetTimer: true })
+    fireEvent.change(screen.getByTestId('draft-commissioner-undo-reason'), {
+      target: { value: 'Wrong player selected' },
+    })
+    fireEvent.click(screen.getByTestId('draft-commissioner-undo-confirm'))
+    expect(onAction).toHaveBeenCalledWith('undo_pick', { reason: 'Wrong player selected' })
   })
 
-  it('Undo last pick sends resetTimer=false when commissioner picks "keep remaining time"', () => {
+  it('Undo last pick requires a reason before confirmation', () => {
     const { onAction } = renderModal(15)
     fireEvent.click(screen.getByTestId('draft-commissioner-undo'))
-    fireEvent.click(screen.getByTestId('draft-commissioner-undo-confirm-keep'))
-    expect(onAction).toHaveBeenCalledWith('undo_pick', { resetTimer: false })
+    const confirm = screen.getByTestId('draft-commissioner-undo-confirm') as HTMLButtonElement
+    expect(confirm.disabled).toBe(true)
+    expect(onAction).not.toHaveBeenCalled()
   })
 
   it('Undo prompt cancel does not call onAction', () => {

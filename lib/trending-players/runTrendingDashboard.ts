@@ -6,10 +6,10 @@ import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
 import { prisma } from '@/lib/prisma'
 import {
   getTrendingPlayers as fcSortByTrend,
+  getCanonicalValuationSnapshot,
   type FantasyCalcPlayer,
   type FantasyCalcSettings,
-} from '@/lib/fantasycalc'
-import { readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db'
+} from '@/lib/player-valuations/canonicalPlayerValuations'
 import { getPlayer } from '@/lib/data/players'
 import { openaiChatText } from '@/lib/openai-client'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
@@ -149,10 +149,10 @@ async function cardFromFcPlayer(
         ? `Trade frequency signal ${(p.maybeTradeFrequency ?? 0).toFixed(2)} · 30d value trend ${p.trend30Day > 0 ? '+' : ''}${Math.round(p.trend30Day)}`
         : `30d value trend ${p.trend30Day > 0 ? '+' : ''}${Math.round(p.trend30Day)} · rank #${p.overallRank}`,
     chips: chipsFromFantasyCalc(p, trendType),
-    sources: enrich.injury ? ['FantasyCalc', 'api.fantasycalc.com', 'injury_layer'] : ['FantasyCalc', 'api.fantasycalc.com'],
+    sources: enrich.injury ? ['Canonical market values', 'injury_layer'] : ['Canonical market values'],
     injuryStatus: enrich.injury,
     isRookie: rookie,
-    dataFreshness: 'Live FantasyCalc values · 30d trend component',
+    dataFreshness: 'Canonical market values · 30d trend component',
   }
 }
 
@@ -187,15 +187,15 @@ async function buildNflFromFantasyCalc(args: {
 }): Promise<{ risers: TrendPlayerCard[]; fallers: TrendPlayerCard[] }> {
   let players: FantasyCalcPlayer[] = []
   try {
-    const cached = await readFantasyCalcValuesFromDb(args.settings, { allowStale: true })
+    const cached = await getCanonicalValuationSnapshot(args.settings)
     players = cached.players
   } catch (e) {
-    console.warn('[trending-players] FantasyCalc fetch failed', e)
-    args.dataGaps.push('FantasyCalc cache unavailable — NFL value trends skipped.')
+    console.warn('[trending-players] Canonical valuation resolution failed', e)
+    args.dataGaps.push('Canonical valuation data unavailable — NFL value trends skipped.')
     return { risers: [], fallers: [] }
   }
   if (players.length === 0) {
-    args.dataGaps.push('FantasyCalc valuation cache is empty — run sync-fantasycalc-valuations to restore NFL value trends.')
+    args.dataGaps.push('Canonical valuation data is unavailable — NFL value trends skipped.')
     return { risers: [], fallers: [] }
   }
   const pool = filterFcPool(players, args.position, args.rookiesOnly)

@@ -374,7 +374,7 @@ describe('advancePlayoffWinners — round transitions', () => {
     const result = await advancePlayoffWinners(SEASON_ID, WEEK)
     expect(result.status).toBe('round_complete')
     expect(roundUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { id: 'round-1' }, data: { status: 'complete' } }),
+      expect.objectContaining({ where: { id: 'round-1' }, data: { status: 'completed' } }),
     )
     expect(roundUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'round-2' }, data: { status: 'active' } }),
@@ -401,7 +401,7 @@ describe('advancePlayoffWinners — round transitions', () => {
     expect(result.status).toBe('ready_for_champion_finalization')
     // Champion crowning must NOT happen here — season status untouched
     expect(roundUpdate).toHaveBeenCalledWith(
-      expect.objectContaining({ data: { status: 'complete' } }),
+      expect.objectContaining({ data: { status: 'completed' } }),
     )
     // Should not try to activate another round (none exists)
     const activationCalls = roundUpdate.mock.calls.filter(

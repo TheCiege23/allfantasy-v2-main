@@ -9,8 +9,11 @@ import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { buildLeagueDecisionContext, summarizeLeagueDecisionContext } from '@/lib/league-decision-context'
 import { getLeagueInfo, getLeagueRosters, getTradedDraftPicks, getAllPlayers } from '@/lib/sleeper-client'
-import { findPlayerByName, FantasyCalcPlayer } from '@/lib/fantasycalc'
-import { getFantasyCalcValuesDbFirst } from '@/lib/fantasycalc-db'
+import {
+  findPlayerByName,
+  getCanonicalPlayerValuations,
+  FantasyCalcPlayer,
+} from '@/lib/player-valuations/canonicalPlayerValuations'
 import { parseSleeperRosterPositions } from '@/lib/trade-engine/sleeper-converter'
 import {
   generateTradeCandidates,
@@ -355,7 +358,7 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder", tool: "TradeFi
 
     let fcPlayers: FantasyCalcPlayer[] = []
     try {
-      fcPlayers = await getFantasyCalcValuesDbFirst({
+      fcPlayers = await getCanonicalPlayerValuations({
         isDynasty: true,
         numQbs: isSF ? 2 : 1,
         numTeams: sleeperLeague.total_rosters || 12,

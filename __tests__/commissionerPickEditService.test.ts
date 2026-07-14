@@ -482,7 +482,7 @@ describe('commissionerPickEdit', () => {
     expect(hm.resetTimer).toHaveBeenCalledWith('league-1')
   })
 
-  it('REMOVE past pick does not reset timer', async () => {
+  it('REMOVE past pick resets timer because it rewinds the on-clock cursor', async () => {
     hm.txFindUnique.mockResolvedValue(
       pausedSession([
         basePick({ overall: 1, id: 'pick-1' }),
@@ -501,10 +501,10 @@ describe('commissionerPickEdit', () => {
       overallPickNumber: 1,
     })
     expect(out.ok).toBe(true)
-    expect(hm.resetTimer).not.toHaveBeenCalled()
+    expect(hm.resetTimer).toHaveBeenCalledWith('league-1')
   })
 
-  it('REMOVE future pick does not reset timer', async () => {
+  it('REMOVE future populated pick resets timer because the draft cursor may move to that pick', async () => {
     hm.txFindUnique.mockResolvedValue(
       pausedSession([
         basePick({ overall: 1, id: 'pick-1' }),
@@ -524,7 +524,7 @@ describe('commissionerPickEdit', () => {
       overallPickNumber: 3,
     })
     expect(out.ok).toBe(true)
-    expect(hm.resetTimer).not.toHaveBeenCalled()
+    expect(hm.resetTimer).toHaveBeenCalledWith('league-1')
   })
 
   it('ASSIGN current on-clock pick resets timer', async () => {

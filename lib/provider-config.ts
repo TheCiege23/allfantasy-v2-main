@@ -32,6 +32,9 @@ const CLEARSPORTS_BASE_URL_KEYS = [
 ] as const
 const DEFAULT_CLEARSPORTS_BASE_URL = 'https://api.clearsportsapi.com/api/v1'
 
+const APISPORTS_KEY_KEYS = ['SPORTS_API_KEY', 'APISPORTS_KEY', 'APISPORTS_API_KEY', 'API_SPORTS_KEY'] as const
+const THESPORTSDB_API_KEY_KEYS = ['THESPORTSDB_API_KEY', 'SPORTSDB_API_KEY', 'THE_SPORTS_DB_API_KEY'] as const
+const CFBD_API_KEY_KEYS = ['CFBD_API_KEY', 'COLLEGE_FOOTBALL_DATA_API_KEY', 'CFBD_KEY'] as const
 const ROLLING_INSIGHTS_API_KEY_KEYS = ['ROLLING_INSIGHTS_API_KEY', 'ROLLINGINSIGHTS_API_KEY'] as const
 const ROLLING_INSIGHTS_CLIENT_ID_KEYS = ['ROLLING_INSIGHTS_CLIENT_ID'] as const
 const ROLLING_INSIGHTS_CLIENT_SECRET_KEYS = ['ROLLING_INSIGHTS_CLIENT_SECRET'] as const
@@ -43,6 +46,15 @@ const DEFAULT_ROLLING_INSIGHTS_BASE_URL = 'https://datafeeds.rolling-insights.co
 interface ResolvedEnvValue {
   value: string
   keyUsed: string | null
+}
+
+export interface SportsProviderEnvDiagnostics {
+  provider: string
+  configured: boolean
+  source: string | null
+  detectedAliases: string[]
+  missingAliases: string[]
+  authMode?: 'api_key' | 'oauth' | 'none'
 }
 
 function trim(value: string | undefined): string {
@@ -59,6 +71,15 @@ function resolveFirstEnv(keys: readonly string[]): ResolvedEnvValue {
     if (value) return { value, keyUsed: key }
   }
   return { value: '', keyUsed: null }
+}
+
+function detectedEnvKeys(keys: readonly string[]): string[] {
+  return keys.filter((key) => Boolean(trim(process.env[key])))
+}
+
+function missingAliases(keys: readonly string[], activeKeys: string[] = []): string[] {
+  const active = new Set(activeKeys)
+  return keys.filter((key) => !trim(process.env[key]) && !active.has(key))
 }
 
 function normalizeBaseUrl(value: string, fallback: string): string {
@@ -234,6 +255,92 @@ export function getRollingInsightsConfigFromEnv(): RollingInsightsProviderConfig
 
 export function isRollingInsightsAvailable(): boolean {
   return !!getRollingInsightsConfigFromEnv()
+}
+
+export function getSportsProviderEnvDiagnostics(): SportsProviderEnvDiagnostics[] {
+  const rollingInsightsApiKey = resolveFirstEnv(ROLLING_INSIGHTS_API_KEY_KEYS)
+  const rollingInsightsClientId = resolveFirstEnv(ROLLING_INSIGHTS_CLIENT_ID_KEYS)
+  const rollingInsightsClientSecret = resolveFirstEnv(ROLLING_INSIGHTS_CLIENT_SECRET_KEYS)
+  const rollingInsightsClientId2 = resolveFirstEnv(ROLLING_INSIGHTS_CLIENT_ID2_KEYS)
+  const rollingInsightsClientSecret2 = resolveFirstEnv(ROLLING_INSIGHTS_CLIENT_SECRET2_KEYS)
+  const hasRollingInsightsPrimaryOAuth = Boolean(rollingInsightsClientId.value && rollingInsightsClientSecret.value)
+  const hasRollingInsightsSecondaryOAuth = Boolean(rollingInsightsClientId2.value && rollingInsightsClientSecret2.value)
+  const rollingInsightsActiveKeys = hasRollingInsightsPrimaryOAuth
+    ? [rollingInsightsClientId.keyUsed, rollingInsightsClientSecret.keyUsed].filter((value): value is string => Boolean(value))
+    : hasRollingInsightsSecondaryOAuth
+      ? [rollingInsightsClientId2.keyUsed, rollingInsightsClientSecret2.keyUsed].filter((value): value is string => Boolean(value))
+      : rollingInsightsApiKey.keyUsed
+        ? [rollingInsightsApiKey.keyUsed]
+        : []
+  const rollingInsightsDetected = [
+    ...detectedEnvKeys(ROLLING_INSIGHTS_API_KEY_KEYS),
+    ...detectedEnvKeys(ROLLING_INSIGHTS_CLIENT_ID_KEYS),
+    ...detectedEnvKeys(ROLLING_INSIGHTS_CLIENT_SECRET_KEYS),
+    ...detectedEnvKeys(ROLLING_INSIGHTS_CLIENT_ID2_KEYS),
+    ...detectedEnvKeys(ROLLING_INSIGHTS_CLIENT_SECRET2_KEYS),
+  ]
+
+  const apiSportsKey = resolveFirstEnv(APISPORTS_KEY_KEYS)
+  const theSportsDbKey = resolveFirstEnv(THESPORTSDB_API_KEY_KEYS)
+  const clearSportsKey = resolveFirstEnv(CLEARSPORTS_KEY_KEYS)
+  const cfbdKey = resolveFirstEnv(CFBD_API_KEY_KEYS)
+
+  return [
+    {
+      provider: 'Rolling Insights',
+      configured: Boolean(rollingInsightsActiveKeys.length),
+      source: hasRollingInsightsPrimaryOAuth
+        ? 'ROLLING_INSIGHTS_CLIENT_ID+ROLLING_INSIGHTS_CLIENT_SECRET'
+        : hasRollingInsightsSecondaryOAuth
+          ? 'ROLLING_INSIGHTS_CLIENT_ID2+ROLLING_INSIGHTS_CLIENT_SECRET2'
+          : rollingInsightsApiKey.keyUsed,
+      detectedAliases: rollingInsightsDetected,
+      missingAliases: [
+        ...missingAliases(ROLLING_INSIGHTS_API_KEY_KEYS, rollingInsightsActiveKeys),
+        ...missingAliases(ROLLING_INSIGHTS_CLIENT_ID_KEYS, rollingInsightsActiveKeys),
+        ...missingAliases(ROLLING_INSIGHTS_CLIENT_SECRET_KEYS, rollingInsightsActiveKeys),
+        ...missingAliases(ROLLING_INSIGHTS_CLIENT_ID2_KEYS, rollingInsightsActiveKeys),
+        ...missingAliases(ROLLING_INSIGHTS_CLIENT_SECRET2_KEYS, rollingInsightsActiveKeys),
+      ],
+      authMode: hasRollingInsightsPrimaryOAuth || hasRollingInsightsSecondaryOAuth
+        ? 'oauth'
+        : rollingInsightsApiKey.value
+          ? 'api_key'
+          : 'none',
+    },
+    {
+      provider: 'TheSportsDB',
+      configured: Boolean(theSportsDbKey.value),
+      source: theSportsDbKey.keyUsed,
+      detectedAliases: detectedEnvKeys(THESPORTSDB_API_KEY_KEYS),
+      missingAliases: missingAliases(THESPORTSDB_API_KEY_KEYS, theSportsDbKey.keyUsed ? [theSportsDbKey.keyUsed] : []),
+      authMode: theSportsDbKey.value ? 'api_key' : 'none',
+    },
+    {
+      provider: 'API-Sports',
+      configured: Boolean(apiSportsKey.value),
+      source: apiSportsKey.keyUsed,
+      detectedAliases: detectedEnvKeys(APISPORTS_KEY_KEYS),
+      missingAliases: missingAliases(APISPORTS_KEY_KEYS, apiSportsKey.keyUsed ? [apiSportsKey.keyUsed] : []),
+      authMode: apiSportsKey.value ? 'api_key' : 'none',
+    },
+    {
+      provider: 'ClearSports',
+      configured: Boolean(clearSportsKey.value),
+      source: clearSportsKey.keyUsed,
+      detectedAliases: detectedEnvKeys(CLEARSPORTS_KEY_KEYS),
+      missingAliases: missingAliases(CLEARSPORTS_KEY_KEYS, clearSportsKey.keyUsed ? [clearSportsKey.keyUsed] : []),
+      authMode: clearSportsKey.value ? 'api_key' : 'none',
+    },
+    {
+      provider: 'CFBD',
+      configured: Boolean(cfbdKey.value),
+      source: cfbdKey.keyUsed,
+      detectedAliases: detectedEnvKeys(CFBD_API_KEY_KEYS),
+      missingAliases: missingAliases(CFBD_API_KEY_KEYS, cfbdKey.keyUsed ? [cfbdKey.keyUsed] : []),
+      authMode: cfbdKey.value ? 'api_key' : 'none',
+    },
+  ]
 }
 
 // ----- Frontend-safe status (no secrets) -----

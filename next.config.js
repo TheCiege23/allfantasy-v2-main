@@ -39,8 +39,10 @@ const nextConfig = {
       };
     }
 
-    if (dev && process.platform === 'win32') {
+    if (process.platform === 'win32') {
       // Windows + webpack filesystem cache can intermittently corrupt .next vendor chunks.
+      // On exFAT volumes, Node can also report EISDIR for readlink() on normal files
+      // during webpack dependency snapshotting, which blocks production builds.
       config.cache = false;
     }
 

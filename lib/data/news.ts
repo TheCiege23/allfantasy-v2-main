@@ -4,6 +4,13 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { DATA_TTLS, isFreshDate, triggerBackgroundRefresh } from '@/lib/data/shared'
 import { runNewsImporter } from '@/lib/workers/news-importer'
+import { requestSportNewsRefresh } from '@/lib/workers/sports-data-import-coordinator'
+
+// Phase 24 rollback flag check -- reuses the exact same flag Phase 21/22 introduced for
+// getPlayer/searchPlayers/getPlayersByTeam/getPlayerNews. Default OFF.
+function isNonBlockingRefreshEnabled(): boolean {
+  return process.env.PLAYER_LOOKUP_NON_BLOCKING_REFRESH === 'true'
+}
 
 export async function getLatestNews(sport: string, limit: number = 25) {
   const normalizedSport = normalizeToSupportedSport(sport)
@@ -14,6 +21,10 @@ export async function getLatestNews(sport: string, limit: number = 25) {
   })
 
   if (rows.length === 0) {
+    if (isNonBlockingRefreshEnabled()) {
+      requestSportNewsRefresh(normalizedSport, 'get_latest_news_miss')
+      return rows
+    }
     await runNewsImporter({ sports: [normalizedSport] })
     rows = await prisma.playerNewsRecord.findMany({
       where: { sport: normalizedSport },
@@ -64,6 +75,10 @@ export async function getHighImpactNews(sport: string) {
   })
 
   if (rows.length === 0) {
+    if (isNonBlockingRefreshEnabled()) {
+      requestSportNewsRefresh(normalizedSport, 'get_high_impact_news_miss')
+      return rows
+    }
     await runNewsImporter({ sports: [normalizedSport] })
     rows = await prisma.playerNewsRecord.findMany({
       where: {

@@ -6,7 +6,7 @@ import {
   findPlayerByName,
   getPickValue,
   FantasyCalcPlayer
-} from './fantasycalc';
+} from '@/lib/player-valuations/canonicalPlayerValuations';
 import { resolveCurrentTradeLearningSeason } from './trade-engine/season-resolver';
 
 interface TradePlayer {

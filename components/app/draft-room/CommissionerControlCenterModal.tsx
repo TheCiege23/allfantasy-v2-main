@@ -30,6 +30,24 @@ const TIMER_MODE_OPTIONS: Array<{ value: TimerMode; label: string }> = [
   { value: 'none', label: 'No timer' },
 ]
 
+const TIMER_PRESET_OPTIONS = [
+  { value: '10s', label: '10 seconds', seconds: 10 },
+  { value: '30s', label: '30 seconds', seconds: 30 },
+  { value: '60s', label: '60 seconds', seconds: 60 },
+  { value: '90s', label: '90 seconds', seconds: 90 },
+  { value: '120s', label: '2 minutes', seconds: 120 },
+  { value: 'off', label: 'Off', seconds: 0 },
+  { value: 'custom', label: 'Set amount', seconds: null },
+] as const
+
+type TimerPresetValue = (typeof TIMER_PRESET_OPTIONS)[number]['value']
+type TimerCustomUnit = 'seconds' | 'minutes'
+
+function presetForTimerSeconds(seconds: number | null): TimerPresetValue {
+  const match = TIMER_PRESET_OPTIONS.find((option) => option.seconds === seconds)
+  return match?.value ?? 'custom'
+}
+
 export type CommissionerControlCenterModalProps = {
   leagueId: string
   draftStatus: string
@@ -116,7 +134,9 @@ export function CommissionerControlCenterModal({
   commissionerAiDraft = null,
   onSaveCommissionerAiDraft,
 }: CommissionerControlCenterModalProps) {
-  const [timerInput, setTimerInput] = useState(String(timerSeconds ?? 90))
+  const [timerPreset, setTimerPreset] = useState<TimerPresetValue>(() => presetForTimerSeconds(timerSeconds))
+  const [timerCustomAmount, setTimerCustomAmount] = useState('')
+  const [timerCustomUnit, setTimerCustomUnit] = useState<TimerCustomUnit>('seconds')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionApiError, setActionApiError] = useState<string | null>(null)
   const [settingsSaving, setSettingsSaving] = useState(false)
@@ -239,8 +259,12 @@ export function CommissionerControlCenterModal({
   }
 
   const handleSetTimer = () => {
-    const sec = Math.max(0, Math.min(86400, parseInt(timerInput, 10) || 90))
-    setTimerInput(String(sec))
+    const selected = TIMER_PRESET_OPTIONS.find((option) => option.value === timerPreset)
+    const rawSeconds =
+      selected?.seconds != null
+        ? selected.seconds
+        : Math.round((parseFloat(timerCustomAmount) || 0) * (timerCustomUnit === 'minutes' ? 60 : 1))
+    const sec = Math.max(0, Math.min(86400, rawSeconds))
     run('set_timer', () => onAction('set_timer_seconds', { seconds: sec, resetCurrentTimer: true }))
   }
 
@@ -705,17 +729,52 @@ export function CommissionerControlCenterModal({
         {(isInProgress || isPaused) && (
           <section>
             <h3 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Edit timer</h3>
-            <div className="flex flex-wrap items-center gap-2">
+            <div
+              className="flex flex-wrap items-center gap-2"
+              data-testid="timer-preset-select-active"
+            >
               <Clock className="h-4 w-4 text-white/50" />
-              <input
-                type="number"
-                min={0}
-                max={86400}
-                value={timerInput}
-                onChange={(e) => setTimerInput(e.target.value)}
-                className="w-20 rounded border border-white/15 bg-black/30 px-2 py-1.5 text-sm text-white"
-              />
-              <span className="text-xs text-white/50">seconds</span>
+              <select
+                value={timerPreset}
+                onChange={(event) => {
+                  const next = event.target.value as TimerPresetValue
+                  setTimerPreset(next)
+                  if (next === 'custom') {
+                    setTimerCustomAmount('')
+                    setTimerCustomUnit('seconds')
+                  }
+                }}
+                data-testid="draft-commissioner-timer-preset"
+                className="rounded border border-white/15 bg-black/30 px-2 py-1.5 text-sm text-white"
+              >
+                {TIMER_PRESET_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              {timerPreset === 'custom' ? (
+                <>
+                  <input
+                    type="number"
+                    min={0}
+                    max={timerCustomUnit === 'minutes' ? 1440 : 86400}
+                    value={timerCustomAmount}
+                    onChange={(e) => setTimerCustomAmount(e.target.value)}
+                    data-testid="draft-commissioner-timer-custom-amount"
+                    className="w-20 rounded border border-white/15 bg-black/30 px-2 py-1.5 text-sm text-white"
+                  />
+                  <select
+                    value={timerCustomUnit}
+                    onChange={(event) => setTimerCustomUnit(event.target.value as TimerCustomUnit)}
+                    data-testid="draft-commissioner-timer-custom-unit"
+                    className="rounded border border-white/15 bg-black/30 px-2 py-1.5 text-sm text-white"
+                  >
+                    <option value="seconds">seconds</option>
+                    <option value="minutes">minutes</option>
+                  </select>
+                </>
+              ) : null}
               <button
                 type="button"
                 onClick={handleSetTimer}

@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftRight, ClipboardList, Settings, X, ExternalLink, Activity } from 'lucide-react'
@@ -1451,9 +1452,9 @@ const maxWeekMenu = useMemo(() => {
             roster,
           }),
         })
-        const json = (await res.json().catch(() => ({}))) as { error?: string }
+        await res.json().catch(() => ({}))
         if (!res.ok) {
-          toast.error(typeof json.error === 'string' ? json.error : 'Could not save lineup')
+          toast.error('Lineup was not saved. Your previous lineup is still active.')
           return false
         }
         toast.success('Lineup saved')
@@ -1464,7 +1465,7 @@ const maxWeekMenu = useMemo(() => {
         invalidateIntelligence({ leagueId: league.id, reason: 'lineup_saved' })
         return true
       } catch {
-        toast.error('Could not save lineup')
+        toast.error('Lineup was not saved. Your previous lineup is still active.')
         return false
       } finally {
         setSavingLineup(false)
@@ -1681,9 +1682,12 @@ const maxWeekMenu = useMemo(() => {
           <div className="flex items-center gap-2">
             {sleeperOwner ? (
               ownerAvatarSrc ? (
-                <img
+                <Image
                   src={ownerAvatarSrc}
                   alt=""
+                  width={36}
+                  height={36}
+                  unoptimized
                   className="h-9 w-9 shrink-0 rounded-full border border-subtle object-cover"
                 />
               ) : (

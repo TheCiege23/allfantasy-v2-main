@@ -16,11 +16,8 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
-import {
-  syncAPISportsGamesToDb,
-  clearAPISportsDiagnostics,
-  getAPISportsDiagnostics,
-} from "@/lib/api-sports"
+import { syncNflRedraftCronCanonicalCache } from "@/lib/nfl-provider/nflRedraftCronCanonicalSync"
+import { syncLegacyNcaafScores } from "@/lib/ncaaf-provider/legacyApiSportsIngestion"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -51,10 +48,17 @@ async function handle(req: NextRequest) {
     }
 
     if (source === "all" || source === "api_sports") {
-      clearAPISportsDiagnostics()
-      const asCount = await syncAPISportsGamesToDb({ season, sport })
-      results.api_sports = { synced: asCount, sport }
-      diagnostics.api_sports = getAPISportsDiagnostics()
+      if (sport === "NFL") {
+        const canonical = await syncNflRedraftCronCanonicalCache({
+          job: "import-schedules",
+          sport,
+          season,
+        })
+        results.canonical_schedule = canonical
+      } else {
+        const asCount = await syncLegacyNcaafScores(season)
+        results.api_sports = { synced: asCount, sport }
+      }
     }
 
     const totalSynced = Object.values(results)

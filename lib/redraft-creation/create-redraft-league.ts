@@ -175,6 +175,7 @@ export async function createRedraftLeagueInTransaction(
       language: body.language,
       joinCode,
       status: 'active',
+      lifecycleState: 'setup',
       settings: mergedSettings as Prisma.InputJsonValue,
       syncStatus: 'manual',
       scoring: footballRedraft ? String(mergedSettings.scoring_format ?? 'half_ppr') : null,

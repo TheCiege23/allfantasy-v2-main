@@ -216,6 +216,14 @@ export function buildRedraftContractRepairPlan(input: {
       roster_size: defaults.roster_size,
       rosterSize: defaults.rosterSize,
     }
+  } else if (isRecord(incoming.starter_slots)) {
+    // A present, non-legacy slot map is a DELIBERATE commissioner customization
+    // (e.g. NCAAF WR3 with no kicker). Contract repair must preserve it EXACTLY —
+    // `deepMergeMissing` would otherwise back-fill default positions (a kicker,
+    // an extra slot) the commissioner intentionally removed, silently overwriting
+    // their roster shape. Keeping this atomic is what lets future league concepts
+    // build off the same base without redraft's default lineup leaking back in.
+    nextSettings = { ...nextSettings, starter_slots: incoming.starter_slots }
   }
 
   nextSettings = normalizeScoringIfKnown(sport, nextSettings)

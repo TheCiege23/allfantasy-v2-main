@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { DEFAULT_LANG, resolveLanguage, SUPPORTED_LANGUAGES } from "@/lib/i18n/constants"
+import { DEFAULT_LANG, getLanguageSupportStatus, resolveLanguage } from "@/lib/i18n/constants"
 import { translations } from "@/lib/i18n/translations"
 import { translateMissingEnglishKeysWithGoogle } from "@/lib/i18n/google-translate-server"
 
@@ -45,6 +45,9 @@ export async function GET(req: Request) {
   return NextResponse.json({
     ok: true,
     language: lang,
+    fallbackLanguage: DEFAULT_LANG,
+    supportStatus: getLanguageSupportStatus(lang),
+    machineTranslatedMissingKeys: Object.keys(googleMessages).length,
     messages: {
       ...merged,
       ...googleMessages,

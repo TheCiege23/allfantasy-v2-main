@@ -19,6 +19,7 @@ const nextDir = path.join(repoRoot, distDirName)
 const legacyNextDir = path.join(repoRoot, '.next')
 const maxAttempts = 4
 const retryDelayMs = 1000
+const retryableRemoveErrors = new Set(['EBUSY', 'EPERM', 'ENOTEMPTY'])
 
 function sleep(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
@@ -80,7 +81,7 @@ function removePath(targetPath) {
       return
     } catch (err) {
       const code = err?.code
-      if (code !== 'EBUSY' && code !== 'EPERM') {
+      if (!retryableRemoveErrors.has(code)) {
         console.warn(`[railway-clean] could not remove ${label}: ${code ?? err.message}`)
         process.exitCode = 1
         return

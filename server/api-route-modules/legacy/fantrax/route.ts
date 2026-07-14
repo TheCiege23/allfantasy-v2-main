@@ -2,8 +2,21 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parseFantraxFiles } from '@/lib/fantrax-parser'
+import { requireVerifiedUser } from '@/lib/auth-guard'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "LegacyFantrax" })(async (request: NextRequest) => {
+  // MFL Commissioner Import Certification & Fantrax Product Decision phase —
+  // real finding: this route had no authentication at all. Any anonymous
+  // request could create/overwrite a FantraxUser's league data under an
+  // arbitrary client-supplied `username`. Fixed by requiring a real,
+  // verified AllFantasy session (this check) plus, in the Import Security
+  // Closure phase below, a durable `appUserId` ownership stamp so the
+  // upload is unambiguously tied to the authenticated caller, not just any
+  // signed-in user.
+  const auth = await requireVerifiedUser()
+  if (!auth.ok) {
+    return auth.response
+  }
   try {
     const formData = await request.formData()
     const username = formData.get('username') as string
@@ -48,7 +61,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
     let user = await prisma.fantraxUser.findUnique({
       where: { fantraxUsername: username }
     })
-    
+
     if (!user) {
       user = await prisma.fantraxUser.create({
         data: {
@@ -57,7 +70,31 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
         }
       })
     }
-    
+
+    // Import Security Closure phase — real ownership enforcement. Reject
+    // (not silently overwrite) if a league snapshot with this exact
+    // userId/leagueName/season already exists and belongs to a *different*
+    // real AllFantasy user. A row with `appUserId: null` is a legacy/
+    // unattributed row — allowed to be claimed by the first authenticated
+    // uploader going forward, closing the gap without breaking any
+    // pre-existing data.
+    const existingLeague = await prisma.fantraxLeague.findUnique({
+      where: {
+        userId_leagueName_season: {
+          userId: user.id,
+          leagueName: result.leagueName,
+          season: season,
+        },
+      },
+      select: { appUserId: true },
+    })
+    if (existingLeague?.appUserId && existingLeague.appUserId !== auth.userId) {
+      return NextResponse.json(
+        { error: 'This Fantrax league snapshot is already owned by a different AllFantasy account.' },
+        { status: 403 },
+      )
+    }
+
     const league = await prisma.fantraxLeague.upsert({
       where: {
         userId_leagueName_season: {
@@ -67,6 +104,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
         }
       },
       update: {
+        appUserId: auth.userId,
         sport,
         teamCount: result.teamCount,
         userTeam: result.userTeam,
@@ -88,6 +126,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
       },
       create: {
         userId: user.id,
+        appUserId: auth.userId,
         leagueName: result.leagueName,
         season,
         sport,
@@ -152,6 +191,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
 })
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "LegacyFantrax" })(async (request: NextRequest) => {
+  // Same fix as POST above — this previously let anyone read any Fantrax
+  // user's uploaded league data (rosters, standings, matchups) by guessing
+  // a username, with no authentication at all.
+  const auth = await requireVerifiedUser()
+  if (!auth.ok) {
+    return auth.response
+  }
   try {
     const { searchParams } = new URL(request.url)
     const username = searchParams?.get('username')
@@ -172,8 +218,15 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legacy
     if (!user) {
       return NextResponse.json({ leagues: [] })
     }
-    
-    const leagues = user.leagues.map((league: typeof user.leagues[number]) => ({
+
+    // Import Security Closure phase — real ownership enforcement. A
+    // `fantraxUsername` can be shared/guessed by anyone; only return league
+    // rows this specific authenticated caller actually owns (a legacy row
+    // with `appUserId: null` is not returned to anyone — fails closed
+    // rather than being readable by whoever asks first).
+    const ownedLeagues = user.leagues.filter((league: typeof user.leagues[number]) => league.appUserId === auth.userId)
+
+    const leagues = ownedLeagues.map((league: typeof user.leagues[number]) => ({
       id: league.id,
       name: league.leagueName,
       season: league.season,

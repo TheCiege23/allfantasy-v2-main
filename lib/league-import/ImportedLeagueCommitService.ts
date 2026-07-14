@@ -416,6 +416,18 @@ export async function persistImportedLeagueFromNormalization(
     console.warn(`[ImportedLeagueCommitService] ${provider} import bootstrap non-fatal:`, err)
   }
 
+  // Canonical imported-league lifecycle completion — provider-agnostic,
+  // reads only the LeagueTeam rows the bootstrap above just wrote. Gives
+  // every imported league (any provider) a real RedraftSeason/RedraftRoster
+  // so Trade Decision OS and other RedraftSeason-scoped consumers work
+  // without any provider-specific branch. Idempotent; never fails the import.
+  try {
+    const { materializeRedraftSeasonForImportedLeague } = await import('@/lib/league-import/canonicalSeasonMaterialization')
+    await materializeRedraftSeasonForImportedLeague(league.id)
+  } catch (err) {
+    console.warn(`[ImportedLeagueCommitService] ${provider} canonical season materialization non-fatal:`, err)
+  }
+
   // Block F — persist future traded draft picks into `future_draft_picks`. Runs
   // AFTER the bootstrap so anything the bootstrap writes (league_teams etc.)
   // is available. Non-fatal: a failure here logs a warning but never fails the

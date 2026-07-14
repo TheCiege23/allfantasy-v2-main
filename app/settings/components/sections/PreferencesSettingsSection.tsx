@@ -15,7 +15,7 @@ import {
   type SupportedSport,
 } from "@/lib/sport-scope"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
-import { SUPPORTED_LANGUAGES, getLanguageDisplayName, type LanguageCode } from "@/lib/i18n/constants"
+import { SUPPORTED_LANGUAGES, getLanguageOptionLabel, type LanguageCode } from "@/lib/i18n/constants"
 import type { SettingsOnSave, SettingsProfile } from "./settings-types"
 
 export function PreferencesSettingsSection({
@@ -122,7 +122,7 @@ export function PreferencesSettingsSection({
               role="radio"
               aria-checked={lang === l}
             >
-              {getLanguageDisplayName(l)}
+              {getLanguageOptionLabel(l)}
             </button>
           ))}
         </div>

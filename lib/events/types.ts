@@ -13,7 +13,7 @@
 
 export const DEFAULT_TENANT = 'allfantasy'
 
-export type EventActorType = 'user' | 'commissioner' | 'system' | 'provider'
+export type EventActorType = 'user' | 'commissioner' | 'administrator' | 'system' | 'provider'
 
 export interface EventActor {
   type: EventActorType

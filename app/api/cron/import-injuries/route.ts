@@ -14,11 +14,11 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
-import {
-  syncAPISportsInjuriesToDb,
-  clearAPISportsDiagnostics,
-  getAPISportsDiagnostics,
-} from "@/lib/api-sports"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { prisma } from "@/lib/prisma"
+import { syncNflRedraftCronCanonicalCache } from "@/lib/nfl-provider/nflRedraftCronCanonicalSync"
+import { projectCanonicalNflInjuries } from "@/lib/nfl-provider/nflRedraftCanonicalScoreInjuryProjector"
+import { syncLegacyNcaafInjuries } from "@/lib/ncaaf-provider/legacyApiSportsIngestion"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
@@ -26,6 +26,15 @@ export const maxDuration = 120
 function resolveSport(param: string | null): "NFL" | "NCAAF" {
   if (param?.toUpperCase() === "NCAAF") return "NCAAF"
   return "NFL"
+}
+
+async function isCanonicalInjuryCacheFresh(season: string | undefined): Promise<boolean> {
+  const prefix = `nfl-redraft-provider:injuries:${season ?? new Date().getUTCFullYear()}:`
+  const row = await prisma.sportsDataCache.findFirst({
+    where: { cacheKey: { startsWith: prefix }, expiresAt: { gt: new Date() } },
+    select: { cacheKey: true },
+  }).catch(() => null)
+  return Boolean(row)
 }
 
 async function handle(req: NextRequest) {
@@ -36,16 +45,45 @@ async function handle(req: NextRequest) {
   const startedAt = Date.now()
 
   try {
-    clearAPISportsDiagnostics()
-    const count = await syncAPISportsInjuriesToDb({ season, sport })
-    const diagnostics = getAPISportsDiagnostics()
+    if (sport === "NFL" && await isCanonicalInjuryCacheFresh(season)) {
+      return NextResponse.json({
+        ok: true,
+        gated: true,
+        sport,
+        reason: "Canonical injury cache is still fresh; provider fetch skipped.",
+        durationMs: Date.now() - startedAt,
+      })
+    }
+
+    let count = 0
+    let canonicalSync: Awaited<ReturnType<typeof syncNflRedraftCronCanonicalCache>> | null = null
+    if (sport === "NFL") {
+      canonicalSync = await withSyncJobRun(
+        { jobName: "cron-import-injuries", sport, provider: "canonical-orchestrator", trigger: "cron" },
+        () => syncNflRedraftCronCanonicalCache(
+          { job: "import-injuries", sport, season },
+          {
+            afterCacheWrite: async ({ resolution }) => {
+              count = await projectCanonicalNflInjuries(resolution, prisma)
+            },
+          },
+        ),
+        () => ({ rowsWritten: count }),
+      )
+    } else {
+      count = await withSyncJobRun(
+        { jobName: "cron-import-injuries", sport, provider: "api-sports-ncaaf-legacy", trigger: "cron" },
+        () => syncLegacyNcaafInjuries(season),
+        (rows) => ({ rowsWritten: typeof rows === "number" ? rows : 0 }),
+      )
+    }
 
     return NextResponse.json({
       ok: true,
       sport,
       season: season ?? "current",
       synced: count,
-      diagnostics,
+      canonicalSync,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })

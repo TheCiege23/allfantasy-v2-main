@@ -1,6 +1,8 @@
 import { defineConfig } from 'vitest/config'
 import path from 'path'
 
+const repoRoot = process.cwd()
+
 export default defineConfig({
   // Vite 8 (rolldown) uses oxc for transforms and can ignore esbuild JSX options.
   // Configure oxc JSX explicitly so .tsx tests parse correctly.
@@ -10,15 +12,16 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['./vitest.setup.ts'],
+    setupFiles: [path.resolve(repoRoot, 'vitest.setup.ts')],
     include: ['__tests__/**/*.test.{ts,tsx}', 'tests/**/*.test.{ts,tsx}', 'lib/**/__tests__/**/*.test.{ts,tsx}'],
     testTimeout: 30000,
   },
   resolve: {
+    preserveSymlinks: true,
     alias: {
-      '@': path.resolve(__dirname, './'),
+      '@': repoRoot,
       // Vitest does not apply Next's server/client split; stub side-effect-only package.
-      'server-only': path.resolve(__dirname, './tests/__mocks__/server-only.ts'),
+      'server-only': path.resolve(repoRoot, 'tests/__mocks__/server-only.ts'),
     },
   },
 })

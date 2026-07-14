@@ -95,6 +95,13 @@ export const SleeperLeagueMapper: IExternalLeagueMapper<SleeperImportPayload> = 
       rosterSize,
       scoring: scoring || null,
       isDynasty,
+      // Sleeper's real league.status ('pre_draft' | 'drafting' | 'in_season' | 'complete').
+      // Never omit this: `League.status` has no DB default, so a missing value here
+      // leaves the row `status: null`, which `leagueListFilter.ts` reads as an
+      // incomplete/legacy-only import and hides from the commissioner's own Dashboard.
+      // Explicit `null` (not `undefined`) when genuinely absent — an honest "no status
+      // reported" signal, never a fabricated default.
+      status: league.status ?? null,
       playoff_team_count: playoffTeams ?? undefined,
       regular_season_length: regularSeasonLength,
       schedule_unit: 'week',

@@ -631,7 +631,7 @@ export function DraftTopBar({
                 <span title={`Draft type: ${draftTypeLabel}`}>{draftFormatLabel}</span>
                 {poolReadinessLabel ? (
                   <>
-                    <span className="text-white/24">Â·</span>
+                    <span className="text-white/24">·</span>
                     <span
                       data-testid="draft-topbar-pool-readiness"
                       className={poolReadiness?.ready ? 'text-emerald-200' : 'text-amber-200'}

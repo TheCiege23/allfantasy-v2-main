@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { fetchNewsContext, fetchRollingInsights } from '@/lib/upstream-apis'
 import type { TradeDecisionContextV1 } from './trade-decision-context'
 import {

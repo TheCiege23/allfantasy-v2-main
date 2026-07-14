@@ -1,6 +1,6 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchFantasyCalcValues, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, getPickValue, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { computeTradeDrivers, computeBestLineupBySlot, type SlotAssignment } from '@/lib/trade-engine/trade-engine'
 import { computeManagerTendencies, computeAcceptProbability, type ManagerTendencyProfile, type AcceptProbabilityResult } from '@/lib/trade-engine/manager-tendency-engine'
 import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'

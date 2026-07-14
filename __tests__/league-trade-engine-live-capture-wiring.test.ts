@@ -47,10 +47,21 @@ vi.mock('@/lib/league-trade-engine/tradeLearningCapture', () => ({
   captureLiveTradeOutcome: mockCaptureLiveTradeOutcome,
 }))
 
+vi.mock('@/lib/shared-services/knowledge-graph/TradeSignalHook', () => ({
+  recordTradeOutcomeSignal: vi.fn().mockResolvedValue(undefined),
+}))
+
+vi.mock('@/lib/events', () => ({
+  EVENT: { TRADE_EXECUTED: 'transaction.trade.executed' },
+  getPlatformEvents: () => ({ emitInTx: vi.fn().mockResolvedValue({ eventId: 'event-mock' }) }),
+}))
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: mockLeagueFindUnique, findUniqueOrThrow: mockLeagueFindUnique },
-    roster: { findFirst: mockRosterFindFirst, findUnique: mockRosterFindUnique, count: mockRosterCount },
+    redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
+    roster: { findFirst: mockRosterFindFirst, findUnique: mockRosterFindUnique, count: mockRosterCount, findMany: vi.fn().mockResolvedValue([]) },
+    iDPSalaryRecord: { findMany: vi.fn().mockResolvedValue([]) },
     afLeagueTrade: {
       create: mockAfLeagueTradeCreate,
       findFirst: mockAfLeagueTradeFindFirst,
@@ -75,6 +86,8 @@ vi.mock('@/lib/league-trade-engine/tradeValidationService', () => ({
 }))
 
 vi.mock('@/lib/league-trade-engine/tradeSettingsResolver', () => ({
+  isPastTradeDeadline: vi.fn().mockReturnValue(false),
+  toRedraftProposalGovernance: vi.fn().mockReturnValue({ source: 'persisted_league_settings', processingMode: 'immediate' }),
   resolveLeagueTradeSettings: vi.fn().mockReturnValue({
     tradeReviewMode: 'instant',
     tradeDeadlineWeek: null,
@@ -205,7 +218,14 @@ describe('tradeService live capture wiring (Trade Learning Phase 8)', () => {
     })
     let capturedCalledDuringTransaction = false
     mockTransaction.mockImplementation(async (cb: (tx: unknown) => Promise<void>) => {
-      const tx = { afLeagueTrade: { update: mockAfLeagueTradeUpdate } }
+      const tx = {
+        afLeagueTrade: { update: mockAfLeagueTradeUpdate },
+        roster: { findMany: vi.fn().mockResolvedValue([]) },
+        iDPSalaryRecord: { findMany: vi.fn().mockResolvedValue([]) },
+        redraftSeason: { findFirst: vi.fn().mockResolvedValue(null) },
+        tradeExecutionSnapshot: { create: vi.fn().mockResolvedValue({}) },
+        leagueAuditLog: { create: vi.fn().mockResolvedValue({}) },
+      }
       await cb(tx)
       capturedCalledDuringTransaction = mockCaptureLiveTradeOutcome.mock.calls.length > 0
     })

@@ -11,7 +11,7 @@
  * this module intentionally does not modify live trade capture code, so a
  * small, parallel copy is used here instead.
  */
-import { findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import type { LeagueRosterConfig } from '@/lib/vorp-engine'
 import type {
   SleeperLeague,

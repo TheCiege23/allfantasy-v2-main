@@ -104,7 +104,31 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo/callback", tool: "A
         tokenExpiresAt,
       },
     })
-    
+
+    // Bridge fix (Yahoo Commissioner Import Certification phase): `YahooConnection`
+    // has no `AppUser` column at all — the only prior link to the signed-in user was
+    // a transient cookie, so the commissioner-import pipeline's own auth resolver
+    // (`getYahooAuthForUser` in `YahooLeagueFetchService.ts`, which reads `LeagueAuth`
+    // by `userId_platform`) could never see a token from this real OAuth flow. Every
+    // real user who completed this exact flow could browse leagues via
+    // `/api/yahoo/leagues` but could never import one through the canonical pipeline.
+    // Mirrors the exact write shape the generic `/api/league/auth` manual-entry route
+    // already uses for Yahoo — no schema change, no new storage mechanism.
+    await prisma.leagueAuth.upsert({
+      where: { userId_platform: { userId: session.user.id, platform: 'yahoo' } },
+      update: {
+        oauthToken: encryptedAccessToken,
+        oauthSecret: encryptedRefreshToken || undefined,
+        updatedAt: new Date(),
+      },
+      create: {
+        userId: session.user.id,
+        platform: 'yahoo',
+        oauthToken: encryptedAccessToken,
+        oauthSecret: encryptedRefreshToken || undefined,
+      },
+    })
+
     const response = NextResponse.redirect(`${APP_URL}/af-legacy?yahoo_connected=1&yahoo_user=${encodeURIComponent(yahooUserId)}`)
     
     response.cookies.set('yahoo_user_id', yahooUserId, {

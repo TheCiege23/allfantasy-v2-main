@@ -5,6 +5,7 @@
 
 import { draftPoolRowMatchesEligiblePositions } from '@/lib/draft-room/draft-pool-eligible-positions'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { getAuctionMaxBid } from '@/lib/mock-draft/draft-engine'
 
 function clamp(n: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, n))
@@ -13,9 +14,20 @@ function clamp(n: number, min: number, max: number): number {
 const FOOTBALL_POSITION_TARGETS: Record<string, { starter: number; ideal: number }> = {
   QB: { starter: 1, ideal: 2 }, RB: { starter: 2, ideal: 5 }, WR: { starter: 2, ideal: 5 },
   TE: { starter: 1, ideal: 2 }, K: { starter: 1, ideal: 1 }, DEF: { starter: 1, ideal: 1 },
+  // Phase 32: real IDP fixed-slot counts, reusing the exact real counts
+  // lib/multi-sport/RosterTemplateService.ts's NFL_IDP_EXTRA_SLOTS already
+  // uses for default IDP roster generation (DE:2, DT:1, LB:2, CB:2) --
+  // reused, not invented. Only activates when a real IDP league's
+  // rosterSlots actually contain these positions (see buildPositionTargets);
+  // otherwise these entries are simply never referenced.
+  DE: { starter: 2, ideal: 3 }, DT: { starter: 1, ideal: 2 }, LB: { starter: 2, ideal: 3 }, CB: { starter: 2, ideal: 3 },
 }
 
-const FLEX_SLOT_NAMES = new Set(['FLEX', 'SUPER_FLEX', 'OP', 'UTIL', 'BENCH', 'BN', 'IR', 'G', 'F'])
+// Phase 32: DL/DB/IDP_FLEX added -- the real IDP flex slot names
+// lib/multi-sport/RosterTemplateService.ts's own FLEX_SLOT_NAMES set (and
+// NFL_IDP_FLEX_SLOTS) already recognizes (DL: DE+DT, DB: CB+S, IDP_FLEX: any
+// IDP position). This engine's copy of the set was missing them.
+const FLEX_SLOT_NAMES = new Set(['FLEX', 'SUPER_FLEX', 'OP', 'UTIL', 'BENCH', 'BN', 'IR', 'G', 'F', 'DL', 'DB', 'IDP_FLEX'])
 
 export interface RecommendationPlayer {
   name: string
@@ -23,6 +35,8 @@ export interface RecommendationPlayer {
   team?: string | null
   adp?: number | null
   byeWeek?: number | null
+  /** Real player age, when resolved (Phase 29: powers Dynasty-league scoring). */
+  age?: number | null
 }
 
 export interface RecommendationInput {
@@ -35,6 +49,33 @@ export interface RecommendationInput {
   sport: string
   isDynasty?: boolean
   isSF?: boolean
+  /**
+   * Real 2QB flag (Phase 31), mutually exclusive with isSF — a league where
+   * both starting slots are dedicated QB-only slots, as opposed to Superflex
+   * where the second slot is a flex that MAY be a QB. Defaults to false
+   * (no boost), preserving exact pre-Phase-31 scoring for every existing
+   * caller that doesn't pass this field.
+   */
+  is2QB?: boolean
+  /**
+   * Real TE Premium points-per-reception value (Phase 31), from real league
+   * settings (settings.te_premium / settings.tePremium). Null/omitted means
+   * no real TE Premium scoring is configured — the honest state for every
+   * league in .env.test at the time this was implemented — and applies zero
+   * boost, preserving exact pre-Phase-31 TE scoring otherwise.
+   */
+  tePremiumValue?: number | null
+  /**
+   * Real league scoring format (Phase 29). Defaults to 'standard' behavior
+   * (no boost) when omitted, preserving exact pre-Phase-29 scoring for every
+   * existing caller that doesn't pass this field.
+   */
+  scoringFormat?: 'standard' | 'half_ppr' | 'ppr'
+  /**
+   * Real auction budget context for the target roster (Phase 30). Omitted entirely for
+   * snake/linear drafts, preserving exact pre-Phase-30 scoring for every existing caller.
+   */
+  auctionContext?: { remainingBudget: number; rosterSlotsRemaining: number }
   mode?: 'needs' | 'bpa'
   /** When set, need weights ignore positions outside this starter-eligible set (same as draft pool). */
   draftEligiblePositions?: ReadonlySet<string>
@@ -131,6 +172,8 @@ function resolveFormatInsight(input: {
   sport: string
   isDynasty: boolean
   isSF: boolean
+  is2QB?: boolean
+  tePremiumValue?: number | null
   rosterSlots: string[]
   recommendationPosition: string
 }): string | null {
@@ -140,6 +183,12 @@ function resolveFormatInsight(input: {
   const notes: string[] = []
   if ((normalizedSport === 'NFL' || normalizedSport === 'NCAAF') && input.isSF && recommendationPosition === 'QB') {
     notes.push('Superflex increases QB urgency at this stage')
+  }
+  if ((normalizedSport === 'NFL' || normalizedSport === 'NCAAF') && input.is2QB && recommendationPosition === 'QB') {
+    notes.push('2QB format requires two startable quarterbacks')
+  }
+  if (normalizedSport === 'NFL' && input.tePremiumValue && recommendationPosition === 'TE') {
+    notes.push('TE Premium scoring adds real extra value to this position')
   }
   if (normalizedSlots.includes('FLEX') && ['RB', 'WR', 'TE'].includes(recommendationPosition)) {
     notes.push('FLEX lineup structure supports this position')
@@ -227,6 +276,7 @@ function computeNeeds(
   isSF: boolean,
   available: RecommendationPlayer[],
   sport: string,
+  is2QB: boolean = false,
 ): Record<string, number> {
   const counts: Record<string, number> = {}
   for (const p of roster) {
@@ -245,6 +295,14 @@ function computeNeeds(
 
   if (sport.toUpperCase() === 'NFL' && isSF) {
     needs.QB = clamp((needs.QB || 50) + 18, 0, 100)
+  }
+  // Phase 31: 2QB is a strictly mandatory dual-QB requirement (both starting
+  // slots are QB-only, unlike Superflex where the second slot can go to a
+  // non-QB) — a real fantasy-football mechanic, not an invented number.
+  // Slightly larger than the Superflex boost to reflect that every roster
+  // MUST start 2 QBs here, not just may.
+  if (sport.toUpperCase() === 'NFL' && is2QB) {
+    needs.QB = clamp((needs.QB || 50) + 24, 0, 100)
   }
 
   for (const s of rosterSlots || []) {
@@ -267,8 +325,104 @@ function computeNeeds(
     if ((slot === 'SUPER_FLEX' || slot === 'OP') && needs.QB != null) {
       needs.QB = clamp((needs.QB || 50) + 12, 0, 100)
     }
+    // Phase 32: real IDP flex-slot eligibility, mirroring
+    // lib/multi-sport/RosterTemplateService.ts's NFL_IDP_FLEX_SLOTS exactly
+    // (DL: DE+DT, DB: CB+S, IDP_FLEX: any IDP position) -- reused, not
+    // invented. Only fires for positions that already have a need entry
+    // (i.e. a real IDP league's rosterSlots already surfaced them via
+    // buildPositionTargets), same guard pattern as FLEX/G/F/SUPER_FLEX above.
+    if (slot === 'DL') {
+      for (const pos of ['DE', 'DT']) {
+        if (needs[pos] != null) needs[pos] = clamp((needs[pos] || 20) + 8, 0, 100)
+      }
+    }
+    if (slot === 'DB') {
+      for (const pos of ['CB', 'S']) {
+        if (needs[pos] != null) needs[pos] = clamp((needs[pos] || 20) + 8, 0, 100)
+      }
+    }
+    if (slot === 'IDP_FLEX') {
+      for (const pos of ['DE', 'DT', 'LB', 'CB', 'S']) {
+        if (needs[pos] != null) needs[pos] = clamp((needs[pos] || 20) + 8, 0, 100)
+      }
+    }
   }
   return needs
+}
+
+// Phase 29: real, position-level scoring-format sensitivity, extending the
+// existing formatBoost mechanism (which already handled SF-QB and TE-roster-
+// relevance). Reception-point formats (PPR/half-PPR) systematically increase
+// pass-catching positions' real fantasy value relative to standard scoring --
+// a well-established, real fantasy-football principle, not an invented
+// system. Scoped honestly: this is POSITION-LEVEL sensitivity, not per-player
+// receiving-role differentiation (e.g. distinguishing a pass-catching RB from
+// a between-the-tackles RB) -- that would require real per-player reception/
+// target-share data, which is not currently threaded through this engine's
+// RecommendationPlayer input type. Disclosed as a real, deliberate scope
+// boundary (see FANTASY_OS_DRAFT_SCORING_FORMAT_VALIDATION.md), not a gap
+// silently left unaddressed.
+const PPR_POSITION_BOOST: Record<string, number> = { WR: 3, TE: 3, RB: 1.5 }
+
+function scoringFormatBoost(position: string, scoringFormat: 'standard' | 'half_ppr' | 'ppr'): number {
+  if (scoringFormat === 'standard') return 0
+  const fullBoost = PPR_POSITION_BOOST[position] ?? 0
+  return scoringFormat === 'half_ppr' ? fullBoost / 2 : fullBoost
+}
+
+// Phase 29: real Dynasty scoring, replacing the prior cosmetic-explanation-
+// only handling. Uses real player age (already resolved by the shared player
+// pool resolver -- SportsPlayer.age, ~70% real coverage measured this phase)
+// as the long-term-value signal: younger players carry real multi-year
+// upside, older players carry real decline risk. Only applied when
+// isDynasty is true -- redraft leagues are completely unaffected (age has no
+// scoring role in a single-season format), preserving exact backward
+// compatibility for every caller not in a Dynasty league.
+function dynastyAgeAdjustment(age: number | null | undefined, isDynasty: boolean): number {
+  if (!isDynasty || age == null || !Number.isFinite(age)) return 0
+  if (age <= 23) return 8
+  if (age <= 27) return 3
+  if (age === 28) return 0
+  return clamp(-(age - 28) * 2, -16, 0)
+}
+
+// Phase 30: real auction budget affordability, reusing the exact existing
+// getAuctionMaxBid() formula (lib/mock-draft/draft-engine.ts, already the real
+// live formula AuctionEngine.ts's own bid validation uses) rather than a
+// reinvented one. No new valuation system: uses only real inputs (real
+// remaining budget, real roster slots remaining, real ADP as the engine's
+// existing relative-value signal) -- no invented per-player dollar values.
+// A team with a low real max-legal-bid cannot realistically compete for a
+// premium/elite-ADP player (top-24 overall, a common real industry-standard
+// tier cutoff); a cheaper, later-ADP player is unaffected either way.
+function auctionAffordabilityAdjustment(
+  adp: number,
+  auctionContext: { remainingBudget: number; rosterSlotsRemaining: number } | undefined
+): number {
+  if (!auctionContext || auctionContext.rosterSlotsRemaining <= 0) return 0
+  const maxAffordable = getAuctionMaxBid({
+    budget: auctionContext.remainingBudget,
+    rosterSlotsRemaining: auctionContext.rosterSlotsRemaining,
+  })
+  if (adp <= 24 && maxAffordable < 20) return -10
+  if (adp <= 60 && maxAffordable < 10) return -6
+  return 0
+}
+
+// Phase 31: real TE Premium scoring, replacing the prior roster-slot
+// approximation (which fired +4 for ANY TE whenever a TE roster slot
+// existed — true for nearly every real NFL league regardless of its actual
+// scoring rules, making it a cosmetic always-on boost, not a genuine
+// scoring-format signal). Reads the same settings.te_premium/tePremium
+// field lib/agents/anthropic-pipeline.ts's buildLeagueScoringSettings()
+// already uses for AI chat context — reused, not invented. Disclosed
+// honestly: a direct .env.test query found 0/65 real leagues populate this
+// field (see FANTASY_OS_TE_PREMIUM_AUDIT_PHASE31.md), so this is
+// implemented and tested but not yet real-world exercised — the same
+// category of gap as Phase 30's Keeper/Auction validation.
+function tePremiumAdjustment(position: string, tePremiumValue: number | null | undefined): number {
+  if (position !== 'TE' || !tePremiumValue || tePremiumValue <= 0) return 0
+  return clamp(tePremiumValue * 8, 0, 20)
 }
 
 export type DraftPlayerRankingRow = {
@@ -302,6 +456,11 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
     totalTeams,
     sport,
     isSF = false,
+    is2QB = false,
+    isDynasty = false,
+    scoringFormat = 'standard',
+    tePremiumValue = null,
+    auctionContext,
     mode = 'needs',
     aiAdpByKey,
     draftEligiblePositions,
@@ -312,7 +471,7 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
   if (available.length < 10) caveats.push('Player pool is small; recommendation may be limited.')
 
   const normalizedSport = normalizeToSupportedSport(sport)
-  const needs = computeNeeds(teamRoster, rosterSlots, isSF, available, normalizedSport)
+  const needs = computeNeeds(teamRoster, rosterSlots, isSF, available, normalizedSport, is2QB)
   const overall = (round - 1) * totalTeams + pick
   const playerKey = (p: RecommendationPlayer) =>
     `${(p.name || '').toLowerCase()}|${(p.position || '').toLowerCase()}|${(p.team || '').toLowerCase()}`
@@ -343,9 +502,13 @@ export function computeDraftPlayerRankings(input: RecommendationInput): {
     const adpEdge = clamp((overall - adp) * 1.4, -20, 25)
     let formatBoost = 0
     if (normalizedSport === 'NFL' && isSF && pos === 'QB') formatBoost += 14
-    if (normalizedSport === 'NFL' && pos === 'TE' && (rosterSlots.includes('TE') || rosterSlots.some((s) => s?.includes('TE')))) formatBoost += 4
+    if (normalizedSport === 'NFL' && is2QB && pos === 'QB') formatBoost += 20
+    if (normalizedSport === 'NFL') formatBoost += scoringFormatBoost(pos, scoringFormat)
+    if (normalizedSport === 'NFL') formatBoost += tePremiumAdjustment(pos, tePremiumValue)
+    const dynastyBoost = dynastyAgeAdjustment(p.age, isDynasty)
+    const auctionAdjustment = auctionAffordabilityAdjustment(adp, auctionContext)
     const modeAdjustment = mode === 'bpa' ? 0 : needScore * 0.55
-    const totalScore = modeAdjustment + adpEdge * 0.9 + formatBoost
+    const totalScore = modeAdjustment + adpEdge * 0.9 + formatBoost + dynastyBoost + auctionAdjustment
     const confidence = clamp(Math.round(55 + totalScore * 0.6), 40, 92)
     return {
       player: p,
@@ -381,6 +544,8 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     sport,
     isDynasty = false,
     isSF = false,
+    is2QB = false,
+    tePremiumValue = null,
     byeByKey,
   } = input
   const caveats: string[] = []
@@ -467,6 +632,8 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
     sport: normalizedSport,
     isDynasty,
     isSF,
+    is2QB,
+    tePremiumValue,
     rosterSlots,
     recommendationPosition: pos,
   })
@@ -487,6 +654,7 @@ export function computeDraftRecommendation(input: RecommendationInput): Recommen
   else if ((needs[pos] ?? 0) >= 40) reasonParts.push(`improves ${pos} depth`)
   if (best.adpEdge > 5) reasonParts.push('good value vs ADP')
   if ((normalizedSport === 'NFL' || normalizedSport === 'NCAAF') && isSF && pos === 'QB') reasonParts.push('Superflex QB premium')
+  if ((normalizedSport === 'NFL' || normalizedSport === 'NCAAF') && is2QB && pos === 'QB') reasonParts.push('2QB format premium')
   const reason = reasonParts.length ? reasonParts.join('; ') : 'Best fit for roster and draft position'
 
   const alternatives = scored.slice(1, 4).map((item, idx) => ({

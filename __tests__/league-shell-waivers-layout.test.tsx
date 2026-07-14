@@ -49,14 +49,14 @@ describe('League shell layout and waivers integration', () => {
     expect(leagueShell).toContain('bg-gradient-to-br from-cyan-500/[0.07] via-[#050814] to-violet-500/[0.04]')
   })
 
-  it('includes waivers in league tab definitions and nfl redraft core tabs', () => {
+  it('keeps distinct canonical Players and Waivers destinations for football redraft', () => {
     expect(leagueTabs).toContain("{ id: 'waivers', label: 'Waivers' }")
-    expect(leagueShell).toContain("{ id: 'waivers', label: 'Waivers' }")
+    expect(leagueShell).toContain("{ id: 'players', label: 'Players' }")
+    expect(leagueShell).toContain("if (tab.id === 'players') return { ...tab, label: 'Players' }")
   })
 
-  it('maps waivers deep links to waivers tab instead of players', () => {
-    expect(leagueShell).toContain("waivers: 'waivers'")
-    expect(leagueShell).not.toContain("waivers: 'players'")
+  it('maps nfl redraft waivers deep links into the combined Players / Waivers tab', () => {
+    expect(leagueShell).toContain("waivers: 'players'")
   })
 
   it('renders WaiverWirePage in the center workspace when waivers tab is selected', () => {
@@ -69,10 +69,11 @@ describe('League shell layout and waivers integration', () => {
     // page.tsx should import the client wrapper, not call nextDynamic directly
     expect(leaguePage).toContain("import { LeagueShellClient } from './LeagueShellClient'")
     expect(leaguePage).not.toContain("nextDynamic")
-    // client wrapper owns dynamic() + ssr:false
+    // LeagueShell is already a client component; the wrapper is the explicit
+    // serialized-props boundary and does not need a second dynamic layer.
     expect(leagueShellClient).toContain("'use client'")
-    expect(leagueShellClient).toContain("import dynamic from 'next/dynamic'")
-    expect(leagueShellClient).toContain("ssr: false")
+    expect(leagueShellClient).toContain("import { LeagueShell, type LeagueShellProps } from './LeagueShell'")
+    expect(leagueShellClient).toContain('return <LeagueShell {...props} />')
   })
 
   it('logs league_dashboard_render_failed marker with full metadata in catch block', () => {

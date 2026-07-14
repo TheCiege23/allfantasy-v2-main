@@ -19,6 +19,7 @@ import {
   clearAPISportsDiagnostics,
   getAPISportsDiagnostics,
 } from "@/lib/api-sports"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
@@ -37,7 +38,11 @@ async function handle(req: NextRequest) {
 
   try {
     clearAPISportsDiagnostics()
-    const count = await syncAPISportsStandingsToDb({ season, sport })
+    const count = await withSyncJobRun(
+      { jobName: "cron-import-standings", sport, provider: "api-sports", trigger: "cron" },
+      () => syncAPISportsStandingsToDb({ season, sport }),
+      (rows) => ({ rowsWritten: typeof rows === "number" ? rows : 0 }),
+    )
     const diagnostics = getAPISportsDiagnostics()
 
     return NextResponse.json({

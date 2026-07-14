@@ -14,6 +14,7 @@ import { normalizeWaiverTypeForEngine } from './waiver-engine-config'
 import { commissionerOverrideAllowed, getCommissionerOverrides } from './commissioner-claim-override'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
+import { recordWaiverClaimSignal } from '@/lib/shared-services/knowledge-graph/WaiverSignalHook'
 import { upsertLeagueWaiverStateAfterRun, getLeagueWaiverState } from './waiver-state-service'
 import { assertNonEmptyIdempotencyKey } from '@/lib/engine-testing/hardening/engineInvariants'
 import { logEngineInvariantOptional } from '@/lib/engine-testing/runtime/invariantRuntime'
@@ -218,6 +219,18 @@ export async function processWaiverClaimsForLeague(
         waiverRunId: runId,
         outcomeCode: oc,
       })
+
+      // Fantasy Knowledge Graph signal capture (Migration Plan Milestone 3) —
+      // one hook covers every failure branch that calls pushFail.
+      await recordWaiverClaimSignal({
+        outcome: 'waiver_claim_lost',
+        leagueId,
+        managerKey: roster.platformUserId,
+        claimId: claim.id,
+        addPlayerId: claim.addPlayerId,
+        dropPlayerId: claim.dropPlayerId ?? null,
+        emittedFrom: 'process-engine.pushFail',
+      })
     }
 
     const waiversFrozen = await isWaiverFrozenForRoster(leagueId, claim.rosterId).catch(() => false)
@@ -364,6 +377,18 @@ export async function processWaiverClaimsForLeague(
         }),
       )
     }
+
+    // Fantasy Knowledge Graph signal capture (Migration Plan Milestone 3) —
+    // same fails-safe convention as recordAfLearningEvent immediately above.
+    await recordWaiverClaimSignal({
+      outcome: 'waiver_claim_won',
+      leagueId,
+      managerKey: roster.platformUserId,
+      claimId: claim.id,
+      addPlayerId: addId,
+      dropPlayerId: dropId ?? null,
+      emittedFrom: 'process-engine.processWaiverClaimsForLeague',
+    })
 
     results.push({
       claimId: claim.id,

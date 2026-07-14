@@ -4,7 +4,7 @@ import { Globe } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useOptionalSession } from "@/components/auth/useOptionalSession";
 import { useOptionalLanguage } from "./LanguageProviderClient";
-import { getLanguageDisplayName, SUPPORTED_LANGUAGES, type LanguageCode } from "@/lib/i18n/constants";
+import { getLanguageOptionLabel, SUPPORTED_LANGUAGES, type LanguageCode } from "@/lib/i18n/constants";
 
 export type LanguageToggleVariant = "default" | "compact";
 
@@ -78,7 +78,7 @@ export default function LanguageToggle({
         >
           {SUPPORTED_LANGUAGES.map((lang) => (
             <option key={lang} value={lang}>
-              {getLanguageDisplayName(lang)}
+              {getLanguageOptionLabel(lang)}
             </option>
           ))}
         </select>
@@ -107,7 +107,7 @@ export default function LanguageToggle({
       >
         {SUPPORTED_LANGUAGES.map((lang) => (
           <option key={lang} value={lang}>
-            {getLanguageDisplayName(lang)}
+            {getLanguageOptionLabel(lang)}
           </option>
         ))}
       </select>

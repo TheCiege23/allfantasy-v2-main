@@ -16,7 +16,7 @@ import {
   getLeagueRosters,
   getLeagueUsers,
 } from '@/lib/sleeper-client'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { normalizeSleeperTrade } from '../normalize/sleeperTradeNormalizer'
 import { runTradeBacktest } from '../backtest/tradeBacktestExecutor'
 import { upsertBacktestResult, upsertReplayImport } from '../writer'

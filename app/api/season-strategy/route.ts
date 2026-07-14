@@ -17,7 +17,7 @@ import {
   type SleeperRoster,
   type SleeperUser,
 } from '@/lib/sleeper-client'
-import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, findPlayerByName } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { calculateDynastyScore, findPlayerTier } from '@/lib/dynasty-tiers'
 import { fetchPlayerNewsFromGrok, getManagerProfiles } from '@/lib/ai-gm-intelligence'
 import { analyzeUserTradingProfile } from '@/lib/smart-trade-recommendations'

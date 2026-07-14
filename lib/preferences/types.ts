@@ -3,7 +3,7 @@
  * Used across Sports App, Bracket Challenge, Legacy, settings, and auth.
  */
 
-export type LanguageCode = "en" | "es"
+export type { LanguageCode } from "@/lib/i18n/constants"
 
 export type ThemeMode = "light" | "dark" | "legacy"
 

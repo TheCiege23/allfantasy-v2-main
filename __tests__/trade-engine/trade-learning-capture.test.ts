@@ -33,8 +33,8 @@ vi.mock('@/lib/prisma', () => ({
   },
 }))
 
-vi.mock('@/lib/fantasycalc', async () => {
-  const actual = await vi.importActual<typeof import('@/lib/fantasycalc')>('@/lib/fantasycalc')
+vi.mock('@/lib/player-valuations/canonicalPlayerValuations', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/player-valuations/canonicalPlayerValuations')>('@/lib/player-valuations/canonicalPlayerValuations')
   return {
     ...actual,
     fetchFantasyCalcValues: mockFetchFantasyCalcValues,

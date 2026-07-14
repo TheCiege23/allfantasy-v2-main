@@ -8,6 +8,7 @@ import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
 import {
@@ -99,6 +100,7 @@ import { useIdpCapSummary, useRedraftRosterId } from '@/app/idp/hooks/useIdpTeam
 import { LeagueSettingsTab as LeagueSettingsContentTab } from './tabs/LeagueSettingsTab'
 import { RedraftTab } from './tabs/RedraftTab'
 import { RedraftStandingsPlayoffsView } from './tabs/redraft/RedraftStandingsPlayoffsView'
+import { CanonicalRedraftScheduleTab } from './tabs/redraft/CanonicalRedraftScheduleTab'
 import { KeeperSelectionTab } from './tabs/KeeperSelectionTab'
 import { BestBallTab } from './tabs/BestBallTab'
 import { GuillotineTab } from './tabs/GuillotineTab'
@@ -129,6 +131,7 @@ import {
   type TournamentHeroContext,
 } from '@/components/league-home/SpecialtyLeagueHomeHero'
 import { NflRedraftLeagueHomeDashboard } from '@/components/league-home/NflRedraftLeagueHomeDashboard'
+import { CommissionerOperationsWorkspace } from '@/components/league-home/CommissionerOperationsWorkspace'
 import { DevyLeagueHomeHero } from '@/components/devy/DevyLeagueHomeHero'
 import { applyMatchupPrimaryTab, shouldUseMatchupInsteadOfDraft } from '@/lib/matchup-center/tabTransition'
 import { MatchupTabContainer } from '@/components/matchup-center/MatchupTabContainer'
@@ -346,8 +349,10 @@ export function LeagueShell({
       const core: TabDef[] = [
         { id: 'home', label: 'Home' },
         { id: 'draft', label: 'Draft' },
-        { id: 'roster', label: 'Roster' },
+        { id: 'roster', label: 'My Team' },
         { id: 'matchups', label: 'Matchups' },
+        { id: 'schedule', label: 'Schedule' },
+        { id: 'players', label: 'Players' },
         { id: 'waivers', label: 'Waivers' },
         { id: 'trades', label: 'Trades' },
         { id: 'standings', label: 'Standings' },
@@ -356,7 +361,8 @@ export function LeagueShell({
       if (isCommissioner) core.push({ id: 'commissioner', label: 'Commissioner' })
       if (isCommissioner) core.push({ id: 'settings', label: '⚙ Settings' })
       return localizeLeagueTabs(core, t).filter((tab) => tab.id !== 'settings').map((tab) => {
-        if (tab.id === 'players') return { ...tab, label: 'Players / Waivers' }
+        if (tab.id === 'roster') return { ...tab, label: 'My Team' }
+        if (tab.id === 'players') return { ...tab, label: 'Players' }
         if (tab.id === 'trades') return { ...tab, label: 'Trades' }
         if (tab.id === 'league' && isCommissioner) return { ...tab, label: 'Commissioner Hub' }
         return tab
@@ -432,17 +438,14 @@ export function LeagueShell({
   }, [
     nflRedraftCore,
     league.sport,
-    league.lifecycleState,
     league.leagueType,
     league.keeperPhaseActive,
     league.bestBallMode,
     league.guillotineMode,
     league.leagueVariant,
-    isPredraftLifecycle,
     isCommissioner,
     shouldUseMatchupPrimary,
     t,
-    language,
   ])
   const [activeTab, setActiveTab] = useState<string>(() => tabDefs[0]?.id ?? 'draft')
   const [rosterLegalityIssueCount, setRosterLegalityIssueCount] = useState(0)
@@ -557,7 +560,7 @@ export function LeagueShell({
     if (!ids.has('survivor')) return
     setActiveTab('survivor')
     survivorLandingApplied.current = true
-  }, [league.id, league.leagueVariant, tabDefs, searchParams, shouldUseMatchupPrimary])
+  }, [league.id, league.leagueVariant, league.guillotineMode, tabDefs, searchParams, shouldUseMatchupPrimary])
 
   /** Zombie leagues default to the Zombie hub (once per visit) when no deep link. */
   useEffect(() => {
@@ -596,7 +599,7 @@ export function LeagueShell({
     if (!ids.has('idp')) return
     setActiveTab('idp')
     idpLandingApplied.current = true
-  }, [league.id, league.leagueVariant, tabDefs, searchParams])
+  }, [league.id, league.leagueVariant, tabDefs, searchParams, shouldUseMatchupPrimary])
 
   useEffect(() => {
     const view = searchParams?.get('view')
@@ -1852,6 +1855,11 @@ function LeagueTabRouter({
       return <MatchupTabContainer league={selectedLeague} />
     case 'matchup':
       return <MatchupTabContainer league={selectedLeague} />
+    case 'schedule':
+      if (isNflRedraftCoreDashboardFromUserLeague(selectedLeague)) {
+        return <CanonicalRedraftScheduleTab leagueId={leagueId} />
+      }
+      return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} />
     case 'draft':
       if (isPredraftLifecycle) return renderPredraftDraftSetup()
       return (
@@ -1978,23 +1986,11 @@ function LeagueTabRouter({
         </div>
       )
     case 'commissioner':
-      if (!isCommissioner) {
-        return (
-          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6">
-            <section className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-5 text-sm text-white/55">
-              Commissioner controls are only available to the commissioner or a co-commissioner.
-            </section>
-          </div>
-        )
-      }
       return (
-        <NflRedraftLeagueHomeDashboard
+        <CommissionerOperationsWorkspace
           league={selectedLeague}
           leagueId={leagueId}
-          teamSlots={teamSlots}
-          userTeamName={userTeam?.teamName ?? null}
-          isCommissioner
-          draftDateIso={draftDateIso}
+          isCommissioner={isCommissioner}
           hasActiveRedraftSeason={hasActiveRedraftSeason}
           onOpenSettings={onOpenLeagueSettingsModal}
           onOpenTab={onSelectTab}
@@ -2002,9 +1998,8 @@ function LeagueTabRouter({
       )
     case 'players':
       return (
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 py-4 lg:px-6">
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
           <PlayersTab league={selectedLeague} onPlayerClick={onPlayerClick} sport={sport} />
-          <SportAwareWaiverWire leagueId={leagueId} />
         </div>
       )
     case 'waivers':
@@ -2050,8 +2045,6 @@ function LeagueTabRouter({
       return <LeaderboardTab league={selectedLeague} tabLabel={tabLabel} />
     case 'my-picks':
       return <MyPicksTab league={selectedLeague} tabLabel={tabLabel} />
-    case 'schedule':
-      return <ScheduleTab league={selectedLeague} tabLabel={tabLabel} />
     default:
       return <LeagueTabPlaceholder league={selectedLeague} tabLabel={tabLabel} />
   }
@@ -2218,6 +2211,15 @@ function LeagueHeader({
     scoringPreset: formatScoringPresetLabel(league.scoring, league.settings),
     timezone: readLeagueTimezone(league.settings),
   })
+  const headerSportLabel = String(league.sport ?? 'NFL').toUpperCase() === 'NCAAF' ? 'NCAAF' : String(league.sport ?? 'NFL').toUpperCase()
+  const headerSeasonLabel = Number.isFinite(Number(league.season)) ? `${Number(league.season)} season` : 'Current season'
+  const headerStatusLabel = (() => {
+    const status = String(league.status ?? '').trim().toLowerCase()
+    if (status === 'active' || status === 'in_season') return 'In season'
+    if (status === 'completed' || status === 'complete') return 'Season complete'
+    if (status === 'drafting' || status === 'in_draft') return 'Draft in progress'
+    return 'League active'
+  })()
 
   useEffect(() => {
     setHeaderAvatarFailed(false)
@@ -2281,9 +2283,12 @@ function LeagueHeader({
           aria-hidden
         >
           {headerAvatarSrc && !headerAvatarFailed ? (
-            <img
+            <Image
               src={headerAvatarSrc}
               alt=""
+              width={40}
+              height={40}
+              unoptimized
               className="h-10 w-10 rounded-2xl object-cover"
               onError={() => setHeaderAvatarFailed(true)}
             />
@@ -2317,6 +2322,23 @@ function LeagueHeader({
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <span
+              className={cn(
+                'inline-flex min-h-6 items-center rounded-full border px-2 text-[9px] font-black uppercase tracking-[0.14em]',
+                headerSportLabel === 'NCAAF'
+                  ? 'border-amber-300/30 bg-amber-500/10 text-amber-100'
+                  : 'border-cyan-300/30 bg-cyan-500/10 text-cyan-100',
+              )}
+              data-testid="league-header-sport-badge"
+            >
+              {headerSportLabel}
+            </span>
+            <span className="inline-flex min-h-6 items-center rounded-full border border-white/10 bg-white/[0.04] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-white/65">
+              {headerSeasonLabel}
+            </span>
+            <span className="inline-flex min-h-6 items-center rounded-full border border-emerald-300/20 bg-emerald-500/[0.08] px-2 text-[9px] font-bold uppercase tracking-[0.12em] text-emerald-100/85">
+              {headerStatusLabel}
+            </span>
             {idpLeagueActive ? (
               <span className="idp-creator-badge flex-shrink-0 whitespace-nowrap">* Created by TheCiege</span>
             ) : null}
@@ -2721,7 +2743,7 @@ function LeagueHeader({
 
       <div className="scrollbar-none mt-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3">
         <div
-          className="flex snap-x snap-mandatory gap-1 overflow-x-auto scroll-pb-1 rounded-xl border border-cyan-500/[0.16] bg-white/[0.04] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_24px_rgba(34,211,238,0.04)] [-webkit-overflow-scrolling:touch]"
+          className="scrollbar-none flex snap-x snap-mandatory gap-1 overflow-x-auto scroll-pb-1 rounded-xl border border-cyan-500/[0.16] bg-white/[0.04] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_24px_rgba(34,211,238,0.04)] [-webkit-overflow-scrolling:touch]"
           role="tablist"
           aria-label="League navigation"
           data-testid="league-command-center-tabs"

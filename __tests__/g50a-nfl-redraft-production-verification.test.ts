@@ -141,13 +141,15 @@ describe('G50A NFL redraft production verification', () => {
     expect(report.directProviderBypassStatus).toBe('PASS_WITH_LIMITATIONS')
     expect(report.remainingDeferredBypasses).toEqual(
       expect.arrayContaining([
-        'app/api/cron/import-scores/route.ts',
-        'app/api/cron/import-schedules/route.ts',
         'app/api/cron/import-standings/route.ts',
-        'app/api/cron/import-injuries/route.ts',
-        'app/api/fantasycalc/route.ts list/trending/compare legacy shapes',
+        'app/api/sports/sync/route.ts',
       ]),
     )
+    expect(report.remainingDeferredBypasses).not.toContain('app/api/cron/import-scores/route.ts')
+    expect(report.remainingDeferredBypasses).not.toContain('app/api/cron/import-schedules/route.ts')
+    expect(report.remainingDeferredBypasses).not.toContain('app/api/cron/import-injuries/route.ts')
+    expect(report.remainingDeferredBypasses).not.toContain('app/api/fantasycalc/route.ts list/trending/compare legacy shapes')
+    expect(report.remainingDeferredBypasses).not.toContain('app/api/redraft/*')
     expect(report.remainingDeferredBypasses).not.toContain('lib/player-assets/resolvePlayerHeadshot.ts')
     expect(report.launchBlockerReport.criticalBlockers.length).toBeGreaterThan(0)
     expect(report.launchBlockerReport.mediumIssues.join(' ')).toContain('FantasyCalc')

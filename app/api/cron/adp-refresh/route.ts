@@ -15,6 +15,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { runAdpImporter } from "@/lib/workers/adp-importer"
+import { withSyncJobRun, extractCommonCounts } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -44,7 +45,11 @@ async function handle(req: NextRequest) {
       })
     }
 
-    const result = await runAdpImporter({ sports })
+    const result = await withSyncJobRun(
+      { jobName: "cron-adp-refresh", sport: sports?.join(",") ?? "ALL", provider: "multi", trigger: "cron" },
+      () => runAdpImporter({ sports }),
+      extractCommonCounts,
+    )
 
     return NextResponse.json({
       ok: true,

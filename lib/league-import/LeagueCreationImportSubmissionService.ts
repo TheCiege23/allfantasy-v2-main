@@ -10,6 +10,26 @@ export interface CommissionerAttestation {
   statement?: string;
 }
 
+/**
+ * Commissioner Import Attestation UI phase — the wire shape sent to the
+ * server, always stamped with the CURRENT request's own `provider`/
+ * `sourceInput` (never caller-supplied) so a stale attestation object from a
+ * previous league/provider selection can never be silently reused — see
+ * `attestationMatchesThisRequest` in `commissionerGate.ts`, which rejects a
+ * mismatch server-side.
+ */
+function toWireAttestation(
+  provider: ImportProvider,
+  sourceInput: string,
+  attestation: CommissionerAttestation
+): CommissionerAttestation & { confirmedProvider: ImportProvider; confirmedSourceLeagueId: string } {
+  return {
+    ...attestation,
+    confirmedProvider: provider,
+    confirmedSourceLeagueId: sourceInput.trim(),
+  };
+}
+
 export interface FetchPreviewResult {
   ok: boolean;
   data?: unknown;
@@ -71,7 +91,7 @@ export async function fetchImportPreview(
       body: JSON.stringify({
         provider,
         sourceId: trimmed,
-        ...(attestation?.accepted ? { attestation } : {}),
+        ...(attestation?.accepted ? { attestation: toWireAttestation(provider, trimmed, attestation) } : {}),
       }),
     });
     const data = await res.json();
@@ -115,7 +135,7 @@ export async function submitImportCreation(
       body: JSON.stringify({
         provider,
         sourceId: trimmed,
-        ...(attestation?.accepted ? { attestation } : {}),
+        ...(attestation?.accepted ? { attestation: toWireAttestation(provider, trimmed, attestation) } : {}),
         ...(options?.force ? { force: true } : {}),
       }),
     });

@@ -2,6 +2,7 @@ import {
   DEFAULT_LANG,
   LANG_STORAGE_KEY,
   SUPPORTED_LANGUAGES,
+  getLanguageTextDirection,
   resolveLanguage,
   type LanguageCode,
 } from "@/lib/i18n/constants";
@@ -37,6 +38,7 @@ export function applyLanguageToDocument(
   if (root) {
     root.setAttribute("lang", resolved);
     root.setAttribute("data-lang", resolved);
+    root.setAttribute("dir", getLanguageTextDirection(resolved));
   }
   return resolved;
 }
@@ -89,9 +91,11 @@ export function buildLanguageInitScript(serverLang?: string | null): string {
         if (supported.indexOf(lang) === -1) lang = fallbackLang;
         document.documentElement.setAttribute("lang", lang);
         document.documentElement.setAttribute("data-lang", lang);
+        document.documentElement.setAttribute("dir", lang === "ar" ? "rtl" : "ltr");
       } catch (e) {
         document.documentElement.setAttribute("lang", ${JSON.stringify(fallbackLanguage)});
         document.documentElement.setAttribute("data-lang", ${JSON.stringify(fallbackLanguage)});
+        document.documentElement.setAttribute("dir", ${JSON.stringify(getLanguageTextDirection(fallbackLanguage))});
       }
     })();
   `;

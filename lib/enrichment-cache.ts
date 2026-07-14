@@ -49,7 +49,7 @@ export async function readCache<T = unknown>(
     if (!row) return null
 
     if (row.expiresAt < new Date()) {
-      prisma.sportsDataCache.delete({ where: { cacheKey: key } }).catch(() => {})
+      prisma.sportsDataCache.deleteMany({ where: { cacheKey: key } }).catch(() => {})
       return null
     }
 

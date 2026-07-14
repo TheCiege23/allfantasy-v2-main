@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
+import { transitionLeagueStateInTransaction } from '@/server/services/leagueLifecycleService'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import {
   advanceNflRedraftPlayoffRound,
@@ -599,10 +600,18 @@ export async function finalizeNflRedraftPlayoffRuntimeSeason(input: {
         },
       },
     }).catch(() => null)
-    await tx.league.update({
-      where: { id: resolved.state.leagueId },
-      data: { lifecycleState: 'completed' },
-    }).catch(() => null)
+    await transitionLeagueStateInTransaction(tx, {
+      leagueId: resolved.state.leagueId,
+      nextState: 'completed',
+      actorUserId: input.actorUserId,
+      source: 'engine:nfl-playoff-runtime',
+      idempotencyKey: `lifecycle:champion-finalize:${resolved.state.seasonId}:${resolved.state.bracket.bracketId}`,
+      metadata: {
+        seasonId: resolved.state.seasonId,
+        playoffBracketId: resolved.state.bracket.bracketId,
+        championRosterId: result.championRosterId,
+      },
+    })
     await tx.redraftRoster.update({
       where: { id: result.championRosterId },
       data: { isEliminated: false },

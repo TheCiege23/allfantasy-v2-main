@@ -1,4 +1,4 @@
-import { FantasyCalcPlayer } from './fantasycalc'
+import { FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 
 export interface LeagueRosterConfig {
   numTeams: number

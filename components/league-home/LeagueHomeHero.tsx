@@ -62,9 +62,9 @@ function StatCard({
   accent: AccentTone
 }) {
   return (
-    <div className="rounded-2xl border border-white/[0.06] bg-gradient-to-b from-white/[0.04] to-white/[0.015] p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+    <div className="glass-panel p-3.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
       <p className={`text-[10px] font-bold uppercase tracking-[0.16em] ${accent.text}`}>{label}</p>
-      <div className="mt-1 text-base font-bold text-white/95 sm:text-lg">{value}</div>
+      <div className="mt-1 text-base font-bold text-primary sm:text-lg">{value}</div>
     </div>
   )
 }

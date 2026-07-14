@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
-import { applyRedraftTradeCapTransfers, validateRedraftTradeCap } from '@/lib/idp/capEngine'
+import { applyRedraftTradeCapTransfersInTransaction, validateRedraftTradeCap, refreshCapProjections } from '@/lib/idp/capEngine'
 import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
 import { getPlatformEvents, EVENT } from '@/lib/events'
 import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
@@ -12,6 +12,10 @@ import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { recordTradeOutcomeForBothManagers } from '@/lib/ai-learning-system/recordTradeParticipants'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
+import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { evaluateRecentAcquisition } from '@/lib/league-trade-engine/recentAcquisitionGuard'
+import { validateProjectedRedraftRoster } from '@/lib/league-trade-engine/postTradeRosterValidator'
+import { passedEvidence, type TradeValidationEvidence } from '@/lib/redraft/tradeExecutionEvidence'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,6 +90,53 @@ async function finalizeAcceptedTrade(
   const proposerOffers = mapLegacyOffers(proposal.assets ?? [], proposal.proposerRosterId, proposal.receiverRosterId)
   const receiverOffers = mapLegacyOffers(proposal.assets ?? [], proposal.receiverRosterId, proposal.proposerRosterId)
 
+  const [league, season] = await Promise.all([
+    prisma.league.findUnique({ where: { id: proposal.leagueId } }),
+    prisma.redraftSeason.findUnique({ where: { id: proposal.seasonId }, select: { currentWeek: true, sport: true } }),
+  ])
+  if (!league || !season) return NextResponse.json({ error: 'Trade league or season is unavailable.' }, { status: 409 })
+  const settings = resolveLeagueTradeSettings(league)
+  if (!settings.tradesAllowed) return NextResponse.json({ error: 'Trades are disabled by league settings.' }, { status: 409 })
+  if (settings.tradeDeadlineWeek != null && season.currentWeek > settings.tradeDeadlineWeek) {
+    return NextResponse.json({ error: 'Trade deadline has passed.' }, { status: 409 })
+  }
+  const deadlineEvidence = passedEvidence('trade_deadline', null, settings.tradeDeadlineWeek != null ? `week ${season.currentWeek} <= deadline week ${settings.tradeDeadlineWeek}` : 'no deadline configured')
+  const perSide = new Map<string, number>()
+  for (const asset of proposal.assets) perSide.set(asset.fromRosterId, (perSide.get(asset.fromRosterId) ?? 0) + 1)
+  if (settings.maxAssetsPerSide != null && [...perSide.values()].some((count) => count > settings.maxAssetsPerSide!)) {
+    return NextResponse.json({ error: `A trade side exceeds the persisted maximum of ${settings.maxAssetsPerSide} assets.` }, { status: 409 })
+  }
+  const assetLimitsEvidence = passedEvidence('per_side_asset_limit', null, settings.maxAssetsPerSide != null ? `max ${settings.maxAssetsPerSide} per side` : 'no limit configured')
+  if (proposal.assets.some((asset) => asset.assetType === 'future_consideration')) {
+    return NextResponse.json({ error: 'Conditional or future consideration is not a supported redraft asset.' }, { status: 409 })
+  }
+  const playerAssets = proposal.assets.filter((asset) => asset.assetType === 'player' && asset.playerId)
+  const playerRows = await prisma.redraftRosterPlayer.findMany({
+    where: { rosterId: { in: [proposal.proposerRosterId, proposal.receiverRosterId] }, droppedAt: null },
+    select: { rosterId: true, playerId: true, playerName: true, position: true, sport: true, team: true, slotType: true, injuryStatus: true, isLocked: true, addedAt: true, acquisitionType: true },
+  })
+  const currentPlayers = new Map(playerRows.map((row) => [`${row.rosterId}:${row.playerId}`, row]))
+  const lockEvidence: TradeValidationEvidence[] = []
+  const acquisitionEvidence: TradeValidationEvidence[] = []
+  for (const asset of playerAssets) {
+    const current = currentPlayers.get(`${asset.fromRosterId}:${asset.playerId}`)
+    if (!current) return NextResponse.json({ error: 'A player asset is no longer owned by the sending franchise.' }, { status: 409 })
+    if (current.isLocked) return NextResponse.json({ error: 'A player asset is locked for the current scoring period.' }, { status: 409 })
+    lockEvidence.push(passedEvidence('player_lock', asset.playerId, 'not locked'))
+    const acquisition = evaluateRecentAcquisition({ acquiredAt: current.addedAt, acquisitionType: current.acquisitionType, restrictionHours: settings.recentlyAddedRestrictionHours, evaluatedAt: new Date() })
+    if (!acquisition.allowed) return NextResponse.json({ error: acquisition.message, code: acquisition.code }, { status: 409 })
+    acquisitionEvidence.push(passedEvidence('recently_added_restriction', asset.playerId, 'acquisition allowed'))
+  }
+
+  const rosterLegalityEvidence: TradeValidationEvidence[] = []
+  for (const rosterId of [proposal.proposerRosterId, proposal.receiverRosterId]) {
+    const outgoing = playerAssets.filter((asset) => asset.fromRosterId === rosterId).map((asset) => asset.playerId!)
+    const incomingIds = new Set(playerAssets.filter((asset) => asset.toRosterId === rosterId).map((asset) => asset.playerId!))
+    const legality = validateProjectedRedraftRoster({ franchiseId: rosterId, sport: season.sport, leagueSettings: league.settings, currentPlayers: playerRows.filter((row) => row.rosterId === rosterId), outgoingPlayerIds: outgoing, incomingPlayers: playerRows.filter((row) => incomingIds.has(row.playerId)) })
+    if (!legality.legal) return NextResponse.json({ error: 'Projected roster is illegal.', violations: legality.violations }, { status: 409 })
+    rosterLegalityEvidence.push(passedEvidence('projected_roster_legality', rosterId, 'legal'))
+  }
+
   const cap = await validateRedraftTradeCap(
     proposal.leagueId,
     proposal.proposerRosterId,
@@ -98,43 +149,49 @@ async function finalizeAcceptedTrade(
     return NextResponse.json({ error: cap.message }, { status: 409 })
   }
 
-  try {
-    await applyRedraftTradeCapTransfers(
-      proposal.leagueId,
-      proposal.proposerRosterId,
-      proposal.receiverRosterId,
-      proposerOffers,
-      receiverOffers,
-    )
-  } catch (e) {
-    console.error('[redraft/trade-votes] IDP cap transfer failed', e)
-    await failEvent()
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Cap transfer failed' },
-      { status: 409 },
-    )
-  }
-
   // Settle the trade for real: move RedraftRosterPlayer rows + transfer faabBalance atomically with
   // the status flip. (IDP salary records were moved above; this handles the standard redraft roster.)
   let updated
   try {
     updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      const executedAt = new Date()
+      const snapshotId = crypto.randomUUID()
+      const executionIdempotencyKey = `trade-execute:${proposal.id}`
+      const rosterIds = [proposal.proposerRosterId, proposal.receiverRosterId]
+      const [beforeRosters, beforePlayers, beforeSalaries] = await Promise.all([
+        tx.redraftRoster.findMany({ where: { id: { in: rosterIds } }, select: { id: true, faabBalance: true } }),
+        tx.redraftRosterPlayer.findMany({ where: { rosterId: { in: rosterIds }, droppedAt: null }, select: { id: true, rosterId: true, playerId: true, slotType: true, acquisitionType: true, addedAt: true, isLocked: true } }),
+        tx.iDPSalaryRecord.findMany({ where: { leagueId: proposal.leagueId, rosterId: { in: rosterIds }, status: { in: ['active', 'franchise_tagged'] } }, select: { id: true, rosterId: true, playerId: true, salary: true, status: true } }),
+      ])
       // Concurrency guard: atomically claim the proposal BEFORE moving any rosters.
       // A conditional update on status='pending' ensures only one of two racing
       // finalizers (double-click, vote-threshold vs. commissioner-approve) settles.
       const claimed = await tx.redraftTradeProposal.updateMany({
         where: { id: proposal.id, status: 'pending' },
-        data: { status: 'accepted', acceptedAt: new Date(), processedAt: new Date() },
+        data: { status: 'accepted', acceptedAt: executedAt, processedAt: executedAt },
       })
       if (claimed.count === 0) {
         throw new Error('PROPOSAL_ALREADY_RESOLVED')
       }
+      const capResult = await applyRedraftTradeCapTransfersInTransaction(tx, proposal.leagueId, proposal.proposerRosterId, proposal.receiverRosterId, proposerOffers, receiverOffers)
       await settleRedraftTradeAssets(tx, {
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
         assets: proposal.assets ?? [],
       })
+      const [afterRosters, afterPlayers, afterSalaries] = await Promise.all([
+        tx.redraftRoster.findMany({ where: { id: { in: rosterIds } }, select: { id: true, faabBalance: true } }),
+        tx.redraftRosterPlayer.findMany({ where: { rosterId: { in: rosterIds }, droppedAt: null }, select: { id: true, rosterId: true, playerId: true, slotType: true, acquisitionType: true, addedAt: true, isLocked: true } }),
+        tx.iDPSalaryRecord.findMany({ where: { leagueId: proposal.leagueId, rosterId: { in: rosterIds }, status: { in: ['active', 'franchise_tagged'] } }, select: { id: true, rosterId: true, playerId: true, salary: true, status: true } }),
+      ])
+      const faabTransfers = proposal.assets.filter((asset) => asset.assetType === 'faab').map((asset) => ({ fromFranchiseId: asset.fromRosterId, toFranchiseId: asset.toRosterId, amount: Math.max(0, Number((asset.metadata as Record<string, unknown> | null)?.amount ?? 0)) }))
+      const idpSalaryTransfers = beforeSalaries.filter((salary) => playerAssets.some((asset) => asset.playerId === salary.playerId && asset.fromRosterId === salary.rosterId)).map((salary) => ({ playerId: salary.playerId, fromFranchiseId: salary.rosterId, toFranchiseId: playerAssets.find((asset) => asset.playerId === salary.playerId && asset.fromRosterId === salary.rosterId)!.toRosterId, salary: salary.salary }))
+      const assetSummary = { playerIds: playerAssets.map((asset) => asset.playerId!), faabTransfers, idpSalaryTransfers, draftAssetIds: proposal.assets.filter((asset) => asset.assetType === 'draft_pick').map((asset) => `${asset.pickSeason ?? ''}:${asset.pickRound ?? ''}:${asset.pickNumber ?? ''}`) }
+      const event = await getPlatformEvents().emitInTx(tx, EVENT.TRADE_EXECUTED, { leagueId: proposal.leagueId, seasonId: proposal.seasonId, sport: season.sport, leagueConcept: 'redraft', actor: { type: 'user', id: decidedByUserId }, idempotencyKey: executionIdempotencyKey, source: 'native_redraft', subjects: [{ kind: 'trade', id: proposal.id }, { kind: 'trade_snapshot', id: snapshotId }], payload: { tradeId: proposal.id, snapshotId, sendingFranchiseIds: [...new Set(proposal.assets.map((asset) => asset.fromRosterId))], receivingFranchiseIds: [...new Set(proposal.assets.map((asset) => asset.toRosterId))], assetSummary, governanceMode: settings.processingMode, settingsVersion: settings.settingsVersion, scoringVersion: settings.scoringVersion, completeness: 'complete', source: 'native_redraft' } })
+      const executedByActorRole = terminalEventType === 'commissioner_approved' ? 'commissioner' : 'user'
+      await tx.tradeExecutionSnapshot.create({ data: { id: snapshotId, tradeId: proposal.id, tradeSource: 'native_redraft', nativeTradeId: proposal.id, leagueId: proposal.leagueId, seasonId: proposal.seasonId, executionIdempotencyKey, eventId: event.eventId, executedAt, executedByActorId: decidedByUserId, executedByActorRole, governance: { processingMode: settings.processingMode, settingsVersion: settings.settingsVersion, scoringVersion: settings.scoringVersion, tradeDeadlineWeek: settings.tradeDeadlineWeek, reviewWindowMinutes: settings.reviewWindowMinutes }, validations: { deadline: deadlineEvidence, locks: lockEvidence, acquisitions: acquisitionEvidence, rosterLegality: rosterLegalityEvidence, assetLimits: assetLimitsEvidence }, beforeState: { proposalStatus: proposal.status, rosters: beforeRosters, players: beforePlayers, idpSalaries: beforeSalaries }, afterState: { proposalStatus: 'accepted', rosters: afterRosters, players: afterPlayers, idpSalaries: afterSalaries }, assetSummary, dependencies: { sourceTransactionIds: capResult?.transactionIds ?? [] }, completeness: 'complete' } })
+      await tx.redraftTradeDecision.upsert({ where: { proposalId: proposal.id }, create: { id: crypto.randomUUID(), proposalId: proposal.id, decision: 'accepted', decidedByUserId, decisionReason: decisionReason ?? null, snapshot: { snapshotId, eventId: event.eventId } }, update: { decision: 'accepted', decidedByUserId, decisionReason: decisionReason ?? null, snapshot: { snapshotId, eventId: event.eventId } } })
+      await tx.leagueAuditLog.create({ data: { leagueId: proposal.leagueId, userId: decidedByUserId, actionType: 'trade_execution_snapshot_created', entityType: 'trade_execution_snapshot', entityId: snapshotId, beforeState: { proposalStatus: proposal.status }, afterState: { proposalStatus: 'accepted' }, metadata: { tradeId: proposal.id, eventId: event.eventId, executionIdempotencyKey } } })
       return tx.redraftTradeProposal.findUniqueOrThrow({ where: { id: proposal.id } })
     })
   } catch (e) {
@@ -149,10 +206,27 @@ async function finalizeAcceptedTrade(
       { status: 409 },
     )
   }
-  await upsertDecision(proposal.id, 'accepted', decidedByUserId, decisionReason)
-
-  // G15.2b — best-effort emit (never throws; only the race-winning finalizer reaches here,
-  // and deterministic keys dedupe → exactly one accepted+processed event per trade).
+  // IDP cap ledger (IDPCapTransaction, written transactionally above) stays authoritative.
+  // The IDPCapProjection table is a derived view — refresh it post-commit, best-effort,
+  // and also durably signal the refresh via the outbox so a retry-safe worker can catch
+  // up if this immediate refresh fails. A failed refresh must not corrupt the ledger.
+  {
+    const capRosterIds = [proposal.proposerRosterId, proposal.receiverRosterId]
+    await getPlatformEvents().emit(EVENT.IDP_CAP_PROJECTION_REFRESH_REQUESTED, {
+      leagueId: proposal.leagueId,
+      seasonId: proposal.seasonId,
+      leagueConcept: 'redraft',
+      actor: { type: 'system', id: null },
+      source: 'route:trade-votes',
+      idempotencyKey: `idp-cap-refresh:${proposal.id}`,
+      subjects: [{ kind: 'trade', id: proposal.id }],
+      payload: { leagueId: proposal.leagueId, rosterIds: capRosterIds, reason: 'trade_executed' },
+    }).catch((err) => console.error('[redraft/trade-votes] IDP_CAP_PROJECTION_REFRESH_REQUESTED emit failed', err))
+    await Promise.all(capRosterIds.map((rosterId) => refreshCapProjections(proposal.leagueId, rosterId))).catch((err) =>
+      console.error('[redraft/trade-votes] refreshCapProjections failed (ledger unaffected; projection stays stale until retried)', err),
+    )
+  }
+  // Compatibility events remain best-effort; the canonical executed outcome is transactional.
   {
     const events = getPlatformEvents()
     const ctx = {

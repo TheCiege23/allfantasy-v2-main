@@ -298,7 +298,7 @@ export default function MarketTimingAlerts() {
 
       {!loading && data && (
         <p className="text-[10px] text-white/20 text-center pt-2">
-          Market data refreshed {formatTimeInTimezone(data.generatedAt)} · Powered by FantasyCalc + AI
+          Market data refreshed {formatTimeInTimezone(data.generatedAt)} · Canonical market intelligence
         </p>
       )}
     </div>

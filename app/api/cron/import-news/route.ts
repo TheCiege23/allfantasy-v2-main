@@ -15,6 +15,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { runNewsImporter } from "@/lib/workers/news-importer"
+import { withSyncJobRun, extractCommonCounts } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
@@ -33,7 +34,11 @@ async function handle(req: NextRequest) {
   const startedAt = Date.now()
 
   try {
-    const result = await runNewsImporter({ sports })
+    const result = await withSyncJobRun(
+      { jobName: "cron-import-news", sport: sports?.join(",") ?? "ALL", provider: "news", trigger: "cron" },
+      () => runNewsImporter({ sports }),
+      extractCommonCounts,
+    )
 
     return NextResponse.json({
       ok: true,

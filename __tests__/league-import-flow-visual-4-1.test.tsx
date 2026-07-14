@@ -28,12 +28,12 @@ describe('LeagueImportFlow — Phase 4.1 visual upgrade (structural)', () => {
       'import-tab-mfl',
       'import-tab-fantrax',
       'import-tab-espn',
-      'import-build-legacy-cta',
     ]) {
       expect(flowSrc, `missing data-testid=${testid}`).toContain(`data-testid={\`import-tab-\${id}\`}`)
-      // The last one (CTA) uses a literal:
     }
-    expect(flowSrc).toContain('data-testid="import-build-legacy-cta"')
+    // Sleeper now discovers real leagues through the canonical pipeline
+    // rather than starting a legacy-only profile import.
+    expect(flowSrc).toContain('data-testid="import-sleeper-discover-cta"')
   })
 
   it('applies shared Dashboard V2 motion classes (warroom-* + fade-in-stagger)', () => {
@@ -56,7 +56,25 @@ describe('LeagueImportFlow — Phase 4.1 visual upgrade (structural)', () => {
 
   it('includes the step-1 eyebrow chip anchoring the pre-import stage', () => {
     expect(flowSrc).toContain('Step 1 · Choose Platform')
-    expect(flowSrc).toContain('Step 2 of 2')
+    expect(flowSrc).toContain('Discover leagues from account')
+  })
+})
+
+describe('LeagueImportFlow — canonical Sleeper commit wiring', () => {
+  it('routes every tab, including sleeper, through the canonical import provider (no legacy special case)', () => {
+    expect(flowSrc).toContain('function tabToImportProvider(tab: LegacyPlatformTab): ImportProvider')
+    expect(flowSrc).toMatch(/function tabToImportProvider\(tab: LegacyPlatformTab\): ImportProvider \| null \{\s*return tab\s*\}/)
+    expect(flowSrc).not.toContain("if (tab === 'sleeper') return null")
+  })
+
+  it('does not use the legacy-only Sleeper import hook', () => {
+    expect(flowSrc).not.toContain('useLegacySleeperImport')
+    expect(flowSrc).not.toContain('startSleeperImport')
+  })
+
+  it('discovers Sleeper leagues through the canonical discover route and previews via the shared runPreview path', () => {
+    expect(flowSrc).toContain("discoverProviderLeagues('sleeper', username)")
+    expect(flowSrc).toContain("void runPreview('sleeper', sourceId)")
   })
 })
 

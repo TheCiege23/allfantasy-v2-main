@@ -40,8 +40,8 @@ describe('NFL redraft core — TeamTab uses PlayerHeadshot, not PlayerImage', ()
   })
 
   it('renders <PlayerHeadshot> in the roster row, not <PlayerImage>', () => {
-    expect(src).toMatch(/<PlayerHeadshot[\s\S]*?sleeperId=\{playerId\}/)
-    expect(src).not.toMatch(/<PlayerImage[\s\S]*?sleeperId=\{playerId\}/)
+    expect(src).toMatch(/<PlayerHeadshot[\s\S]*?playerId=\{playerId\}/)
+    expect(src).not.toMatch(/<PlayerImage[\s\S]*?playerId=\{playerId\}/)
   })
 
   it('forwards player name + position + team to the shared component', () => {
@@ -78,8 +78,8 @@ describe('NFL redraft core — PlayersTab uses PlayerHeadshot, not PlayerImage',
   })
 
   it('renders <PlayerHeadshot> in the player row, not <PlayerImage>', () => {
-    expect(src).toMatch(/<PlayerHeadshot[\s\S]*?sleeperId=\{p\.id\}/)
-    expect(src).not.toMatch(/<PlayerImage[\s\S]*?sleeperId=\{p\.id\}/)
+    expect(src).toMatch(/<PlayerHeadshot[\s\S]*?playerId=\{p\.id\}/)
+    expect(src).not.toMatch(/<PlayerImage[\s\S]*?playerId=\{p\.id\}/)
   })
 
   it('forwards player name + position + team to the shared component', () => {

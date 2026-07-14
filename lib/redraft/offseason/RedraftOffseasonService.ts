@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { EVENT, getPlatformEvents } from '@/lib/events'
 import { publishLeagueFanoutEvent } from '@/lib/league-events/publisher'
 import { transitionLeagueStateInTransaction } from '@/server/services/leagueLifecycleService'
+import { upsertFranchiseSeasonRows } from '@/lib/rank/upsertFranchiseSeasonRows'
 
 export type EnterRedraftOffseasonResult = {
   ok: true
@@ -144,47 +145,20 @@ export async function enterRedraftOffseason(
       // been written anywhere in the codebase — native leagues silently
       // scored 0 toward rank. Write it here, from the SAME `records`/
       // `champion`/`runnerUp` this function already computed for
-      // `LeagueSeason.teamRecords`, so the two models never disagree about
-      // who the champion was. `madePlayoffs` is derived the same way the
-      // legacy rank engine (`computeAndSaveRank.ts`) already does — a real
-      // playoff seed assigned. Known limitation: only newly-completed
-      // seasons from this point forward get a row; already-offseason
-      // seasons short-circuit above (line ~83) before reaching this
-      // transaction, so a real backfill for those is a separate, disclosed
-      // follow-up, not attempted here.
-      for (const record of records) {
-        if (!record.rosterId) continue
-        await tx.franchiseSeason.upsert({
-          where: { leagueId_rosterId_season: { leagueId: season.leagueId, rosterId: record.rosterId, season: season.season } },
-          update: {
-            userId: record.managerUserId ?? null,
-            wins: record.wins,
-            losses: record.losses,
-            ties: record.ties,
-            pointsFor: record.pointsFor,
-            pointsAgainst: record.pointsAgainst,
-            madePlayoffs: record.playoffSeed != null && record.playoffSeed > 0,
-            wonChampionship: record.rosterId === champion?.rosterId,
-            runnerUp: record.rosterId === runnerUp?.rosterId,
-            finalRank: record.rank,
-          },
-          create: {
-            leagueId: season.leagueId,
-            rosterId: record.rosterId,
-            userId: record.managerUserId ?? null,
-            season: season.season,
-            wins: record.wins,
-            losses: record.losses,
-            ties: record.ties,
-            pointsFor: record.pointsFor,
-            pointsAgainst: record.pointsAgainst,
-            madePlayoffs: record.playoffSeed != null && record.playoffSeed > 0,
-            wonChampionship: record.rosterId === champion?.rosterId,
-            runnerUp: record.rosterId === runnerUp?.rosterId,
-            finalRank: record.rank,
-          },
-        })
-      }
+      // `LeagueSeason.teamRecords`, via the shared `upsertFranchiseSeasonRows`
+      // helper (also used by the historical backfill script) so the two
+      // callers never disagree about who the champion was. Known
+      // limitation: only newly-completed seasons from this point forward
+      // get a row here; already-offseason seasons short-circuit above
+      // (line ~83) before reaching this transaction — that's what the
+      // backfill script is for.
+      await upsertFranchiseSeasonRows(tx, {
+        leagueId: season.leagueId,
+        season: season.season,
+        records,
+        championRosterId: champion?.rosterId ?? null,
+        runnerUpRosterId: runnerUp?.rosterId ?? null,
+      })
 
       await tx.leagueAuditLog.create({
         data: {

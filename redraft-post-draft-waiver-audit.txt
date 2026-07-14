@@ -1,0 +1,3009 @@
+﻿
+===== components\app\draft-room\PostDraftView.tsx =====
+'use client'
+
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import Link from 'next/link'
+import {
+  LayoutGrid,
+  Users,
+  ListOrdered,
+  Sparkles,
+  Share2,
+  Copy,
+  ChevronDown,
+  ChevronRight,
+  Check,
+  FileText,
+  Play,
+  Pause,
+  SkipBack,
+  SkipForward,
+  Download,
+} from 'lucide-react'
+import type { DraftSessionSnapshot, SlotOrderEntry } from '@/lib/live-draft-engine/types'
+import type {
+  PickLogEntry,
+  PostDraftSummary,
+  PostDraftRecapSections,
+  TeamGradeExplanationEntry,
+  TeamResultEntry,
+  ValueReachEntry,
+} from '@/lib/post-draft'
+
+export type PostDraftTab = 'summary' | 'teams' | 'roster' | 'replay' | 'recap' | 'share'
+
+/**
+ * Color scheme for letter grades on the post-draft team-grade cards.
+ * A â†’ emerald, B â†’ cyan, C â†’ amber, D â†’ orange, F â†’ rose. Strips off any
+ * +/- modifier so "A+", "A", "A-" all share the same family.
+ */
+function gradeBadgeClasses(grade: string): { wrapper: string; letter: string } {
+  const letter = String(grade ?? '').trim().charAt(0).toUpperCase()
+  switch (letter) {
+    case 'A':
+      return {
+        wrapper: 'border-emerald-400/40 bg-emerald-500/12 shadow-[0_0_20px_rgba(16,185,129,0.18)]',
+        letter: 'text-emerald-200',
+      }
+    case 'B':
+      return {
+        wrapper: 'border-cyan-400/40 bg-cyan-500/12 shadow-[0_0_20px_rgba(34,211,238,0.18)]',
+        letter: 'text-cyan-200',
+      }
+    case 'C':
+      return {
+        wrapper: 'border-amber-400/40 bg-amber-500/12 shadow-[0_0_20px_rgba(245,158,11,0.18)]',
+        letter: 'text-amber-200',
+      }
+    case 'D':
+      return {
+        wrapper: 'border-orange-400/40 bg-orange-500/12 shadow-[0_0_20px_rgba(249,115,22,0.18)]',
+        letter: 'text-orange-200',
+      }
+    case 'F':
+      return {
+        wrapper: 'border-rose-400/45 bg-rose-500/12 shadow-[0_0_22px_rgba(244,63,94,0.22)]',
+        letter: 'text-rose-200',
+      }
+    default:
+      return { wrapper: 'border-white/15 bg-white/[0.04]', letter: 'text-white/70' }
+  }
+}
+
+export type PostDraftViewProps = {
+  leagueId: string
+  leagueName: string
+  sport: string
+  session: DraftSessionSnapshot
+  currentUserRosterId: string | null
+  slotOrder: SlotOrderEntry[]
+}
+
+function buildSummaryText(
+  params: {
+    leagueName?: string | null
+    rounds: number
+    teamCount: number
+    pickCount: number
+    byPosition: Record<string, number>
+    teamLines: string
+  }
+): string {
+  const posLines = Object.entries(params.byPosition)
+    .sort((a, b) => b[1] - a[1])
+    .map(([pos, n]) => `${pos}: ${n}`)
+    .join(', ')
+  return [
+    `${params.leagueName ?? 'Draft'} â€” Draft complete`,
+    `Rounds: ${params.rounds} Â· Teams: ${params.teamCount} Â· Total picks: ${params.pickCount}`,
+    `By position: ${posLines}`,
+    '',
+    'Team rosters:',
+    params.teamLines,
+  ].join('\n')
+}
+
+function fallbackPickLogFromSession(session: DraftSessionSnapshot): PickLogEntry[] {
+  return (session.picks ?? []).map((p) => ({
+    id: p.id,
+    overall: p.overall,
+    round: p.round,
+    slot: p.slot,
+    rosterId: p.rosterId,
+    displayName: p.displayName ?? null,
+    playerName: p.playerName,
+    position: p.position,
+    team: p.team ?? null,
+    amount: (p as { amount?: number | null }).amount ?? undefined,
+    pickLabel: p.pickLabel,
+  }))
+}
+
+function fallbackTeamResultsFromSession(
+  session: DraftSessionSnapshot,
+  slotOrder: SlotOrderEntry[],
+  pickLog: PickLogEntry[]
+): TeamResultEntry[] {
+  return slotOrder.map((slotEntry) => {
+    const teamPicks = pickLog.filter((pick) => pick.rosterId === slotEntry.rosterId)
+    const totalSpent = session.draftType === 'auction'
+      ? teamPicks.reduce((sum, pick) => sum + (Number(pick.amount) || 0), 0)
+      : undefined
+    return {
+      rosterId: slotEntry.rosterId,
+      displayName: slotEntry.displayName ?? `Team ${slotEntry.slot}`,
+      slot: slotEntry.slot,
+      pickCount: teamPicks.length,
+      picks: teamPicks,
+      ...(totalSpent != null ? { totalSpent } : {}),
+    }
+  })
+}
+
+function fallbackValueReach(pickLog: PickLogEntry[]): ValueReachEntry[] {
+  const firstByPosition: Record<string, { overall: number; displayName: string | null }> = {}
+  for (const pick of pickLog) {
+    const position = pick.position || 'OTHER'
+    if (firstByPosition[position] == null || pick.overall < firstByPosition[position].overall) {
+      firstByPosition[position] = {
+        overall: pick.overall,
+        displayName: pick.displayName ?? null,
+      }
+    }
+  }
+  return Object.entries(firstByPosition)
+    .sort((a, b) => a[1].overall - b[1].overall)
+    .map(([position, payload]) => ({
+      position,
+      earliestOverall: payload.overall,
+      firstPickBy: payload.displayName,
+    }))
+}
+
+function buildReplayCsv(pickLog: PickLogEntry[]): string {
+  const header = 'overall,round,slot,pick_label,manager,player,position,team,amount'
+  const rows = pickLog.map((pick) => {
+    const cols = [
+      pick.overall,
+      pick.round,
+      pick.slot,
+      pick.pickLabel,
+      pick.displayName ?? '',
+      pick.playerName,
+      pick.position,
+      pick.team ?? '',
+      pick.amount ?? '',
+    ]
+    return cols
+      .map((col) => `"${String(col).replace(/"/g, '""')}"`)
+      .join(',')
+  })
+  return [header, ...rows].join('\n')
+}
+
+function buildFallbackRecapSections(params: {
+  leagueName: string
+  sport: string
+  rounds: number
+  teamCount: number
+  pickCount: number
+  byPosition: Record<string, number>
+  teamResults: TeamResultEntry[]
+  valueReach: ValueReachEntry[]
+}): PostDraftRecapSections {
+  const topPositions = Object.entries(params.byPosition)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([position, count]) => `${position} (${count})`)
+    .join(', ')
+  const topTeams: TeamGradeExplanationEntry[] = params.teamResults
+    .slice()
+    .sort((a, b) => b.pickCount - a.pickCount)
+    .slice(0, 6)
+    .map((entry, index) => ({
+      rank: index + 1,
+      rosterId: entry.rosterId,
+      displayName: entry.displayName,
+      grade: index < 2 ? 'A-' : index < 4 ? 'B' : 'B-',
+      score: Math.max(68, 90 - index * 4),
+      explanation: `${entry.displayName} closed with ${entry.pickCount} selections and a balanced draft board footprint. Deterministic grade details are available in Draft Grades.`,
+    }))
+  const valueLead = params.valueReach[0]
+  const valueTail = params.valueReach[params.valueReach.length - 1]
+  return {
+    leagueNarrativeRecap: `${params.leagueName} completed a ${params.rounds}-round ${params.sport} draft with ${params.pickCount} total picks. Top positions drafted: ${topPositions || 'balanced distribution'}.`,
+    strategyRecap: `Early draft construction centered around ${topPositions || 'balanced positional allocation'}, with managers prioritizing depth and role coverage through all ${params.rounds} rounds.`,
+    bestWorstValueExplanation:
+      valueLead && valueTail
+        ? `Earliest positional pressure started at ${valueLead.position} (overall #${valueLead.earliestOverall}). Late positional patience was strongest at ${valueTail.position} (first selected at #${valueTail.earliestOverall}).`
+        : 'Value/reach highlights are available from deterministic draft-grade scoring.',
+    chimmyDraftDebrief: `Chimmy debrief: the board is finalized for all ${params.teamCount} teams. Next step is to review your roster and waiver contingencies before opening-week lock.`,
+    teamGradeExplanations: topTeams,
+  }
+}
+
+export function PostDraftView({
+  leagueId,
+  leagueName,
+  sport,
+  session,
+  currentUserRosterId,
+  slotOrder,
+}: PostDraftViewProps) {
+  const [tab, setTab] = useState<PostDraftTab>('summary')
+  const [recap, setRecap] = useState<string | null>(null)
+  const [recapLoading, setRecapLoading] = useState(false)
+  const [recapError, setRecapError] = useState<string | null>(null)
+  const [recapExecutionMode, setRecapExecutionMode] = useState<string | null>(null)
+  const [recapSections, setRecapSections] = useState<PostDraftRecapSections | null>(null)
+  const [recapSectionsLoading, setRecapSectionsLoading] = useState(false)
+  const [recapSectionsError, setRecapSectionsError] = useState<string | null>(null)
+  const [copyLabel, setCopyLabel] = useState<'link' | 'summary' | 'csv' | 'shared' | null>(null)
+  const [shareError, setShareError] = useState<string | null>(null)
+  const [summaryLoading, setSummaryLoading] = useState(false)
+  const [summaryError, setSummaryError] = useState<string | null>(null)
+  const [summaryPayload, setSummaryPayload] = useState<PostDraftSummary | null>(null)
+  const [replayLoading, setReplayLoading] = useState(false)
+  const [replayError, setReplayError] = useState<string | null>(null)
+  const [replayPickLog, setReplayPickLog] = useState<PickLogEntry[] | null>(null)
+  const [replayIndex, setReplayIndex] = useState(0)
+  const [replayPlaying, setReplayPlaying] = useState(false)
+
+  const fallbackPickLog = useMemo(() => fallbackPickLogFromSession(session), [session])
+  const effectivePickLog = replayPickLog ?? summaryPayload?.pickLog ?? fallbackPickLog
+  const effectiveTeamResults = summaryPayload?.teamResults ?? fallbackTeamResultsFromSession(session, slotOrder, effectivePickLog)
+  const effectiveValueReach = summaryPayload?.valueReach ?? fallbackValueReach(effectivePickLog)
+  const effectiveByPosition = useMemo(() => {
+    if (summaryPayload?.byPosition) return summaryPayload.byPosition
+    return effectivePickLog.reduce<Record<string, number>>((acc, pick) => {
+      const position = pick.position || 'OTHER'
+      acc[position] = (acc[position] ?? 0) + 1
+      return acc
+    }, {})
+  }, [summaryPayload?.byPosition, effectivePickLog])
+  const effectivePickCount = summaryPayload?.pickCount ?? effectivePickLog.length
+  const effectiveTotalPicks = summaryPayload?.totalPicks ?? (session.rounds * session.teamCount)
+  const fallbackRecapSections = useMemo(
+    () =>
+      buildFallbackRecapSections({
+        leagueName: summaryPayload?.leagueName ?? leagueName,
+        sport: summaryPayload?.sport ?? sport,
+        rounds: summaryPayload?.rounds ?? session.rounds,
+        teamCount: summaryPayload?.teamCount ?? session.teamCount,
+        pickCount: effectivePickCount,
+        byPosition: effectiveByPosition,
+        teamResults: effectiveTeamResults,
+        valueReach: effectiveValueReach,
+      }),
+    [
+      summaryPayload?.leagueName,
+      summaryPayload?.sport,
+      summaryPayload?.rounds,
+      summaryPayload?.teamCount,
+      leagueName,
+      sport,
+      session.rounds,
+      session.teamCount,
+      effectivePickCount,
+      effectiveByPosition,
+      effectiveTeamResults,
+      effectiveValueReach,
+    ]
+  )
+  const activeReplayIndex = effectivePickLog.length > 0 ? Math.max(0, Math.min(replayIndex, effectivePickLog.length - 1)) : 0
+  const activeReplayPick = effectivePickLog.length > 0 ? effectivePickLog[activeReplayIndex] : null
+  const teamSummaryLines = useMemo(
+    () =>
+      effectiveTeamResults
+        .map((teamEntry) => `${teamEntry.displayName}: ${(teamEntry.picks ?? []).map((pick) => pick.playerName).join(', ')}`)
+        .join('\n'),
+    [effectiveTeamResults]
+  )
+
+  useEffect(() => {
+    if (session.status !== 'completed') return
+    let cancelled = false
+    const loadSummary = async () => {
+      setSummaryLoading(true)
+      setSummaryError(null)
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/post-draft-summary`, { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled) {
+          if (res.ok && data && Array.isArray(data.pickLog)) {
+            setSummaryPayload(data as PostDraftSummary)
+          } else {
+            setSummaryPayload(null)
+            if (typeof data?.error === 'string') setSummaryError(data.error)
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setSummaryPayload(null)
+          setSummaryError('Post-draft summary unavailable. Showing local fallback.')
+        }
+      } finally {
+        if (!cancelled) setSummaryLoading(false)
+      }
+    }
+    const loadReplay = async () => {
+      setReplayLoading(true)
+      setReplayError(null)
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/replay`, { cache: 'no-store' })
+        const data = await res.json().catch(() => ({}))
+        if (!cancelled) {
+          if (res.ok && Array.isArray(data.pickLog)) {
+            setReplayPickLog(data.pickLog as PickLogEntry[])
+          } else {
+            setReplayPickLog(null)
+            if (typeof data?.error === 'string') setReplayError(data.error)
+          }
+        }
+      } catch {
+        if (!cancelled) {
+          setReplayPickLog(null)
+          setReplayError('Replay payload unavailable. Showing local fallback.')
+        }
+      } finally {
+        if (!cancelled) setReplayLoading(false)
+      }
+    }
+    void Promise.all([loadSummary(), loadReplay()])
+    return () => {
+      cancelled = true
+    }
+  }, [leagueId, session.status])
+
+  useEffect(() => {
+    if (!replayPlaying || effectivePickLog.length === 0) return
+    const timer = window.setTimeout(() => {
+      setReplayIndex((prev) => {
+        const next = prev + 1
+        if (next >= effectivePickLog.length) {
+          setReplayPlaying(false)
+          return effectivePickLog.length - 1
+        }
+        return next
+      })
+    }, 850)
+    return () => window.clearTimeout(timer)
+  }, [replayPlaying, effectivePickLog.length])
+
+  useEffect(() => {
+    if (activeReplayIndex < effectivePickLog.length) return
+    setReplayIndex(Math.max(0, effectivePickLog.length - 1))
+  }, [activeReplayIndex, effectivePickLog.length])
+
+  const setCopyStatus = (label: 'link' | 'summary' | 'csv' | 'shared') => {
+    setCopyLabel(label)
+    window.setTimeout(() => setCopyLabel(null), 2000)
+  }
+
+  const fetchRecap = useCallback(async (options?: { includeAiExplanation?: boolean }) => {
+    const includeAiExplanation = options?.includeAiExplanation === true
+    if (includeAiExplanation) {
+      setRecapLoading(true)
+      setRecapError(null)
+    } else {
+      setRecapSectionsLoading(true)
+      setRecapSectionsError(null)
+    }
+    setRecapExecutionMode(null)
+    try {
+      const res = await fetch(`/api/leagues/${encodeURIComponent(leagueId)}/draft/recap`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ includeAiExplanation }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        if (data?.sections && typeof data.sections === 'object') {
+          setRecapSections(data.sections as PostDraftRecapSections)
+        } else if (!recapSections) {
+          setRecapSections(fallbackRecapSections)
+        }
+        if (includeAiExplanation && typeof data.recap === 'string') {
+          setRecap(data.recap)
+        }
+        setRecapExecutionMode(typeof data?.execution?.mode === 'string' ? data.execution.mode : null)
+      } else if (includeAiExplanation) {
+        setRecapError(data.error ?? 'Failed to load recap')
+      } else {
+        setRecapSectionsError(data.error ?? 'Deterministic recap unavailable')
+      }
+    } catch {
+      if (includeAiExplanation) {
+        setRecapError('Request failed')
+      } else {
+        setRecapSectionsError('Request failed')
+      }
+    } finally {
+      if (includeAiExplanation) setRecapLoading(false)
+      else setRecapSectionsLoading(false)
+    }
+  }, [fallbackRecapSections, leagueId, recapSections])
+
+  useEffect(() => {
+    if (tab !== 'recap') return
+    if (recapSections || recapSectionsLoading) return
+    void fetchRecap({ includeAiExplanation: false })
+  }, [fetchRecap, recapSections, recapSectionsLoading, tab])
+
+  const copyLink = useCallback(() => {
+    setShareError(null)
+    const url = typeof window !== 'undefined' ? window.location.href : ''
+    if (!url) return
+    if (!navigator.clipboard?.writeText) {
+      setShareError('Clipboard not available on this device/browser.')
+      return
+    }
+    void navigator.clipboard.writeText(url).then(
+      () => setCopyStatus('link'),
+      () => setShareError('Unable to copy link. You can still share manually.')
+    )
+  }, [])
+
+  const copySummary = useCallback(() => {
+    setShareError(null)
+    if (!navigator.clipboard?.writeText) {
+      setShareError('Clipboard not available on this device/browser.')
+      return
+    }
+    const text = buildSummaryText({
+      leagueName: summaryPayload?.leagueName ?? leagueName,
+      rounds: summaryPayload?.rounds ?? session.rounds,
+      teamCount: summaryPayload?.teamCount ?? session.teamCount,
+      pickCount: effectivePickCount,
+      byPosition: effectiveByPosition,
+      teamLines: teamSummaryLines,
+    })
+    void navigator.clipboard.writeText(text).then(
+      () => setCopyStatus('summary'),
+      () => setShareError('Unable to copy summary. Try export CSV instead.')
+    )
+  }, [summaryPayload, leagueName, session.rounds, session.teamCount, effectivePickCount, effectiveByPosition, teamSummaryLines])
+
+  const exportReplayCsv = useCallback(() => {
+    setShareError(null)
+    if (typeof window === 'undefined') return
+    try {
+      const csv = buildReplayCsv(effectivePickLog)
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${leagueName || 'allfantasy'}-draft-replay.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setCopyStatus('csv')
+    } catch {
+      setShareError('CSV export unavailable. You can still copy summary text.')
+    }
+  }, [effectivePickLog, leagueName])
+
+  const nativeShare = useCallback(async () => {
+    setShareError(null)
+    const url = typeof window !== 'undefined' ? window.location.href : ''
+    if (!url) return
+    if (typeof navigator === 'undefined' || typeof navigator.share !== 'function') {
+      setShareError('Native share is not supported here. Use copy link instead.')
+      return
+    }
+    try {
+      await navigator.share({
+        title: `${leagueName} Draft Summary`,
+        text: `${leagueName} draft recap`,
+        url,
+      })
+      setCopyStatus('shared')
+    } catch {
+      // User canceled or share failed; degrade silently with no hard error.
+    }
+  }, [leagueName])
+
+  const myPicks = currentUserRosterId ? effectivePickLog.filter((p) => p.rosterId === currentUserRosterId) : []
+  const c2cCollegeRounds = summaryPayload?.c2cCollegeRounds ?? session.c2c?.collegeRounds ?? []
+  const activeRecapSections = recapSections ?? fallbackRecapSections
+
+  const tabs: { id: PostDraftTab; label: string; icon: typeof LayoutGrid }[] = [
+    { id: 'summary', label: 'Summary', icon: FileText },
+    { id: 'teams', label: 'Teams', icon: Users },
+    { id: 'roster', label: 'My Roster', icon: ListOrdered },
+    { id: 'replay', label: 'Replay', icon: LayoutGrid },
+    { id: 'recap', label: 'AI Recap', icon: Sparkles },
+    { id: 'share', label: 'Share', icon: Share2 },
+  ]
+
+  return (
+    <div className="flex h-full flex-col bg-[#0a0a0f] text-white" data-testid="post-draft-view">
+      <header className="shrink-0 border-b border-white/12 bg-black/30 px-4 py-3">
+        <h1 className="text-base font-semibold md:text-lg">{leagueName}</h1>
+        <p className="text-xs text-white/60">{sport} Â· Draft complete</p>
+        <p className="mt-2 rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-3 py-2 text-[11px] leading-snug text-emerald-100/95">
+          Results use the authoritative saved draft board from this league. Refresh anytime â€” your recap and grades stay aligned with persisted picks.
+        </p>
+      </header>
+
+      <nav className="flex shrink-0 gap-1 overflow-x-auto border-b border-white/10 bg-black/20 px-2 py-2 scrollbar-thin">
+        {tabs.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            onClick={() => setTab(id)}
+            data-testid={`post-draft-tab-${id}`}
+            className={`flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm whitespace-nowrap touch-manipulation min-h-[44px] ${
+              tab === id ? 'bg-cyan-500/20 text-cyan-200' : 'text-white/70 hover:bg-white/10'
+            }`}
+            aria-pressed={tab === id}
+            aria-label={label}
+          >
+            <Icon className="h-4 w-4 shrink-0" />
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <main className="flex-1 overflow-auto p-4 text-sm min-h-0">
+        {tab === 'summary' && (
+          <section className="space-y-4" data-testid="post-draft-summary-panel">
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4" data-testid="post-draft-summary-card-overview">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">Draft summary</h2>
+              <p className="text-white/90">Total picks: <strong>{effectivePickCount}</strong> of {effectiveTotalPicks}</p>
+              <p className="text-white/90 mt-1">Rounds: <strong>{summaryPayload?.rounds ?? session.rounds}</strong> Â· Teams: <strong>{summaryPayload?.teamCount ?? session.teamCount}</strong></p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-testid="post-draft-summary-open-teams"
+                  onClick={() => setTab('teams')}
+                  className="rounded border border-white/20 bg-black/20 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                >
+                  Team results
+                </button>
+                <button
+                  type="button"
+                  data-testid="post-draft-summary-open-replay"
+                  onClick={() => setTab('replay')}
+                  className="rounded border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/20"
+                >
+                  Open replay
+                </button>
+                <button
+                  type="button"
+                  data-testid="post-draft-summary-open-ai-recap"
+                  onClick={() => setTab('recap')}
+                  className="rounded border border-violet-300/30 bg-violet-500/10 px-2.5 py-1.5 text-xs text-violet-100 hover:bg-violet-500/20"
+                >
+                  AI recap
+                </button>
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4" data-testid="post-draft-summary-card-position">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">By position</h2>
+              <ul className="space-y-1">
+                {Object.entries(effectiveByPosition)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([pos, count]) => (
+                    <li key={pos} className="flex justify-between text-white/90">
+                      <span>{pos}</span>
+                      <span className="tabular-nums">{count}</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4" data-testid="post-draft-summary-card-value-reach">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">Value / reach</h2>
+              <p className="text-white/70 text-xs">
+                Earliest pick by position (first time each position was selected):
+              </p>
+              <ul className="mt-2 space-y-1 text-sm text-white/90">
+                {effectiveValueReach.map((entry) => (
+                    <li key={entry.position}>
+                      {entry.position}: overall #{entry.earliestOverall}
+                      {entry.firstPickBy ? ` (${entry.firstPickBy})` : ''}
+                    </li>
+                  ))}
+              </ul>
+              <p className="mt-2 text-[10px] text-white/50">Full value/reach vs ADP in Draft Grades.</p>
+              <Link
+                href={`/league/${leagueId}/draft-results`}
+                className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-cyan-600/20 px-3 py-2 text-xs font-medium text-cyan-300 hover:bg-cyan-600/30"
+              >
+                View draft grades & rankings
+                <ChevronRight className="h-4 w-4" />
+              </Link>
+            </div>
+            {session.draftType === 'auction' && (summaryPayload?.budgetSummary || session.auction) && (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4" data-testid="post-draft-summary-card-budget">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">Budget summary</h2>
+                <p className="text-white/70 text-xs mb-2">Per-team budget and spent (auction).</p>
+                <ul className="space-y-2">
+                  {(summaryPayload?.budgetSummary ?? []).map((entry) => {
+                    return (
+                      <li key={entry.rosterId} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                        <span className="font-medium text-white/90">{entry.displayName ?? `Team ${entry.slot}`}</span>
+                        <span className="text-white/70 tabular-nums">
+                          ${entry.spent} / ${entry.budget} Â· ${entry.remaining} left
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
+            {(summaryPayload?.keeperOutcome?.length || session.keeper?.selections?.length) && (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4" data-testid="post-draft-summary-card-keeper">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">Keeper outcome</h2>
+                <p className="text-white/70 text-xs mb-2">Keepers locked and their round cost.</p>
+                <ul className="space-y-1.5">
+                  {(summaryPayload?.keeperOutcome ?? session.keeper?.selections ?? []).map((k, i) => {
+                    return (
+                      <li key={i} className="flex flex-wrap items-center gap-2 text-sm text-white/90">
+                        <span className="font-medium">{k.playerName}</span>
+                        <span className="text-white/50">{k.position}{k.team ? ` Â· ${k.team}` : ''}</span>
+                        <span className="text-white/50">Round {k.roundCost}</span>
+                        {'displayName' in k ? (
+                          <span className="text-white/40 text-xs">({(k as { displayName?: string }).displayName ?? 'â€”'})</span>
+                        ) : null}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            )}
+            {summaryLoading && (
+              <p className="text-xs text-white/50">
+                Syncing roster assignments and draft grades from the finalized boardâ€¦
+              </p>
+            )}
+            {summaryError && (
+              <p className="text-xs text-amber-300/90">{summaryError}</p>
+            )}
+            {(session.devy?.enabled || session.c2c?.enabled || summaryPayload?.devyRounds?.length || summaryPayload?.c2cCollegeRounds?.length) && (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4" data-testid="post-draft-summary-card-devy">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-2">Devy / C2C</h2>
+                <ul className="space-y-1 text-sm text-white/80">
+                  {(summaryPayload?.devyRounds ?? session.devy?.devyRounds ?? []).length ? (
+                    <li>Devy rounds: {(summaryPayload?.devyRounds ?? session.devy?.devyRounds ?? []).join(', ')}</li>
+                  ) : null}
+                  {(summaryPayload?.c2cCollegeRounds ?? session.c2c?.collegeRounds ?? []).length ? (
+                    <li>C2C college rounds: {(summaryPayload?.c2cCollegeRounds ?? session.c2c?.collegeRounds ?? []).join(', ')}</li>
+                  ) : null}
+                </ul>
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === 'teams' && (
+          <section className="space-y-3" data-testid="post-draft-teams-panel">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">Team-by-team results</h2>
+            {effectiveTeamResults.map((entry) => {
+              return (
+                <TeamResultsCard
+                  key={entry.rosterId}
+                  displayName={entry.displayName}
+                  picks={entry.picks}
+                  slot={entry.slot}
+                />
+              )
+            })}
+          </section>
+        )}
+
+        {tab === 'roster' && (
+          <section data-testid="post-draft-roster-panel">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">My drafted roster</h2>
+            {myPicks.length === 0 ? (
+              <p className="text-white/60">No picks for your team in this draft.</p>
+            ) : (
+              <ul className="space-y-2">
+                {myPicks.map((p) => (
+                  <li
+                    key={p.id}
+                    className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2"
+                  >
+                    <span className="font-medium text-white/90">
+                      {p.playerName}
+                      {c2cCollegeRounds.length > 0 && c2cCollegeRounds.includes(p.round) ? (
+                        <span className="ml-1 rounded bg-violet-500/20 px-1 py-0.5 text-[9px] font-medium text-violet-100">College</span>
+                      ) : c2cCollegeRounds.length > 0 ? (
+                        <span className="ml-1 rounded bg-cyan-500/20 px-1 py-0.5 text-[9px] font-medium text-cyan-100">Pro</span>
+                      ) : null}
+                    </span>
+                    <span className="text-xs text-white/50">{p.position}{p.team ? ` Â· ${p.team}` : ''}</span>
+                    <span className="text-[10px] text-white/40">#{p.overall}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {tab === 'replay' && (
+          <section data-testid="post-draft-replay-panel">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50 mb-3">Pick log (replay)</h2>
+            <div className="mb-3 rounded-xl border border-white/10 bg-white/5 p-3">
+              <p className="text-[11px] text-white/55 mb-2">Replay controls</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="post-draft-replay-restart"
+                  onClick={() => {
+                    setReplayPlaying(false)
+                    setReplayIndex(0)
+                  }}
+                  className="rounded border border-white/20 bg-black/25 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                >
+                  <SkipBack className="h-3.5 w-3.5 inline mr-1" />
+                  Restart
+                </button>
+                <button
+                  type="button"
+                  data-testid="post-draft-replay-prev"
+                  onClick={() => {
+                    setReplayPlaying(false)
+                    setReplayIndex((prev) => Math.max(0, prev - 1))
+                  }}
+                  className="rounded border border-white/20 bg-black/25 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                >
+                  Prev
+                </button>
+                <button
+                  type="button"
+                  data-testid="post-draft-replay-play-toggle"
+                  onClick={() => setReplayPlaying((prev) => !prev)}
+                  className="rounded border border-cyan-300/30 bg-cyan-500/10 px-2.5 py-1.5 text-xs text-cyan-100 hover:bg-cyan-500/20"
+                >
+                  {replayPlaying ? (
+                    <>
+                      <Pause className="h-3.5 w-3.5 inline mr-1" />
+                      Pause
+                    </>
+                  ) : (
+                    <>
+                      <Play className="h-3.5 w-3.5 inline mr-1" />
+                      Play
+                    </>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  data-testid="post-draft-replay-next"
+                  onClick={() => {
+                    setReplayPlaying(false)
+                    setReplayIndex((prev) => Math.min(effectivePickLog.length - 1, prev + 1))
+                  }}
+                  className="rounded border border-white/20 bg-black/25 px-2.5 py-1.5 text-xs text-white/80 hover:bg-white/10"
+                  disabled={effectivePickLog.length === 0}
+                >
+                  Next
+                  <SkipForward className="h-3.5 w-3.5 inline ml-1" />
+                </button>
+                <span className="text-[11px] text-white/60" data-testid="post-draft-replay-progress">
+                  {effectivePickLog.length === 0 ? 'No picks' : `${activeReplayIndex + 1} / ${effectivePickLog.length}`}
+                </span>
+              </div>
+              {activeReplayPick && (
+                <div className="mt-3 rounded-lg border border-cyan-300/25 bg-cyan-500/8 px-3 py-2" data-testid="post-draft-replay-active-pick">
+                  <p className="text-cyan-100 font-medium">
+                    {activeReplayPick.pickLabel} Â· {activeReplayPick.playerName}
+                  </p>
+                  <p className="text-xs text-white/70">
+                    {activeReplayPick.position}
+                    {activeReplayPick.team ? ` Â· ${activeReplayPick.team}` : ''}
+                    {activeReplayPick.displayName ? ` Â· ${activeReplayPick.displayName}` : ''}
+                  </p>
+                </div>
+              )}
+            </div>
+            {replayLoading && <p className="text-xs text-white/50 mb-2">Loading replay payloadâ€¦</p>}
+            {replayError && <p className="text-xs text-amber-300/90 mb-2">{replayError}</p>}
+            <ol className="space-y-1.5">
+              {effectivePickLog.map((p, idx) => (
+                <li
+                  key={p.id}
+                  className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left ${
+                    idx === activeReplayIndex
+                      ? 'border-cyan-300/35 bg-cyan-500/10'
+                      : idx < activeReplayIndex
+                        ? 'border-white/10 bg-white/5'
+                        : 'border-white/8 bg-black/20'
+                  }`}
+                  data-testid={`post-draft-replay-item-${idx}`}
+                >
+                  <span className="tabular-nums text-white/50 w-8">#{p.overall}</span>
+                  <span className="flex-1 font-medium text-white/90 truncate">{p.playerName}</span>
+                  <span className="text-xs text-white/50 shrink-0">{p.position}</span>
+                  <span className="text-xs text-white/40 max-w-[80px] truncate">{p.displayName ?? ''}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        {tab === 'recap' && (
+          <section className="space-y-3" data-testid="post-draft-ai-recap-panel">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">AI recap</h2>
+            {recapSectionsLoading && (
+              <p className="text-white/60 text-xs">Building deterministic recap cardsâ€¦</p>
+            )}
+            {recapSectionsError && (
+              <p className="text-amber-300/90 text-xs">{recapSectionsError}</p>
+            )}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-narrative">
+                <p className="text-[10px] uppercase tracking-wider text-white/50">League narrative recap</p>
+                <p className="mt-1.5 text-sm text-white/90">{activeRecapSections.leagueNarrativeRecap}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-strategy">
+                <p className="text-[10px] uppercase tracking-wider text-white/50">Strategy recap</p>
+                <p className="mt-1.5 text-sm text-white/90">{activeRecapSections.strategyRecap}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-value">
+                <p className="text-[10px] uppercase tracking-wider text-white/50">Best / worst value</p>
+                <p className="mt-1.5 text-sm text-white/90">{activeRecapSections.bestWorstValueExplanation}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid="post-draft-recap-card-chimmy">
+                <p className="text-[10px] uppercase tracking-wider text-white/50">Chimmy debrief</p>
+                <p className="mt-1.5 text-sm text-cyan-100">{activeRecapSections.chimmyDraftDebrief}</p>
+              </div>
+            </div>
+            <div data-testid="post-draft-recap-card-team-grades" className="rounded-2xl border border-white/10 bg-gradient-to-br from-[#0a1228]/80 to-[#070d1c]/90 p-4">
+              <div className="mb-3 flex items-baseline justify-between">
+                <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/55">Team Grades</p>
+                <p className="text-[10px] uppercase tracking-wider text-white/35">
+                  {activeRecapSections.teamGradeExplanations.length} {activeRecapSections.teamGradeExplanations.length === 1 ? 'team' : 'teams'}
+                </p>
+              </div>
+              {activeRecapSections.teamGradeExplanations.length > 0 ? (
+                <div className="grid gap-2.5 md:grid-cols-2">
+                  {activeRecapSections.teamGradeExplanations.map((entry) => {
+                    const colors = gradeBadgeClasses(entry.grade)
+                    return (
+                      <div
+                        key={entry.rosterId}
+                        data-testid={`post-draft-team-grade-card-${entry.rosterId}`}
+                        className={`flex items-start gap-3 rounded-xl border p-3 ${colors.wrapper}`}
+                      >
+                        <div
+                          data-testid="post-draft-team-grade-letter"
+                          className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/35 text-2xl font-black tabular-nums ${colors.letter}`}
+                        >
+                          {entry.grade}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                              #{entry.rank}
+                            </span>
+                            <span className="truncate text-sm font-bold text-white">{entry.displayName}</span>
+                            <span className="ml-auto shrink-0 font-mono text-[11px] tabular-nums text-white/50">
+                              {Math.round(entry.score)}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-snug text-white/70">{entry.explanation}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-4 text-center text-xs text-white/50">
+                  Deterministic team-grade explanations are syncing.
+                </p>
+              )}
+            </div>
+            {!recap && !recapLoading && !recapError && (
+              <button
+                type="button"
+                onClick={() => void fetchRecap({ includeAiExplanation: true })}
+                data-testid="post-draft-ai-recap-generate"
+                className="inline-flex items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm text-white hover:bg-cyan-500 min-h-[44px]"
+              >
+                <Sparkles className="h-4 w-4" />
+                Generate AI narrative recap
+              </button>
+            )}
+            {recapLoading && <p className="text-white/60">Generating recapâ€¦</p>}
+            {recapError && (
+              <p className="text-amber-400 text-sm">{recapError}</p>
+            )}
+            {recap && (
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 whitespace-pre-wrap text-white/90" data-testid="post-draft-ai-recap-text">
+                {recap}
+              </div>
+            )}
+            {recapExecutionMode && (
+              <p className="text-[10px] text-white/60" data-testid="post-draft-ai-recap-execution">
+                {recapExecutionMode === 'ai_explained'
+                  ? 'Execution: deterministic recap + AI narrative layer'
+                  : 'Execution: deterministic recap only'}
+              </p>
+            )}
+            {recap && (
+              <button
+                type="button"
+                onClick={() => void fetchRecap({ includeAiExplanation: true })}
+                data-testid="post-draft-ai-recap-refresh"
+                className="rounded border border-white/20 bg-black/20 px-3 py-1.5 text-xs text-white/80 hover:bg-white/10"
+              >
+                Refresh recap
+              </button>
+            )}
+          </section>
+        )}
+
+        {tab === 'share' && (
+          <section className="space-y-4" data-testid="post-draft-share-panel">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/50">Export & share</h2>
+            <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                data-testid="post-draft-share-native"
+                onClick={() => void nativeShare()}
+                className="flex items-center justify-center gap-2 rounded-lg border border-violet-300/25 bg-violet-500/10 px-4 py-3 text-sm text-violet-100 hover:bg-violet-500/20 min-h-[44px]"
+              >
+                {copyLabel === 'shared' ? <Check className="h-4 w-4 text-emerald-400" /> : <Share2 className="h-4 w-4" />}
+                {copyLabel === 'shared' ? 'Shared' : 'Native share'}
+              </button>
+              <button
+                type="button"
+                onClick={copyLink}
+                data-testid="post-draft-share-copy-link"
+                className="flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-sm text-white/90 hover:bg-white/10 min-h-[44px]"
+              >
+                {copyLabel === 'link' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                {copyLabel === 'link' ? 'Link copied' : 'Copy draft room link'}
+              </button>
+              <button
+                type="button"
+                onClick={copySummary}
+                data-testid="post-draft-share-copy-summary"
+                className="flex items-center justify-center gap-2 rounded-lg border border-white/20 bg-white/5 px-4 py-3 text-sm text-white/90 hover:bg-white/10 min-h-[44px]"
+              >
+                {copyLabel === 'summary' ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                {copyLabel === 'summary' ? 'Summary copied' : 'Copy summary (text)'}
+              </button>
+              <button
+                type="button"
+                onClick={exportReplayCsv}
+                data-testid="post-draft-export-csv"
+                className="flex items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100 hover:bg-cyan-500/20 min-h-[44px]"
+              >
+                {copyLabel === 'csv' ? <Check className="h-4 w-4 text-emerald-400" /> : <Download className="h-4 w-4" />}
+                {copyLabel === 'csv' ? 'CSV exported' : 'Export replay CSV'}
+              </button>
+            </div>
+            {shareError && (
+              <p className="text-[11px] text-amber-300/90" data-testid="post-draft-share-error">
+                {shareError}
+              </p>
+            )}
+            <p className="text-[11px] text-white/50">
+              Share the link so others can view the draft. Summary copies a text version of rosters.
+            </p>
+          </section>
+        )}
+      </main>
+
+      <div className="shrink-0 border-t border-white/10 px-4 py-3 flex flex-wrap items-center gap-4">
+        <Link
+          href={`/league/${leagueId}/draft-results`}
+          className="inline-flex items-center gap-2 text-cyan-400 hover:underline text-sm"
+        >
+          Draft grades & rankings
+        </Link>
+        <Link
+          href={`/league/${leagueId}`}
+          className="inline-flex items-center gap-2 text-white/60 hover:underline text-sm"
+        >
+          Back to league
+        </Link>
+      </div>
+    </div>
+  )
+}
+
+function TeamResultsCard({
+  displayName,
+  slot,
+  picks,
+}: {
+  displayName: string
+  slot: number
+  picks: PickLogEntry[]
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/5 overflow-hidden" data-testid={`post-draft-team-card-${slot}`}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        data-testid={`post-draft-team-toggle-${slot}`}
+        className="flex w-full items-center justify-between px-4 py-3 text-left min-h-[44px] touch-manipulation"
+        aria-expanded={open}
+      >
+        <span className="font-medium text-white/90">{displayName}</span>
+        <span className="text-xs text-white/50">{picks.length} picks</span>
+        {open ? <ChevronDown className="h-4 w-4 text-white/50" /> : <ChevronRight className="h-4 w-4 text-white/50" />}
+      </button>
+      {open && (
+        <ul className="border-t border-white/10 px-4 py-2 space-y-1">
+          {picks.map((p) => (
+            <li key={p.id} className="flex items-center gap-2 text-sm">
+              <span className="tabular-nums text-white/50 w-6">#{p.overall}</span>
+              <span className="text-white/90">{p.playerName}</span>
+              <span className="text-xs text-white/50">{p.position}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+export default PostDraftView
+
+
+===== components\app\draft-room\ResultsRosterPanel.tsx =====
+'use client'
+
+/**
+ * D.6 â€” Sleeper-style Results / Roster panel (right column of the bottom dock).
+ *
+ * Shows the focused team's roster filled in canonical slot order
+ * (QB / RB / RB / WR / WR / TE / FLEX / SF / [IDP] / DEF / K / BNâ€¦).
+ * Users can switch the focused team via the dropdown next to the team name â€”
+ * NO route change, NO ownership change, just a read-only view swap.
+ *
+ * Defaults to the current user's team when `currentUserRosterId` is provided.
+ *
+ * Per spec:
+ *   - Use actual league roster settings; never force SF/IDP slots when the
+ *     league config doesn't include them.
+ *   - Preserve commissioner custom slots (rendered after the canonical block).
+ *   - Bench slots come last.
+ */
+
+import { useMemo, useState, useEffect } from 'react'
+import { ChevronDown, Bot, User } from 'lucide-react'
+import {
+  buildOrderedRosterSlots,
+  assignPicksToSlots,
+  type RosterSlotEntry,
+} from '@/lib/draft-room/rosterSlotOrder'
+
+export interface ResultsRosterPanelTeam {
+  rosterId: string
+  /** Display name â€” "TheCiege24", "JohnBailey33", "Slot 4". */
+  displayName: string
+  /** When true, this is the user's team (drives the default focus). */
+  isCurrentUser?: boolean
+  /** AI manager flag â€” surfaces a tiny robot icon next to the name. */
+  isAi?: boolean
+}
+
+export interface ResultsRosterPanelPick {
+  rosterId: string
+  playerName: string
+  position: string
+  team?: string | null
+  overall: number
+  isDevy?: boolean
+}
+
+export interface ResultsRosterPanelProps {
+  teams: readonly ResultsRosterPanelTeam[]
+  /** Picks across ALL teams; the panel filters by focused rosterId. */
+  picks: readonly ResultsRosterPanelPick[]
+  /** Drives the default focus when no manual selection has been made. */
+  currentUserRosterId: string | null
+  /** League roster config â€” drives slot order. */
+  starterSlots: Record<string, number> | null | undefined
+  benchSlots?: number | null
+  idpEnabled?: boolean
+  /** Optional override of the focused team â€” used by tests / external triggers. */
+  focusRosterIdOverride?: string | null
+  testIdBase?: string
+}
+
+export function ResultsRosterPanel({
+  teams,
+  picks,
+  currentUserRosterId,
+  starterSlots,
+  benchSlots,
+  idpEnabled = false,
+  focusRosterIdOverride,
+  testIdBase = 'results-roster-panel',
+}: ResultsRosterPanelProps) {
+  // Defaults to current user; manual selection via dropdown overrides.
+  const [manualFocus, setManualFocus] = useState<string | null>(null)
+  // External override (e.g. test harness) wins over both.
+  useEffect(() => {
+    if (focusRosterIdOverride !== undefined) setManualFocus(focusRosterIdOverride)
+  }, [focusRosterIdOverride])
+
+  const focusedRosterId =
+    manualFocus ?? currentUserRosterId ?? teams[0]?.rosterId ?? null
+  const focusedTeam = useMemo(
+    () => teams.find((t) => t.rosterId === focusedRosterId) ?? null,
+    [teams, focusedRosterId],
+  )
+
+  const orderedSlots = useMemo(
+    () => buildOrderedRosterSlots({ starterSlots, benchSlots, idpEnabled }),
+    [starterSlots, benchSlots, idpEnabled],
+  )
+
+  const focusedPicks = useMemo(() => {
+    return picks
+      .filter((p) => p.rosterId === focusedRosterId)
+      .slice()
+      .sort((a, b) => a.overall - b.overall)
+  }, [picks, focusedRosterId])
+
+  const slotAssignments = useMemo(
+    () => assignPicksToSlots(focusedPicks, orderedSlots),
+    [focusedPicks, orderedSlots],
+  )
+
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+
+  const starterPicks = slotAssignments.filter((s) => s.slot.kind === 'starter' || s.slot.kind === 'custom')
+  const benchPicks = slotAssignments.filter((s) => s.slot.kind === 'bench')
+
+  return (
+    <section
+      data-testid={testIdBase}
+      data-focused-roster-id={focusedRosterId ?? ''}
+      className="flex h-full min-h-0 flex-col bg-[#060d1d] text-white"
+      aria-label="Roster results"
+    >
+      {/* Header â€” team selector dropdown. */}
+      <header className="shrink-0 border-b border-white/10 bg-[#0a1228] px-3 py-2">
+        <button
+          type="button"
+          onClick={() => setDropdownOpen((v) => !v)}
+          aria-haspopup="listbox"
+          aria-expanded={dropdownOpen}
+          data-testid={`${testIdBase}-team-trigger`}
+          className="flex w-full items-center justify-between gap-2 rounded border border-white/10 bg-black/30 px-2 py-1.5 text-left transition hover:border-white/25"
+        >
+          <span className="flex min-w-0 items-center gap-1.5">
+            {focusedTeam?.isAi ? (
+              <Bot className="h-3.5 w-3.5 shrink-0 text-violet-300/85" aria-label="AI manager" />
+            ) : (
+              <User className="h-3.5 w-3.5 shrink-0 text-cyan-200/85" aria-hidden />
+            )}
+            <span className="truncate text-[12px] font-semibold text-white/95">
+              {focusedTeam?.displayName ?? 'â€”'}
+            </span>
+            {focusedTeam?.isCurrentUser ? (
+              <span className="rounded border border-cyan-400/40 bg-cyan-500/15 px-1 text-[8px] font-bold uppercase tracking-wider text-cyan-100">
+                YOU
+              </span>
+            ) : null}
+          </span>
+          <ChevronDown
+            className={`h-3.5 w-3.5 shrink-0 text-white/55 transition-transform ${dropdownOpen ? 'rotate-180' : ''}`}
+            aria-hidden
+          />
+        </button>
+        {dropdownOpen ? (
+          <ul
+            role="listbox"
+            data-testid={`${testIdBase}-team-listbox`}
+            className="mt-1 max-h-[40vh] overflow-y-auto rounded border border-white/10 bg-[#0a1228] py-1 shadow-lg shadow-black/40"
+          >
+            {teams.map((t) => {
+              const isFocused = t.rosterId === focusedRosterId
+              return (
+                <li key={t.rosterId} role="option" aria-selected={isFocused}>
+                  <button
+                    type="button"
+                    data-testid={`${testIdBase}-team-option-${t.rosterId}`}
+                    onClick={() => {
+                      setManualFocus(t.rosterId)
+                      setDropdownOpen(false)
+                    }}
+                    className={`flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-[12px] transition ${
+                      isFocused ? 'bg-cyan-500/12 text-cyan-100' : 'text-white/80 hover:bg-white/5'
+                    }`}
+                  >
+                    {t.isAi ? (
+                      <Bot className="h-3 w-3 shrink-0 text-violet-300/85" aria-hidden />
+                    ) : (
+                      <User className="h-3 w-3 shrink-0 text-cyan-200/85" aria-hidden />
+                    )}
+                    <span className="truncate">{t.displayName}</span>
+                    {t.isCurrentUser ? (
+                      <span className="ml-auto rounded border border-cyan-400/40 bg-cyan-500/15 px-1 text-[8px] font-bold uppercase tracking-wider text-cyan-100">
+                        YOU
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        ) : null}
+      </header>
+
+      {/* Body â€” ordered slots. */}
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <SlotGroup heading="STARTERS" entries={starterPicks} testIdBase={`${testIdBase}-starters`} />
+        {benchPicks.length ? (
+          <SlotGroup heading="BENCH" entries={benchPicks} testIdBase={`${testIdBase}-bench`} />
+        ) : null}
+        {starterPicks.length === 0 && benchPicks.length === 0 ? (
+          <div className="px-3 py-6 text-center text-[11px] text-white/45">
+            League roster settings have no starter slots configured yet.
+          </div>
+        ) : null}
+      </div>
+    </section>
+  )
+}
+
+interface SlotGroupProps {
+  heading: string
+  entries: ReadonlyArray<{ slot: RosterSlotEntry; pick: ResultsRosterPanelPick | null }>
+  testIdBase: string
+}
+
+function SlotGroup({ heading, entries, testIdBase }: SlotGroupProps) {
+  if (!entries.length) return null
+  return (
+    <div className="border-b border-white/8 last:border-b-0" data-testid={testIdBase}>
+      <div className="sticky top-0 bg-[#0a1228] px-3 py-1 text-[9px] font-semibold uppercase tracking-[0.18em] text-white/45">
+        {heading}
+      </div>
+      <ul>
+        {entries.map((entry, idx) => (
+          <li
+            key={`${entry.slot.label}-${idx}`}
+            data-testid={`${testIdBase}-row-${idx}`}
+            data-slot-label={entry.slot.label}
+            data-slot-position={entry.slot.position}
+            className="flex items-center gap-2 border-b border-white/5 px-3 py-1.5 text-[11px] last:border-b-0"
+          >
+            <span className="w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider text-white/55">
+              {entry.slot.label}
+            </span>
+            {entry.pick ? (
+              <span className="flex min-w-0 flex-1 items-center justify-between gap-2">
+                <span className="truncate text-[12px] text-white/95">
+                  {entry.pick.playerName}
+                </span>
+                <span className="shrink-0 text-[10px] text-white/45">
+                  {entry.pick.position}
+                  {entry.pick.team ? ` Â· ${entry.pick.team}` : ''}
+                </span>
+              </span>
+            ) : (
+              <span className="text-[11px] italic text-white/35">Empty</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+
+===== components\app\draft-room\DraftRosterStrip.tsx =====
+'use client'
+
+/**
+ * Dynasty / C2C / devy-aware roster strip rendered inside the draft team panel.
+ *
+ * Groups the focused team's drafted picks into four sections â€” Starters, Bench,
+ * Taxi, Devy â€” with position color-coding and slot placeholders so a manager
+ * can see roster gaps as the draft progresses.
+ *
+ * Starter assignment uses a greedy fill:
+ *   1. Walk drafted picks in draft order (lowest overall first).
+ *   2. For each pick, place it in the first empty starter slot matching its
+ *      position. If no exact match, try the first empty FLEX slot (RB/WR/TE
+ *      eligible; SUPERFLEX adds QB).
+ *   3. Overflow picks go to Bench. Picks flagged as devy-round go to Devy.
+ *      Picks explicitly tagged `isTaxi` go to Taxi.
+ *
+ * When `starterSlots` is not supplied, falls back to sport defaults (NFL shown).
+ */
+
+import React, { useMemo } from 'react'
+import { Users } from 'lucide-react'
+import { PlayerAvatar } from './PlayerAvatar'
+
+export interface DraftRosterStripPick {
+  playerName: string
+  position: string
+  overall: number
+  /** True when this pick was taken during a devy round (routed from the page). */
+  isDevy?: boolean
+  /** True when commissioner/manager flagged the player as taxi-squad eligible. */
+  isTaxi?: boolean
+  /** Optional NFL team abbreviation (badge / DEF logo selection). */
+  team?: string | null
+  /** Optional headshot URL â€” falls back to silhouette+initials when missing. */
+  headshotUrl?: string | null
+  /** Optional team logo URL â€” DEF promotes to primary avatar; others render as bottom-right badge. */
+  teamLogoUrl?: string | null
+}
+
+export interface DraftRosterStripProps {
+  picks: DraftRosterStripPick[]
+  /** Map of starter slot name â†’ count (QB, RB, WR, TE, FLEX, SUPERFLEX, K, DEF, â€¦). */
+  starterSlots?: Record<string, number> | null
+  benchSlots?: number | null
+  taxiSlots?: number | null
+  devySlots?: number | null
+  /** When true, taxi section renders even if no picks routed there yet. */
+  isDynasty?: boolean
+  /** Optional label for the focused team â€” shown in the section header. */
+  teamLabel?: string | null
+  sport?: string | null
+}
+
+const POSITION_COLORS: Record<string, { border: string; bg: string; text: string }> = {
+  QB: { border: 'border-rose-400/45', bg: 'bg-rose-500/12', text: 'text-rose-200' },
+  RB: { border: 'border-emerald-400/45', bg: 'bg-emerald-500/12', text: 'text-emerald-200' },
+  WR: { border: 'border-sky-400/45', bg: 'bg-sky-500/12', text: 'text-sky-200' },
+  TE: { border: 'border-amber-400/45', bg: 'bg-amber-500/12', text: 'text-amber-200' },
+  K: { border: 'border-violet-400/45', bg: 'bg-violet-500/12', text: 'text-violet-200' },
+  DEF: { border: 'border-slate-400/45', bg: 'bg-slate-500/15', text: 'text-slate-200' },
+  DST: { border: 'border-slate-400/45', bg: 'bg-slate-500/15', text: 'text-slate-200' },
+  FLX: { border: 'border-cyan-400/45', bg: 'bg-cyan-500/12', text: 'text-cyan-200' },
+  FLEX: { border: 'border-cyan-400/45', bg: 'bg-cyan-500/12', text: 'text-cyan-200' },
+  SF: { border: 'border-fuchsia-400/45', bg: 'bg-fuchsia-500/12', text: 'text-fuchsia-200' },
+  SUPERFLEX: { border: 'border-fuchsia-400/45', bg: 'bg-fuchsia-500/12', text: 'text-fuchsia-200' },
+}
+
+const NEUTRAL_COLOR = { border: 'border-white/15', bg: 'bg-white/[0.04]', text: 'text-white/70' }
+
+const DEFAULT_NFL_STARTERS: Record<string, number> = {
+  QB: 1,
+  RB: 1,
+  WR: 2,
+  TE: 1,
+  DEF: 1,
+}
+
+function colorForPosition(position: string): { border: string; bg: string; text: string } {
+  return POSITION_COLORS[position.toUpperCase()] ?? NEUTRAL_COLOR
+}
+
+function normalizeSlotKey(key: string): string {
+  const value = key.trim().toUpperCase().replace(/\s+/g, '')
+  if (value === 'FLEX') return 'FLX'
+  if (value === 'SUPERFLEX' || value === 'SUPER_FLEX') return 'SF'
+  if (value === 'DST' || value === 'D/ST' || value === 'DEFENSE') return 'DEF'
+  return value
+}
+
+function flexEligible(position: string, flexKey: string): boolean {
+  const pos = position.toUpperCase()
+  if (flexKey === 'FLEX' || flexKey === 'FLX') return pos === 'RB' || pos === 'WR' || pos === 'TE'
+  if (flexKey === 'SUPERFLEX' || flexKey === 'SUPER_FLEX' || flexKey === 'SF') {
+    return pos === 'QB' || pos === 'RB' || pos === 'WR' || pos === 'TE'
+  }
+  if (flexKey === 'WR/RB' || flexKey === 'RB/WR') return pos === 'RB' || pos === 'WR'
+  if (flexKey === 'WR/TE') return pos === 'WR' || pos === 'TE'
+  return false
+}
+
+type Slot = { key: string; label: string; pick: DraftRosterStripPick | null }
+
+function buildStarterSlots(
+  starterSlots: Record<string, number>,
+  sortedPicks: DraftRosterStripPick[],
+  excluded: Set<number>,
+): { slots: Slot[]; usedOveralls: Set<number> } {
+  const slots: Slot[] = []
+  for (const [rawKey, count] of Object.entries(starterSlots)) {
+    const key = normalizeSlotKey(rawKey)
+    for (let i = 0; i < (count ?? 0); i += 1) {
+      slots.push({ key, label: key, pick: null })
+    }
+  }
+
+  const used = new Set<number>()
+
+  for (const pick of sortedPicks) {
+    if (excluded.has(pick.overall)) continue
+    const pos = pick.position.toUpperCase()
+
+    const directIdx = slots.findIndex((s) => !s.pick && s.key === pos)
+    if (directIdx >= 0) {
+      slots[directIdx]!.pick = pick
+      used.add(pick.overall)
+      continue
+    }
+
+    const flexIdx = slots.findIndex((s) => !s.pick && flexEligible(pos, s.key))
+    if (flexIdx >= 0) {
+      slots[flexIdx]!.pick = pick
+      used.add(pick.overall)
+    }
+  }
+
+  return { slots, usedOveralls: used }
+}
+
+function buildFillerSlots(
+  capacity: number,
+  assigned: DraftRosterStripPick[],
+): Slot[] {
+  const slots: Slot[] = []
+  for (let i = 0; i < capacity; i += 1) {
+    slots.push({ key: 'BN', label: `BN${i + 1}`, pick: assigned[i] ?? null })
+  }
+  for (let i = capacity; i < assigned.length; i += 1) {
+    slots.push({ key: 'BN', label: `BN${i + 1}`, pick: assigned[i]! })
+  }
+  return slots
+}
+
+export function DraftRosterStrip({
+  picks,
+  starterSlots,
+  benchSlots,
+  taxiSlots,
+  devySlots,
+  isDynasty = false,
+  teamLabel,
+  sport,
+}: DraftRosterStripProps) {
+  const effectiveStarterSlots = useMemo(() => {
+    if (starterSlots && Object.keys(starterSlots).length > 0) return starterSlots
+    return DEFAULT_NFL_STARTERS
+  }, [starterSlots])
+
+  const sortedPicks = useMemo(
+    () => picks.slice().sort((a, b) => a.overall - b.overall),
+    [picks],
+  )
+
+  const devyPicks = useMemo(
+    () => sortedPicks.filter((p) => p.isDevy === true),
+    [sortedPicks],
+  )
+  const taxiPicks = useMemo(
+    () => sortedPicks.filter((p) => p.isTaxi === true),
+    [sortedPicks],
+  )
+  const excludedFromStarters = useMemo(() => {
+    const s = new Set<number>()
+    for (const p of devyPicks) s.add(p.overall)
+    for (const p of taxiPicks) s.add(p.overall)
+    return s
+  }, [devyPicks, taxiPicks])
+
+  const { slots: starterSlotList, usedOveralls } = useMemo(
+    () => buildStarterSlots(effectiveStarterSlots, sortedPicks, excludedFromStarters),
+    [effectiveStarterSlots, sortedPicks, excludedFromStarters],
+  )
+
+  const benchPicks = useMemo(
+    () =>
+      sortedPicks.filter(
+        (p) => !usedOveralls.has(p.overall) && !excludedFromStarters.has(p.overall),
+      ),
+    [sortedPicks, usedOveralls, excludedFromStarters],
+  )
+
+  const benchCapacity = Math.max(0, benchSlots ?? 6)
+  const benchSlotList = useMemo(
+    () => buildFillerSlots(benchCapacity, benchPicks),
+    [benchCapacity, benchPicks],
+  )
+
+  const taxiCapacity = Math.max(0, taxiSlots ?? 0)
+  const taxiSlotList = useMemo(
+    () =>
+      taxiCapacity > 0 || taxiPicks.length > 0
+        ? buildFillerSlots(taxiCapacity, taxiPicks).map((s, i) => ({
+            ...s,
+            key: 'TX',
+            label: `TX${i + 1}`,
+          }))
+        : [],
+    [taxiCapacity, taxiPicks],
+  )
+
+  const devyCapacity = Math.max(0, devySlots ?? 0)
+  const devySlotList = useMemo(
+    () =>
+      devyCapacity > 0 || devyPicks.length > 0
+        ? buildFillerSlots(devyCapacity, devyPicks).map((s, i) => ({
+            ...s,
+            key: 'DV',
+            label: `DV${i + 1}`,
+          }))
+        : [],
+    [devyCapacity, devyPicks],
+  )
+
+  const showTaxi = isDynasty || taxiCapacity > 0 || taxiPicks.length > 0
+  const showDevy = devyCapacity > 0 || devyPicks.length > 0
+
+  return (
+    <section
+      className="border-t border-white/8 bg-[#050c1d] px-3 py-2"
+      data-testid="draft-roster-strip"
+      aria-label="Roster strip"
+    >
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <Users className="h-3 w-3 text-cyan-300/80" aria-hidden />
+        <p className="text-[9px] font-medium uppercase tracking-wider text-cyan-200/80">
+          Roster
+          {teamLabel ? <span className="ml-1 text-white/55">Â· {teamLabel}</span> : null}
+          {sport ? <span className="ml-1 text-white/30">Â· {sport}</span> : null}
+        </p>
+      </div>
+
+      <RosterSection title="Starters" slots={starterSlotList} emptyHint="No starter slots configured." />
+
+      {benchSlotList.length > 0 ? (
+        <RosterSection title="Bench" slots={benchSlotList} emptyHint={null} />
+      ) : null}
+
+      {showTaxi ? (
+        <RosterSection
+          title="Taxi"
+          slots={taxiSlotList.length > 0 ? taxiSlotList : [{ key: 'TX', label: 'TX1', pick: null }]}
+          emptyHint="No taxi picks yet."
+        />
+      ) : null}
+
+      {showDevy ? (
+        <RosterSection
+          title="Devy"
+          slots={devySlotList.length > 0 ? devySlotList : [{ key: 'DV', label: 'DV1', pick: null }]}
+          emptyHint="No devy picks yet."
+        />
+      ) : null}
+    </section>
+  )
+}
+
+function RosterSection({
+  title,
+  slots,
+  emptyHint,
+}: {
+  title: string
+  slots: Slot[]
+  emptyHint: string | null
+}) {
+  if (slots.length === 0 && emptyHint === null) return null
+  return (
+    <div
+      className="mb-1.5 last:mb-0"
+      data-testid={`draft-roster-strip-section-${title.toLowerCase()}`}
+    >
+      <p className="mb-0.5 text-[9px] font-medium uppercase tracking-wider text-white/38">{title}</p>
+      {slots.length === 0 ? (
+        <p className="text-[10px] text-white/30">{emptyHint}</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {slots.map((slot, idx) => {
+            const tone = slot.pick
+              ? colorForPosition(slot.pick.position)
+              : colorForPosition(slot.label)
+            return (
+              <li
+                key={`${title}-${idx}-${slot.label}`}
+                className={`flex items-center gap-2 rounded border px-1.5 py-1 text-[10px] ${tone.border} ${tone.bg}`}
+              >
+                <span
+                  className={`inline-flex min-w-[28px] shrink-0 justify-center rounded px-1 py-0.5 text-[9px] font-black uppercase tracking-[0.1em] ${tone.text} ${tone.bg} ${tone.border} border`}
+                >
+                  {slot.label}
+                </span>
+                {slot.pick ? (
+                  <>
+                    <PlayerAvatar
+                      headshotUrl={slot.pick.headshotUrl ?? null}
+                      teamLogoUrl={slot.pick.teamLogoUrl ?? null}
+                      teamAbbr={slot.pick.team ?? null}
+                      position={slot.pick.position}
+                      displayName={slot.pick.playerName}
+                      size={22}
+                      testIdBase={`draft-roster-strip-avatar-${title}-${idx}`}
+                    />
+                    <span className="min-w-0 flex-1 truncate font-medium text-white/88">
+                      {slot.pick.playerName}
+                    </span>
+                    <span className="shrink-0 text-[9px] text-white/45">
+                      {slot.pick.position} Â· #{slot.pick.overall}
+                    </span>
+                  </>
+                ) : (
+                  <span className="italic text-white/28">Empty</span>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+
+===== app\league\[leagueId]\tabs\redraft\RosterManager.tsx =====
+'use client'
+
+import type { RedraftRosterClient } from '@/lib/redraft/client'
+
+function slotRank(slot: string): number {
+  const normalized = slot.toLowerCase()
+  if (normalized === 'bench') return 50
+  if (normalized === 'taxi') return 60
+  if (normalized === 'ir') return 70
+  return 10
+}
+
+export function RosterManager({
+  roster,
+  week,
+}: {
+  roster: RedraftRosterClient | null
+  week: number
+}) {
+  const players = [...(roster?.players ?? [])].sort((a, b) => {
+    const slotDiff = slotRank(a.slotType) - slotRank(b.slotType)
+    if (slotDiff !== 0) return slotDiff
+    return a.playerName.localeCompare(b.playerName)
+  })
+  const scored = players.filter((p) => p.weeklyScore).length
+  const validation = roster?.lineupValidation
+  const playerIssueMap = new Map<string, NonNullable<typeof validation>['issues']>()
+  for (const issue of validation?.issues ?? []) {
+    if (!issue.playerId) continue
+    const current = playerIssueMap.get(issue.playerId) ?? []
+    current.push(issue)
+    playerIssueMap.set(issue.playerId, current)
+  }
+
+  return (
+    <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h3 className="text-[13px] font-bold text-white">Roster</h3>
+          <p className="text-[11px] text-white/45">
+            {roster ? `${roster.teamName ?? roster.ownerName ?? 'Roster'} - Week ${week}` : 'Select a roster to view players.'}
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {validation ? (
+            <span
+              className={[
+                'rounded-full border px-2 py-1 text-[10px] font-semibold',
+                validation.ok
+                  ? 'border-emerald-300/25 bg-emerald-300/10 text-emerald-100'
+                  : 'border-rose-300/25 bg-rose-400/10 text-rose-100',
+              ].join(' ')}
+            >
+              {validation.ok ? 'Lineup legal' : `${validation.errorCount} lineup issue${validation.errorCount === 1 ? '' : 's'}`}
+            </span>
+          ) : null}
+          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[10px] font-semibold text-cyan-100">
+            {scored}/{players.length} scored
+          </span>
+        </div>
+      </div>
+
+      {validation && validation.issues.length > 0 ? (
+        <div className="mb-3 space-y-1 rounded-lg border border-amber-300/20 bg-amber-400/10 p-3">
+          {validation.issues.slice(0, 5).map((issue, index) => (
+            <p
+              key={`${issue.code}-${issue.playerId ?? issue.slotType ?? index}`}
+              className={issue.severity === 'error' ? 'text-[11px] text-rose-100' : 'text-[11px] text-amber-100'}
+            >
+              {issue.message}
+            </p>
+          ))}
+          {validation.issues.length > 5 ? (
+            <p className="text-[11px] text-white/45">+{validation.issues.length - 5} more lineup notices</p>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!roster ? (
+        <div className="rounded-lg border border-white/[0.06] bg-black/20 p-4 text-[12px] text-white/45">
+          No roster loaded yet.
+        </div>
+      ) : players.length === 0 ? (
+        <div className="rounded-lg border border-amber-300/20 bg-amber-400/10 p-4 text-[12px] text-amber-100">
+          This roster has no active players yet.
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[12px] text-white/80">
+            <thead className="border-b border-white/[0.08] text-[10px] uppercase text-white/40">
+              <tr>
+                <th className="py-2 pr-2">Slot</th>
+                <th className="py-2 pr-2">Player</th>
+                <th className="py-2 pr-2">Team</th>
+                <th className="py-2 text-right">Pts</th>
+              </tr>
+            </thead>
+            <tbody>
+              {players.map((player) => {
+                const playerIssues = playerIssueMap.get(player.playerId) ?? []
+                const hasError = playerIssues.some((issue) => issue.severity === 'error')
+                return (
+                  <tr
+                    key={player.id}
+                    className={[
+                      'border-b border-white/[0.05]',
+                      hasError ? 'bg-rose-500/10' : playerIssues.length ? 'bg-amber-400/10' : '',
+                    ].join(' ')}
+                  >
+                    <td className="py-2 pr-2">
+                      <span className="rounded-md border border-white/10 bg-black/20 px-1.5 py-0.5 text-[10px] text-white/60">
+                        {player.slotType}
+                      </span>
+                    </td>
+                    <td className="min-w-0 py-2 pr-2">
+                      <div className="font-semibold text-white/85">{player.playerName}</div>
+                      <div className="flex flex-wrap gap-1 text-[10px] text-white/35">
+                        <span>{player.position}</span>
+                        {player.injuryStatus ? <span>Injury: {player.injuryStatus}</span> : null}
+                        {player.byeWeek ? <span>Bye: W{player.byeWeek}</span> : null}
+                        {player.isLocked ? <span>Locked</span> : null}
+                      </div>
+                      {playerIssues.length > 0 ? (
+                        <p className={hasError ? 'mt-1 text-[10px] text-rose-100' : 'mt-1 text-[10px] text-amber-100'}>
+                          {playerIssues[0]?.message}
+                        </p>
+                      ) : null}
+                    </td>
+                    <td className="py-2 pr-2 text-white/50">{player.team ?? 'FA'}</td>
+                    <td className="py-2 text-right font-bold text-white">
+                      {player.weeklyScore ? player.weeklyScore.fantasyPts.toFixed(2) : 'Missing'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+===== app\league\[leagueId]\tabs\redraft\WaiverCenter.tsx =====
+'use client'
+
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { Loader2, TrendingUp, Zap } from 'lucide-react'
+import { ProjectionChip } from '@/components/sports/ProjectionCard'
+import { PlayerAvatar } from '@/components/app/draft-room/PlayerAvatar'
+import { fetchRedraftWaiverClaims, type RedraftWaiverClaimClient } from '@/lib/redraft/client'
+
+type WaiverTarget = {
+  name: string
+  position: string
+  team: string
+  priority: number
+  reason: string
+  projectedPoints?: number
+  /** Optional player headshot â€” falls back to silhouette+initials when missing. */
+  headshotUrl?: string | null
+  teamLogoUrl?: string | null
+}
+
+export function WaiverCenter({
+  seasonId,
+  leagueId,
+  rosterId,
+  sport,
+}: {
+  seasonId: string | null
+  leagueId?: string
+  rosterId?: string | null
+  sport?: string
+}) {
+  const [targets, setTargets] = useState<WaiverTarget[]>([])
+  const [claims, setClaims] = useState<RedraftWaiverClaimClient[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!seasonId || !rosterId) {
+      setClaims([])
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const rows = await fetchRedraftWaiverClaims(seasonId, rosterId)
+        if (!cancelled) setClaims(rows)
+      } catch {
+        if (!cancelled) setClaims([])
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [seasonId, rosterId])
+
+  async function fetchSuggestions() {
+    if (!leagueId) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/waiver-ai-suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ leagueId }),
+      })
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        setError(err.error ?? 'Failed to load suggestions')
+        return
+      }
+      const data = await res.json()
+      const picks = Array.isArray(data?.suggestions) ? data.suggestions
+        : Array.isArray(data?.picks) ? data.picks
+        : Array.isArray(data?.targets) ? data.targets : []
+      setTargets(picks.map((p: any, i: number) => ({
+        name: p.playerName ?? p.name ?? p.player ?? '',
+        position: p.position ?? '',
+        team: p.team ?? 'FA',
+        priority: p.priority ?? p.score ?? (picks.length - i),
+        reason: p.reason ?? p.rationale ?? p.note ?? '',
+        projectedPoints: p.projectedPoints ?? p.expectedPoints ?? null,
+        headshotUrl: p.headshotUrl ?? p.imageUrl ?? p.photoUrl ?? null,
+        teamLogoUrl: p.teamLogoUrl ?? null,
+      })))
+    } catch {
+      setError('Network error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4 p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="h-4 w-4 text-cyan-400" />
+          <h3 className="text-[14px] font-bold text-white">Waiver Wire AI</h3>
+        </div>
+        <button
+          type="button"
+          onClick={fetchSuggestions}
+          disabled={loading || !leagueId}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500/15 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 transition hover:bg-cyan-500/25 disabled:opacity-50"
+        >
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+          {loading ? 'Analyzing...' : 'Get AI Picks'}
+        </button>
+      </div>
+
+      {!leagueId && (
+        <p className="text-xs text-white/40">Select a league to get waiver suggestions.</p>
+      )}
+
+      {error && <p className="text-xs text-red-400">{error}</p>}
+
+      {targets.length === 0 && !loading && leagueId && (
+        <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-6 text-center">
+          <p className="text-sm text-white/40">Click &quot;Get AI Picks&quot; to analyze your league&apos;s waiver wire.</p>
+          <p className="mt-1 text-xs text-white/20">AI will recommend targets based on your roster, injuries, and trends.</p>
+        </div>
+      )}
+
+      {targets.length > 0 && (
+        <div className="space-y-1.5">
+          {targets.map((t, i) => (
+            <Link
+              key={`${t.name}-${i}`}
+              href={`/player/${encodeURIComponent(t.name.toLowerCase().replace(/\s+/g, '-'))}`}
+              className="flex items-center gap-3 rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2.5 transition hover:border-white/[0.1] hover:bg-white/[0.04]"
+            >
+              <span className="flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/10 text-[10px] font-bold text-cyan-300">
+                {i + 1}
+              </span>
+              <PlayerAvatar
+                headshotUrl={t.headshotUrl ?? null}
+                teamLogoUrl={t.teamLogoUrl ?? null}
+                teamAbbr={t.team}
+                position={t.position}
+                displayName={t.name}
+                size={32}
+                testIdBase={`waiver-target-avatar-${i}`}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[12px] font-semibold text-white/80">{t.name}</span>
+                  <span className="text-[10px] text-cyan-300/60">{t.position}</span>
+                  <span className="text-[10px] text-white/30">{t.team}</span>
+                  {t.projectedPoints != null && <ProjectionChip points={t.projectedPoints} />}
+                </div>
+                {t.reason && <p className="mt-0.5 text-[10px] text-white/35 line-clamp-1">{t.reason}</p>}
+              </div>
+              <div className="shrink-0 rounded-md bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">
+                {t.priority}/10
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h4 className="text-[12px] font-bold text-white">Waiver claims</h4>
+          <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] text-white/45">
+            {sport ?? 'NFL'}
+          </span>
+        </div>
+        {!seasonId || !rosterId ? (
+          <p className="text-[11px] text-white/40">Select a roster to view waiver claims.</p>
+        ) : claims.length === 0 ? (
+          <p className="text-[11px] text-white/40">No waiver claims submitted for this roster.</p>
+        ) : (
+          <div className="space-y-2">
+            {claims.map((claim) => (
+              <div key={claim.id} className="rounded-lg border border-white/[0.06] bg-black/20 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-[12px] font-semibold text-white">{claim.addPlayerName}</p>
+                    <p className="text-[10px] text-white/40">
+                      {claim.dropPlayerName ? `Drop ${claim.dropPlayerName}` : 'No drop'} - FAAB{' '}
+                      {claim.bidAmount ?? 0}
+                    </p>
+                  </div>
+                  <span
+                    className={[
+                      'rounded-full px-2 py-0.5 text-[10px] font-bold uppercase',
+                      claim.status === 'approved'
+                        ? 'bg-emerald-400/15 text-emerald-200'
+                        : claim.status === 'denied'
+                          ? 'bg-rose-400/15 text-rose-200'
+                          : 'bg-cyan-400/15 text-cyan-100',
+                    ].join(' ')}
+                  >
+                    {claim.status}
+                  </span>
+                </div>
+                {claim.denialReason ? <p className="mt-1 text-[10px] text-amber-100/80">{claim.denialReason}</p> : null}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+
+===== app\api\redraft\waivers\route.ts =====
+import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { assertLeagueMember } from '@/lib/league/league-access'
+import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
+import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const seasonId = req.nextUrl.searchParams?.get('seasonId')?.trim()
+  const rosterId = req.nextUrl.searchParams?.get('rosterId')?.trim()
+  if (!seasonId || !rosterId) {
+    return NextResponse.json({ error: 'seasonId and rosterId required' }, { status: 400 })
+  }
+
+  const season = await prisma.redraftSeason.findFirst({ where: { id: seasonId } })
+  if (!season) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const gate = await assertLeagueMember(season.leagueId, userId)
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+
+  const roster = await prisma.redraftRoster.findFirst({
+    where: { id: rosterId, seasonId, leagueId: season.leagueId },
+    select: { ownerId: true },
+  })
+  if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
+  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const claims = await prisma.redraftWaiverClaim.findMany({
+    where: { seasonId, rosterId },
+    orderBy: { submittedAt: 'desc' },
+  })
+
+  return NextResponse.json({ claims })
+}
+
+export async function POST(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  let body: {
+    rosterId?: string
+    seasonId?: string
+    leagueId?: string
+    addPlayerId?: string
+    addPlayerName?: string
+    dropPlayerId?: string
+    dropPlayerName?: string
+    bidAmount?: number
+  }
+  try {
+    body = (await req.json()) as typeof body
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const rosterId = body.rosterId?.trim()
+  const seasonId = body.seasonId?.trim()
+  const leagueId = body.leagueId?.trim()
+  const addPlayerId = body.addPlayerId?.trim()
+  const addPlayerName = body.addPlayerName?.trim() ?? 'Player'
+
+  if (!rosterId || !seasonId || !leagueId || !addPlayerId) {
+    return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  }
+
+  const gate = await assertLeagueMember(leagueId, userId)
+  if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
+
+  const roster = await prisma.redraftRoster.findFirst({
+    where: { id: rosterId, seasonId, leagueId },
+    select: { ownerId: true, waiverPriority: true },
+  })
+  if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
+  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+
+  const bidAmount = body.bidAmount == null ? null : Number(body.bidAmount)
+  if (bidAmount != null && (!Number.isFinite(bidAmount) || bidAmount < 0)) {
+    return NextResponse.json({ error: 'Invalid bid amount' }, { status: 400 })
+  }
+
+  const existingPending = await prisma.redraftWaiverClaim.findFirst({
+    where: {
+      seasonId,
+      leagueId,
+      rosterId,
+      addPlayerId,
+      dropPlayerId: body.dropPlayerId ?? null,
+      status: 'pending',
+    },
+  })
+  if (existingPending) return NextResponse.json({ claim: existingPending, duplicate: true })
+
+  const claim = await prisma.redraftWaiverClaim.create({
+    data: {
+      seasonId,
+      leagueId,
+      rosterId,
+      addPlayerId,
+      addPlayerName,
+      dropPlayerId: body.dropPlayerId ?? null,
+      dropPlayerName: body.dropPlayerName ?? null,
+      bidAmount,
+      priority: roster.waiverPriority,
+    },
+  })
+
+  void resolveLeagueSport(leagueId).then((sport) =>
+    recordAfLearningEvent({
+      eventType: 'waiver_claim_submitted',
+      sport,
+      leagueId,
+      userId,
+      source: 'redraft_waiver_claim',
+      payload: {
+        claimId: claim.id,
+        bidAmount,
+        hasDrop: Boolean(body.dropPlayerId),
+      },
+    }),
+  )
+
+  return NextResponse.json({ claim })
+}
+
+export async function DELETE(req: NextRequest) {
+  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  let body: { claimId?: string; rosterId?: string }
+  try {
+    body = (await req.json()) as typeof body
+  } catch {
+    return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+
+  const claimId = body.claimId?.trim()
+  const rosterId = body.rosterId?.trim()
+  if (!claimId || !rosterId) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+
+  const c = await prisma.redraftWaiverClaim.findFirst({ where: { id: claimId, rosterId } })
+  if (!c) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const roster = await prisma.redraftRoster.findFirst({
+    where: { id: rosterId, seasonId: c.seasonId, leagueId: c.leagueId },
+    select: { ownerId: true },
+  })
+  if (!roster) return NextResponse.json({ error: 'Roster not found' }, { status: 404 })
+  if (roster.ownerId !== userId) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  if (c.status !== 'pending') return NextResponse.json({ error: 'Only pending claims can be cancelled' }, { status: 409 })
+
+  await prisma.redraftWaiverClaim.update({
+    where: { id: claimId },
+    data: { status: 'cancelled' },
+  })
+
+  return NextResponse.json({ ok: true })
+}
+
+
+
+===== app\api\redraft\waiver-process\route.ts =====
+import { NextResponse } from 'next/server'
+import { processWaiverWindow } from '@/lib/redraft/waiverEngine'
+import { prisma } from '@/lib/prisma'
+import { requireAdminOrBearer } from '@/lib/adminAuth'
+
+export const dynamic = 'force-dynamic'
+export const maxDuration = 60
+
+export async function POST(request: Request) {
+  const gate = await requireAdminOrBearer(request)
+  if (!gate.ok) return gate.res
+
+  const seasons = await prisma.redraftSeason.findMany({
+    where: { status: { in: ['active', 'drafting'] } },
+    take: 20,
+  })
+  const results: { seasonId: string; processed: unknown[] }[] = []
+  for (const s of seasons) {
+    const processed = await processWaiverWindow(s.leagueId, s.id)
+    results.push({ seasonId: s.id, processed })
+  }
+  return NextResponse.json({ results })
+}
+
+
+===== app\api\waiver-wire\leagues\[leagueId]\route.ts =====
+MISSING FILE
+
+===== app\api\waiver-wire\leagues\[leagueId]\claims\route.ts =====
+import { NextRequest, NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import {
+  createClaim,
+  getClaimsByRoster,
+  getEffectiveLeagueWaiverSettings,
+  getPendingClaims,
+  getProcessedClaimsAndTransactions,
+} from "@/lib/waiver-wire"
+import { validateAiActionExecution } from '@/lib/ai/action-validation'
+import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
+import { logAction } from '@/server/services/auditService'
+import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTransactionGates'
+import { getLeagueRole } from "@/lib/league/permissions"
+import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
+
+function waiverClaimErrorCode(message: string): string {
+  const m = message.toLowerCase()
+  if (m.includes("already have a pending claim")) return "CLAIM_EXISTS"
+  if (m.includes("claim not found")) return "CLAIM_NOT_FOUND"
+  if (m.includes("waiver claims are closed") || m.includes("submission window") || m.includes("waiver submissions are")) {
+    return "WAIVER_CLOSED"
+  }
+  if (m.includes("insufficient faab")) return "INSUFFICIENT_FAAB"
+  if (m.includes("minimum faab") || m.includes("faab bid")) return "INVALID_FAAB"
+  if (m.includes("roster full") || m.includes("drop required")) return "DROP_REQUIRED"
+  if (m.includes("drop player not on roster") || m.includes("invalid drop") || m.includes("undroppable")) return "INVALID_DROP"
+  if (m.includes("no longer available") || m.includes("unavailable")) return "PLAYER_UNAVAILABLE"
+  if (m.includes("locked") || m.includes("lineup lock") || m.includes("starter is locked") || m.includes("bench player is locked")) {
+    return "PLAYER_LOCKED"
+  }
+  if (m.includes("unauthorized")) return "UNAUTHORIZED"
+  return "VALIDATION_FAILED"
+}
+
+function waiverClaimError(message: string, status: number) {
+  return NextResponse.json({ error: message, code: waiverClaimErrorCode(message) }, { status })
+}
+
+export async function GET(
+  req: NextRequest,
+  { params }: { params: { leagueId: string } }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const leagueId = params.leagueId
+  const [leagueAsOwner, rosterAsMember] = await Promise.all([
+    (prisma as any).league.findFirst({ where: { id: leagueId, userId } }),
+    (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
+  ])
+  if (!leagueAsOwner && !rosterAsMember) return NextResponse.json({ error: "League not found" }, { status: 404 })
+
+  const type = req.nextUrl.searchParams?.get("type") || "pending"
+  const limit = Math.min(100, Math.max(1, Number(req.nextUrl.searchParams?.get("limit") || "50")))
+  const scope = req.nextUrl.searchParams?.get("scope") || "mine"
+
+  if (type === "history") {
+    const { claims, transactions } = await getProcessedClaimsAndTransactions(leagueId, limit)
+    return NextResponse.json({ claims, transactions })
+  }
+
+  const wantsLeagueScope = scope === "league" || !rosterAsMember
+  if (wantsLeagueScope) {
+    const role = await getLeagueRole(leagueId, userId)
+    if (!leagueAsOwner && role !== "commissioner" && role !== "co_commissioner") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+    const pending = await getPendingClaims(leagueId)
+    return NextResponse.json({ claims: pending, scope: "league" })
+  }
+
+  if (!rosterAsMember) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
+  const pending = await getClaimsByRoster(rosterAsMember.id, "pending")
+  return NextResponse.json({ claims: pending, scope: "mine" })
+}
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: { leagueId: string } }
+) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const leagueId = params.leagueId
+  const roster = await (prisma as any).roster.findFirst({
+    where: { leagueId, platformUserId: userId },
+  })
+  if (!roster) return NextResponse.json({ error: "Roster not found" }, { status: 404 })
+
+  const body = await req.json().catch(() => ({}))
+
+  const aiValidation = validateAiActionExecution({
+    body,
+    action: 'add_waiver_claim',
+    leagueId,
+  })
+  if (!aiValidation.ok) {
+    return NextResponse.json({ error: aiValidation.error }, { status: aiValidation.status })
+  }
+
+  const gate = await assertLeagueActionGate(leagueId, userId, 'waiver_claim_submit')
+  if (!gate.ok) {
+    return NextResponse.json({ error: gate.err.error, code: gate.err.code }, { status: gate.err.status })
+  }
+
+  const rosterLegalityGate = await assertRosterTransactionsAllowed({
+    leagueId,
+    rosterIds: [roster.id],
+    userId,
+    kind: 'waiver_claim',
+  })
+  if (!rosterLegalityGate.ok) {
+    return NextResponse.json(
+      { error: rosterLegalityGate.error, code: rosterLegalityGate.code },
+      { status: 403 },
+    )
+  }
+
+  const addPlayerId = body.addPlayerId ?? body.add_player_id
+  if (!addPlayerId) return NextResponse.json({ error: "addPlayerId required" }, { status: 400 })
+
+  const pending = await getClaimsByRoster(roster.id, "pending")
+  if (pending.some((c: { addPlayerId: string }) => c.addPlayerId === String(addPlayerId))) {
+    return waiverClaimError("You already have a pending claim for this player.", 409)
+  }
+
+  try {
+    let metadataForCreate: Record<string, unknown> | undefined =
+      body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
+        ? { ...(body.metadata as Record<string, unknown>) }
+        : undefined
+
+    if (
+      body.commissionerOverrides &&
+      typeof body.commissionerOverrides === "object" &&
+      !Array.isArray(body.commissionerOverrides)
+    ) {
+      const role = await getLeagueRole(leagueId, userId)
+      if (role === "commissioner" || role === "co_commissioner") {
+        const co = body.commissionerOverrides as Record<string, unknown>
+        const patch: Parameters<typeof mergeCommissionerOverrides>[1] = { setByUserId: userId }
+        if (typeof co.bypassInsufficientFaab === "boolean") patch.bypassInsufficientFaab = co.bypassInsufficientFaab
+        if (typeof co.bypassWeeklyDropLimit === "boolean") patch.bypassWeeklyDropLimit = co.bypassWeeklyDropLimit
+        if (typeof co.note === "string") patch.note = co.note
+        metadataForCreate = mergeCommissionerOverrides(metadataForCreate ?? null, patch)
+      }
+    }
+
+    const claim = await createClaim(leagueId, roster.id, {
+      addPlayerId: String(addPlayerId),
+      dropPlayerId: body.dropPlayerId ?? body.drop_player_id ?? null,
+      faabBid: body.faabBid ?? body.faab_bid ?? null,
+      priorityOrder: body.priorityOrder ?? body.priority_order,
+      userId,
+      claimType: typeof body.claimType === "string" ? body.claimType : "add_drop",
+      metadata: metadataForCreate,
+    })
+
+    void logAction({
+      leagueId,
+      userId,
+      actionType: 'waiver_claim_submit',
+      entityType: 'waiver',
+      entityId: claim.id,
+      afterState: { addPlayerId: String(addPlayerId), rosterId: roster.id },
+    }).catch(() => {})
+
+    void import('@/lib/league-notifications/realtimeHint').then(({ publishLeagueRealtimeHint }) =>
+      publishLeagueRealtimeHint(leagueId, 'waiver_claim_submitted', 'New waiver claim', {
+        claimId: claim.id,
+        rosterId: roster.id,
+      }),
+    )
+
+    const eff = await getEffectiveLeagueWaiverSettings(leagueId)
+    let fcfsProcessWarning: string | undefined
+    if (eff.normalizedWaiverType === "fcfs") {
+      try {
+        const { processWaiverClaimsForLeague } = await import("@/lib/waiver-wire/process-engine")
+        await processWaiverClaimsForLeague(leagueId, {
+          runType: "fcfs_immediate",
+          processedByUserId: userId,
+        })
+      } catch (err) {
+        fcfsProcessWarning = err instanceof Error ? err.message : "FCFS processing failed"
+        console.error("[waiver-wire] FCFS immediate processing error", err)
+      }
+    }
+
+    return NextResponse.json({
+      claim,
+      fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !fcfsProcessWarning,
+      ...(fcfsProcessWarning ? { fcfsProcessWarning } : {}),
+    })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "Failed to create claim"
+    if (message.includes("does not belong to this league") || message.includes("Roster not found")) {
+      return waiverClaimError(message, 400)
+    }
+    if (message.includes("eliminated")) {
+      return waiverClaimError(message, 403)
+    }
+    if (message.includes("locked")) {
+      return waiverClaimError(message, 423)
+    }
+    if (
+      message.includes("Claim limit") ||
+      message.includes("maximum pending") ||
+      message.includes("temporarily blocked") ||
+      message.includes("cannot be submitted") ||
+      message.includes("submission window") ||
+      message.includes("Waiver claims are closed") ||
+      message.includes("Waiver submissions are") ||
+      message.includes("frozen for this league") ||
+      message.includes("Roster full") ||
+      message.includes("your roster") ||
+      message.includes("over the limit") ||
+      message.includes("Insufficient FAAB") ||
+      message.includes("Minimum FAAB") ||
+      message.includes("undroppable") ||
+      message.includes("illegal state") ||
+      message.includes("resolve IR") ||
+      message.includes("taxi") ||
+      message.includes("devy") ||
+      message.includes("starter is locked") ||
+      message.includes("bench player is locked") ||
+      message.includes("All roster moves are locked") ||
+      message.includes("Weekly drop limit")
+    ) {
+      return waiverClaimError(message, 400)
+    }
+    throw e
+  }
+}
+
+
+===== lib\redraft-creation\post-redraft-create.ts =====
+/**
+ * Shared POST handler for redraft league creation (used by /api/leagues/redraft/create and legacy path).
+ *
+ * leagues.userId is ALWAYS `app_users.id` derived from the authenticated session â€” never from the client body.
+ */
+
+import { NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import type { LeagueSport, Prisma } from '@prisma/client'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { createRedraftLeagueInTransaction } from '@/lib/redraft-creation/create-redraft-league'
+import { resolveAppUserIdForLeagueCreate } from '@/lib/redraft-creation/resolve-app-user-for-league'
+import {
+  stripForbiddenUserFieldsFromRedraftBody,
+  validateRedraftCreatePayload,
+} from '@/lib/redraft-creation/validate'
+
+const LOG_PREFIX = '[redraft-create]'
+
+function log(event: string, payload: Record<string, unknown>) {
+  console.info(`${LOG_PREFIX} ${event}`, payload)
+}
+
+function prismaErrorDetail(e: unknown): string {
+  if (e && typeof e === 'object' && 'code' in e && 'message' in e) {
+    const o = e as { code?: string; message?: string; meta?: unknown }
+    const meta = o.meta && typeof o.meta === 'object' ? JSON.stringify(o.meta) : ''
+    return [o.code, o.message, meta].filter(Boolean).join(' Â· ')
+  }
+  return e instanceof Error ? e.message : String(e)
+}
+
+export async function postRedraftCreate(req: Request): Promise<NextResponse> {
+  const session = (await getServerSession(authOptions as never)) as {
+    user?: { id?: string; email?: string | null; name?: string | null }
+  } | null
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  }
+
+  let raw: unknown
+  try {
+    raw = await req.json()
+  } catch {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Invalid JSON body',
+        issues: [{ path: 'body', message: 'Request body must be valid JSON' }],
+      },
+      { status: 400 }
+    )
+  }
+
+  const { body: sanitizedBody, strippedKeys } = stripForbiddenUserFieldsFromRedraftBody(raw)
+  if (strippedKeys.length > 0) {
+    log('client_user_id_fields_stripped_ignored', { strippedKeys })
+  }
+
+  log('payload_received', {
+    keys: sanitizedBody && typeof sanitizedBody === 'object' ? Object.keys(sanitizedBody as object) : [],
+  })
+
+  const validated = validateRedraftCreatePayload(sanitizedBody)
+  if (!validated.ok) {
+    log('validation_failed', { error: validated.error, issues: validated.issues })
+    return NextResponse.json(
+      {
+        success: false,
+        error: validated.error,
+        issues: validated.issues,
+      },
+      { status: validated.status }
+    )
+  }
+
+  const body = validated.data
+
+  const resolvedUser = await resolveAppUserIdForLeagueCreate(session.user)
+  log('pre_league_create_app_user', {
+    hasSessionUserId: true,
+    sessionUserIdPrefix: String(session.user.id).slice(0, 8),
+    hasSessionEmail: typeof session.user.email === 'string' && session.user.email.length > 0,
+    resolveOk: resolvedUser.ok,
+    resolvedVia: resolvedUser.ok ? resolvedUser.resolvedVia : undefined,
+    reason: resolvedUser.ok ? undefined : resolvedUser.reason,
+  })
+
+  if (!resolvedUser.ok) {
+    log('app_user_missing_for_league_create', {
+      reason: resolvedUser.reason,
+      sessionUserIdPrefix: String(session.user.id).slice(0, 8),
+    })
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Authenticated user not found in app_users',
+        issues: [{ path: 'session', message: 'No matching AppUser for this session. Sign out and sign in again, or finish account setup.' }],
+      },
+      { status: 403 }
+    )
+  }
+
+  if (resolvedUser.resolvedVia === 'email_fallback') {
+    console.warn(`${LOG_PREFIX} session user id did not match app_users.id; using AppUser id from email`, {
+      sessionIdPrefix: String(session.user.id).slice(0, 8),
+      appUserIdPrefix: resolvedUser.appUserId.slice(0, 8),
+    })
+  }
+
+  const appUserId = resolvedUser.appUserId
+
+  const appUser = await prisma.appUser.findUnique({
+    where: { id: appUserId },
+    select: { id: true },
+  })
+  if (!appUser) {
+    log('app_user_find_unique_failed', { appUserIdPrefix: appUserId.slice(0, 8) })
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Authenticated user not found in app_users',
+        issues: [{ path: 'app_users', message: 'Authenticated user not found in app_users' }],
+      },
+      { status: 403 }
+    )
+  }
+
+  /** Real app_users.id used for leagues.userId (and roster / commissioner rows). */
+  const userIdForLeagueCreate = appUser.id
+
+  console.log(`${LOG_PREFIX} pre_league_create`, {
+    sessionUser: session.user,
+    incomingPayloadHadStrippedUserFields: strippedKeys.length > 0,
+    strippedUserFieldKeys: strippedKeys,
+    userIdForLeagueCreate,
+  })
+
+  let createdLeagueId = ''
+  let homepageUrl = ''
+
+  try {
+    const result = await prisma.$transaction(
+      async (tx) => {
+        return createRedraftLeagueInTransaction(
+          tx as Prisma.TransactionClient,
+          userIdForLeagueCreate,
+          body,
+          (ev, payload) => log(ev, payload)
+        )
+      },
+      { maxWait: 20000, timeout: 25000 }
+    )
+    createdLeagueId = result.leagueId
+    homepageUrl = result.homepageUrl
+  } catch (e) {
+    const detail = prismaErrorDetail(e)
+    log('transaction_failed', { detail, appUserId: userIdForLeagueCreate })
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Failed to create league',
+        detail,
+      },
+      { status: 500 }
+    )
+  }
+
+  try {
+    const { runPostCreateInitialization } = await import(
+      '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
+    )
+    await runPostCreateInitialization(createdLeagueId, body.sport as LeagueSport, null)
+  } catch (e) {
+    console.warn(`${LOG_PREFIX} post_create_bootstrap_non_fatal`, e)
+  }
+
+  try {
+    const { generateLeagueConstitutionArtifact } = await import('@/lib/league/format-artifact-service')
+    await generateLeagueConstitutionArtifact(createdLeagueId)
+  } catch (e) {
+    console.warn(`${LOG_PREFIX} constitution_non_fatal`, e)
+  }
+
+  log('success', { homepageUrl, leagueId: createdLeagueId })
+
+  return NextResponse.json({
+    success: true,
+    leagueId: createdLeagueId,
+    homepageUrl,
+  })
+}
+
+
+===== lib\redraft-creation\create-redraft-league.ts =====
+/**
+ * Single-transaction redraft league creation (League + settings + commissioner + draft + homepage + slots + draft session).
+ */
+
+import { randomUUID } from 'crypto'
+import type { LeagueSport, Prisma, SoccerPipelineVariant } from '@prisma/client'
+import { buildInitialLeagueSettings } from '@/lib/sport-defaults/LeagueDefaultSettingsService'
+import { getDraftDefaults, getWaiverDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
+import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
+import type { SportType } from '@/lib/sport-defaults/types'
+import { getRedraftSportIntegration } from '@/lib/redraft-creation/sport-config'
+import type { SoccerPipeline } from '@/lib/redraft-creation/sport-config'
+import type { RedraftCreateBody } from '@/lib/redraft-creation/validate'
+import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigation'
+import {
+  getRedraftEngineDraftType,
+  isFootballRedraftDefaultsSport,
+  normalizeRedraftSettingsSnapshot,
+} from '@/lib/league-concepts/redraftDefaults'
+import { buildRedraftDraftSlotOrder } from '@/lib/redraft-core-contract'
+
+type Tx = Prisma.TransactionClient
+
+/**
+ * Sport-specific auction budget defaults (dollars per team).
+ * MLB's $260 tracks the classic 23-player rotisserie budget used by Yahoo /
+ * CBS / Fantrax leagues. Other sports default to $200, matching Sleeper /
+ * ESPN / Yahoo conventions for NFL, NBA, NHL, and college sports. Soccer
+ * defaults low because most soccer auctions mirror FPL's Â£100 squad cap.
+ * Commissioners can override in the draft settings panel after create.
+ */
+function getDefaultAuctionBudget(sport: LeagueSport): number {
+  if (sport === 'MLB') return 260
+  if (sport === 'SOCCER') return 100
+  return 200
+}
+
+function secondsToPickTimerPreset(sec: number): string {
+  const presets: [string, number][] = [
+    ['30s', 30],
+    ['60s', 60],
+    ['90s', 90],
+    ['120s', 120],
+    ['300s', 300],
+    ['600s', 600],
+  ]
+  let best = '120s'
+  let bestDiff = Infinity
+  for (const [k, v] of presets) {
+    const d = Math.abs(v - sec)
+    if (d < bestDiff) {
+      bestDiff = d
+      best = k
+    }
+  }
+  return best
+}
+
+async function uniqueJoinCode(tx: Tx): Promise<string> {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  for (let attempt = 0; attempt < 12; attempt++) {
+    let code = ''
+    for (let i = 0; i < 8; i++) code += chars[Math.floor(Math.random() * chars.length)]
+    try {
+      const clash = await tx.league.findFirst({ where: { joinCode: code }, select: { id: true } })
+      if (!clash) return code
+    } catch (e) {
+      // Fallback: if joinCode column doesn't exist in DB yet, generate without clash check
+      console.warn('[uniqueJoinCode] joinCode column query failed, using unchecked code:', (e as Error).message?.slice(0, 100))
+      return code
+    }
+  }
+  throw new Error('Unable to generate join code')
+}
+
+function resolveCoreDraftSessionType(d: RedraftCreateBody['draftType']): 'snake' | 'linear' | 'auction' {
+  if (d === 'linear') return 'linear'
+  if (d === 'auction') return 'auction'
+  return 'snake'
+}
+
+export function soccerPipelineToPrismaVariant(
+  sport: LeagueSport,
+  pipeline: SoccerPipeline | null
+): SoccerPipelineVariant | null {
+  if (sport !== 'SOCCER' || !pipeline) return null
+  return pipeline === 'mls' ? 'MLS' : 'EURO'
+}
+
+export type RedraftCreateTransactionResult = {
+  leagueId: string
+  homepageUrl: string
+}
+
+/** @param appUserId â€” Must be `AppUser.id` (app_users.id). Resolved in the API handler from the session. */
+export async function createRedraftLeagueInTransaction(
+  tx: Tx,
+  appUserId: string,
+  body: RedraftCreateBody,
+  log?: (event: string, payload: Record<string, unknown>) => void
+): Promise<RedraftCreateTransactionResult> {
+  const sport = body.sport as LeagueSport
+  const sportType = toSportType(sport) as SportType
+  const draftDefaults = getDraftDefaults(sportType, undefined)
+  const waiverDefaults = getWaiverDefaults(sportType, undefined)
+  const soccerPipeline = (body.soccerPipeline ?? null) as SoccerPipeline | null
+  const integration = getRedraftSportIntegration(sport, soccerPipeline)
+  const soccerPrismaVariant = soccerPipelineToPrismaVariant(sport, soccerPipeline)
+  const footballRedraft = isFootballRedraftDefaultsSport(sport)
+
+  const coreDraft = footballRedraft ? getRedraftEngineDraftType(body.draftType) : resolveCoreDraftSessionType(body.draftType)
+  const baseTimerSeconds = draftDefaults.timer_seconds_default ?? 90
+  const isOffline = body.draftType === 'offline'
+  const isAuto = body.draftType === 'auto'
+
+  const initial = buildInitialLeagueSettings(sport, null)
+  const requestedSettings: Record<string, unknown> = {
+    ...initial,
+    league_type: 'redraft',
+    leagueType: 'redraft',
+    sport_type: sport,
+    trade_review_mode: body.tradeReviewMode,
+    requested_draft_type: body.draftType,
+    redraft_draft_mode: body.draftType,
+    language: body.language,
+    default_team_count: body.teamCount,
+    soccer_pipeline: sport === 'SOCCER' ? soccerPipeline : undefined,
+    redraft_creation_source: 'api_v1_redraft',
+    constitution_request: {
+      requestedAt: new Date().toISOString(),
+      notes: '',
+    },
+  }
+  const mergedSettings: Record<string, unknown> = footballRedraft
+    ? normalizeRedraftSettingsSnapshot({
+        sport,
+        draftType: body.draftType,
+        teamCount: body.teamCount,
+        settings: requestedSettings,
+      })
+    : requestedSettings
+  const draftSettings = (mergedSettings.draftSettings && typeof mergedSettings.draftSettings === 'object')
+    ? (mergedSettings.draftSettings as Record<string, unknown>)
+    : {}
+  const timerSeconds = Number(draftSettings.timerSeconds ?? mergedSettings.draft_timer_seconds ?? baseTimerSeconds) || baseTimerSeconds
+  const draftRounds = Number(draftSettings.rounds ?? mergedSettings.draft_rounds ?? draftDefaults.rounds_default) || draftDefaults.rounds_default
+  const pickTimerPreset = secondsToPickTimerPreset(timerSeconds)
+
+  log?.('transaction_start', { appUserId, sport })
+
+  const joinCode = await uniqueJoinCode(tx)
+  const platformLeagueId = `manual-${randomUUID()}`
+
+  log?.('pre_prisma_league_create', {
+    userIdForLeague: appUserId,
+    sport,
+    teamCount: body.teamCount,
+    draftType: body.draftType,
+  })
+
+  const league = await tx.league.create({
+    data: {
+      userId: appUserId,
+      isCommissioner: true,
+      name: body.name.trim(),
+      platform: 'manual',
+      platformLeagueId,
+      leagueSize: body.teamCount,
+      sport,
+      leagueType: 'redraft',
+      leagueVariant: null,
+      isDynasty: false,
+      timezone: body.timezone,
+      language: body.language,
+      joinCode,
+      status: 'active',
+      settings: mergedSettings as Prisma.InputJsonValue,
+      syncStatus: 'manual',
+      scoring: footballRedraft ? String(mergedSettings.scoring_format ?? 'half_ppr') : null,
+      scoringPresetId: footballRedraft ? String(mergedSettings.scoring_preset_id ?? 'fb_half_ppr') : null,
+      rosterSize: footballRedraft ? draftRounds : null,
+    },
+  })
+
+  await tx.leagueSettings.create({
+    data: {
+      leagueId: league.id,
+      timezone: body.timezone,
+      draftType: coreDraft,
+      rounds: draftRounds,
+      pickTimerPreset,
+      pickTimerCustomValue: null,
+      cpuAutoPick: true,
+      aiAutoPick: isAuto,
+      draftOrderMethod: 'manual',
+    },
+  })
+
+  await tx.leagueWaiverSettings.create({
+    data: {
+      leagueId: league.id,
+      waiverType: waiverDefaults.waiver_type,
+      processingDayOfWeek: waiverDefaults.processing_days?.[0] ?? null,
+      processingTimeUtc: waiverDefaults.processing_time_utc ?? null,
+      claimLimitPerPeriod: waiverDefaults.max_claims_per_period ?? null,
+      faabBudget: waiverDefaults.FAAB_budget_default ?? null,
+      tiebreakRule: (waiverDefaults.claim_priority_behavior as string) ?? null,
+      lockType: (waiverDefaults.game_lock_behavior as string) ?? null,
+      instantFaAfterClear: waiverDefaults.free_agent_unlock_behavior === 'instant',
+    },
+  })
+
+  const scoringTemplateId =
+    sport === 'NFL'
+      ? 'default-NFL-PPR'
+      : sport === 'SOCCER'
+        ? 'default-SOCCER-standard'
+        : `${sport}-default`
+
+  await tx.redraftLeagueExtendedSettings.create({
+    data: {
+      leagueId: league.id,
+      commissionerTradeReviewType: body.tradeReviewMode,
+      languageCode: body.language,
+      scoringTypeDefault: String(mergedSettings.scoring_template_id ?? scoringTemplateId),
+      waiverTypeDefault: waiverDefaults.waiver_type,
+      rosterPresetKey: footballRedraft ? `default-${sport}-redraft-v2` : `default-${sport}-standard`,
+      playoffPresetKey: footballRedraft ? 'default-redraft-v2' : 'default',
+      draftTimerSecondsDefault: timerSeconds,
+      isPublic: false,
+      allowInviteLinks: true,
+      settingsJson: {
+        tradeReviewMode: body.tradeReviewMode,
+        tradeSettings: mergedSettings.tradeSettings,
+        playoffSettings: mergedSettings.playoffSettings,
+      },
+    },
+  })
+
+  await tx.redraftLeagueDraftProfile.create({
+    data: {
+      leagueId: league.id,
+      draftType: body.draftType,
+      isOffline,
+      isAuto,
+      rounds: draftRounds,
+      timerSeconds,
+      orderMode: coreDraft,
+      auctionBudget: body.draftType === 'auction' ? getDefaultAuctionBudget(sport) : null,
+      draftStatus: isOffline ? 'offline' : 'pre_draft',
+      configJson: {
+        coreDraftSessionType: coreDraft,
+        redraftWizard: true,
+        redraftCoreContractVersion: footballRedraft ? 2 : undefined,
+        mockDraftEntryAvailable: true,
+        liveDraftSetupAvailable: true,
+      },
+    },
+  })
+
+  await tx.redraftLeagueHomepageState.create({
+    data: {
+      leagueId: league.id,
+      activeTab: 'overview',
+      onboardingComplete: false,
+      chatEnabled: true,
+      draftRoomEnabled: !isOffline,
+      paymentEnabled: false,
+      homepageConfigJson: { createdVia: 'redraft_v1' },
+    },
+  })
+
+  await tx.redraftLeagueSportIntegration.create({
+    data: {
+      leagueId: league.id,
+      sport,
+      soccerPipelineVariant: soccerPrismaVariant,
+      standingsEnabled: integration.standingsEnabled,
+      schedulesEnabled: integration.schedulesEnabled,
+      injuriesEnabled: integration.injuriesEnabled,
+      newsEnabled: integration.newsEnabled,
+      weatherEnabled: integration.weatherEnabled,
+      playerPoolSource: integration.playerPoolSource,
+      gameFeedSource: integration.gameFeedSource,
+      integrationConfigJson: { source: 'redraft_v1', soccerPipeline: soccerPipeline ?? undefined },
+    },
+  })
+
+  await tx.redraftLeagueChatRoom.create({
+    data: {
+      leagueId: league.id,
+      roomType: 'league',
+      title: 'League chat',
+    },
+  })
+
+  const roster = await tx.roster.create({
+    data: {
+      leagueId: league.id,
+      platformUserId: appUserId,
+      playerData: { draftPicks: [] },
+    },
+  })
+
+  const userProfile = await tx.userProfile.findUnique({
+    where: { userId: appUserId },
+    select: { displayName: true },
+  })
+  const displayName = userProfile?.displayName ?? 'User'
+
+  await tx.leagueTeam.create({
+    data: {
+      leagueId: league.id,
+      externalId: roster.id,
+      ownerName: displayName,
+      teamName: `${displayName}'s Team`,
+      claimedByUserId: appUserId,
+      platformUserId: appUserId,
+      isCommissioner: true,
+      role: 'commissioner',
+    },
+  })
+
+  await tx.redraftLeagueMember.create({
+    data: {
+      leagueId: league.id,
+      userId: appUserId,
+      role: 'COMMISSIONER',
+      teamNumber: 1,
+    },
+  })
+
+  const slotData: Prisma.LeagueEntrySlotCreateManyInput[] = []
+  for (let slot = 1; slot <= body.teamCount; slot++) {
+    slotData.push({
+      id: randomUUID(),
+      leagueId: league.id,
+      slotNumber: slot,
+      status: 'OPEN',
+      rosterId: null,
+    })
+  }
+  await tx.leagueEntrySlot.createMany({ data: slotData })
+
+  const draftSlotOrder = buildRedraftDraftSlotOrder({
+    teamCount: body.teamCount,
+    rosters: [{ id: roster.id }],
+    teams: [{ ownerName: displayName, teamName: `${displayName}'s Team` }],
+  })
+  const auctionBudget = body.draftType === 'auction' ? getDefaultAuctionBudget(sport) : null
+  await tx.draftSession.create({
+    data: {
+      leagueId: league.id,
+      status: isOffline ? 'pre_draft' : 'pre_draft',
+      draftType: coreDraft,
+      rounds: draftRounds,
+      teamCount: body.teamCount,
+      timerSeconds,
+      slotOrder: draftSlotOrder as Prisma.InputJsonValue,
+      auctionBudgetPerTeam: auctionBudget,
+      sportType: sport,
+      sessionKind: 'live',
+      cpuAutoPick: true,
+      aiAutoPick: isAuto,
+    },
+  })
+
+  const homepageUrl = buildPostCreateLeagueHomeHref({
+    leagueId: league.id,
+    leagueType: 'redraft',
+    allowInviteLink: true,
+  })
+  log?.('transaction_success', { leagueId: league.id })
+
+  return { leagueId: league.id, homepageUrl }
+}
+

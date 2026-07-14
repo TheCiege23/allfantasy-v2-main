@@ -8,6 +8,7 @@ export const maxDuration = 30
 export async function POST(req: NextRequest) {
   const gate = await requireAfSub()
   if (gate instanceof Response) return gate
+  const userId = gate
 
   let body: { rosterId?: string; seasonId?: string; week?: number }
   try {
@@ -20,6 +21,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   }
 
-  const recs = await generateWaiverRecs(body.rosterId, body.seasonId, body.week)
-  return NextResponse.json({ recommendations: recs })
+  const analysis = await generateWaiverRecs(userId, body.rosterId, body.seasonId, body.week)
+  if (!analysis) return NextResponse.json({ error: 'Season or roster not found' }, { status: 404 })
+
+  return NextResponse.json({
+    recommendations: analysis.rankedAdds,
+    analysis,
+  })
 }

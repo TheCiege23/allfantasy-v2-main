@@ -3,26 +3,15 @@ import 'dotenv/config'
 import { spawn } from 'node:child_process'
 import { pathToFileURL } from 'node:url'
 
-import { syncClearSportsToDb } from '@/lib/clear-sports'
 import { importNcaafFantasyData } from '@/lib/fantasy-data/importNcaafFantasyData'
 import { importNflFantasyData } from '@/lib/fantasy-data/importNflFantasyData'
-import { generateAndPersistCanonicalNflProjections } from '@/lib/nfl-data-foundation/nflDataFoundationService'
-import {
-  backfillNflRollingInsightsIdentities,
-  rollingInsightsSeasonRange,
-  syncNflFoundationInjuries,
-  syncNflFoundationSchedule,
-  syncNflFoundationSeasonStats,
-} from '@/lib/nfl-data-foundation/nflFoundationSync'
 import { recordProviderSync } from '@/lib/provider-sync-logger'
-import { prisma } from '@/lib/prisma'
 import {
-  syncNFLDepthChartsToDb,
-  syncNFLPlayersToDb,
-  syncNFLTeamsToDb,
-} from '@/lib/rolling-insights'
+  getSportsProviderEnvDiagnostics,
+  type SportsProviderEnvDiagnostics,
+} from '@/lib/provider-config'
+import { prisma } from '@/lib/prisma'
 import { buildFoundationCadencePlan } from '@/lib/sports-foundation/syncCadence'
-import { importCollegePlayers } from '@/lib/workers/devy-data-worker'
 
 type SupportedFoundationSport = 'NFL' | 'NCAAF'
 
@@ -35,6 +24,10 @@ type Args = {
   historyEnd: number
   projectionSeason: number
   sports: SupportedFoundationSport[]
+  providers: string[]
+  skipProviders: string[]
+  limit: number
+  verbose: boolean
   skipClearSports: boolean
   skipTheSportsDb: boolean
   skipSleeper: boolean
@@ -44,17 +37,31 @@ type Args = {
 type StepResult = {
   step: string
   ok: boolean
+  provider?: string
+  dryRun?: boolean
+  rowsRead?: number
+  rowsWouldWrite?: number
+  rowsWritten?: number
+  rowsSkipped?: number
+  durationMs?: number
   detail?: string
   counts?: Record<string, number | string | boolean | null>
   warnings?: string[]
   errors?: string[]
-}
-
-type ProviderEnvStatus = {
-  provider: string
-  configured: boolean
-  source: string | null
-  missing: string[]
+  stages?: Array<{
+    stage: string
+    provider: string
+    ok: boolean
+    dryRun: boolean
+    rowsRead: number
+    rowsWouldWrite: number
+    rowsWritten: number
+    rowsSkipped: number
+    durationMs: number
+    warnings: string[]
+    errors: string[]
+    details?: Record<string, unknown>
+  }>
 }
 
 type SyncJobRunRecord = {
@@ -76,6 +83,10 @@ function parseArgs(argv: string[]): Args {
     historyEnd: nowSeason,
     projectionSeason: nowSeason,
     sports: ['NFL', 'NCAAF'],
+    providers: [],
+    skipProviders: [],
+    limit: 25,
+    verbose: false,
     skipClearSports: false,
     skipTheSportsDb: false,
     skipSleeper: false,
@@ -85,6 +96,7 @@ function parseArgs(argv: string[]): Args {
   for (const raw of argv) {
     if (raw === '--apply') out.apply = true
     else if (raw === '--json') out.json = true
+    else if (raw === '--verbose') out.verbose = true
     else if (raw === '--skip-clearsports') out.skipClearSports = true
     else if (raw === '--skip-thesportsdb') out.skipTheSportsDb = true
     else if (raw === '--skip-sleeper') out.skipSleeper = true
@@ -104,6 +116,9 @@ function parseArgs(argv: string[]): Args {
     } else if (raw.startsWith('--projection-season=')) {
       const parsed = Number(raw.slice('--projection-season='.length))
       if (Number.isFinite(parsed) && parsed > 2000) out.projectionSeason = Math.trunc(parsed)
+    } else if (raw.startsWith('--limit=')) {
+      const parsed = Number(raw.slice('--limit='.length))
+      if (Number.isFinite(parsed) && parsed > 0) out.limit = Math.trunc(parsed)
     } else if (raw.startsWith('--sports=')) {
       const parsed = raw
         .slice('--sports='.length)
@@ -111,6 +126,18 @@ function parseArgs(argv: string[]): Args {
         .map((part) => part.trim().toUpperCase())
         .filter((part): part is SupportedFoundationSport => part === 'NFL' || part === 'NCAAF')
       if (parsed.length) out.sports = [...new Set(parsed)]
+    } else if (raw.startsWith('--providers=')) {
+      out.providers = raw
+        .slice('--providers='.length)
+        .split(',')
+        .map((part) => normalizeProviderToken(part))
+        .filter(Boolean)
+    } else if (raw.startsWith('--skip-providers=')) {
+      out.skipProviders = raw
+        .slice('--skip-providers='.length)
+        .split(',')
+        .map((part) => normalizeProviderToken(part))
+        .filter(Boolean)
     }
   }
 
@@ -123,8 +150,22 @@ function parseArgs(argv: string[]): Args {
   if (out.historyEnd > out.season) {
     out.historyEnd = out.season
   }
+  if (!isProviderEnabled(out, 'the_sportsdb')) out.skipTheSportsDb = true
+  if (!isProviderEnabled(out, 'clearsports')) out.skipClearSports = true
+  if (!isProviderEnabled(out, 'sleeper')) out.skipSleeper = true
+  if (!isProviderEnabled(out, 'cfbd')) out.skipCollege = true
 
   return out
+}
+
+function normalizeProviderToken(value: string): string {
+  return value.trim().toLowerCase().replace(/[\s-]+/g, '_')
+}
+
+function isProviderEnabled(args: Args, provider: string): boolean {
+  const token = normalizeProviderToken(provider)
+  if (args.providers.length > 0 && !args.providers.includes(token)) return false
+  return !args.skipProviders.includes(token)
 }
 
 function normalizeProviderEnvAliases() {
@@ -182,54 +223,8 @@ function normalizeProviderEnvAliases() {
   }
 }
 
-function resolveProviderEnvStatus(): ProviderEnvStatus[] {
-  const statuses: ProviderEnvStatus[] = [
-    {
-      provider: 'Rolling Insights',
-      configured: Boolean(
-        process.env.ROLLING_INSIGHTS_API_KEY?.trim() ||
-          process.env.ROLLING_INSIGHTS_CLIENT_ID?.trim() && process.env.ROLLING_INSIGHTS_CLIENT_SECRET?.trim() ||
-          process.env.ROLLING_INSIGHTS_CLIENT_ID2?.trim() && process.env.ROLLING_INSIGHTS_CLIENT_SECRET2?.trim(),
-      ),
-      source:
-        process.env.ROLLING_INSIGHTS_API_KEY?.trim()
-          ? 'ROLLING_INSIGHTS_API_KEY'
-          : process.env.ROLLING_INSIGHTS_CLIENT_ID?.trim() && process.env.ROLLING_INSIGHTS_CLIENT_SECRET?.trim()
-            ? 'ROLLING_INSIGHTS_CLIENT_ID/ROLLING_INSIGHTS_CLIENT_SECRET'
-            : process.env.ROLLING_INSIGHTS_CLIENT_ID2?.trim() && process.env.ROLLING_INSIGHTS_CLIENT_SECRET2?.trim()
-              ? 'ROLLING_INSIGHTS_CLIENT_ID2/ROLLING_INSIGHTS_CLIENT_SECRET2'
-              : null,
-      missing: ['ROLLING_INSIGHTS_API_KEY', 'ROLLING_INSIGHTS_CLIENT_ID/ROLLING_INSIGHTS_CLIENT_SECRET'],
-    },
-    {
-      provider: 'TheSportsDB',
-      configured: Boolean(process.env.THESPORTSDB_API_KEY?.trim()),
-      source: process.env.THESPORTSDB_API_KEY?.trim() ? 'THESPORTSDB_API_KEY' : null,
-      missing: ['THESPORTSDB_API_KEY'],
-    },
-    {
-      provider: 'API-Sports',
-      configured: Boolean(process.env.APISPORTS_API_KEY?.trim()),
-      source: process.env.APISPORTS_API_KEY?.trim() ? 'APISPORTS_API_KEY' : null,
-      missing: ['SPORTS_API_KEY', 'APISPORTS_KEY', 'API_SPORTS_KEY'],
-    },
-    {
-      provider: 'ClearSports',
-      configured: Boolean(process.env.CLEARSPORTS_API_KEY?.trim()),
-      source: process.env.CLEARSPORTS_API_KEY?.trim() ? 'CLEARSPORTS_API_KEY' : null,
-      missing: ['CLEARSPORTS_API_KEY'],
-    },
-    {
-      provider: 'CFBD',
-      configured: Boolean(process.env.CFBD_API_KEY?.trim()),
-      source: process.env.CFBD_API_KEY?.trim() ? 'CFBD_API_KEY' : null,
-      missing: ['CFBD_API_KEY'],
-    },
-  ]
-  return statuses
-}
-
-async function createJobRun(args: Args, providerStatus: ProviderEnvStatus[]): Promise<SyncJobRunRecord | null> {
+async function createJobRun(args: Args, providerStatus: SportsProviderEnvDiagnostics[]): Promise<SyncJobRunRecord | null> {
+  if (!args.apply) return null
   const model = (prisma as any).syncJobRun
   if (!model?.create) return null
 
@@ -285,8 +280,9 @@ async function markJobRunComplete(input: {
 }
 
 function stepRowsRead(step: StepResult): number {
+  if (typeof step.rowsRead === 'number' && Number.isFinite(step.rowsRead)) return step.rowsRead
   if (!step.counts) return 0
-  const readishKeys = ['fetched', 'providerRows', 'validForGameSchedule', 'cacheWrites']
+  const readishKeys = ['fetched', 'providerRows', 'validForGameSchedule', 'cacheWrites', 'dbRowsAvailable']
   return readishKeys.reduce((sum, key) => {
     const value = step.counts?.[key]
     return sum + (typeof value === 'number' && Number.isFinite(value) ? value : 0)
@@ -294,6 +290,7 @@ function stepRowsRead(step: StepResult): number {
 }
 
 function stepRowsWritten(step: StepResult): number {
+  if (typeof step.rowsWritten === 'number' && Number.isFinite(step.rowsWritten)) return step.rowsWritten
   if (!step.counts) return 0
   const writeishKeys = [
     'written',
@@ -317,6 +314,7 @@ function stepRowsWritten(step: StepResult): number {
 }
 
 function stepRowsSkipped(step: StepResult): number {
+  if (typeof step.rowsSkipped === 'number' && Number.isFinite(step.rowsSkipped)) return step.rowsSkipped
   if (!step.counts) return 0
   const skipKeys = ['skipped', 'rowsSkipped', 'unmatched', 'skippedAmbiguous', 'skippedMissingWeek', 'skippedMissingStats']
   return skipKeys.reduce((sum, key) => {
@@ -330,14 +328,14 @@ async function captureFoundationDbSnapshot(input: {
   historyStart: number
   historyEnd: number
   projectionSeason: number
-}): Promise<Record<string, number>> {
+}): Promise<Record<string, unknown>> {
   const historyYears = Array.from(
     { length: Math.max(0, input.historyEnd - input.historyStart + 1) },
     (_, index) => String(input.historyStart + index),
   )
   const sport = input.sport
 
-  const [players, playersWithImages, seasonStats, projections, activeInjuries, identityRows] = await Promise.all([
+  const [players, playersWithImages, seasonStats, projections, activeInjuries, identityRows, missingHeadshotRows, headshotSourceRows] = await Promise.all([
     (prisma as any).sportsPlayer.count({ where: { sport } }).catch(() => 0),
     (prisma as any).sportsPlayer.count({ where: { sport, imageUrl: { not: null } } }).catch(() => 0),
     (prisma as any).playerSeasonStats.count({
@@ -353,12 +351,40 @@ async function captureFoundationDbSnapshot(input: {
       where: { sport, expiresAt: { gte: new Date() } },
     }).catch(() => 0),
     (prisma as any).playerIdentityMap.count({ where: { sport } }).catch(() => 0),
+    prisma.sportsPlayer.findMany({
+      where: { sport, imageUrl: null },
+      select: { name: true, team: true, position: true },
+      orderBy: { name: 'asc' },
+      take: 25,
+    }).catch(() => []),
+    (prisma as any).sportsPlayer.groupBy({
+      by: ['source'],
+      where: { sport, imageUrl: { not: null } },
+      _count: { source: true },
+    }).catch(() => []),
   ])
+
+  const headshotCoveragePct =
+    players > 0 ? Number(((Number(playersWithImages) / Number(players)) * 100).toFixed(1)) : 0
+  const missingHeadshotSample = (missingHeadshotRows as Array<{ name: string; team: string | null; position: string | null }>).map((row) => {
+    const team = String(row.team ?? '').trim()
+    const position = String(row.position ?? '').trim()
+    return [row.name, team ? `(${team})` : '', position ? `- ${position}` : ''].filter(Boolean).join(' ')
+  })
+  const headshotSources = Object.fromEntries(
+    (headshotSourceRows as Array<{ source?: string | null; _count?: { source?: number } }>).map((row) => [
+      String(row.source ?? 'unknown').trim() || 'unknown',
+      Number(row._count?.source ?? 0),
+    ]),
+  )
 
   return {
     players,
     playersWithImages,
     missingImages: Math.max(0, players - playersWithImages),
+    headshotCoveragePct,
+    missingHeadshotSample,
+    headshotSources,
     seasonStats,
     projections,
     activeInjuries,
@@ -434,41 +460,66 @@ async function runTsxScript(
 
 async function runNflFoundation(args: Args): Promise<StepResult[]> {
   const steps: StepResult[] = []
-  const riSeason = rollingInsightsSeasonRange(args.season)
 
   const importSummary = await importNflFantasyData({
     season: args.season,
     week: args.week,
+    historyStart: args.historyStart,
+    historyEnd: args.historyEnd,
+    projectionSeason: args.projectionSeason,
     dryRun: !args.apply,
+    limit: args.limit,
+    verbose: args.verbose,
+    providers: args.providers,
+    skipProviders: args.skipProviders,
   })
   steps.push({
     step: 'importNflFantasyData',
     ok: importSummary.ok,
+    provider: importSummary.provider,
+    dryRun: importSummary.dryRun,
+    rowsRead: Object.values(importSummary.counts).reduce((sum, value) => sum + value, 0),
+    rowsWouldWrite: importSummary.dryRun ? 0 : Object.values(importSummary.counts).reduce((sum, value) => sum + value, 0),
+    rowsWritten: importSummary.dryRun ? 0 : Object.values(importSummary.counts).reduce((sum, value) => sum + value, 0),
+    rowsSkipped: importSummary.skipped,
+    durationMs: importSummary.durationMs,
     detail: importSummary.dryRun ? 'dry-run' : 'write',
     counts: importSummary.counts,
     warnings: importSummary.warnings,
     errors: importSummary.errors,
+    stages: importSummary.stages,
   })
 
   if (!args.apply) {
     return steps
   }
 
-  const teamsWritten = await syncNFLTeamsToDb()
+  const [
+    rollingInsightsModule,
+    nflFoundationModule,
+    projectionModule,
+  ] = await Promise.all([
+    import('@/lib/rolling-insights'),
+    import('@/lib/nfl-data-foundation/nflFoundationSync'),
+    import('@/lib/nfl-data-foundation/nflDataFoundationService'),
+  ])
+  const riSeason = nflFoundationModule.rollingInsightsSeasonRange(args.season)
+
+  const teamsWritten = await rollingInsightsModule.syncNFLTeamsToDb()
   steps.push({
     step: 'syncNFLTeamsToDb',
     ok: true,
     counts: { teamsWritten },
   })
 
-  const playersWritten = await syncNFLPlayersToDb({ season: riSeason })
+  const playersWritten = await rollingInsightsModule.syncNFLPlayersToDb({ season: riSeason })
   steps.push({
     step: 'syncNFLPlayersToDb',
     ok: true,
     counts: { playersWritten, rollingInsightsSeason: riSeason },
   })
 
-  const depthChartsWritten = await syncNFLDepthChartsToDb({ season: riSeason })
+  const depthChartsWritten = await rollingInsightsModule.syncNFLDepthChartsToDb({ season: riSeason })
   steps.push({
     step: 'syncNFLDepthChartsToDb',
     ok: true,
@@ -487,7 +538,7 @@ async function runNflFoundation(args: Args): Promise<StepResult[]> {
     )
   }
 
-  const schedule = await syncNflFoundationSchedule({ season: args.season, write: true })
+  const schedule = await nflFoundationModule.syncNflFoundationSchedule({ season: args.season, write: true })
   steps.push({
     step: 'syncNflFoundationSchedule',
     ok: schedule.written >= 0,
@@ -500,7 +551,7 @@ async function runNflFoundation(args: Args): Promise<StepResult[]> {
   })
 
   for (let season = args.historyStart; season <= args.historyEnd; season += 1) {
-    const seasonStats = await syncNflFoundationSeasonStats({
+    const seasonStats = await nflFoundationModule.syncNflFoundationSeasonStats({
       season,
       write: true,
       prismaClient: undefined,
@@ -520,7 +571,7 @@ async function runNflFoundation(args: Args): Promise<StepResult[]> {
     })
   }
 
-  const injuries = await syncNflFoundationInjuries({ write: true })
+  const injuries = await nflFoundationModule.syncNflFoundationInjuries({ write: true })
   steps.push({
     step: 'syncNflFoundationInjuries',
     ok: injuries.error == null,
@@ -533,7 +584,7 @@ async function runNflFoundation(args: Args): Promise<StepResult[]> {
     errors: injuries.error ? [injuries.error] : [],
   })
 
-  const identities = await backfillNflRollingInsightsIdentities({ write: true })
+  const identities = await nflFoundationModule.backfillNflRollingInsightsIdentities({ write: true })
   steps.push({
     step: 'backfillNflRollingInsightsIdentities',
     ok: identities.errors.length === 0,
@@ -547,7 +598,7 @@ async function runNflFoundation(args: Args): Promise<StepResult[]> {
     errors: identities.errors,
   })
 
-  const projections = await generateAndPersistCanonicalNflProjections({
+  const projections = await projectionModule.generateAndPersistCanonicalNflProjections({
     season: args.projectionSeason,
     week: args.week,
     write: true,
@@ -571,15 +622,30 @@ async function runNcaafFoundation(args: Args): Promise<StepResult[]> {
 
   const importSummary = await importNcaafFantasyData({
     season: args.season,
+    historyStart: args.historyStart,
+    historyEnd: args.historyEnd,
+    projectionSeason: args.projectionSeason,
     dryRun: !args.apply,
+    limit: args.limit,
+    verbose: args.verbose,
+    providers: args.providers,
+    skipProviders: args.skipProviders,
   })
   steps.push({
     step: 'importNcaafFantasyData',
     ok: importSummary.ok,
+    provider: importSummary.provider,
+    dryRun: importSummary.dryRun,
+    rowsRead: Object.values(importSummary.counts).reduce((sum, value) => sum + value, 0),
+    rowsWouldWrite: importSummary.dryRun ? 0 : Object.values(importSummary.counts).reduce((sum, value) => sum + value, 0),
+    rowsWritten: importSummary.dryRun ? 0 : Object.values(importSummary.counts).reduce((sum, value) => sum + value, 0),
+    rowsSkipped: importSummary.skipped,
+    durationMs: importSummary.durationMs,
     detail: importSummary.dryRun ? 'dry-run' : 'write',
     counts: importSummary.counts,
     warnings: importSummary.warnings,
     errors: importSummary.errors,
+    stages: importSummary.stages,
   })
 
   if (!args.apply) {
@@ -587,6 +653,7 @@ async function runNcaafFoundation(args: Args): Promise<StepResult[]> {
   }
 
   if (!args.skipCollege) {
+    const { importCollegePlayers } = await import('@/lib/workers/devy-data-worker')
     const college = await importCollegePlayers('NCAAF')
     steps.push({
       step: 'importCollegePlayers:NCAAF',
@@ -611,6 +678,7 @@ async function runNcaafFoundation(args: Args): Promise<StepResult[]> {
 
 async function runGlobalClearSportsStep(args: Args): Promise<StepResult | null> {
   if (args.skipClearSports || !args.apply) return null
+  const { syncClearSportsToDb } = await import('@/lib/clear-sports')
   const clearSports = await syncClearSportsToDb({ season: String(args.season), syncType: 'all' })
   return {
     step: 'syncClearSportsToDb',
@@ -632,8 +700,10 @@ async function runGlobalClearSportsStep(args: Args): Promise<StepResult | null> 
 
 export async function main() {
   const args = parseArgs(process.argv.slice(2))
+  const providerStatus = getSportsProviderEnvDiagnostics().filter((status) =>
+    isProviderEnabled(args, status.provider),
+  )
   normalizeProviderEnvAliases()
-  const providerStatus = resolveProviderEnvStatus()
   const cadence = args.sports.map((sport) =>
     buildFoundationCadencePlan({
       sport,
@@ -646,15 +716,17 @@ export async function main() {
     logLine(args, 'Sports foundation sync')
     logLine(
       args,
-      `mode=${args.apply ? 'apply' : 'dry-run'} season=${args.season} week=${args.week} historyStart=${args.historyStart} historyEnd=${args.historyEnd} projectionSeason=${args.projectionSeason}`,
+      `mode=${args.apply ? 'apply' : 'dry-run'} season=${args.season} week=${args.week} historyStart=${args.historyStart} historyEnd=${args.historyEnd} projectionSeason=${args.projectionSeason} limit=${args.limit}`,
     )
     logLine(args, `sports=${args.sports.join(',')}`)
+    if (args.providers.length > 0) logLine(args, `providers=${args.providers.join(',')}`)
+    if (args.skipProviders.length > 0) logLine(args, `skipProviders=${args.skipProviders.join(',')}`)
     logLine(args, '')
     logLine(args, 'Provider env status')
     for (const status of providerStatus) {
       logLine(
         args,
-        `- ${status.provider}: ${status.configured ? `configured via ${status.source}` : `missing (${status.missing.join(' or ')})`}`,
+        `- ${status.provider}: configured=${status.configured} source=${status.source ?? 'none'} authMode=${status.authMode ?? 'none'} detected=[${status.detectedAliases.join(', ')}] missing=[${status.missingAliases.join(', ')}]`,
       )
     }
     logLine(args, '')
@@ -672,7 +744,7 @@ export async function main() {
 
   const startedAt = Date.now()
   const steps: StepResult[] = []
-  const dbSnapshots: Partial<Record<SupportedFoundationSport, Record<string, number>>> = {}
+  const dbSnapshots: Partial<Record<SupportedFoundationSport, Record<string, unknown>>> = {}
   const jobRun = await createJobRun(args, providerStatus)
 
   const clearSportsStep = await runGlobalClearSportsStep(args)
@@ -726,6 +798,10 @@ export async function main() {
     historyEnd: args.historyEnd,
     projectionSeason: args.projectionSeason,
     sports: args.sports,
+    providers: args.providers,
+    skipProviders: args.skipProviders,
+    limit: args.limit,
+    verbose: args.verbose,
     providerStatus,
     cadence,
     dbSnapshots,
@@ -753,6 +829,19 @@ export async function main() {
   logLine(args, ok ? 'Summary: success' : 'Summary: partial failure')
   for (const step of steps) {
     logLine(args, `- ${step.ok ? 'OK' : 'FAIL'} ${step.step}${step.detail ? ` (${step.detail})` : ''}`)
+    if (args.verbose && step.stages?.length) {
+      for (const stage of step.stages) {
+        logLine(
+          args,
+          `    stage=${stage.stage} provider=${stage.provider} dryRun=${stage.dryRun} rowsRead=${stage.rowsRead} rowsWouldWrite=${stage.rowsWouldWrite} rowsWritten=${stage.rowsWritten} rowsSkipped=${stage.rowsSkipped}`,
+        )
+      }
+    }
+    if (step.warnings?.length) {
+      for (const warning of step.warnings.slice(0, args.verbose ? 6 : 2)) {
+        logLine(args, `    warning: ${warning}`)
+      }
+    }
     if (step.errors?.length) {
       for (const error of step.errors.slice(0, 2)) {
         logLine(args, `    error: ${error}`)

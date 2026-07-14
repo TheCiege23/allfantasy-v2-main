@@ -37,6 +37,10 @@ export type AiAuditEntry = {
  * Write one audit row. Never awaited by callers — errors are caught internally.
  */
 export function logAiInteraction(entry: AiAuditEntry): void {
+  if (!prisma?.aiInteractionLog?.create) {
+    return
+  }
+
   prisma.aiInteractionLog
     .create({
       data: {

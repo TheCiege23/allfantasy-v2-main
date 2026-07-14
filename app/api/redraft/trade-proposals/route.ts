@@ -11,6 +11,8 @@ import { shouldRunTradeShadow, shouldRunTradeLive, runTradeShadowForProposal } f
 import { toTradeCard, type TradeCard } from '@/lib/decision-os/trade/tradeCardAdapter'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
+import { resolveLeagueTradeSettings, toRedraftProposalGovernance } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { evaluateRecentAcquisition } from '@/lib/league-trade-engine/recentAcquisitionGuard'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,11 +26,6 @@ type TradeAssetInput = {
   pickRound?: number
   pickNumber?: number
   metadata?: unknown
-}
-
-function parseVetoMode(input: string | undefined): 'commissioner' | 'league_vote' | 'no_veto' {
-  if (input === 'league_vote' || input === 'no_veto') return input
-  return 'commissioner'
 }
 
 export async function GET(req: NextRequest) {
@@ -77,14 +74,26 @@ export async function POST(req: NextRequest) {
     receiverRosterId?: string
     vetoMode?: string
     vetoThreshold?: number
+    reviewWindow?: unknown
+    tradeDeadline?: unknown
+    maxAssets?: unknown
+    processingMode?: unknown
+    commissionerApproval?: unknown
+    allowDraftPicks?: unknown
     reason?: string
     expiresInHours?: number
     assets?: TradeAssetInput[]
   }
+
   try {
     body = (await req.json()) as typeof body
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
+  }
+  const prohibitedGovernanceFields = ['vetoMode', 'vetoThreshold', 'reviewWindow', 'tradeDeadline', 'maxAssets', 'processingMode', 'commissionerApproval', 'allowDraftPicks']
+    .filter((field) => Object.prototype.hasOwnProperty.call(body, field))
+  if (prohibitedGovernanceFields.length) {
+    return NextResponse.json({ error: 'Trade governance is controlled by persisted league settings.', prohibitedFields: prohibitedGovernanceFields }, { status: 400 })
   }
 
   const leagueId = body.leagueId?.trim()
@@ -101,10 +110,12 @@ export async function POST(req: NextRequest) {
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  const [season, proposer, receiver] = await Promise.all([
+  const [season, proposer, receiver, league, eligibleRosterCount] = await Promise.all([
     prisma.redraftSeason.findFirst({ where: { id: seasonId, leagueId } }),
     prisma.redraftRoster.findFirst({ where: { id: proposerRosterId, seasonId, leagueId } }),
     prisma.redraftRoster.findFirst({ where: { id: receiverRosterId, seasonId, leagueId } }),
+    prisma.league.findUnique({ where: { id: leagueId } }),
+    prisma.redraftRoster.count({ where: { seasonId, leagueId } }),
   ])
 
   if (!season) return NextResponse.json({ error: 'Season not found' }, { status: 404 })
@@ -115,9 +126,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Only proposer roster owner can create trade' }, { status: 403 })
   }
 
-  const vetoMode = parseVetoMode(body.vetoMode?.trim())
-  const thresholdInput = Number(body.vetoThreshold)
-  const vetoThreshold = Number.isFinite(thresholdInput) && thresholdInput > 0 ? Math.floor(thresholdInput) : 4
+  if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+  const effectiveSettings = resolveLeagueTradeSettings(league)
+  const governance = toRedraftProposalGovernance(effectiveSettings, eligibleRosterCount)
+  if (!effectiveSettings.tradesAllowed) return NextResponse.json({ error: 'Trades are disabled by league settings.' }, { status: 409 })
+  if (effectiveSettings.tradeDeadlineWeek != null && season.currentWeek > effectiveSettings.tradeDeadlineWeek) {
+    return NextResponse.json({ error: 'Trade deadline has passed.' }, { status: 409 })
+  }
+
+  const vetoMode = governance.vetoMode
+  const vetoThreshold = governance.vetoThreshold
   const expiresHoursInput = Number(body.expiresInHours)
   const expiresHours = Number.isFinite(expiresHoursInput) && expiresHoursInput > 0 ? Math.floor(expiresHoursInput) : 48
   const expiresAt = new Date(Date.now() + expiresHours * 3600 * 1000)
@@ -141,10 +159,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'At least one valid asset is required' }, { status: 400 })
   }
 
-  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab', 'future_consideration'])
+  const allowedAssetTypes = new Set(['player', 'draft_pick', 'faab'])
   for (const asset of assets) {
     if (!allowedAssetTypes.has(asset.assetType!)) {
       return NextResponse.json({ error: `Invalid assetType: ${asset.assetType}` }, { status: 400 })
+    }
+    if (asset.assetType === 'draft_pick' && !effectiveSettings.draftPickTradingAllowed) {
+      return NextResponse.json({ error: 'Draft asset trading is disabled by league settings.' }, { status: 409 })
     }
     const fromRosterId = asset.fromRosterId!
     const toRosterId = asset.toRosterId!
@@ -155,6 +176,29 @@ export async function POST(req: NextRequest) {
     ) {
       return NextResponse.json({ error: 'Asset roster direction is invalid' }, { status: 400 })
     }
+  }
+
+  const perSide = new Map<string, number>()
+  for (const asset of assets) perSide.set(asset.fromRosterId!, (perSide.get(asset.fromRosterId!) ?? 0) + 1)
+  if (effectiveSettings.maxAssetsPerSide != null && [...perSide.values()].some((count) => count > effectiveSettings.maxAssetsPerSide!)) {
+    return NextResponse.json({ error: `A trade side exceeds the persisted maximum of ${effectiveSettings.maxAssetsPerSide} assets.` }, { status: 409 })
+  }
+
+  const playerAssets = assets.filter((asset) => asset.assetType === 'player')
+  if (playerAssets.some((asset) => !asset.playerId)) return NextResponse.json({ error: 'Player assets require playerId.' }, { status: 400 })
+  const ownedPlayers = playerAssets.length
+    ? await prisma.redraftRosterPlayer.findMany({
+        where: { rosterId: { in: [proposerRosterId, receiverRosterId] }, playerId: { in: playerAssets.map((asset) => asset.playerId!) }, droppedAt: null },
+        select: { rosterId: true, playerId: true, isLocked: true, addedAt: true, acquisitionType: true },
+      })
+    : []
+  const owned = new Map(ownedPlayers.map((row) => [`${row.rosterId}:${row.playerId}`, row]))
+  for (const asset of playerAssets) {
+    const row = owned.get(`${asset.fromRosterId}:${asset.playerId}`)
+    if (!row) return NextResponse.json({ error: 'A player asset is not owned by the sending franchise.' }, { status: 409 })
+    if (row.isLocked) return NextResponse.json({ error: 'A player asset is locked for the current scoring period.' }, { status: 409 })
+    const acquisition = evaluateRecentAcquisition({ acquiredAt: row.addedAt, acquisitionType: row.acquisitionType, restrictionHours: effectiveSettings.recentlyAddedRestrictionHours, evaluatedAt: new Date() })
+    if (!acquisition.allowed) return NextResponse.json({ error: acquisition.message, code: acquisition.code }, { status: 409 })
   }
 
   const created = await prisma.$transaction(async (tx: any) => {
@@ -318,5 +362,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ proposal: created, valueSnapshot: snapshotRow, ...(decisionOs ? { decisionOs } : {}) })
+  return NextResponse.json({ proposal: created, valueSnapshot: snapshotRow, governance, ...(decisionOs ? { decisionOs } : {}) })
 }

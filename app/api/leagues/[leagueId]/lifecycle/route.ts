@@ -5,10 +5,9 @@ import {
   getAllowedActions,
   loadLeagueForLifecycle,
   transitionLeagueState,
-  normalizeLifecycleState,
+  parseLifecycleStateForWrite,
 } from '@/server/services/leagueLifecycleService'
 import { isElevatedCommissioner, isHeadCommissioner } from '@/server/services/permissionService'
-import type { LeagueLifecycleState } from '@prisma/client'
 import { resolveLeagueAccess } from '@/lib/league-access'
 
 export const dynamic = 'force-dynamic'
@@ -76,7 +75,13 @@ export async function POST(
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
 
-  const next = normalizeLifecycleState(body.nextState) as LeagueLifecycleState
+  const next = parseLifecycleStateForWrite(body.nextState)
+  if (!next) {
+    return NextResponse.json(
+      { error: 'Invalid lifecycle state', code: 'INVALID_LIFECYCLE_STATE' },
+      { status: 400 },
+    )
+  }
   const headOnly = next === 'archived'
   if (headOnly) {
     const head = await isHeadCommissioner(params.leagueId, userId)

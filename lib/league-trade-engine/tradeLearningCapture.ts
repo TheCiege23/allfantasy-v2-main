@@ -16,7 +16,7 @@
 import type { League } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
-import { fetchFantasyCalcValues, findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, findPlayerBySleeperId, getPickValue, type FantasyCalcPlayer } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { computeTradeDrivers, type TradeDriverData } from '@/lib/trade-engine/trade-engine'
 import { getCalibratedWeights, calibrateAcceptProbability } from '@/lib/trade-engine/accept-calibration'
 import { logTradeOfferEvent, logTradeOutcomeEvent, type TradeOutcomeStatus } from '@/lib/trade-engine/trade-event-logger'

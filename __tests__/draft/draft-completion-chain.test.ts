@@ -177,15 +177,43 @@ describe('repairDraftCompletionIfBoardFull — source contract', () => {
 // ---------------------------------------------------------------------------
 // DRAFT_COMPLETED event — generic emission from completeDraftSession (G12-2)
 // ---------------------------------------------------------------------------
+describe('draft lifecycle coordinator boundary', () => {
+  const dsSrc = src('lib/live-draft-engine/DraftSessionService.ts')
+  const lifecycleSrc = src('server/services/leagueLifecycleService.ts')
+
+  it('passes the draft id into the transaction lifecycle helper', () => {
+    expect(dsSrc).toContain('applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId, session.id)')
+  })
+
+  it('does not activate a real league for mock sessions', () => {
+    expect(dsSrc).toContain("session.sessionKind !== 'mock'")
+    expect(dsSrc).toMatch(/const lifecycle = activatesLeague[\s\S]+applyPostDraftLifecycleInTransaction/)
+  })
+
+  it('rejects unsupported completion states instead of forcing a transition', () => {
+    expect(lifecycleSrc).toContain('if (resolved.force)')
+    expect(lifecycleSrc).toContain('Draft completion cannot transition')
+  })
+
+  it('persists lifecycle audit and outbox evidence in the caller transaction', () => {
+    expect(lifecycleSrc).toContain('transitionLeagueStateInTransaction')
+    expect(lifecycleSrc).toContain('tx.leagueAuditLog.create')
+    expect(lifecycleSrc).toContain('emitInTx(tx, EVENT.LEAGUE_LIFECYCLE_CHANGED')
+  })
+})
 describe('DRAFT_COMPLETED event — generic emission contract (G12-2)', () => {
   const dsSrc = src('lib/live-draft-engine/DraftSessionService.ts')
 
   it('emits DRAFT_COMPLETED from completeDraftSession for all league types', () => {
-    expect(dsSrc).toMatch(/getPlatformEvents\(\)\.emit\(EVENT\.DRAFT_COMPLETED/)
+    expect(dsSrc).toMatch(/getPlatformEvents\(\)\.emitInTx\(tx, EVENT\.DRAFT_COMPLETED/)
   })
 
+  it('persists the completion event and audit in the draft transaction', () => {
+    expect(dsSrc).toContain("actionType: 'draft_completed'")
+    expect(dsSrc).toContain('emitInTx(tx, EVENT.DRAFT_COMPLETED')
+  })
   it('uses a deterministic idempotencyKey scoped to the session id', () => {
-    expect(dsSrc).toMatch(/idempotencyKey: `draft\.completed:\$\{draftId\}`/)
+    expect(dsSrc).toMatch(/idempotencyKey: `draft\.completed:\$\{session\.id\}`/)
   })
 
   it('returns sessionId from the completion transaction', () => {

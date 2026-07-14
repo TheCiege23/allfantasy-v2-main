@@ -96,7 +96,7 @@ export function DraftHelperFloatingWindow({
       id: 'warRoom',
       title: 'WAR ROOM (LIVE BOARD)',
       icon: <Zap className="w-4 h-4" />,
-      content: <div className="text-sm text-gray-300 p-2">War room data coming soon...</div>,
+      content: <div className="text-sm text-gray-300 p-2">War room data Coming Soon</div>,
     },
     {
       id: 'intelligence',
@@ -115,7 +115,7 @@ export function DraftHelperFloatingWindow({
       id: 'fullWarRoom',
       title: 'FULL WAR ROOM (BUILD)',
       icon: <Layers className="w-4 h-4" />,
-      content: <div className="text-sm text-gray-300 p-2">Full war room content coming soon...</div>,
+      content: <div className="text-sm text-gray-300 p-2">Full war room content Coming Soon</div>,
     },
   ]
 

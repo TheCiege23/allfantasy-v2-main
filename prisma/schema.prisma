@@ -1633,10 +1633,18 @@ model FantraxLeague {
   isDevy        Boolean     @default(false)
   transactions  Json?
   user          FantraxUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Import Security Closure phase: the real, authenticated AllFantasy user who
+  /// uploaded this snapshot. Nullable for safe backfill of any pre-existing rows —
+  /// reads/commits fail closed (reject, not fabricate ownership) when null. This is
+  /// the actual security boundary; `userId`/`FantraxUser` remains a separate,
+  /// client-supplied "which Fantrax account" label, never trusted for authorization.
+  appUserId     String?
+  appUser       AppUser?    @relation(fields: [appUserId], references: [id], onDelete: SetNull)
 
   @@unique([userId, leagueName, season])
   @@index([userId, season])
   @@index([season])
+  @@index([appUserId])
 }
 
 model manager_trade_tendencies {
@@ -2998,6 +3006,7 @@ model AppUser {
   bracketMemberships                       BracketLeagueMember[]
   bracketPayments                          BracketPayment[]                       @relation("BracketPayments")
   legacyImportJobs                         LegacyImportJob[]
+  fantraxLeagues                           FantraxLeague[]
   aiRecommendationLogs                     AiRecommendationLog[]
   legacyUser                               LegacyUser?                            @relation(fields: [legacyUserId], references: [id])
   accounts                                 AuthAccount[]
@@ -5399,6 +5408,8 @@ model League {
   leagueApplications                    LeagueApplication[]
   leagueReputation                      LeagueReputation?
   renewals                              LeagueRenewal[]
+  tradeExecutionSnapshots               TradeExecutionSnapshot[]
+  tradeReversals                        TradeReversal[]
   memberHistories                       LeagueMemberHistory[]
   championships                         LeagueChampionship[]
   commissionerSuccessions               CommissionerSuccession[]
@@ -10878,6 +10889,7 @@ model AfLeagueTrade {
   statusHistory    AfLeagueTradeStatusHistory[]
   votes            AfLeagueTradeVote[]
   processingEvents AfLeagueTradeProcessingEvent[]
+  executionSnapshot TradeExecutionSnapshot?
 
   @@index([leagueId, status])
   @@index([proposerRosterId])
@@ -12843,7 +12855,10 @@ model RedraftSeason {
   league                   League                     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   redraftTradeProposals    RedraftTradeProposal[]
   redraftWaiverClaims      RedraftWaiverClaim[]
+  tradeExecutionSnapshots TradeExecutionSnapshot[]
+  tradeReversals          TradeReversal[]
 
+  @@unique([leagueId, season])
   @@index([leagueId])
   @@map("redraft_seasons")
 }
@@ -13202,10 +13217,71 @@ model RedraftTradeProposal {
   season           RedraftSeason              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   votes            RedraftTradeVote[]
   valueSnapshot    RedraftTradeValueSnapshot?
+  executionSnapshot TradeExecutionSnapshot?
 
   @@index([leagueId, status])
   @@index([seasonId, createdAt])
   @@map("redraft_trade_proposals")
+}
+
+/// Immutable before/after evidence created atomically with a completed trade and its outbox event.
+model TradeExecutionSnapshot {
+  id                      String   @id @default(cuid())
+  tradeId                 String   @unique
+  tradeSource             String   @db.VarChar(32)
+  nativeTradeId           String?  @unique
+  genericTradeId          String?  @unique
+  leagueId                String
+  seasonId                String?
+  tenantId                String   @default("allfantasy")
+  organizationId          String?
+  executionIdempotencyKey String   @unique
+  eventId                 String   @unique
+  executedAt              DateTime
+  executedByActorId       String
+  executedByActorRole     String   @db.VarChar(32)
+  governance              Json
+  validations             Json
+  beforeState             Json
+  afterState              Json
+  assetSummary            Json
+  dependencies            Json     @default("{}")
+  completeness            String   @default("complete") @db.VarChar(16)
+  createdAt               DateTime @default(now())
+  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season                  RedraftSeason? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  nativeTrade             RedraftTradeProposal? @relation(fields: [nativeTradeId], references: [id], onDelete: SetNull)
+  genericTrade            AfLeagueTrade? @relation(fields: [genericTradeId], references: [id], onDelete: SetNull)
+  reversal                TradeReversal?
+
+  @@index([leagueId, executedAt])
+  @@index([seasonId, executedAt])
+  @@map("trade_execution_snapshots")
+}
+
+/// Immutable evidence that a completed native or generic trade was restored from its execution snapshot.
+model TradeReversal {
+  id             String   @id @default(cuid())
+  tradeId        String   @unique
+  snapshotId     String   @unique
+  leagueId       String
+  seasonId       String?
+  actorId        String
+  actorRole      String   @db.VarChar(32)
+  reason         String
+  idempotencyKey String   @unique
+  readiness      Json
+  restoredState  Json
+  eventId        String   @unique
+  noticeKey      String   @unique
+  reversedAt     DateTime
+  createdAt      DateTime @default(now())
+  snapshot       TradeExecutionSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  league         League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season         RedraftSeason? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, reversedAt])
+  @@map("trade_reversals")
 }
 
 model RedraftTradeAsset {
@@ -15067,7 +15143,11 @@ model ReputationTelemetryRecord {
 enum LeagueRenewalStatus {
   pending
   in_progress
+  confirming
+  ready
   completed
+  archived
+  cancelled
   abandoned
 
   @@map("league_renewal_status")
@@ -15077,6 +15157,11 @@ enum LeagueRenewalSlotStatus {
   invited
   confirmed
   declined
+  vacant
+  replacement_invited
+  replacement_accepted
+  commissioner_confirmed
+  removed
   abandoned
 
   @@map("league_renewal_slot_status")
@@ -15129,13 +15214,35 @@ model LeagueRenewal {
   executedAt     DateTime?
   abandonedAt    DateTime?
   nextSeason     Int?
+  priorSeasonId  String?
+  nextSeasonId   String?             @unique
+  deadlineAt     DateTime?
+  completedAt    DateTime?
+  archivedAt     DateTime?
+  createdByUserId String?             @db.VarChar(64)
+  majorChangeApprovalPolicy String?   @db.VarChar(32)
+  settingsProposalVersionId String?
+  scoringProposalVersionId  String?
+  /// Immutable copy of League.settings taken atomically at renewal completion time.
+  settingsSnapshot          Json?
+  settingsSnapshotVersion   Int?
+  rosterCount               Int?
+  managerAssignmentCount    Int?
+  /// Stable identity for the completion write itself (distinct from the renewal's own id) — survives retries.
+  completionIdempotencyKey  String?
+  completionEventId         String?
+  completionAuditId         String?
+  sourceSeasonId            String?
 
   league League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   slots  LeagueRenewalSlot[]
 
   @@unique([leagueId, season])
+  @@unique([completionIdempotencyKey])
+  @@unique([completionEventId])
   @@index([leagueId, status])
   @@index([windowClosesAt])
+  @@index([priorSeasonId])
   @@map("league_renewals")
 }
 
@@ -15149,10 +15256,20 @@ model LeagueRenewalSlot {
   invitedAt   DateTime                @default(now())
   respondedAt DateTime?
   isReturning Boolean                 @default(true)
+  franchiseId String?                 @db.VarChar(64)
+  priorManagerId String?              @db.VarChar(64)
+  candidateManagerId String?          @db.VarChar(64)
+  confirmedManagerId String?          @db.VarChar(64)
+  confirmedAt DateTime?
+  confirmedByUserId String?           @db.VarChar(64)
+  replacementInvitationId String?
+  decisionAt DateTime?
+  removedFromNextSeason Boolean       @default(false)
 
   renewal LeagueRenewal @relation(fields: [renewalId], references: [id], onDelete: Cascade)
 
   @@unique([renewalId, userId])
+  @@unique([renewalId, franchiseId])
   @@index([leagueId, userId])
   @@index([renewalId, status])
   @@map("league_renewal_slots")

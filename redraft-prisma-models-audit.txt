@@ -1,0 +1,760 @@
+﻿
+> prisma\schema.prisma:6874:model Roster {
+  prisma\schema.prisma:6875:  id                   String                     @id @default(uuid())
+  prisma\schema.prisma:6876:  leagueId             String
+  prisma\schema.prisma:6877:  platformUserId       String
+  prisma\schema.prisma:6878:  playerData           Json
+  prisma\schema.prisma:6879:  faabRemaining        Int?
+  prisma\schema.prisma:6880:  createdAt            DateTime                   @default(now())
+  prisma\schema.prisma:6881:  updatedAt            DateTime                   @updatedAt
+  prisma\schema.prisma:6882:  waiverPriority       Int?
+  prisma\schema.prisma:6883:  /// Optional commissioner flags: `isAdvertised`, `aiManaged`, `aiManagerType`, etc.
+  prisma\schema.prisma:6884:  settings             Json?
+  prisma\schema.prisma:6885:  dispersalDraftPasses Boolean                    @default(false)
+  prisma\schema.prisma:6886:  devyRights           DevyRights[]
+  prisma\schema.prisma:6887:  keeperDeclarations   KeeperDeclaration[]
+  prisma\schema.prisma:6888:  redraftDraftPicks    RedraftDraftPick[]
+  prisma\schema.prisma:6889:  redraftDraftQueue    RedraftDraftQueue[]
+  prisma\schema.prisma:6890:  league               League                     @relation(fields: [leagueId], 
+references: [id], onDelete: Cascade)
+  prisma\schema.prisma:6891:  waiverClaims         WaiverClaim[]
+  prisma\schema.prisma:6892:  waiverTransactions   WaiverTransaction[]
+  prisma\schema.prisma:6893:  weeklyScores         WeeklyScore[]
+  prisma\schema.prisma:6894:  teamWeekResults      TeamWeekResult[]
+  prisma\schema.prisma:6895:  fantasyStandings     FantasyStanding[]
+  prisma\schema.prisma:6896:  afTradesAsProposer   AfLeagueTrade[]            @relation("AfLeagueTradeProposerRoster")
+  prisma\schema.prisma:6897:  afTradesAsReceiver   AfLeagueTrade[]            @relation("AfLeagueTradeReceiverRoster")
+  prisma\schema.prisma:6898:  afTradeVotesCast     AfLeagueTradeVote[]
+  prisma\schema.prisma:6899:  afLineupAssignments  AfRosterLineupAssignment[]
+  prisma\schema.prisma:6900:  afRosterMoveHistory  AfRosterMoveHistory[]
+  prisma\schema.prisma:6901:  afLineupLockStates   AfLineupLockState[]
+  prisma\schema.prisma:6902:  leagueDues           LeagueDues?
+  prisma\schema.prisma:6903:
+  prisma\schema.prisma:6904:  @@unique([leagueId, platformUserId])
+  prisma\schema.prisma:6905:  @@index([leagueId])
+  prisma\schema.prisma:6906:  @@index([leagueId, updatedAt])
+  prisma\schema.prisma:6907:  @@index([platformUserId])
+  prisma\schema.prisma:6908:  @@map("rosters")
+  prisma\schema.prisma:6909:}
+  prisma\schema.prisma:6910:
+  prisma\schema.prisma:6911:/// Normalized weekly lineup rows (mirrors `Roster.playerData.lineup_sections`) for 
+scoring queries and audits.
+  prisma\schema.prisma:6912:model AfRosterLineupAssignment {
+  prisma\schema.prisma:6913:  id        String   @id @default(cuid())
+  prisma\schema.prisma:6914:  leagueId  String
+  prisma\schema.prisma:6915:  rosterId  String
+  prisma\schema.prisma:6916:  season    Int
+  prisma\schema.prisma:6917:  week      Int
+  prisma\schema.prisma:6918:  section   String   @db.VarChar(16)
+  prisma\schema.prisma:6919:  slotIndex Int      @default(0)
+  prisma\schema.prisma:6920:  playerId  String   @db.VarChar(128)
+  prisma\schema.prisma:6921:  createdAt DateTime @default(now())
+  prisma\schema.prisma:6922:  updatedAt DateTime @updatedAt
+  prisma\schema.prisma:6923:  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:6924:  roster    Roster   @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:6925:
+  prisma\schema.prisma:6926:  @@unique([rosterId, season, week, playerId])
+  prisma\schema.prisma:6927:  @@index([leagueId, season, week])
+  prisma\schema.prisma:6928:  @@index([rosterId, season, week])
+  prisma\schema.prisma:6929:  @@map("af_roster_lineup_assignments")
+  prisma\schema.prisma:6930:}
+  prisma\schema.prisma:6931:
+  prisma\schema.prisma:6932:/// Immutable roster / lineup change log (user saves, commissioner overrides, imports).
+  prisma\schema.prisma:6933:model AfRosterMoveHistory {
+  prisma\schema.prisma:6934:  id          String   @id @default(cuid())
+  prisma\schema.prisma:6935:  leagueId    String
+  prisma\schema.prisma:6936:  rosterId    String
+  prisma\schema.prisma:6937:  season      Int
+  prisma\schema.prisma:6938:  week        Int
+  prisma\schema.prisma:6939:  actorUserId String?  @db.VarChar(128)
+  prisma\schema.prisma:6940:  source      String   @db.VarChar(32)
+  prisma\schema.prisma:6941:  moveSummary String?  @db.VarChar(512)
+  prisma\schema.prisma:6942:  beforeHash  String?  @db.VarChar(64)
+  prisma\schema.prisma:6943:  afterHash   String?  @db.VarChar(64)
+  prisma\schema.prisma:6944:  metadata    Json?
+  prisma\schema.prisma:6945:  createdAt   DateTime @default(now())
+  prisma\schema.prisma:6946:  league      League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:6947:  roster      Roster   @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:6948:
+  prisma\schema.prisma:6949:  @@index([leagueId, rosterId, createdAt])
+  prisma\schema.prisma:6950:  @@index([leagueId, season, week])
+  prisma\schema.prisma:6951:  @@map("af_roster_move_history")
+  prisma\schema.prisma:6952:}
+  prisma\schema.prisma:6953:
+  prisma\schema.prisma:6954:/// Cached lineup lock snapshot per roster/week (optional; may be computed on read).
+> prisma\schema.prisma:6976:model RosterLegalityWeeklyReminder {
+  prisma\schema.prisma:6977:  id         String   @id @default(cuid())
+  prisma\schema.prisma:6978:  leagueId   String   @db.VarChar(64)
+  prisma\schema.prisma:6979:  rosterId   String   @db.VarChar(64)
+  prisma\schema.prisma:6980:  season     Int
+  prisma\schema.prisma:6981:  week       Int
+  prisma\schema.prisma:6982:  issueHash  String   @db.VarChar(128)
+  prisma\schema.prisma:6983:  notifiedAt DateTime @default(now())
+  prisma\schema.prisma:6984:
+  prisma\schema.prisma:6985:  @@unique([rosterId, season, week])
+  prisma\schema.prisma:6986:  @@index([leagueId, week])
+  prisma\schema.prisma:6987:  @@map("roster_legality_weekly_reminders")
+  prisma\schema.prisma:6988:}
+  prisma\schema.prisma:6989:
+  prisma\schema.prisma:6990:/// Per-player fantasy points for a league week (starters drive team total; bench stored 
+for audit).
+  prisma\schema.prisma:6991:model WeeklyScore {
+  prisma\schema.prisma:6992:  id        String   @id @default(uuid())
+  prisma\schema.prisma:6993:  leagueId  String
+  prisma\schema.prisma:6994:  season    Int
+  prisma\schema.prisma:6995:  week      Int
+  prisma\schema.prisma:6996:  rosterId  String
+  prisma\schema.prisma:6997:  playerId  String
+  prisma\schema.prisma:6998:  points    Float
+  prisma\schema.prisma:6999:  isStarter Boolean  @default(true)
+  prisma\schema.prisma:7000:  statLine  Json?
+  prisma\schema.prisma:7001:  createdAt DateTime @default(now())
+  prisma\schema.prisma:7002:  league    League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:7003:  roster    Roster   @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:7004:
+  prisma\schema.prisma:7005:  @@unique([leagueId, season, week, rosterId, playerId])
+  prisma\schema.prisma:7006:  @@index([leagueId, season, week])
+  prisma\schema.prisma:7007:  @@index([rosterId, season, week])
+  prisma\schema.prisma:7008:  @@map("weekly_scores")
+  prisma\schema.prisma:7009:}
+  prisma\schema.prisma:7010:
+  prisma\schema.prisma:7011:/// Aggregated roster score + H2H result for one week.
+  prisma\schema.prisma:7012:model TeamWeekResult {
+  prisma\schema.prisma:7013:  id                String  @id @default(uuid())
+  prisma\schema.prisma:7014:  leagueId          String
+  prisma\schema.prisma:7015:  season            Int
+  prisma\schema.prisma:7016:  week              Int
+  prisma\schema.prisma:7017:  rosterId          String
+  prisma\schema.prisma:7018:  totalPoints       Float
+  prisma\schema.prisma:7019:  opponentRosterId  String?
+  prisma\schema.prisma:7020:  winLoss           String? @db.VarChar(8)
+  prisma\schema.prisma:7021:  status            String  @default("final") @db.VarChar(16)
+  prisma\schema.prisma:7022:  /// H2H-category mode: per-category team totals + winner breakdown for this week's 
+matchup.
+  prisma\schema.prisma:7023:  /// Shape matches CategoryMatchupResult in lib/category-scoring/types.ts.
+  prisma\schema.prisma:7024:  /// Null for points-mode leagues.
+  prisma\schema.prisma:7025:  categoryBreakdown Json?
+  prisma\schema.prisma:7026:  league            League  @relation(fields: [leagueId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:7027:  roster            Roster  @relation(fields: [rosterId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:7028:
+  prisma\schema.prisma:7029:  @@unique([leagueId, season, week, rosterId])
+  prisma\schema.prisma:7030:  @@index([leagueId, season, week])
+  prisma\schema.prisma:7031:  @@map("team_week_results")
+  prisma\schema.prisma:7032:}
+  prisma\schema.prisma:7033:
+  prisma\schema.prisma:7034:/// Season-to-date standings for AF-native leagues (deterministic engine).
+  prisma\schema.prisma:7035:model FantasyStanding {
+  prisma\schema.prisma:7036:  id                String   @id @default(uuid())
+  prisma\schema.prisma:7037:  leagueId          String
+  prisma\schema.prisma:7038:  season            Int
+  prisma\schema.prisma:7039:  rosterId          String
+  prisma\schema.prisma:7040:  wins              Int      @default(0)
+  prisma\schema.prisma:7041:  losses            Int      @default(0)
+  prisma\schema.prisma:7042:  ties              Int      @default(0)
+  prisma\schema.prisma:7043:  pointsFor         Float    @default(0)
+  prisma\schema.prisma:7044:  pointsAgainst     Float    @default(0)
+  prisma\schema.prisma:7045:  /// H2H-category mode: cumulative category wins/losses/ties across all played weeks.
+  prisma\schema.prisma:7046:  /// Null for points-mode leagues; summed by standingsEngine from 
+TeamWeekResult.categoryBreakdown.
+  prisma\schema.prisma:7047:  categoryWinsFor   Int?     @default(0)
+  prisma\schema.prisma:7048:  categoryLossesFor Int?     @default(0)
+  prisma\schema.prisma:7049:  categoryTiesFor   Int?     @default(0)
+  prisma\schema.prisma:7050:  rank              Int?
+  prisma\schema.prisma:7051:  playoffSeed       Int?
+  prisma\schema.prisma:7052:  updatedAt         DateTime @updatedAt
+  prisma\schema.prisma:7053:  league            League   @relation(fields: [leagueId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:7054:  roster            Roster   @relation(fields: [rosterId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:7055:
+  prisma\schema.prisma:7056:  @@unique([leagueId, season, rosterId])
+> prisma\schema.prisma:7130:model LeagueTeam {
+  prisma\schema.prisma:7131:  id                   String                    @id @default(uuid())
+  prisma\schema.prisma:7132:  leagueId             String
+  prisma\schema.prisma:7133:  externalId           String
+  prisma\schema.prisma:7134:  ownerName            String
+  prisma\schema.prisma:7135:  teamName             String
+  prisma\schema.prisma:7136:  avatarUrl            String?
+  prisma\schema.prisma:7137:  wins                 Int                       @default(0)
+  prisma\schema.prisma:7138:  losses               Int                       @default(0)
+  prisma\schema.prisma:7139:  ties                 Int                       @default(0)
+  prisma\schema.prisma:7140:  pointsFor            Float                     @default(0)
+  prisma\schema.prisma:7141:  pointsAgainst        Float                     @default(0)
+  prisma\schema.prisma:7142:  currentRank          Int?
+  prisma\schema.prisma:7143:  aiPowerScore         Float?
+  prisma\schema.prisma:7144:  projectedWins        Float?
+  prisma\schema.prisma:7145:  strengthNotes        String?
+  prisma\schema.prisma:7146:  riskNotes            String?
+  prisma\schema.prisma:7147:  lastUpdatedAt        DateTime                  @updatedAt
+  prisma\schema.prisma:7148:  legacyRosterId       String?                   @unique
+  prisma\schema.prisma:7149:  divisionId           String?                   @db.VarChar(64)
+  prisma\schema.prisma:7150:  role                 String                    @default("member")
+  prisma\schema.prisma:7151:  isOrphan             Boolean                   @default(false)
+  prisma\schema.prisma:7152:  claimedByUserId      String?
+  prisma\schema.prisma:7153:  platformUserId       String?
+  prisma\schema.prisma:7154:  /// Sleeper is_owner for this teamâ€™s user; co-commissioners are AF-only via 
+isCoCommissioner.
+  prisma\schema.prisma:7155:  isCommissioner       Boolean                   @default(false)
+  prisma\schema.prisma:7156:  isCoCommissioner     Boolean                   @default(false)
+  prisma\schema.prisma:7157:  seasonChampionships  LeagueSeason[]            @relation("LeagueSeasonChampion")
+  prisma\schema.prisma:7158:  division             LeagueDivision?           @relation(fields: [divisionId], 
+references: [id])
+  prisma\schema.prisma:7159:  league               League                    @relation(fields: [leagueId], references: 
+[id], onDelete: Cascade)
+  prisma\schema.prisma:7160:  legacyRoster         LegacyRoster?             @relation(fields: [legacyRosterId], 
+references: [id])
+  prisma\schema.prisma:7161:  performances         TeamPerformance[]
+  prisma\schema.prisma:7162:  aiOpponentAssignment AiOpponentTeamAssignment?
+  prisma\schema.prisma:7163:
+  prisma\schema.prisma:7164:  @@unique([leagueId, externalId])
+  prisma\schema.prisma:7165:  @@index([leagueId, pointsFor])
+  prisma\schema.prisma:7166:  @@index([divisionId])
+  prisma\schema.prisma:7167:  @@index([aiPowerScore])
+  prisma\schema.prisma:7168:  @@map("league_teams")
+  prisma\schema.prisma:7169:}
+  prisma\schema.prisma:7170:
+  prisma\schema.prisma:7171:/// League hierarchy â€” divisions (tiers) within a league for promotion/relegation.
+  prisma\schema.prisma:7172:model LeagueDivision {
+  prisma\schema.prisma:7173:  id        String       @id @default(cuid())
+  prisma\schema.prisma:7174:  leagueId  String       @db.VarChar(64)
+  prisma\schema.prisma:7175:  tierLevel Int          @default(1)
+  prisma\schema.prisma:7176:  sport     String       @db.VarChar(16)
+  prisma\schema.prisma:7177:  name      String?      @db.VarChar(128)
+  prisma\schema.prisma:7178:  league    League       @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:7179:  teams     LeagueTeam[]
+  prisma\schema.prisma:7180:
+  prisma\schema.prisma:7181:  @@unique([leagueId, tierLevel])
+  prisma\schema.prisma:7182:  @@index([leagueId])
+  prisma\schema.prisma:7183:  @@map("league_divisions")
+  prisma\schema.prisma:7184:}
+  prisma\schema.prisma:7185:
+  prisma\schema.prisma:7186:/// Promotion/relegation rule: how many teams move between two tiers at season end.
+  prisma\schema.prisma:7187:model PromotionRule {
+  prisma\schema.prisma:7188:  id            String @id @default(cuid())
+  prisma\schema.prisma:7189:  leagueId      String @db.VarChar(64)
+  prisma\schema.prisma:7190:  fromTierLevel Int    @default(1)
+  prisma\schema.prisma:7191:  toTierLevel   Int    @default(2)
+  prisma\schema.prisma:7192:  promoteCount  Int    @default(1)
+  prisma\schema.prisma:7193:  relegateCount Int    @default(1)
+  prisma\schema.prisma:7194:  league        League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:7195:
+  prisma\schema.prisma:7196:  @@unique([leagueId, fromTierLevel, toTierLevel])
+  prisma\schema.prisma:7197:  @@index([leagueId])
+  prisma\schema.prisma:7198:  @@map("promotion_rules")
+  prisma\schema.prisma:7199:}
+  prisma\schema.prisma:7200:
+  prisma\schema.prisma:7201:model TeamPerformance {
+  prisma\schema.prisma:7202:  id        String     @id @default(uuid())
+  prisma\schema.prisma:7203:  teamId    String
+  prisma\schema.prisma:7204:  week      Int
+  prisma\schema.prisma:7205:  season    Int
+  prisma\schema.prisma:7206:  points    Float
+  prisma\schema.prisma:7207:  opponent  String?
+  prisma\schema.prisma:7208:  result    String?
+  prisma\schema.prisma:7209:  data      Json?
+  prisma\schema.prisma:7210:  createdAt DateTime   @default(now())
+> prisma\schema.prisma:10361:model RosterTemplate {
+  prisma\schema.prisma:10362:  id         String               @id @default(cuid())
+  prisma\schema.prisma:10363:  name       String               @db.VarChar(64)
+  prisma\schema.prisma:10364:  formatType String               @db.VarChar(32)
+  prisma\schema.prisma:10365:  createdAt  DateTime             @default(now())
+  prisma\schema.prisma:10366:  sportType  String               @db.VarChar(12)
+  prisma\schema.prisma:10367:  slots      RosterTemplateSlot[]
+  prisma\schema.prisma:10368:
+  prisma\schema.prisma:10369:  @@unique([sportType, formatType])
+  prisma\schema.prisma:10370:  @@index([sportType])
+  prisma\schema.prisma:10371:  @@map("roster_templates")
+  prisma\schema.prisma:10372:}
+  prisma\schema.prisma:10373:
+> prisma\schema.prisma:10374:model RosterTemplateSlot {
+  prisma\schema.prisma:10375:  id               String         @id @default(cuid())
+  prisma\schema.prisma:10376:  templateId       String
+  prisma\schema.prisma:10377:  slotName         String         @db.VarChar(32)
+  prisma\schema.prisma:10378:  allowedPositions Json
+  prisma\schema.prisma:10379:  starterCount     Int            @default(0)
+  prisma\schema.prisma:10380:  benchCount       Int            @default(0)
+  prisma\schema.prisma:10381:  reserveCount     Int            @default(0)
+  prisma\schema.prisma:10382:  taxiCount        Int            @default(0)
+  prisma\schema.prisma:10383:  devyCount        Int            @default(0)
+  prisma\schema.prisma:10384:  isFlexibleSlot   Boolean        @default(false)
+  prisma\schema.prisma:10385:  slotOrder        Int            @default(0)
+  prisma\schema.prisma:10386:  template         RosterTemplate @relation(fields: [templateId], references: [id], 
+onDelete: Cascade)
+  prisma\schema.prisma:10387:
+  prisma\schema.prisma:10388:  @@index([templateId])
+  prisma\schema.prisma:10389:  @@map("roster_template_slots")
+  prisma\schema.prisma:10390:}
+  prisma\schema.prisma:10391:
+  prisma\schema.prisma:10392:/// League-specific roster config (template + overrides)
+  prisma\schema.prisma:10393:model LeagueRosterConfig {
+  prisma\schema.prisma:10394:  id         String   @id @default(cuid())
+  prisma\schema.prisma:10395:  leagueId   String   @unique @db.VarChar(64)
+  prisma\schema.prisma:10396:  templateId String
+  prisma\schema.prisma:10397:  overrides  Json?
+  prisma\schema.prisma:10398:  createdAt  DateTime @default(now())
+  prisma\schema.prisma:10399:
+  prisma\schema.prisma:10400:  @@index([leagueId])
+  prisma\schema.prisma:10401:  @@map("league_roster_configs")
+  prisma\schema.prisma:10402:}
+  prisma\schema.prisma:10403:
+  prisma\schema.prisma:10404:/// Multi-sport: scoring template per sport/format
+  prisma\schema.prisma:10405:model ScoringTemplate {
+  prisma\schema.prisma:10406:  id         String        @id @default(cuid())
+  prisma\schema.prisma:10407:  name       String        @db.VarChar(64)
+  prisma\schema.prisma:10408:  formatType String        @db.VarChar(32)
+  prisma\schema.prisma:10409:  createdAt  DateTime      @default(now())
+  prisma\schema.prisma:10410:  sportType  String        @db.VarChar(12)
+  prisma\schema.prisma:10411:  rules      ScoringRule[]
+  prisma\schema.prisma:10412:
+  prisma\schema.prisma:10413:  @@unique([sportType, formatType])
+  prisma\schema.prisma:10414:  @@index([sportType])
+  prisma\schema.prisma:10415:  @@map("scoring_templates")
+  prisma\schema.prisma:10416:}
+  prisma\schema.prisma:10417:
+  prisma\schema.prisma:10418:model ScoringRule {
+  prisma\schema.prisma:10419:  id          String          @id @default(cuid())
+  prisma\schema.prisma:10420:  templateId  String
+  prisma\schema.prisma:10421:  statKey     String          @db.VarChar(48)
+  prisma\schema.prisma:10422:  pointsValue Float           @default(0)
+  prisma\schema.prisma:10423:  multiplier  Float           @default(1)
+  prisma\schema.prisma:10424:  enabled     Boolean         @default(true)
+  prisma\schema.prisma:10425:  template    ScoringTemplate @relation(fields: [templateId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:10426:
+  prisma\schema.prisma:10427:  @@index([templateId])
+  prisma\schema.prisma:10428:  @@index([templateId, statKey])
+  prisma\schema.prisma:10429:  @@map("scoring_rules")
+  prisma\schema.prisma:10430:}
+  prisma\schema.prisma:10431:
+  prisma\schema.prisma:10432:/// League-level scoring overrides (optional)
+  prisma\schema.prisma:10433:model LeagueScoringOverride {
+  prisma\schema.prisma:10434:  id          String  @id @default(cuid())
+  prisma\schema.prisma:10435:  leagueId    String  @db.VarChar(64)
+  prisma\schema.prisma:10436:  statKey     String  @db.VarChar(48)
+  prisma\schema.prisma:10437:  pointsValue Float   @default(0)
+  prisma\schema.prisma:10438:  enabled     Boolean @default(true)
+  prisma\schema.prisma:10439:
+  prisma\schema.prisma:10440:  @@unique([leagueId, statKey], name: "uniq_league_scoring_override_league_stat")
+  prisma\schema.prisma:10441:  @@index([leagueId])
+  prisma\schema.prisma:10442:  @@map("league_scoring_overrides")
+  prisma\schema.prisma:10443:}
+  prisma\schema.prisma:10444:
+  prisma\schema.prisma:10445:/// Sport-level feature flags: which league options are valid for this sport (PROMPT 2/4).
+  prisma\schema.prisma:10446:/// Commissioners can override only where the sport allows; validation uses these flags.
+  prisma\schema.prisma:10447:model SportFeatureFlags {
+  prisma\schema.prisma:10448:  id                    String   @id @default(cuid())
+  prisma\schema.prisma:10449:  supportsBestBall      Boolean  @default(false)
+  prisma\schema.prisma:10450:  supportsSuperflex     Boolean  @default(false)
+  prisma\schema.prisma:10451:  supportsTePremium     Boolean  @default(false)
+  prisma\schema.prisma:10452:  supportsKickers       Boolean  @default(false)
+  prisma\schema.prisma:10453:  supportsTeamDefense   Boolean  @default(false)
+  prisma\schema.prisma:10454:  supportsIdp           Boolean  @default(false)
+> prisma\schema.prisma:12355:model RosterSnapshot {
+  prisma\schema.prisma:12356:  snapshotId    String   @id @default(cuid())
+  prisma\schema.prisma:12357:  leagueId      String   @db.VarChar(64)
+  prisma\schema.prisma:12358:  teamId        String   @db.VarChar(64)
+  prisma\schema.prisma:12359:  sport         String   @db.VarChar(12)
+  prisma\schema.prisma:12360:  weekOrPeriod  Int
+  prisma\schema.prisma:12361:  season        Int?
+  prisma\schema.prisma:12362:  rosterPlayers Json     @map("roster_players")
+  prisma\schema.prisma:12363:  lineupPlayers Json     @map("lineup_players")
+  prisma\schema.prisma:12364:  benchPlayers  Json     @map("bench_players")
+  prisma\schema.prisma:12365:  createdAt     DateTime @default(now())
+  prisma\schema.prisma:12366:
+  prisma\schema.prisma:12367:  @@index([leagueId, weekOrPeriod])
+  prisma\schema.prisma:12368:  @@index([teamId, sport])
+  prisma\schema.prisma:12369:  @@index([sport, season])
+  prisma\schema.prisma:12370:  @@map("dw_roster_snapshots")
+  prisma\schema.prisma:12371:}
+  prisma\schema.prisma:12372:
+  prisma\schema.prisma:12373:/// Matchup fact (head-to-head result per period)
+  prisma\schema.prisma:12374:model MatchupFact {
+  prisma\schema.prisma:12375:  matchupId    String   @id @default(cuid())
+  prisma\schema.prisma:12376:  leagueId     String   @db.VarChar(64)
+  prisma\schema.prisma:12377:  sport        String   @db.VarChar(12)
+  prisma\schema.prisma:12378:  weekOrPeriod Int
+  prisma\schema.prisma:12379:  teamA        String   @db.VarChar(64)
+  prisma\schema.prisma:12380:  teamB        String   @db.VarChar(64)
+  prisma\schema.prisma:12381:  scoreA       Float    @default(0)
+  prisma\schema.prisma:12382:  scoreB       Float    @default(0)
+  prisma\schema.prisma:12383:  winnerTeamId String?  @db.VarChar(64)
+  prisma\schema.prisma:12384:  season       Int?
+  prisma\schema.prisma:12385:  createdAt    DateTime @default(now())
+  prisma\schema.prisma:12386:
+  prisma\schema.prisma:12387:  @@index([leagueId, weekOrPeriod])
+  prisma\schema.prisma:12388:  @@index([leagueId, season])
+  prisma\schema.prisma:12389:  @@map("dw_matchup_facts")
+  prisma\schema.prisma:12390:}
+  prisma\schema.prisma:12391:
+  prisma\schema.prisma:12392:/// Draft fact (pick record)
+  prisma\schema.prisma:12393:model DraftFact {
+  prisma\schema.prisma:12394:  draftId    String   @id @default(cuid())
+  prisma\schema.prisma:12395:  leagueId   String   @db.VarChar(64)
+  prisma\schema.prisma:12396:  sport      String   @db.VarChar(12)
+  prisma\schema.prisma:12397:  round      Int
+  prisma\schema.prisma:12398:  pickNumber Int
+  prisma\schema.prisma:12399:  playerId   String   @db.VarChar(64)
+  prisma\schema.prisma:12400:  managerId  String?  @db.VarChar(64)
+  prisma\schema.prisma:12401:  season     Int?
+  prisma\schema.prisma:12402:  createdAt  DateTime @default(now())
+  prisma\schema.prisma:12403:
+  prisma\schema.prisma:12404:  @@index([leagueId])
+  prisma\schema.prisma:12405:  @@index([leagueId, round])
+  prisma\schema.prisma:12406:  @@index([playerId, sport])
+  prisma\schema.prisma:12407:  @@map("dw_draft_facts")
+  prisma\schema.prisma:12408:}
+  prisma\schema.prisma:12409:
+  prisma\schema.prisma:12410:/// Transaction fact (add/drop/trade)
+  prisma\schema.prisma:12411:model TransactionFact {
+  prisma\schema.prisma:12412:  transactionId String   @id @default(cuid())
+  prisma\schema.prisma:12413:  leagueId      String   @db.VarChar(64)
+  prisma\schema.prisma:12414:  sport         String   @db.VarChar(12)
+  prisma\schema.prisma:12415:  type          String   @db.VarChar(24)
+  prisma\schema.prisma:12416:  playerId      String?  @db.VarChar(64)
+  prisma\schema.prisma:12417:  managerId     String?  @db.VarChar(64)
+  prisma\schema.prisma:12418:  rosterId      String?  @db.VarChar(64)
+  prisma\schema.prisma:12419:  payload       Json?
+  prisma\schema.prisma:12420:  season        Int?
+  prisma\schema.prisma:12421:  weekOrPeriod  Int?
+  prisma\schema.prisma:12422:  createdAt     DateTime @default(now())
+  prisma\schema.prisma:12423:
+  prisma\schema.prisma:12424:  @@index([leagueId, createdAt])
+  prisma\schema.prisma:12425:  @@index([playerId, sport])
+  prisma\schema.prisma:12426:  @@index([type])
+  prisma\schema.prisma:12427:  @@map("dw_transaction_facts")
+  prisma\schema.prisma:12428:}
+  prisma\schema.prisma:12429:
+  prisma\schema.prisma:12430:/// Season standing fact (rank, W-L, PF/PA per team per season)
+  prisma\schema.prisma:12431:model SeasonStandingFact {
+  prisma\schema.prisma:12432:  standingId    String   @id @default(cuid())
+  prisma\schema.prisma:12433:  leagueId      String   @db.VarChar(64)
+  prisma\schema.prisma:12434:  sport         String   @db.VarChar(12)
+  prisma\schema.prisma:12435:  season        Int
+> prisma\schema.prisma:12750:model RedraftSeason {
+  prisma\schema.prisma:12751:  id                       String                     @id @default(cuid())
+  prisma\schema.prisma:12752:  leagueId                 String
+  prisma\schema.prisma:12753:  sport                    String
+  prisma\schema.prisma:12754:  season                   Int
+  prisma\schema.prisma:12755:  status                   String                     @default("setup")
+  prisma\schema.prisma:12756:  totalWeeks               Int
+  prisma\schema.prisma:12757:  playoffStartWeek         Int
+  prisma\schema.prisma:12758:  currentWeek              Int                        @default(0)
+  prisma\schema.prisma:12759:  medianGame               Boolean                    @default(false)
+  prisma\schema.prisma:12760:  createdAt                DateTime                   @default(now())
+  prisma\schema.prisma:12761:  updatedAt                DateTime                   @updatedAt
+  prisma\schema.prisma:12762:  bestBallOptimizedLineups BestBallOptimizedLineup[]
+  prisma\schema.prisma:12763:  guillotineSeason         GuillotineSeason?
+  prisma\schema.prisma:12764:  keeperAuditLogs          KeeperAuditLog[]
+  prisma\schema.prisma:12765:  keeperEligibilities      KeeperEligibility[]
+  prisma\schema.prisma:12766:  keeperPickAdjustments    KeeperPickAdjustment[]
+  prisma\schema.prisma:12767:  keeperRecords            KeeperRecord[]
+  prisma\schema.prisma:12768:  keeperSelectionSession   KeeperSelectionSession?
+  prisma\schema.prisma:12769:  aiLeagueInsights         RedraftAILeagueInsight[]
+  prisma\schema.prisma:12770:  redraftLeagueTrades      RedraftLeagueTrade[]
+  prisma\schema.prisma:12771:  redraftTransactions      RedraftLeagueTransaction[]
+  prisma\schema.prisma:12772:  schedule                 RedraftMatchup[]
+  prisma\schema.prisma:12773:  playoffBracket           RedraftPlayoffBracket?
+  prisma\schema.prisma:12774:  playoffMatchups          RedraftPlayoffMatchup[]
+  prisma\schema.prisma:12775:  playoffRounds            RedraftPlayoffRound[]
+  prisma\schema.prisma:12776:  playoffSeeds             RedraftPlayoffSeed[]
+  prisma\schema.prisma:12777:  rosters                  RedraftRoster[]
+  prisma\schema.prisma:12778:  league                   League                     @relation(fields: [leagueId], 
+references: [id], onDelete: Cascade)
+  prisma\schema.prisma:12779:  redraftTradeProposals    RedraftTradeProposal[]
+  prisma\schema.prisma:12780:  redraftWaiverClaims      RedraftWaiverClaim[]
+  prisma\schema.prisma:12781:
+  prisma\schema.prisma:12782:  @@index([leagueId])
+  prisma\schema.prisma:12783:  @@map("redraft_seasons")
+  prisma\schema.prisma:12784:}
+  prisma\schema.prisma:12785:
+> prisma\schema.prisma:12786:model RedraftRoster {
+  prisma\schema.prisma:12787:  id                       String                     @id @default(cuid())
+  prisma\schema.prisma:12788:  seasonId                 String
+  prisma\schema.prisma:12789:  leagueId                 String
+  prisma\schema.prisma:12790:  ownerId                  String
+  prisma\schema.prisma:12791:  ownerName                String
+  prisma\schema.prisma:12792:  teamName                 String?
+  prisma\schema.prisma:12793:  avatarUrl                String?
+  prisma\schema.prisma:12794:  wins                     Int                        @default(0)
+  prisma\schema.prisma:12795:  losses                   Int                        @default(0)
+  prisma\schema.prisma:12796:  ties                     Int                        @default(0)
+  prisma\schema.prisma:12797:  pointsFor                Float                      @default(0)
+  prisma\schema.prisma:12798:  pointsAgainst            Float                      @default(0)
+  prisma\schema.prisma:12799:  streak                   String?
+  prisma\schema.prisma:12800:  playoffSeed              Int?
+  prisma\schema.prisma:12801:  faabBalance              Float?                     @default(100)
+  prisma\schema.prisma:12802:  waiverPriority           Int                        @default(0)
+  prisma\schema.prisma:12803:  isEliminated             Boolean                    @default(false)
+  prisma\schema.prisma:12804:  bestBallOptimizedLineups BestBallOptimizedLineup[]
+  prisma\schema.prisma:12805:  c2cPlayerStates          C2CPlayerState[]
+  prisma\schema.prisma:12806:  devyDevySlots            DevyDevySlot[]
+  prisma\schema.prisma:12807:  devyPlayerStates         DevyPlayerState[]
+  prisma\schema.prisma:12808:  devyRookieTransitions    DevyRookieTransition[]
+  prisma\schema.prisma:12809:  devyTaxiSlots            DevyTaxiSlot[]
+  prisma\schema.prisma:12810:  guillotineSurvivalLogs   GuillotineSurvivalLog[]
+  prisma\schema.prisma:12811:  idpCapProjections        IDPCapProjection[]
+  prisma\schema.prisma:12812:  idpDeadMoneyHits         IDPDeadMoney[]             
+@relation("RedraftRosterIdpDeadMoney")
+  prisma\schema.prisma:12813:  idpSalaryRecords         IDPSalaryRecord[]
+  prisma\schema.prisma:12814:  keeperRecords            KeeperRecord[]
+  prisma\schema.prisma:12815:  aiRosterInsights         RedraftAIRosterInsight[]
+  prisma\schema.prisma:12816:  tradesProposed           RedraftLeagueTrade[]       @relation("RedraftTradeProposer")
+  prisma\schema.prisma:12817:  tradesReceived           RedraftLeagueTrade[]       @relation("RedraftTradeReceiver")
+  prisma\schema.prisma:12818:  transactions             RedraftLeagueTransaction[]
+  prisma\schema.prisma:12819:  awayMatchups             RedraftMatchup[]           @relation("RedraftAwayRoster")
+  prisma\schema.prisma:12820:  homeMatchups             RedraftMatchup[]           @relation("RedraftHomeRoster")
+  prisma\schema.prisma:12821:  playoffAwayMatchups      RedraftPlayoffMatchup[]    
+@relation("RedraftPlayoffAwayRoster")
+  prisma\schema.prisma:12822:  playoffHomeMatchups      RedraftPlayoffMatchup[]    
+@relation("RedraftPlayoffHomeRoster")
+  prisma\schema.prisma:12823:  playoffWinningMatchups   RedraftPlayoffMatchup[]    
+@relation("RedraftPlayoffWinnerRoster")
+  prisma\schema.prisma:12824:  playoffSeeds             RedraftPlayoffSeed[]
+  prisma\schema.prisma:12825:  players                  RedraftRosterPlayer[]
+  prisma\schema.prisma:12826:  season                   RedraftSeason              @relation(fields: [seasonId], 
+references: [id], onDelete: Cascade)
+  prisma\schema.prisma:12827:  tradeAssetsFrom          RedraftTradeAsset[]        @relation("RedraftTradeAssetFrom")
+  prisma\schema.prisma:12828:  tradeAssetsTo            RedraftTradeAsset[]        @relation("RedraftTradeAssetTo")
+  prisma\schema.prisma:12829:  tradeProposalsMade       RedraftTradeProposal[]     
+@relation("RedraftTradeProposalProposer")
+  prisma\schema.prisma:12830:  tradeProposalsReceived   RedraftTradeProposal[]     
+@relation("RedraftTradeProposalReceiver")
+  prisma\schema.prisma:12831:  tradeProposalVotes       RedraftTradeVote[]
+  prisma\schema.prisma:12832:  waiverClaims             RedraftWaiverClaim[]
+  prisma\schema.prisma:12833:
+  prisma\schema.prisma:12834:  @@unique([seasonId, ownerId])
+  prisma\schema.prisma:12835:  @@index([seasonId])
+  prisma\schema.prisma:12836:  @@map("redraft_rosters")
+  prisma\schema.prisma:12837:}
+  prisma\schema.prisma:12838:
+> prisma\schema.prisma:12839:model RedraftRosterPlayer {
+  prisma\schema.prisma:12840:  id              String        @id @default(cuid())
+  prisma\schema.prisma:12841:  rosterId        String
+  prisma\schema.prisma:12842:  playerId        String
+  prisma\schema.prisma:12843:  playerName      String
+  prisma\schema.prisma:12844:  position        String
+  prisma\schema.prisma:12845:  team            String?
+  prisma\schema.prisma:12846:  sport           String
+  prisma\schema.prisma:12847:  slotType        String
+  prisma\schema.prisma:12848:  isLocked        Boolean       @default(false)
+  prisma\schema.prisma:12849:  injuryStatus    String?
+  prisma\schema.prisma:12850:  byeWeek         Int?
+  prisma\schema.prisma:12851:  addedAt         DateTime      @default(now())
+  prisma\schema.prisma:12852:  droppedAt       DateTime?
+  prisma\schema.prisma:12853:  acquisitionType String        @default("drafted")
+  prisma\schema.prisma:12854:  isKept          Boolean       @default(false)
+  prisma\schema.prisma:12855:  roster          RedraftRoster @relation(fields: [rosterId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:12856:
+  prisma\schema.prisma:12857:  @@index([rosterId])
+  prisma\schema.prisma:12858:  @@index([playerId])
+  prisma\schema.prisma:12859:  @@map("redraft_roster_players")
+  prisma\schema.prisma:12860:}
+  prisma\schema.prisma:12861:
+  prisma\schema.prisma:12862:model RedraftMatchup {
+  prisma\schema.prisma:12863:  id               String            @id @default(cuid())
+  prisma\schema.prisma:12864:  seasonId         String
+  prisma\schema.prisma:12865:  leagueId         String
+  prisma\schema.prisma:12866:  week             Int
+  prisma\schema.prisma:12867:  type             String            @default("regular")
+  prisma\schema.prisma:12868:  homeRosterId     String
+  prisma\schema.prisma:12869:  awayRosterId     String?
+  prisma\schema.prisma:12870:  homeScore        Float             @default(0)
+  prisma\schema.prisma:12871:  awayScore        Float             @default(0)
+  prisma\schema.prisma:12872:  homeProjected    Float?
+  prisma\schema.prisma:12873:  awayProjected    Float?
+  prisma\schema.prisma:12874:  homeWinPct       Float?
+  prisma\schema.prisma:12875:  awayWinPct       Float?
+  prisma\schema.prisma:12876:  status           String            @default("scheduled")
+  prisma\schema.prisma:12877:  isMedianMatchup  Boolean           @default(false)
+  prisma\schema.prisma:12878:  medianScore      Float?
+  prisma\schema.prisma:12879:  lineupSnapshots  Json?
+  prisma\schema.prisma:12880:  c2cMatchupScores C2CMatchupScore[]
+  prisma\schema.prisma:12881:  awayRoster       RedraftRoster?    @relation("RedraftAwayRoster", fields: 
+[awayRosterId], references: [id])
+  prisma\schema.prisma:12882:  homeRoster       RedraftRoster     @relation("RedraftHomeRoster", fields: 
+[homeRosterId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:12883:  league           League            @relation(fields: [leagueId], references: [id], 
+onDelete: Cascade)
+  prisma\schema.prisma:12884:  season           RedraftSeason     @relation(fields: [seasonId], references: [id], 
+onDelete: Cascade)
+  prisma\schema.prisma:12885:
+  prisma\schema.prisma:12886:  @@index([seasonId, week])
+  prisma\schema.prisma:12887:  @@index([homeRosterId])
+  prisma\schema.prisma:12888:  @@index([awayRosterId])
+  prisma\schema.prisma:12889:  @@map("redraft_matchups")
+  prisma\schema.prisma:12890:}
+  prisma\schema.prisma:12891:
+> prisma\schema.prisma:12892:model RedraftWaiverClaim {
+  prisma\schema.prisma:12893:  id             String        @id @default(cuid())
+  prisma\schema.prisma:12894:  seasonId       String
+  prisma\schema.prisma:12895:  leagueId       String
+  prisma\schema.prisma:12896:  rosterId       String
+  prisma\schema.prisma:12897:  addPlayerId    String
+  prisma\schema.prisma:12898:  addPlayerName  String
+  prisma\schema.prisma:12899:  dropPlayerId   String?
+  prisma\schema.prisma:12900:  dropPlayerName String?
+  prisma\schema.prisma:12901:  bidAmount      Float?
+  prisma\schema.prisma:12902:  priority       Int?
+  prisma\schema.prisma:12903:  status         String        @default("pending")
+  prisma\schema.prisma:12904:  submittedAt    DateTime      @default(now())
+  prisma\schema.prisma:12905:  processedAt    DateTime?
+  prisma\schema.prisma:12906:  denialReason   String?
+  prisma\schema.prisma:12907:  league         League        @relation(fields: [leagueId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:12908:  roster         RedraftRoster @relation(fields: [rosterId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:12909:  season         RedraftSeason @relation(fields: [seasonId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:12910:
+  prisma\schema.prisma:12911:  @@index([seasonId, status])
+  prisma\schema.prisma:12912:  @@index([rosterId])
+  prisma\schema.prisma:12913:  @@map("redraft_waiver_claims")
+  prisma\schema.prisma:12914:}
+  prisma\schema.prisma:12915:
+  prisma\schema.prisma:12916:model RedraftLeagueTrade {
+  prisma\schema.prisma:12917:  id                String    @id @default(cuid())
+  prisma\schema.prisma:12918:  leagueId          String
+  prisma\schema.prisma:12919:  seasonId          String
+  prisma\schema.prisma:12920:  proposerId        String
+  prisma\schema.prisma:12921:  proposerRosterId  String
+  prisma\schema.prisma:12922:  receiverId        String
+  prisma\schema.prisma:12923:  receiverRosterId  String
+  prisma\schema.prisma:12924:  proposerOffers    Json
+  prisma\schema.prisma:12925:  receiverOffers    Json
+  prisma\schema.prisma:12926:  status            String    @default("pending")
+  prisma\schema.prisma:12927:  voteCount         Int       @default(0)
+  prisma\schema.prisma:12928:  vetoCount         Int       @default(0)
+  prisma\schema.prisma:12929:  vetoThreshold     Int       @default(4)
+  prisma\schema.prisma:12930:  expiresAt         DateTime
+  prisma\schema.prisma:12931:  processedAt       DateTime?
+  prisma\schema.prisma:12932:  notes             String?
+  prisma\schema.prisma:12933:  aiGrade           String?
+  prisma\schema.prisma:12934:  aiSummary         String?
+  prisma\schema.prisma:12935:  aiFairnessScore   Float?
+  prisma\schema.prisma:12936:  aiCollusionFlag   Boolean   @default(false)
+  prisma\schema.prisma:12937:  aiCollusionReason String?
+  prisma\schema.prisma:12938:  createdAt         DateTime  @default(now())
+  prisma\schema.prisma:12939:
+  prisma\schema.prisma:12940:  league         League        @relation(fields: [leagueId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:12941:  proposerRoster RedraftRoster @relation("RedraftTradeProposer", fields: 
+[proposerRosterId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:12942:  receiverRoster RedraftRoster @relation("RedraftTradeReceiver", fields: 
+[receiverRosterId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:12943:  season         RedraftSeason @relation(fields: [seasonId], references: [id], onDelete: 
+Cascade)
+  prisma\schema.prisma:12944:
+  prisma\schema.prisma:12945:  @@index([leagueId, status])
+  prisma\schema.prisma:12946:  @@index([proposerRosterId])
+  prisma\schema.prisma:12947:  @@index([receiverRosterId])
+  prisma\schema.prisma:12948:  @@map("redraft_league_trades")
+  prisma\schema.prisma:12949:}
+  prisma\schema.prisma:12950:
+  prisma\schema.prisma:12951:/// User music favorites â€” tracks saved from TheAudioDB or Spotify
+  prisma\schema.prisma:12952:model UserMusicFavorite {
+  prisma\schema.prisma:12953:  id         String   @id @default(cuid())
+  prisma\schema.prisma:12954:  userId     String
+  prisma\schema.prisma:12955:  trackId    String   @db.VarChar(191)
+  prisma\schema.prisma:12956:  trackName  String   @db.VarChar(255)
+  prisma\schema.prisma:12957:  artistName String   @db.VarChar(255)
+  prisma\schema.prisma:12958:  trackImage String?  @db.Text
+  prisma\schema.prisma:12959:  createdAt  DateTime @default(now())
+  prisma\schema.prisma:12960:  user       AppUser  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:12961:
+  prisma\schema.prisma:12962:  @@unique([userId, trackId])
+  prisma\schema.prisma:12963:  @@index([userId, createdAt])
+  prisma\schema.prisma:12964:  @@map("user_music_favorites")
+  prisma\schema.prisma:12965:}
+  prisma\schema.prisma:12966:
+  prisma\schema.prisma:12967:model RedraftLeagueTransaction {
+  prisma\schema.prisma:12968:  id        String        @id @default(cuid())
+  prisma\schema.prisma:12969:  leagueId  String
+  prisma\schema.prisma:12970:  seasonId  String
+  prisma\schema.prisma:12971:  rosterId  String
+  prisma\schema.prisma:12972:  type      String
+> prisma\schema.prisma:15047:model RosterCarryover {
+  prisma\schema.prisma:15048:  id              String   @id @default(cuid())
+  prisma\schema.prisma:15049:  leagueId        String   @db.VarChar(64)
+  prisma\schema.prisma:15050:  rosterId        String   @db.VarChar(64)
+  prisma\schema.prisma:15051:  userId          String?  @db.VarChar(64)
+  prisma\schema.prisma:15052:  fromSeason      Int
+  prisma\schema.prisma:15053:  toSeason        Int
+  prisma\schema.prisma:15054:  carryoverKind   String   @db.VarChar(32)
+  prisma\schema.prisma:15055:  /// Snapshot of playerData at time of carryover (immutable audit).
+  prisma\schema.prisma:15056:  playerDataSnapshot Json?
+  prisma\schema.prisma:15057:  /// Number of keepers carried.
+  prisma\schema.prisma:15058:  keeperCount     Int      @default(0)
+  prisma\schema.prisma:15059:  /// Number of taxi slots carried.
+  prisma\schema.prisma:15060:  taxiCount       Int      @default(0)
+  prisma\schema.prisma:15061:  /// Number of devy rights carried.
+  prisma\schema.prisma:15062:  devyRightsCount Int      @default(0)
+  prisma\schema.prisma:15063:  appliedAt       DateTime @default(now())
+  prisma\schema.prisma:15064:  appliedBy       String   @db.VarChar(64)
+  prisma\schema.prisma:15065:
+  prisma\schema.prisma:15066:  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:15067:
+  prisma\schema.prisma:15068:  @@unique([leagueId, rosterId, fromSeason, toSeason])
+  prisma\schema.prisma:15069:  @@index([leagueId, toSeason])
+  prisma\schema.prisma:15070:  @@index([rosterId, toSeason])
+  prisma\schema.prisma:15071:  @@map("roster_carryovers")
+  prisma\schema.prisma:15072:}
+  prisma\schema.prisma:15073:
+  prisma\schema.prisma:15074:/// Per-franchise per-season outcome record. One row per (leagueId, rosterId, season).
+  prisma\schema.prisma:15075:/// Canonical season-end snapshot: wins, losses, playoffs, championship.
+  prisma\schema.prisma:15076:model FranchiseSeason {
+  prisma\schema.prisma:15077:  id              String   @id @default(cuid())
+  prisma\schema.prisma:15078:  leagueId        String   @db.VarChar(64)
+  prisma\schema.prisma:15079:  rosterId        String   @db.VarChar(64)
+  prisma\schema.prisma:15080:  userId          String?  @db.VarChar(64)
+  prisma\schema.prisma:15081:  season          Int
+  prisma\schema.prisma:15082:  wins            Int      @default(0)
+  prisma\schema.prisma:15083:  losses          Int      @default(0)
+  prisma\schema.prisma:15084:  ties            Int      @default(0)
+  prisma\schema.prisma:15085:  pointsFor       Float?
+  prisma\schema.prisma:15086:  pointsAgainst   Float?
+  prisma\schema.prisma:15087:  madePlayoffs    Boolean  @default(false)
+  prisma\schema.prisma:15088:  wonChampionship Boolean  @default(false)
+  prisma\schema.prisma:15089:  runnerUp        Boolean  @default(false)
+  prisma\schema.prisma:15090:  finalRank       Int?
+  prisma\schema.prisma:15091:  keeperCount     Int      @default(0)
+  prisma\schema.prisma:15092:  faabSpent       Int      @default(0)
+  prisma\schema.prisma:15093:  tradeCount      Int      @default(0)
+  prisma\schema.prisma:15094:  createdAt       DateTime @default(now())
+  prisma\schema.prisma:15095:  updatedAt       DateTime @updatedAt
+  prisma\schema.prisma:15096:
+  prisma\schema.prisma:15097:  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:15098:
+  prisma\schema.prisma:15099:  @@unique([leagueId, rosterId, season])
+  prisma\schema.prisma:15100:  @@index([leagueId, season])
+  prisma\schema.prisma:15101:  @@index([rosterId])
+  prisma\schema.prisma:15102:  @@index([leagueId, wonChampionship])
+  prisma\schema.prisma:15103:  @@map("franchise_seasons")
+  prisma\schema.prisma:15104:}
+  prisma\schema.prisma:15105:
+  prisma\schema.prisma:15106:/// Tracks the state of the rookie draft window for a season.
+  prisma\schema.prisma:15107:/// One record per (leagueId, season). Controls when the rookie draft can open.
+  prisma\schema.prisma:15108:model RookieDraftWindow {
+  prisma\schema.prisma:15109:  id                 String                  @id @default(cuid())
+  prisma\schema.prisma:15110:  leagueId           String                  @db.VarChar(64)
+  prisma\schema.prisma:15111:  season             Int
+  prisma\schema.prisma:15112:  status             RookieDraftWindowStatus @default(pending)
+  prisma\schema.prisma:15113:  draftOrderMethod   String                  @db.VarChar(32)
+  prisma\schema.prisma:15114:  /// Snapshot of the computed draft order when the window opens.
+  prisma\schema.prisma:15115:  pickOrderSnapshot  Json?
+  prisma\schema.prisma:15116:  scheduledDraftDate DateTime?
+  prisma\schema.prisma:15117:  openedAt           DateTime?
+  prisma\schema.prisma:15118:  closedAt           DateTime?
+  prisma\schema.prisma:15119:  initiatedBy        String?                 @db.VarChar(64)
+  prisma\schema.prisma:15120:  createdAt          DateTime                @default(now())
+  prisma\schema.prisma:15121:  updatedAt          DateTime                @updatedAt
+  prisma\schema.prisma:15122:
+  prisma\schema.prisma:15123:  league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  prisma\schema.prisma:15124:
+  prisma\schema.prisma:15125:  @@unique([leagueId, season])
+  prisma\schema.prisma:15126:  @@index([leagueId, status])
+  prisma\schema.prisma:15127:  @@map("rookie_draft_windows")
+
+

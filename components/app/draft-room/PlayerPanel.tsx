@@ -131,6 +131,8 @@ export type PlayerPanelProps = {
   useAiAdp?: boolean
   onUseAiAdpChange?: (value: boolean) => void
   loading?: boolean
+  /** Customer-facing explanation for the current player-pool loading stage. */
+  loadingMessage?: string | null
   /** When true, AI ADP is enabled but no data (show message, keep sort controls working) */
   aiAdpUnavailable?: boolean
   /** Optional message when AI ADP is enabled but unavailable */
@@ -378,6 +380,7 @@ function PlayerPanelInner({
   useAiAdp = false,
   onUseAiAdpChange,
   loading = false,
+  loadingMessage = null,
   aiAdpUnavailable = false,
   aiAdpUnavailableMessage = null,
   aiAdpStaleWarning = false,
@@ -659,7 +662,6 @@ function PlayerPanelInner({
     c2cConfig?.enabled,
     sortBy,
     sortDirection,
-    useAiAdp,
     sport,
     sleeperStatOpts,
     rookieFilterContext,
@@ -1259,7 +1261,7 @@ function PlayerPanelInner({
               className="py-3 text-center text-sm text-white/65"
               data-testid="draft-pool-loading-message"
             >
-              Loading player pool...
+              {loadingMessage?.trim() || 'Loading player pool...'}
             </p>
             {Array.from({ length: 8 }).map((_, i) => (
               <div

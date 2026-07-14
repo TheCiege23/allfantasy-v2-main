@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { Crown, Sparkles, Swords, MessageCircle, type LucideIcon } from 'lucide-react'
+import { Crown, Sparkles, Swords, MessageCircle, Users, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import type { UserLeague } from '../../types'
 import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
@@ -214,6 +214,7 @@ export function DashboardHero({
           {/* Compact icon actions — the old giant launcher cards, collapsed to one row. */}
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
             <NavChip icon={Swords} accent="text-cyan-400" label={t('dashboard.warroom.hero.navWarRoomTitle')} href="/war-room" />
+            <NavChip icon={Users} accent="text-emerald-400" label={t('dashboard.warroom.hero.navManagerHubTitle')} href="/manager-hub" />
             <NavChip icon={Crown} accent="text-amber-400" label={isCommissionerAnywhere ? t('dashboard.warroom.hero.navCommissionerHubTitle') : t('dashboard.warroom.hero.navRunLeagueTitle')} href="/commissioner-hub" />
             <NavChip icon={Sparkles} accent="text-violet-400" label={t('dashboard.warroom.hero.navChimmyTitle')} onClick={openChimmy} />
             <NavChip icon={MessageCircle} accent="text-cyan-300" label={t('dashboard.warroom.hero.navComms')} onClick={openComms} />

@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { mergeUnifiedIntoRosterState } from "@/lib/player-data/adapters/rosterPlayerAdapter"
 import type { UnifiedPlayerWireDto } from "@/lib/player-data/serializeUnifiedPlayerForApi"
 import { getRosterPlayerIds } from "@/lib/waiver-wire/roster-utils"
@@ -279,6 +279,7 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null)
   const [lineupLock, setLineupLock] = useState<LineupLockPayload | null>(null)
   const [canEditLineup, setCanEditLineup] = useState(true)
+  const autoSaveRef = useRef<(state: RosterState) => Promise<void>>(async () => {})
 
   const loadAvailablePlayers = useCallback(async () => {
     if (!options.leagueId) {
@@ -399,6 +400,7 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
 
   const movePlayer = useCallback(
     (playerId: string, toSlot: RosterSectionKey) => {
+      if (saving) return false
       if (!canEditLineup) {
         setSaveError("Lineup is locked for this period.")
         return false
@@ -440,16 +442,17 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         next[toSlot] = [...next[toSlot], moved]
         setSaveError(null)
         setRoster(next)
-        void autoSave(next)
+        void autoSaveRef.current(next)
         return true
       }
       return false
     },
-    [roster, slotLimits, starterAllowedPositions, canEditLineup],
+    [roster, slotLimits, starterAllowedPositions, canEditLineup, saving],
   )
 
   const swapPlayers = useCallback(
     (aId: string, bId: string) => {
+      if (saving) return false
       if (!canEditLineup) {
         setSaveError("Lineup is locked for this period.")
         return false
@@ -502,14 +505,15 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
 
       setSaveError(null)
       setRoster(next)
-      void autoSave(next)
+      void autoSaveRef.current(next)
       return true
     },
-    [roster, slotLimits, starterAllowedPositions, canEditLineup],
+    [roster, slotLimits, starterAllowedPositions, canEditLineup, saving],
   )
 
   const dropPlayer = useCallback(
     (playerId: string) => {
+      if (saving) return
       if (!canEditLineup) return
       if (!roster) return
       const next: RosterState = {
@@ -527,13 +531,14 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         })
       })
       setRoster(next)
-      void autoSave(next)
+      void autoSaveRef.current(next)
     },
-    [roster, canEditLineup],
+    [roster, canEditLineup, saving],
   )
 
   const addPlayer = useCallback(
     (player: RosterPlayer, toSlot: RosterSectionKey = "bench") => {
+      if (saving) return
       if (!canEditLineup) return
       if (!roster) return
       const exists = SECTION_KEYS.some((key) => roster[key].some((p) => p.id === player.id))
@@ -555,9 +560,9 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
         [toSlot]: [...roster[toSlot], { ...player, slot: toSlot }],
       }
       setRoster(next)
-      void autoSave(next)
+      void autoSaveRef.current(next)
     },
-    [roster, slotLimits, starterAllowedPositions, canEditLineup],
+    [roster, slotLimits, starterAllowedPositions, canEditLineup, saving],
   )
 
   const autoSave = useCallback(
@@ -578,12 +583,7 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
             starters: rosterData.starters,
           }),
         })
-        if (!res.ok) {
-          const json = await res.json().catch(() => ({}))
-          throw new Error(
-            typeof json?.error === "string" ? json.error : "Unable to save lineup."
-          )
-        }
+        if (!res.ok) throw new Error("lineup_save_failed")
         setExistingPlayerData(rosterData)
         setLastSavedAt(Date.now())
         dispatchStateRefreshEvent({
@@ -593,14 +593,16 @@ export function useRosterManager(options: RosterManagerOptions = {}) {
           source: "useRosterManager",
         })
         void loadAvailablePlayers()
-      } catch (err: any) {
-        setSaveError(err?.message || "Unable to save lineup.")
+      } catch {
+        await loadRoster()
+        setSaveError("Lineup was not saved. The last confirmed roster has been restored. Try again.")
       } finally {
         setSaving(false)
       }
     },
-    [options.leagueId, existingPlayerData, rosterId, loadAvailablePlayers, canEditLineup],
+    [options.leagueId, existingPlayerData, rosterId, loadAvailablePlayers, loadRoster],
   )
+  autoSaveRef.current = autoSave
 
   const addPlayerFromPool = useCallback(
     (playerId: string, toSlot: RosterSectionKey = "bench") => {

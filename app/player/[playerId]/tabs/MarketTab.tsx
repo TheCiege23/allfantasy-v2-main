@@ -62,7 +62,7 @@ export function MarketTab({ player }: { player: PlayerIdentity }) {
       ) : (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-6 text-center">
           <p className="text-sm text-white/40">No market data available for {player.name}.</p>
-          <p className="mt-1 text-xs text-white/25">Market values require FantasyCalc data to be imported.</p>
+          <p className="mt-1 text-xs text-white/25">Canonical market values are currently unavailable.</p>
         </div>
       )}
 

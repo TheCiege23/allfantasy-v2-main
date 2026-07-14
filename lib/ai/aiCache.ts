@@ -98,7 +98,7 @@ export async function getCachedAiAnswer(key: string): Promise<string | null> {
     if (!row) return null
     if (row.expiresAt < new Date()) {
       // Expired — clean up lazily
-      prisma.sportsDataCache.delete({ where: { cacheKey: key } }).catch(() => {})
+      prisma.sportsDataCache.deleteMany({ where: { cacheKey: key } }).catch(() => {})
       return null
     }
     const data = row.data as { text?: unknown }

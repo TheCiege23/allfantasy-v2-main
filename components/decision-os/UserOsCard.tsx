@@ -24,6 +24,16 @@ const PARTICIPATION_TIER_LABEL: Record<string, string> = {
   inactive: 'Inactive',
 }
 
+/** Phase 36: human-readable labels, never the raw enum string — `insufficient_data` in
+ * particular must never render as raw snake_case, and must read as a data gap, not a judgment. */
+const RETENTION_RISK_LABEL: Record<string, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+  critical: 'Critical',
+  insufficient_data: 'Insufficient data',
+}
+
 function StatChip({ label, value }: { label: string; value: number }) {
   return (
     <div className="min-w-0 rounded-xl border border-subtle bg-surface-muted px-3 py-2">
@@ -133,8 +143,15 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
 
         <aside className="space-y-4">
           <DecisionOsPanel title="Retention risk" className="bg-surface-muted">
-            <p className="mt-2 text-sm font-bold text-primary" data-testid="user-os-retention-risk">
-              {teamHealth.retentionRisk}
+            <p
+              className={
+                teamHealth.retentionRisk === 'insufficient_data'
+                  ? 'mt-2 text-sm font-bold text-muted'
+                  : 'mt-2 text-sm font-bold text-primary'
+              }
+              data-testid="user-os-retention-risk"
+            >
+              {RETENTION_RISK_LABEL[teamHealth.retentionRisk] ?? teamHealth.retentionRisk}
             </p>
             {teamHealth.retentionRiskReasons.length > 0 ? (
               <p className="mt-1 text-xs leading-5 text-secondary">

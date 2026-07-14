@@ -27,16 +27,16 @@ export function ActiveLeaguesSection() {
 
   if (loading) {
     return (
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <section className="card-premium p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Users className="h-4 w-4 text-cyan-400" />
             {t("dashboard.activeLeagues")}
           </div>
-          <Link href="/leagues" className="text-xs text-white/50 hover:text-white/70">{t("dashboard.viewAll")}</Link>
+          <Link href="/leagues" className="text-xs text-muted hover:text-secondary">{t("dashboard.viewAll")}</Link>
         </div>
         <div className="flex items-center justify-center py-8">
-          <Loader2 className="h-6 w-6 animate-spin text-white/40" />
+          <Loader2 className="h-6 w-6 animate-spin text-muted" />
         </div>
       </section>
     )
@@ -44,28 +44,28 @@ export function ActiveLeaguesSection() {
 
   if (leagues.length === 0) {
     return (
-      <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+      <section className="card-premium p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2 text-sm font-semibold">
             <Users className="h-4 w-4 text-cyan-400" />
             {t("dashboard.activeLeagues")}
           </div>
-          <Link href="/leagues" className="text-xs text-white/50 hover:text-white/70">{t("dashboard.viewAll")}</Link>
+          <Link href="/leagues" className="text-xs text-muted hover:text-secondary">{t("dashboard.viewAll")}</Link>
         </div>
-        <p className="text-sm text-white/40 py-4">{t("dashboard.activeLeagues.empty")}</p>
+        <p className="py-4 text-sm text-muted">{t("dashboard.activeLeagues.empty")}</p>
         <Link href="/dashboard" className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300">{t("dashboard.action.openWebApp")} <ChevronRight className="h-3.5 w-3.5" /></Link>
       </section>
     )
   }
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <section className="card-premium p-5">
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2 text-sm font-semibold">
           <Users className="h-4 w-4 text-cyan-400" />
           {t("dashboard.activeLeagues")}
         </div>
-        <Link href="/leagues" className="text-xs text-white/50 hover:text-white/70">{t("dashboard.viewAll")}</Link>
+        <Link href="/leagues" className="text-xs text-muted hover:text-secondary">{t("dashboard.viewAll")}</Link>
       </div>
       <div className="space-y-6">
         <DashboardSportGroups

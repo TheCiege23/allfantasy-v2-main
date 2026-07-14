@@ -13,16 +13,16 @@ export default async function ConnectSleeperPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#07071a] px-4 py-8 text-white">
+    <div className="min-h-screen bg-app px-4 py-8 text-primary">
       <div className="mx-auto max-w-md">
         <Link
           href="/settings"
           className="mb-6 inline-block text-sm text-cyan-400/90 hover:text-cyan-300"
         >
-          ← Back to settings
+          Back to settings
         </Link>
         <h1 className="text-xl font-bold">Connect Sleeper</h1>
-        <p className="mt-3 text-sm leading-relaxed text-white/55">
+        <p className="mt-3 text-sm leading-relaxed text-muted">
           Link your Sleeper account by importing a league from the dashboard. Your Sleeper username
           is saved when leagues sync.
         </p>

@@ -159,6 +159,12 @@ export async function POST(request: Request) {
 
   const body = await readBody(request)
   const action = body.action ?? 'create_proposal'
+  if (action === 'create_proposal') {
+    const prohibited = ['vetoMode', 'vetoThreshold'].filter((field) => Object.prototype.hasOwnProperty.call(body, field))
+    if (prohibited.length) {
+      return NextResponse.json({ error: 'Trade governance is controlled by persisted league settings.', prohibitedFields: prohibited }, { status: 400 })
+    }
+  }
   const leagueId = await leagueIdFromInput({ seasonId: body.seasonId, leagueId: body.leagueId, proposalId: body.proposalId })
   if (!leagueId) return NextResponse.json({ error: 'seasonId, leagueId, or proposalId required' }, { status: 400 })
   const member = await assertLeagueMember(leagueId, userId)

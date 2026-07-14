@@ -6,7 +6,7 @@ vi.mock('@/lib/prisma', () => ({
     sportsDataCache: {
       findUnique: vi.fn(),
       upsert: vi.fn(),
-      delete: vi.fn(),
+      deleteMany: vi.fn(),
     },
   },
 }))
@@ -24,11 +24,11 @@ import {
 
 const mockFindUnique = prisma.sportsDataCache.findUnique as ReturnType<typeof vi.fn>
 const mockUpsert = prisma.sportsDataCache.upsert as ReturnType<typeof vi.fn>
-const mockDelete = prisma.sportsDataCache.delete as ReturnType<typeof vi.fn>
+const mockDeleteMany = prisma.sportsDataCache.deleteMany as ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.resetAllMocks()
-  mockDelete.mockResolvedValue({})
+  mockDeleteMany.mockResolvedValue({ count: 1 })
 })
 
 // ── AI_CACHE_TTL shape ────────────────────────────────────────────────────────
@@ -235,9 +235,9 @@ describe('getCachedAiAnswer', () => {
 
     await getCachedAiAnswer('aic:chimmy:scope:q:c')
 
-    // delete is fire-and-forget — wait a tick
+    // deleteMany is fire-and-forget — wait a tick
     await new Promise((r) => setTimeout(r, 0))
-    expect(mockDelete).toHaveBeenCalled()
+    expect(mockDeleteMany).toHaveBeenCalled()
   })
 
   it('returns null when data.text is missing', async () => {

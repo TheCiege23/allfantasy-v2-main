@@ -5,7 +5,7 @@ import {
   findPlayerByName,
   getPickValue,
   FantasyCalcPlayer 
-} from './fantasycalc';
+} from '@/lib/player-valuations/canonicalPlayerValuations';
 import {
   calculateDynastyScore,
   getAgeCurveWithCliffs,

@@ -142,6 +142,7 @@ export async function POST(
 ) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  return NextResponse.json({ error: 'This renewal endpoint is deprecated. Use /api/redraft/renewals.' }, { status: 410 })
   const { leagueId } = await params
 
   const league = await prisma.league.findUnique({
@@ -198,55 +199,46 @@ export async function POST(
   const nextSeason = currentSeason + 1
   const changes: { field: string; oldValue: string; newValue: string }[] = []
 
-  // ─── 1. STORE SEASON HISTORY with rankings ───
+  // 1. Preserve the completed-season summary exactly once. Renewal may read it but never rewrite it.
   try {
-    // Build team records with rankings attached
-    const teamRecords = league.teams
-      .filter(t => !t.isOrphan)
-      .sort((a, b) => (b.pointsFor ?? 0) - (a.pointsFor ?? 0))
-      .map((t, i) => ({
-        teamId: t.id,
-        teamName: t.teamName,
-        ownerName: t.ownerName,
-        wins: t.wins,
-        losses: t.losses,
-        pointsFor: t.pointsFor,
-        rank: t.currentRank ?? i + 1,
-        isCommissioner: t.isCommissioner,
-      }))
-
-    // Find champion (rank 1 or highest points)
-    const champion = teamRecords[0]
-
-    await prisma.leagueSeason.upsert({
+    const existingSnapshot = await prisma.leagueSeason.findUnique({
       where: { leagueId_season: { leagueId, season: currentSeason } },
-      update: {
-        status: 'complete',
-        teamRecords: toPrismaJsonInput(teamRecords),
-        championName: champion?.ownerName ?? champion?.teamName ?? null,
-        runnerUpName: teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null,
-        regularSeasonWinnerName: champion?.ownerName ?? champion?.teamName ?? null,
-        teamCount: teamRecords.length,
-        scoringFormat: league.scoring ?? null,
-        isDynasty: league.isDynasty,
-      },
-      create: {
-        leagueId,
-        season: currentSeason,
-        platformLeagueId: leagueId,
-        status: 'complete',
-        teamRecords: toPrismaJsonInput(teamRecords),
-        championName: champion?.ownerName ?? champion?.teamName ?? null,
-        championAvatar: null,
-        runnerUpName: teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null,
-        regularSeasonWinnerName: champion?.ownerName ?? champion?.teamName ?? null,
-        teamCount: teamRecords.length,
-        scoringFormat: league.scoring ?? null,
-        isDynasty: league.isDynasty,
-      },
+      select: { id: true },
     })
-  } catch { /* non-fatal */ }
-
+    if (!existingSnapshot) {
+      const teamRecords = league.teams
+        .filter(t => !t.isOrphan)
+        .sort((a, b) => (b.pointsFor ?? 0) - (a.pointsFor ?? 0))
+        .map((t, i) => ({
+          teamId: t.id,
+          teamName: t.teamName,
+          ownerName: t.ownerName,
+          managerUserId: t.platformUserId,
+          wins: t.wins,
+          losses: t.losses,
+          pointsFor: t.pointsFor,
+          rank: t.currentRank ?? i + 1,
+          isCommissioner: t.isCommissioner,
+        }))
+      const champion = teamRecords[0]
+      await prisma.leagueSeason.create({
+        data: {
+          leagueId,
+          season: currentSeason,
+          platformLeagueId: leagueId,
+          status: 'complete',
+          teamRecords: toPrismaJsonInput(teamRecords),
+          championName: champion?.ownerName ?? champion?.teamName ?? null,
+          championAvatar: null,
+          runnerUpName: teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null,
+          regularSeasonWinnerName: champion?.ownerName ?? champion?.teamName ?? null,
+          teamCount: teamRecords.length,
+          scoringFormat: league.scoring ?? null,
+          isDynasty: league.isDynasty,
+        },
+      })
+    }
+  } catch { /* legacy route remains best-effort until canonical renewal replacement */ }
   // ─── 2. REMOVE unchecked members ───
   if (removeMemberIds.length > 0) {
     await prisma.leagueTeam.updateMany({

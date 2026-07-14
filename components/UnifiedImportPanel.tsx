@@ -8,6 +8,7 @@ interface UnifiedImportPanelProps {
   onImport: (provider: ImportProvider, sourceInput: string) => Promise<void>;
   loadingProvider?: ImportProvider | null;
   disabledProviders?: ImportProvider[];
+  initialInputs?: Partial<Record<ImportProvider, string>>;
 }
 
 export function UnifiedImportPanel({

@@ -104,19 +104,24 @@ export async function settleRedraftTradeAssets(
   }
 
   // Apply net FAAB transfers with sufficiency checks.
+  //
+  // This must be a single atomic guarded UPDATE, not a read-then-write (findUnique
+  // then update): under Postgres's default READ COMMITTED isolation, two concurrent
+  // settlements against the same roster can both read the same starting balance,
+  // both compute a valid-looking result, and the second write silently overwrites
+  // the first (a lost update) — physically reproduced during Gate C concurrency
+  // validation: two real trades each "successfully" deducted 60 FAAB from a 100
+  // balance, yet the final balance was 40, not -20 and not correctly rejected.
+  // The WHERE clause's own arithmetic guard makes this atomic regardless of
+  // isolation level — Postgres's row-level lock on the UPDATE itself prevents the
+  // race, the same way the existing conditional-claim UPDATE on trade proposals does.
   let faabTransferred = 0
   for (const [rosterId, delta] of faabDelta) {
     if (delta === 0) continue
-    const roster = await tx.redraftRoster.findUnique({
-      where: { id: rosterId },
-      select: { faabBalance: true },
-    })
-    const current = roster?.faabBalance ?? 0
-    const next = current + delta
-    if (next < 0) {
+    const updated = await tx.$executeRaw`UPDATE "redraft_rosters" SET "faabBalance" = "faabBalance" + ${delta} WHERE id = ${rosterId} AND COALESCE("faabBalance", 0) + ${delta} >= 0`
+    if (updated === 0) {
       throw new Error('Insufficient FAAB balance to complete trade')
     }
-    await tx.redraftRoster.update({ where: { id: rosterId }, data: { faabBalance: next } })
     if (delta > 0) faabTransferred += delta
   }
 

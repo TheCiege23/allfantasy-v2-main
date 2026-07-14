@@ -40,6 +40,15 @@ export interface ImportedLeagueNormalizationInput {
 export interface ImportedLeagueNormalizationResult {
   success: true
   normalized: NormalizedImportResult
+  /**
+   * The raw, provider-native payload this normalization was built from (e.g. a
+   * `SleeperImportPayload` for Sleeper). Already fetched once here — exposed so
+   * downstream Sleeper-specific validation (SleeperImportValidation) can read
+   * it without a second, wasteful, potentially-inconsistent fetch. `unknown`
+   * because its real shape is provider-specific; callers narrow it themselves
+   * after checking `normalized.source.source_provider`.
+   */
+  rawPayload?: unknown
 }
 
 export interface ImportedLeagueNormalizationError {
@@ -120,7 +129,7 @@ export async function runImportedLeagueNormalizationPipeline(
       provider,
       raw: payload,
     })
-    return { success: true, normalized }
+    return { success: true, normalized, rawPayload: payload }
   } catch (e) {
     if (e instanceof EspnImportConnectionError) {
       return { success: false, error: e.message, code: 'CONNECTION_REQUIRED' }

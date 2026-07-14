@@ -1,10 +1,12 @@
 /**
  * NFL redraft core dashboard — tab-bar regression lock.
  *
- * The NFL redraft shell leads with the core tabs:
- *   Home / Roster / Matchups / Players / Waivers / Trades / War Room / League,
- * plus a commissioner-only Settings tab. The exported NFL_REDRAFT_CORE_TAB_IDS
- * pins that visible order.
+ * Since the G32 League Home overhaul (docs/G32_NFL_REDRAFT_LEAGUE_HOME_OVERHAUL.md),
+ * the NFL redraft shell leads with the core tabs:
+ *   Home / Draft / Roster / Matchups / Schedule / Waivers / Trades / Standings / League Chat,
+ * plus a commissioner-only Commissioner tab. The exported NFL_REDRAFT_CORE_TAB_IDS
+ * pins that visible order. (Settings is built into the same branch but is always
+ * filtered back out — it is reached via the header gear, not a tab.)
  *
  * History, AI Coaching, Redraft, Trend, and Finance must NOT appear in the
  * primary tab bar for these leagues. Settings is also reachable via the
@@ -38,13 +40,16 @@ describe('NFL redraft core — exported tab ID list', () => {
   it('NFL_REDRAFT_CORE_TAB_IDS is exactly the visible redraft tabs in order', () => {
     expect([...NFL_REDRAFT_CORE_TAB_IDS]).toEqual([
       'home',
+      'draft',
       'roster',
       'matchups',
+      'schedule',
       'players',
       'waivers',
       'trades',
-      'war_room',
-      'league',
+      'standings',
+      'league_chat',
+      'commissioner',
     ])
   })
 })
@@ -70,7 +75,7 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
   it('declares the core tabs in the canonical Phase 1 order', () => {
     // Order matters — the tab bar reads left-to-right.
     const orderRegex =
-      /\{\s*id:\s*'home'[^}]*\}[\s\S]*?\{\s*id:\s*'roster'[^}]*\}[\s\S]*?\{\s*id:\s*'matchups'[^}]*\}[\s\S]*?\{\s*id:\s*'players'[^}]*\}[\s\S]*?\{\s*id:\s*'waivers'[^}]*\}[\s\S]*?\{\s*id:\s*'trades'[^}]*\}[\s\S]*?\{\s*id:\s*'war_room'[^}]*\}[\s\S]*?\{\s*id:\s*'league'[^}]*\}/
+      /\{\s*id:\s*'home'[^}]*\}[\s\S]*?\{\s*id:\s*'draft'[^}]*\}[\s\S]*?\{\s*id:\s*'roster'[^}]*\}[\s\S]*?\{\s*id:\s*'matchups'[^}]*\}[\s\S]*?\{\s*id:\s*'schedule'[^}]*\}[\s\S]*?\{\s*id:\s*'waivers'[^}]*\}[\s\S]*?\{\s*id:\s*'trades'[^}]*\}[\s\S]*?\{\s*id:\s*'standings'[^}]*\}[\s\S]*?\{\s*id:\s*'league_chat'[^}]*\}[\s\S]*?\{\s*id:\s*'commissioner'[^}]*\}/
     expect(branch).toMatch(orderRegex)
   })
 
@@ -99,12 +104,12 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
   })
 
   it('the generic withSettings append path (non-redraft branch) lives AFTER the redraft return', () => {
-    // The generic path adds `{ id: 'settings', label: '⚙ Settings' }` to every
-    // non-redraft sport tab list. If this append moves above the redraft
-    // branch's return, the redraft bar would inherit it — regression guard.
-    // (The redraft branch has its own commissioner-gated settings push, so use
-    // the LAST occurrence to locate the generic append.)
-    const genericSettingsIdx = src.lastIndexOf("{ id: 'settings', label: '⚙ Settings' }")
+    // The generic path builds `const withSettings = [...base, { id: 'settings', ... }]`
+    // for every non-redraft sport tab list. If this append moves above the
+    // redraft branch's return, the redraft bar would inherit it — regression
+    // guard. Anchor on the `withSettings` declaration (not the settings label
+    // text, which is cosmetic and has changed independently of this invariant).
+    const genericSettingsIdx = src.indexOf('const withSettings = [...base,')
     expect(genericSettingsIdx).toBeGreaterThan(branchEnd)
   })
 })
@@ -113,10 +118,10 @@ describe('NFL redraft core — deep-link blocker', () => {
   const src = read('app/league/[leagueId]/LeagueShell.tsx')
 
   it('blocks ?view=settings / ?tab=settings when nflRedraftCore is true', () => {
-    // The normalizer maps `?view=...` and `?tab=...` to a tab id. For the
-    // redraft shell, settings has no tab — the early return below stops
-    // setActiveTab('settings') from ever firing.
-    expect(src).toMatch(/if \(key === 'settings' && nflRedraftCore\) return/)
+    // The normalizer maps `?view=...` and `?tab=...` (raw `key`) through `map[key]`
+    // to a resolved `target` tab id. For the redraft shell, settings has no tab —
+    // the early return below stops setActiveTab('settings') from ever firing.
+    expect(src).toMatch(/if \(target === 'settings' && nflRedraftCore\) return/)
   })
 
   it('only fires setActiveTab when the resolved target id is in tabDefs', () => {

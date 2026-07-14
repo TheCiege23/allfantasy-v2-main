@@ -1,0 +1,262 @@
+﻿
+===== app/drafts/[draftId]/page.tsx =====
+/**
+ * Canonical full-screen Sleeper-style live draft route.
+ *
+ * Phase 2A â€” Commit 9: stand up the new URL without retiring legacy routes.
+ *   - Resolves draftId via the existing canonical resolver.
+ *   - Mock / auction / lottery delegate to existing routes (do not reimplement here).
+ *   - Live snake builds the initial snapshot server-side and seeds the
+ *     existing canonical client (`DraftBoard` â†’ `DraftRoomPageClient`) to
+ *     eliminate the empty-flash on first paint.
+ *
+ * Legacy routes (`/draft/[draftId]/snake`, `/draft/room/[draftId]`,
+ * dashboard overlay iframe) remain untouched in this commit.
+ */
+
+import { getServerSession } from 'next-auth'
+import { redirect, notFound } from 'next/navigation'
+import { authOptions } from '@/lib/auth'
+import { resolveDraftRouteContext } from '@/lib/draft/resolve-draft-context'
+import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
+import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
+import { DraftBoard } from '@/components/draft/DraftBoard'
+import { checkDraftPoolCacheFast, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
+
+export const dynamic = 'force-dynamic'
+
+export default async function DraftsByIdPage({
+  params,
+}: {
+  params: Promise<{ draftId: string }>
+}) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  const { draftId } = await params
+
+  if (!userId) {
+    redirect(`/login?callbackUrl=${encodeURIComponent(`/drafts/${draftId}`)}`)
+  }
+
+  console.warn('[drafts:page] start', {
+    draftId,
+    userId_present: !!userId,
+    userId,
+  })
+
+  const context = await resolveDraftRouteContext(draftId, userId)
+
+  console.warn('[drafts:context]', {
+    draftId,
+    context_null: context === null,
+    kind: (context as any)?.kind ?? null,
+    leagueId: (context as any)?.leagueId ?? null,
+    routeType: (context as any)?.routeType ?? null,
+    draftType: (context as any)?.draftType ?? null,
+    status: (context as any)?.status ?? null,
+  })
+
+  if (!context) {
+    console.warn('[drafts:notFound] branch=context_null', { draftId, userId })
+    notFound()
+  }
+
+  // Mock drafts ride a different engine â€” keep them on their existing URL family.
+  if (context.kind === 'mock') {
+    redirect(`/mock-draft?draftId=${encodeURIComponent(context.draftId)}`)
+  }
+
+  // Auction / lottery have their own dedicated UIs â€” preserve the existing routes.
+  if (context.routeType === 'auction') {
+    redirect(`/draft/${encodeURIComponent(context.draftId)}/auction`)
+  }
+  if (context.routeType === 'lottery') {
+    redirect(`/draft/${encodeURIComponent(context.draftId)}/lottery`)
+  }
+
+  // Live snake â€” gate non-members with notFound (do not reveal existence).
+  const allowed = await canAccessLeagueDraft(context.leagueId, userId)
+
+  console.warn('[drafts:access]', {
+    draftId,
+    leagueId: context.leagueId,
+    userId,
+    allowed,
+  })
+
+  if (!allowed) {
+    console.warn('[drafts:notFound] branch=access_denied', { draftId, leagueId: context.leagueId, userId })
+    notFound()
+  }
+
+  // Run pool cache check concurrently with session snapshot build.
+  // Triggers a background prewarm if cold so the pool has a head start
+  // before the client fetches GET /draft/pool.
+  const [poolCacheResult, initialSnapshot] = await Promise.all([
+    checkDraftPoolCacheFast(context.leagueId).catch(() => ({ warm: false as const })),
+    buildSessionSnapshot(context.leagueId, new Date(), userId).catch((err) => {
+      console.warn('[drafts:snapshot:error]', {
+        draftId,
+        leagueId: context.leagueId,
+        error: (err as Error)?.message ?? String(err),
+      })
+      return null
+    }),
+  ])
+
+  console.warn('[drafts:snapshot]', {
+    draftId,
+    leagueId: context.leagueId,
+    snapshot_null: initialSnapshot === null,
+    pool_warm: poolCacheResult.warm,
+  })
+
+  if (!poolCacheResult.warm) {
+    console.info('[drafts:page] pool cache cold â€” firing background prewarm', { leagueId: context.leagueId })
+    triggerDraftPoolPrewarmBackground(context.leagueId)
+  }
+
+  return (
+    <div
+      className={
+        !context.isDynasty &&
+        context.routeType === 'snake' &&
+        String(context.draftType).toLowerCase() !== 'auction'
+          ? 'min-h-screen bg-[radial-gradient(ellipse_100%_60%_at_50%_0%,rgba(34,211,238,0.08),transparent_50%)]'
+          : 'min-h-screen'
+      }
+    >
+      <DraftBoard
+        kind="live"
+        draftId={context.draftId}
+        leagueId={context.leagueId}
+        leagueName={context.leagueName}
+        sport={context.sport}
+        isDynasty={context.isDynasty}
+        isCommissioner={context.isCommissioner}
+        formatType={context.formatType}
+        presentationVariant={
+          !context.isDynasty &&
+          context.routeType === 'snake' &&
+          String(context.draftType).toLowerCase() !== 'auction'
+            ? 'redraft_snake'
+            : 'default'
+        }
+        initialSnapshot={initialSnapshot}
+      />
+    </div>
+  )
+}
+
+
+===== components/draft/DraftBoard.tsx =====
+import type { DraftSessionSnapshot } from '@/lib/live-draft-engine/types'
+import { DraftRoomPageClient } from '@/components/app/draft-room/DraftRoomPageClient'
+import { MockDraftSessionBoard } from '@/components/mock-draft/MockDraftSessionBoard'
+
+type LiveDraftBoardProps = {
+  kind: 'live'
+  draftId: string
+  leagueId: string
+  leagueName: string
+  sport: string
+  isDynasty: boolean
+  isCommissioner: boolean
+  formatType?: string
+  /** Snake redraft live room â€” enables premium chrome from `/draft/[id]/snake`. */
+  presentationVariant?: 'default' | 'redraft_snake'
+  /**
+   * Server-rendered snapshot (built via `buildSessionSnapshot` on the route)
+   * used to seed the client's first paint. Omit on legacy routes that fetch
+   * client-side.
+   */
+  initialSnapshot?: DraftSessionSnapshot | null
+}
+
+type MockDraftBoardProps = {
+  kind: 'mock'
+  draftId: string
+  canManage?: boolean
+}
+
+type DraftBoardProps = LiveDraftBoardProps | MockDraftBoardProps
+
+export function DraftBoard(props: DraftBoardProps) {
+  if (props.kind === 'mock') {
+    return <MockDraftSessionBoard draftId={props.draftId} canManage={props.canManage} />
+  }
+
+  return (
+    <DraftRoomPageClient
+      draftId={props.draftId}
+      leagueId={props.leagueId}
+      leagueName={props.leagueName}
+      sport={props.sport}
+      isDynasty={props.isDynasty}
+      isCommissioner={props.isCommissioner}
+      formatType={props.formatType}
+      presentationVariant={props.presentationVariant ?? 'default'}
+      initialSnapshot={props.initialSnapshot ?? null}
+    />
+  )
+}
+
+
+===== components/draft/DraftRoomPageClient.tsx =====
+MISSING FILE
+
+===== components/draft/DraftPlayerPool.tsx =====
+MISSING FILE
+
+===== components/draft/DraftQueuePanel.tsx =====
+MISSING FILE
+
+===== components/draft/DraftTimerBar.tsx =====
+MISSING FILE
+
+===== components/draft/DraftHeader.tsx =====
+MISSING FILE
+
+===== lib/draft-engine/index.ts =====
+/**
+ * Canonical draft engine facade â€” core logic lives in `lib/live-draft-engine/*`.
+ * Use these URLs and helpers for new integrations including redraft, mobile,
+ * Chimmy, specialty formats, and commissioner draft controls.
+ */
+
+export { generateFullPickOrder } from './order/generateFullPickOrder'
+export type { PlannedPickSlot } from './order/generateFullPickOrder'
+
+export * from './validation/draftInvariants'
+export * from './queue/autopickPreference'
+
+/** REST endpoints for league-scoped live drafts. */
+export const leagueDraftApi = {
+  session: (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/draft/session`,
+  pool: (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/draft/pool`,
+  pick: (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/draft/pick`,
+  queue: (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/draft/queue`,
+  controls: (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/draft/controls`,
+  actions: (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/draft/actions`,
+  chat: (leagueId: string) => `/api/leagues/${encodeURIComponent(leagueId)}/draft/chat`,
+} as const
+
+/** REST endpoints for draft-id routes and legacy standalone draft surfaces. */
+export const draftApi = {
+  session: leagueDraftApi.session,
+  pool: leagueDraftApi.pool,
+  pick: leagueDraftApi.pick,
+  queue: leagueDraftApi.queue,
+  controls: leagueDraftApi.controls,
+  actions: leagueDraftApi.actions,
+  chat: leagueDraftApi.chat,
+
+  pickByDraftId: (draftId: string) => `/api/draft/${encodeURIComponent(draftId)}/pick`,
+  stream: (draftId: string) => `/api/draft/stream/${encodeURIComponent(draftId)}`,
+
+  /**
+   * Legacy standalone draft room state endpoint.
+   * Do not use for new redraft league draft work.
+   */
+  legacyRoomState: () => `/api/draft/room/state`,
+} as const

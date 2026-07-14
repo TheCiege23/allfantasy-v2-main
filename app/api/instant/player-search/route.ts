@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/player-valuations/canonicalPlayerValuations'
 
 let cachedPlayers: any[] | null = null
 let cacheTime = 0

@@ -160,7 +160,7 @@ describe('createCanonicalLeagueInTransaction contract', () => {
           language: 'en',
           leagueType: 'redraft',
           leagueSize: 12,
-          scoring: 'PPR',
+          scoring: 'half_ppr',
           playoffTeams: 6,
         }),
       }),
@@ -191,7 +191,7 @@ describe('createCanonicalLeagueInTransaction contract', () => {
         data: expect.objectContaining({
           leagueId: 'league-1',
           formatKey: 'redraft',
-          scoringFormat: 'PPR',
+          scoringFormat: 'half_ppr',
           templateId: 'fb_half_ppr',
         }),
       }),

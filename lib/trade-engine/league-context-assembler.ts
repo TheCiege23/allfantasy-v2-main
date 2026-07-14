@@ -1,7 +1,7 @@
 import { prisma } from '../prisma'
 import { pricePlayer, type ValuationContext } from '../hybrid-valuation'
 import { getPlayerAnalyticsBatch, type PlayerAnalytics } from '../player-analytics'
-import { fetchFantasyCalcValues } from '../fantasycalc'
+import { fetchFantasyCalcValues } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { buildManagerProfile, type ManagerTendencyProfile } from './manager-tendency-engine'
 import {
   computeNeedsSurplus,
@@ -13,14 +13,14 @@ import { getPlayerADP, type ADPEntry } from '../adp-data'
 import { getPreAnalysisStatus } from '../trade-pre-analysis'
 import { convertSleeperToAssets } from './convertSleeperToAssets'
 import {
-  getAllPlayers,
-  getLeagueInfo,
-  getLeagueRosters,
-  getLeagueTransactions,
-  getLeagueUsers,
-  type SleeperUser,
-  type SleeperPlayer,
-} from '../sleeper-client'
+  expandRosterPositionTokens,
+  isSuperflexToken,
+  countStarterSlots,
+  countBenchSlots,
+} from './rosterPositionFormat'
+import { runImportedLeagueNormalizationPipeline } from '../league-import/ImportedLeagueNormalizationPipeline'
+import { IMPORT_PROVIDERS, type ImportProvider, type NormalizedImportResult } from '../league-import/types'
+import type { SleeperImportPayload } from '../league-import/adapters/sleeper/types'
 import {
   type LeagueDecisionContext,
   type LeagueTeamSnapshot,
@@ -38,25 +38,6 @@ import {
   computeSourceFreshness,
 } from './trade-decision-context'
 
-type SleeperRoster = {
-  roster_id: number
-  owner_id: string | null
-  co_owners?: string[] | null
-  players?: string[] | null
-  starters?: string[] | null
-  reserve?: string[] | null
-  taxi?: string[] | null
-  settings?: {
-    wins?: number
-    losses?: number
-    ties?: number
-    fpts?: number
-    fpts_decimal?: number
-    fpts_against?: number
-    fpts_against_decimal?: number
-  }
-}
-
 type RosterSlot = 'Starter' | 'Bench' | 'IR' | 'Taxi'
 
 type RosteredPlayer = {
@@ -70,7 +51,10 @@ type RosteredPlayer = {
 }
 
 type ParsedRoster = {
+  /** A stable numeric id for this call only — see resolveNumericRosterId's docstring for why this isn't always the provider's real id. */
   rosterId: number
+  /** The provider's real, canonical team/roster identifier — always prefer this over rosterId for cross-system references. */
+  sourceTeamId: string
   userId: string
   displayName: string
   avatar?: string
@@ -80,46 +64,57 @@ type ParsedRoster = {
   tradeCount: number
 }
 
-const playersCache: { at: number; data: Record<string, SleeperPlayer> | null } = { at: 0, data: null }
-const CACHE_TTL_MS = 6 * 60 * 60 * 1000
-
-async function getSleeperPlayers(): Promise<Record<string, SleeperPlayer>> {
-  const now = Date.now()
-  if (playersCache.data && now - playersCache.at < CACHE_TTL_MS) return playersCache.data
-  const data = await getAllPlayers()
-  playersCache.at = now
-  playersCache.data = data
-  return data
-}
-
 function isIdpPos(pos?: string) {
   const p = (pos || '').toUpperCase()
   return p === 'DL' || p === 'LB' || p === 'DB' || p === 'EDGE' || p === 'IDP'
 }
 
-function buildRoster(
+/**
+ * Builds a roster's classified player list from the provider-neutral
+ * `player_map` (name/position/team, keyed by the provider's own source
+ * player id) that every import adapter already produces — see
+ * lib/league-import/adapters/{sleeper,espn,yahoo,mfl,fantrax,fleaflicker}/*Adapter.ts,
+ * all six populate this field. Age is intentionally left undefined here:
+ * the original Sleeper-only implementation also set it from Sleeper's own
+ * player dict, but nothing downstream ever read `RosteredPlayer.age` again
+ * (verified by reading the rest of this file before refactoring it) — every
+ * real age-based calculation below uses FantasyCalc's own age data instead.
+ */
+function buildRosterFromPlayerMap(
   playerIds: string[],
   starters: Set<string>,
   reserve: Set<string>,
   taxi: Set<string>,
-  dict: Record<string, SleeperPlayer>
+  playerMap: Record<string, { name: string; position: string; team: string }>
 ): RosteredPlayer[] {
-  return playerIds.map(pid => {
-    const meta = dict[pid] || {}
-    const name =
-      meta.full_name ||
-      [meta.first_name, meta.last_name].filter(Boolean).join(' ') ||
-      pid
-    const pos = (meta.position || '').toUpperCase()
-    const team = (meta.team || '').toUpperCase() || undefined
+  return playerIds.map((pid) => {
+    const meta = playerMap[pid]
+    const name = meta?.name || pid
+    const pos = (meta?.position || '').toUpperCase()
+    const team = (meta?.team || '').toUpperCase() || undefined
 
     let slot: RosterSlot = 'Bench'
     if (starters.has(pid)) slot = 'Starter'
     else if (reserve.has(pid)) slot = 'IR'
     else if (taxi.has(pid)) slot = 'Taxi'
 
-    return { id: pid, name, pos: pos || 'UNK', team, slot, isIdp: isIdpPos(pos), age: meta.age }
+    return { id: pid, name, pos: pos || 'UNK', team, slot, isIdp: isIdpPos(pos) }
   })
+}
+
+/**
+ * A stable numeric id for THIS call only, keyed on array position when the
+ * provider's real team identifier isn't a clean integer (e.g. Yahoo's
+ * compound team keys like "423.l.116.t.4" — not parseable without losing
+ * information). Sleeper and ESPN's own ids already parse cleanly as
+ * integers, so this is a no-op for them. Every downstream reference that
+ * needs the REAL provider identifier uses `sourceTeamId` instead — see
+ * `ParsedRoster`/`LeagueTeamSnapshot.teamId`, which is always the true
+ * `source_team_id`, never this synthetic fallback.
+ */
+function resolveNumericRosterId(sourceTeamId: string, index: number): number {
+  const parsed = Number(sourceTeamId)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : index + 1
 }
 
 async function fetchInjuries(
@@ -194,10 +189,28 @@ function tendencyToPreferenceVector(t: ManagerTendencyProfile): ManagerPreferenc
   }
 }
 
+function resolveProvider(platform: string | undefined): ImportProvider {
+  const candidate = (platform || 'sleeper').toLowerCase()
+  const match = (IMPORT_PROVIDERS as readonly string[]).find((p) => p === candidate)
+  // Defaults to sleeper for an unrecognized value rather than throwing — matches
+  // the original code's own unconditional `platform || 'sleeper'` fallback
+  // behavior exactly, so every existing caller (which never passes `platform`
+  // today) sees identical behavior to before this refactor.
+  return (match as ImportProvider | undefined) ?? 'sleeper'
+}
+
 export interface BuildLeagueContextInput {
   leagueId: string
   username: string
   platform?: string
+  /**
+   * AllFantasy account id — required for ESPN/Yahoo/MFL/Fantrax (their fetch
+   * services resolve stored credentials by userId; see
+   * ImportedLeagueNormalizationPipeline.ts). Not required for Sleeper or
+   * Fleaflicker, matching every other provider-aware entry point in this
+   * codebase (e.g. app/api/leagues/import/commit/route.ts).
+   */
+  userId?: string
 }
 
 export async function buildLeagueDecisionContext(
@@ -206,70 +219,58 @@ export async function buildLeagueDecisionContext(
   const assembledAt = new Date().toISOString()
   const contextId = `ldc-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
   const warnings: string[] = []
-  const { leagueId, username, platform } = input
+  const { leagueId, username, userId } = input
+  const provider = resolveProvider(input.platform)
 
-  const [leagueData, rostersData, usersData, transactionsData] = await Promise.all([
-    getLeagueInfo(leagueId),
-    getLeagueRosters(leagueId),
-    getLeagueUsers(leagueId),
-    getLeagueTransactions(leagueId, 1).catch(() => []),
-  ])
-
-  if (!leagueData || !Array.isArray(rostersData) || !Array.isArray(usersData)) {
-    throw new Error('Failed to fetch league data from Sleeper')
+  const normalizationResult = await runImportedLeagueNormalizationPipeline({
+    provider,
+    sourceId: leagueId,
+    userId,
+  })
+  if (!normalizationResult.success) {
+    throw new Error(`Failed to fetch league data from ${provider}: ${normalizationResult.error}`)
   }
+  const normalized: NormalizedImportResult = normalizationResult.normalized
 
-  const tradeCountByRosterId: Record<number, number> = {}
-  let totalTrades = 0
-  let recentTrades = 0
-  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
-  for (const tx of transactionsData) {
-    if (tx.type === 'trade' && tx.roster_ids) {
-      totalTrades++
-      if (tx.status_updated && tx.status_updated * 1000 > thirtyDaysAgo) recentTrades++
-      for (const rid of tx.roster_ids) {
-        tradeCountByRosterId[rid] = (tradeCountByRosterId[rid] || 0) + 1
-      }
-    }
-  }
-
-  const userMap = new Map<string, SleeperUser>()
-  for (const u of usersData) userMap.set(u.user_id, u)
-
-  const scoringSettings = leagueData.scoring_settings || {}
-  const leagueSettings2 = leagueData.settings || {}
-  const rosterPositions: string[] = leagueData.roster_positions || []
+  const rawRosterPositions = (normalized.league.roster_positions as string[] | undefined) ?? []
+  const expandedPositions = expandRosterPositionTokens(rawRosterPositions)
+  const scoringSettings = (normalized.league.scoring_settings as Record<string, number> | undefined) ?? {}
   const scoringType =
     scoringSettings.rec === 1 ? 'PPR' :
     scoringSettings.rec === 0.5 ? 'Half PPR' :
     'Standard'
   const tepBonus = Number(scoringSettings.bonus_rec_te || 0)
   const isTEP = tepBonus > 0
-  const isSF = rosterPositions.some((p: string) => {
-    const up = String(p || '').toUpperCase()
-    return up === 'SUPER_FLEX' || up === 'SF'
-  })
-  const totalRosters = Number(leagueData.total_rosters)
-  const configuredTeams = Number((leagueSettings2 as { num_teams?: unknown }).num_teams)
-  const numTeams =
-    (Number.isFinite(totalRosters) && totalRosters > 0 ? totalRosters : null) ??
-    (Number.isFinite(configuredTeams) && configuredTeams > 0 ? configuredTeams : null) ??
-    12
-  const taxiSlots = Number(leagueSettings2.taxi_slots || 0)
-  const benchSlots = rosterPositions.filter((p: string) => String(p).toUpperCase() === 'BN').length
-  const starterSlots = rosterPositions.filter((p: string) => {
-    const up = String(p).toUpperCase()
-    return up !== 'BN' && up !== 'IR'
-  }).length
+  const isSF = expandedPositions.some(isSuperflexToken)
+  const numTeams = normalized.league.leagueSize > 0 ? normalized.league.leagueSize : 12
+  const benchSlots = countBenchSlots(expandedPositions)
+  const starterSlots = countStarterSlots(expandedPositions)
+
+  // Taxi squad SIZE (not which players are on it — that's normalized.rosters[].taxi_ids,
+  // already provider-neutral) is not yet captured by the normalization layer for any
+  // provider (confirmed: NormalizedLeagueSettings has no taxi_slots field). Sleeper's
+  // raw payload still carries it, so we preserve exact Sleeper behavior via the raw
+  // payload this phase's earlier work already threads through
+  // (ImportedLeagueNormalizationResult.rawPayload — see Phase 2B). Every other
+  // provider gets an honest 0 plus a data-quality warning, never a silent guess.
+  let taxiSlots = 0
+  if (provider === 'sleeper') {
+    const rawSleeperPayload = normalizationResult.rawPayload as SleeperImportPayload | undefined
+    taxiSlots = Number(rawSleeperPayload?.league?.settings?.taxi_slots ?? 0)
+  } else if (expandedPositions.length > 0) {
+    warnings.push(
+      `taxiSlots defaulted to 0: not yet captured by the ${provider} import normalization layer (only which players are on taxi is known, not the league-configured slot count).`
+    )
+  }
 
   const leagueSettingsObj: LeagueSettings = {
-    leagueName: leagueData.name || 'Dynasty League',
+    leagueName: normalized.league.name || 'Dynasty League',
     scoringType: scoringType as any,
     numTeams,
     isTEP,
     tepBonus,
     isSF,
-    rosterPositions,
+    rosterPositions: expandedPositions,
     starterSlots,
     benchSlots,
     taxiSlots,
@@ -281,39 +282,51 @@ export async function buildLeagueDecisionContext(
     ppr: scoringType === 'Standard' ? 0 : scoringType === 'Half PPR' ? 0.5 : 1,
   }
 
-  const dict = await getSleeperPlayers()
+  const playerMap = normalized.player_map ?? {}
+  if (Object.keys(playerMap).length === 0) {
+    warnings.push(`Player identity map is empty for this ${provider} import — player names/positions may be unavailable.`)
+  }
 
-  const parsedRosters: ParsedRoster[] = (rostersData as SleeperRoster[])
-    .filter(r => r.owner_id)
-    .map(r => {
-      const user = userMap.get(r.owner_id!)
-      const playerIds = (r.players || []).filter(Boolean)
-      const starters = new Set((r.starters || []).filter(Boolean))
-      const reserve = new Set((r.reserve || []).filter(Boolean))
-      const taxi = new Set((r.taxi || []).filter(Boolean))
-      const players = buildRoster(playerIds, starters, reserve, taxi, dict)
+  const tradeCountBySourceTeamId: Record<string, number> = {}
+  let totalTrades = 0
+  let recentTrades = 0
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+  for (const tx of normalized.transactions ?? []) {
+    if (tx.type === 'trade') {
+      totalTrades++
+      const createdMs = new Date(tx.created_at).getTime()
+      if (Number.isFinite(createdMs) && createdMs > thirtyDaysAgo) recentTrades++
+      for (const rid of tx.roster_ids ?? []) {
+        tradeCountBySourceTeamId[rid] = (tradeCountBySourceTeamId[rid] || 0) + 1
+      }
+    }
+  }
 
-      const wins = r.settings?.wins ?? 0
-      const losses = r.settings?.losses ?? 0
-      const ties = r.settings?.ties ?? 0
-      const fpts = (r.settings?.fpts ?? 0) + (r.settings?.fpts_decimal ?? 0) / 100
+  const parsedRosters: ParsedRoster[] = (normalized.rosters ?? [])
+    .filter((r) => r.source_manager_id)
+    .map((r, index) => {
+      const starters = new Set((r.starter_ids ?? []).filter(Boolean))
+      const reserve = new Set((r.reserve_ids ?? []).filter(Boolean))
+      const taxi = new Set((r.taxi_ids ?? []).filter(Boolean))
+      const players = buildRosterFromPlayerMap(r.player_ids ?? [], starters, reserve, taxi, playerMap)
 
       return {
-        rosterId: r.roster_id,
-        userId: r.owner_id!,
-        displayName: user?.display_name || user?.username || `Team ${r.roster_id}`,
-        avatar: user?.avatar ? `https://sleepercdn.com/avatars/thumbs/${user.avatar}` : undefined,
-        pointsFor: fpts,
-        record: { wins, losses, ...(ties > 0 ? { ties } : {}) },
+        rosterId: resolveNumericRosterId(r.source_team_id, index),
+        sourceTeamId: r.source_team_id,
+        userId: r.source_manager_id,
+        displayName: r.owner_name || r.team_name || `Team ${r.source_team_id}`,
+        avatar: r.avatar_url ?? undefined,
+        pointsFor: r.points_for,
+        record: { wins: r.wins, losses: r.losses, ...(r.ties > 0 ? { ties: r.ties } : {}) },
         players,
-        tradeCount: tradeCountByRosterId[r.roster_id] || 0,
+        tradeCount: tradeCountBySourceTeamId[r.source_team_id] || 0,
       }
     })
 
   let fcPlayers: any[] = []
   try {
     fcPlayers = await fetchFantasyCalcValues({
-      isDynasty: leagueSettings2.type === 2,
+      isDynasty: normalized.league.isDynasty,
       numQbs: isSF ? 2 : 1,
       numTeams,
       ppr: 1,
@@ -391,13 +404,18 @@ export async function buildLeagueDecisionContext(
     }
   }
 
+  // Sleeper-only cache (lib/trade-pre-analysis.ts keys entirely on sleeperUsername/
+  // sleeperLeagueId — a separate, out-of-scope module this phase does not touch).
+  // Gated to sleeper so a non-Sleeper username is never looked up against it.
   let cachedTendencies: Record<string, ManagerTendencyProfile> = {}
-  try {
-    const preAnalysis = await getPreAnalysisStatus(username, leagueId)
-    if (preAnalysis.status === 'ready' && preAnalysis.cache?.managerTendencies) {
-      cachedTendencies = preAnalysis.cache.managerTendencies as Record<string, ManagerTendencyProfile>
-    }
-  } catch {}
+  if (provider === 'sleeper') {
+    try {
+      const preAnalysis = await getPreAnalysisStatus(username, leagueId)
+      if (preAnalysis.status === 'ready' && preAnalysis.cache?.managerTendencies) {
+        cachedTendencies = preAnalysis.cache.managerTendencies as Record<string, ManagerTendencyProfile>
+      }
+    } catch {}
+  }
 
   const leagueAverage = parsedRosters.reduce((sum, r) => sum + r.pointsFor, 0) / Math.max(1, parsedRosters.length)
 
@@ -517,7 +535,7 @@ export async function buildLeagueDecisionContext(
     const tendency = cachedTendencies[r.userId] || null
 
     return {
-      teamId: String(r.rosterId),
+      teamId: r.sourceTeamId,
       teamName: r.displayName,
       rosterId: r.rosterId,
       userId: r.userId,
@@ -588,14 +606,14 @@ export async function buildLeagueDecisionContext(
 
     leagueConfig: {
       leagueId,
-      name: leagueData.name || 'Dynasty League',
-      platform: platform || 'sleeper',
+      name: normalized.league.name || 'Dynasty League',
+      platform: provider,
       scoringType,
       numTeams,
       isSF,
       isTEP,
       tepBonus,
-      rosterPositions,
+      rosterPositions: expandedPositions,
       starterSlots,
       benchSlots,
       taxiSlots,

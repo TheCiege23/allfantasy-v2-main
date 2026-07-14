@@ -51,7 +51,7 @@ describe('UserOsCard', () => {
     expect(screen.getByTestId('user-os-participation-tier')).toHaveTextContent('Elite')
     expect(screen.getByText('2')).toBeInTheDocument() // trades
     expect(screen.getByTestId('user-os-trend-available')).toHaveTextContent('increasing')
-    expect(screen.getByTestId('user-os-retention-risk')).toHaveTextContent('low')
+    expect(screen.getByTestId('user-os-retention-risk')).toHaveTextContent('Low')
   })
 
   it('shows the honest no_snapshots trend state, not a fabricated chart', () => {
@@ -75,8 +75,28 @@ describe('UserOsCard', () => {
         })}
       />,
     )
-    expect(screen.getByTestId('user-os-retention-risk')).toHaveTextContent('high')
+    expect(screen.getByTestId('user-os-retention-risk')).toHaveTextContent('High')
     expect(screen.getByText('inactive 14+ days')).toBeInTheDocument()
+  })
+
+  // Phase 36: insufficient_data must render as a clear, human-readable, non-alarming label —
+  // never the raw snake_case enum, never indistinguishable from a real negative judgment.
+  it('renders insufficient_data as "Insufficient data", not the raw enum, and explains what is missing', () => {
+    render(
+      <UserOsCard
+        snapshot={makeSnapshot({
+          teamHealth: {
+            participationTier: 'inactive', overallEngagementScore: 0, retentionRisk: 'insufficient_data',
+            retentionRiskReasons: ['No activity has been recorded for this league yet, so engagement cannot be assessed. This does not mean the manager is inactive.'],
+            isInactive: true, daysSinceLastActivity: null,
+          },
+        })}
+      />,
+    )
+    const el = screen.getByTestId('user-os-retention-risk')
+    expect(el).toHaveTextContent('Insufficient data')
+    expect(el).not.toHaveTextContent('insufficient_data')
+    expect(screen.getByText(/does not mean the manager is inactive/)).toBeInTheDocument()
   })
 
   it('shows an honest zero-activity state for an inactive manager, never fabricated', () => {

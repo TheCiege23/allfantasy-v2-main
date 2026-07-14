@@ -19,6 +19,7 @@ import { loadFantasyProviderHealth } from "@/lib/fantasy-data/providerHealth"
 import type { FantasyDataEvidenceSnapshot } from "@/lib/fantasy-data/fantasyDataEvidence"
 import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness"
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
+import { buildAiDataWarnings, type AiDataWarning, type FreshnessStatus } from "@/lib/production-health/productionHealthCore"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
 
@@ -190,6 +191,43 @@ export type LeagueGroundingPacket = {
   // ── AI enforcement ────────────────────────────────────────────────────────
   unavailable: string[]
   safeAnswerRules: string[]
+  /**
+   * Machine-readable freshness warnings per data type. Empty when all cited
+   * data is fresh/recent. Each entry carries an explicit instruction so Chimmy
+   * caveats or refuses rather than hallucinating from stale/missing data.
+   */
+  dataWarnings: AiDataWarning[]
+}
+
+/** Per-domain freshness for AI warnings, derived from evidence + overall tier. */
+function buildPacketDataWarnings(
+  sport: string,
+  evidence: FantasyDataEvidenceSnapshot | null,
+  freshness: FantasyFreshnessReport | null,
+): AiDataWarning[] {
+  if (!evidence) {
+    return buildAiDataWarnings(sport, {
+      players: "unavailable",
+      adp: "unavailable",
+      injuries: "unavailable",
+    })
+  }
+  // FantasyFreshnessTier and FreshnessStatus share the same string union.
+  const overall: FreshnessStatus = (freshness?.tier as FreshnessStatus) ?? "pending"
+  const unavailable = evidence.dataAvailability === "unavailable"
+  const domainCounts: Record<string, number> = {
+    players: evidence.players.count,
+    adp: evidence.adp.count,
+    projections: evidence.projections.count,
+    injuries: evidence.injuries.count,
+    schedules: evidence.schedules.count,
+    standings: evidence.standings.count,
+  }
+  const freshnessByType: Record<string, FreshnessStatus> = {}
+  for (const [domain, count] of Object.entries(domainCounts)) {
+    freshnessByType[domain] = count === 0 ? (unavailable ? "unavailable" : "pending") : overall
+  }
+  return buildAiDataWarnings(sport, freshnessByType)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -931,6 +969,7 @@ export async function buildLeagueSportsGroundingPacket(args: {
 
   const unavailable = buildUnavailableList(evidence, draft, managers)
   const safeAnswerRules = buildSafeAnswerRules(sport, freshness, evidence)
+  const dataWarnings = buildPacketDataWarnings(sport, evidence, freshness)
 
   return {
     sport,
@@ -961,6 +1000,7 @@ export async function buildLeagueSportsGroundingPacket(args: {
     standingsSummary,
     unavailable,
     safeAnswerRules,
+    dataWarnings,
   }
 }
 
@@ -969,12 +1009,13 @@ export async function buildLeagueSportsGroundingPacket(args: {
  * Enforcement fields are promoted to the top so the model sees them first.
  */
 export function serializeLeagueGroundingForPrompt(packet: LeagueGroundingPacket): string {
-  const { safeAnswerRules, unavailable, freshness, evidence, ...rest } = packet
+  const { safeAnswerRules, unavailable, freshness, evidence, dataWarnings, ...rest } = packet
   return JSON.stringify({
     _notice: "LEAGUE GROUNDING PACKET — only cite facts in this object. Never invent numbers.",
     _source: freshness?.summary ?? "Data freshness unknown.",
     _missing: unavailable,
     _rules: safeAnswerRules,
+    _dataWarnings: dataWarnings,
     freshness,
     evidence: evidence
       ? {

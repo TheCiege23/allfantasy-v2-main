@@ -3,15 +3,14 @@
  * Client-side language lives in LanguageProviderClient; this provides constants and validation.
  */
 
-import type { LanguageCode } from "./types"
+import { SUPPORTED_LANGUAGES, resolveLanguage as resolveCanonicalLanguage, type LanguageCode } from "@/lib/i18n/constants"
 
-export const SUPPORTED_LOCALES: LanguageCode[] = ["en", "es"]
+export const SUPPORTED_LOCALES: LanguageCode[] = [...SUPPORTED_LANGUAGES]
 
 export function isValidLanguage(value: string | null | undefined): value is LanguageCode {
-  return value === "en" || value === "es"
+  return SUPPORTED_LANGUAGES.includes(value as LanguageCode)
 }
 
 export function resolveLanguage(value: string | null | undefined): LanguageCode {
-  if (value === "en" || value === "es") return value
-  return "en"
+  return resolveCanonicalLanguage(value)
 }

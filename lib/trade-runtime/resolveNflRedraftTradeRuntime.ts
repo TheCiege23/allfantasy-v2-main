@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client'
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
 import type { CanonicalLeagueRuntimeEvent } from '@/lib/league-runtime/leagueRuntimeEvents'
 import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
+import { resolveLeagueTradeSettings, toRedraftProposalGovernance } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import {
   validateRedraftLineup,
   type RedraftLineupPlayer,
@@ -474,6 +475,10 @@ function persistedAssetData(proposalId: string, assets: NflRedraftTradeAssetInpu
 export async function createNflRedraftTradeProposal(input: CreateNflRedraftTradeProposalInput) {
   const resolved = await resolveNflRedraftTradeRuntime({ seasonId: input.seasonId, leagueId: input.leagueId })
   if (!resolved.ok) throw new Error(resolved.reason)
+  const league = await prisma.league.findUnique({ where: { id: resolved.state.leagueId } })
+  if (!league) throw new Error('league_not_found')
+  const effectiveSettings = resolveLeagueTradeSettings(league)
+  const governance = toRedraftProposalGovernance(effectiveSettings, resolved.state.teams.length)
   const validation = validateNflRedraftTradeProposal({
     state: resolved.state,
     proposerRosterId: input.proposerRosterId,
@@ -484,8 +489,8 @@ export async function createNflRedraftTradeProposal(input: CreateNflRedraftTrade
   if (!validation.ok) throw new Error(validation.message)
 
   const proposalId = crypto.randomUUID()
-  const vetoMode = normalizeVetoMode(input.vetoMode)
-  const vetoThreshold = Math.max(1, Math.floor(Number(input.vetoThreshold ?? 4)))
+  const vetoMode = governance.vetoMode
+  const vetoThreshold = governance.vetoThreshold
   const expiresAt = new Date(Date.now() + positiveHours(input.expiresInHours, resolved.state.settings.reviewHours) * 3600 * 1000)
   const created = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const proposal = await tx.redraftTradeProposal.create({
@@ -548,7 +553,7 @@ export async function createNflRedraftTradeProposal(input: CreateNflRedraftTrade
     )
   }
   await recordTradeLeagueEvents(events)
-  return { proposal: created, validation, events }
+  return { proposal: created, validation, events, governance }
 }
 
 function proposalAssetsForDb(assets: NflRedraftTradeAssetState[]): Prisma.InputJsonArray {

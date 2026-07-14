@@ -5,6 +5,7 @@
 
 import { prisma } from '@/lib/prisma'
 import { getNflScoringPreset, detectNflPresetMatch, buildFullNflScoringConfig, type NflScoringPresetKey, type NflScoringSource } from './NflScoringPresets'
+import { bridgeUiRulesToEngineCategoryPoints } from './scoringKeyBridge'
 
 const PREFIX = 'nfl_scoring_'
 
@@ -49,7 +50,33 @@ export async function saveLeagueNflScoringConfig(leagueId: string, config: { pre
   const currentSettings = (league?.settings as Record<string, unknown>) ?? {}
   const preset = getNflScoringPreset(config.presetKey)
   const warningFlags: string[] = []; if (preset.warning) warningFlags.push('external_preset')
-  await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...currentSettings, [`${PREFIX}config`]: { presetKey: config.presetKey, source: config.source ?? (config.presetKey === 'af_default' ? 'AF_DEFAULT' : config.presetKey === 'custom' ? 'CUSTOM' : 'PLATFORM_PRESET'), rules: config.rules, matchesPreset: detectNflPresetMatch(config.rules) === config.presetKey, premiumFeaturesUsed: config.premiumFeaturesUsed ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null, warningFlags } } } })
+
+  // R1: also write the CANONICAL engine store (`sportConfig.categoryPoints`) by
+  // bridging the UI rule keys → engine keys, so commissioner scoring edits made in
+  // the panel actually change scored points. `nfl_scoring_config` is preserved for
+  // the panel's own GET (backwards compatibility).
+  const currentSportConfig = (currentSettings.sportConfig as Record<string, unknown> | undefined) ?? {}
+  const categoryPoints = bridgeUiRulesToEngineCategoryPoints(config.rules)
+
+  await prisma.league.update({
+    where: { id: leagueId },
+    data: {
+      settings: {
+        ...currentSettings,
+        sportConfig: { ...currentSportConfig, categoryPoints },
+        [`${PREFIX}config`]: {
+          presetKey: config.presetKey,
+          source: config.source ?? (config.presetKey === 'af_default' ? 'AF_DEFAULT' : config.presetKey === 'custom' ? 'CUSTOM' : 'PLATFORM_PRESET'),
+          rules: config.rules,
+          matchesPreset: detectNflPresetMatch(config.rules) === config.presetKey,
+          premiumFeaturesUsed: config.premiumFeaturesUsed ?? false,
+          lastUpdatedAt: new Date().toISOString(),
+          lastUpdatedBy: config.userId ?? null,
+          warningFlags,
+        },
+      },
+    },
+  })
 }
 
 export async function applyDefaultNflScoringOnCreate(leagueId: string): Promise<void> {

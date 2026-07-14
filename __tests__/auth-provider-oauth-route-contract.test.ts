@@ -8,6 +8,7 @@ const encryptMock = vi.hoisted(() => vi.fn((value: string) => `enc:${value}`))
 const decryptMock = vi.hoisted(() => vi.fn())
 
 const yahooConnectionUpsertMock = vi.hoisted(() => vi.fn())
+const leagueAuthUpsertMock = vi.hoisted(() => vi.fn())
 const userProfileUpsertMock = vi.hoisted(() => vi.fn())
 const userProfileFindUniqueMock = vi.hoisted(() => vi.fn())
 const userProfileUpdateMock = vi.hoisted(() => vi.fn())
@@ -44,6 +45,9 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     yahooConnection: {
       upsert: yahooConnectionUpsertMock,
+    },
+    leagueAuth: {
+      upsert: leagueAuthUpsertMock,
     },
     userProfile: {
       upsert: userProfileUpsertMock,
@@ -84,6 +88,7 @@ describe("Auth provider OAuth route contracts", () => {
     authAccountDeleteManyMock.mockResolvedValue({ count: 0 })
     authAccountCreateMock.mockResolvedValue({})
     yahooConnectionUpsertMock.mockResolvedValue({})
+    leagueAuthUpsertMock.mockResolvedValue({})
     userProfileUpsertMock.mockResolvedValue({})
 
     vi.stubGlobal("fetch", vi.fn())
@@ -155,6 +160,38 @@ describe("Auth provider OAuth route contracts", () => {
     expect(res.status).toBe(307)
     expect(res.headers.get("location")).toContain("/af-legacy?yahoo_error=no_code")
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it("Yahoo callback bridges the real token into LeagueAuth so the commissioner-import pipeline can see it (Yahoo certification phase)", async () => {
+    ;(global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: "real-access-token", refresh_token: "real-refresh-token", expires_in: 3600 }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          fantasy_content: { users: [{ user: [{ guid: "yahoo-guid-1", profile: { display_name: "Real User" } }] }] },
+        }),
+      })
+
+    const { GET } = await import("@/app/api/auth/yahoo/callback/route")
+    const req = createMockNextRequest(
+      "http://localhost:3000/api/auth/yahoo/callback?code=abc&state=expected-state",
+      { headers: { cookie: "yahoo_oauth_state=expected-state; yahoo_oauth_user_id=u1" } }
+    )
+
+    const res = await GET(req as any)
+
+    expect(res.status).toBe(307)
+    expect(res.headers.get("location")).toContain("yahoo_connected=1")
+    expect(yahooConnectionUpsertMock).toHaveBeenCalled()
+    expect(leagueAuthUpsertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { userId_platform: { userId: "u1", platform: "yahoo" } },
+        create: expect.objectContaining({ userId: "u1", platform: "yahoo", oauthToken: "enc:real-access-token" }),
+      })
+    )
   })
 
   it("Discord disconnect keeps compatibility with legacy plaintext token", async () => {

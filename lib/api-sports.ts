@@ -491,7 +491,7 @@ export async function fetchAPISportsInjuriesByTeam(teamId: string, season: strin
   throw lastError instanceof Error ? lastError : new Error('Failed to fetch API-Sports injuries by team')
 }
 
-async function fetchAPISportsInjuriesViaTeamFanout(
+export async function fetchAPISportsInjuriesViaTeamFanout(
   season: string,
   opts?: { sport?: 'NFL' | 'NCAAF' }
 ): Promise<APISportsInjury[]> {

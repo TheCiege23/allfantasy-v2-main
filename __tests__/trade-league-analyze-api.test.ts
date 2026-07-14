@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { POST as legacyPost } from '@/server/api-route-modules/legacy/trade/league-analyze/route'
 
 vi.mock('@/lib/ai/openai-route-client', () => ({
@@ -76,7 +76,7 @@ vi.mock('@/lib/sleeper-client', () => ({
   })),
 }))
 
-vi.mock('@/lib/fantasycalc', () => ({
+vi.mock('@/lib/player-valuations/canonicalPlayerValuations', () => ({
   fetchFantasyCalcValues: vi.fn(async () => [
     { player: { name: 'Patrick Mahomes' }, value: 15000, overallRank: 1 },
     { player: { name: 'Josh Allen' }, value: 14000, overallRank: 2 },
@@ -88,16 +88,33 @@ vi.mock('@/lib/trade-pre-analysis', () => ({
 }))
 
 vi.mock('@/lib/hybrid-valuation', () => ({
-  pricePlayer: vi.fn(async () => ({ value: 10000 })),
+  pricePlayer: vi.fn(async (name: string) => ({
+    name,
+    value: 10000,
+    assetValue: {
+      marketValue: 10000,
+      impactValue: 8000,
+      vorpValue: 7000,
+      volatility: 0.2,
+    },
+  })),
 }))
 
 vi.mock('@/lib/trade-engine', () => ({
-  runTradeEngine: vi.fn(async () => ({
-    verdict: 'ACCEPT',
-    confidence: 0.82,
-    reasoning: 'Good value trade',
+  runTradeEngine: vi.fn(() => ({
+    validTrades: [
+      {
+        toRosterId: 2,
+        fairnessScore: 0.74,
+        acceptanceLabel: 'Strong',
+        give: [{ id: '123', name: 'Patrick Mahomes', pos: 'QB', value: 10000 }],
+        receive: [{ id: '126', name: 'Josh Allen', pos: 'QB', value: 9500 }],
+      },
+    ],
+    rejectedTrades: [],
+    stats: { candidatesGenerated: 1, candidatesRejected: 0, candidatesValid: 1 },
   })),
-  runAssistOrchestrator: vi.fn(async () => ({})),
+  runAssistOrchestrator: vi.fn(async (trades) => trades),
 }))
 
 vi.mock('@/lib/trade-engine/otb-persistence', () => ({
@@ -117,15 +134,86 @@ vi.mock('@/lib/decision-log', () => ({
 }))
 
 vi.mock('@/lib/analytics/confidence-risk-engine', () => ({
-  computeConfidenceRisk: vi.fn(() => ({ confidenceScore01: 0.82, riskProfile: 'moderate' })),
-  getHistoricalHitRate: vi.fn(() => 0.75),
+  computeConfidenceRisk: vi.fn(() => ({
+    confidenceScore01: 0.82,
+    numericConfidence: 82,
+    confidenceLevel: 'high',
+    volatilityLevel: 'Low',
+    riskProfile: 'moderate',
+    riskTags: [],
+    explanation: 'Mock confidence',
+  })),
+  getHistoricalHitRate: vi.fn(async () => 0.75),
 }))
 
 vi.mock('@/lib/trade-engine/league-context-assembler', () => ({
   buildLeagueDecisionContext: vi.fn(async () => ({
+    contextId: 'ctx-1',
     context: { leagueId: 'league-123' },
+    sourceFreshness: { sleeper: 'fresh' },
   })),
-  leagueContextToIntelligence: vi.fn(() => ({})),
+  leagueContextToIntelligence: vi.fn(() => ({
+    intelligence: {
+      assetsByRosterId: {
+        1: [{ id: '123', name: 'Patrick Mahomes', type: 'PLAYER', value: 10000 }],
+        2: [{ id: '126', name: 'Josh Allen', type: 'PLAYER', value: 9500 }],
+      },
+      managerProfiles: {
+        1: { displayName: 'User One' },
+        2: { displayName: 'User Two' },
+      },
+      settings: { isSF: true, isTEP: false },
+    },
+  })),
+}))
+
+vi.mock('@/lib/comprehensive-trade-learning', () => ({
+  getComprehensiveLearningContext: vi.fn(async () => 'Mock learning context'),
+}))
+
+vi.mock('@/lib/ai/ai-result-cache', () => ({
+  getOrCreateAiResult: vi.fn(async ({ feature, onCacheMiss }) => {
+    if (feature === 'legacy-trade-league-analyze') {
+      return {
+        cacheHit: false,
+        modelDurationMs: 1,
+        row: {
+          id: 'ai-result-1',
+          resultKey: 'result-key-1',
+          resultText: JSON.stringify([
+            {
+              targetManager: 'user2',
+              targetDisplayName: 'User Two',
+              theirNeeds: ['QB'],
+              yourSurplus: ['QB'],
+              suggestedTrades: [
+                {
+                  youGive: ['Patrick Mahomes'],
+                  youReceive: ['Josh Allen'],
+                  whyTheyAccept: 'QB swap',
+                  whyYouWin: 'Value edge',
+                  tradeGrade: 'B',
+                },
+              ],
+              overallFit: 'High',
+            },
+          ]),
+          resultJson: null,
+        },
+      }
+    }
+    const fallback = onCacheMiss ? await onCacheMiss() : { resultText: '{}', resultJson: { content: '{}' } }
+    return {
+      cacheHit: false,
+      modelDurationMs: 1,
+      row: {
+        id: 'ai-result-notes',
+        resultKey: 'result-key-notes',
+        resultText: fallback.resultText ?? '{}',
+        resultJson: fallback.resultJson ?? null,
+      },
+    }
+  }),
 }))
 
 vi.mock('@/lib/analytics-server', () => ({
@@ -140,6 +228,15 @@ vi.mock('@/lib/telemetry/usage', () => ({
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    tradeFeedback: {
+      findMany: vi.fn(async () => []),
+    },
+    tradePreferences: {
+      findUnique: vi.fn(async () => null),
+    },
+    leagueTradeHistory: {
+      findUnique: vi.fn(async () => null),
+    },
     sleeperImportCache: {
       upsert: vi.fn(async () => ({})),
     },
@@ -175,7 +272,7 @@ describe('trade/league-analyze API', () => {
       expect(response.status).toBe(200)
       expect(data).toBeDefined()
       // Trade suggestions should be an array or object with trade data
-      expect(data.suggestions || data.trades || data.analysis).toBeDefined()
+      expect(data.tradeSuggestions).toHaveLength(1)
     })
 
     it('validates required parameters', async () => {
@@ -268,15 +365,12 @@ describe('trade/league-analyze API', () => {
       const data = await response.json()
 
       // Assert
-      expect(response.status).toBe(404)
-      expect(data.error).toContain('League not found')
+      expect(response.status).toBe(502)
+      expect(data.error).toContain('Failed to fetch league info')
     })
 
     it('returns 404 when user not found in league', async () => {
       // Arrange
-      const { getSleeperUser } = await import('@/lib/sleeper-client')
-      vi.mocked(getSleeperUser).mockResolvedValueOnce(null)
-
       const request = new NextRequest('http://localhost:3000/api/legacy/trade/league-analyze', {
         method: 'POST',
         headers: {
@@ -296,7 +390,7 @@ describe('trade/league-analyze API', () => {
 
       // Assert
       expect(response.status).toBe(404)
-      expect(data.error).toContain('Sleeper user')
+      expect(data.error).toContain('User not found in league')
     })
 
     it('handles rate limiting', async () => {
@@ -327,7 +421,7 @@ describe('trade/league-analyze API', () => {
 
       // Assert
       expect(response.status).toBe(429)
-      expect(data.error).toContain('Rate limited')
+      expect(data.error).toContain('Rate limit')
     })
   })
 
@@ -426,7 +520,7 @@ describe('trade/league-analyze API', () => {
       // Assert
       if (response.status === 200) {
         // Response should include trade suggestions
-        expect(data.suggestions || data.trades || data.analysis).toBeDefined()
+        expect(data.tradeSuggestions).toBeDefined()
       }
     })
 
@@ -462,6 +556,12 @@ describe('trade/league-analyze API', () => {
       // Arrange
       const { getLeagueRosters } = await import('@/lib/sleeper-client')
       vi.mocked(getLeagueRosters).mockResolvedValueOnce([
+        {
+          roster_id: 1,
+          owner_id: 'other-user',
+          settings: { wins: 4, losses: 8 },
+          players: [],
+        },
         {
           roster_id: 2,
           owner_id: 'user-456',

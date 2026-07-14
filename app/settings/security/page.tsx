@@ -14,7 +14,7 @@ export default function SecuritySettingsPage() {
 
   if (loading && !profile) {
     return (
-      <div className="min-h-screen bg-[#07071a] px-4 py-10">
+      <div className="min-h-screen bg-app px-4 py-10 text-primary">
         <LoadingStateRenderer label={t("settings.securityPage.loading")} testId="settings-security-loading" />
       </div>
     )
@@ -22,7 +22,7 @@ export default function SecuritySettingsPage() {
 
   if (!profile) {
     return (
-      <div className="min-h-screen bg-[#07071a] px-4 py-10">
+      <div className="min-h-screen bg-app px-4 py-10 text-primary">
         <ErrorStateRenderer
           title={t("settings.securityPage.errorTitle")}
           message={error ?? t("settings.securityPage.tryAgain")}
@@ -34,7 +34,7 @@ export default function SecuritySettingsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#07071a] px-4 py-8 text-white">
+    <div className="min-h-screen bg-app px-4 py-8 text-primary">
       <div className="mx-auto max-w-xl">
         <Link
           href="/settings"

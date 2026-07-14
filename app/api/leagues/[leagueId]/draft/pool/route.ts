@@ -152,7 +152,33 @@ function stripPoolEntryFallbacks(payload: DraftPoolResponseBody): DraftPoolRespo
         strippedDisplay = { ...strippedDisplay, metadata }
       }
 
-      return { ...e, display: strippedDisplay }
+      const assets =
+        strippedDisplay.assets && typeof strippedDisplay.assets === 'object'
+          ? (strippedDisplay.assets as Record<string, unknown>)
+          : null
+      const headshotUrl =
+        typeof e.headshotUrl === 'string' && e.headshotUrl.trim()
+          ? e.headshotUrl
+          : typeof assets?.headshotUrl === 'string' && assets.headshotUrl.trim()
+            ? assets.headshotUrl
+            : null
+      const teamLogoUrl =
+        typeof e.teamLogoUrl === 'string' && e.teamLogoUrl.trim()
+          ? e.teamLogoUrl
+          : typeof assets?.teamLogoUrl === 'string' && assets.teamLogoUrl.trim()
+            ? assets.teamLogoUrl
+            : null
+
+      return {
+        ...e,
+        display: strippedDisplay,
+        headshotUrl,
+        imageUrl:
+          typeof e.imageUrl === 'string' && e.imageUrl.trim()
+            ? e.imageUrl
+            : headshotUrl,
+        teamLogoUrl,
+      }
     }),
   }
 }

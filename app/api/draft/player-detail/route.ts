@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { getTeamLogo } from '@/lib/players/getTeamLogo'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -129,7 +130,19 @@ export async function GET(req: NextRequest) {
       weight: seed?.weight ?? null,
       age: seed?.age ?? null,
       college: seed?.college ?? null,
-      headshotUrl: record?.headshotUrl ?? seed?.imageUrl ?? null,
+      headshotUrl:
+        record?.headshotUrl ??
+        record?.headshotUrlLg ??
+        record?.headshotUrlSm ??
+        seed?.imageUrl ??
+        null,
+      imageUrl:
+        record?.headshotUrl ??
+        record?.headshotUrlLg ??
+        record?.headshotUrlSm ??
+        seed?.imageUrl ??
+        null,
+      teamLogoUrl: getTeamLogo(team, sport),
       injuryStatus: record?.injuryStatus ?? seed?.status ?? null,
       injuryNotes: record?.injuryNotes ?? null,
       adp: record?.adp ?? null,

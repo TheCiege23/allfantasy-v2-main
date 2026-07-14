@@ -13,6 +13,7 @@ import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { ProposeTradeModal } from './ProposeTradeModal'
+import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
 export type TradesTabProps = {
   league: UserLeague
@@ -110,7 +111,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         error?: string
       } | null
       if (!res.ok) {
-        setErr(typeof data?.error === 'string' ? data.error : 'Could not load trades.')
+        setErr('Could not load trades.')
         setTradeBlock([])
         setActiveTrades([])
         setActiveCount(0)
@@ -163,9 +164,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/trades/${encodeURIComponent(tradeId)}/${path}`, {
           method: 'POST',
         })
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        await res.json().catch(() => ({}))
         if (!res.ok) {
-          setActionErr(data.error ?? `Failed to ${path} trade.`)
+          setActionErr(`We could not ${path} this trade. Nothing was changed. Try again.`)
           return
         }
         await load()
@@ -188,9 +189,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ decision }),
         })
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        await res.json().catch(() => ({}))
         if (!res.ok) {
-          setActionErr(data.error ?? 'Failed to record commissioner decision.')
+          setActionErr('We could not save that commissioner decision. Nothing was changed. Try again.')
           return
         }
         await load()
@@ -280,7 +281,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 <div className="h-3 w-40 rounded bg-white/10" />
               </div>
             ) : err ? (
-              <p className="py-10 text-center text-sm text-amber-300/90">{err}</p>
+              <LeagueSurfaceState
+                kind="error"
+                title="Trades unavailable"
+                description="We could not load this league's trades. Existing offers were not changed."
+                actionLabel="Retry trades"
+                onAction={() => void load()}
+                compact
+                testId="league-trades-error"
+              />
             ) : (panelMode === 'review' ? reviewTrades : activeTrades).length === 0 ? (
               panelMode === 'review' ? (
                 <div className="flex flex-col items-center py-10 text-center">

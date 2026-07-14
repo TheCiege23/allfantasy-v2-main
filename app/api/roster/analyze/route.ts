@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { fetchFantasyCalcValues, type FantasyCalcPlayer, type FantasyCalcSettings } from '@/lib/fantasycalc';
+import { fetchFantasyCalcValues, type FantasyCalcPlayer, type FantasyCalcSettings } from '@/lib/player-valuations/canonicalPlayerValuations';
 
 interface RosterInsight {
   title: string;

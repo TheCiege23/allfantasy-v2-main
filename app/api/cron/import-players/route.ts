@@ -14,6 +14,7 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
+import { withSyncJobRun, extractCommonCounts } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -43,7 +44,11 @@ async function handle(req: NextRequest) {
       })
     }
 
-    const result = await runSportsDataImporter({ sports })
+    const result = await withSyncJobRun(
+      { jobName: "cron-import-players", sport: sports?.join(",") ?? "ALL", provider: "multi", trigger: "cron" },
+      () => runSportsDataImporter({ sports }),
+      extractCommonCounts,
+    )
 
     return NextResponse.json({
       ok: true,

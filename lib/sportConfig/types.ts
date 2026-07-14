@@ -13,6 +13,15 @@ export type ScoringCategory = {
   minForBonus?: number
   /** When set, category only applies if this toggle is active (e.g. IDP, TE_PREMIUM). */
   requiresToggle?: string
+  /**
+   * Threshold-tier categories (e.g. team-defense points/yards allowed): the
+   * category awards `defaultPoints` when the single stat at `tierStatKey` falls
+   * within `[tierMin, tierMax]` (inclusive). Exactly one tier in a band matches,
+   * mirroring the `minForBonus` bonus mechanism without redesigning the scorer.
+   */
+  tierStatKey?: string
+  tierMin?: number
+  tierMax?: number
 }
 
 export type ScoringPreset = {

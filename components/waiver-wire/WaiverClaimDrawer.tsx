@@ -167,7 +167,7 @@ export default function WaiverClaimDrawer({
           </p>
         )}
         <p className="mt-1 text-[11px] text-white/50">
-          Claims will be processed according to your league&apos;s waiver settings. AI suggestions are advisory only and do
+          Claims will be processed according to your league&apos;s waiver settings. Decision Support suggestions are advisory only and do
           not guarantee that a claim will succeed.
         </p>
       </div>
@@ -211,4 +211,3 @@ export default function WaiverClaimDrawer({
     </>
   )
 }
-

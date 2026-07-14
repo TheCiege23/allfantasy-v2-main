@@ -48,6 +48,12 @@ export function validateTradeAssets(params: {
     return { ok: false, code: 'NO_ASSETS', message: 'At least one asset is required.' }
   }
 
+  const perSide = new Map<string, number>()
+  for (const asset of assets) perSide.set(asset.fromRosterId, (perSide.get(asset.fromRosterId) ?? 0) + 1)
+  if (settings.maxAssetsPerSide != null && [...perSide.values()].some((count) => count > settings.maxAssetsPerSide!)) {
+    return { ok: false, code: 'MAX_ASSETS_PER_SIDE', message: `A trade side exceeds the persisted maximum of ${settings.maxAssetsPerSide} assets.` }
+  }
+
   const rosterIds = new Set([proposer.id, receiver.id])
   const seen = new Set<string>()
 
@@ -62,6 +68,13 @@ export function validateTradeAssets(params: {
     const t = a.itemType as TradeItemType
     if (!TRADE_ITEM_TYPES.includes(t)) {
       return { ok: false, code: 'INVALID_ITEM_TYPE', message: `Unknown itemType: ${a.itemType}` }
+    }
+
+    if (t === 'future_pick') {
+      return { ok: false, code: 'FUTURE_REDRAFT_PICK_UNSUPPORTED', message: 'Future-season picks are not valid redraft trade assets.' }
+    }
+    if (a.metadata?.conditional === true || a.metadata?.condition != null) {
+      return { ok: false, code: 'CONDITIONAL_TRADE_UNSUPPORTED', message: 'Conditional trade assets are not supported.' }
     }
 
     if (t === 'faab') {

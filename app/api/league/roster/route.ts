@@ -11,6 +11,7 @@ import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupL
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { getRedraftDefaultContract } from '@/lib/league-concepts/redraftDefaults'
 import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { resolveRedraftCurrentWeek } from '@/lib/redraft/resolveRedraftCurrentWeek'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -242,7 +243,18 @@ export async function GET(req: NextRequest) {
         rosterTemplateId = `${String(leagueSport).toLowerCase()}-redraft-default`
       }
     }
-const leagueWeek = weekFromLeagueSettings(league.settings)
+    let redraftSeasonCurrentWeek: number | null = null
+    if (useLockedFootballRedraftSlots) {
+      const redraftSeason = await prisma.redraftSeason.findFirst({
+        where: { leagueId },
+        select: { currentWeek: true },
+      })
+      redraftSeasonCurrentWeek = redraftSeason?.currentWeek ?? null
+    }
+    const leagueWeek = resolveRedraftCurrentWeek({
+      redraftSeasonCurrentWeek,
+      legacySettingsWeek: weekFromLeagueSettings(league.settings),
+    })
     const lockCtx = await resolveFullLineupLockContext({
       leagueId,
       rosterId: roster.id,

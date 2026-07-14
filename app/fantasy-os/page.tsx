@@ -5,6 +5,8 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import type { UserLeague } from '@/app/dashboard/types'
 import { resolveTenantBrand } from '@/lib/white-label'
 import FantasyOsGateway from './FantasyOsGateway'
+import { redirect } from 'next/navigation'
+import { canAccessFantasyOS } from '@/lib/fantasy-os/access'
 
 const BRAND = resolveTenantBrand()
 
@@ -25,9 +27,21 @@ export const dynamic = 'force-dynamic'
  * active white-label tenant are preserved; no provider branding appears on this executive surface.
  */
 export default async function FantasyOsPage() {
-  const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
+  const session = (await getServerSession(authOptions as never)) as {
+    user?: { id?: string; email?: string | null; role?: string | null }
+  } | null
   const userId = typeof session?.user?.id === 'string' ? session.user.id.trim() : ''
   const isAuthenticated = userId.length > 0
+
+  // Security boundary: Fantasy OS is an enterprise workspace. Only platform admin, owner, or an
+  // active enterprise entitlement may enter; everyone else (including unauthenticated) is redirected
+  // to the dashboard. The URL alone never exposes the workspace — nav/cards are convenience only.
+  const allowed = await canAccessFantasyOS({
+    userId: userId || null,
+    email: session?.user?.email ?? null,
+    role: session?.user?.role ?? null,
+  })
+  if (!allowed) redirect('/dashboard')
 
   const payload = isAuthenticated ? await getDashboardLeagueListForUser(userId).catch(() => null) : null
   const leaguesRaw = (payload?.leagues ?? []) as UserLeague[]

@@ -77,6 +77,42 @@ const NFL_SCORING_BASE: ScoringCategory[] = [
   { key: 'idp_safety', label: 'Safety', defaultPoints: 2, isToggleable: true, group: 'idp', sport: 'NFL', requiresToggle: 'IDP' },
   { key: 'idp_tfl', label: 'Tackle For Loss', defaultPoints: 1, isToggleable: true, group: 'idp', sport: 'NFL', requiresToggle: 'IDP' },
   { key: 'idp_qb_hit', label: 'QB Hit', defaultPoints: 0.5, isToggleable: true, group: 'idp', sport: 'NFL', requiresToggle: 'IDP' },
+
+  // ── Team Defense / Special Teams (DST) ───────────────────────────────────
+  // Always active (most leagues start a DEF), commissioner-overridable. These
+  // score off team-defense stat keys (def_*) that only a team-defense roster row
+  // carries, so offensive players are unaffected. See gap G8 in
+  // docs/redraft-commissioner-scoring-contract.md.
+  { key: 'def_sack', label: 'DST Sack', defaultPoints: 1, isToggleable: true, group: 'team_def', sport: 'NFL' },
+  { key: 'def_int', label: 'DST Interception', defaultPoints: 2, isToggleable: true, group: 'team_def', sport: 'NFL' },
+  { key: 'def_fr', label: 'DST Fumble Recovery', defaultPoints: 2, isToggleable: true, group: 'team_def', sport: 'NFL' },
+  { key: 'def_safety', label: 'DST Safety', defaultPoints: 2, isToggleable: true, group: 'team_def', sport: 'NFL' },
+  { key: 'def_blk_kick', label: 'DST Blocked Kick', defaultPoints: 2, isToggleable: true, group: 'team_def', sport: 'NFL' },
+  { key: 'def_td', label: 'DST Defensive TD', defaultPoints: 6, isToggleable: true, group: 'team_def', sport: 'NFL' },
+  { key: 'def_st_td', label: 'DST Special-Teams / Return TD', defaultPoints: 6, isToggleable: true, group: 'team_def', sport: 'NFL' },
+  // Return yardage (G9) — 0 by default; commissioner enables a per-yard value.
+  { key: 'def_kr_yd', label: 'DST Kick Return Yards', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'per_yard' },
+  { key: 'def_pr_yd', label: 'DST Punt Return Yards', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'per_yard' },
+
+  // Points-allowed tiers — the team-defense row carries a single
+  // `def_points_allowed` value; exactly one tier matches it.
+  { key: 'def_pa_0', label: 'DST Points Allowed: 0', defaultPoints: 10, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'pa_tier', tierStatKey: 'def_points_allowed', tierMin: 0, tierMax: 0 },
+  { key: 'def_pa_1_6', label: 'DST Points Allowed: 1–6', defaultPoints: 7, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'pa_tier', tierStatKey: 'def_points_allowed', tierMin: 1, tierMax: 6 },
+  { key: 'def_pa_7_13', label: 'DST Points Allowed: 7–13', defaultPoints: 4, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'pa_tier', tierStatKey: 'def_points_allowed', tierMin: 7, tierMax: 13 },
+  { key: 'def_pa_14_20', label: 'DST Points Allowed: 14–20', defaultPoints: 1, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'pa_tier', tierStatKey: 'def_points_allowed', tierMin: 14, tierMax: 20 },
+  { key: 'def_pa_21_27', label: 'DST Points Allowed: 21–27', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'pa_tier', tierStatKey: 'def_points_allowed', tierMin: 21, tierMax: 27 },
+  { key: 'def_pa_28_34', label: 'DST Points Allowed: 28–34', defaultPoints: -1, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'pa_tier', tierStatKey: 'def_points_allowed', tierMin: 28, tierMax: 34 },
+  { key: 'def_pa_35_plus', label: 'DST Points Allowed: 35+', defaultPoints: -4, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'pa_tier', tierStatKey: 'def_points_allowed', tierMin: 35 },
+
+  // Yards-allowed tiers — optional (off by default: 0 pts), commissioner can
+  // value them. Inert until a provider supplies `def_yds_allowed` (see G8 doc).
+  { key: 'def_ya_0_99', label: 'DST Yards Allowed: <100', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 0, tierMax: 99 },
+  { key: 'def_ya_100_199', label: 'DST Yards Allowed: 100–199', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 100, tierMax: 199 },
+  { key: 'def_ya_200_299', label: 'DST Yards Allowed: 200–299', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 200, tierMax: 299 },
+  { key: 'def_ya_300_349', label: 'DST Yards Allowed: 300–349', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 300, tierMax: 349 },
+  { key: 'def_ya_350_399', label: 'DST Yards Allowed: 350–399', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 350, tierMax: 399 },
+  { key: 'def_ya_400_449', label: 'DST Yards Allowed: 400–449', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 400, tierMax: 449 },
+  { key: 'def_ya_450_plus', label: 'DST Yards Allowed: 450+', defaultPoints: 0, isToggleable: true, group: 'team_def', sport: 'NFL', unit: 'ya_tier', tierStatKey: 'def_yds_allowed', tierMin: 450 },
 ]
 
 function nflPreset(name: string, recPoints: number): ScoringPreset {

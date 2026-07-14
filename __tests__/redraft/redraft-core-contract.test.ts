@@ -38,11 +38,16 @@ describe('redraft core contract hardening', () => {
 
     expect(plan.eligible).toBe(true)
     expect(plan.settingsChanged).toBe(true)
-    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 1, WR: 2, TE: 1, DEF: 1 })
+    // The input is the legacy standard map (FLEX/DST aliases); repair normalizes it
+    // to the current canonical NFL redraft contract — the full 9-starter lineup
+    // QB/RB/RB/WR/WR/TE/FLX/K/DEF (counts unchanged, only FLEX→FLX, DST→DEF).
+    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 2, TE: 1, FLX: 1, K: 1, DEF: 1 })
     expect(plan.nextSettings.scoring_preset_id).toBe('fb_full_ppr')
     expect(plan.draftSession.shouldCreate).toBe(false)
     expect(plan.draftSession.shouldUpdate).toBe(true)
-    expect(plan.draftSession.data.rounds).toBe(12)
+    // Draft rounds = draftable roster slots for the canonical contract: 9 starters
+    // + 6 bench = 15 (IR is not drafted). slotOrder has one entry per team (12).
+    expect(plan.draftSession.data.rounds).toBe(15)
     expect(plan.draftSession.data.slotOrder).toHaveLength(12)
   })
 
@@ -67,6 +72,27 @@ describe('redraft core contract hardening', () => {
     expect(plan.nextSettings.scoring_preset_id).toBe('custom_college_power')
     expect(plan.draftSession.shouldCreate).toBe(false)
     expect(plan.draftSession.shouldUpdate).toBe(false)
+  })
+
+  it('preserves a customized slot map that omits a default position (no kicker back-fill)', () => {
+    // A deliberately kicker-less, non-legacy NFL custom map must survive repair
+    // unchanged — contract repair must not re-inject the default K slot. This is
+    // the base-engine guarantee future formats rely on.
+    const plan = buildRedraftContractRepairPlan({
+      sport: 'NFL',
+      leagueType: 'redraft',
+      teamCount: 10,
+      settings: {
+        starter_slots: { QB: 1, RB: 2, WR: 3, TE: 1, FLX: 1, DEF: 1 },
+        scoring_preset_id: 'fb_ppr',
+      },
+      draftSession: { status: 'pre_draft', slotOrder: [] },
+      rosters: [{ id: 'r1' }],
+      teams: [{ ownerName: 'Commish' }],
+    })
+
+    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 3, TE: 1, FLX: 1, DEF: 1 })
+    expect((plan.nextSettings.starter_slots as Record<string, number>).K).toBeUndefined()
   })
 
   it('is idempotent after the first repair pass', () => {

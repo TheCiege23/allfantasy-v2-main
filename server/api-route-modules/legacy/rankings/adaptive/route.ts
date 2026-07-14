@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
+import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/player-valuations/canonicalPlayerValuations'
 import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { computeAdaptiveRankings, type RankingView } from '@/lib/rankings-engine/adaptive-rankings'
 import { computeLeagueDemandIndex } from '@/lib/rankings-engine/league-demand-index'

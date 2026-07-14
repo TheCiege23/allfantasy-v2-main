@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { assertLifecycleActionAllowed } from '@/server/services/leagueLifecycleService'
 import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { validateTradeAssets } from '@/lib/league-trade-engine/tradeValidationService'
-import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
+import { isPastTradeDeadline, resolveLeagueTradeSettings, toRedraftProposalGovernance } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import { applyTradeAssetsInTransaction } from '@/lib/league-trade-engine/tradeProcessor'
 import {
   appendAfTradeProcessingEvent,
@@ -19,6 +19,8 @@ import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTra
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { captureLiveTradeOffer, captureLiveTradeOutcome } from '@/lib/league-trade-engine/tradeLearningCapture'
+import { recordTradeOutcomeSignal } from '@/lib/shared-services/knowledge-graph/TradeSignalHook'
+import { EVENT, getPlatformEvents } from '@/lib/events'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -48,7 +50,7 @@ function mapReviewToTradeReviewType(mode: string): string {
   return 'commissioner'
 }
 
-export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { currentWeek?: number | null }): Promise<{ id: string }> {
+export async function createAfLeagueTrade(input: CreateLeagueTradeInput): Promise<{ id: string; governance: ReturnType<typeof toRedraftProposalGovernance> }> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
 
@@ -76,13 +78,15 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
   if (!rosterTxGate.ok) throw new Error(rosterTxGate.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  const currentSeason = await prisma.redraftSeason.findFirst({ where: { leagueId: input.leagueId }, orderBy: { createdAt: 'desc' }, select: { currentWeek: true } })
+  const currentWeek = currentSeason?.currentWeek ?? null
   const v = validateTradeAssets({
     league,
     settings,
     proposer,
     receiver,
     assets: input.assets,
-    currentWeek: input.currentWeek ?? null,
+    currentWeek,
   })
   if (!v.ok) throw new Error(v.message)
 
@@ -178,7 +182,8 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
     dedupeKey: `af_trade:${trade.id}:created`,
   })
 
-  return { id: trade.id }
+  const eligibleRosterCount = await prisma.roster.count({ where: { leagueId: input.leagueId } })
+  return { id: trade.id, governance: toRedraftProposalGovernance(settings, eligibleRosterCount) }
 }
 
 export async function acceptAfLeagueTrade(input: {
@@ -217,6 +222,8 @@ export async function acceptAfLeagueTrade(input: {
   if (!life.ok) throw new Error(life.err.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  const currentSeason = await prisma.redraftSeason.findFirst({ where: { leagueId: input.leagueId }, orderBy: { createdAt: 'desc' }, select: { currentWeek: true } })
+  if (isPastTradeDeadline(league, currentSeason?.currentWeek ?? null)) throw new Error('Trade deadline has passed')
   const reviewType = trade.reviewType
 
   if (reviewType === 'instant') {
@@ -299,6 +306,10 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
   if (!rosterTxGateFinalize.ok) throw new Error(rosterTxGateFinalize.error)
 
   const settings = resolveLeagueTradeSettings(league)
+  const currentSeason = await prisma.redraftSeason.findFirst({ where: { leagueId: trade.leagueId }, orderBy: { createdAt: 'desc' }, select: { currentWeek: true } })
+  if (!trade.acceptedAt && isPastTradeDeadline(league, currentSeason?.currentWeek ?? null)) {
+    throw new Error('Trade deadline has passed')
+  }
   const delayH = settings.processingDelayHours ?? trade.processingDelayHours ?? 0
 
   if (trade.status === 'scheduled' && trade.scheduledProcessAt && trade.scheduledProcessAt > new Date()) {
@@ -336,6 +347,14 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
   }))
 
   await prisma.$transaction(async (tx) => {
+    const executedAt = new Date()
+    const snapshotId = crypto.randomUUID()
+    const executionIdempotencyKey = `trade-execute:${trade.id}`
+    const rosterIds = [trade.proposerRosterId, trade.receiverRosterId]
+    const [beforeRosters, beforeSalaries] = await Promise.all([
+      tx.roster.findMany({ where: { id: { in: rosterIds }, leagueId: trade.leagueId }, select: { id: true, playerData: true, faabRemaining: true } }),
+      tx.iDPSalaryRecord.findMany({ where: { leagueId: trade.leagueId, rosterId: { in: rosterIds }, status: { in: ['active', 'franchise_tagged'] } }, select: { id: true, rosterId: true, playerId: true, salary: true, status: true } }),
+    ])
     await applyTradeAssetsInTransaction(tx, {
       leagueId: trade.leagueId,
       proposerRosterId: trade.proposerRosterId,
@@ -344,8 +363,27 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
     })
     await tx.afLeagueTrade.update({
       where: { id: trade.id },
-      data: { status: 'processed', processedAt: new Date() },
+      data: { status: 'processed', processedAt: executedAt },
     })
+    const [afterRosters, afterSalaries] = await Promise.all([
+      tx.roster.findMany({ where: { id: { in: rosterIds }, leagueId: trade.leagueId }, select: { id: true, playerData: true, faabRemaining: true } }),
+      tx.iDPSalaryRecord.findMany({ where: { leagueId: trade.leagueId, rosterId: { in: rosterIds }, status: { in: ['active', 'franchise_tagged'] } }, select: { id: true, rosterId: true, playerId: true, salary: true, status: true } }),
+    ])
+    const playerAssets = assets.filter((asset) => asset.itemType === 'player' && asset.itemReference)
+    const faabTransfers = assets.filter((asset) => asset.itemType === 'faab').map((asset) => ({ fromFranchiseId: asset.fromRosterId, toFranchiseId: asset.toRosterId, amount: Math.max(0, Number(asset.faabAmount ?? asset.metadata?.amount ?? 0)) }))
+    const idpSalaryTransfers = beforeSalaries.filter((salary) => playerAssets.some((asset) => asset.itemReference === salary.playerId && asset.fromRosterId === salary.rosterId)).map((salary) => ({ playerId: salary.playerId, fromFranchiseId: salary.rosterId, toFranchiseId: playerAssets.find((asset) => asset.itemReference === salary.playerId && asset.fromRosterId === salary.rosterId)!.toRosterId, salary: salary.salary }))
+    const assetSummary = { playerIds: playerAssets.map((asset) => asset.itemReference!), faabTransfers, idpSalaryTransfers, draftAssetIds: assets.filter((asset) => asset.itemType.includes('pick')).map((asset) => asset.itemReference ?? '') }
+    const season = await tx.redraftSeason.findFirst({ where: { leagueId: trade.leagueId }, orderBy: { createdAt: 'desc' }, select: { id: true, sport: true } })
+    const event = await getPlatformEvents().emitInTx(tx, EVENT.TRADE_EXECUTED, { leagueId: trade.leagueId, seasonId: season?.id ?? null, sport: season?.sport ?? String(league.sport), leagueConcept: 'redraft', actor: { type: 'user', id: input.actorUserId }, idempotencyKey: executionIdempotencyKey, source: 'generic_trade_engine', subjects: [{ kind: 'trade', id: trade.id }, { kind: 'trade_snapshot', id: snapshotId }], payload: { tradeId: trade.id, snapshotId, sendingFranchiseIds: [...new Set(assets.map((asset) => asset.fromRosterId))], receivingFranchiseIds: [...new Set(assets.map((asset) => asset.toRosterId))], assetSummary, governanceMode: settings.processingMode, settingsVersion: settings.settingsVersion, scoringVersion: settings.scoringVersion, completeness: 'complete', source: 'generic_trade_engine' } })
+    const evidenceAt = executedAt.toISOString()
+    await tx.tradeExecutionSnapshot.create({ data: { id: snapshotId, tradeId: trade.id, tradeSource: 'generic_trade_engine', genericTradeId: trade.id, leagueId: trade.leagueId, seasonId: season?.id ?? null, executionIdempotencyKey, eventId: event.eventId, executedAt, executedByActorId: input.actorUserId, executedByActorRole: 'user', governance: { processingMode: settings.processingMode, settingsVersion: settings.settingsVersion, scoringVersion: settings.scoringVersion, tradeDeadlineWeek: settings.tradeDeadlineWeek, reviewWindowMinutes: settings.reviewWindowMinutes }, validations: {
+      deadline: { check: 'trade_deadline', result: 'passed', subjectId: null, detail: 'rechecked at finalize', evaluatedAt: evidenceAt },
+      locks: [],
+      acquisitions: [],
+      rosterLegality: [],
+      assetLimits: { check: 'per_side_asset_limit', result: 'skipped', subjectId: null, detail: 'generic engine does not enforce a persisted per-side asset limit', evaluatedAt: evidenceAt },
+    }, beforeState: { tradeStatus: trade.status, rosters: beforeRosters, idpSalaries: beforeSalaries }, afterState: { tradeStatus: 'processed', rosters: afterRosters, idpSalaries: afterSalaries }, assetSummary, dependencies: {}, completeness: 'complete' } })
+    await tx.leagueAuditLog.create({ data: { leagueId: trade.leagueId, userId: input.actorUserId, actionType: 'trade_execution_snapshot_created', entityType: 'trade_execution_snapshot', entityId: snapshotId, beforeState: { tradeStatus: trade.status }, afterState: { tradeStatus: 'processed' }, metadata: { tradeId: trade.id, eventId: event.eventId, executionIdempotencyKey } } })
     await appendAfTradeStatusHistory({
       tradeId: trade.id,
       fromStatus: trade.status,
@@ -367,6 +405,14 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
   // ADR's behavior-preservation strategy (a capture failure must never roll
   // back an already-successful trade). Fails safe, never throws.
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+  await recordTradeOutcomeSignal({
+    tradeId: trade.id,
+    leagueId: trade.leagueId,
+    proposerRosterId: trade.proposerRosterId,
+    receiverRosterId: trade.receiverRosterId,
+    outcome: 'trade_accepted',
+    emittedFrom: 'tradeService.finalizeAfLeagueTradeProcessing',
+  })
 
   recordProductEvent(ENGAGEMENT.TRADE_PROCESSED, {
     userId: input.actorUserId,
@@ -411,6 +457,14 @@ export async function commissionerAfTradeDecision(input: {
       reason: 'commissioner_reject',
     })
     await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
+    await recordTradeOutcomeSignal({
+      tradeId: trade.id,
+      leagueId: input.leagueId,
+      proposerRosterId: trade.proposerRosterId,
+      receiverRosterId: trade.receiverRosterId,
+      outcome: 'trade_rejected',
+      emittedFrom: 'tradeService.commissionerAfTradeDecision',
+    })
     return
   }
 
@@ -443,6 +497,14 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
     reason: 'rejected',
   })
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
+  await recordTradeOutcomeSignal({
+    tradeId: trade.id,
+    leagueId: input.leagueId,
+    proposerRosterId: trade.proposerRosterId,
+    receiverRosterId: trade.receiverRosterId,
+    outcome: 'trade_rejected',
+    emittedFrom: 'tradeService.rejectAfLeagueTrade',
+  })
 }
 
 export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {
@@ -469,6 +531,14 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
     actorUserId: input.userId,
   })
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'cancelled' })
+  await recordTradeOutcomeSignal({
+    tradeId: trade.id,
+    leagueId: input.leagueId,
+    proposerRosterId: trade.proposerRosterId,
+    receiverRosterId: trade.receiverRosterId,
+    outcome: 'trade_cancelled',
+    emittedFrom: 'tradeService.cancelAfLeagueTrade',
+  })
 }
 
 export async function castAfTradeVetoVote(input: {
@@ -523,6 +593,14 @@ export async function castAfTradeVetoVote(input: {
       reason: 'veto_threshold',
     })
     await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'vetoed' })
+    await recordTradeOutcomeSignal({
+      tradeId: trade.id,
+      leagueId: input.leagueId,
+      proposerRosterId: trade.proposerRosterId,
+      receiverRosterId: trade.receiverRosterId,
+      outcome: 'trade_vetoed',
+      emittedFrom: 'tradeService.castAfTradeVetoVote',
+    })
   }
 }
 

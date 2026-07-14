@@ -11,8 +11,12 @@ const PROPOSER = 'roster-A'
 const RECEIVER = 'roster-B'
 
 function makeTx(faab: Record<string, number> = {}, movedCount = 1) {
+  const balances = { ...faab }
   const calls = {
     playerUpdates: [] as Array<{ where: unknown; data: unknown }>,
+    // One entry per successful atomic $executeRaw guarded update (mirrors the real
+    // UPDATE "redraft_rosters" SET "faabBalance" = "faabBalance" + $delta WHERE
+    // id = $rosterId AND ... >= 0 statement — see lib/redraft/tradeSettlement.ts).
     rosterUpdates: [] as Array<{ id: string; faabBalance: number }>,
   }
   const tx = {
@@ -22,15 +26,16 @@ function makeTx(faab: Record<string, number> = {}, movedCount = 1) {
         return { count: movedCount }
       }),
     },
-    redraftRoster: {
-      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({
-        faabBalance: faab[where.id] ?? 0,
-      })),
-      update: vi.fn(async ({ where, data }: { where: { id: string }; data: { faabBalance: number } }) => {
-        calls.rosterUpdates.push({ id: where.id, faabBalance: data.faabBalance })
-        return {}
-      }),
-    },
+    // Simulates the atomic guarded UPDATE: tagged-template call, interpolated
+    // values are [delta, rosterId, delta] matching the real query's parameter order.
+    $executeRaw: vi.fn(async (_strings: TemplateStringsArray, delta: number, rosterId: string) => {
+      const current = balances[rosterId] ?? 0
+      const next = current + delta
+      if (next < 0) return 0
+      balances[rosterId] = next
+      calls.rosterUpdates.push({ id: rosterId, faabBalance: next })
+      return 1
+    }),
   }
   return { tx: tx as never, calls }
 }

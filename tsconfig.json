@@ -45,7 +45,9 @@
     "instrumentation.ts",
     "pages/**/*.ts",
     "pages/**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next-dev-local/types/**/*.ts",
+    ".next-playwright-3101/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

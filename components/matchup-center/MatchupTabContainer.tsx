@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Loader2, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { MatchupCenterPayload } from '@/lib/matchup-center/types'
 import { MatchupHeaderCard } from '@/components/matchup-center/MatchupHeaderCard'
@@ -18,6 +18,7 @@ import type { LeagueMatchupAiResult, StartSitAiResult } from '@/lib/ai-matchup-e
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { sendProductAnalyticsBeacon } from '@/lib/analytics/client'
 import { cn } from '@/lib/utils'
+import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
 function matchupRelativeAge(loadedAt: number | null, nowMs: number): string {
   if (!loadedAt) return ''
@@ -148,7 +149,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
       void load({ silent: true })
     }, ms)
     return () => window.clearInterval(id)
-  }, [payload?.refreshIntervalMs, payload?.matchupStatus, season, week, load])
+  }, [payload, season, week, load])
 
   const rows = useMemo(() => (payload ? zipStarters(payload.left, payload.right) : []), [payload])
 
@@ -206,9 +207,9 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
             className={cn(
               'text-[10px]',
               nowMs - loadedAt < 90_000
-                ? 'text-white/30'
+                ? 'text-muted'
                 : nowMs - loadedAt < 300_000
-                  ? 'text-white/45'
+                  ? 'text-muted'
                   : 'text-amber-300',
             )}
           >
@@ -218,13 +219,25 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
       </div>
 
       {loading && !payload ? (
-        <div className="flex justify-center py-16 text-cyan-300/90">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
+        <LeagueSurfaceState
+          kind="loading"
+          title="Loading matchup"
+          description={`Preparing both lineups and scoring for week ${week}.`}
+          compact
+          testId="league-matchup-loading"
+        />
       ) : null}
 
       {error ? (
-        <div className="rounded-xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-sm text-red-100/90">{error}</div>
+        <LeagueSurfaceState
+          kind="error"
+          title="Matchup unavailable"
+          description="We could not load this matchup. Your lineup was not changed."
+          actionLabel="Retry matchup"
+          onAction={() => void load()}
+          compact
+          testId="league-matchup-error"
+        />
       ) : null}
 
       {payload ? (
@@ -254,11 +267,15 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
               })()
             }}
           />
-          <div className="rounded-2xl border border-white/[0.08] bg-[#060b18]/80 px-2">
+          <div className="rounded-2xl border border-subtle bg-surface px-2">
             {rows.length === 0 ? (
-              <p className="py-8 text-center text-sm text-white/45">
-                No starter rows yet — set your lineup for week {payload.week}, or run weekly scoring.
-              </p>
+              <LeagueSurfaceState
+                kind="empty"
+                title="No starters yet"
+                description={`Set a lineup for week ${payload.week}. Player contributions appear here after starters are assigned.`}
+                compact
+                testId="league-matchup-empty-lineup"
+              />
             ) : (
               rows.map((row, i) => (
                 <MatchupStarterRow

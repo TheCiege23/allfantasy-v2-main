@@ -17,12 +17,19 @@ import { ImportedLeagueConflictError } from '@/lib/league-import/ImportedLeagueC
 import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
-import { assertImportCommissioner, recordImportAttestation } from '@/lib/league-import/commissionerGate'
+import { assertImportCommissioner, recordImportAttestation, recordCommissionerVerificationMethod } from '@/lib/league-import/commissionerGate'
+import {
+  runSleeperImportValidation,
+  toImportWarningRecords,
+  type SleeperImportValidationResult,
+} from '@/lib/league-import/sleeper/SleeperImportValidation'
+import type { SleeperImportPayload } from '@/lib/league-import/adapters/sleeper/types'
 
 function mapImportCommitErrorStatus(code: string): number {
   if (code === 'LEAGUE_NOT_FOUND') return 404
   if (code === 'UNAUTHORIZED') return 401
   if (code === 'CONNECTION_REQUIRED') return 400
+  if (code === 'NORMALIZATION_FAILED') return 422
   return 500
 }
 
@@ -35,7 +42,12 @@ export async function POST(req: NextRequest) {
   let body: {
     provider?: string
     sourceId?: string
-    attestation?: { accepted?: boolean; statement?: string }
+    attestation?: {
+      accepted?: boolean
+      statement?: string
+      confirmedProvider?: string
+      confirmedSourceLeagueId?: string
+    }
     /** When true, re-import over an existing league instead of returning 409. */
     force?: boolean
   }
@@ -72,10 +84,21 @@ export async function POST(req: NextRequest) {
     // providers where commissioner status is determinable (Sleeper); no-op for others.
     requireCommissioner: true,
     attestation: body.attestation?.accepted
-      ? { accepted: true, statement: body.attestation.statement }
+      ? {
+          accepted: true,
+          statement: body.attestation.statement,
+          confirmedProvider: resolveProvider(body.attestation.confirmedProvider ?? '') ?? undefined,
+          confirmedSourceLeagueId: body.attestation.confirmedSourceLeagueId,
+        }
       : undefined,
   })
   if (!gate.ok) {
+    if (gate.notFound) {
+      return NextResponse.json(
+        { error: gate.reason ?? 'League not found.', code: 'LEAGUE_NOT_FOUND' },
+        { status: 404 },
+      )
+    }
     return NextResponse.json(
       {
         error: gate.reason ?? 'Commissioner verification failed.',
@@ -100,12 +123,22 @@ export async function POST(req: NextRequest) {
 
   try {
     const canonical = buildCanonicalImportBundle(result.normalized)
+    let validation: SleeperImportValidationResult | undefined
+    if (provider === 'sleeper') {
+      try {
+        validation = await runSleeperImportValidation(result.rawPayload as SleeperImportPayload, auth.userId)
+      } catch (validationError) {
+        console.warn('[import commit] Sleeper validation failed (import still proceeds):', validationError)
+      }
+    }
+    const additionalWarnings = validation ? toImportWarningRecords(validation.findings) : undefined
     const { persisted, runId } = await persistImportWithCanonicalAudit({
       userId: auth.userId,
       provider,
       normalized: result.normalized,
       canonical,
       allowUpdateExisting: Boolean(body.force),
+      additionalWarnings,
     })
 
     // Stamp the attestation on the new league so the gate is auditable.
@@ -116,17 +149,38 @@ export async function POST(req: NextRequest) {
         provider,
         sourceLeagueId: sourceId,
         attestation: { accepted: true, statement: body.attestation.statement },
+        importRunId: runId,
       }).catch(() => {})
     }
 
-    return NextResponse.json({
+    // Import Security Closure phase (Part 10) — always record how
+    // commissioner status was established, not just when it was an
+    // attestation. Every full-league commit answers "provider-verified" vs
+    // "user-attested" vs "no commissioner claim required" from this one
+    // durable field, without inferring it from other data.
+    void recordCommissionerVerificationMethod({
       leagueId: persisted.league.id,
-      name: persisted.league.name,
-      sport: persisted.league.sport,
-      league: persisted.league,
-      historicalBackfill: persisted.historicalBackfill,
+      appUserId: auth.userId,
+      provider,
+      sourceLeagueId: sourceId,
+      method: gate.verification === 'attestation' ? 'attestation' : gate.verification === 'api' ? 'api' : 'membership-only',
+      sourceManagerId: gate.sourceManagerId,
       importRunId: runId,
-    })
+    }).catch(() => {})
+
+    return NextResponse.json(
+      {
+        leagueId: persisted.league.id,
+        name: persisted.league.name,
+        sport: persisted.league.sport,
+        league: persisted.league,
+        historicalBackfill: persisted.historicalBackfill,
+        importRunId: runId,
+        replayed: Boolean(persisted.existed),
+        validation,
+      },
+      { status: persisted.existed ? 200 : 201 },
+    )
   } catch (error) {
     if (error instanceof ImportedLeagueConflictError) {
       return NextResponse.json(

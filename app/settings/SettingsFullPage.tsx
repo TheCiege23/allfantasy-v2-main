@@ -14,9 +14,9 @@ import { SubscriptionGateModal } from "@/components/subscription/SubscriptionGat
 import type { AutoCoachUserPreferences } from "@/lib/autocoach/autoCoachPreferences"
 
 const CARD =
-  "rounded-2xl border border-white/[0.07] bg-white/[0.03] p-5 mb-4"
+  "card-premium mb-4 p-5"
 
-const LABEL = "mb-1 block text-[11px] font-medium uppercase tracking-wide text-white/40"
+const LABEL = "mb-1 block text-[11px] font-medium uppercase tracking-wide text-muted"
 
 const ACCENT_SWATCHES = [
   { id: "cyan", hex: "#06b6d4" },
@@ -83,7 +83,7 @@ function ToggleRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-3 py-2">
-      <span className="text-sm text-white/85">{label}</span>
+      <span className="text-sm text-secondary">{label}</span>
       <button
         type="button"
         role="switch"
@@ -91,11 +91,11 @@ function ToggleRow({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full px-0.5 transition-colors ${
-          checked ? "bg-cyan-500" : "bg-white/10"
+          checked ? "bg-brand-primary" : "bg-surface-hover"
         } ${disabled ? "opacity-50" : ""}`}
       >
         <span
-          className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+          className={`h-4 w-4 rounded-full bg-surface shadow transition-transform ${
             checked ? "translate-x-4" : "translate-x-0"
           }`}
         />
@@ -477,9 +477,9 @@ export default function SettingsFullPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#07071a] text-white">
+    <div className="min-h-screen bg-app text-primary">
       <div className="mx-auto max-w-xl px-4 py-6 pb-24">
-        <div className="mb-6 flex flex-col gap-4 border-b border-white/[0.06] pb-6 sm:flex-row sm:items-start sm:justify-between">
+        <div className="mb-6 flex flex-col gap-4 border-b border-subtle pb-6 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <Link
               href="/dashboard"
@@ -488,19 +488,19 @@ export default function SettingsFullPage() {
               <ArrowLeft className="h-4 w-4" />
               ← Dashboard
             </Link>
-            <h1 className="text-xl font-bold text-white">Settings</h1>
+            <h1 className="text-xl font-bold text-primary">Settings</h1>
           </div>
           <button
             type="button"
             onClick={() => void signOut({ callbackUrl: "/" })}
-            className="shrink-0 self-start rounded-xl border border-white/15 bg-white/[0.06] px-4 py-2 text-sm font-medium text-white/90 transition hover:bg-white/10"
+            className="shrink-0 self-start rounded-xl border border-subtle bg-surface-muted px-4 py-2 text-sm font-medium text-secondary transition hover:bg-surface-hover"
           >
             Log out
           </button>
         </div>
 
         {loading && !profile ? (
-          <p className="text-sm text-white/55">Loading settings…</p>
+          <p className="text-sm text-muted">Loading settings…</p>
         ) : !profile ? (
           <div className="space-y-4">
             <div
@@ -526,7 +526,7 @@ export default function SettingsFullPage() {
 
             {/* 1. Profile */}
         <section className={CARD}>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/50">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
             Profile
           </h2>
           <div className="mb-5 flex items-center gap-4">
@@ -552,7 +552,7 @@ export default function SettingsFullPage() {
               className="hidden"
               onChange={handleAvatarFile}
             />
-            <p className="text-xs text-white/45">
+            <p className="text-xs text-muted">
               {avatarUploading ? "Uploading…" : "Click to upload a new photo (max 2MB)."}
             </p>
           </div>
@@ -566,7 +566,7 @@ export default function SettingsFullPage() {
                 id="displayName"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-cyan-500/40"
+                className="w-full rounded-xl border border-subtle bg-surface-muted px-3 py-2 text-sm text-primary outline-none placeholder:text-muted focus:border-brand-primary/40"
                 autoComplete="name"
               />
             </div>
@@ -578,7 +578,7 @@ export default function SettingsFullPage() {
                 id="username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-cyan-500/40"
+                className="w-full rounded-xl border border-subtle bg-surface-muted px-3 py-2 text-sm text-primary outline-none placeholder:text-muted focus:border-brand-primary/40"
                 autoComplete="username"
               />
             </div>
@@ -591,7 +591,7 @@ export default function SettingsFullPage() {
                 value={email}
                 disabled
                 readOnly
-                className="w-full cursor-not-allowed rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-sm text-white/50"
+                className="w-full cursor-not-allowed rounded-xl border border-subtle bg-surface-muted px-3 py-2 text-sm text-muted"
               />
             </div>
             <div>
@@ -604,15 +604,15 @@ export default function SettingsFullPage() {
                 maxLength={160}
                 onChange={(e) => setBio(e.target.value)}
                 rows={3}
-                className="w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white outline-none placeholder:text-white/30 focus:border-cyan-500/40"
+                className="w-full resize-none rounded-xl border border-subtle bg-surface-muted px-3 py-2 text-sm text-primary outline-none placeholder:text-muted focus:border-brand-primary/40"
                 placeholder="Short bio…"
               />
-              <p className="mt-1 text-right text-[10px] text-white/35">{bio.length}/160</p>
+              <p className="mt-1 text-right text-[10px] text-muted">{bio.length}/160</p>
             </div>
             <button
               type="submit"
               disabled={saving}
-              className="rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-black transition hover:bg-cyan-400 disabled:opacity-50"
+              className="rounded-xl bg-brand-primary px-4 py-2 text-sm font-semibold text-content-inverse transition hover:bg-brand-strong disabled:opacity-50"
             >
               {saving ? "Saving…" : "Save profile"}
             </button>
@@ -634,11 +634,11 @@ export default function SettingsFullPage() {
 
         {/* 3. Notifications */}
         <section className={CARD}>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-white/50">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
             Notifications
           </h2>
-          <p className="mb-3 text-xs text-white/40">Changes save automatically.</p>
-          <div className="divide-y divide-white/[0.06]">
+          <p className="mb-3 text-xs text-muted">Changes save automatically.</p>
+          <div className="divide-y divide-subtle">
             <ToggleRow
               label="Waiver wire closes"
               checked={toggles.waiverWireCloses}
@@ -673,15 +673,15 @@ export default function SettingsFullPage() {
         </section>
 
         <section className={CARD}>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-white/50">
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
             AI Auto Start/Sit Protection
           </h2>
-          <p className="mb-3 text-xs text-white/40">
+          <p className="mb-3 text-xs text-muted">
             Master switch: pause all leagues. When on, enable per league on each team tab. Uses live status and
             Start/Sit projections; swaps only before each player&apos;s game — not Best Ball, not in-game fixes.
           </p>
           <div className="flex items-center justify-between gap-3 py-1">
-            <span className="text-sm text-white/85">Protection active (all leagues)</span>
+            <span className="text-sm text-secondary">Protection active (all leagues)</span>
             <button
               type="button"
               role="switch"
@@ -696,33 +696,33 @@ export default function SettingsFullPage() {
                 void persistAutoCoachGlobal(!autoCoachGlobal)
               }}
               className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full px-0.5 transition-colors ${
-                autoCoachGlobal && hasProAutoCoach ? "bg-cyan-500" : "bg-white/10"
+                autoCoachGlobal && hasProAutoCoach ? "bg-brand-primary" : "bg-surface-hover"
               } ${!hasProAutoCoach ? "cursor-pointer opacity-50" : ""}`}
             >
               <span
-                className={`h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                className={`h-4 w-4 rounded-full bg-surface shadow transition-transform ${
                   autoCoachGlobal && hasProAutoCoach ? "translate-x-4" : "translate-x-0"
                 }`}
               />
             </button>
           </div>
           {!hasProAutoCoach ? (
-            <p className="mt-2 text-[11px] text-white/35">
+            <p className="mt-2 text-[11px] text-muted">
               Requires AF Pro — tap the toggle to see upgrade options.
             </p>
           ) : null}
 
-          <div className="mt-4 border-t border-white/[0.06] pt-3">
+          <div className="mt-4 border-t border-subtle pt-3">
             {hasProAutoCoach && autoCoachGlobal ? (
               <AutoCoachPreferencesPanel />
             ) : (
-              <p className="text-[11px] text-white/40">
+              <p className="text-[11px] text-muted">
                 Enable AutoCoach globally above to manage preferences.
               </p>
             )}
           </div>
 
-          <div className="mt-4 border-t border-white/[0.06] pt-3">
+          <div className="mt-4 border-t border-subtle pt-3">
             <button
               type="button"
               onClick={() => {
@@ -737,22 +737,22 @@ export default function SettingsFullPage() {
             {swapLogsOpen ? (
               <div className="mt-2 space-y-2">
                 {swapLogsLoading ? (
-                  <p className="text-[11px] text-white/40">Loading…</p>
+                  <p className="text-[11px] text-muted">Loading…</p>
                 ) : swapLogs.length === 0 ? (
-                  <p className="text-[11px] text-white/40">No swaps logged yet.</p>
+                  <p className="text-[11px] text-muted">No swaps logged yet.</p>
                 ) : (
-                  <ul className="max-h-56 space-y-2 overflow-y-auto text-[11px] text-white/70">
+                  <ul className="max-h-56 space-y-2 overflow-y-auto text-[11px] text-secondary">
                     {swapLogs.map((s) => (
                       <li
                         key={s.id}
-                        className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5"
+                        className="rounded-lg border border-subtle bg-surface-muted px-2 py-1.5"
                       >
-                        <p className="font-medium text-white/85">
+                        <p className="font-medium text-secondary">
                           {s.playerOutName} ({s.playerOutStatus}) → {s.playerInName}
                         </p>
-                        <p className="text-white/45">{new Date(s.swapMadeAt).toLocaleString()}</p>
+                        <p className="text-muted">{new Date(s.swapMadeAt).toLocaleString()}</p>
                         {s.decisionNotes ? (
-                          <p className="mt-0.5 text-white/35">{s.decisionNotes}</p>
+                          <p className="mt-0.5 text-muted">{s.decisionNotes}</p>
                         ) : null}
                       </li>
                     ))}
@@ -769,12 +769,12 @@ export default function SettingsFullPage() {
 
         {/* 4. Subscription & Billing */}
         <section className={CARD} data-testid="settings-subscription-section">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/50">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
             Subscription &amp; Billing
           </h2>
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
-              <p className="text-sm font-medium text-white/85">
+              <p className="text-sm font-medium text-secondary">
                 {proAutoCoachEnt.isActiveOrGrace
                   ? proAutoCoachEnt.entitlement?.plans?.length
                     ? `Active: ${proAutoCoachEnt.entitlement.plans.join(", ").replace(/\b\w/g, (c) => c.toUpperCase())}`
@@ -785,7 +785,7 @@ export default function SettingsFullPage() {
                   ? "Subscription expired"
                   : "Free plan"}
               </p>
-              <p className="mt-0.5 text-[11px] text-white/40">
+              <p className="mt-0.5 text-[11px] text-muted">
                 {proAutoCoachEnt.isActiveOrGrace
                   ? "Full AI features unlocked."
                   : "Upgrade to unlock Chimmy AI, bracket analysis, and commissioner tools."}
@@ -804,7 +804,7 @@ export default function SettingsFullPage() {
               <a
                 href="/api/subscription/billing-portal"
                 data-testid="settings-billing-portal-link"
-                className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-sm font-medium text-white/70 hover:bg-white/[0.07]"
+                className="rounded-xl border border-subtle bg-surface-muted px-4 py-3 text-center text-sm font-medium text-secondary hover:bg-surface-hover"
               >
                 Manage billing &amp; invoices
               </a>
@@ -814,7 +814,7 @@ export default function SettingsFullPage() {
 
         {/* 5. Appearance */}
         <section className={CARD}>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/50">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
             Appearance
           </h2>
           <p className={LABEL}>Theme</p>
@@ -828,7 +828,7 @@ export default function SettingsFullPage() {
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition ${
                   theme === t
                     ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
-                    : "border-white/[0.08] bg-white/[0.04] text-white/70 hover:bg-white/[0.07]"
+                    : "border-subtle bg-surface-muted text-secondary hover:bg-surface-hover"
                 }`}
               >
                 {t}
@@ -858,7 +858,7 @@ export default function SettingsFullPage() {
 
         {/* 5. Fantasy preferences */}
         <section className={CARD}>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/50">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
             Fantasy preferences
           </h2>
           <form onSubmit={(e) => void handleSaveFantasy(e)} className="space-y-4">
@@ -873,7 +873,7 @@ export default function SettingsFullPage() {
                     className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                       primarySport === s
                         ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
-                        : "border-white/[0.08] bg-white/[0.04] text-white/70"
+                        : "border-subtle bg-surface-muted text-secondary"
                     }`}
                   >
                     {s}
@@ -892,7 +892,7 @@ export default function SettingsFullPage() {
                     className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${
                       defaultScoring === s
                         ? "border-cyan-500/30 bg-cyan-500/20 text-cyan-400"
-                        : "border-white/[0.08] bg-white/[0.04] text-white/70"
+                        : "border-subtle bg-surface-muted text-secondary"
                     }`}
                   >
                     {s}
@@ -909,7 +909,7 @@ export default function SettingsFullPage() {
                 value={favoriteTeam}
                 onChange={(e) => setFavoriteTeam(e.target.value)}
                 placeholder="e.g. Kansas City Chiefs"
-                className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white outline-none placeholder:text-white/30"
+                className="w-full rounded-xl border border-subtle bg-surface-muted px-3 py-2 text-sm text-primary outline-none placeholder:text-muted"
               />
             </div>
             <button
@@ -924,20 +924,20 @@ export default function SettingsFullPage() {
 
         {/* 7. Account */}
         <section className={CARD}>
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/50">
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted">
             Account
           </h2>
           <div className="flex flex-col gap-2">
             <Link
               href="/settings/security"
-              className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-center text-sm font-medium text-white hover:bg-white/[0.07]"
+              className="rounded-xl border border-subtle bg-surface-muted px-4 py-3 text-center text-sm font-medium text-primary hover:bg-surface-hover"
             >
               Change password
             </Link>
             <button
               type="button"
               onClick={() => void handleExport()}
-              className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-3 text-sm font-medium text-white hover:bg-white/[0.07]"
+              className="rounded-xl border border-subtle bg-surface-muted px-4 py-3 text-sm font-medium text-primary hover:bg-surface-hover"
             >
               Export my data
             </button>
@@ -962,17 +962,17 @@ export default function SettingsFullPage() {
           <div
             role="dialog"
             aria-modal="true"
-            className="w-full max-w-md rounded-2xl border border-white/[0.1] bg-[#0c1020] p-5 shadow-xl"
+            className="w-full max-w-md rounded-2xl border border-subtle bg-surface p-5 shadow-popover"
           >
-            <h3 className="text-lg font-semibold text-white">Delete account</h3>
-            <p className="mt-2 text-sm text-white/55">
-              This cannot be undone. Type <span className="font-mono text-white/90">DELETE</span> to
+            <h3 className="text-lg font-semibold text-primary">Delete account</h3>
+            <p className="mt-2 text-sm text-muted">
+              This cannot be undone. Type <span className="font-mono text-primary">DELETE</span> to
               confirm.
             </p>
             <input
               value={deleteConfirm}
               onChange={(e) => setDeleteConfirm(e.target.value)}
-              className="mt-4 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2 text-sm text-white"
+              className="mt-4 w-full rounded-xl border border-subtle bg-surface-muted px-3 py-2 text-sm text-primary"
               placeholder="DELETE"
               autoComplete="off"
             />
@@ -980,7 +980,7 @@ export default function SettingsFullPage() {
               <button
                 type="button"
                 onClick={() => setDeleteOpen(false)}
-                className="rounded-lg px-3 py-2 text-sm text-white/70 hover:bg-white/[0.06]"
+                className="rounded-lg px-3 py-2 text-sm text-secondary hover:bg-surface-hover"
               >
                 Cancel
               </button>

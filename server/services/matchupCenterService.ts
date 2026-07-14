@@ -12,16 +12,11 @@ import type { MatchupCenterPayload, MatchupGameStatus, MatchupPlayerSlot, Matchu
 import { buildMatchupInsightsBlock } from '@/lib/matchup-center/matchupAiInsights'
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
+import { loadCanonicalPlayerScores } from '@/server/services/canonicalPlayerScores'
+import { resolveRedraftMatchupContext } from '@/server/services/matchupSources/redraftMatchupSource'
+import type { MatchupContextResult, MatchupSideContext } from '@/server/services/matchupSources/types'
 
 type PlayerWeekScore = { points: number; statLine: unknown }
-
-function buildPlayerWeekMap(rows: { playerId: string; points: number; statLine: unknown }[]): Map<string, PlayerWeekScore> {
-  const m = new Map<string, PlayerWeekScore>()
-  for (const r of rows) {
-    m.set(r.playerId, { points: r.points, statLine: r.statLine ?? null })
-  }
-  return m
-}
 
 function projectionFromStatLine(statLine: unknown): number | null {
   if (!statLine || typeof statLine !== 'object' || Array.isArray(statLine)) return null
@@ -138,110 +133,140 @@ export async function buildMatchupCenterPayload(params: {
   const season = params.season ?? league.season
   const week = params.week ?? weekFromSettings(league.settings)
 
+  const base: AssembleBase = {
+    leagueId: params.leagueId,
+    season,
+    week,
+    leagueSport: String(league.sport),
+    conceptOverlay: league.leagueVariant ? `Concept: ${league.leagueVariant}` : null,
+  }
+
+  // 1) Concept-native source first (redraft-family: RedraftMatchup/RedraftRoster/
+  //    RedraftRosterPlayer). Returns null when the league is not redraft-family →
+  //    fall back to the generic TeamWeekResult/Roster source below.
+  const redraftCtx = await resolveRedraftMatchupContext({
+    leagueId: params.leagueId,
+    viewerUserId: params.viewerUserId,
+    season,
+    week,
+  })
+  if (redraftCtx) return assembleFromContext(redraftCtx, base)
+
+  // 2) Generic source — preserves prior TeamWeekResult/Roster behavior + 404s.
+  const generic = await resolveGenericMatchupContext({
+    leagueId: params.leagueId,
+    viewerUserId: params.viewerUserId,
+    season,
+    week,
+  })
+  if ('error' in generic) return generic
+  return assembleFromContext(generic, {
+    ...base,
+    conceptOverlay: league.leagueVariant ? `Format: ${league.leagueVariant}` : null,
+  })
+}
+
+type AssembleBase = {
+  leagueId: string
+  season: number
+  week: number
+  leagueSport: string
+  conceptOverlay: string | null
+}
+
+function normalizeContextWeekStatus(status: string | null | undefined): 'upcoming' | 'live' | 'final' {
+  const s = String(status ?? '').toLowerCase()
+  if (s === 'final' || s === 'complete' || s === 'completed') return 'final'
+  if (s === 'live' || s === 'in_progress') return 'live'
+  return 'upcoming'
+}
+
+/** Generic (non-redraft) source: pairing from TeamWeekResult, rosters from `Roster`. */
+async function resolveGenericMatchupContext(params: {
+  leagueId: string
+  viewerUserId: string
+  season: number
+  week: number
+}): Promise<MatchupContextResult | { error: string; status: number }> {
   const myRoster = await prisma.roster.findFirst({
     where: { leagueId: params.leagueId, platformUserId: params.viewerUserId },
     select: { id: true, playerData: true },
   })
   if (!myRoster) return { error: 'Roster not found', status: 404 }
 
-  const [myResult, labels, standings, myScores] = await Promise.all([
+  const [myResult, labels, standings] = await Promise.all([
     prisma.teamWeekResult.findUnique({
       where: {
-        leagueId_season_week_rosterId: {
-          leagueId: params.leagueId,
-          season,
-          week,
-          rosterId: myRoster.id,
-        },
+        leagueId_season_week_rosterId: { leagueId: params.leagueId, season: params.season, week: params.week, rosterId: myRoster.id },
       },
     }),
     buildRosterLabelMap(params.leagueId),
-    prisma.fantasyStanding.findMany({
-      where: { leagueId: params.leagueId, season },
-    }),
-    prisma.weeklyScore.findMany({
-      where: { leagueId: params.leagueId, season, week, rosterId: myRoster.id, isStarter: true },
-    }),
+    prisma.fantasyStanding.findMany({ where: { leagueId: params.leagueId, season: params.season } }),
   ])
 
-  const tw = myResult
-  const oppRosterId = tw?.opponentRosterId ?? null
-  if (!oppRosterId) {
-    const byeLeft: MatchupSidePayload = {
-      rosterId: myRoster.id,
-      teamName: labels.get(myRoster.id) ?? 'My team',
-      avatarUrl: null,
-      record: { wins: 0, losses: 0, ties: 0 },
-      winPct: 0,
-      totalPoints: 0,
-      projectedTotal: 0,
-      starters: [],
-      remainingStarters: 0,
-    }
-    const byeRight: MatchupSidePayload = {
-      rosterId: 'bye',
-      teamName: 'No opponent',
-      avatarUrl: null,
-      record: { wins: 0, losses: 0, ties: 0 },
-      winPct: 0,
-      totalPoints: 0,
-      projectedTotal: 0,
-      starters: [],
-      remainingStarters: 0,
-    }
-    return applyMatchupCommandCenterMeta({
-      leagueId: params.leagueId,
-      season,
-      week,
-      sport: String(league.sport),
-      matchupStatus: 'upcoming',
-      conceptOverlay: league.leagueVariant ? `Format: ${league.leagueVariant}` : null,
-      left: byeLeft,
-      right: byeRight,
-      winProbabilityLeft: null,
-      insights: buildMatchupInsightsBlock({ left: byeLeft, right: byeRight, sport: String(league.sport) }),
-      partialData: true,
-    })
-  }
+  // Phase 34 fix: a missing TeamWeekResult ROW (no schedule data ever recorded for
+  // this league/season/week/roster -- confirmed via real .env.test execution: this
+  // table has 0 rows in that environment) is NOT evidence of a bye. It previously
+  // fell through the same `!oppRosterId` branch as a real row that explicitly
+  // records no opponent, silently overstating certainty ("bye" implies a confirmed
+  // schedule fact). Mirrors the already-established, real distinction
+  // resolveRedraftMatchupContext() makes for the exact same shape of problem: a
+  // missing matchup ROW -> `none` (honest, explainable), a real row with no
+  // opponent -> `bye` (positive evidence: the engine explicitly processed this
+  // roster's week and recorded no opponent).
+  if (!myResult) return { kind: 'none', reason: `no_team_week_result_for_week_${params.week}` }
 
-  const [oppRoster, oppResult, oppScores] = await Promise.all([
-    prisma.roster.findFirst({
-      where: { id: oppRosterId },
-      select: { id: true, playerData: true },
-    }),
+  const selected = genericSide(myRoster, labels, standings, myResult, 'My team')
+  const oppRosterId = myResult.opponentRosterId ?? null
+  if (!oppRosterId) return { kind: 'bye', selected }
+
+  const [oppRoster, oppResult] = await Promise.all([
+    prisma.roster.findFirst({ where: { id: oppRosterId }, select: { id: true, playerData: true } }),
     prisma.teamWeekResult.findUnique({
       where: {
-        leagueId_season_week_rosterId: {
-          leagueId: params.leagueId,
-          season,
-          week,
-          rosterId: oppRosterId,
-        },
+        leagueId_season_week_rosterId: { leagueId: params.leagueId, season: params.season, week: params.week, rosterId: oppRosterId },
       },
     }),
-    prisma.weeklyScore.findMany({
-      where: { leagueId: params.leagueId, season, week, rosterId: oppRosterId, isStarter: true },
-    }),
   ])
-
   if (!oppRoster) return { error: 'Opponent roster missing', status: 404 }
 
-  const myScoreByPlayer = buildPlayerWeekMap(
-    myScores.map((r) => ({ playerId: r.playerId, points: r.points, statLine: r.statLine })),
-  )
-  const oppScoreByPlayer = buildPlayerWeekMap(
-    oppScores.map((r) => ({ playerId: r.playerId, points: r.points, statLine: r.statLine })),
-  )
+  return { kind: 'matchup', selected, opponent: genericSide(oppRoster, labels, standings, oppResult, 'Opponent') }
+}
 
-  const myStarters = parseStarterRows(myRoster.playerData)
-  const oppStarters = parseStarterRows(oppRoster.playerData)
+function genericSide(
+  roster: { id: string; playerData: unknown },
+  labels: Map<string, string>,
+  standings: Array<{ rosterId: string; wins: number; losses: number; ties: number }>,
+  tw: { status?: string | null; totalPoints?: number | null } | null,
+  fallbackName: string,
+): MatchupSideContext {
+  const st = standings.find((s) => s.rosterId === roster.id)
+  return {
+    rosterId: roster.id,
+    teamName: labels.get(roster.id) ?? fallbackName,
+    avatarUrl: null,
+    record: { wins: st?.wins ?? 0, losses: st?.losses ?? 0, ties: st?.ties ?? 0 },
+    starters: parseStarterRows(roster.playerData),
+    weekStatus: normalizeContextWeekStatus(tw?.status),
+    engineTotalPoints: tw?.totalPoints ?? null,
+  }
+}
 
-  const sport = normalizeToSupportedSport(String(league.sport)) ?? 'NFL'
-  const mediaInputs = [...myStarters, ...oppStarters].map((p) => ({
-    playerId: p.id,
-    teamAbbr: p.team ?? null,
-    sport: sport.toLowerCase(),
-  }))
+/** Shared payload assembly — scoring (canonical adapter) + media + payload — used by every source. */
+async function assembleFromContext(ctx: MatchupContextResult, base: AssembleBase): Promise<MatchupCenterPayload> {
+  if (ctx.kind === 'none') return buildEmptyMatchupPayload(base, ctx.reason)
+  if (ctx.kind === 'bye') return assembleSidesPayload(base, ctx.selected, null)
+  return assembleSidesPayload(base, ctx.selected, ctx.opponent)
+}
+
+async function assembleSidesPayload(
+  base: AssembleBase,
+  selected: MatchupSideContext,
+  opponent: MatchupSideContext | null,
+): Promise<MatchupCenterPayload> {
+  const sport = normalizeToSupportedSport(base.leagueSport) ?? 'NFL'
+  const allStarters = opponent ? [...selected.starters, ...opponent.starters] : selected.starters
+  const mediaInputs = allStarters.map((p) => ({ playerId: p.id, teamAbbr: p.team ?? null, sport: sport.toLowerCase() }))
   let mediaMap: Awaited<ReturnType<typeof attachPlayerMediaBatch>> | null = null
   try {
     mediaMap = await attachPlayerMediaBatch(mediaInputs)
@@ -251,7 +276,7 @@ export async function buildMatchupCenterPayload(params: {
 
   const toSlot = (
     row: { id: string; position: string; name?: string; team?: string },
-    pointsMap: Map<string, PlayerWeekScore>,
+    pointsMap: ReadonlyMap<string, PlayerWeekScore>,
     weekStatus: string,
   ): MatchupPlayerSlot => {
     const rowScore = pointsMap.get(row.id)
@@ -259,7 +284,7 @@ export async function buildMatchupCenterPayload(params: {
     const statLine = rowScore?.statLine ?? null
     const proj = resolveProjectedPoints(pts, statLine, row.position)
     const headshot = mediaMap?.get(row.id)?.media.headshotUrl ?? null
-    const opponent =
+    const opp =
       readStatLineString(statLine, ['opponent', 'opp', 'opponentAbbr', 'vs', 'opponentTeam']) ?? null
     const injuryStatus =
       readStatLineString(statLine, ['injuryStatus', 'injury', 'injury_status', 'injury_designation']) ?? null
@@ -276,7 +301,7 @@ export async function buildMatchupCenterPayload(params: {
       name: row.name ?? row.id,
       position: row.position,
       team: row.team ?? null,
-      opponent,
+      opponent: opp,
       headshotUrl: headshot,
       currentPoints: pts,
       projectedPoints: proj,
@@ -289,48 +314,79 @@ export async function buildMatchupCenterPayload(params: {
     })
   }
 
-  const leftSlots = myStarters.map((r) => toSlot(r, myScoreByPlayer, tw?.status ?? 'upcoming'))
-  const rightSlots = oppStarters.map((r) => toSlot(r, oppScoreByPlayer, oppResult?.status ?? 'upcoming'))
-
-  const stLeft = standings.find((s) => s.rosterId === myRoster.id)
-  const stRight = standings.find((s) => s.rosterId === oppRosterId)
-
+  const selScores = await loadCanonicalPlayerScores({
+    leagueId: base.leagueId,
+    sport: base.leagueSport,
+    season: selected.scoreSeason ?? base.season,
+    week: selected.scoreWeek ?? base.week,
+    rosterId: selected.rosterId,
+    players: selected.starters.map((s) => ({ playerId: s.id, position: s.position })),
+  })
+  const leftSlots = selected.starters.map((r) => toSlot(r, selScores, selected.weekStatus))
   const left: MatchupSidePayload = {
-    rosterId: myRoster.id,
-    teamName: labels.get(myRoster.id) ?? 'My team',
-    avatarUrl: null,
-    record: {
-      wins: stLeft?.wins ?? 0,
-      losses: stLeft?.losses ?? 0,
-      ties: stLeft?.ties ?? 0,
-    },
-    winPct: recordWinPct(stLeft?.wins ?? 0, stLeft?.losses ?? 0, stLeft?.ties ?? 0),
-    totalPoints: tw?.totalPoints ?? leftSlots.reduce((s, x) => s + x.currentPoints, 0),
+    rosterId: selected.rosterId,
+    teamName: selected.teamName,
+    avatarUrl: selected.avatarUrl,
+    record: selected.record,
+    winPct: recordWinPct(selected.record.wins, selected.record.losses, selected.record.ties),
+    totalPoints: selected.engineTotalPoints ?? leftSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: leftSlots.reduce((s, x) => s + x.projectedPoints, 0),
     starters: leftSlots,
     remainingStarters: leftSlots.filter((s) => s.gameStatus !== 'final').length,
   }
 
+  if (!opponent) {
+    const byeRight: MatchupSidePayload = {
+      rosterId: 'bye',
+      teamName: 'No opponent',
+      avatarUrl: null,
+      record: { wins: 0, losses: 0, ties: 0 },
+      winPct: 0,
+      totalPoints: 0,
+      projectedTotal: 0,
+      starters: [],
+      remainingStarters: 0,
+    }
+    return applyMatchupCommandCenterMeta({
+      leagueId: base.leagueId,
+      season: base.season,
+      week: base.week,
+      sport: base.leagueSport,
+      matchupStatus: 'upcoming',
+      conceptOverlay: base.conceptOverlay,
+      left,
+      right: byeRight,
+      winProbabilityLeft: null,
+      insights: buildMatchupInsightsBlock({ left, right: byeRight, sport: base.leagueSport }),
+      partialData: true,
+    })
+  }
+
+  const oppScores = await loadCanonicalPlayerScores({
+    leagueId: base.leagueId,
+    sport: base.leagueSport,
+    season: opponent.scoreSeason ?? base.season,
+    week: opponent.scoreWeek ?? base.week,
+    rosterId: opponent.rosterId,
+    players: opponent.starters.map((s) => ({ playerId: s.id, position: s.position })),
+  })
+  const rightSlots = opponent.starters.map((r) => toSlot(r, oppScores, opponent.weekStatus))
   const right: MatchupSidePayload = {
-    rosterId: oppRoster.id,
-    teamName: labels.get(oppRoster.id) ?? 'Opponent',
-    avatarUrl: null,
-    record: {
-      wins: stRight?.wins ?? 0,
-      losses: stRight?.losses ?? 0,
-      ties: stRight?.ties ?? 0,
-    },
-    winPct: recordWinPct(stRight?.wins ?? 0, stRight?.losses ?? 0, stRight?.ties ?? 0),
-    totalPoints: oppResult?.totalPoints ?? rightSlots.reduce((s, x) => s + x.currentPoints, 0),
+    rosterId: opponent.rosterId,
+    teamName: opponent.teamName,
+    avatarUrl: opponent.avatarUrl,
+    record: opponent.record,
+    winPct: recordWinPct(opponent.record.wins, opponent.record.losses, opponent.record.ties),
+    totalPoints: opponent.engineTotalPoints ?? rightSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: rightSlots.reduce((s, x) => s + x.projectedPoints, 0),
     starters: rightSlots,
     remainingStarters: rightSlots.filter((s) => s.gameStatus !== 'final').length,
   }
 
   const ms =
-    tw?.status === 'final' && oppResult?.status === 'final'
+    selected.weekStatus === 'final' && opponent.weekStatus === 'final'
       ? 'final'
-      : tw?.status === 'live' || oppResult?.status === 'live'
+      : selected.weekStatus === 'live' || opponent.weekStatus === 'live'
         ? 'live'
         : 'upcoming'
 
@@ -339,16 +395,46 @@ export async function buildMatchupCenterPayload(params: {
     totalProj > 0 ? Math.max(0.05, Math.min(0.95, left.projectedTotal / totalProj)) : null
 
   return applyMatchupCommandCenterMeta({
-    leagueId: params.leagueId,
-    season,
-    week,
-    sport: String(league.sport),
+    leagueId: base.leagueId,
+    season: base.season,
+    week: base.week,
+    sport: base.leagueSport,
     matchupStatus: ms,
-    conceptOverlay: league.leagueVariant ? `Concept: ${league.leagueVariant}` : null,
+    conceptOverlay: base.conceptOverlay,
     left,
     right,
     winProbabilityLeft: winProb,
-    insights: buildMatchupInsightsBlock({ left, right, sport: String(league.sport) }),
+    insights: buildMatchupInsightsBlock({ left, right, sport: base.leagueSport }),
     partialData: !mediaMap,
+  })
+}
+
+/** Clear, non-crashing empty state when a concept source finds no matchup. */
+function buildEmptyMatchupPayload(base: AssembleBase, reason: string): MatchupCenterPayload {
+  const emptySide = (rosterId: string, teamName: string): MatchupSidePayload => ({
+    rosterId,
+    teamName,
+    avatarUrl: null,
+    record: { wins: 0, losses: 0, ties: 0 },
+    winPct: 0,
+    totalPoints: 0,
+    projectedTotal: 0,
+    starters: [],
+    remainingStarters: 0,
+  })
+  const left = emptySide('none-left', 'Your team')
+  const right = emptySide('none-right', 'No matchup')
+  return applyMatchupCommandCenterMeta({
+    leagueId: base.leagueId,
+    season: base.season,
+    week: base.week,
+    sport: base.leagueSport,
+    matchupStatus: 'upcoming',
+    conceptOverlay: `No matchup this week (${reason})`,
+    left,
+    right,
+    winProbabilityLeft: null,
+    insights: buildMatchupInsightsBlock({ left, right, sport: base.leagueSport }),
+    partialData: true,
   })
 }

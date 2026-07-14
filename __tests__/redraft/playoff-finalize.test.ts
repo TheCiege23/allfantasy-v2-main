@@ -88,9 +88,9 @@ describe('finalizeRedraftSeasonChampion — safety guards', () => {
     expect(engine).toContain("status: 'no_final_round'")
   })
 
-  it('returns final_round_incomplete when final round is not status=complete', () => {
+  it('returns final_round_incomplete when final round is not status=completed', () => {
     expect(engine).toContain("status: 'final_round_incomplete'")
-    expect(engine).toContain("finalRound.status !== 'complete'")
+    expect(engine).toContain("finalRound.status !== 'completed'")
   })
 
   it('returns no_winner when final matchup has no winnerRosterId', () => {
@@ -154,9 +154,16 @@ describe('finalizeRedraftSeasonChampion — persistence', () => {
     expect(engine).toContain('redraftPlayoffBracket.update')
   })
 
-  it("transitions League.lifecycleState to 'completed'", () => {
-    expect(engine).toContain('league.update')
-    expect(engine).toContain("lifecycleState: 'completed'")
+  it("routes the completed transition through the transaction-aware lifecycle coordinator", () => {
+    expect(engine).toContain('transitionLeagueStateInTransaction(tx')
+    expect(engine).toContain("nextState: 'completed'")
+    expect(engine).not.toMatch(/league\.update\([\s\S]{0,240}lifecycleState: 'completed'/)
+  })
+
+  it('persists lifecycle, champion, and season events through the transaction outbox', () => {
+    expect(engine).toContain('emitInTx(tx, EVENT.CHAMPION_CROWNED')
+    expect(engine).toContain('emitInTx(tx, EVENT.SEASON_COMPLETED')
+    expect(engine).toContain("actionType: 'champion_finalized'")
   })
 
   it('wraps all writes in a single prisma.$transaction', () => {

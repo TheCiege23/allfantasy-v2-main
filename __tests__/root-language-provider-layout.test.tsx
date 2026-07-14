@@ -107,7 +107,7 @@ describe("root language provider layout", () => {
 
   it("wraps global controls and children with AppProviders unconditionally", () => {
     const providersStart = layoutSource.indexOf("<AppProviders ")
-    const chromeGate = layoutSource.indexOf("<SafeGlobalChrome metaPixelId")
+    const chromeGate = layoutSource.indexOf("<SafeGlobalChrome fbAppId")
     const providersEnd = layoutSource.indexOf("</AppProviders>")
 
     expect(providersStart).toBeGreaterThan(-1)
@@ -138,7 +138,8 @@ describe("root language provider layout", () => {
     // Volatile chrome lives inside SafeGlobalChrome, not the root layout.
     expect(safeGlobalChromeSource).toContain('id="fb-root"')
     expect(safeGlobalChromeSource).toContain("connect.facebook.net")
-    expect(safeGlobalChromeSource).toContain('id="meta-pixel"')
+    expect(safeGlobalChromeSource).not.toContain('id="meta-pixel"')
+    expect(safeGlobalChromeSource).not.toContain("fbevents.js")
     expect(safeGlobalChromeSource).toContain("<AuthRouteGlobalChrome />")
   })
 
@@ -161,11 +162,13 @@ describe("root language provider layout", () => {
     expect(layoutSource).not.toContain('id="af-body-start"')
     // Route-sensitive chrome must NOT appear directly in the root layout
     // — it must be reached only via <SafeGlobalChrome />.
-    expect(layoutSource).not.toContain('id="meta-pixel"')
+    expect(layoutSource).toContain('id="meta-pixel-immediate-bootstrap"')
+    expect(layoutSource).toContain('id="meta-pixel-base"')
+    expect(layoutSource).toContain("<MetaPixelPageViewTracker pixelId={metaPixelId} />")
     expect(layoutSource).not.toContain('id="af-register-sw"')
     expect(layoutSource).not.toContain('id="af-unregister-sw"')
     expect(layoutSource).not.toContain('id="fb-root"')
-    expect(layoutSource).not.toContain("connect.facebook.net")
+    expect(layoutSource).not.toContain("connect.facebook.net/en_US/sdk.js")
   })
 
   it("preloads the NextAuth session unconditionally (no auth-route bypass)", () => {
@@ -473,9 +476,9 @@ describe("root language provider layout", () => {
     expect(railwayJsonSource).toContain("npm run start:railway")
     expect(railwayJsonSource).toContain('"/api/af-debug/sha"')
     expect(nixpacksSource).toContain('cmd = "npm run start:railway"')
-    expect(nextConfigSource).toContain("const railwayDistDir")
     expect(nextConfigSource).toContain("RAILWAY_GIT_COMMIT_SHA")
-    expect(nextConfigSource).toContain("isRailwayRuntime ? railwayDistDir : '.next'")
+    expect(nextConfigSource).toContain("const isRailwayRuntime")
+    expect(nextConfigSource).toContain("process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local')")
     expect(railwayStartSource).not.toContain("proxyRequest")
     expect(railwayStartSource).not.toContain("patchIfRailwayDroppedDocumentShell")
     expect(railwayStartSource).not.toContain("ensureBodyBoundary")
@@ -528,8 +531,8 @@ describe("root language provider layout", () => {
 
   it("cleans stale Railway build artifacts before Next builds", () => {
     expect(packageJsonSource).toContain('"prebuild": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs"')
-    expect(packageJsonSource).toContain('"build": "next build"')
-    expect(packageJsonSource).toContain('"build:railway": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs && next build"')
+    expect(packageJsonSource).toContain('"build": "node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build"')
+    expect(packageJsonSource).toContain('"build:railway": "node scripts/railway-clean-next-build.cjs && node scripts/railway-tailwind-prebuild.cjs && node --require ./scripts/win-exfat-readlink-shim.cjs node_modules/next/dist/bin/next build"')
     expect(railwayJsonSource).toContain(
       "npx prisma generate && npm run build:railway"
     )

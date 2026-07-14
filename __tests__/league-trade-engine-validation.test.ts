@@ -51,4 +51,15 @@ describe('validateTradeAssets', () => {
     })
     expect(v.ok).toBe(false)
   })
+
+  it('rejects future redraft picks and conditional assets', () => {
+    const lg = buildEngineTestLeague()
+    const proposer = buildEngineTestRoster('r1', lg.id, 'u1', { players: ['p1'] })
+    const receiver = buildEngineTestRoster('r2', lg.id, 'u2', { players: ['p3'] })
+    const settings = resolveLeagueTradeSettings(lg)
+    const future = validateTradeAssets({ league: lg, settings, proposer, receiver, assets: [{ itemType: 'future_pick', itemReference: '2027-1', fromRosterId: 'r1', toRosterId: 'r2' }], currentWeek: 5 })
+    const conditional = validateTradeAssets({ league: lg, settings, proposer, receiver, assets: [{ itemType: 'player', itemReference: 'p1', fromRosterId: 'r1', toRosterId: 'r2', metadata: { conditional: true } }], currentWeek: 5 })
+    expect(future).toMatchObject({ ok: false, code: 'FUTURE_REDRAFT_PICK_UNSUPPORTED' })
+    expect(conditional).toMatchObject({ ok: false, code: 'CONDITIONAL_TRADE_UNSUPPORTED' })
+  })
 })

@@ -124,12 +124,14 @@ const FULL_FLOW: NflRedraftProductionVerificationStage[] = [
 const EVIDENCE_BY_CAPABILITY: Record<NflRedraftProviderOrchestratorCapability, NflRedraftEvidenceType[]> = {
   fantasy_valuations: ['ranking_adp', 'projection'],
   headshots: ['player_metadata_media'],
+  injuries: ['injury'],
   league_import: ['roster_context', 'draft_context'],
   live_stats: ['live_stats', 'fantasy_scoring', 'stat_correction'],
   logos: ['player_metadata_media'],
   news: ['news'],
   player_identity: ['player_identity', 'player_metadata_media'],
   schedule: ['schedule_game_context'],
+  scores: ['live_stats', 'fantasy_scoring', 'stat_correction'],
   standings: ['fantasy_scoring', 'matchup_context'],
   weather: ['weather'],
 }
@@ -137,12 +139,14 @@ const EVIDENCE_BY_CAPABILITY: Record<NflRedraftProviderOrchestratorCapability, N
 const CANONICAL_OBJECTS_BY_CAPABILITY: Record<NflRedraftProviderOrchestratorCapability, string[]> = {
   fantasy_valuations: ['PlayerIntelligence', 'FantasyValuation'],
   headshots: ['PlayerMetadata', 'PlayerMedia'],
+  injuries: ['CanonicalPlayer', 'PlayerIntelligence'],
   league_import: ['CanonicalLeague', 'RedraftRuntimeState'],
   live_stats: ['LiveScoringContext', 'FantasyScoring'],
   logos: ['TeamMetadata', 'PlayerMetadata'],
   news: ['PlayerIntelligence'],
   player_identity: ['CanonicalPlayerIdentity', 'CanonicalPlayer'],
   schedule: ['GameContext', 'TeamContext'],
+  scores: ['GameContext', 'LiveScoringContext'],
   standings: ['RedraftStandings', 'MatchupContext'],
   weather: ['GameContext', 'WeatherContext'],
 }
@@ -150,12 +154,14 @@ const CANONICAL_OBJECTS_BY_CAPABILITY: Record<NflRedraftProviderOrchestratorCapa
 const SURFACES_BY_CAPABILITY: Record<NflRedraftProviderOrchestratorCapability, NflRedraftEvidenceSurface[]> = {
   fantasy_valuations: ['draft', 'waiver', 'trade', 'player_card'],
   headshots: ['draft', 'mock_draft', 'roster', 'waiver', 'trade', 'matchup', 'team', 'player_card'],
+  injuries: ['draft', 'roster', 'waiver', 'trade', 'matchup', 'team', 'player_card'],
   league_import: ['draft', 'team', 'roster'],
   live_stats: ['roster', 'matchup', 'team', 'player_card', 'live_scoring', 'standings'],
   logos: ['draft', 'roster', 'waiver', 'trade', 'matchup', 'team', 'player_card'],
   news: ['draft', 'waiver', 'trade', 'team', 'player_card'],
   player_identity: ['draft', 'mock_draft', 'roster', 'waiver', 'trade', 'matchup', 'team', 'player_card'],
   schedule: ['draft', 'roster', 'waiver', 'trade', 'matchup', 'team', 'player_card'],
+  scores: ['matchup', 'team', 'player_card', 'live_scoring', 'standings'],
   standings: ['matchup', 'team', 'standings'],
   weather: ['draft', 'roster', 'waiver', 'trade', 'matchup', 'team', 'player_card'],
 }
@@ -196,6 +202,9 @@ function limitationsForCapability(capability: NflRedraftProviderOrchestratorCapa
   if (capability === 'live_stats' || capability === 'standings' || capability === 'schedule') {
     return ['Legacy cron import jobs are still deferred as canonical cache-sync migrations. Runtime fallback remains verified.']
   }
+  if (capability === 'scores' || capability === 'injuries') {
+    return ['Canonical ingestion is source-verified; live credentials, provider freshness, and authenticated UI propagation remain uncertified.']
+  }
   return []
 }
 
@@ -221,7 +230,7 @@ function buildProviderCoverage(): NflRedraftProviderCoverageRow[] {
     .map((integration): NflRedraftProviderCoverageRow => {
       const limitations: string[] = []
       if (integration.providerId === 'api_sports') limitations.push('Injury and venue data need a dedicated canonical sync path before full launch certification.')
-      if (integration.providerId === 'fantasycalc') limitations.push('Trade values, value history, and market movement are still legacy-shape surfaces outside the single-player canonical valuation path.')
+      if (integration.providerId === 'fantasycalc') limitations.push('Source canonicalization is complete; live provider freshness and authenticated propagation remain uncertified.')
       if (integration.providerId === 'espn') limitations.push('ESPN import depends on user credentials and cannot be globally live-verified.')
       if (integration.providerId === 'openweather') limitations.push('Weather is optional context and hides/falls back when unavailable.')
       if (integration.providerId === 'rolling_insights') limitations.push('Rolling outage is degraded mode; canonical cache/runtime fallback must be monitored in launch hardening.')
@@ -419,12 +428,12 @@ function buildLaunchBlockers(): NflRedraftLaunchBlockerReport {
   return {
     criticalBlockers: [
       'Full repository TypeScript validation is blocked by pre-existing shared type errors outside G50A.',
-      'Cron import jobs still need grouped migration into canonical provider cache sync before full provider-correct launch signoff.',
+      'The remaining standings ingestion path still needs grouped migration into canonical provider cache sync before full provider-correct launch signoff.',
       'A deterministic seeded browser journey for Draft -> Roster -> Waivers -> Trades -> Matchups -> Premium UI still needs production Playwright proof.',
     ],
     mediumIssues: [
-      'FantasyCalc list, trend, value-history, market-movement, and trade-value legacy response shapes should move behind a versioned canonical valuation API.',
-      'API-Sports injuries and venue details need a first-class canonical sync path where configured.',
+      'Canonical valuation response naming should eventually remove the legacy FantasyCalc compatibility URL at /api/fantasycalc.',
+      'API-Sports venue details need a first-class canonical sync path where configured.',
       'Persisted provider trace history and alert thresholds should be added for stale/fallback spikes.',
     ],
     minorPolish: [
@@ -461,7 +470,11 @@ export function buildNflRedraftProductionVerificationReport(input: {
   const remainingDeferredBypasses = unique([
     ...providerCertification.deferredBypasses,
     ...listNflRedraftLegacyDirectProviderAudit()
-      .filter((entry) => entry.migrateNow === false && !entry.notes.startsWith('G49J migrated'))
+      .filter((entry) => (
+        entry.migrateNow === false
+        && !/^G(?:49J|50|51) migrated/.test(entry.notes)
+        && !entry.providerUsed.startsWith('none found')
+      ))
       .map((entry) => entry.routeOrFile),
   ])
 

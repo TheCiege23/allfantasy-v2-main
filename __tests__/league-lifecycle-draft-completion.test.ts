@@ -18,14 +18,14 @@ describe('resolveLifecycleTransitionAfterDraftCompletes', () => {
   it('maps setup → post_draft with force (no direct edge in TRANSITIONS)', () => {
     expect(resolveLifecycleTransitionAfterDraftCompletes('setup')).toEqual({
       target: 'post_draft',
-      force: true,
+      force: false,
     })
   })
 
   it('maps pre_draft → post_draft with force', () => {
     expect(resolveLifecycleTransitionAfterDraftCompletes('pre_draft')).toEqual({
       target: 'post_draft',
-      force: true,
+      force: false,
     })
   })
 

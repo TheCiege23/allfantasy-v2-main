@@ -15,24 +15,24 @@ export function MatchupWeekSelector({
 }) {
   const cap = maxWeek ?? 40
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-white/[0.1] bg-[#0a1228]/90 px-3 py-2">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-white/45">Week</span>
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-xl border border-subtle bg-surface px-3 py-2">
+      <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Week</span>
       <button
         type="button"
         disabled={disabled || week <= 1}
-        className="rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-sm text-white/80 disabled:opacity-30"
+        className="rounded-lg border border-subtle bg-surface-muted px-2 py-1 text-sm text-secondary disabled:opacity-40"
         onClick={() => onChange({ season, week: Math.max(1, week - 1) })}
       >
         −
       </button>
       <div className="min-w-[72px] text-center text-sm font-bold text-cyan-200">
         W{week}{' '}
-        <span className="text-[11px] font-medium text-white/40">· {season}</span>
+        <span className="text-[11px] font-medium text-muted">· {season}</span>
       </div>
       <button
         type="button"
         disabled={disabled || week >= cap}
-        className="rounded-lg border border-white/10 bg-white/[0.06] px-2 py-1 text-sm text-white/80 disabled:opacity-30"
+        className="rounded-lg border border-subtle bg-surface-muted px-2 py-1 text-sm text-secondary disabled:opacity-40"
         onClick={() => onChange({ season, week: Math.min(cap, week + 1) })}
       >
         +

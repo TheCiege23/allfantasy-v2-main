@@ -75,6 +75,14 @@ export interface ManagerCommandCenterSnapshot {
   healthyLeagueCount: number
   atRiskLeagueCount: number
   unavailableLeagueCount: number
+  /**
+   * Phase 36: leagues where `retentionRisk === 'insufficient_data'` — the league itself has
+   * zero recorded activity for ANY manager, so health cannot be honestly assessed either way.
+   * Kept as its own bucket (not folded into healthy or at-risk) so `totalLeagues` always equals
+   * the sum of all four counts — the exact "two numbers silently contradicting" bug class this
+   * file's own OS-C3 fix already guards against for `medium` risk.
+   */
+  insufficientDataLeagueCount: number
   leagueSummaries: ManagerCommandCenterLeagueSummary[]
   attentionQueue: DecisionOsAttentionSignal[]
   recommendations: ManagerCommandCenterRecommendation[]
@@ -89,6 +97,7 @@ function emptySnapshot(now: Date, warnings: string[]): ManagerCommandCenterSnaps
     healthyLeagueCount: 0,
     atRiskLeagueCount: 0,
     unavailableLeagueCount: 0,
+    insufficientDataLeagueCount: 0,
     leagueSummaries: [],
     attentionQueue: [],
     recommendations: [],
@@ -130,6 +139,7 @@ export async function resolveManagerCommandCenterSnapshot(
   let healthyLeagueCount = 0
   let atRiskLeagueCount = 0
   let unavailableLeagueCount = 0
+  let insufficientDataLeagueCount = 0
   const leagueSummaries: ManagerCommandCenterLeagueSummary[] = []
   const attentionSignals: DecisionOsAttentionSignal[] = []
   const recommendationEntries: ManagerCommandCenterRecommendation[] = []
@@ -163,7 +173,11 @@ export async function resolveManagerCommandCenterSnapshot(
     }
 
     const { teamHealth, recommendations, leagueTrend } = snapshot
-    if (AT_RISK_RETENTION.has(teamHealth.retentionRisk) || teamHealth.isInactive) {
+    if (teamHealth.retentionRisk === 'insufficient_data') {
+      // Real, missing-data-driven `isInactive: true` must not count as at-risk here —
+      // that would silently reintroduce the exact conflation this bucket exists to fix.
+      insufficientDataLeagueCount += 1
+    } else if (AT_RISK_RETENTION.has(teamHealth.retentionRisk) || teamHealth.isInactive) {
       atRiskLeagueCount += 1
     } else {
       healthyLeagueCount += 1
@@ -214,6 +228,7 @@ export async function resolveManagerCommandCenterSnapshot(
     healthyLeagueCount,
     atRiskLeagueCount,
     unavailableLeagueCount,
+    insufficientDataLeagueCount,
     leagueSummaries,
     attentionQueue,
     recommendations: recommendationEntries.slice(0, MANAGER_RECOMMENDATIONS_CAP),

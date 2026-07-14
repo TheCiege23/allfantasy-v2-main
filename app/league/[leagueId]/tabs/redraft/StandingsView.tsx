@@ -52,8 +52,8 @@ export function StandingsView({
     setRuntimeError(null)
     try {
       setRuntime(await fetchRedraftPlayoffRuntime({ seasonId }))
-    } catch (e) {
-      setRuntimeError(e instanceof Error ? e.message : 'Failed to load playoff runtime')
+    } catch {
+      setRuntimeError('Playoff status is temporarily unavailable. Refresh and try again.')
     } finally {
       setRuntimeLoading(false)
     }
@@ -80,8 +80,8 @@ export function StandingsView({
         setFinalizeError(`Cannot finalize: ${res.status.replace(/_/g, ' ')}`)
       }
       await refreshRuntime()
-    } catch (e) {
-      setFinalizeError(e instanceof Error ? e.message : 'Failed to finalize season')
+    } catch {
+      setFinalizeError('The season was not finalized. Review unresolved playoff results and try again.')
     } finally {
       setFinalizeBusy(false)
     }
@@ -101,8 +101,8 @@ export function StandingsView({
         setResult('Playoff bracket generated.')
       }
       await refreshRuntime()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to generate playoffs')
+    } catch {
+      setError('The playoff bracket was not generated. No standings were changed.')
     } finally {
       setBusy(false)
     }
@@ -138,8 +138,8 @@ export function StandingsView({
         setAdvanceMsg(`Advance status: ${String(res.status).replace(/_/g, ' ')}`)
       }
       await refreshRuntime()
-    } catch (e) {
-      setAdvanceError(e instanceof Error ? e.message : 'Failed to advance round')
+    } catch {
+      setAdvanceError('The round was not advanced. Resolve every matchup and try again.')
     } finally {
       setAdvanceBusy(false)
     }
@@ -225,8 +225,13 @@ export function StandingsView({
 
       <PlayoffRuntimePanel runtime={runtime} loading={runtimeLoading} error={runtimeError} />
 
-      <div className="overflow-x-auto rounded-xl border border-white/[0.08]">
-        <table className="w-full text-left text-[12px] text-white/80">
+      <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] px-3 py-2 text-[11px] leading-5 text-white/50">
+        Rankings and playoff seeds come from the league standings service. Points and records reflect the latest completed recalculation; pending stat corrections may change the order.
+      </div>
+
+      <div className="overflow-x-auto rounded-xl border border-white/[0.08]" tabIndex={0} aria-label="League standings table">
+        <table className="min-w-[680px] w-full text-left text-[12px] text-white/80">
+        <caption className="sr-only">Authoritative league standings ordered by the configured tiebreaker rules.</caption>
         <thead className="border-b border-white/[0.08] bg-white/[0.04] text-[10px] uppercase text-white/45">
           <tr>
             <th className="px-3 py-2">#</th>
