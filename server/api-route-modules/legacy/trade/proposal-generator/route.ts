@@ -259,6 +259,30 @@ function buildProposal(
   }
 }
 
+/**
+ * The ONLY seam where LLM output enters a returned proposal. Acceptance likelihood is computed
+ * deterministically (computeTradeAcceptance) and must never come from the model, so this
+ * returns exactly the four narrative fields the LLM is permitted to contribute and drops
+ * everything else. Any rogue field the model emits despite the prompt (acceptance,
+ * acceptancePct, pitchAcceptance, likelihood, ...) therefore never reaches the client — the
+ * single acceptance number is always acceptanceModel.score.
+ * (AF_DATA_PROVENANCE_AUDIT.md demo risk #4.)
+ */
+export function sanitizeProposalNarrative(ai: unknown): {
+  theirPitch: string | null
+  yourAdvantage: string | null
+  tradePitch: string | null
+  fairnessNote: string | null
+} {
+  const src = (ai && typeof ai === 'object' ? ai : {}) as Record<string, unknown>
+  return {
+    theirPitch: (src.theirPitch as string | null | undefined) ?? null,
+    yourAdvantage: (src.yourAdvantage as string | null | undefined) ?? null,
+    tradePitch: (src.tradePitch as string | null | undefined) ?? null,
+    fairnessNote: (src.fairnessNote as string | null | undefined) ?? null,
+  }
+}
+
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generator", tool: "LegacyTradeProposalGenerator" })(async (req: NextRequest) => {
   const authResult = requireAuthOrOrigin(req)
   if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
@@ -538,10 +562,9 @@ Respond in JSON format:
         delta: p.delta,
         fairnessScore: p.fairnessScore,
         acceptanceModel: acceptanceByLabel.get(p.label) ?? null,
-        theirPitch: ai.theirPitch ?? null,
-        yourAdvantage: ai.yourAdvantage ?? null,
-        tradePitch: ai.tradePitch ?? null,
-        fairnessNote: ai.fairnessNote ?? null,
+        // Narrative-only allowlist: any acceptance-like field the LLM emits is dropped here so
+        // acceptanceModel.score stays the single acceptance number (see demo risk #4).
+        ...sanitizeProposalNarrative(ai),
       }
     }).filter(Boolean)
 
