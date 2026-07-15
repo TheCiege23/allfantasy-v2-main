@@ -286,7 +286,8 @@ function aggregateByLeagueType(leagues: FetchedLeague[]): {
 // grade shown to the user are now the same thing, and repeat runs on the same data always
 // agree. The LLM is still used for verdict/trash_talk/strengths/weaknesses narrative, but
 // every field below is computed here and forced onto the LLM's output afterward.
-function scoreToGrade(score: number): string {
+// Exported for regression coverage (compare-grades.test.ts) — certifies deterministic grading.
+export function scoreToGrade(score: number): string {
   if (score >= 97) return 'A+'
   if (score >= 93) return 'A'
   if (score >= 90) return 'A-'
@@ -304,7 +305,9 @@ function scoreToGrade(score: number): string {
 // rather than left as an unverifiable LLM judgment call.
 const LONGEVITY_FULL_CREDIT_LEAGUES = 8
 
-function computeWeightedScore(args: {
+// Exported for regression coverage — certifies the disclosed weights (champ 35 / win% 25 /
+// playoff 25 / longevity 15) that are forced onto the LLM output server-side.
+export function computeWeightedScore(args: {
   wins: number
   losses: number
   championships: number
