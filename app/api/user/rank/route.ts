@@ -713,6 +713,38 @@ export async function GET(request: Request) {
         ? (careerStats.playoffAppearances / importedLeagueRows.length) * 100
         : playoffRate
 
+    // ── Converge every career total the two client surfaces render ─────
+    // Two surfaces read career counts from this payload: the dashboard
+    // (RankingsCard / CareerProgressionStrip → top-level `career*`) and
+    // /af-rankings (AfRankingsClient → `rank.*`). AfRankingsClient renders
+    // BOTH blocks, so any mismatch between a `rank.*` field and its top-level
+    // `career*` twin surfaces as two different numbers on one page.
+    //
+    // `careerStats` above is THIS request's fresh recompute, but it only ever
+    // sees ONE source (imports if present, else legacy) and never native AF
+    // leagues. The denorm `d` is the canonical all-source snapshot written by
+    // calculateAndSaveRank — the SAME snapshot that produced the xpTotal/tier/
+    // level shown above — so it is both the more-complete count (it merges
+    // imports + legacy + native, deduped) AND already what the rest of this
+    // payload reflects. Read every cross-referenced total from ONE denorm-
+    // preferred value so the two surfaces can never disagree: not while the
+    // denorm briefly lags a fresh import (both show the consistent persisted
+    // count until the next recalc), and not in the steady state (native/mixed
+    // history the fresh recompute would undercount). Fresh careerStats is the
+    // fallback only when the denorm has never been written, so a real persisted
+    // value is never zeroed out. (winRate/playoffRate below intentionally stay
+    // on the fresh figure — the denorm stores neither ties nor the rate itself.)
+    const resolvedChampionships = d?.careerChampionships ?? careerStats.championships
+    const resolvedWins = d?.careerWins ?? careerStats.totalWins
+    const resolvedLosses = d?.careerLosses ?? careerStats.totalLosses
+    const resolvedPlayoffAppearances =
+      d?.careerPlayoffAppearances ?? careerStats.playoffAppearances
+    // DB column swap (see careerStatsFromProfileDenorm): `career_leagues_played`
+    // holds the distinct-season count → API `seasonsPlayed`; `career_seasons_played`
+    // holds the league-row count → API `leaguesPlayed`.
+    const resolvedSeasonsPlayed = d?.careerLeaguesPlayed ?? careerStats.seasonsPlayed
+    const resolvedLeaguesPlayed = d?.careerSeasonsPlayed ?? careerStats.leaguesPlayed
+
     const rank = {
       careerTier: lv.tierGroup,
       careerTierName: lv.name,
@@ -723,17 +755,16 @@ export async function GET(request: Request) {
       aiInsight,
       winRate: Math.round(winRateForDisplay * 10) / 10,
       playoffRate: Math.round(playoffRateForDisplay * 10) / 10,
-      // Branch-aware, matching careerStats.championships used everywhere else in this file
-      // (lines 390/481) — this used to read the raw legacy-table-only `championshipCount`
-      // regardless of whether the user's real championship data actually came from Sleeper
-      // imports, so a user with both import and legacy history could see two different
-      // championship counts depending on which response branch/UI surface read them.
-      championshipCount: careerStats.championships,
-      seasonsPlayed: careerStats.seasonsPlayed,
-      totalWins: careerStats.totalWins,
-      totalLosses: careerStats.totalLosses,
+      // Denorm-preferred (see resolved* block above): identical to the top-level
+      // `career*` twins so the /af-rankings `rank.*` block and the dashboard's
+      // top-level fields always report the same numbers, even under denorm
+      // staleness or native/mixed history the fresh recompute would undercount.
+      championshipCount: resolvedChampionships,
+      seasonsPlayed: resolvedSeasonsPlayed,
+      totalWins: resolvedWins,
+      totalLosses: resolvedLosses,
       totalTies: displayTies,
-      playoffAppearances: careerStats.playoffAppearances,
+      playoffAppearances: resolvedPlayoffAppearances,
       importedAt:
         importedLeagueRows.length > 0 && d?.rankCalculatedAt
           ? d.rankCalculatedAt.toISOString()
@@ -762,17 +793,17 @@ export async function GET(request: Request) {
       xpForLevel: lv.xpForLevel,
       progressPct: lv.progressPct,
       nextLevelName: lv.nextLevel?.name ?? null,
-      careerWins: d?.careerWins ?? careerStats.totalWins,
-      careerLosses: d?.careerLosses ?? careerStats.totalLosses,
-      careerChampionships: d?.careerChampionships ?? careerStats.championships,
-      careerPlayoffAppearances: d?.careerPlayoffAppearances ?? careerStats.playoffAppearances,
-      // Same DB-to-API un-swap as careerStatsFromProfileDenorm above: `career_leagues_played`
-      // holds the distinct-season count, `career_seasons_played` holds the league-row count.
-      // This block used to read the raw (swapped) DB fields straight through, so these two
-      // top-level response keys — the ones CareerProgressionStrip actually renders — were
-      // inverted even though the corrected values already existed in `careerStats`/`stats`.
-      careerSeasonsPlayed: d?.careerLeaguesPlayed ?? careerStats.seasonsPlayed,
-      careerLeaguesPlayed: d?.careerSeasonsPlayed ?? careerStats.leaguesPlayed,
+      // Denorm-preferred resolved* values (defined above) — the SAME references
+      // the `rank.*` block reads, which is what keeps the dashboard's top-level
+      // fields and /af-rankings' `rank.*` block from ever disagreeing. The DB-to-
+      // API un-swap (career_leagues_played = distinct seasons; career_seasons_played
+      // = league-row count) lives in the resolved* definitions.
+      careerWins: resolvedWins,
+      careerLosses: resolvedLosses,
+      careerChampionships: resolvedChampionships,
+      careerPlayoffAppearances: resolvedPlayoffAppearances,
+      careerSeasonsPlayed: resolvedSeasonsPlayed,
+      careerLeaguesPlayed: resolvedLeaguesPlayed,
       rankCalculatedAt: d?.rankCalculatedAt?.toISOString() ?? rankCalculatedAtIso,
     }
 
