@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+// TODO(provenance #1): route through getCanonicalPlayerValuations from
+// '@/lib/player-valuations/canonicalPlayerValuations' once verified behavior-identical.
+// NOT swapped: the canonical wrapper resolves values via the NFL-redraft provider gateway
+// (resolveNflRedraftProductionProviderCapability), which changes valuation output here.
 import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
 import { writeSnapshot } from '@/lib/trade-engine/snapshot-store'
 import { logUserEventByUsername } from '@/lib/user-events'
@@ -538,7 +542,9 @@ function buildPreseasonFallbackResponse({
   })
 }
 
-async function getFantasyCalcValues(league: any): Promise<Map<string, number>> {
+// Exported for regression coverage (rankings-analyze-valuations.test.ts) — certifies the
+// FantasyCalc map is real and non-empty, not the old empty-map stub. Behavior unchanged.
+export async function getFantasyCalcValues(league: any): Promise<Map<string, number>> {
   const rosterPositions: string[] = Array.isArray(league?.roster_positions) ? league.roster_positions : []
   const isSF =
     league?.settings?.superflex_enabled === 1 ||
@@ -564,7 +570,9 @@ async function getFantasyCalcValues(league: any): Promise<Map<string, number>> {
   return values
 }
 
-function calculatePositionalValuesWithPlayers(
+// Exported for regression coverage — certifies per-player FantasyCalc pricing with a
+// per-missing-player fallback (not a whole-roster flat price). Behavior unchanged.
+export function calculatePositionalValuesWithPlayers(
   playerIds: string[],
   fcValues: Map<string, number>,
   playersData: Record<string, any>
