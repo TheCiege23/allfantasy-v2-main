@@ -109,10 +109,6 @@
       "schedule": "0 * * * *"
     },
     {
-      "path": "/api/zombie/automation",
-      "schedule": "0 9 * * 2"
-    },
-    {
       "path": "/api/big-brother/cron/automation",
       "schedule": "*/5 * * * *"
     },
@@ -151,6 +147,10 @@
     {
       "path": "/api/cron/import-scores",
       "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/import-projections",
+      "schedule": "0 13 * * 3"
     },
     {
       "path": "/api/cron/recompute-allfantasy-adp",
