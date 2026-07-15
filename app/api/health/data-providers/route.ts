@@ -33,8 +33,18 @@ export async function GET() {
     const sportsOk = sportsAgeMs != null && sportsAgeMs < FRESH_WINDOW_MS
     const weatherOk = weatherAgeMs != null && weatherAgeMs < FRESH_WINDOW_MS
 
+    // Offseason decision (AF_DATA_PROVENANCE_AUDIT.md demo risk #3 residual): the chip's
+    // top-level `ok` is gated on SPORTS-data freshness ONLY — the primary live feed users
+    // care about (scores/stats). Weather (OpenWeatherMap) is a game-day enrichment that
+    // legitimately goes stale in the NFL offseason (it is July) and, even in-season, only
+    // refreshes around games. Requiring weather freshness made the chip read "Data sync
+    // delayed" permanently in the offseason — the inverse of the original hardcoded-green
+    // bug. Weather is still reported below as a secondary signal, and `degraded` surfaces
+    // the sports-fresh/weather-stale case for observability, but weather no longer flips
+    // the top-level connection state.
     return NextResponse.json({
-      ok: sportsOk && weatherOk,
+      ok: sportsOk,
+      degraded: sportsOk && !weatherOk,
       sports: { ok: sportsOk, lastSyncedAt: latestSportsCache?.createdAt.toISOString() ?? null },
       weather: { ok: weatherOk, lastSyncedAt: latestWeatherCache?.fetchedAt.toISOString() ?? null },
       checkedAt: new Date().toISOString(),

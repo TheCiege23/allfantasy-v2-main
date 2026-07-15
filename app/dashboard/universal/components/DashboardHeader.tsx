@@ -131,9 +131,9 @@ export function DashboardHeader({
             data-health={dataHealth}
             title={
               dataHealth === 'connected'
-                ? 'Sports data and weather caches synced within the last 24 hours'
+                ? 'Live sports data synced within the last 24 hours'
                 : dataHealth === 'degraded'
-                  ? 'Sports data or weather cache hasn’t synced recently — checking again on next load'
+                  ? 'Live sports data hasn’t synced in over 24 hours — retrying on next load'
                   : 'Checking live data connection…'
             }
           >
