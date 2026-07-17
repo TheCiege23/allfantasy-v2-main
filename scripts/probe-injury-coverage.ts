@@ -3,16 +3,14 @@
  * Usage: DATABASE_URL=<staging> npx tsx scripts/probe-injury-coverage.ts
  */
 import { PrismaClient } from '@prisma/client'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 const prisma = new PrismaClient({ log: [] })
 
 void (async () => {
   const host = process.env.DATABASE_URL?.match(/@([^/]+)\//)?.[1] ?? 'unknown'
   console.log(`DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) {
-    console.error('HARD REFUSE: prod host detected — run against non-prod only')
-    process.exit(1)
-  }
+  refuseIfNotNonProduction(process.env.DATABASE_URL, 'F2.3 injury/status coverage probe reads real player injury data and must never touch production.')
 
   const total = await prisma.sportsPlayer.count()
   const withStatus = await prisma.sportsPlayer.count({ where: { status: { not: null } } })

@@ -11,8 +11,7 @@
  *     DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-imported-leagues-nonprod.ts
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 function hostOf(url: string | null): string {
   if (!url) return '?'
@@ -28,11 +27,9 @@ function hostOf(url: string | null): string {
     console.log('IMPORTED_LEAGUES SKIPPED (no DATABASE_URL).')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host. This is a non-prod discoverability check.`)
-    process.exit(1)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'This is a non-prod discoverability check and must never touch production.')
+  const host = hostOf(dbUrl)
   console.log(`ADR-DOS-F0 imported-league discovery — READ-ONLY — DB host: ${host}`)
 
   const { prisma } = await import('../lib/prisma')

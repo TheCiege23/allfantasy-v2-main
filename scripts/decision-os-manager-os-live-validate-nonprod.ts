@@ -8,7 +8,7 @@
  * only replaces the HTTP/session shell with a direct function call, the same discipline
  * `decision-os-import-sleeper-nonprod.ts` and `decision-os-suite-conformance.ts` already established.
  *
- * Read-only: makes zero writes. HARD-REFUSES the production DB host (ep-spring-tooth) and skips
+ * Read-only: makes zero writes. HARD-REFUSES the production database and skips
  * cleanly without DATABASE_URL, matching every other `*-nonprod.ts` script's own boundary.
  *
  *     DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-manager-os-live-validate-nonprod.ts --userId=<id>
@@ -17,8 +17,7 @@
  *   --userId=<id>   AppUser.id to validate as (required — must own at least one claimed team).
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 function arg(name: string): string | undefined {
   const hit = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))
@@ -40,11 +39,9 @@ function hostOf(url: string | null): string {
     console.log('SKIPPED (no DATABASE_URL) — set a NON-PROD DATABASE_URL to run this validation.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host (${PROD_HOST_MARKER}). This runner must NEVER touch production, even read-only.`)
-    process.exit(1)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'This runner must never touch production, even read-only.')
+  const host = hostOf(dbUrl)
   console.log(`Target DB host: ${host} (confirmed non-production)`)
 
   const userId = arg('userId')

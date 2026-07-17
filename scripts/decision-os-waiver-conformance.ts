@@ -14,14 +14,13 @@
  * the World facts (settings/FAAB/priority) the loader reads from the actual league.
  *
  * STRICTLY READ-ONLY & SAFE: reads only; never seeds, writes, or executes a claim. Skips without
- * DATABASE_URL (exit 0). REFUSES the production host (exit 0).
+ * DATABASE_URL (exit 0). REFUSES the production host (exit 2).
  *
  *   DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-waiver-conformance.ts [leagueId ...]
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { refuseIfNotNonProduction } from './db-target-identity'
 import type { WaiverAIServiceInput } from '../lib/waiver-ai-engine'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -56,11 +55,9 @@ function captureTelemetry(): TelemetryEvent[] {
     console.log('WAIVER_CONFORMANCE SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run the real-data check.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.log(`WAIVER_CONFORMANCE SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'Phase F.1 waiver conformance reads real league and waiver data and must never touch production.')
+  const host = hostOf(dbUrl)
   console.log(`Phase F.1 waiver conformance — READ-ONLY — DB host: ${host}`)
 
   const { prisma } = await import('../lib/prisma')

@@ -3,16 +3,14 @@
  * Usage: DATABASE_URL=<staging> npx tsx scripts/probe-adp-coverage.ts
  */
 import { PrismaClient } from '@prisma/client'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 const prisma = new PrismaClient({ log: [] })
 
 void (async () => {
   const host = process.env.DATABASE_URL?.match(/@([^/]+)\//)?.[1] ?? 'unknown'
   console.log(`DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) {
-    console.error('HARD REFUSE: prod host detected — run against non-prod only')
-    process.exit(1)
-  }
+  refuseIfNotNonProduction(process.env.DATABASE_URL, 'F2.4 ADP/market-value coverage probe reads real player-value data and must never touch production.')
 
   // AdpDataRecord counts
   const adpTotal = await prisma.adpDataRecord.count()

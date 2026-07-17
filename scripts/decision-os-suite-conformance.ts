@@ -24,8 +24,9 @@
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
 import {
-  hostOf,
-  isProductionHost,
+  describeTarget,
+  shouldRefuseTarget,
+  refusalReason,
   parseExplicitLeagueIds,
   parseManagerId,
   formatCheckLine,
@@ -45,9 +46,8 @@ function check(name: string, ok: boolean, detail = ''): void {
     process.exit(0)
   }
   const dbUrl = resolveDatabaseUrl()
-  const host = hostOf(dbUrl)
-  if (isProductionHost(dbUrl)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host. This is a read-only, non-prod-only check.`)
+  if (shouldRefuseTarget(dbUrl)) {
+    console.error(`REFUSED: ${refusalReason(dbUrl)} This is a read-only, non-prod-only check.`)
     process.exit(1)
   }
 
@@ -58,7 +58,7 @@ function check(name: string, ok: boolean, detail = ''): void {
   }
   const managerId = parseManagerId(process.argv.slice(2))
 
-  console.log(`Fantasy OS Suite conformance — READ-ONLY — DB host: ${host}`)
+  console.log(`Fantasy OS Suite conformance — READ-ONLY — DB target: ${describeTarget(dbUrl)}`)
   console.log(`leagueIds=${leagueIds.join(',')}${managerId ? ` managerId=${managerId}` : ' (no --managerId, skipping User OS)'}`)
 
   const { resolveMissionControlSnapshot } = await import('../lib/decision-os/missionControl')

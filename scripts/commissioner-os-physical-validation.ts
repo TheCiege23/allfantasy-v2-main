@@ -17,8 +17,7 @@
  * Cleans up every row it creates (and only those rows) in a final try/finally, regardless of outcome.
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 function hostOf(url: string | null): string {
   if (!url) return '?'
@@ -53,11 +52,9 @@ function check(name: string, ok: boolean, detail = '') {
     origLog('COMMISSIONER_OS_PHYSICAL_VALIDATION SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    origLog(`COMMISSIONER_OS_PHYSICAL_VALIDATION SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'Commissioner OS physical validation writes real fixture rows and must never touch production.')
+  const host = hostOf(dbUrl)
   log(`Commissioner OS physical validation — DB host: ${host}`)
 
   const { prisma } = await import('../lib/prisma')

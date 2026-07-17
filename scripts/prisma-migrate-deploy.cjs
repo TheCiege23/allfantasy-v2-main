@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+const { classifyDatabaseTarget } = require("./db-target-identity.cjs");
+
 function stripQuotes(value) {
   const trimmed = value.trim();
   if (
@@ -136,9 +138,10 @@ function normalizeDatabaseUrl(candidate, poolerUrl, sourceKey) {
 }
 
 // --prod: explicit, deliberate production deploy. Loads .env.prod-deploy (git-ignored,
-// never auto-loaded by anything else) instead of the default .env, which as of 2026-07-14
-// points at the safe dev branch. Requires ALLOW_PROD_MIGRATION=1 as a second, independent
-// confirmation — `--prod` alone is not enough. See prisma-cli-env-override-danger memory.
+// never auto-loaded by anything else) instead of the default .env, which points at
+// ep-curly-block-ad0dlt9o/mydb_shadow — production's compute but a separate database.
+// Requires ALLOW_PROD_MIGRATION=1 as a second, independent confirmation — `--prod` alone is
+// not enough. See prisma-cli-env-override-danger memory.
 const targetsProd = process.argv.includes("--prod");
 if (targetsProd && process.env.ALLOW_PROD_MIGRATION !== "1") {
   console.error(
@@ -171,6 +174,28 @@ if (!databaseUrl) {
   console.error(`db:migrate:deploy error: ${reason || "No valid database URL found."}`);
   process.exit(1);
 }
+
+// `--prod` must actually reach production. This is the check that was missing: from
+// 2026-07-14 until 2026-07-17, .env.prod-deploy pointed at ep-spring-tooth-adaoi9x1/neondb —
+// the "claude-dashboard-local-dev" fork — so every `db:migrate:deploy:prod` silently migrated
+// a dev clone while real production fell 12 migrations behind, and nothing complained because
+// nothing verified the destination. Refusing a non-production target under --prod turns that
+// silent failure into a loud one.
+const deployTarget = classifyDatabaseTarget(databaseUrl);
+const deployLabel = `${deployTarget.endpointId || deployTarget.host || "?"}/${deployTarget.database || "?"}`;
+
+if (targetsProd && deployTarget.classification !== "production") {
+  console.error(
+    `\n[db:migrate:deploy] REFUSING --prod — the resolved target is NOT production (${deployLabel}).\n` +
+      `  ${deployTarget.reason}\n\n` +
+      `--prod loads .env.prod-deploy. Point its DATABASE_URL/DIRECT_URL at the production\n` +
+      `endpoint, or run without --prod if you meant to migrate a non-production database.\n` +
+      `Confirm the current production endpoint with \`npm run db:verify-prod-identity\`.\n`
+  );
+  process.exit(1);
+}
+
+console.log(`[db:migrate:deploy] Target: ${deployLabel} (${deployTarget.classification}).`);
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.DIRECT_URL = databaseUrl;

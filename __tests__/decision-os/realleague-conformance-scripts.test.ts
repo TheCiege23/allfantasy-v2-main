@@ -23,9 +23,8 @@ describe('ADR-DOS-F1: each conformance script gates + refuses prod like the trad
       // DB gate + clean skip.
       expect(src).toContain('hasDatabaseUrl')
       expect(src).toMatch(/SKIPPED \(no DATABASE_URL\)/)
-      // Prod host hard-refusal.
-      expect(src).toContain('ep-spring-tooth')
-      expect(src).toMatch(/refusing production DB host/i)
+      // Production refusal is delegated to the single shared guard.
+      expect(src).toContain('refuseIfNotNonProduction')
       // Prisma imported dynamically AFTER the gate — no top-level static prisma import.
       expect(/^import\s+[^\n]*\bprisma\b[^\n]*from\s+['"][^'"]*lib\/prisma['"]/m.test(src)).toBe(false)
       expect(src).toMatch(/await import\(['"][^'"]*lib\/prisma['"]\)/)
@@ -42,9 +41,18 @@ describe('ADR-DOS-F1: each conformance script gates + refuses prod like the trad
     })
   }
 
-  it('the prod-host refusal regex actually catches a prod URL (positive control)', () => {
-    const refuse = (host: string) => host.includes('ep-spring-tooth')
-    expect(refuse('ep-spring-tooth-12345.aws.neon.tech')).toBe(true)
-    expect(refuse('ep-winter-salad-67890.aws.neon.tech')).toBe(false)
+  // Positive control. The previous version of this test re-implemented the guard inline
+  // (`host.includes('ep-spring-tooth')`) and asserted that its own copy matched itself — a
+  // tautology that stayed green while the real marker named a dev clone and production went
+  // unguarded. Exercise the ACTUAL shared guard instead, so a regression in it fails here.
+  it('the shared guard these scripts call really does refuse production and permit local dev', async () => {
+    const { classifyDatabaseTarget } = await import('@/scripts/db-target-identity')
+    const at = (host: string, db: string) => `postgresql://u:p@${host}.c-2.us-east-1.aws.neon.tech/${db}`
+
+    expect(classifyDatabaseTarget(at('ep-curly-block-ad0dlt9o', 'neondb')).classification).toBe('production')
+    expect(classifyDatabaseTarget(at('ep-curly-block-ad0dlt9o-pooler', 'mydb_shadow')).classification).toBe(
+      'non-production',
+    )
+    expect(classifyDatabaseTarget(at('ep-winter-salad-67890', 'neondb')).classification).toBe('unknown')
   })
 })

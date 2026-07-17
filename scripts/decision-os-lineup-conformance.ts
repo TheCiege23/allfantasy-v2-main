@@ -14,7 +14,7 @@
  * honestly (scanIncomplete); parity is independent of metadata completeness.
  *
  * STRICTLY READ-ONLY & SAFE: reads only; never seeds, writes, or sets a lineup. Skips without DATABASE_URL
- * (exit 0). REFUSES the production host (exit 0).
+ * (exit 0). REFUSES the production host (exit 2).
  *
  * INVOCATION (the lineup chain pulls `lib/time-engine/serverClock.ts` → `server-only`, which throws under
  * plain tsx, so run with the existing `_audit-preload.cjs` shim that stubs it):
@@ -23,9 +23,8 @@
  *     scripts/decision-os-lineup-conformance.ts [leagueId ...]
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { refuseIfNotNonProduction } from './db-target-identity'
 import type { LineupActionSummaryPayload } from '../lib/lineup-actions/types'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -79,11 +78,9 @@ function legacySummaryFor(leagueId: string): LineupActionSummaryPayload {
     console.log('LINEUP_CONFORMANCE SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run the real-data check.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.log(`LINEUP_CONFORMANCE SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'Phase F.1 lineup conformance reads real roster and lineup data and must never touch production.')
+  const host = hostOf(dbUrl)
   console.log(`Phase F.1 lineup conformance — READ-ONLY — DB host: ${host}`)
 
   const { prisma } = await import('../lib/prisma')

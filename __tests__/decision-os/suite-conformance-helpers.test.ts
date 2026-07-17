@@ -8,37 +8,47 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  hostOf,
-  isProductionHost,
+  shouldRefuseTarget,
+  refusalReason,
+  describeTarget,
   parseExplicitLeagueIds,
   parseManagerId,
   formatCheckLine,
-  PROD_HOST_MARKER,
 } from '@/scripts/decision-os-suite-conformance-helpers'
 
-describe('hostOf / isProductionHost', () => {
-  it('extracts the host from a postgres URL', () => {
-    expect(hostOf('postgresql://user:pass@ep-spring-tooth.us-east-1.aws.neon.tech/db')).toBe(
-      'ep-spring-tooth.us-east-1.aws.neon.tech',
-    )
+/**
+ * These helpers no longer own classification — scripts/db-target-identity.cjs does, and its own
+ * suite covers the rules. What matters here is that this module still refuses correctly after
+ * delegating, including for targets that are merely unrecognised.
+ *
+ * The previous version of this block asserted `PROD_HOST_MARKER === 'ep-spring-tooth'`, which
+ * pinned the 2026-07-14 inversion in place: the marker named a dev clone, so the guards permitted
+ * real production, and this test enforced that. Assert the SAFETY PROPERTY, never the literal
+ * endpoint id — endpoint ids drift, and a test that hardcodes one converts drift into a
+ * green build.
+ */
+describe('shouldRefuseTarget', () => {
+  const PROD = 'postgresql://user:pass@ep-curly-block-ad0dlt9o.c-2.us-east-1.aws.neon.tech/neondb'
+  const LOCAL_DEV = 'postgresql://user:pass@ep-curly-block-ad0dlt9o-pooler.c-2.us-east-1.aws.neon.tech/mydb_shadow'
+
+  it('refuses production', () => {
+    expect(shouldRefuseTarget(PROD)).toBe(true)
+    expect(refusalReason(PROD)).toMatch(/PRODUCTION/i)
   })
 
-  it('returns "?" for a null or unparseable URL', () => {
-    expect(hostOf(null)).toBe('?')
-    expect(hostOf('not a url')).toBe('?')
+  it('permits local dev on mydb_shadow — the same compute as production, a different database', () => {
+    expect(shouldRefuseTarget(LOCAL_DEV)).toBe(false)
   })
 
-  it('flags the production host marker', () => {
-    expect(isProductionHost('postgresql://user:pass@ep-spring-tooth.us-east-1.aws.neon.tech/db')).toBe(true)
+  it('refuses anything unrecognised, null, or unparseable (fails closed)', () => {
+    expect(shouldRefuseTarget('postgresql://user:pass@ep-unlisted-branch-zz99xx11.aws.neon.tech/neondb')).toBe(true)
+    expect(shouldRefuseTarget(null)).toBe(true)
+    expect(shouldRefuseTarget('not a url')).toBe(true)
   })
 
-  it('does not flag a non-production host', () => {
-    expect(isProductionHost('postgresql://user:pass@ep-throwaway-nonprod.us-east-1.aws.neon.tech/db')).toBe(false)
-    expect(isProductionHost(null)).toBe(false)
-  })
-
-  it('the exported marker matches the existing scripts/decision-os-*-nonprod.ts convention', () => {
-    expect(PROD_HOST_MARKER).toBe('ep-spring-tooth')
+  it('describeTarget reports endpoint/database without credentials', () => {
+    expect(describeTarget(LOCAL_DEV)).toBe('ep-curly-block-ad0dlt9o/mydb_shadow')
+    expect(describeTarget(LOCAL_DEV)).not.toContain('pass')
   })
 })
 

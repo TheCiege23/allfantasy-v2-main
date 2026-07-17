@@ -1,25 +1,31 @@
 /**
  * Wraps interactive `prisma` CLI subcommands (migrate dev, migrate reset, db push, db
- * seed) with a production-host refusal check, mirroring scripts/backfill-franchise-seasons.ts's
- * PROD_HOST_MARKER guard.
+ * seed) with a refusal check, so none of them can run against production.
  *
  * Root cause this defuses: the Prisma CLI reads `.env` directly (not `.env.local`) and
  * ignores shell-exported DATABASE_URL overrides on this Windows/Git-Bash setup — confirmed
  * 2026-07-14 when an inline `DATABASE_URL=<dev> npx prisma migrate deploy` still connected to
- * prod. `.env` now points at the safe dev branch by default (see .env's own comment), so this
- * guard is defense-in-depth for whenever `.env` gets pointed at prod again, intentionally or not.
+ * prod.
+ *
+ * `.env` points at ep-curly-block-ad0dlt9o/mydb_shadow — which is production's COMPUTE but a
+ * separate DATABASE. That is exactly why classification lives in db-target-identity.cjs and is
+ * keyed on (endpoint, database): a host-only check here would have to either refuse normal
+ * local dev or permit production. See that module for the full rationale.
  *
  * Usage: node scripts/prisma-cli-guard.cjs <prisma subcommand and args...>
  *   e.g. node scripts/prisma-cli-guard.cjs migrate dev
  *
- * To intentionally target prod with an interactive command (rare — prefer
- * `npm run db:migrate:deploy:prod`), set ALLOW_PROD_MIGRATION=1.
+ * Escape hatches:
+ *   ALLOW_PROD_MIGRATION=1     — "I accept this may be production" (rare; for a real production
+ *                                migration deploy prefer `npm run db:migrate:deploy:prod`).
+ *   AF_NONPROD_ENDPOINT_ACK=<endpoint-id>
+ *                              — "this unlisted endpoint is a disposable non-prod branch".
  */
 const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const PROD_HOST_MARKER = "ep-spring-tooth";
+const { classifyDatabaseTarget } = require("./db-target-identity.cjs");
 
 function stripQuotes(value) {
   const trimmed = value.trim();
@@ -40,15 +46,6 @@ function readEnvFileValue(filePath, key) {
   return null;
 }
 
-function hostOf(url) {
-  if (!url) return "?";
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, "http://")).host;
-  } catch {
-    return "?";
-  }
-}
-
 // Same resolution the real Prisma CLI uses: process.env first, else `.env` (never `.env.local`
 // — that's the whole gotcha this guard exists to catch).
 const envPath = path.join(process.cwd(), ".env");
@@ -58,11 +55,16 @@ function resolve(key) {
 
 const directUrl = resolve("DIRECT_URL");
 const databaseUrl = resolve("DATABASE_URL");
-const host = hostOf(directUrl || databaseUrl);
+const target = classifyDatabaseTarget(directUrl || databaseUrl);
+const label = `${target.endpointId || target.host || "?"}/${target.database || "?"}`;
 
-if (host.includes(PROD_HOST_MARKER) && process.env.ALLOW_PROD_MIGRATION !== "1") {
+// Fails closed: refuse `production` AND `unknown`. An endpoint nobody has listed is an
+// endpoint nobody has verified, and this wrapper fronts destructive commands.
+if (target.classification !== "non-production" && process.env.ALLOW_PROD_MIGRATION !== "1") {
+  const what = target.classification === "production" ? "PRODUCTION" : "an UNRECOGNISED database";
   console.error(
-    `\n[prisma-cli-guard] REFUSING — resolved DB host is production (${host}).\n` +
+    `\n[prisma-cli-guard] REFUSING — resolved target is ${what} (${label}).\n` +
+      `  ${target.reason}\n\n` +
       `If you really mean to run an interactive Prisma command against production, set\n` +
       `ALLOW_PROD_MIGRATION=1 explicitly. For a real production migration deploy, prefer\n` +
       `\`npm run db:migrate:deploy:prod\` instead of this interactive path.\n`
@@ -70,7 +72,9 @@ if (host.includes(PROD_HOST_MARKER) && process.env.ALLOW_PROD_MIGRATION !== "1")
   process.exit(1);
 }
 
-console.log(`[prisma-cli-guard] Target host: ${host}${host.includes(PROD_HOST_MARKER) ? " (PRODUCTION — explicitly allowed)" : ""}`);
+const suffix =
+  target.classification === "non-production" ? "" : ` (${target.classification.toUpperCase()} — explicitly allowed)`;
+console.log(`[prisma-cli-guard] Target: ${label}${suffix}`);
 
 const prismaArgs = process.argv.slice(2);
 const prismaBin = path.join(process.cwd(), "node_modules", ".bin", process.platform === "win32" ? "prisma.cmd" : "prisma");

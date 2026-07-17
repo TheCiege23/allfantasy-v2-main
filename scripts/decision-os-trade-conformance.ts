@@ -11,7 +11,7 @@
  *   • Reads only (resolveCanonicalWorld find* port + AdpDataRecord/SportsPlayer caches). NEVER writes,
  *     upserts, warms a cache, calls a live provider API, or persists anything.
  *   • Skips cleanly (exit 0) when no DATABASE_URL is set — safe to wire into CI without a database.
- *   • REFUSES the production database (exit 0, runs nothing) — validation runs only against non-prod data.
+ *   • REFUSES the production database (exit 2) — validation runs only against non-prod data.
  *
  *   DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-trade-conformance.ts [leagueId ...]
  *
@@ -20,10 +20,9 @@
  * roster players (player-for-player) — no proposal write, no snapshot write.
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { refuseIfNotNonProduction } from './db-target-identity'
 import type { CanonicalWorld } from '../lib/decision-os/world/facts'
 import type { TradeAssetSummary } from '../lib/decision-os/trade/dco'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -47,13 +46,11 @@ function hostOf(url: string | null): string {
     process.exit(0)
   }
 
-  const host = hostOf(resolveDatabaseUrl())
+  const dbUrl = resolveDatabaseUrl()
   // The trade conformance check stages representative trades + runs the memo; per the E.5 mandate it
   // REFUSES the production database outright (it never runs against prod, even read-only).
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.log(`TRADE_CONFORMANCE SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  refuseIfNotNonProduction(dbUrl, 'Phase E.5 trade conformance stages representative trades from real roster data and must never touch production.')
+  const host = hostOf(dbUrl)
   console.log(`Phase E.5 trade conformance — READ-ONLY — DB host: ${host}`)
 
   // Dynamic imports AFTER the DB gate so the skip path never evaluates the prisma singleton.

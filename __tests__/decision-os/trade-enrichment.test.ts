@@ -399,11 +399,14 @@ describe('E.5 (7)+(8) — validation script gating', () => {
     expect(prismaImportIdx).toBeGreaterThan(gateIdx) // prisma is imported only AFTER the gate
   })
 
-  it('refuses the production database host before doing any work', () => {
-    expect(src).toMatch(/refusing production DB/i)
-    expect(src).toContain('ep-spring-tooth')
-    const refuseIdx = src.indexOf('refusing production DB')
+  // Asserts the shared guard is called before prisma is pulled — never a literal endpoint id.
+  // Hardcoding the endpoint here is what let the 2026-07-14 inversion ship green.
+  it('refuses a non-safe database target before doing any work', () => {
+    expect(src).toContain('refuseIfNotNonProduction')
+    const refuseIdx = src.indexOf('refuseIfNotNonProduction(')
     const prismaImportIdx = src.indexOf("await import('../lib/prisma')")
+    expect(refuseIdx).toBeGreaterThan(-1)
+    expect(prismaImportIdx).toBeGreaterThan(-1)
     expect(refuseIdx).toBeLessThan(prismaImportIdx) // refusal happens before prisma is pulled
   })
 })

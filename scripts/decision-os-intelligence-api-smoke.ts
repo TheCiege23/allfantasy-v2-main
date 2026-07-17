@@ -18,8 +18,9 @@
  *   DATABASE_URL=<staging> npx tsx scripts/decision-os-intelligence-api-smoke.ts
  *
  * The DATABASE_URL must point to the staging (non-prod) Neon branch.
- * The script hard-refuses to run against the production host (ep-spring-tooth).
+ * The script hard-refuses to run against production (ep-curly-block-ad0dlt9o/neondb).
  */
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 // ── Safety check — must happen before any imports that open Prisma ─────────────
 
@@ -30,12 +31,7 @@ if (!DB_URL) {
   process.exit(0)
 }
 
-const PROD_HOST_FRAGMENT = 'ep-spring-tooth'
-if (DB_URL.includes(PROD_HOST_FRAGMENT)) {
-  console.error('❌ HARD-REFUSED: DATABASE_URL appears to point to the production DB (ep-spring-tooth).')
-  console.error('   This script must only run against staging (ep-winter-salad).')
-  process.exit(1)
-}
+refuseIfNotNonProduction(DB_URL, 'Decision OS Intelligence API smoke test calls real handlers against staging data and must never touch production.')
 
 // ── Set Intelligence API env vars for this run ────────────────────────────────
 

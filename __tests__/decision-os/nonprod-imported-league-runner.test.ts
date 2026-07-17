@@ -27,8 +27,10 @@ describe('ADR-DOS-F0: both scripts gate the database the same way the conformanc
       // DB-gated: import the gate helper and short-circuit (SKIPPED) before touching prisma.
       expect(`${path}:hasDatabaseUrl`).toBe(`${path}:${src.includes('hasDatabaseUrl') ? 'hasDatabaseUrl' : 'MISSING'}`)
       expect(`${path}:SKIP`).toBe(`${path}:${/SKIPPED/.test(src) ? 'SKIP' : 'MISSING'}`)
-      // Prod host hard-refusal.
-      expect(`${path}:prodmarker`).toBe(`${path}:${src.includes('ep-spring-tooth') ? 'prodmarker' : 'MISSING'}`)
+      // Production refusal is delegated to the single shared guard (scripts/db-target-identity).
+      expect(`${path}:prodguard`).toBe(
+        `${path}:${src.includes('refuseIfNotNonProduction') || src.includes('assertNonProductionTarget') ? 'prodguard' : 'MISSING'}`,
+      )
       // The prisma singleton is imported dynamically AFTER the gate (so the skip/refuse path never
       // evaluates it): there must be no top-of-file static `import ... '@/lib/prisma'` / `'../lib/prisma'`.
       expect(`${path}:no-static-prisma`).toBe(
@@ -37,10 +39,18 @@ describe('ADR-DOS-F0: both scripts gate the database the same way the conformanc
     }
   })
 
-  it('the prod-host refusal regex actually catches a prod URL (positive control)', () => {
-    const refuse = (host: string) => host.includes('ep-spring-tooth')
-    expect(refuse('ep-spring-tooth-12345.us-east-2.aws.neon.tech')).toBe(true)
-    expect(refuse('ep-winter-salad-67890.us-east-2.aws.neon.tech')).toBe(false)
+  // Positive control against the REAL guard, not an inline re-implementation of it. The previous
+  // version asserted `host.includes('ep-spring-tooth')` matched itself — which stayed green while
+  // that marker actually named a dev clone, leaving production permitted.
+  it('the shared guard really does refuse production and permit local dev', async () => {
+    const { classifyDatabaseTarget } = await import('@/scripts/db-target-identity')
+    const at = (host: string, db: string) => `postgresql://u:p@${host}.c-2.us-east-1.aws.neon.tech/${db}`
+
+    expect(classifyDatabaseTarget(at('ep-curly-block-ad0dlt9o', 'neondb')).classification).toBe('production')
+    expect(classifyDatabaseTarget(at('ep-curly-block-ad0dlt9o-pooler', 'mydb_shadow')).classification).toBe(
+      'non-production',
+    )
+    expect(classifyDatabaseTarget(at('ep-winter-salad-67890', 'neondb')).classification).toBe('unknown')
   })
 })
 

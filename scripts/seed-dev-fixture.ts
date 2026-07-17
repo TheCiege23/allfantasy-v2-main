@@ -8,8 +8,8 @@
  * scripts/seed-redraft-war-room-runtime.ts rather than inventing a parallel fixture shape.
  *
  * PROPERTIES (all required by the verification-first brief):
- *  - SAFE      : refuses to run against the production host (see PROD_HOST_MARKERS). Fails closed —
- *                an unparseable/absent DATABASE_URL aborts rather than guessing.
+ *  - SAFE      : refuses to run against the production host (see scripts/db-target-identity.cjs). Fails
+ *                closed — an unparseable/absent DATABASE_URL aborts rather than guessing.
  *  - IDEMPOTENT: deterministic ids + upserts; re-running converges to the same state. Rosters/members
  *                for the two fixture leagues are replaced wholesale (scoped strictly to these two
  *                league ids — never a global delete).
@@ -24,11 +24,7 @@
  * RESET (removes ONLY this fixture's two leagues and their children):
  *   npm run seed:dev -- --reset
  */
-
-// Production endpoint markers. `ep-spring-tooth` is the known production Neon host; the generic
-// markers catch a prod URL that is renamed or moved to another provider.
-const PROD_HOST_MARKERS = ['ep-spring-tooth', 'prod', 'production']
-const DEV_HOST_ALLOWLIST = ['ep-curly-block', 'localhost', '127.0.0.1']
+import { assertNonProductionTarget } from './db-target-identity'
 
 const LOCAL_DEV_USER = {
   id: 'local-dev-user',
@@ -58,40 +54,10 @@ const MANAGER_NAMES = [
 ]
 
 function assertNonProductionDatabase(): { host: string; database: string } {
-  const url = process.env.DATABASE_URL
-  if (!url) {
-    throw new Error('SEED ABORTED: DATABASE_URL is not set. Refusing to run against an unknown database.')
-  }
-
-  let host: string
-  try {
-    host = new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    throw new Error('SEED ABORTED: DATABASE_URL could not be parsed. Refusing to guess the target database.')
-  }
-
-  const database = url.split('/').pop()?.split('?')[0] ?? '?'
-  const haystack = `${host}/${database}`.toLowerCase()
-
-  const hitProdMarker = PROD_HOST_MARKERS.find((m) => haystack.includes(m))
-  if (hitProdMarker) {
-    throw new Error(
-      `SEED ABORTED: target "${haystack}" matches production marker "${hitProdMarker}". ` +
-        'This seed writes data and must never touch production.',
-    )
-  }
-
-  // Fail CLOSED: an unrecognized host is refused rather than assumed safe. If you are legitimately on a
-  // new dev branch, add its host to DEV_HOST_ALLOWLIST deliberately.
-  const onAllowlist = DEV_HOST_ALLOWLIST.some((m) => haystack.includes(m))
-  if (!onAllowlist) {
-    throw new Error(
-      `SEED ABORTED: target "${haystack}" is not on the dev allowlist [${DEV_HOST_ALLOWLIST.join(', ')}]. ` +
-        'Add it explicitly if this really is a safe non-production database.',
-    )
-  }
-
-  return { host, database }
+  const result = assertNonProductionTarget(process.env.DATABASE_URL, {
+    action: 'This seed writes data and must never touch production.',
+  })
+  return { host: result.host ?? '?', database: result.database ?? '?' }
 }
 
 async function main() {

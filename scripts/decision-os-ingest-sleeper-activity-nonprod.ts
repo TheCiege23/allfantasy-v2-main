@@ -24,7 +24,7 @@
  *
  * Safety, mirroring every existing `scripts/decision-os-*-nonprod.ts` script exactly:
  *   - Skips cleanly without a DATABASE_URL.
- *   - Hard-refuses the production DB host (`ep-spring-tooth`).
+ *   - Hard-refuses the production database.
  *   - Requires an EXPLICIT, already-imported AF league id — no auto-discovery, no production
  *     league enumeration, ever.
  *   - Read-only against AF-native tables (`League`, `LeagueTeam`, `Roster`, `UserProfile`) — this
@@ -65,8 +65,7 @@ import {
   collectRosterOwnerIds,
   shouldWarnPossibleSilentFetchFailure,
 } from './decision-os-ingest-sleeper-activity-helpers'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 function arg(name: string): string | undefined {
   const hit = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))
@@ -89,11 +88,8 @@ function hostOf(url: string | null): string {
     process.exit(0)
   }
   const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'This runner writes activity rows and must never touch production.')
   const host = hostOf(dbUrl)
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host. This runner writes activity rows and must NEVER touch production.`)
-    process.exit(1)
-  }
 
   // Deliberately named `--afLeagueId=` (not `--league=`, which the sibling
   // `decision-os-import-sleeper-nonprod.ts` uses for the SLEEPER SOURCE league id — the opposite

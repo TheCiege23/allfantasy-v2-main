@@ -47,6 +47,7 @@
     "db:migrate:deploy:prod": "node scripts/prisma-migrate-deploy.cjs --prod",
     "db:status": "prisma migrate status",
     "db:verify": "prisma validate && prisma migrate status",
+    "db:verify-prod-identity": "tsx scripts/verify-prod-db-identity.ts",
     "db:migrate:baseline": "powershell -ExecutionPolicy Bypass -File \"scripts/baseline-migrations.ps1\"",
     "db:foundation:apply": "tsx scripts/apply-af-foundation-if-needed.ts",
     "db:indexes:platform-backend": "prisma db execute --file scripts/sql/platform-backend-indexes.sql --schema prisma/schema.prisma",

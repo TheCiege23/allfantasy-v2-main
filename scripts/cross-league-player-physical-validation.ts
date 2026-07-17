@@ -21,8 +21,7 @@
  */
 import crypto from 'node:crypto'
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 let failures = 0
 const checks: Array<{ name: string; ok: boolean; detail: string }> = []
@@ -54,11 +53,9 @@ console.log = (...args: unknown[]) => {
     origLog('CROSS_LEAGUE_VALIDATION SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    origLog(`CROSS_LEAGUE_VALIDATION REFUSED — resolved host looks like PRODUCTION (${host}). Aborting.`)
-    process.exit(0)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'Cross-League Player Intelligence physical validation writes real fixture rows and must never touch production.')
+  const host = hostOf(dbUrl)
   console.log(`Cross-League Player Intelligence physical validation — DB host: ${host}`)
 
   // Safety check passed — NOW it's safe to import repo modules.

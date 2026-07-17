@@ -3,16 +3,14 @@
  * Usage: DATABASE_URL=<staging> npx tsx scripts/probe-news-coverage.ts
  */
 import { PrismaClient } from '@prisma/client'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 const prisma = new PrismaClient({ log: [] })
 
 void (async () => {
   const host = process.env.DATABASE_URL?.match(/@([^/]+)\//)?.[1] ?? 'unknown'
   console.log(`DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) {
-    console.error('HARD REFUSE: prod host')
-    process.exit(1)
-  }
+  refuseIfNotNonProduction(process.env.DATABASE_URL, 'F2.7 news coverage probe reads real player news data and must never touch production.')
 
   // PlayerNewsRecord
   const pnrTotal = await prisma.playerNewsRecord.count()

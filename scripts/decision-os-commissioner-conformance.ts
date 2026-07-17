@@ -8,15 +8,14 @@
  * non-automating, and NO league/roster mutation occurs.
  *
  * STRICTLY READ-ONLY & SAFE: reads only; never seeds, writes, mutates, or executes a commissioner action.
- * Skips cleanly (exit 0) without DATABASE_URL. REFUSES the production host (exit 0).
+ * Skips cleanly (exit 0) without DATABASE_URL. REFUSES the production host (exit 2).
  *
  *   DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-commissioner-conformance.ts [leagueId ...]
  *
  * With no ids it auto-discovers the most-recently-synced leagues (each self-labels via provenance).
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -61,11 +60,9 @@ const COUNTS = {
     console.log('COMMISSIONER_CONFORMANCE SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run the real-data check.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.log(`COMMISSIONER_CONFORMANCE SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'Phase F.1 commissioner conformance reads real league and roster data and must never touch production.')
+  const host = hostOf(dbUrl)
   console.log(`Phase F.1 commissioner conformance — READ-ONLY — DB host: ${host}`)
 
   const { prisma } = await import('../lib/prisma')

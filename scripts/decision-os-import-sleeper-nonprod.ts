@@ -14,7 +14,7 @@
  *     product writes on every real import.
  *   • NEVER writes Canonical World (lib/decision-os/world is a derived, storage-less, find*-only layer —
  *     this runner imports no world write surface because none exists; it only READS via resolveCanonicalWorld).
- *   • HARD-REFUSES the production DB host (ep-spring-tooth) and SKIPs cleanly without DATABASE_URL.
+ *   • HARD-REFUSES the production database and SKIPs cleanly without DATABASE_URL.
  *   • Idempotent: re-runs short-circuit a completed ImportRun; `--force` re-imports over an existing league.
  *
  *     DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-import-sleeper-nonprod.ts [options]
@@ -29,8 +29,7 @@
  *   --force                Re-import over an existing league (allowUpdateExisting).
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 function arg(name: string): string | undefined {
   const hit = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))
@@ -53,11 +52,9 @@ function hostOf(url: string | null): string {
     console.log('NONPROD_IMPORT SKIPPED (no DATABASE_URL) — set a NON-PROD DATABASE_URL to seed an imported league.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host (${PROD_HOST_MARKER}). This runner writes import rows and must NEVER touch production.`)
-    process.exit(1)
-  }
+  const dbUrl = resolveDatabaseUrl()
+  refuseIfNotNonProduction(dbUrl, 'This runner writes import rows and must never touch production.')
+  const host = hostOf(dbUrl)
 
   const account = (arg('account') ?? 'theciege24').trim()
   const explicitLeague = arg('league')?.trim()

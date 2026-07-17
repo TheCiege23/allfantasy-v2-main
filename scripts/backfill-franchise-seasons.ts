@@ -29,20 +29,23 @@
  *   DATABASE_URL=<non-prod db> npx tsx scripts/backfill-franchise-seasons.ts            # real write, once approved
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { describeTarget, refuseIfNotNonProduction } from './db-target-identity'
 
-// Verified against the live Neon console 2026-07-14: the "production" branch's
-// endpoint is ep-spring-tooth-adaoi9x1, NOT ep-curly-block (that's the
-// claude-dashboard-local-dev branch — a real but non-prod clone).
-const PROD_HOST_MARKER = 'ep-spring-tooth'
-
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
-}
+// CORRECTED 2026-07-17. This file previously asserted, as verified fact, that production was
+// ep-spring-tooth-adaoi9x1 and that ep-curly-block was the claude-dashboard-local-dev clone.
+// That is exactly backwards, and the claim propagated into ~20 files, leaving every guard
+// refusing the clone and permitting production.
+//
+// The truth (Neon project icy-field-51189449, three independent signals, 2026-07-17):
+//   ep-curly-block-ad0dlt9o  -> branch "production", primary:true, default:true, 26.8M commits
+//   ep-spring-tooth-adaoi9x1 -> branch "claude-dashboard-local-dev", forked off production
+//                               2026-07-07, 127k commits
+//
+// The lesson is in HOW it went wrong, not just what: the old check was
+// `refuse if host === PROD_HOST_MARKER`, which fails OPEN, so one wrong string disabled the
+// guard against the only database it mattered for. Classification now lives in
+// db-target-identity.cjs, is keyed on (endpoint, database) — production and local dev share a
+// compute and differ only by database name — and refuses anything not positively known safe.
 
 const NATIVE_PLATFORMS = ['allfantasy', 'af', 'manual', 'native']
 
@@ -108,12 +111,9 @@ function parseNativeRecords(raw: unknown): Array<{
     console.log('BACKFILL_FRANCHISE_SEASONS SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.log(`BACKFILL_FRANCHISE_SEASONS SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
-  console.log(`FranchiseSeason backfill — DB host: ${host} — mode: ${dryRun ? 'DRY RUN (no writes)' : 'REAL WRITE'}${leagueFilter ? ` — league: ${leagueFilter}` : ''}`)
+  refuseIfNotNonProduction(resolveDatabaseUrl(), 'This backfill writes franchise_seasons rows and must never touch production.')
+  const target = describeTarget(resolveDatabaseUrl())
+  console.log(`FranchiseSeason backfill — target: ${target} — mode: ${dryRun ? 'DRY RUN (no writes)' : 'REAL WRITE'}${leagueFilter ? ` — league: ${leagueFilter}` : ''}`)
 
   const { prisma } = await import('../lib/prisma')
   const { upsertFranchiseSeasonRows } = await import('../lib/rank/upsertFranchiseSeasonRows')

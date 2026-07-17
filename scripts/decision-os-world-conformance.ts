@@ -17,6 +17,7 @@
  * safe to wire into CI without a database.
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { refuseIfNotNonProduction } from './db-target-identity'
 import type { CanonicalWorld } from '../lib/decision-os/world/facts'
 
 let failures = 0
@@ -41,11 +42,10 @@ function hostOf(url: string | null): string {
     process.exit(0)
   }
 
-  const host = hostOf(resolveDatabaseUrl())
+  const dbUrl = resolveDatabaseUrl()
+  const host = hostOf(dbUrl)
   console.log(`Phase D.2 world conformance — READ-ONLY (find* only) — DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) {
-    console.log('⚠️  This is the PRODUCTION host. Proceeding because this script is strictly read-only (no writes).')
-  }
+  refuseIfNotNonProduction(dbUrl, 'Phase D.2 world conformance reads real league data and must never touch production, even read-only.')
 
   // Dynamic imports AFTER the DB gate so the skip path never evaluates the prisma singleton.
   const { prisma } = await import('../lib/prisma')

@@ -3,13 +3,14 @@
  * Probes SportsNews and examines PlayerNewsRecord playerId namespace.
  */
 import { PrismaClient } from '@prisma/client'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 const prisma = new PrismaClient({ log: [] })
 
 void (async () => {
   const host = process.env.DATABASE_URL?.match(/@([^/]+)\//)?.[1] ?? 'unknown'
   console.log(`DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) { console.error('HARD REFUSE'); process.exit(1) }
+  refuseIfNotNonProduction(process.env.DATABASE_URL, 'F2.7 news coverage probe (part 2) reads real player news data and must never touch production.')
 
   // SportsNews
   const snTotal = await prisma.sportsNews.count()

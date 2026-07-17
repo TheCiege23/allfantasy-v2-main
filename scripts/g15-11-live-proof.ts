@@ -16,6 +16,7 @@ import { PrismaOutboxStore, OutboxRelay, createPrismaAuditFeedConsumer, type Pri
 import { createIntelligenceSnapshotConsumer } from '../lib/intelligence/projections/snapshotProjection'
 import { IntelligenceQueryService } from '../lib/intelligence/IntelligenceQueryService'
 import { buildCommissionerGrounding, detectCommissionerIntelligenceIntent } from '../lib/intelligence/chimmy/commissionerGrounding'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 let failures = 0
 function check(name: string, ok: boolean, detail = '') {
@@ -27,7 +28,7 @@ function check(name: string, ok: boolean, detail = '') {
   const prisma = new PrismaClient()
   const host = (() => { try { return new URL((process.env.DATABASE_URL ?? '').replace(/^postgres(ql)?:\/\//, 'http://')).host } catch { return '?' } })()
   console.log(`G15.11 live proof — DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) { console.error('REFUSING to run the seeding proof against the production host.'); process.exit(2) }
+  refuseIfNotNonProduction(process.env.DATABASE_URL, 'G15.11 live proof seeds a league and drains the outbox and must never touch production.')
 
   // before
   console.log(JSON.stringify({

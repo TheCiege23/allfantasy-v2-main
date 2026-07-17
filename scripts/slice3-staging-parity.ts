@@ -18,6 +18,7 @@ import { seedNflRedraftLeague, addRosterPlayer, cleanupSeededLeague } from '../t
 import { captureRedraftTradeValueSnapshot } from '../lib/trade-value/captureSnapshot'
 import { runTradeShadowForProposal } from '../lib/decision-os/trade/shadow'
 import { registerDecisionTelemetrySink } from '../lib/decision-os/core/telemetry'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -29,7 +30,7 @@ const check = (name: string, ok: boolean, detail = '') => {
   const prisma = new PrismaClient()
   const host = (() => { try { return new URL((process.env.DATABASE_URL ?? '').replace(/^postgres(ql)?:\/\//, 'http://')).host } catch { return '?' } })()
   console.log(`Slice 3 staging parity — DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) { console.error('REFUSING to run against the production host.'); process.exit(2) }
+  refuseIfNotNonProduction(process.env.DATABASE_URL, 'Slice 3 staging parity seeds a trade proposal and must never touch production.')
 
   const events: { event: string; flags?: Record<string, unknown> }[] = []
   registerDecisionTelemetrySink((e) => events.push(e as never))

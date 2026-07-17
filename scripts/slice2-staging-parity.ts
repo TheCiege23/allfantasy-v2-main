@@ -20,6 +20,7 @@ import { runWaiverShadowForEngine } from '../lib/decision-os/waiver/shadow'
 import { evaluateWaiverRules } from '../lib/decision-os/waiver/rules'
 import { resolveWaiverWorld } from '../lib/decision-os/waiver/world'
 import { registerDecisionTelemetrySink } from '../lib/decision-os/core/telemetry'
+import { refuseIfNotNonProduction } from './db-target-identity'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -37,10 +38,7 @@ const check = (name: string, ok: boolean, detail = '') => {
     }
   })()
   console.log(`Slice 2 staging parity — DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) {
-    console.error('REFUSING to run against the production host.')
-    process.exit(2)
-  }
+  refuseIfNotNonProduction(process.env.DATABASE_URL, 'Slice 2 staging parity seeds a league and asserts zero waiver execution; must never touch production.')
 
   const events: { event: string; flags?: Record<string, unknown> }[] = []
   registerDecisionTelemetrySink((e) => events.push(e as never))
