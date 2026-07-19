@@ -7,7 +7,9 @@ name: TypeScript error ratchet
 
 on:
   pull_request:
-    branches: [main, master]
+    # No `branches:` filter on purpose. Filtering PR runs to base
+    # main/master silently skipped every stacked PR (a PR based on
+    # another branch), so those merged with no real check coverage.
   push:
     branches: [main, master]
 
