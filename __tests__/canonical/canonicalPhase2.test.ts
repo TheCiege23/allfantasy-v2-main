@@ -9,9 +9,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const prismaMock = vi.hoisted(() => ({
-  player: { findUnique: vi.fn() },
+  player: { findUnique: vi.fn(), findMany: vi.fn() },
   team: { findUnique: vi.fn() },
-  playerImage: { findFirst: vi.fn() },
+  playerImage: { findFirst: vi.fn(), findMany: vi.fn() },
   teamImage: { findFirst: vi.fn() },
   playerSeasonStat: { findFirst: vi.fn() },
   fantasyProjection: { findMany: vi.fn() },
@@ -41,7 +41,11 @@ import {
   normalizePosition,
   NON_PLAYER_POSITIONS,
 } from '@/lib/canonical/canonicalIdentity'
-import { getCanonicalPlayer, getCanonicalTeam } from '@/lib/canonical/getCanonicalPlayer'
+import {
+  getCanonicalPlayer,
+  getCanonicalPlayerMapForSport,
+  getCanonicalTeam,
+} from '@/lib/canonical/getCanonicalPlayer'
 
 describe('canonical identity — matching key', () => {
   it('is deterministic: the same player always derives the same id', () => {
@@ -252,6 +256,90 @@ describe('getCanonicalPlayer', () => {
     prismaMock.player.findUnique.mockResolvedValue(null)
     expect(await getCanonicalPlayer('nope')).toBeNull()
     expect(await getCanonicalPlayer('')).toBeNull()
+  })
+})
+
+describe('getCanonicalPlayerMapForSport — the enumeration shape', () => {
+  /**
+   * The third `getAllPlayers()` usage shape: a call site that iterates the entire player
+   * universe rather than looking ids up. Batch 1 only proved the two lookup shapes.
+   */
+  const IDENTITIES = [
+    { playerId: 'nfl-a-1111', providerPlayerId: '4034' },
+    { playerId: 'nfl-b-2222', providerPlayerId: '6794' },
+    { playerId: 'nfl-ghost-9', providerPlayerId: '9999' }, // identity with no Player row
+  ]
+  const PLAYERS = [
+    { id: 'nfl-a-1111', name: 'Alvin Kamara', sport: 'NFL', position: 'RB', team: 'NO', active: true, imageUrl: 'https://cdn/a.png' },
+    { id: 'nfl-b-2222', name: 'Justin Jefferson', sport: 'NFL', position: 'WR', team: 'MIN', active: true, imageUrl: null },
+  ]
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.playerProviderIdentity.findMany.mockResolvedValue(IDENTITIES)
+    prismaMock.player.findMany.mockResolvedValue(PLAYERS)
+    prismaMock.playerImage.findMany.mockResolvedValue([])
+  })
+
+  it('returns a map keyed by SLEEPER id, matching the shape call sites already index', async () => {
+    const map = await getCanonicalPlayerMapForSport('NFL')
+
+    // Callers index `players[sleeperId]`, so the key must be the Sleeper id, not Player.id.
+    expect(map.get('4034')?.name).toBe('Alvin Kamara')
+    expect(map.get('6794')?.position).toBe('WR')
+    expect(map.get('nfl-a-1111')).toBeUndefined()
+  })
+
+  it('drops identities with no canonical player rather than emitting a partial entry', async () => {
+    const map = await getCanonicalPlayerMapForSport('NFL')
+    expect(map.has('9999')).toBe(false)
+    expect(map.size).toBe(2)
+  })
+
+  it('stays at two queries and does NOT read images by default', async () => {
+    // Joining PlayerImage across a whole sport is a third read over every row; enumeration
+    // callers rarely use it, so it is opt-in.
+    await getCanonicalPlayerMapForSport('NFL')
+    expect(prismaMock.playerImage.findMany).not.toHaveBeenCalled()
+    expect(prismaMock.player.findMany).toHaveBeenCalledTimes(1)
+    expect(prismaMock.playerProviderIdentity.findMany).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the denormalized Player.imageUrl when images are not joined', async () => {
+    const map = await getCanonicalPlayerMapForSport('NFL')
+    expect(map.get('4034')?.imageUrl).toBe('https://cdn/a.png')
+    expect(map.get('6794')?.imageUrl).toBeNull()
+  })
+
+  it('prefers the primary PlayerImage when includeImages is set', async () => {
+    prismaMock.playerImage.findMany.mockResolvedValue([
+      { playerId: 'nfl-b-2222', url: 'https://cdn/primary.png' },
+    ])
+
+    const map = await getCanonicalPlayerMapForSport('NFL', { includeImages: true })
+
+    expect(prismaMock.playerImage.findMany).toHaveBeenCalledTimes(1)
+    expect(map.get('6794')?.imageUrl).toBe('https://cdn/primary.png')
+  })
+
+  it('scopes the identity read to the sport and normalizes case', async () => {
+    await getCanonicalPlayerMapForSport('nfl')
+    expect(prismaMock.playerProviderIdentity.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { provider: 'sleeper', sportKey: 'NFL' } }),
+    )
+  })
+
+  it('honours activeOnly', async () => {
+    await getCanonicalPlayerMapForSport('NFL', { activeOnly: true })
+    expect(prismaMock.player.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { sport: 'NFL', active: true } }),
+    )
+  })
+
+  it('returns an empty map for a blank sport without querying', async () => {
+    const map = await getCanonicalPlayerMapForSport('')
+    expect(map.size).toBe(0)
+    expect(prismaMock.player.findMany).not.toHaveBeenCalled()
   })
 })
 

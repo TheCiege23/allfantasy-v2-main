@@ -6,11 +6,11 @@ import {
   getLeagueTransactions,
   getLeagueRosters,
   getLeagueUsers,
-  getAllPlayers,
   getLeagueHistory,
   resolveSleeperUser,
   SleeperTransaction,
 } from '@/lib/sleeper-client';
+import { getCanonicalPlayerMapForSport } from '@/lib/canonical/getCanonicalPlayer';
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -35,11 +35,27 @@ export interface PortfolioHistoryResponse {
 }
 
 async function fetchUserTrades(leagueId: string, sleeperUserId: string): Promise<UserTrade[]> {
-  const [users, rosters, allPlayers] = await Promise.all([
+  // Phase 3 batch 2 — canonical read path. Historical trade portfolio: renders trades that
+  // already happened, so cache-only is correct; no live roster decision depends on this.
+  // Reshaped to the `Record<sleeperId, {...}>` the code below already indexes.
+  const [users, rosters, canonicalPlayers] = await Promise.all([
     getLeagueUsers(leagueId),
     getLeagueRosters(leagueId),
-    getAllPlayers(),
+    getCanonicalPlayerMapForSport('NFL'),
   ]);
+
+  const allPlayers: Record<
+    string,
+    { full_name: string; first_name: string; last_name: string; position: string }
+  > = Object.fromEntries(
+    [...canonicalPlayers].map(([sleeperId, p]) => {
+      const [first = '', ...rest] = (p.name ?? '').split(' ');
+      return [
+        sleeperId,
+        { full_name: p.name, first_name: first, last_name: rest.join(' '), position: p.position },
+      ];
+    }),
+  );
 
   const userRoster = rosters.find((r: any) => r.owner_id === sleeperUserId);
   if (!userRoster) return [];

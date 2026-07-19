@@ -310,6 +310,82 @@ export async function getCanonicalPlayersBySleeperIds(
   return out
 }
 
+/**
+ * Enumerate every canonical player for a sport, keyed by Sleeper id.
+ *
+ * This is the third `getAllPlayers()` usage shape — a call site that iterates the whole player
+ * universe rather than looking specific ids up (free-agent scans, "list every player" endpoints,
+ * name searches). It is deliberately a separate function from
+ * `getCanonicalPlayersBySleeperIds()` because the cost profile is different: that one answers a
+ * bounded set of ids, this one is a full-table read for the sport (~13.9k rows for NFL).
+ *
+ * Two queries regardless of size, and it stays lightweight on purpose:
+ *   - Keyed by **Sleeper id**, matching the `Record<sleeperId, player>` shape callers already
+ *     index, so migrating a site is a data-source swap rather than a rewrite.
+ *   - `includeImages` is **off by default**. Joining `PlayerImage` across an entire sport is a
+ *     third read over every row to populate a field enumeration callers rarely use; the
+ *     denormalized `Player.imageUrl` is still returned either way.
+ *
+ * Players without a Sleeper identity are absent by construction. That matches the old path —
+ * `getAllPlayers()` only ever returned Sleeper's universe — but it does mean this is an
+ * NFL-shaped accessor today, because Sleeper covers no other sport (see `canonicalIdentity.ts`).
+ */
+export async function getCanonicalPlayerMapForSport(
+  sport: string,
+  opts: { activeOnly?: boolean; includeImages?: boolean } = {},
+): Promise<Map<string, CanonicalPlayerLite>> {
+  const sportKey = String(sport ?? '').trim().toUpperCase()
+  const out = new Map<string, CanonicalPlayerLite>()
+  if (!sportKey) return out
+
+  const [identities, players] = await Promise.all([
+    prisma.playerProviderIdentity.findMany({
+      where: { provider: 'sleeper', sportKey },
+      select: { playerId: true, providerPlayerId: true },
+    }),
+    prisma.player.findMany({
+      where: opts.activeOnly ? { sport: sportKey, active: true } : { sport: sportKey },
+      select: {
+        id: true, name: true, sport: true, position: true,
+        team: true, active: true, imageUrl: true,
+      },
+    }),
+  ])
+
+  const byId = new Map(players.map((p) => [p.id, p]))
+
+  let imageById = new Map<string, string>()
+  if (opts.includeImages) {
+    const images = await prisma.playerImage.findMany({
+      where: {
+        playerId: { in: [...byId.keys()] },
+        imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
+        isPrimary: true,
+      },
+      select: { playerId: true, url: true },
+    })
+    imageById = new Map(images.filter((i) => i.playerId).map((i) => [i.playerId as string, i.url]))
+  }
+
+  for (const identity of identities) {
+    if (!identity.playerId) continue
+    const player = byId.get(identity.playerId)
+    if (!player) continue
+    out.set(identity.providerPlayerId, {
+      id: player.id,
+      sleeperId: identity.providerPlayerId,
+      name: player.name,
+      sport: String(player.sport ?? '').toUpperCase(),
+      position: player.position,
+      team: player.team,
+      active: player.active,
+      imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
+    })
+  }
+
+  return out
+}
+
 /** Full canonical player, resolved from a Sleeper id rather than a canonical id. */
 export async function getCanonicalPlayerBySleeperId(
   sleeperId: string,
