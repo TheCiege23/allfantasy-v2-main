@@ -39,8 +39,8 @@ async function main() {
   console.log(`  duplicates collapsed : ${summary.collapsedDuplicates}`)
   console.log(`  player identities    : ${summary.playerIdentities}`)
   console.log(`  team identities      : ${summary.teamIdentities}`)
-  console.log(`  matched by sleeperId : ${summary.strategies.sleeper_id}`)
-  console.log(`  matched by name+pos  : ${summary.strategies.name_sport_position}`)
+  console.log(`  matched by sleeperId      : ${summary.strategies.sleeper_id}`)
+  console.log(`  matched by name+pos+team  : ${summary.strategies.name_sport_position_team}`)
   console.log(`  duration             : ${Date.now() - started}ms`)
 }
 

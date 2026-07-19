@@ -67,12 +67,40 @@ describe('canonical identity — matching key', () => {
     expect(qb.id).not.toBe(lb.id)
   })
 
-  it('falls back to name+sport+position when no sleeperId exists (e.g. soccer)', () => {
+  it('falls back to name+sport+position+team when no sleeperId exists (e.g. soccer)', () => {
     const identity = deriveCanonicalPlayerIdentity({
-      name: 'Erling Haaland', sport: 'SOCCER', position: 'FW',
+      name: 'Erling Haaland', sport: 'SOCCER', position: 'FW', team: 'MCI',
     })
-    expect(identity.strategy).toBe('name_sport_position')
+    expect(identity.strategy).toBe('name_sport_position_team')
     expect(identity.id).toMatch(/^soccer-erling-haaland-[0-9a-f]{8}$/)
+  })
+
+  it('does NOT fuse different college players who share a name AND position', () => {
+    // Found against the real 95,839-row SportsPlayer table, not a sample: five different
+    // NCAAB guards named "Jordan Williams" (Arizona State, Rice, St. Francis Brooklyn,
+    // Texas A&M, Vanderbilt), none with a sleeperId because Sleeper covers NFL only. With
+    // `(sport, name, position)` alone they collapsed into ONE canonical player; 6,439 rows
+    // were at risk this way. `team` is what separates them.
+    const schools = [
+      'Arizona State University', 'Rice University', 'St. Francis Brooklyn',
+      'Texas A&M University', 'Vanderbilt University',
+    ]
+    const ids = schools.map((team) =>
+      deriveCanonicalPlayerIdentity({ name: 'Jordan Williams', sport: 'NCAAB', position: 'G', team }).id,
+    )
+    expect(new Set(ids).size).toBe(5)
+  })
+
+  it('still collapses one player across sources via sleeperId even if team differs', () => {
+    // Team is only in the FALLBACK key, so a traded NFL player with a sleeperId still
+    // collapses — which is why keying on team is safe for the sport that has real trades.
+    const cin = deriveCanonicalPlayerIdentity({
+      name: 'Joe Flacco', sport: 'NFL', position: 'QB', team: 'CIN', sleeperId: '19',
+    })
+    const cle = deriveCanonicalPlayerIdentity({
+      name: 'Joe Flacco', sport: 'NFL', position: 'QB', team: 'CLE', sleeperId: '19',
+    })
+    expect(cin.id).toBe(cle.id)
   })
 
   it('treats straight and typographic apostrophes as the same player', () => {

@@ -14,10 +14,31 @@
  *   1. **`sleeperId` when present.** The strongest key available: it is a real cross-source
  *      player identity that different providers' rows agree on, so two `SportsPlayer` rows
  *      carrying the same `sleeperId` are the same human by construction.
- *   2. **`(sport, normalizedName, position)` otherwise.** Name alone is not safe — the NFL has
- *      two Josh Allens (QB/BUF and LB/JAX), and collapsing them would corrupt every downstream
- *      read. Position separates the realistic collisions; `normalizePlayerName` already folds
- *      punctuation and Jr/Sr/III suffixes so "Ja'Marr"/"JaMarr" agree.
+ *   2. **`(sport, normalizedName, position, team)` otherwise.** Name alone is not safe — the
+ *      NFL has two Josh Allens (QB/BUF and LB/JAX) — and name+position alone is not safe
+ *      either, which only became visible at production scale (see below).
+ *      `normalizePlayerName` already folds punctuation and Jr/Sr/III suffixes so
+ *      "Ja'Marr"/"Ja’Marr" agree.
+ *
+ * ── Why `team` is in the fallback key (measured, not assumed) ──
+ *
+ * Against the real 95,839-row `SportsPlayer` table, `sleeperId` covers **NFL only** (87.2%);
+ * every other sport is 0%. So 84% of production resolves through the fallback key, not 16% as
+ * a small NFL-shaped sample suggests.
+ *
+ * With `(sport, name, position)` alone, 5,826 groups contained rows from the *same* ingesting
+ * source — a source does not list one person twice, so those were distinct humans about to be
+ * fused: five different NCAAB guards named "Jordan Williams" (Arizona State, Rice, St. Francis
+ * Brooklyn, Texas A&M, Vanderbilt) collapsing into one canonical player. 6,439 rows were at
+ * risk. Adding `team` cuts that to 137 (0.14%), and the residual is genuinely ambiguous
+ * same-name/same-team/same-position rows, mostly NCAAB.
+ *
+ * Keying on `team` risks *under*-merging a traded player into two canonical rows — but that
+ * only applies to rows without a `sleeperId`, and the sports that rely on this key are
+ * single-source college/international rosters, while NFL (6 sources, real trades) is 87.2%
+ * covered by `sleeperId` and unaffected. Under-merging is also the safe direction: a duplicate
+ * canonical row is cosmetic, whereas fusing two people corrupts their images, stats and
+ * identity irreversibly.
  *
  * The id embeds a readable slug plus a short hash of that key: deterministic and unique, while
  * still being greppable in logs and DB dumps (`nfl-jamarr-chase-3f2a1b9c`).
@@ -33,11 +54,12 @@ export interface CanonicalPlayerSeed {
   name: string
   sport: string
   position?: string | null
+  team?: string | null
   sleeperId?: string | null
 }
 
 /** How a canonical id was derived — recorded on the row so a re-match can be audited. */
-export type CanonicalMatchStrategy = 'sleeper_id' | 'name_sport_position'
+export type CanonicalMatchStrategy = 'sleeper_id' | 'name_sport_position_team'
 
 export interface CanonicalPlayerIdentity {
   id: string
@@ -66,6 +88,11 @@ export function normalizePosition(position: string | null | undefined): string {
   return String(position ?? '').trim().toUpperCase()
 }
 
+/** Team codes and full school names both appear as `SportsPlayer.team`; compare case-folded. */
+export function normalizeTeam(team: string | null | undefined): string {
+  return String(team ?? '').trim().toUpperCase()
+}
+
 /**
  * Derive the stable canonical identity for a player.
  *
@@ -79,10 +106,10 @@ export function deriveCanonicalPlayerIdentity(
   const normalizedName = normalizePlayerName(seed.name)
   const sleeperId = seed.sleeperId?.trim()
 
-  const strategy: CanonicalMatchStrategy = sleeperId ? 'sleeper_id' : 'name_sport_position'
+  const strategy: CanonicalMatchStrategy = sleeperId ? 'sleeper_id' : 'name_sport_position_team'
   const matchKey = sleeperId
     ? `sleeper:${sleeperId}`
-    : `${sport}|${normalizedName}|${normalizePosition(seed.position)}`
+    : `${sport}|${normalizedName}|${normalizePosition(seed.position)}|${normalizeTeam(seed.team)}`
 
   const slug = slugify(normalizedName || seed.name || 'unknown')
   const id = `${sport.toLowerCase() || 'unknown'}-${slug}-${shortHash(matchKey)}`
