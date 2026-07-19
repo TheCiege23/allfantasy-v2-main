@@ -81,6 +81,7 @@ const KEEP = new Set([
   'app/api/cron/draft-pool-prewarm/route.ts',
   'app/api/cron/fantasy-os-exec-sync/route.ts',
   'app/api/cron/trade-weekly-recalibration/route.ts',
+  'app/api/cron/sync-player-images/route.ts',
   'app/api/admin/automation/health/route.ts','app/api/admin/automation/waivers/run/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts','app/api/ai/waivers/recommend/route.ts',
   // admin keeps (only relevant to the NEW set)

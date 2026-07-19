@@ -13,6 +13,10 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/sync-player-images",
+      "schedule": "10 5 * * *"
+    },
+    {
       "path": "/api/cron/waivers",
       "schedule": "*/5 * * * *"
     },
