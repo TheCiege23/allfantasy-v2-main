@@ -41,6 +41,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/simulations", tool: "L
     ip,
     maxRequests: 5,
     windowMs: 60000,
+    includeIpInKey: true,
   })
 
   if (!rateLimitResult.success) {

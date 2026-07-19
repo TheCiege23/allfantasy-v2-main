@@ -113,9 +113,32 @@ export function consumeRateLimit(args: {
   const u = args.sleeperUsername ? normalizeKeyPart(args.sleeperUsername) : 'anonymous'
   const ip = args.ip ? normalizeKeyPart(args.ip) : 'unknown'
 
+  // ── Degenerate-bucket guard ────────────────────────────────────────────────
+  // A caller that passes `ip` but neither a usable `sleeperUsername` nor
+  // `includeIpInKey: true` would key on `scope:action:user:anonymous` — a SINGLE
+  // bucket shared by every visitor on the platform. At the call site that reads
+  // like a per-IP limit (an `ip` was passed, after all), so the collapse is
+  // invisible in review: `maxRequests: 5` silently becomes 5/min for everyone
+  // combined, and one user's traffic 429s everybody else.
+  //
+  // When that shape is detected, fall back to bucketing by IP. This only ever
+  // ADDS a dimension to the key, so it can tighten an over-broad bucket but can
+  // never widen a correct one. A deliberate global ceiling passes no `ip` and is
+  // therefore untouched.
+  const hasUserKey = u !== 'anonymous' && u !== ''
+  const wouldCollapseToGlobal = !hasUserKey && args.includeIpInKey !== true && Boolean(args.ip)
+
+  if (wouldCollapseToGlobal && process.env.NODE_ENV !== 'production') {
+    console.warn(
+      `[rate-limit] ${scope}:${action} passed an ip but no sleeperUsername and no ` +
+        `includeIpInKey — this would collapse to one global bucket. Bucketing by ip ` +
+        `instead. Pass a per-user key, or set includeIpInKey: true to be explicit.`,
+    )
+  }
+
   // Per-user throttling is the primary strategy
   // Optionally include IP to deter automated abuse while still being "per user"
-  const key = args.includeIpInKey
+  const key = args.includeIpInKey || wouldCollapseToGlobal
     ? `${scope}:${action}:user:${u}:ip:${ip}`
     : `${scope}:${action}:user:${u}`
 

@@ -13,8 +13,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/feedback", tool:
       ip,
       maxRequests: 20,
       windowMs: 60_000,
+      includeIpInKey: true,
     })
-    if (!allowed) {
+    if (!allowed.success) {
       return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
     }
 

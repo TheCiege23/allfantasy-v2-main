@@ -79,9 +79,11 @@ export async function POST(req: Request) {
     const rl = consumeRateLimit({
       scope: "import",
       action: "sleeper_sync",
+      sleeperUsername: afUserId,
       ip,
       maxRequests: 5,
       windowMs: 60 * 1000,
+      includeIpInKey: true,
     });
 
     if (!rl.success) {

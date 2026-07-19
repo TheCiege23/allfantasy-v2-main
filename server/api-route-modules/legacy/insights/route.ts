@@ -39,6 +39,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/insights", tool: "Lega
     ip,
     maxRequests: 3,
     windowMs: 60000,
+    includeIpInKey: true,
   })
 
   if (!rateLimitResult.success) {

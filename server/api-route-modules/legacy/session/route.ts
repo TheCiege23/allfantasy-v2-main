@@ -17,6 +17,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/session", tool: "Legac
       ip,
       maxRequests: 10,
       windowMs: 60_000,
+      includeIpInKey: true,
     })
 
     if (!rateLimit.success) {

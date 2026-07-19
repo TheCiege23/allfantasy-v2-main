@@ -34,6 +34,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/smart-recommendations"
     ip,
     maxRequests: 5,
     windowMs: 60000,
+    includeIpInKey: true,
   })
   
   if (!rateLimitResult.success) {
