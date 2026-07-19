@@ -250,6 +250,9 @@ export function V3ImportWizard() {
               disabled={soon}
               aria-pressed={selected === p.id}
               aria-label={soon ? `${p.name} — coming soon` : `Import from ${p.name}`}
+              data-testid="v3-platform-card"
+              data-platform={p.id}
+              data-mode={p.mode}
             >
               <span className="plat-logo" style={{ background: p.color }}>{p.initial}</span>
               <span className="plat-name">{p.name}</span>
@@ -281,7 +284,7 @@ export function V3ImportWizard() {
       </p>
 
       {/* ── Wizard ─────────────────────────────────────────────────────── */}
-      <div className="wiz">
+      <div className="wiz" data-testid="v3-import-wizard" data-step={step}>
         <div className="wiz-steps" role="list" aria-label="Import progress">
           {W.steps.map((label, i) => (
             <div
@@ -289,6 +292,7 @@ export function V3ImportWizard() {
               role="listitem"
               className={`wiz-step${i === step ? ' is-active' : ''}${i < step ? ' is-done' : ''}`}
               aria-current={i === step ? 'step' : undefined}
+              data-testid="v3-wizard-step"
             >
               <span className="wiz-num">{i < step ? <Check size={13} /> : i + 1}</span>
               <span className="wiz-label">{label}</span>
@@ -354,12 +358,12 @@ export function V3ImportWizard() {
               )}
 
               <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                <button type="button" className="btn btn-secondary" onClick={restart}>
+                <button type="button" className="btn btn-secondary" data-testid="v3-wizard-back" onClick={restart}>
                   <ArrowLeft size={16} /> {W.back}
                 </button>
 
                 {platform.mode === 'guest' && (
-                  <button type="button" className="btn btn-primary" onClick={() => setStep(2)}>
+                  <button type="button" className="btn btn-primary" data-testid="v3-wizard-next" onClick={() => setStep(2)}>
                     {W.next} <ArrowRight size={16} />
                   </button>
                 )}
@@ -367,18 +371,19 @@ export function V3ImportWizard() {
                   <button
                     type="button"
                     className="btn btn-primary"
+                    data-testid="v3-wizard-signup-cta"
                     onClick={() => goSignup('/dashboard', `Connect ${platform.name}`)}
                   >
                     Create a free account to connect {platform.name} <ArrowRight size={16} />
                   </button>
                 )}
                 {platform.mode === 'create' && (
-                  <Link href="/create-league" className="btn btn-primary">
+                  <Link href="/create-league" className="btn btn-primary" data-testid="v3-wizard-create-league">
                     Create a league <ArrowRight size={16} />
                   </Link>
                 )}
                 {platform.helpHref && (
-                  <Link href={platform.helpHref} className="btn btn-ghost">
+                  <Link href={platform.helpHref} className="btn btn-ghost" data-testid="v3-wizard-help-link">
                     Full guide <ExternalLink size={14} />
                   </Link>
                 )}
@@ -424,7 +429,7 @@ export function V3ImportWizard() {
               </div>
 
               {phase === 'failed' && error && (
-                <p role="alert" style={{ fontSize: 13.5, color: '#fca5a5', marginTop: 12 }}>
+                <p role="alert" data-testid="v3-import-error" style={{ fontSize: 13.5, color: '#fca5a5', marginTop: 12 }}>
                   {error}
                 </p>
               )}
@@ -470,11 +475,11 @@ export function V3ImportWizard() {
               >
                 <Check size={22} style={{ color: 'var(--good)' }} />
               </span>
-              <div style={{ flex: 1 }}>
+              <div style={{ flex: 1 }} data-testid="v3-wizard-done">
                 <h3 style={{ fontSize: 19, marginBottom: 5 }}>{W.doneTitle}</h3>
                 <p style={{ fontSize: 14, color: 'var(--text-3)' }}>{W.doneSub}</p>
               </div>
-              <Link href={GUEST_DASHBOARD} className="btn btn-primary">
+              <Link href={GUEST_DASHBOARD} className="btn btn-primary" data-testid="v3-wizard-dashboard-link">
                 {W.goToDashboard} <ArrowRight size={16} />
               </Link>
             </div>

@@ -111,10 +111,11 @@ export default function LandingV3(_props: LandingV3Props) {
               ))}
             </div>
 
-            <div className="hero-cta">
+            <div className="hero-cta" data-testid="landing-hero-cta-group">
               <a
                 href="#import"
                 className="btn btn-primary"
+                data-testid="landing-hero-primary-cta"
                 onClick={() => track(V3.hero.primary, '#import', 'primary', 'hero')}
               >
                 {V3.hero.primary} <ArrowRight size={17} />
@@ -122,6 +123,7 @@ export default function LandingV3(_props: LandingV3Props) {
               <Link
                 href="/demo-dashboard"
                 className="btn btn-secondary"
+                data-testid="landing-hero-demo-cta"
                 onClick={() => track(V3.hero.secondary, '/demo-dashboard', 'secondary', 'hero')}
               >
                 <PlayCircle size={17} /> {V3.hero.secondary}
@@ -129,6 +131,7 @@ export default function LandingV3(_props: LandingV3Props) {
               <a
                 href="#import"
                 className="btn btn-ghost"
+                data-testid="landing-hero-tertiary-cta"
                 onClick={() => track(V3.hero.tertiary, '#import', 'secondary', 'hero')}
               >
                 {V3.hero.tertiary}
@@ -234,7 +237,7 @@ export default function LandingV3(_props: LandingV3Props) {
             {V3.os.cards.map((c) => {
               const Icon = OS_ICONS[c.icon] ?? Sparkles
               return (
-                <Link key={c.name} href={c.href} className="card card-hover os-card">
+                <Link key={c.name} href={c.href} className="card card-hover os-card" data-testid="landing-os-card">
                   <div className="os-icon"><Icon size={20} /></div>
                   <div className="os-name">{c.name}</div>
                   <div className="os-desc">{c.desc}</div>
@@ -377,11 +380,11 @@ export default function LandingV3(_props: LandingV3Props) {
             <h2 className="section-title">{V3.pricing.title}</h2>
             <p className="section-sub">{V3.pricing.sub}</p>
           </div>
-          <div className="price-grid">
+          <div className="price-grid" data-testid="landing-pricing-grid">
             {V3.pricing.plans.map((plan) => {
               const href = plan.href ? signupUrlWithIntent(plan.href) : signupHref
               return (
-                <div key={plan.name} className={`price-card${plan.featured ? ' is-featured' : ''}`}>
+                <div key={plan.name} className={`price-card${plan.featured ? ' is-featured' : ''}`} data-testid="landing-pricing-card" data-plan={plan.name}>
                   {plan.featured && (
                     <span className="pill pill-purple" style={{ alignSelf: 'flex-start', marginBottom: 10, fontSize: 10.5 }}>
                       <Sparkles size={11} />
@@ -402,6 +405,7 @@ export default function LandingV3(_props: LandingV3Props) {
                   <Link
                     href={href}
                     className={`btn btn-block ${plan.featured ? 'btn-primary' : 'btn-secondary'}`}
+                    data-testid="landing-pricing-cta"
                     onClick={() => track(plan.cta, href, plan.featured ? 'primary' : 'secondary', `pricing-${plan.name.toLowerCase()}`)}
                   >
                     {plan.cta}
@@ -411,7 +415,7 @@ export default function LandingV3(_props: LandingV3Props) {
             })}
           </div>
           <div className="center" style={{ marginTop: 26 }}>
-            <Link href="/pricing" className="btn btn-ghost">
+            <Link href="/pricing" className="btn btn-ghost" data-testid="landing-pricing-compare">
               {V3.pricing.compareCta} <ArrowRight size={15} />
             </Link>
           </div>
@@ -452,10 +456,10 @@ export default function LandingV3(_props: LandingV3Props) {
           </h2>
           <p className="section-sub" style={{ marginBottom: 28 }}>{V3.finalCta.body}</p>
           <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <a href="#import" className="btn btn-primary">
+            <a href="#import" className="btn btn-primary" data-testid="landing-final-cta-primary">
               {V3.finalCta.primary} <ArrowRight size={17} />
             </a>
-            <Link href="/create-league" className="btn btn-secondary">
+            <Link href="/create-league" className="btn btn-secondary" data-testid="landing-final-cta-secondary">
               {V3.finalCta.secondary}
             </Link>
           </div>
@@ -494,7 +498,7 @@ function Nav({ signupHref, loginHref }: { signupHref: string; loginHref: string 
   }, [openMenu, close])
 
   return (
-    <div className="nav" ref={navRef}>
+    <div className="nav" ref={navRef} data-testid="landing-nav">
       <div className="wrap">
         <div className="nav-inner">
           <Link
@@ -521,15 +525,17 @@ function Nav({ signupHref, loginHref }: { signupHref: string; loginHref: string 
                   className="nav-link"
                   aria-expanded={openMenu === g.label}
                   aria-haspopup="true"
+                  data-testid="landing-nav-group"
+                  data-group={g.label}
                   onClick={() => setOpenMenu(openMenu === g.label ? null : g.label)}
                 >
                   {g.label}
                   <ChevronDown size={14} style={{ opacity: 0.6 }} />
                 </button>
                 {openMenu === g.label && (
-                  <div className="nav-menu">
+                  <div className="nav-menu" data-testid="landing-nav-menu">
                     {g.items.map((it) => (
-                      <Link key={it.href} href={it.href} onClick={close}>
+                      <Link key={it.href} href={it.href} onClick={close} data-testid="landing-nav-menu-link">
                         {it.label}
                         <span className="nav-menu-desc">{it.desc}</span>
                       </Link>
@@ -538,12 +544,13 @@ function Nav({ signupHref, loginHref }: { signupHref: string; loginHref: string 
                 )}
               </div>
             ))}
-            <Link href={V3.nav.pricing.href} className="nav-link">{V3.nav.pricing.label}</Link>
+            <Link href={V3.nav.pricing.href} className="nav-link" data-testid="landing-nav-pricing">{V3.nav.pricing.label}</Link>
           </nav>
 
           <button
             type="button"
             className="btn btn-ghost nav-burger"
+            data-testid="landing-nav-burger"
             onClick={() => setMobileOpen((v) => !v)}
             aria-expanded={mobileOpen}
             aria-label={mobileOpen ? V3.nav.closeMenu : V3.nav.openMenu}
@@ -572,7 +579,7 @@ function Nav({ signupHref, loginHref }: { signupHref: string; loginHref: string 
         </div>
 
         {mobileOpen && (
-          <div className="nav-mobile">
+          <div className="nav-mobile" data-testid="landing-nav-mobile">
             {V3.nav.groups.map((g) => (
               <div key={g.label}>
                 <div className="nav-mobile-group">{g.label}</div>
@@ -612,7 +619,7 @@ function Nav({ signupHref, loginHref }: { signupHref: string; loginHref: string 
 
 function Footer({ loginHref }: { loginHref: string }) {
   return (
-    <footer className="footer">
+    <footer className="footer" data-testid="landing-footer">
       <div className="wrap">
         <div className="footer-grid">
           <div>
@@ -637,7 +644,7 @@ function Footer({ loginHref }: { loginHref: string }) {
               <div className="footer-col-title">{col.title}</div>
               <div className="footer-links">
                 {col.links.map((l) => (
-                  <Link key={l.href} href={l.href}>{l.label}</Link>
+                  <Link key={l.href} href={l.href} data-testid="landing-footer-link">{l.label}</Link>
                 ))}
               </div>
             </div>
