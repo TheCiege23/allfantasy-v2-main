@@ -107,20 +107,31 @@ function pickBestSourceRow(rows: SourcePlayer[]): SourcePlayer {
 }
 
 /**
- * Strip a redundant `<provider>-` prefix from a source row's `externalId`.
+ * Strip a redundant `<provider><sep>` prefix from a source row's `externalId`.
  *
- * `SportsPlayer.externalId` encodes the provider locally (ESPN rows are stored as
- * `espn-11252`), but `PlayerProviderIdentity` is the cross-platform map, so it must hold the
- * id in the provider's own space (`11252` — the value that actually builds an ESPN headshot
- * URL). Without this, one player ends up with both `espn=espn-11252` and `espn=11252`, and
- * `getCanonicalPlayer`'s `providerIds` map silently keeps whichever landed last.
+ * `SportsPlayer.externalId` encodes the provider locally, but `PlayerProviderIdentity` is the
+ * cross-platform map, so it must hold the id in the provider's own space — `11252`, the value
+ * that actually builds an ESPN headshot URL, not `espn-11252`.
+ *
+ * Production uses THREE different separators for this, which only became visible when reading
+ * real rows back: one NFL player carried `sleeper` identities of `3218` (from the `sleeperId`
+ * column), `sleeper:3218` and `sleeper_3218` (both from `externalId`). Handling only `-` left
+ * two duplicate identity rows per player and made `getCanonicalPlayer`'s `providerIds` map
+ * report whichever landed last.
  *
  * `Player.providerIds` deliberately keeps the RAW externalId — the legacy `SportsPlayer`
  * mirror looks rows up by it.
  */
+const PROVIDER_ID_SEPARATORS = ['-', '_', ':']
+
 function normalizeProviderPlayerId(provider: string, rawId: string): string {
-  const prefix = `${provider.toLowerCase()}-`
-  return rawId.toLowerCase().startsWith(prefix) ? rawId.slice(prefix.length) : rawId
+  const lower = rawId.toLowerCase()
+  const p = provider.toLowerCase()
+  for (const sep of PROVIDER_ID_SEPARATORS) {
+    const prefix = `${p}${sep}`
+    if (lower.startsWith(prefix)) return rawId.slice(prefix.length)
+  }
+  return rawId
 }
 
 async function upsertProviderIdentity(args: {

@@ -23,7 +23,11 @@
  */
 
 import { prisma } from '@/lib/prisma'
-import { readPrimaryPlayerImage, type StoredPlayerImage } from '@/lib/player-assets/playerImageStore'
+import {
+  PLAYER_IMAGE_TYPE_HEADSHOT,
+  readPrimaryPlayerImage,
+  type StoredPlayerImage,
+} from '@/lib/player-assets/playerImageStore'
 import { readPrimaryTeamImage, type StoredTeamImage } from '@/lib/sport-teams/teamImageStore'
 import { resolvePlayerHeadshot } from '@/lib/player-assets/resolvePlayerHeadshot'
 
