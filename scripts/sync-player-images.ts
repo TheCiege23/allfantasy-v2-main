@@ -29,14 +29,16 @@ async function syncPlayerImages() {
   const limit = Math.max(Number(arg('limit', '50')) || 50, 1)
   const dryRun = process.argv.includes('--dry-run')
 
-  const players = await prisma.sportsPlayer.findMany({
+  // Phase 2: canonical-first. `player.id` here is `Player.id`, so the write-through keys
+  // PlayerImage by the canonical id rather than the legacy SportsPlayer.id.
+  const players = await prisma.player.findMany({
     where: { sport, imageUrl: null },
     take: limit,
-    orderBy: { updatedAt: 'asc' },
-    select: { id: true, name: true, team: true, sport: true },
+    orderBy: { lastSyncedAt: 'asc' },
+    select: { id: true, name: true, team: true, sport: true, position: true, providerIds: true },
   })
 
-  console.log(`Found ${players.length} ${sport} players without images${dryRun ? ' (dry run)' : ''}`)
+  console.log(`Found ${players.length} canonical ${sport} players without images${dryRun ? ' (dry run)' : ''}`)
   if (dryRun || players.length === 0) return
 
   const resolver = await createBatchPlayerHeadshotResolver({ sport })
@@ -50,15 +52,24 @@ async function syncPlayerImages() {
         name: player.name,
         sport: player.sport,
         team: player.team,
+        position: player.position,
         playerId: player.id,
       })
 
       if (result.imageUrl) {
-        // Legacy mirror, kept in step with the cron until Phase 3 migrates the readers.
-        await prisma.sportsPlayer.update({
+        await prisma.player.update({
           where: { id: player.id },
-          data: { imageUrl: result.imageUrl },
+          data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
         })
+        // Legacy mirror via providerIds, kept in step with the cron until Phase 3.
+        const providerIds = (player.providerIds ?? {}) as Record<string, unknown>
+        for (const [source, externalId] of Object.entries(providerIds)) {
+          if (typeof externalId !== 'string' || !externalId) continue
+          await prisma.sportsPlayer.updateMany({
+            where: { sport: player.sport, source, externalId },
+            data: { imageUrl: result.imageUrl },
+          })
+        }
         successCount++
         console.log(`SUCCESS ${player.name} [${result.source}]: ${result.imageUrl}`)
       } else {

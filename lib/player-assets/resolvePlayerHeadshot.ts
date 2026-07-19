@@ -2,8 +2,12 @@
  * E.1.5 — server-side player-headshot resolver.
  *
  * Resolves a real player headshot URL by checking, in order:
- *   - NFL: G49H provider orchestrator -> canonical media resolver -> default fallback
- *   - Other sports: ClearSports -> TheSportsDB legacy resolver
+ *   - NFL: G49H provider orchestrator (canonical media resolver) first, then falling through
+ *     to the shared chain below when it yields no image.
+ *   - All sports: TheSportsDB -> api-sports -> local SportsPlayer cache -> Sleeper (NFL only).
+ *
+ * ClearSports is deliberately not in this chain: it publishes no image product for any sport
+ * (see the note at the `csPlayers` declaration below).
  *
  * If none of the above produce a valid HTTP/HTTPS image URL, returns
  * `{ imageUrl: null, source: 'none', confidence: 'none' }` so the UI's
@@ -14,12 +18,11 @@
  *
  * Two callable shapes:
  *   - `resolvePlayerHeadshot(input)`            — single player (one network call per provider).
- *   - `createBatchPlayerHeadshotResolver()`     — factory for scripts that resolve many players;
- *                                                pre-loads ClearSports once and looks up locally.
+ *   - `createBatchPlayerHeadshotResolver()`     — factory for scripts and crons that resolve
+ *                                                many players against one shared resolver.
  */
 
 import { prisma } from '@/lib/prisma'
-import { clearSportsFetch } from '@/lib/clear-sports/client'
 import { theSportsDbProvider } from '@/lib/workers/providers/thesportsdb'
 import { apiSportsProvider } from '@/lib/workers/providers/api-sports'
 import { sleeperChainProvider } from '@/lib/workers/providers/sleeper-chain'
@@ -83,7 +86,7 @@ export function normalizePlayerName(name: string | null | undefined): string {
   if (!name) return ''
   let s = String(name).trim().toLowerCase()
   // Strip apostrophes, hyphens, periods entirely.
-  s = s.replace(/[''`.,]/g, '')
+  s = s.replace(/['‘’`.,]/g, '')
   s = s.replace(/-/g, ' ')
   // Drop common suffixes after the last space.
   s = s.replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '')
@@ -127,12 +130,12 @@ export function buildNameSearchVariants(rawName: string | null | undefined, norm
   push(rawName)
   // 2. Strip apostrophes/periods/commas/backticks but keep capitalization.
   //    "Ja'Marr Chase" → "JaMarr Chase"; "A.J. Brown" → "AJ Brown"
-  push(rawName.replace(/[''`.,]/g, '').replace(/\s+/g, ' ').trim())
+  push(rawName.replace(/['‘’`.,]/g, '').replace(/\s+/g, ' ').trim())
   // 3. Replace apostrophes/periods with spaces, then collapse — gives "Ja Marr",
   //    "A J", "D K", "Amon Ra" (same as hyphen→space).
   push(
     rawName
-      .replace(/[''`.]/g, ' ')
+      .replace(/['‘’`.]/g, ' ')
       .replace(/-/g, ' ')
       .replace(/\s+/g, ' ')
       .trim(),
@@ -143,7 +146,7 @@ export function buildNameSearchVariants(rawName: string | null | undefined, norm
   // 5. Drop trailing Jr/Sr/II/III/IV/V after stripping punctuation.
   push(
     rawName
-      .replace(/[''`.,]/g, '')
+      .replace(/['‘’`.,]/g, '')
       .replace(/\s+(jr|sr|ii|iii|iv|v)$/i, '')
       .trim(),
   )
@@ -198,33 +201,10 @@ function clearSportsName(p: ClearSportsPlayerLite): string {
   return String(p.name ?? p.full_name ?? '').trim()
 }
 
-interface ClearSportsResponse {
-  data?: ClearSportsPlayerLite[]
-  players?: ClearSportsPlayerLite[]
-  results?: ClearSportsPlayerLite[]
-}
-
 type SportsPlayerHeadshotCacheRow = {
   imageUrl: string | null
   team: string | null
   position: string | null
-}
-
-function extractPlayers(json: unknown): ClearSportsPlayerLite[] {
-  if (Array.isArray(json)) return json as ClearSportsPlayerLite[]
-  const obj = json as ClearSportsResponse | null | undefined
-  if (!obj) return []
-  return obj.data ?? obj.players ?? obj.results ?? []
-}
-
-async function fetchClearSportsPlayers(sport: string): Promise<ClearSportsPlayerLite[]> {
-  const domain = sport.toLowerCase()
-  try {
-    const json = await clearSportsFetch<unknown>(`${domain}/players`)
-    return extractPlayers(json)
-  } catch {
-    return []
-  }
 }
 
 export interface BatchPlayerHeadshotResolver {
@@ -242,7 +222,15 @@ export async function createBatchPlayerHeadshotResolver(args: {
   sport: string
 }): Promise<BatchPlayerHeadshotResolver> {
   const sport = String(args.sport || 'NFL').toUpperCase()
-  const csPlayers = sport === 'NFL' ? [] : await fetchClearSportsPlayers(sport)
+  // ClearSports contributes nothing to headshots for ANY sport, so we no longer call it here.
+  //  - NFL was already hardcoded to skip it.
+  //  - Non-NFL hit `{domain}/players`, which does not exist: ClearSports only publishes
+  //    `/api/v1/nfl/{player,team,injury}-stats`, `teams/:id` and `games` — no image product.
+  // Measured during Phase 2 verification: three 500s per player (~120ms wasted) on every
+  // soccer resolution before this change. The tiers below are left in place but now read from
+  // an empty map, so they fall through for free. See providerFallbackPolicy.ts for the
+  // matching removal from the declarative player_images / team_logos chains.
+  const csPlayers: ClearSportsPlayerLite[] = []
 
   // Build name → players index. Ambiguous names (multiple players with same normalized name)
   // are kept as a list; the caller resolves with team/position.
@@ -268,7 +256,15 @@ export async function resolvePlayerHeadshot(
   input: ResolveHeadshotInput,
 ): Promise<ResolveHeadshotResult> {
   const sport = String(input.sport || 'NFL').toUpperCase()
-  const csPlayers = sport === 'NFL' ? [] : await fetchClearSportsPlayers(sport)
+  // ClearSports contributes nothing to headshots for ANY sport, so we no longer call it here.
+  //  - NFL was already hardcoded to skip it.
+  //  - Non-NFL hit `{domain}/players`, which does not exist: ClearSports only publishes
+  //    `/api/v1/nfl/{player,team,injury}-stats`, `teams/:id` and `games` — no image product.
+  // Measured during Phase 2 verification: three 500s per player (~120ms wasted) on every
+  // soccer resolution before this change. The tiers below are left in place but now read from
+  // an empty map, so they fall through for free. See providerFallbackPolicy.ts for the
+  // matching removal from the declarative player_images / team_logos chains.
+  const csPlayers: ClearSportsPlayerLite[] = []
   const csByName = new Map<string, ClearSportsPlayerLite[]>()
   for (const p of csPlayers) {
     const nk = normalizePlayerName(clearSportsName(p))

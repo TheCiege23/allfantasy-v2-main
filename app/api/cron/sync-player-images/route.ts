@@ -33,6 +33,13 @@ import { createBatchPlayerHeadshotResolver } from "@/lib/player-assets/resolvePl
 import { PLAYER_IMAGE_TYPE_HEADSHOT } from "@/lib/player-assets/playerImageStore"
 import { TEAM_IMAGE_TYPE_LOGO, writePrimaryTeamImage } from "@/lib/sport-teams/teamImageStore"
 
+/**
+ * Phase 2: this route is now canonical-first. It iterates `Player` / `Team` and writes images
+ * keyed by canonical `Player.id` / `Team.id`, not the `SportsPlayer.id` / `SportsTeam.id`
+ * Phase 1 used. The legacy `SportsPlayer.imageUrl` mirror is still maintained — resolved via
+ * `Player.providerIds` — so today's readers keep working until Phase 3 migrates them.
+ */
+
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
@@ -52,12 +59,40 @@ interface PassSummary {
   timedOut: boolean
 }
 
+/** A canonical player as this route needs it. `id` is `Player.id`. */
+interface CanonicalPlayerRow {
+  id: string
+  name: string
+  team: string | null
+  sport: string
+  position: string
+  providerIds: unknown
+}
+
 /**
- * Resolve headshots for a batch of players and mirror the result onto the legacy column.
- * `resolve()` performs the canonical `PlayerImage` write-through internally.
+ * Mirror a resolved URL back onto the legacy `SportsPlayer.imageUrl` column.
+ *
+ * There is no FK from `Player` to `SportsPlayer`, so we route through the `providerIds` map
+ * the backfill recorded (`{ source: externalId }`) and match on `SportsPlayer`'s natural key
+ * `(sport, externalId, source)`.
+ */
+async function mirrorToLegacy(player: CanonicalPlayerRow, imageUrl: string): Promise<void> {
+  const providerIds = (player.providerIds ?? {}) as Record<string, unknown>
+  for (const [source, externalId] of Object.entries(providerIds)) {
+    if (typeof externalId !== "string" || !externalId) continue
+    await prisma.sportsPlayer.updateMany({
+      where: { sport: player.sport, source, externalId },
+      data: { imageUrl },
+    })
+  }
+}
+
+/**
+ * Resolve headshots for a batch of canonical players. `resolve()` performs the canonical
+ * `PlayerImage` write-through internally, now keyed by `Player.id`.
  */
 async function resolveBatch(
-  players: Array<{ id: string; name: string; team: string | null; sport: string }>,
+  players: CanonicalPlayerRow[],
   sport: string,
   deadline: number,
   opts: { skipCache: boolean },
@@ -78,17 +113,17 @@ async function resolveBatch(
         name: player.name,
         sport: player.sport,
         team: player.team,
-        playerId: player.id,
+        position: player.position,
+        playerId: player.id, // canonical Player.id
         skipCache: opts.skipCache,
       })
 
       if (result.imageUrl) {
-        // Legacy mirror — keeps the existing SportsPlayer.imageUrl readers working until
-        // Phase 3 migrates them onto PlayerImage.
-        await prisma.sportsPlayer.update({
+        await prisma.player.update({
           where: { id: player.id },
-          data: { imageUrl: result.imageUrl },
+          data: { imageUrl: result.imageUrl, lastSeenAt: new Date() },
         })
+        await mirrorToLegacy(player, result.imageUrl)
         summary.resolved++
       } else {
         summary.failed++
@@ -116,17 +151,42 @@ async function resolveBatch(
  * Prisma into client bundles. See `lib/sport-teams/teamImageStore.ts`.
  */
 async function syncTeamLogos(sport: string, dryRun: boolean): Promise<PassSummary> {
-  const teams = await prisma.sportsTeam.findMany({
-    where: { sport, logo: { not: null } },
-    select: { id: true, logo: true, source: true },
-  })
+  // Logos live on the legacy SportsTeam rows; canonical Team has no logo column. Route each
+  // logo to its canonical team through TeamProviderIdentity, which the backfill populated
+  // with `(provider, providerTeamId)` = `(SportsTeam.source, SportsTeam.externalId)`.
+  const [legacyTeams, identities] = await Promise.all([
+    prisma.sportsTeam.findMany({
+      where: { sport, logo: { not: null } },
+      select: { logo: true, source: true, externalId: true },
+    }),
+    prisma.teamProviderIdentity.findMany({
+      where: { sportKey: sport },
+      select: { teamId: true, provider: true, providerTeamId: true },
+    }),
+  ])
 
-  const summary: PassSummary = { considered: teams.length, resolved: 0, failed: 0, timedOut: false }
+  const canonicalByProviderKey = new Map(
+    identities
+      .filter((i) => i.teamId)
+      .map((i) => [`${i.provider}|${i.providerTeamId}`, i.teamId as string]),
+  )
+
+  const summary: PassSummary = {
+    considered: legacyTeams.length, resolved: 0, failed: 0, timedOut: false,
+  }
   if (dryRun) return summary
 
-  for (const team of teams) {
+  for (const team of legacyTeams) {
+    const canonicalTeamId = canonicalByProviderKey.get(`${team.source}|${team.externalId}`)
+    if (!canonicalTeamId) {
+      // No canonical team yet — run the Phase 2 backfill first. Skipped rather than written
+      // under a legacy id, which is exactly the mixing Phase 2 exists to end.
+      summary.failed++
+      continue
+    }
+
     const write = await writePrimaryTeamImage({
-      teamId: team.id,
+      teamId: canonicalTeamId, // canonical Team.id
       sportKey: sport,
       imageType: TEAM_IMAGE_TYPE_LOGO,
       url: team.logo as string,
@@ -162,12 +222,16 @@ async function handle(req: NextRequest) {
     let teams: PassSummary = { considered: 0, resolved: 0, failed: 0, timedOut: false }
 
     if (doPlayers) {
-      // ── Pass A: players with no image at all ──
-      const missing = await prisma.sportsPlayer.findMany({
+      const canonicalSelect = {
+        id: true, name: true, team: true, sport: true, position: true, providerIds: true,
+      } as const
+
+      // ── Pass A: canonical players with no image at all ──
+      const missing = await prisma.player.findMany({
         where: { sport, imageUrl: null },
         take: limit,
-        orderBy: { updatedAt: "asc" },
-        select: { id: true, name: true, team: true, sport: true },
+        orderBy: { lastSyncedAt: "asc" },
+        select: canonicalSelect,
       })
 
       // ── Pass B: players whose canonical image has aged out ──
@@ -184,9 +248,9 @@ async function handle(req: NextRequest) {
       })
       const staleIds = stale.map((row) => row.playerId).filter((id): id is string => Boolean(id))
       const stalePlayers = staleIds.length
-        ? await prisma.sportsPlayer.findMany({
+        ? await prisma.player.findMany({
             where: { id: { in: staleIds } },
-            select: { id: true, name: true, team: true, sport: true },
+            select: canonicalSelect,
           })
         : []
 
