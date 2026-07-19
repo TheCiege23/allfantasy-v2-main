@@ -95,6 +95,7 @@ interface SourcePlayer {
   weight: string | null
   status: string | null
   fetchedAt: Date
+  expiresAt: Date | null
 }
 
 /** Prefer the most complete, most recently fetched source row when several collapse together. */
@@ -133,6 +134,36 @@ function normalizeProviderPlayerId(provider: string, rawId: string): string {
     if (lower.startsWith(prefix)) return rawId.slice(prefix.length)
   }
   return rawId
+}
+
+/**
+ * Split `SportsPlayer.status` into roster state and injury state.
+ *
+ * That column is mixed. Against the real NFL table it holds roster values (`Active` 10,930,
+ * `Inactive` 2,979, `ACT` 1,159, `INACT` 367, `Retired` 136, `Free Agent`, `NA`) AND injury
+ * values (`Questionable` 406, `Injured Reserve` 226, `IR`, `Injured`, `PUP`) in the same field.
+ *
+ * Copying it wholesale into `Player.injuryStatus` — which is what this backfill did until now —
+ * gave ~10,930 NFL players an "injury status" of `Active`. Anything reading `injuryStatus` to
+ * decide whether a player is hurt would have been wrong for the majority of the league.
+ */
+const ROSTER_ACTIVE = new Set(['ACTIVE', 'ACT'])
+const ROSTER_INACTIVE = new Set(['INACTIVE', 'INACT', 'RETIRED', 'NA', 'FREE AGENT'])
+
+export function classifySourceStatus(raw: string | null | undefined): {
+  active: boolean
+  injuryStatus: string | null
+} {
+  const value = String(raw ?? '').trim()
+  if (!value) return { active: true, injuryStatus: null }
+  const upper = value.toUpperCase()
+
+  if (ROSTER_ACTIVE.has(upper)) return { active: true, injuryStatus: null }
+  if (ROSTER_INACTIVE.has(upper)) return { active: false, injuryStatus: null }
+
+  // Anything else is an injury/availability designation (Questionable, IR, PUP, Doubtful, Out,
+  // Injured Reserve, ...). Those players are still on a roster, so `active` stays true.
+  return { active: true, injuryStatus: value }
 }
 
 async function upsertProviderIdentity(args: {
@@ -209,8 +240,19 @@ interface PlayerWriteRow {
   height: string | null
   weight: string | null
   injuryStatus: string | null
+  active: boolean
   providerIds: Record<string, string>
   confidence: number
+  /**
+   * When the SOURCE row was actually observed, carried through from `SportsPlayer.fetchedAt`.
+   *
+   * This deliberately is NOT `now()`. Stamping backfill time here would make every canonical
+   * row look freshly observed the moment a backfill runs, which is exactly the trap that makes
+   * a freshness guard useless: it would measure "when did we last run the backfill" rather than
+   * "when did anyone last actually see this player's team". `lastSeenAt` keeps backfill time.
+   */
+  sourceFetchedAt: Date | null
+  sourceExpiresAt: Date | null
 }
 
 interface IdentityWriteRow {
@@ -230,34 +272,39 @@ interface IdentityWriteRow {
  */
 async function writePlayerBatches(rows: PlayerWriteRow[]): Promise<void> {
   for (const batch of batches(rows, WRITE_BATCH)) {
-    const cols = 14
+    const cols = 17
     const values = batch
       .map((_, i) => `(${Array.from({ length: cols }, (_, c) => `$${i * cols + c + 1}`).join(',')})`)
       .join(',')
     const params = batch.flatMap((r) => [
       r.id, r.name, r.normalizedName, r.sport, r.position, r.league, r.team,
       r.imageUrl, r.height, r.weight, r.injuryStatus, JSON.stringify(r.providerIds),
-      'phase2-backfill', r.confidence,
+      'phase2-backfill', r.confidence, r.sourceFetchedAt, r.sourceExpiresAt, r.active,
     ])
 
     await prisma.$executeRawUnsafe(
       `INSERT INTO "Player" (
          id, name, normalized_name, sport, position, league, team, image_url,
          height, weight, "injuryStatus", provider_ids, source, confidence,
-         fetched_at, last_seen_at, active, "lastSyncedAt", "createdAt"
+         fetched_at, expires_at, last_seen_at, active, "lastSyncedAt", "createdAt"
        )
        SELECT v.id, v.name, v.normalized_name, v.sport, v.position, v.league, v.team, v.image_url,
               v.height, v.weight, v."injuryStatus", v.provider_ids::jsonb, v.source, v.confidence::double precision,
-              now(), now(), true, now(), now()
+              v.source_fetched_at::timestamp(3), v.source_expires_at::timestamp(3),
+              now(), v.active::boolean, now(), now()
        FROM (VALUES ${values}) AS v(
          id, name, normalized_name, sport, position, league, team, image_url,
-         height, weight, "injuryStatus", provider_ids, source, confidence)
+         height, weight, "injuryStatus", provider_ids, source, confidence,
+         source_fetched_at, source_expires_at, active)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          normalized_name = EXCLUDED.normalized_name,
          team = EXCLUDED.team,
          image_url = EXCLUDED.image_url,
          "injuryStatus" = EXCLUDED."injuryStatus",
+         active = EXCLUDED.active,
+         fetched_at = EXCLUDED.fetched_at,
+         expires_at = EXCLUDED.expires_at,
          provider_ids = EXCLUDED.provider_ids,
          last_seen_at = now(),
          "lastSyncedAt" = now()`,
@@ -419,7 +466,7 @@ export async function backfillCanonicalPlayers(
     select: {
       id: true, name: true, sport: true, position: true, team: true,
       externalId: true, source: true, sleeperId: true, imageUrl: true,
-      height: true, weight: true, status: true, fetchedAt: true,
+      height: true, weight: true, status: true, fetchedAt: true, expiresAt: true,
     },
   })) as SourcePlayer[]
 
@@ -478,11 +525,15 @@ export async function backfillCanonicalPlayers(
       imageUrl: best.imageUrl,
       height: best.height,
       weight: best.weight,
-      injuryStatus: best.status,
+      injuryStatus: classifySourceStatus(best.status).injuryStatus,
+      active: classifySourceStatus(best.status).active,
       providerIds: Object.fromEntries(
         rows.filter((r) => r.source && r.externalId).map((r) => [r.source, r.externalId]),
       ),
       confidence: identity.strategy === 'sleeper_id' ? 1 : 0.8,
+      // Real observation time from the source row, NOT now() — see PlayerWriteRow.
+      sourceFetchedAt: best.fetchedAt ?? null,
+      sourceExpiresAt: best.expiresAt ?? null,
     })
 
     // ── Provider identities, deduped in memory before any write ──

@@ -23,8 +23,12 @@ const prismaMock = vi.hoisted(() => ({
 }))
 
 const headshotMock = vi.hoisted(() => ({ resolvePlayerHeadshot: vi.fn() }))
+const sleeperClientMock = vi.hoisted(() => ({ getAllPlayers: vi.fn(async () => ({})) }))
 
 vi.mock('@/lib/prisma', () => ({ prisma: prismaMock }))
+
+// The freshness guard imports this lazily for its live overlay.
+vi.mock('@/lib/sleeper-client', () => sleeperClientMock)
 
 // Partial mock on purpose: `canonicalIdentity` depends on the REAL `normalizePlayerName`, and
 // hand-copying it into the mock silently diverged (the copied character class dropped the
@@ -45,7 +49,10 @@ import {
   getCanonicalPlayer,
   getCanonicalPlayerMapForSport,
   getCanonicalTeam,
+  DECISION_FRESHNESS_MS,
+  type FreshnessStats,
 } from '@/lib/canonical/getCanonicalPlayer'
+import { classifySourceStatus } from '@/lib/canonical/backfillCanonical'
 
 describe('canonical identity — matching key', () => {
   it('is deterministic: the same player always derives the same id', () => {
@@ -340,6 +347,131 @@ describe('getCanonicalPlayerMapForSport — the enumeration shape', () => {
     const map = await getCanonicalPlayerMapForSport('')
     expect(map.size).toBe(0)
     expect(prismaMock.player.findMany).not.toHaveBeenCalled()
+  })
+})
+
+describe('classifySourceStatus — SportsPlayer.status is a MIXED column', () => {
+  /**
+   * Measured on the real NFL table: roster values (`Active` 10,930, `Inactive` 2,979, `ACT`
+   * 1,159, `INACT` 367, `Retired` 136) share the column with injury values (`Questionable` 406,
+   * `Injured Reserve` 226, `IR`, `PUP`). Copying it wholesale into `injuryStatus` gave ~10,930
+   * players an "injury status" of `Active`.
+   */
+  it('maps roster-active values to active with NO injury status', () => {
+    for (const v of ['Active', 'ACT', 'active']) {
+      expect(classifySourceStatus(v)).toEqual({ active: true, injuryStatus: null })
+    }
+  })
+
+  it('maps roster-inactive values to inactive with NO injury status', () => {
+    for (const v of ['Inactive', 'INACT', 'Retired', 'NA', 'Free Agent']) {
+      expect(classifySourceStatus(v)).toEqual({ active: false, injuryStatus: null })
+    }
+  })
+
+  it('keeps injury designations as injuryStatus and leaves the player active', () => {
+    // An injured player is still rostered — `active` must not be flipped by an injury.
+    for (const v of ['Questionable', 'Injured Reserve', 'IR', 'PUP', 'Out', 'Doubtful']) {
+      expect(classifySourceStatus(v)).toEqual({ active: true, injuryStatus: v })
+    }
+  })
+
+  it('treats a missing status as active, not injured', () => {
+    expect(classifySourceStatus(null)).toEqual({ active: true, injuryStatus: null })
+    expect(classifySourceStatus('  ')).toEqual({ active: true, injuryStatus: null })
+  })
+})
+
+describe('freshness guard', () => {
+  const IDENTITIES = [{ playerId: 'p-fresh', providerPlayerId: '111' }, { playerId: 'p-stale', providerPlayerId: '222' }]
+  const base = { sport: 'NFL', position: 'RB', active: true, injuryStatus: null, imageUrl: null }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    prismaMock.playerProviderIdentity.findMany.mockResolvedValue(IDENTITIES)
+    prismaMock.playerImage.findMany.mockResolvedValue([])
+    prismaMock.player.findMany.mockResolvedValue([
+      // observed an hour ago, source TTL still in the future
+      { id: 'p-fresh', name: 'Fresh Guy', team: 'KC', ...base,
+        fetchedAt: new Date(Date.now() - 60 * 60 * 1000),
+        expiresAt: new Date(Date.now() + 86_400_000) },
+      // observed 30 days ago — canonical still says NE, live says cut
+      { id: 'p-stale', name: 'Stale Guy', team: 'NE', ...base,
+        fetchedAt: new Date(Date.now() - 30 * 86_400_000),
+        expiresAt: new Date(Date.now() - 86_400_000) },
+    ])
+    sleeperClientMock.getAllPlayers.mockResolvedValue({
+      '111': { full_name: 'Fresh Guy', position: 'RB', team: 'KC' },
+      '222': { full_name: 'Stale Guy', position: 'RB', team: null },
+    })
+  })
+
+  it('does not contact the provider at all when no threshold is given', async () => {
+    const stats: FreshnessStats = { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+    const map = await getCanonicalPlayerMapForSport('NFL', { stats })
+
+    expect(sleeperClientMock.getAllPlayers).not.toHaveBeenCalled()
+    expect(stats).toMatchObject({ checked: 0, stale: 0, refreshed: 0, liveFetched: false })
+    expect(map.get('222')?.team).toBe('NE') // cache-only keeps the stale value
+  })
+
+  it('refreshes ONLY the stale row and leaves the current one untouched', async () => {
+    const stats: FreshnessStats = { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+    const map = await getCanonicalPlayerMapForSport('NFL', {
+      maxAgeMs: DECISION_FRESHNESS_MS, stats,
+    })
+
+    expect(stats.checked).toBe(2)
+    expect(stats.stale).toBe(1)
+    expect(stats.refreshed).toBe(1)
+    // One live call total, regardless of how many rows were stale.
+    expect(sleeperClientMock.getAllPlayers).toHaveBeenCalledTimes(1)
+    expect(map.get('222')?.team).toBeNull()  // corrected from the stale "NE"
+    expect(map.get('111')?.team).toBe('KC')  // untouched
+  })
+
+  it('treats a past source TTL as stale even inside the age threshold', async () => {
+    prismaMock.player.findMany.mockResolvedValue([
+      { id: 'p-stale', name: 'Stale Guy', team: 'NE', ...base,
+        fetchedAt: new Date(Date.now() - 60 * 1000),        // a minute old
+        expiresAt: new Date(Date.now() - 60 * 1000) },      // but already expired
+    ])
+    prismaMock.playerProviderIdentity.findMany.mockResolvedValue([
+      { playerId: 'p-stale', providerPlayerId: '222' },
+    ])
+    const stats: FreshnessStats = { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+
+    await getCanonicalPlayerMapForSport('NFL', { maxAgeMs: DECISION_FRESHNESS_MS, stats })
+
+    expect(stats.stale).toBe(1)
+  })
+
+  it('treats a row with no observation time as stale rather than assuming fresh', async () => {
+    prismaMock.player.findMany.mockResolvedValue([
+      { id: 'p-stale', name: 'Stale Guy', team: 'NE', ...base, fetchedAt: null, expiresAt: null },
+    ])
+    prismaMock.playerProviderIdentity.findMany.mockResolvedValue([
+      { playerId: 'p-stale', providerPlayerId: '222' },
+    ])
+    const stats: FreshnessStats = { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+
+    await getCanonicalPlayerMapForSport('NFL', { maxAgeMs: DECISION_FRESHNESS_MS, stats })
+
+    expect(stats.stale).toBe(1)
+  })
+
+  it('keeps the cached row when a stale player is absent from live data', async () => {
+    // Present in canonical, gone from Sleeper's universe: do not invent a value.
+    sleeperClientMock.getAllPlayers.mockResolvedValue({})
+    const stats: FreshnessStats = { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+
+    const map = await getCanonicalPlayerMapForSport('NFL', {
+      maxAgeMs: DECISION_FRESHNESS_MS, stats,
+    })
+
+    expect(stats.stale).toBe(1)
+    expect(stats.refreshed).toBe(0)
+    expect(map.get('222')?.team).toBe('NE')
   })
 })
 

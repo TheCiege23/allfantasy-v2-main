@@ -12,7 +12,6 @@ import {
 import { getComprehensiveLearningContext } from './comprehensive-trade-learning';
 import { fetchPlayerNewsFromGrok } from './ai-gm-intelligence';
 import {
-  getAllPlayers,
   getLeagueInfo,
   getLeagueRosters,
   getLeagueTransactions,
@@ -20,6 +19,11 @@ import {
   getTradedDraftPicks,
   SleeperDraftPick,
 } from './sleeper-client';
+import {
+  getCanonicalPlayerMapForSport,
+  DECISION_FRESHNESS_MS,
+  type FreshnessStats,
+} from './canonical/getCanonicalPlayer';
 import { computeManagerTendencies, type ManagerTendencyProfile } from './trade-engine/manager-tendency-engine';
 
 const CACHE_FRESHNESS_HOURS = 4;
@@ -862,12 +866,36 @@ export async function runPreAnalysis(
   });
   
   try {
-    const [leagueInfo, rosters, userMap, allPlayersRes] = await Promise.all([
+    // Phase 3 batch 3 — canonical read path WITH the freshness guard.
+    //
+    // Trade pre-analysis feeds a live trade decision, so this is one of the sites where
+    // staleness could mislead: canonical was measured showing a team for 92 NFL players Sleeper
+    // had already cut. `DECISION_FRESHNESS_MS` makes the accessor fall through to live for rows
+    // whose source observation is older than 6h (or past their source TTL) and overlay only
+    // those — one live fetch total, not one per player.
+    const tradeFreshness: FreshnessStats = { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+    const [leagueInfo, rosters, userMap, canonicalPlayers] = await Promise.all([
       fetchSleeperLeagueInfo(sleeperLeagueId),
       fetchSleeperRosters(sleeperLeagueId),
       fetchSleeperUsers(sleeperLeagueId),
-      getAllPlayers(),
+      getCanonicalPlayerMapForSport('NFL', {
+        maxAgeMs: DECISION_FRESHNESS_MS,
+        stats: tradeFreshness,
+      }),
     ]);
+
+    // Reshaped to the `Record<sleeperId, {first_name,last_name,position,age?}>` the analyzers
+    // below already index. `age` is not carried on canonical `Player`; it was already optional
+    // here (`age?: number`) and every consumer guards it, so it degrades rather than breaks.
+    const allPlayersRes: Record<
+      string,
+      { first_name: string; last_name: string; position: string; age?: number }
+    > = Object.fromEntries(
+      [...canonicalPlayers].map(([sleeperId, p]) => {
+        const [first = '', ...rest] = (p.name ?? '').split(' ');
+        return [sleeperId, { first_name: first, last_name: rest.join(' '), position: p.position }];
+      }),
+    );
     
     if (!leagueInfo) {
       throw new Error('Could not fetch league info');

@@ -10,11 +10,15 @@ import {
   getSleeperUser,
   getLeagueRosters,
   getLeagueInfo,
-  getAllPlayers,
   getLeagueType,
   getScoringType,
   SleeperPlayer,
 } from '@/lib/sleeper-client'
+import {
+  getCanonicalPlayerMapForSport,
+  DECISION_FRESHNESS_MS,
+  type FreshnessStats,
+} from '@/lib/canonical/getCanonicalPlayer'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { getComprehensiveLearningContext } from '@/lib/comprehensive-trade-learning'
 import { autoLogDecision } from '@/lib/decision-log'
@@ -239,10 +243,39 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/waiver/analyze", tool:
     const leagueStatus = (leagueInfo as any)?.status || ''
     const isOffseason = leagueStatus === 'complete' || leagueStatus === 'pre_draft'
 
-    const [rosters, allPlayers] = await Promise.all([
+    // Phase 3 batch 3 — canonical read path WITH the freshness guard.
+    //
+    // This is the waiver wire, so staleness is not cosmetic: canonical was measured showing a
+    // team for 92 NFL players Sleeper had already cut, which here would hide genuinely
+    // available players and surface unavailable ones. Batch 2 held this site back for exactly
+    // that reason. `maxAgeMs: DECISION_FRESHNESS_MS` makes the accessor fall through to live
+    // for any row whose SOURCE observation is older than 6h (or past its source TTL), and
+    // overlay only those rows — one live fetch, not one per player.
+    const freshness: FreshnessStats = { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+    const [rosters, canonicalPlayers] = await Promise.all([
       getLeagueRosters(normalizedLeagueId),
-      getAllPlayers(),
+      getCanonicalPlayerMapForSport('NFL', {
+        maxAgeMs: DECISION_FRESHNESS_MS,
+        stats: freshness,
+      }),
     ])
+
+    // Reshaped to the `Record<sleeperId, SleeperPlayer-ish>` the helpers below already index.
+    // `status` is rebuilt from canonical's split fields: roster state lives on `active`, injury
+    // designations on `injuryStatus` (SportsPlayer.status mixes the two — see
+    // classifySourceStatus). The downstream filter drops Inactive/Retired, so inactive players
+    // are labelled accordingly rather than passed through as an injury value.
+    const allPlayers = Object.fromEntries(
+      [...canonicalPlayers].map(([sleeperId, p]) => [
+        sleeperId,
+        {
+          full_name: p.name,
+          position: p.position,
+          team: p.team,
+          status: p.active ? (p.injuryStatus ?? 'Active') : 'Inactive',
+        },
+      ]),
+    ) as Record<string, SleeperPlayer>
 
     const userRoster = rosters.find(r => r.owner_id === sleeperUser.user_id)
     if (!userRoster) {

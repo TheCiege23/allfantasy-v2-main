@@ -232,12 +232,120 @@ export interface CanonicalPlayerLite {
   position: string
   team: string | null
   active: boolean
+  /**
+   * Injury/availability designation only (Questionable, IR, PUP, ...), never a roster state.
+   * `SportsPlayer.status` mixes both; the backfill splits them — roster state lands on
+   * `active`. See `classifySourceStatus` in backfillCanonical.ts.
+   */
+  injuryStatus: string | null
   /** Primary `PlayerImage` URL, falling back to the denormalized `Player.imageUrl`. */
   imageUrl: string | null
 }
 
 /** Postgres caps bound parameters; chunk large id lists rather than letting the query fail. */
 const ID_CHUNK = 1000
+
+/**
+ * Batch 3 — the freshness guard.
+ *
+ * Batch 2 held `waiver/analyze` back because there was no mechanism for this. `skipLiveFallback`
+ * looked like one but only governs *headshot* re-resolution; nothing re-checked roster state.
+ *
+ * ── What counts as "stale" ──
+ * `Player.fetchedAt` is the SOURCE row's observation time, carried through from
+ * `SportsPlayer.fetchedAt` by the backfill. It is deliberately not backfill time: stamping
+ * `now()` there would make every row look freshly observed the instant a backfill ran, so the
+ * guard would measure its own bookkeeping instead of the data. `expiresAt` is the source's own
+ * TTL and is honoured when set.
+ *
+ * ── Why one live call, not N ──
+ * `getAllPlayers()` is all-or-nothing (and in-process cached), so the guard fetches it at most
+ * ONCE per call and overlays only the rows that are actually stale. Rows that are current are
+ * never touched, which is the property that matters: a mostly-fresh table costs one fetch and
+ * zero overwritten rows, not one fetch per player.
+ */
+export interface FreshnessStats {
+  /** Rows considered. */
+  checked: number
+  /** Rows whose source observation was older than the threshold. */
+  stale: number
+  /** Rows actually overwritten from live data. */
+  refreshed: number
+  /** True when the live provider was contacted at all. */
+  liveFetched: boolean
+}
+
+export interface FreshnessOptions {
+  /**
+   * Fall through to live provider data for rows whose source observation is older than this.
+   * Omit for cache-only, which stays the default — most surfaces are descriptive and should
+   * not pay for a live fetch.
+   */
+  maxAgeMs?: number
+  /** Optional sink so callers and tests can assert what the guard actually did. */
+  stats?: FreshnessStats
+}
+
+/** Common decision-time threshold: roster state older than this can mislead a live decision. */
+export const DECISION_FRESHNESS_MS = 6 * 60 * 60 * 1000
+
+interface RecencyFields {
+  fetchedAt: Date | null
+  expiresAt: Date | null
+}
+
+function isSourceStale(row: RecencyFields, maxAgeMs: number, now: number): boolean {
+  // A source-declared expiry is authoritative when present.
+  if (row.expiresAt && row.expiresAt.getTime() <= now) return true
+  // No observation time at all means we cannot claim freshness.
+  if (!row.fetchedAt) return true
+  return now - row.fetchedAt.getTime() > maxAgeMs
+}
+
+function initStats(stats?: FreshnessStats): FreshnessStats {
+  const s = stats ?? { checked: 0, stale: 0, refreshed: 0, liveFetched: false }
+  s.checked = 0
+  s.stale = 0
+  s.refreshed = 0
+  s.liveFetched = false
+  return s
+}
+
+/**
+ * Overlay live Sleeper state onto the stale entries of a canonical map.
+ * Mutates `map` in place and records what happened in `stats`.
+ */
+async function applyFreshnessOverlay(
+  map: Map<string, CanonicalPlayerLite>,
+  staleSleeperIds: Set<string>,
+  stats: FreshnessStats,
+): Promise<void> {
+  if (staleSleeperIds.size === 0) return
+
+  const { getAllPlayers } = await import('@/lib/sleeper-client')
+  const live = await getAllPlayers()
+  stats.liveFetched = true
+
+  for (const sleeperId of staleSleeperIds) {
+    const fresh = live[sleeperId]
+    const cached = map.get(sleeperId)
+    if (!cached) continue
+    if (!fresh) {
+      // Present in canonical, absent from Sleeper's current universe. Do not invent a value —
+      // leave the cached row and let the caller see it via `stats.stale`.
+      continue
+    }
+    const liveName =
+      fresh.full_name || `${fresh.first_name ?? ''} ${fresh.last_name ?? ''}`.trim() || cached.name
+    map.set(sleeperId, {
+      ...cached,
+      name: liveName,
+      position: fresh.position ?? cached.position,
+      team: fresh.team ?? null,
+    })
+    stats.refreshed++
+  }
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = []
@@ -252,8 +360,12 @@ function chunk<T>(items: T[], size: number): T[][] {
  */
 export async function getCanonicalPlayersBySleeperIds(
   sleeperIds: string[],
+  opts: FreshnessOptions = {},
 ): Promise<Map<string, CanonicalPlayerLite>> {
   const out = new Map<string, CanonicalPlayerLite>()
+  const stats = initStats(opts.stats)
+  const staleIds = new Set<string>()
+  const now = Date.now()
   const ids = [...new Set(sleeperIds.filter((id) => typeof id === 'string' && id.trim()))]
   if (ids.length === 0) return out
 
@@ -272,7 +384,8 @@ export async function getCanonicalPlayersBySleeperIds(
         where: { id: { in: playerIds } },
         select: {
           id: true, name: true, sport: true, position: true,
-          team: true, active: true, imageUrl: true,
+          team: true, active: true, imageUrl: true, injuryStatus: true,
+          fetchedAt: true, expiresAt: true,
         },
       }),
       prisma.playerImage.findMany({
@@ -302,10 +415,21 @@ export async function getCanonicalPlayersBySleeperIds(
         position: player.position,
         team: player.team,
         active: player.active,
+        injuryStatus: player.injuryStatus ?? null,
         imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
       })
+
+      if (opts.maxAgeMs !== undefined) {
+        stats.checked++
+        if (isSourceStale(player, opts.maxAgeMs, now)) {
+          stats.stale++
+          staleIds.add(identity.providerPlayerId)
+        }
+      }
     }
   }
+
+  if (opts.maxAgeMs !== undefined) await applyFreshnessOverlay(out, staleIds, stats)
 
   return out
 }
@@ -332,10 +456,11 @@ export async function getCanonicalPlayersBySleeperIds(
  */
 export async function getCanonicalPlayerMapForSport(
   sport: string,
-  opts: { activeOnly?: boolean; includeImages?: boolean } = {},
+  opts: { activeOnly?: boolean; includeImages?: boolean } & FreshnessOptions = {},
 ): Promise<Map<string, CanonicalPlayerLite>> {
   const sportKey = String(sport ?? '').trim().toUpperCase()
   const out = new Map<string, CanonicalPlayerLite>()
+  const stats = initStats(opts.stats)
   if (!sportKey) return out
 
   const [identities, players] = await Promise.all([
@@ -347,7 +472,8 @@ export async function getCanonicalPlayerMapForSport(
       where: opts.activeOnly ? { sport: sportKey, active: true } : { sport: sportKey },
       select: {
         id: true, name: true, sport: true, position: true,
-        team: true, active: true, imageUrl: true,
+        team: true, active: true, imageUrl: true, injuryStatus: true,
+        fetchedAt: true, expiresAt: true,
       },
     }),
   ])
@@ -367,6 +493,9 @@ export async function getCanonicalPlayerMapForSport(
     imageById = new Map(images.filter((i) => i.playerId).map((i) => [i.playerId as string, i.url]))
   }
 
+  const now = Date.now()
+  const staleIds = new Set<string>()
+
   for (const identity of identities) {
     if (!identity.playerId) continue
     const player = byId.get(identity.playerId)
@@ -379,9 +508,20 @@ export async function getCanonicalPlayerMapForSport(
       position: player.position,
       team: player.team,
       active: player.active,
+      injuryStatus: player.injuryStatus ?? null,
       imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
     })
+
+    if (opts.maxAgeMs !== undefined) {
+      stats.checked++
+      if (isSourceStale(player, opts.maxAgeMs, now)) {
+        stats.stale++
+        staleIds.add(identity.providerPlayerId)
+      }
+    }
   }
+
+  if (opts.maxAgeMs !== undefined) await applyFreshnessOverlay(out, staleIds, stats)
 
   return out
 }
