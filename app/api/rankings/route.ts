@@ -3,6 +3,7 @@ import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { assertLeagueMember } from '@/lib/league-access';
 import { z } from 'zod';
 import { isToolRankingsEnabled } from '@/lib/feature-toggle';
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
@@ -32,6 +33,17 @@ export async function POST(req: Request) {
 
     const json = await req.json();
     const { leagueId } = bodySchema.parse(json);
+
+    // Authentication alone left this open: `leagueId` is body-supplied, so any signed-in user could
+    // read any league's teams and performances. This route is the modern uuid id space
+    // (prisma.league / League.id), so assertLeagueMember is the correct guard — it THROWS with
+    // err.status = 403 rather than returning a result, hence the try/catch.
+    try {
+      await assertLeagueMember(leagueId, session.user.id);
+    } catch {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
       select: { sport: true },

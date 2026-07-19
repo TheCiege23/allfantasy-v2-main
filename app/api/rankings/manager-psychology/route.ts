@@ -1,8 +1,14 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { openaiChatJson } from '@/lib/openai-client'
-import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
+import { resolveLegacyLeagueAccess } from '@/lib/legacy/assertLegacyLeagueAccess'
+import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
+import { recordLlmUsage } from '@/lib/telemetry/llm-usage'
+
+const PSYCHOLOGY_MAX_TOKENS = 600
 
 interface ManagerData {
   username: string
@@ -307,28 +313,46 @@ function buildFallbackProfile(
 }
 
 export const POST = withApiUsage({ endpoint: "/api/rankings/manager-psychology", tool: "ManagerPsychology" })(async (request: NextRequest) => {
-  const ip = getClientIp(request)
-  const rateLimitResult = consumeRateLimit({
-    scope: 'legacy',
-    action: 'manager_psychology',
-    ip,
-    maxRequests: 10,
-    windowMs: 60000,
-  })
-
-  if (!rateLimitResult.success) {
-    return NextResponse.json({
-      error: 'Rate limited. Please wait before trying again.',
-      retryAfter: rateLimitResult.retryAfterSec,
-    }, { status: 429 })
-  }
-
   try {
     const body = await request.json()
     const { leagueId, rosterId, username, teamData } = body
 
     if (!leagueId || rosterId == null) {
       return NextResponse.json({ error: 'leagueId and rosterId required' }, { status: 400 })
+    }
+
+    // `leagueId` is a Sleeper league id (it keys leagueTradeHistory.sleeperLeagueId below), so
+    // membership resolves through the legacy import graph, not prisma.league. Without this gate any
+    // caller could read another league's trade history by guessing a league id + username pair.
+    const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+    const access = await resolveLegacyLeagueAccess(leagueId, session?.user?.id)
+    if (!access.ok) {
+      return NextResponse.json(
+        { error: access.status === 401 ? 'Authentication required' : 'Forbidden' },
+        { status: access.status },
+      )
+    }
+    const userId = session!.user!.id as string
+
+    // Was `{scope:'legacy', action:'manager_psychology', ip, maxRequests:10}` with no user key and
+    // no includeIpInKey, which resolves to the single key `legacy:manager_psychology:user:anonymous`
+    // — one global 10/min bucket shared by every caller, so one user could lock out everyone else
+    // while a distributed caller was barely slowed. Now bucketed per user AND per IP, matching the
+    // other two LLM routes in this directory.
+    const rl = consumeRateLimit({
+      scope: 'rankings',
+      action: 'manager_psychology',
+      sleeperUsername: userId,
+      ip: getClientIp(request),
+      maxRequests: 10,
+      windowMs: 60_000,
+      includeIpInKey: true,
+    })
+    if (!rl.success) {
+      return NextResponse.json(
+        buildRateLimit429({ message: 'Too many requests. Please wait a moment and try again.', rl }),
+        { status: 429 },
+      )
     }
 
     const managerName = username || teamData?.displayName || teamData?.username || `Manager #${rosterId}`
@@ -461,7 +485,18 @@ Include exactly 4 traits. Make traits from these categories: Risk Tolerance, Pat
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
-      maxTokens: 600,
+      maxTokens: PSYCHOLOGY_MAX_TOKENS,
+    })
+
+    // openaiChatJson returns the raw completion, so the provider's usage block is available here.
+    await recordLlmUsage({
+      endpoint: '/api/rankings/manager-psychology',
+      tool: 'ManagerPsychology',
+      userId,
+      model: result.model,
+      usage: result.ok ? (result.json as { usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } })?.usage : null,
+      maxTokens: PSYCHOLOGY_MAX_TOKENS,
+      ok: result.ok,
     })
 
     if (!result.ok) {
