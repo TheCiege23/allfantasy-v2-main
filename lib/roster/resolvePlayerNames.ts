@@ -38,14 +38,14 @@ export async function resolvePlayerNamesForSport(
 
   if (normalizedSport === 'NFL') {
     try {
-      const { getAllPlayers } = await import('@/lib/sleeper-client')
-      const allPlayers = await getAllPlayers()
+      // Phase 3: canonical read path. Was a live `getAllPlayers()` fetch of Sleeper's entire
+      // NFL universe to look up a handful of ids; now a fixed 3 queries against `Player` +
+      // `PlayerProviderIdentity`, keyed by the same Sleeper ids the caller already holds.
+      // Ids with no canonical player are simply absent, so the DB fallbacks below still run.
+      const { getCanonicalPlayersBySleeperIds } = await import('@/lib/canonical/getCanonicalPlayer')
+      const canonical = await getCanonicalPlayersBySleeperIds(uniquePlayerIds)
       for (const playerId of uniquePlayerIds) {
-        const player = allPlayers[playerId]
-        const fullName =
-          player?.full_name ??
-          (player ? `${(player as { first_name?: string }).first_name ?? ''} ${(player as { last_name?: string }).last_name ?? ''}`.trim() : '')
-        setNameIfPresent(nameMap, playerId, fullName)
+        setNameIfPresent(nameMap, playerId, canonical.get(playerId)?.name)
       }
     } catch {
       // Fall through to local database lookups.

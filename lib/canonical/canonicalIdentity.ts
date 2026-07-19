@@ -84,8 +84,38 @@ export function normalizeSport(sport: string | null | undefined): string {
   return String(sport ?? '').trim().toUpperCase()
 }
 
+/**
+ * Long-form position names → the short codes the app renders and matches on.
+ *
+ * Only NFL is affected, because it is the only sport ingesting from more than one source:
+ * Sleeper emits `WR`, while the other five emit `Wide Receiver`. 1,076 of 14,117 canonical NFL
+ * players (7.6%) carried a long form. That breaks two things at once — migrated call sites
+ * render "Wide Receiver" where they used to render "WR", and because `position` is part of the
+ * fallback matching key, the same player from two sources derives two different canonical ids
+ * and never collapses.
+ *
+ * Derived from the actual distinct values in production, not guessed.
+ */
+const LONG_FORM_POSITIONS: Record<string, string> = {
+  'OFFENSIVE TACKLE': 'OT', 'RIGHT TACKLE': 'OT', 'GUARD': 'G', 'OFFENSIVE GUARD': 'G',
+  'CENTER': 'C', 'OFFENSIVE LINEMAN': 'OL', 'WIDE RECEIVER': 'WR', 'RUNNING BACK': 'RB',
+  'FULLBACK': 'FB', 'FULL-BACK': 'FB', 'TIGHT END': 'TE', 'QUARTERBACK': 'QB',
+  'LINEBACKER': 'LB', 'OUTSIDE LINEBACKER': 'OLB', 'INSIDE LINEBACKER': 'ILB',
+  'MIDDLE LINEBACKER': 'MLB', 'CORNERBACK': 'CB', 'SAFETY': 'S', 'DEFENSIVE BACK': 'DB',
+  'DEFENSIVE TACKLE': 'DT', 'DEFENSIVE END': 'DE', 'DEFENSIVE LINEMAN': 'DL',
+  'NOSE TACKLE': 'NT', 'PUNTER': 'P', 'KICKER': 'K', 'LONG SNAPPER': 'LS',
+}
+
+/**
+ * Non-player roles that leak into `SportsPlayer` from upstream feeds. Kept verbatim rather
+ * than mapped — they should be filtered at ingestion, not silently relabelled as positions.
+ * Flagged for the ingestion owners; deliberately NOT "fixed" here.
+ */
+export const NON_PLAYER_POSITIONS = new Set(['ASSISTANT COACH', 'MANAGER', 'CO-DRIVER'])
+
 export function normalizePosition(position: string | null | undefined): string {
-  return String(position ?? '').trim().toUpperCase()
+  const raw = String(position ?? '').trim().toUpperCase()
+  return LONG_FORM_POSITIONS[raw] ?? raw
 }
 
 /** Team codes and full school names both appear as `SportsPlayer.team`; compare case-folded. */

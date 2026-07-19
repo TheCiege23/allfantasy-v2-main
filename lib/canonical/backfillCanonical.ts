@@ -28,6 +28,7 @@ import { prisma } from '@/lib/prisma'
 import {
   deriveCanonicalPlayerIdentity,
   deriveCanonicalTeamIdentity,
+  normalizePosition,
   normalizeSport,
   type CanonicalMatchStrategy,
 } from '@/lib/canonical/canonicalIdentity'
@@ -469,7 +470,9 @@ export async function backfillCanonicalPlayers(
       normalizedName: identity.normalizedName,
       sport: sportKey,
       // `position` and `league` are non-null on Player; SportsPlayer.position is nullable.
-      position: best.position ?? 'UNK',
+      // Stored normalized ("Wide Receiver" -> "WR") so migrated call sites render the same
+      // short codes the live Sleeper path gave them.
+      position: normalizePosition(best.position) || 'UNK',
       league: sportKey,
       team: best.team,
       imageUrl: best.imageUrl,

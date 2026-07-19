@@ -38,6 +38,8 @@ vi.mock('@/lib/player-assets/resolvePlayerHeadshot', async (importOriginal) => (
 import {
   deriveCanonicalPlayerIdentity,
   deriveCanonicalTeamIdentity,
+  normalizePosition,
+  NON_PLAYER_POSITIONS,
 } from '@/lib/canonical/canonicalIdentity'
 import { getCanonicalPlayer, getCanonicalTeam } from '@/lib/canonical/getCanonicalPlayer'
 
@@ -124,6 +126,25 @@ describe('canonical identity — matching key', () => {
     const nfl = deriveCanonicalPlayerIdentity({ name: 'Chris Paul', sport: 'NFL', position: 'WR' })
     const nba = deriveCanonicalPlayerIdentity({ name: 'Chris Paul', sport: 'NBA', position: 'PG' })
     expect(nfl.id).not.toBe(nba.id)
+  })
+
+  it('folds long-form positions so one player from two sources collapses', () => {
+    // Found by the Phase 3 pilot spot-check against real data: 1,076 of 14,117 canonical NFL
+    // players (7.6%) stored "Wide Receiver" rather than "WR", because NFL is the only sport
+    // with multiple sources and the non-Sleeper five emit long form. Since position is part of
+    // the fallback matching key, the same player derived two ids and never merged — and
+    // migrated call sites rendered "Wide Receiver" where the live path gave "WR".
+    const short = deriveCanonicalPlayerIdentity({ name: 'Test Player', sport: 'NFL', position: 'WR', team: 'CIN' })
+    const long = deriveCanonicalPlayerIdentity({ name: 'Test Player', sport: 'NFL', position: 'Wide Receiver', team: 'CIN' })
+    expect(short.id).toBe(long.id)
+  })
+
+  it('leaves unknown positions alone and does not relabel non-player roles', () => {
+    expect(normalizePosition('Rover')).toBe('ROVER')
+    // `Assistant Coach` / `Manager` / `Co-Driver` leak into SportsPlayer from upstream feeds.
+    // They are a filtering problem at ingestion, not something to silently map to a position.
+    expect(NON_PLAYER_POSITIONS.has('ASSISTANT COACH')).toBe(true)
+    expect(normalizePosition('Assistant Coach')).toBe('ASSISTANT COACH')
   })
 
   it('normalizes teams onto their natural unique key', () => {
