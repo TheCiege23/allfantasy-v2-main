@@ -33,7 +33,7 @@ import {
   LayoutGrid, ShieldCheck, User, Plus, ChevronDown, ChevronRight, LifeBuoy, Sparkles,
   Rocket, AlertCircle, Trophy, ListChecks, ArrowLeftRight, Handshake, Filter, Lock,
   List as ListIcon, X, MousePointerClick, LineChart, History, Brain, Share2, Scale,
-  Sun, Moon, Monitor, Search, Lightbulb, Info, Settings, MessageCircle, Swords,
+  Sun, Moon, Monitor, Search, Lightbulb, Info, Settings, MessageCircle, Swords, Check,
 } from 'lucide-react'
 import { useAccessTier } from '@/hooks/useAccessTier'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
@@ -96,6 +96,36 @@ const seasonYear = (v: unknown): number | null => {
 }
 
 /**
+ * Season timeline steps, in order. "Trade deadline" is a genuine milestone but we have NO
+ * per-league deadline week (the only `tradeDeadlineWeek` in the codebase is a hardcoded 12
+ * inside season-strategy), so it is never marked complete on a guess — a regular-season
+ * league simply shows it as upcoming.
+ */
+const SEASON_STEPS = ['Pre-season', 'Draft', 'Reg. season', 'Trade deadline', 'Playoffs', 'Champion', 'Offseason'] as const
+
+/**
+ * Which step a league is on, from its real lifecycle status and week.
+ * Returns null when the league carries no usable status — the timeline is then hidden
+ * rather than defaulted to a phase we can't substantiate.
+ */
+function resolveSeasonPhase(
+  league: { status: string; playoffStartWeek: number | null } | null,
+  week: number | null,
+): { index: number; week: number | null } | null {
+  if (!league) return null
+  const s = (league.status ?? '').toLowerCase().trim().replace(/\s+/g, '_')
+  if (s === 'pre_draft' || s === 'predraft' || s === 'setup') return { index: 0, week: null }
+  if (s === 'drafting') return { index: 1, week: null }
+  if (s === 'complete' || s === 'completed') return { index: 5, week: null }
+  // In-season (or post-draft): regular season until the playoff week, then playoffs.
+  const playoffStart = league.playoffStartWeek
+  if (week != null && playoffStart != null && week >= playoffStart) return { index: 4, week }
+  if (s === 'post_draft' || s === 'postdraft') return { index: 2, week }
+  if (s === 'in_season' || s === 'active' || week != null) return { index: 2, week }
+  return null
+}
+
+/**
  * Compact "time from now" for the priority cards ("Locks in 4h"). Returns null for a
  * missing/unparseable/past timestamp so callers fall back to generic copy — the card must
  * never claim a deadline the data doesn't actually carry.
@@ -139,6 +169,8 @@ type DisplayLeague = {
   // `season` drives the Current vs Historical split; the rest populate the league detail popup.
   season: number | null; teamCount: number | null; format: string | null
   scoring: string | null; sport: string | null; platformLeagueId: string | null
+  /** Drives the season timeline's regular-season vs playoffs boundary. */
+  playoffStartWeek: number | null
 }
 
 function mapLeagues(payload: LeagueListPayload): DisplayLeague[] {
@@ -165,6 +197,7 @@ function mapLeagues(payload: LeagueListPayload): DisplayLeague[] {
       scoring: str(r.scoring) ?? str(r.scoringType),
       sport: str(r.sport) ?? str(r.sport_type),
       platformLeagueId: str(r.platformLeagueId) ?? str(r.sleeperLeagueId),
+      playoffStartWeek: num(r.playoffStartWeek),
     }
   })
 }
@@ -431,6 +464,42 @@ export default function NocturneDashboard({
     })
   }, [leagues, leagueSearch, platformFilter, dashLeagueFilter])
 
+  // Real current week per league. `/api/dashboard/live-scores` already resolves this from
+  // RedraftSeason (it returns { scores: [{ leagueId, week, ... }] }), so the timeline needs
+  // no new endpoint. Leagues without a redraft season (Sleeper/AF-Legacy imports) simply
+  // aren't in the response and fall back to a week-less phase.
+  const [weekByLeague, setWeekByLeague] = useState<Record<string, number> | null>(null)
+  useEffect(() => {
+    if (leagues.length === 0) return
+    let cancelled = false
+    void fetch('/api/dashboard/live-scores', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (cancelled || !d) return
+        const rows = Array.isArray(d.scores) ? (d.scores as Array<{ leagueId?: string; week?: number }>) : []
+        const map: Record<string, number> = {}
+        for (const row of rows) {
+          if (typeof row.leagueId === 'string' && typeof row.week === 'number') map[row.leagueId] = row.week
+        }
+        setWeekByLeague(map)
+      })
+      .catch(() => { if (!cancelled) setWeekByLeague(null) })
+    return () => { cancelled = true }
+  }, [leagues.length])
+
+  // Timeline follows the selected league; with no selection it uses the payload's primary
+  // league (the one today-actions itself treats as primary), else the first current league.
+  const timelineLeague = useMemo(() => {
+    if (dashLeagueFilter !== 'all') return leagues.find((l) => l.id === dashLeagueFilter) ?? null
+    const primaryId = str(todayFull?.primaryLeagueId)
+    return (primaryId ? leagues.find((l) => l.id === primaryId) : null) ?? leagues[0] ?? null
+  }, [leagues, dashLeagueFilter, todayFull])
+
+  const seasonPhase = useMemo(
+    () => resolveSeasonPhase(timelineLeague, timelineLeague ? (weekByLeague?.[timelineLeague.id] ?? null) : null),
+    [timelineLeague, weekByLeague],
+  )
+
   // Real urgency for the priority cards. `lockTime` rides each lineup action and
   // `waiverTiming` carries the server's next waiver run — so "Locks in 4h" is measured,
   // not decorative. Scoped the same way the counts are; falls back to generic copy
@@ -449,6 +518,65 @@ export default function NocturneDashboard({
       waiverHint: wt?.waiverTimingHint ?? null,
     }
   }, [todayFull, dashLeagueFilter])
+
+  // ── Top outstanding issues ───────────────────────────────────────────────────
+  // Built ONLY from rows that already exist in the today-actions bundle: each lineup
+  // action carries its own message/severity/urgency, and pending trades carry a league.
+  // Nothing is synthesised — if the payload has no rows, the section reports empty.
+  const outstandingIssues = useMemo(() => {
+    const nameOf = (id: string) => leagues.find((l) => l.id === id)?.name ?? 'League'
+    const inScope = (id: string) => dashLeagueFilter === 'all' || id === dashLeagueFilter
+    const sevRank: Record<string, number> = { critical: 0, warning: 1, info: 2 }
+    const urgRank: Record<string, number> = { urgent: 0, soon: 1, normal: 2, low: 3 }
+
+    const rows: Array<{ key: string; label: string; league: string; severity: string; sev: number; urg: number; count: number }> = []
+
+    // Lineup actions are per-slot, so one underlying problem ("Missing N starter slots")
+    // arrives as N identical messages. Collapse identical (league, message) pairs into a
+    // single row with a count — otherwise a Top 10 list is just the same line ten times.
+    const actions = ((todayFull?.lineup as { actions?: Array<Record<string, unknown>> } | undefined)?.actions) ?? []
+    const grouped = new Map<string, { label: string; league: string; severity: string; sev: number; urg: number; count: number }>()
+    for (const a of actions) {
+      const leagueId = str(a.leagueId)
+      if (!leagueId || !inScope(leagueId)) continue
+      const message = str(a.message)
+      if (!message) continue
+      const severity = str(a.severity) ?? 'info'
+      const sev = sevRank[severity] ?? 2
+      const urg = urgRank[str(a.urgency) ?? 'normal'] ?? 2
+      const key = `lineup:${leagueId}:${message}`
+      const hit = grouped.get(key)
+      if (hit) {
+        hit.count += 1
+        // Keep the most severe / most urgent variant of a collapsed group.
+        hit.sev = Math.min(hit.sev, sev)
+        hit.urg = Math.min(hit.urg, urg)
+        if (sev < (sevRank[hit.severity] ?? 2)) hit.severity = severity
+      } else {
+        grouped.set(key, { label: message, league: nameOf(leagueId), severity, sev, urg, count: 1 })
+      }
+    }
+    for (const [key, v] of grouped) rows.push({ key, ...v })
+
+    const tradeLeagues = ((todayFull?.trades as { trades?: Array<Record<string, unknown>> } | undefined)?.trades) ?? []
+    for (const tl of tradeLeagues) {
+      const leagueId = str(tl.leagueId)
+      if (!leagueId || !inScope(leagueId)) continue
+      const count = Array.isArray(tl.trades) ? tl.trades.length : 0
+      if (count === 0) continue
+      rows.push({
+        key: `trade:${leagueId}`,
+        label: `${count} trade offer${count > 1 ? 's' : ''} waiting on your response`,
+        league: str(tl.leagueName) ?? nameOf(leagueId),
+        severity: 'warning',
+        sev: 1,
+        urg: 0,
+        count: 1,
+      })
+    }
+
+    return rows.sort((a, b) => a.sev - b.sev || a.urg - b.urg).slice(0, 10)
+  }, [todayFull, leagues, dashLeagueFilter])
 
   // ── Current vs Historical ────────────────────────────────────────────────────
   // An imported account can carry hundreds of past-season snapshots (547 here). Only
@@ -638,6 +766,19 @@ export default function NocturneDashboard({
           </div>
         )}
 
+        {/* ═══ SEASON TIMELINE ═══ */}
+        {context === 'global' && seasonPhase && timelineLeague && (
+          <div>
+            <div className="dash-kicker" style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
+              Season timeline
+              <span title={`Phase for ${timelineLeague.name}${seasonPhase.week ? ` · week ${seasonPhase.week}` : ''}`} style={{ display: 'inline-flex' }}>
+                <Info size={13} style={{ color: 'var(--color-neutral-600)' }} />
+              </span>
+            </div>
+            <SeasonTimeline phaseIndex={seasonPhase.index} week={seasonPhase.week} />
+          </div>
+        )}
+
         {/* ═══ TODAY'S PRIORITIES ═══ */}
         {context === 'global' && (
           <div>
@@ -658,6 +799,31 @@ export default function NocturneDashboard({
                 {leagues.length === 0 ? 'Import a league to see your priorities here.' : today === null ? 'Loading your priorities…' : "You're all set — nothing needs attention right now."}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ═══ TOP OUTSTANDING ISSUES ═══ */}
+        {context === 'global' && outstandingIssues.length > 0 && (
+          <div>
+            <div className="dash-kicker" style={{ marginBottom: 12 }}>
+              Top {outstandingIssues.length} outstanding issue{outstandingIssues.length > 1 ? 's' : ''} — {dashFilterLeagueName ?? 'all leagues'}
+            </div>
+            <div className="afcard" style={{ padding: 6 }}>
+              {outstandingIssues.map((iss) => (
+                <div key={iss.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 'var(--radius-md)' }}>
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 8, height: 8, borderRadius: '50%', flex: 'none',
+                      background: iss.severity === 'critical' ? '#e5675f' : iss.severity === 'warning' ? '#d8a657' : 'var(--color-accent-500)',
+                    }}
+                  />
+                  <span style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{iss.label}</span>
+                  {iss.count > 1 && <span className="tag tag-neutral" style={{ flex: 'none' }}>×{iss.count}</span>}
+                  <span style={{ fontSize: 11.5, color: 'var(--color-neutral-600)', flex: 'none', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{iss.league}</span>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 
@@ -1180,6 +1346,49 @@ function LeagueCollection({ leagues, view, onOpen }: { leagues: DisplayLeague[];
   )
 }
 
+/**
+ * Season stepper: completed phases get a check, the active phase shows the real week
+ * number when we have one, upcoming phases stay hollow. Scrolls horizontally on narrow
+ * screens rather than squashing the labels.
+ */
+function SeasonTimeline({ phaseIndex, week }: { phaseIndex: number; week: number | null }) {
+  return (
+    <div className="afcard" style={{ overflowX: 'auto' }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', minWidth: 620 }}>
+        {SEASON_STEPS.map((label, i) => {
+          const done = i < phaseIndex
+          const active = i === phaseIndex
+          const reached = done || active
+          return (
+            <div key={label} style={{ display: 'flex', alignItems: 'flex-start', flex: i === SEASON_STEPS.length - 1 ? '0 0 auto' : 1 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, flex: 'none', width: 84 }}>
+                <div
+                  style={{
+                    width: 28, height: 28, borderRadius: '50%', display: 'grid', placeItems: 'center',
+                    fontSize: 11, fontWeight: 700, flex: 'none',
+                    background: reached ? 'var(--color-accent)' : 'transparent',
+                    color: reached ? '#fff' : 'var(--color-neutral-600)',
+                    border: reached ? 'none' : '1.5px solid var(--color-neutral-700)',
+                    boxShadow: active ? '0 0 0 4px color-mix(in srgb, var(--color-accent) 22%, transparent)' : 'none',
+                  }}
+                >
+                  {active && week != null ? week : done ? <Check size={14} /> : i === 5 ? <Trophy size={13} /> : null}
+                </div>
+                <span style={{ fontSize: 11, textAlign: 'center', lineHeight: 1.25, color: active ? 'var(--color-text)' : 'var(--color-neutral-600)', fontWeight: active ? 600 : 400 }}>
+                  {label}
+                </span>
+              </div>
+              {i < SEASON_STEPS.length - 1 && (
+                <div style={{ flex: 1, height: 2, marginTop: 13, background: done ? 'var(--color-accent)' : 'var(--color-neutral-800)', borderRadius: 2 }} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function LeagueDetailRow({ label, value }: { label: string; value: string }) {
   return (
     <div>
@@ -1266,10 +1475,21 @@ function CommissionerHQ({
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
           {snapshots.map((s) => {
             const sel = s.leagueId === active.leagueId
+            // Leagues created from the default template all share one name, so several
+            // chips can read identically and become unpickable. When a name repeats,
+            // append a short stable id fragment to tell them apart. Names that are
+            // already unique are left completely alone.
+            const duplicated = snapshots.filter((o) => o.leagueName === s.leagueName).length > 1
             return (
               <button key={s.leagueId} type="button" onClick={() => onSelect(s.leagueId)}
+                title={duplicated ? `${s.leagueName} · id ${s.leagueId}` : s.leagueName}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 999, border: `1px solid ${sel ? 'var(--color-accent)' : 'var(--color-neutral-800)'}`, background: sel ? 'color-mix(in srgb, var(--color-accent) 14%, transparent)' : 'none', color: 'var(--color-text)', cursor: 'pointer', fontSize: 13.5, fontWeight: 500 }}>
                 {s.leagueName}
+                {duplicated && (
+                  <span style={{ fontSize: 11, color: 'var(--color-neutral-500)', fontFamily: 'ui-monospace,Menlo,monospace' }}>
+                    #{s.leagueId.slice(-4)}
+                  </span>
+                )}
               </button>
             )
           })}
