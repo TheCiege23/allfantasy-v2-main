@@ -1,7 +1,20 @@
 import fs from 'fs'
 import path from 'path'
 
-const VALUES_DIR = path.join(process.cwd(), 'app', 'player-values')
+/**
+ * Value reference docs live under `data/` — not `app/` — for two reasons:
+ *
+ * 1. They must be committed. Vercel builds from git, so a gitignored doc can
+ *    never reach production and every caller below silently gets no grounding.
+ * 2. `next.config.js` traces `./data/**` into the `/api/**` function bundles
+ *    (`outputFileTracingIncludes`). Files outside that tree are not bundled,
+ *    so `fs` reads against them fail at runtime even when they exist locally.
+ *
+ * Anything dropped here is injected verbatim into AI system prompts, so treat
+ * this directory as trusted input only. Prefer .md/.csv/.json over .txt —
+ * `.vercelignore` strips `*.txt` from CLI deploys.
+ */
+const VALUES_DIR = path.join(process.cwd(), 'data', 'player-values')
 
 function inferSportFromFilename(lower: string): string {
   if (lower.includes('nba')) return 'NBA'
