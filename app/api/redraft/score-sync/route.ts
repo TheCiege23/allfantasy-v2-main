@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
+import { requireCronAuth } from '@/app/api/cron/_auth'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
@@ -149,4 +150,22 @@ export async function POST(request: Request) {
     const status = message.includes('not found') ? 404 : 500
     return NextResponse.json({ ok: false, error: message }, { status })
   }
+}
+
+/**
+ * Vercel Cron issues a GET (scheduled every 5 minutes in vercel.json), but this route only
+ * exported POST.
+ * Measured in production 2026-07-19: 288 invocations in 24h, all 405 — no score sync ever ran
+ * on schedule.
+ *
+ * POST keeps its existing `requireAdminOrBearer` gate untouched. GET is gated on
+ * `requireCronAuth` (what Vercel's scheduler presents, and already a superset of the admin
+ * secrets), and runs the no-body path POST takes when called without a leagueId/seasonId —
+ * which is exactly what a scheduled invocation does.
+ */
+export async function GET(request: Request) {
+  if (!requireCronAuth(request as unknown as NextRequest)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return NextResponse.json(await runLegacyAutomationBridge())
 }
