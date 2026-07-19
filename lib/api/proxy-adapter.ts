@@ -12,10 +12,18 @@ function copyHeaders(req: NextRequest): Headers {
   const cookie = req.headers.get('cookie')
   const authorization = req.headers.get('authorization')
   const contentType = req.headers.get('content-type')
+  // The proxied fetch originates from the function itself, so the target sees the
+  // platform's IP rather than the caller's. Forward the original client IP or every
+  // proxied request looks like one caller to an IP-keyed rate limiter, collapsing
+  // all proxied traffic into a single shared bucket.
+  const forwardedFor = req.headers.get('x-forwarded-for')
+  const realIp = req.headers.get('x-real-ip')
 
   if (cookie) headers.set('cookie', cookie)
   if (authorization) headers.set('authorization', authorization)
   if (contentType) headers.set('content-type', contentType)
+  if (forwardedFor) headers.set('x-forwarded-for', forwardedFor)
+  if (realIp) headers.set('x-real-ip', realIp)
 
   return headers
 }
