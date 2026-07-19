@@ -1,0 +1,64 @@
+name: Security unit tests
+
+# No vitest job existed in CI, so every unit/security suite in this repo ran
+# only on a developer's machine, once, and guarded nothing afterwards. This runs
+# an explicit allowlist of security-critical suites as a PR check.
+#
+# The allowlist lives in .github/security-test-suites.txt — see that file for
+# why it is an allowlist rather than the whole suite, and the rules for adding.
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+jobs:
+  security-unit-tests:
+    name: Security suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `vitest run valid.test.ts missing.test.ts` runs only `valid` and exits 0.
+      # Without this step a renamed or deleted suite would silently stop being
+      # covered while the check stayed green — so verify existence up front.
+      - name: Verify every listed suite exists
+        run: |
+          set -euo pipefail
+          list=.github/security-test-suites.txt
+          missing=0
+          count=0
+          while IFS= read -r line || [ -n "$line" ]; do
+            case "$line" in ''|\#*) continue ;; esac
+            count=$((count + 1))
+            if [ ! -f "$line" ]; then
+              echo "::error file=$list::listed security suite not found: $line"
+              missing=1
+            fi
+          done < "$list"
+
+          if [ "$count" -eq 0 ]; then
+            echo "::error file=$list::the allowlist is empty — this check would pass without running anything"
+            exit 1
+          fi
+          if [ "$missing" -ne 0 ]; then
+            echo "A listed suite is missing. If you renamed or deleted it, update $list in the same PR."
+            exit 1
+          fi
+          echo "$count suite(s) listed, all present."
+
+      - name: Run security suites
+        run: |
+          set -euo pipefail
+          suites=$(grep -vE '^[[:space:]]*(#|$)' .github/security-test-suites.txt | tr '\n' ' ')
+          echo "Running: $suites"
+          npx vitest run $suites

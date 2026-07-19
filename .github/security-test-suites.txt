@@ -1,0 +1,33 @@
+# Security-critical vitest suites run as a required PR check.
+# See .github/workflows/security-unit-tests.yml
+#
+# RULES
+#   - One suite path per line, relative to the repo root. `#` starts a comment.
+#   - Every path listed here MUST exist. The workflow fails if one is missing,
+#     because `vitest run a.test.ts missing.test.ts` runs only `a` and exits 0 —
+#     a renamed or deleted suite would otherwise silently drop coverage while CI
+#     stayed green.
+#   - Only add a suite that passes on `main`. A permanently-red required check
+#     gets ignored, then bypassed, and then it is protecting nothing.
+#
+# Deliberately NOT the whole vitest suite: the repo has known-failing files
+# (e.g. __tests__/shared-activity-rate-limit-cache.test.ts has 3 pre-existing
+# failures on main). Running everything would make this red on arrival. Grow the
+# list as suites are fixed.
+
+# --- admin boundary -------------------------------------------------------
+__tests__/admin-access-state.test.ts
+__tests__/admin-auth-no-defaults.test.ts
+__tests__/admin-bootstrap-route.test.ts
+__tests__/admin-status-route.test.ts
+__tests__/admin-metrics-route.test.ts
+
+# --- route authorization --------------------------------------------------
+__tests__/ai-phase2-routes-authz-contract.test.ts
+__tests__/auth-entitlements.test.ts
+__tests__/chimmy-action-permission-framework.test.ts
+
+# --- PENDING: add each line below as its PR merges to main ----------------
+# __tests__/admin-api-protection.test.ts        <- PR #279 (red on main until it lands)
+# __tests__/rankings-routes-authorization.test.ts <- PR #275
+# __tests__/rate-limit-key-composition.test.ts  <- PR #278
