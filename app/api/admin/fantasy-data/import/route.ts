@@ -7,6 +7,7 @@
  */
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdminOrBearer } from "@/lib/adminAuth"
+import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { importNflFantasyData } from "@/lib/fantasy-data/importNflFantasyData"
 import { importNcaafFantasyData } from "@/lib/fantasy-data/importNcaafFantasyData"
 
@@ -48,6 +49,24 @@ export async function POST(request: NextRequest) {
       sport === "NCAAF"
         ? await importNcaafFantasyData({ season, dryRun })
         : await importNflFantasyData({ season, dryRun })
+
+    // Imports provider fantasy data into canonical tables. This route already
+    // writes SyncJobRun telemetry (job-level), but that records *what ran*, not
+    // *who triggered it* — the audit row is the attribution half.
+    await logAdminAudit({
+      adminUserId: resolveAdminAuditActor(gate.user),
+      action: "admin_fantasy_data_import",
+      targetType: "sport",
+      targetId: sport,
+      details: {
+        sport,
+        season: result.season ?? season ?? null,
+        provider: result.provider ?? null,
+        dryRun,
+        succeeded: result.ok,
+        durationMs: Date.now() - startedAt,
+      },
+    })
 
     return NextResponse.json({
       ok: result.ok,

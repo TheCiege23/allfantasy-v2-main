@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
+import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
@@ -105,6 +106,24 @@ async function runLegacyAutomationBridge() {
     zombieResolutionFailed: zombieRes.filter((r) => r.status === 'rejected').length,
     c2cLeaguesSynced: c2cLeagues.length,
   }
+}
+
+/**
+ * Vercel cron invokes the `*/5 * * * *` schedule with GET and an
+ * `Authorization: Bearer $CRON_SECRET` header. This route was POST-only and gated
+ * by requireAdminOrBearer, which compares the bearer against ADMIN_PASSWORD rather
+ * than CRON_SECRET — so the schedule 405'd, and would have 401'd even as a POST.
+ *
+ * A cron call carries no body, which is exactly the no-leagueId/no-seasonId branch
+ * POST already takes: the legacy automation bridge (survivor/zombie/c2c). Note this
+ * route is the reconciliation fallback — the primary NFL scoring driver is
+ * /api/cron/live-score-tick.
+ */
+export async function GET(request: NextRequest) {
+  if (!requireCronAuth(request)) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return NextResponse.json(await runLegacyAutomationBridge())
 }
 
 export async function POST(request: Request) {

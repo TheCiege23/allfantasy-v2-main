@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { requireAdminOrBearer } from "@/lib/adminAuth"
+import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { runReputationEngineForLeague } from "@/lib/reputation-engine"
 
 export const runtime = "nodejs"
@@ -27,6 +28,17 @@ export async function POST(request: Request) {
 
   try {
     const result = await runReputationEngineForLeague(leagueId, { sport, season, replace })
+
+    // `replace: true` (the default) overwrites a league's existing reputation data,
+    // so this is a destructive admin mutation and needs an attribution trail.
+    await logAdminAudit({
+      adminUserId: resolveAdminAuditActor(gate.user),
+      action: "admin_reputation_recompute",
+      targetType: "league",
+      targetId: leagueId,
+      details: { sport: sport ?? null, season: season ?? null, replace },
+    })
+
     return NextResponse.json({
       ok: true,
       leagueId,

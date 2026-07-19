@@ -783,6 +783,30 @@ export const authOptions: NextAuthOptions = {
       } catch (claimErr) {
         console.warn("[auth] guest trial claim (signIn event) failed (non-blocking):", claimErr);
       }
+
+      // Capture a "login" IdentitySignal. Two consumers:
+      //  1. DuplicateManagerRiskService — correlating shared IP/device across accounts.
+      //  2. The admin Command Center login metrics, which previously counted
+      //     AuthSession.createdAt — a column that does not exist, so every login
+      //     card silently rendered 0. IdentitySignal is the real event source.
+      // Only "league_join" was ever recorded before this, so no login was captured
+      // anywhere in the real auth flow.
+      // Deliberately its OWN try/catch: sharing the block above would mean a guest
+      // -claim throw silently skips login capture entirely. IP/UA are HMAC-hashed by
+      // the recorder — raw values are never stored. Best-effort; never blocks sign-in.
+      try {
+        const { headers } = await import("next/headers");
+        const h = await headers();
+        const { recordIdentitySignal } = await import("@/lib/identity/IdentitySignalRecorder");
+        await recordIdentitySignal({
+          userId: user.id,
+          ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+          userAgent: h.get("user-agent"),
+          context: "login",
+        });
+      } catch (signalErr) {
+        console.warn("[auth] identity signal capture (signIn event) failed (non-blocking):", signalErr);
+      }
     },
   },
 };
