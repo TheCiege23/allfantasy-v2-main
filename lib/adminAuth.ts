@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { verifyAdminSessionCookie } from "@/lib/adminSession";
 import { authOptions } from "@/lib/auth";
 import { isAllFantasyTestEmail, isSiteAdmin } from "@/lib/auth/admin";
+import { extractBearerToken, resolveAdminApiToken } from "@/lib/admin/adminApiTokens";
 
 export type AdminUser = {
   id?: string;
@@ -156,9 +157,67 @@ export async function requireAdmin() {
   };
 }
 
+/**
+ * Phase 1 of the per-admin token migration keeps the shared `ADMIN_PASSWORD` bearer
+ * path working by default, so automated callers keep functioning while they are moved
+ * onto per-admin tokens. Set `ADMIN_SHARED_SECRET_FALLBACK=off` once none are left;
+ * Phase 2 deletes the path outright.
+ *
+ * Note this gates only the ADMIN_PASSWORD *bearer* path. `checkAdminSecret` covers the
+ * `x-admin-secret` / `x-cron-secret` headers, which resolve `BRACKET_ADMIN_SECRET`
+ * first — a separate cron credential, not the shared admin password — so disabling
+ * this flag must not take crons down with it.
+ */
+function sharedSecretFallbackEnabled(): boolean {
+  const raw = (process.env.ADMIN_SHARED_SECRET_FALLBACK || "").trim().toLowerCase();
+  if (!raw) return true;
+  return !["0", "off", "false", "no", "disabled"].includes(raw);
+}
+
+export type AdminBearerAuthSource = "admin_api_token" | "shared_secret";
+
+/**
+ * Admin gate for routes that also accept machine callers.
+ *
+ * A per-admin API token is tried first and resolves to a real identity — that is the
+ * point of the token table, since the shared-secret branch below can only ever report
+ * "somebody who knew the secret". `source` and `tokenId` are additive; existing callers
+ * that only read `.ok` / `.user` are unaffected.
+ */
 export async function requireAdminOrBearer(request: Request) {
-  if (checkBearerToken(request) || checkAdminSecret(request)) {
-    return { ok: true as const, user: { role: "admin" } as AdminUser };
+  const bearer = extractBearerToken(request);
+  if (bearer) {
+    // Authority comes from the owner being an admin RIGHT NOW, not from the token —
+    // so an owner who loses admin access loses their tokens with it.
+    const owner = await resolveAdminApiToken(bearer, isAdminEmailAllowed);
+    if (owner) {
+      return {
+        ok: true as const,
+        user: {
+          id: owner.ownerUserId ?? undefined,
+          email: owner.ownerEmail,
+          role: "admin",
+        } as AdminUser,
+        source: "admin_api_token" as AdminBearerAuthSource,
+        tokenId: owner.tokenId,
+      };
+    }
+  }
+
+  if (sharedSecretFallbackEnabled() && checkBearerToken(request)) {
+    return {
+      ok: true as const,
+      user: { role: "admin" } as AdminUser,
+      source: "shared_secret" as AdminBearerAuthSource,
+    };
+  }
+
+  if (checkAdminSecret(request)) {
+    return {
+      ok: true as const,
+      user: { role: "admin" } as AdminUser,
+      source: "shared_secret" as AdminBearerAuthSource,
+    };
   }
 
   return requireAdmin();

@@ -12016,6 +12016,36 @@ model AdminAuditLog {
   @@map("admin_audit_log")
 }
 
+/// Per-admin API tokens for bearer-authenticated admin calls.
+///
+/// Exists so a bearer call carries an identity instead of proving only "someone knew
+/// the shared ADMIN_PASSWORD". A token never grants more than its owner: `ownerEmail`
+/// is re-checked against the admin allowlist on every use, so an owner losing admin
+/// access effectively revokes their tokens without anyone having to remember to.
+///
+/// Only a HASH is stored. The raw token is shown once at issue time and is
+/// unrecoverable afterwards — treat it like a password and never log it.
+model AdminApiToken {
+  id             String    @id @default(uuid())
+  label          String    @db.VarChar(120)
+  /// sha256 of the raw token, lowercase hex (always 64 chars). Unique so verifying a
+  /// presented token is one indexed lookup rather than a scan-and-compare.
+  tokenHash      String    @unique @db.VarChar(64)
+  /// The admin this token acts as. Authority is derived from this at call time, never
+  /// stored on the token itself.
+  ownerEmail     String    @db.VarChar(320)
+  ownerUserId    String?   @db.VarChar(64)
+  createdByEmail String?   @db.VarChar(320)
+  createdAt      DateTime  @default(now())
+  lastUsedAt     DateTime?
+  revokedAt      DateTime?
+  revokedByEmail String?   @db.VarChar(320)
+
+  @@index([ownerEmail])
+  @@index([revokedAt])
+  @@map("admin_api_token")
+}
+
 /// Idempotency and processing audit log for Stripe webhook events.
 model StripeWebhookEvent {
   id           String    @id @default(uuid())
