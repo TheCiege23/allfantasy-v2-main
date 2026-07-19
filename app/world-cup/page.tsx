@@ -3,6 +3,7 @@
 import { useEffect } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { TIER_PRICE } from "@/lib/monetization/priceOf"
 import {
   ArrowRight,
   Bot,
@@ -110,7 +111,7 @@ const upgradeCards = [
   {
     id: "af-pro",
     title: "AF Pro",
-    price: "$9.99/mo",
+    price: `${TIER_PRICE.proMonthly}/mo`,
     bestFor: "Best for players",
     icon: Sparkles,
     body: "Bracket grades, group-stage advice, knockout strategy, upset picks, team comparisons, and saved AI reports.",
@@ -122,7 +123,7 @@ const upgradeCards = [
   {
     id: "af-commissioner",
     title: "AF Commissioner",
-    price: "$14.99/mo",
+    price: `${TIER_PRICE.commissionerMonthly}/mo`,
     bestFor: "Best for pool creators",
     icon: Crown,
     body: "Custom scoring, bigger pools, pool announcements, invite tools, leaderboard exports, and AI commissioner recaps.",
@@ -146,7 +147,7 @@ const upgradeCards = [
   {
     id: "af-supreme",
     title: "AF Supreme",
-    price: "$19.99/mo",
+    price: `${TIER_PRICE.supremeMonthly}/mo`,
     bestFor: "Best for die-hards",
     icon: Star,
     body: "All AI tools, priority Chimmy access, advanced analytics, league tools, AF Legacy intel, and commissioner features — everything in one plan.",
@@ -654,7 +655,7 @@ export default function WorldCupAdLandingPage() {
                 }}
                 className="block rounded-xl bg-amber-300 px-5 py-2.5 text-center text-sm font-black text-slate-950 shadow-[0_8px_25px_-8px_rgba(251,191,36,0.6)] transition hover:bg-amber-200"
               >
-                AF Pro — $9.99/mo
+                AF Pro — {TIER_PRICE.proMonthly}/mo
               </Link>
               <p className="mt-1.5 text-center text-[10px] text-amber-300/60 font-bold">
                 Use code WassupFred — 20% off first purchase

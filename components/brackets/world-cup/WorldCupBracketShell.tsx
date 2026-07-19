@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowUp, AtSign, BarChart3, Baseline, Bell, Bold, Bot, Check
 import { toast } from "sonner"
 import type { WorldCupChallengeView, WorldCupMatchView, WorldCupPickView } from "@/lib/world-cup/types"
 import { isWorldCupChallengeLocked } from "@/lib/world-cup/worldCupBracketBuilder"
+import { TIER_PRICE } from "@/lib/monetization/priceOf"
 import type {
   WorldCupBracketEntryClient,
   WorldCupChallengeIntegrityReport,
@@ -2433,7 +2434,7 @@ export default function WorldCupBracketShell({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-black text-white">Unlock Commissioner Tools</p>
-                <p className="mt-0.5 text-[10px] text-white/50">Custom scoring, bigger pools, invite tools — $14.99/mo</p>
+                <p className="mt-0.5 text-[10px] text-white/50">Custom scoring, bigger pools, invite tools — {TIER_PRICE.commissionerMonthly}/mo</p>
               </div>
               <Zap className="h-4 w-4 shrink-0 text-violet-300/50" />
             </Link>

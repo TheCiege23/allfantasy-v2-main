@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useAccessTier } from '@/hooks/useAccessTier'
+import { TIER_PRICE } from '@/lib/monetization/priceOf'
 
 /**
  * Surfaces the real, working /af-legacy toolset as clickable dashboard cards. Reuses that
@@ -112,7 +113,7 @@ function LegacyToolCard({
   } else if (accessTier.isGuest) {
     cta = { href: `/signup?next=${encodeURIComponent(toolHref)}`, label: 'Sign up free to try', tone: 'signup' }
   } else {
-    cta = { href: '/pricing', label: 'Unlock with AF Legacy — $29.99/mo', tone: 'upgrade' }
+    cta = { href: '/pricing', label: `Unlock with AF Legacy — ${TIER_PRICE.legacyMonthly}/mo`, tone: 'upgrade' }
   }
 
   return (

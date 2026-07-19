@@ -1,3 +1,12 @@
+import { TIER_PRICE } from '@/lib/monetization/priceOf'
+
+/**
+ * Prices read from `lib/monetization/catalog.ts`, never hardcoded. This page is the
+ * rollback backup for the Nocturne landing, so a stale price here would ship the moment
+ * anyone rolls back — the one situation where nobody is thinking about the price table.
+ *
+ * The amount is interpolated; the per-period suffix stays translated per locale.
+ */
 export const LANDING_COPY = {
   en: {
     nav: {
@@ -22,7 +31,7 @@ export const LANDING_COPY = {
       secondary: 'Sign In',
       alreadyHaveAccount: 'Already have an account? Sign in',
       primaryAuthed: 'Go to Dashboard →',
-      reassurance: 'Free for players · Commissioners from $14.99/mo · Cancel anytime',
+      reassurance: `Free for players · Commissioners from ${TIER_PRICE.commissionerMonthly}/mo · Cancel anytime`,
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Soccer'],
     trust: [
@@ -221,7 +230,7 @@ export const LANDING_COPY = {
       secondary: 'Iniciar sesión',
       alreadyHaveAccount: '¿Ya tienes cuenta? Inicia sesión',
       primaryAuthed: 'Ir al panel →',
-      reassurance: 'Gratis para jugadores · Comisionados desde $14.99/mes · Cancela cuando quieras',
+      reassurance: `Gratis para jugadores · Comisionados desde ${TIER_PRICE.commissionerMonthly}/mes · Cancela cuando quieras`,
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Soccer'],
     trust: [
@@ -420,7 +429,7 @@ export const LANDING_COPY = {
       secondary: '登录',
       alreadyHaveAccount: '已有账户？登录',
       primaryAuthed: '前往控制台 →',
-      reassurance: '玩家免费 · 赛区长 $14.99/月起 · 随时取消',
+      reassurance: `玩家免费 · 赛区长 ${TIER_PRICE.commissionerMonthly}/月起 · 随时取消`,
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', '足球'],
     trust: [
@@ -619,7 +628,7 @@ export const LANDING_COPY = {
       secondary: 'Mag-sign In',
       alreadyHaveAccount: 'May account na? Mag-sign in',
       primaryAuthed: 'Pumunta sa Dashboard →',
-      reassurance: 'Libre para sa mga manlalaro · Commissioner mula $14.99/buwan · Kanselahin anumang oras',
+      reassurance: `Libre para sa mga manlalaro · Commissioner mula ${TIER_PRICE.commissionerMonthly}/buwan · Kanselahin anumang oras`,
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Soccer'],
     trust: [
@@ -818,7 +827,7 @@ export const LANDING_COPY = {
       secondary: 'Đăng nhập',
       alreadyHaveAccount: 'Đã có tài khoản? Đăng nhập',
       primaryAuthed: 'Đến Bảng Điều Khiển →',
-      reassurance: 'Miễn phí cho người chơi · Commissioner từ $14.99/tháng · Hủy bất cứ lúc nào',
+      reassurance: `Miễn phí cho người chơi · Commissioner từ ${TIER_PRICE.commissionerMonthly}/tháng · Hủy bất cứ lúc nào`,
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Bóng đá'],
     trust: [

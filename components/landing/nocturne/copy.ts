@@ -9,7 +9,14 @@
  * Copy constraint (enforced by `__tests__/no-ai-customer-copy.test.ts`): no
  * customer-facing "AI" language — insights are "projected edge", "full output",
  * "insights", never "AI".
+ *
+ * Prices are NOT hardcoded — they read from `lib/monetization/catalog.ts` via
+ * `TIER_PRICE`. This is the LIVE landing page, and it previously carried four
+ * hardcoded amounts that only matched the catalog because someone remembered to
+ * update them after the July 2026 reprice. Do not reintroduce a literal here.
  */
+
+import { TIER_PRICE } from '@/lib/monetization/priceOf'
 
 export const NOCTURNE_COPY = {
   nav: {
@@ -31,7 +38,7 @@ export const NOCTURNE_COPY = {
       'Bring Sleeper, ESPN, Yahoo and more into one command center that shows what needs your attention, who to start, and where to go — across every league at once.',
     primary: 'Get started free',
     secondary: 'See how it works',
-    finePrint: 'Free to explore every league · Full insights from $14.99/mo · Cancel anytime',
+    finePrint: `Free to explore every league · Full insights from ${TIER_PRICE.commissionerMonthly}/mo · Cancel anytime`,
     mockup: {
       title: 'Your leagues',
       clock: 'Week 12 · Sun 11:41a',
@@ -142,9 +149,9 @@ export const NOCTURNE_COPY = {
       },
       commissioner: {
         name: 'Commissioner',
-        price: '$14.99',
+        price: TIER_PRICE.commissionerMonthly,
         priceSuffix: '/ mo',
-        priceYear: 'or $149.99/yr',
+        priceYear: `or ${TIER_PRICE.commissionerYearly}/yr`,
         features: [
           'Everything in Free',
           'Full commissioner tool suite',
@@ -155,9 +162,9 @@ export const NOCTURNE_COPY = {
       },
       legacy: {
         name: 'AF Legacy',
-        price: '$29.99',
+        price: TIER_PRICE.legacyMonthly,
         priceSuffix: '/ mo',
-        priceYear: 'or $299.99/yr',
+        priceYear: `or ${TIER_PRICE.legacyYearly}/yr`,
         badge: 'Full output',
         features: [
           'Everything in Free',

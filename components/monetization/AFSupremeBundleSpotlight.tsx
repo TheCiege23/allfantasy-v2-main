@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { CheckCircle2, Crown, Shield, Telescope, WandSparkles } from 'lucide-react'
 import { trackUpgradeEntryClicked } from '@/lib/monetization-analytics'
+import { TIER_PRICE } from '@/lib/monetization/priceOf'
 
 const INCLUDED_PLANS = [
   {
@@ -74,13 +75,13 @@ export function AFSupremeBundleSpotlight({ className = '' }: { className?: strin
           className="rounded-full border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100"
           data-testid="af-supreme-price-monthly"
         >
-          $19.99 monthly
+          {TIER_PRICE.supremeMonthly} monthly
         </span>
         <span
           className="rounded-full border border-emerald-300/40 bg-emerald-500/15 px-2.5 py-1 font-semibold text-emerald-100"
           data-testid="af-supreme-price-yearly"
         >
-          $199.99 yearly
+          {TIER_PRICE.supremeYearly} yearly
         </span>
       </div>
 
