@@ -3699,11 +3699,19 @@ function AFLegacyContent() {
       })
       const data = await res.json()
       
+      if (res.status === 401) {
+        // Team Scan reads the caller's OWN leagues, resolved server-side from the
+        // session — it can no longer be driven by a username typed into the box.
+        // Without this branch the raw "Unauthorized" from the API surfaces to the user.
+        setPlayerSearchError('Sign in to use Team Scan — it reads the leagues on your own account.')
+        return
+      }
+
       if (!res.ok) {
         setPlayerSearchError(data.error || 'Failed to search players')
         return
       }
-      
+
       if (data.success) {
         setPlayerSearchResults(data.players || [])
         if (data.players?.length === 0) {
