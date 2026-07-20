@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
@@ -124,14 +125,16 @@ export async function buildMatchupCenterPayload(params: {
       sport: true,
       settings: true,
       leagueVariant: true,
-      userId: true,
-      teams: { select: { platformUserId: true } },
     },
   })
   if (!league) return { error: 'League not found', status: 404 }
 
-  const memberIds = new Set(league.teams.map((t) => t.platformUserId).filter(Boolean) as string[])
-  if (league.userId !== params.viewerUserId && !memberIds.has(params.viewerUserId)) {
+  // Canonical membership predicate (`lib/league-access.ts`). This previously gated on
+  // `LeagueTeam.platformUserId` — a nullable column populated only by the native
+  // open-slot claim path — so a real member of an imported league, whose membership
+  // lives in `Roster.platformUserId`, was handed a bare 403 for their own matchups.
+  const access = await resolveLeagueAccess(params.leagueId, params.viewerUserId)
+  if (!access?.isMember) {
     return { error: 'Forbidden', status: 403 }
   }
 
