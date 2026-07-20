@@ -58,6 +58,12 @@ const { prismaMock, store, getServerSessionMock, chatCompletionsCreateMock } = v
         ).length
       }),
     },
+    // The canonical membership predicate consults redraft membership and claimed teams
+    // alongside rosters. Neither applies to these fixtures — the roster path is what grants
+    // access here — but they must be present or the helper throws and a legitimate member
+    // 403s, which reads exactly like a real authorization regression.
+    redraftLeagueMember: { findUnique: vi.fn(async () => null) },
+    leagueTeam: { count: vi.fn(async () => 0) },
     waiverPickup: {
       findMany: vi.fn(async () => []),
     },
