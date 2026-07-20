@@ -2,6 +2,8 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
+const { identifyTarget, describeTarget } = require("./db-target-identity.cjs");
+
 function stripQuotes(value) {
   const trimmed = value.trim();
   if (
@@ -171,6 +173,45 @@ if (!databaseUrl) {
   console.error(`db:migrate:deploy error: ${reason || "No valid database URL found."}`);
   process.exit(1);
 }
+
+// ── Target identity gate ─────────────────────────────────────────────────────
+// Verify what we actually resolved, rather than trusting which file it came from.
+// Both directions matter: `.env.prod-deploy` once pointed at the CLONE, so --prod
+// migrated dev while production silently fell behind — a mismatch this catches.
+const deployTarget = identifyTarget(databaseUrl);
+
+if (deployTarget.kind === "production" && !(targetsProd && process.env.ALLOW_PROD_MIGRATION === "1")) {
+  console.error(
+    `\n[db:migrate:deploy] REFUSING — resolved target is PRODUCTION ` +
+      `(${describeTarget(databaseUrl)}) without an explicit production deploy.\n` +
+      `Run: ALLOW_PROD_MIGRATION=1 npm run db:migrate:deploy:prod\n`
+  );
+  process.exit(1);
+}
+
+if (targetsProd && deployTarget.kind !== "production") {
+  console.error(
+    `\n[db:migrate:deploy] REFUSING — --prod was requested but the resolved target is NOT\n` +
+      `production (${describeTarget(databaseUrl)}). Check .env.prod-deploy: it has pointed at\n` +
+      `a clone before, which silently migrated dev while production fell behind.\n`
+  );
+  process.exit(1);
+}
+
+if (
+  (deployTarget.kind === "unknown" || deployTarget.kind === "unparseable") &&
+  process.env.ALLOW_UNKNOWN_DB_TARGET !== "1"
+) {
+  console.error(
+    `\n[db:migrate:deploy] REFUSING — cannot identify the resolved database ` +
+      `(${describeTarget(databaseUrl)}).\n` +
+      `Add it to KNOWN_SAFE_TARGETS in scripts/db-target-identity.cjs, or set\n` +
+      `ALLOW_UNKNOWN_DB_TARGET=1 for a one-off.\n`
+  );
+  process.exit(1);
+}
+
+console.log(`[db:migrate:deploy] Target: ${describeTarget(databaseUrl)}`);
 
 process.env.DATABASE_URL = databaseUrl;
 process.env.DIRECT_URL = databaseUrl;

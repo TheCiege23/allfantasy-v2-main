@@ -45,6 +45,7 @@
     "db:migrate": "node scripts/prisma-cli-guard.cjs migrate dev",
     "db:migrate:deploy": "node scripts/prisma-migrate-deploy.cjs",
     "db:migrate:deploy:prod": "node scripts/prisma-migrate-deploy.cjs --prod",
+    "db:target": "node scripts/db-target-identity.cjs",
     "db:status": "prisma migrate status",
     "db:verify": "prisma validate && prisma migrate status",
     "db:migrate:baseline": "powershell -ExecutionPolicy Bypass -File \"scripts/baseline-migrations.ps1\"",
