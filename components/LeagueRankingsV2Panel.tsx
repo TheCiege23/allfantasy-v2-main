@@ -563,6 +563,8 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
   const [data, setData] = useState<RankingsData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  /** Non-retryable access outcomes from the member-gated rankings endpoint. */
+  const [accessState, setAccessState] = useState<'signed-out' | 'not-member' | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
   const [coachInsights, setCoachInsights] = useState<Record<number, CoachInsight>>({})
   const [loadingCoach, setLoadingCoach] = useState<number | null>(null)
@@ -575,8 +577,15 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
   const fetchRankings = useCallback(async () => {
     setLoading(true)
     setError('')
+    setAccessState(null)
     try {
       const res = await fetch(`/api/rankings/league-v2?leagueId=${leagueId}`)
+      // Member-gated endpoint: 401/403 are not retryable failures, so they get their own states
+      // below rather than the generic "Failed to compute" card with a Retry button.
+      if (res.status === 401 || res.status === 403) {
+        setAccessState(res.status === 401 ? 'signed-out' : 'not-member')
+        return
+      }
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: 'Failed' }))
         throw new Error(err.error || 'Failed to load rankings')
@@ -750,6 +759,34 @@ export default function LeagueRankingsV2Panel({ leagueId, leagueName, username }
       <div className="flex flex-col items-center justify-center py-16 gap-3">
         <div className="w-10 h-10 border-2 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin" />
         <span className="text-sm text-white/40">Computing league rankings...</span>
+      </div>
+    )
+  }
+
+  if (accessState) {
+    const signedOut = accessState === 'signed-out'
+    return (
+      <div className="text-center py-12 px-4" data-testid="rankings-v2-access-state">
+        <div className="w-12 h-12 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-3">
+          <span className="text-xl">{signedOut ? '🔒' : '👋'}</span>
+        </div>
+        <p className="text-white/70 text-sm font-medium mb-1">
+          {signedOut ? 'Your session has expired' : "You're not in this league"}
+        </p>
+        <p className="text-white/30 text-xs mb-4 max-w-xs mx-auto">
+          {signedOut
+            ? 'Sign in again to see rankings for this league.'
+            : 'League rankings are only visible to members of that league.'}
+        </p>
+        {signedOut ? (
+          <a
+            href="/login"
+            data-testid="rankings-v2-signin-link"
+            className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors px-4 py-2 rounded-lg bg-cyan-500/10 border border-cyan-500/20"
+          >
+            Sign in
+          </a>
+        ) : null}
       </div>
     )
   }
