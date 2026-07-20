@@ -1485,6 +1485,11 @@ export default function PowerRankingsPage() {
   const [teams, setTeams] = useState<TeamRanking[]>([]);
   const [rankingsLoading, setRankingsLoading] = useState(false);
   const [rankingsError, setRankingsError] = useState<string | null>(null);
+  /** Distinguishes a signed-out/expired session and a non-member from a generic failure, so each
+   *  gets an actionable state instead of a raw API string in a red box. */
+  const [rankingsErrorKind, setRankingsErrorKind] = useState<
+    "auth" | "forbidden" | "generic" | null
+  >(null);
   const [expandedRosterId, setExpandedRosterId] = useState<number | null>(null);
   const [detailLoadingRosterId, setDetailLoadingRosterId] = useState<number | null>(null);
 
@@ -1504,6 +1509,7 @@ export default function PowerRankingsPage() {
   const loadRankings = useCallback(async (league: UserLeague) => {
     setRankingsLoading(true);
     setRankingsError(null);
+    setRankingsErrorKind(null);
 
     try {
       const targetLeagueId = getTargetLeagueId(league);
@@ -1511,6 +1517,21 @@ export default function PowerRankingsPage() {
         `/api/rankings/league-v2?leagueId=${encodeURIComponent(targetLeagueId)}`,
         { cache: "no-store" }
       );
+
+      // The rankings endpoint is member-gated. Map its two rejection codes to states the reader can
+      // act on, rather than surfacing the raw server string.
+      if (response.status === 401 || response.status === 403) {
+        setRankingsMeta(null);
+        setTeams([]);
+        setRankingsErrorKind(response.status === 401 ? "auth" : "forbidden");
+        setRankingsError(
+          response.status === 401
+            ? "Your session has expired. Sign in again to see these rankings."
+            : "You're not a member of this league, so its rankings aren't available."
+        );
+        return;
+      }
+
       const payload = (await response.json().catch(() => ({}))) as RankingsResponse & {
         error?: string;
       };
@@ -1524,6 +1545,7 @@ export default function PowerRankingsPage() {
     } catch (error) {
       setRankingsMeta(null);
       setTeams([]);
+      setRankingsErrorKind("generic");
       setRankingsError(
         error instanceof Error ? error.message : "Failed to load league rankings."
       );
@@ -1964,9 +1986,30 @@ export default function PowerRankingsPage() {
         ) : null}
 
         {!rankingsLoading && rankingsError ? (
-          <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-200">
-            {rankingsError}
-          </div>
+          rankingsErrorKind === "auth" || rankingsErrorKind === "forbidden" ? (
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-sm text-slate-200">
+              <p>{rankingsError}</p>
+              {rankingsErrorKind === "auth" ? (
+                <Link
+                  href="/login"
+                  className="mt-4 inline-flex items-center rounded-full bg-white px-5 py-2 text-sm font-semibold text-slate-900 transition hover:bg-slate-200"
+                >
+                  Sign in
+                </Link>
+              ) : (
+                <Link
+                  href="/dashboard"
+                  className="mt-4 inline-flex items-center rounded-full border border-white/20 px-5 py-2 text-sm font-semibold text-white transition hover:bg-white/10"
+                >
+                  Back to your leagues
+                </Link>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-6 text-sm text-red-200">
+              {rankingsError}
+            </div>
+          )
         ) : null}
 
         {!rankingsLoading && !rankingsError && heroData ? (
