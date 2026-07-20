@@ -46,6 +46,18 @@ const { prismaMock, store, getServerSessionMock, chatCompletionsCreateMock } = v
         if (select) {
           const result: Record<string, unknown> = {}
           for (const key of Object.keys(select)) result[key] = (league as any)[key]
+          // `resolveLeagueAccess` resolves membership in a single query using per-caller
+          // filtered relation selects, so the fake has to honour those the way Prisma
+          // would. Copying flat keys alone yields `rosters: undefined`, which the helper
+          // reads (correctly) as "not a member" and 403s a legitimate one.
+          if (select.rosters) {
+            const platformUserId = select.rosters.where?.platformUserId
+            result.rosters = Array.from(store.rosters.values()).filter(
+              (r) => r.leagueId === where.id && r.platformUserId === platformUserId
+            )
+          }
+          if (select.redraftMembers) result.redraftMembers = []
+          if (select.teams) result.teams = []
           return result
         }
         return league
