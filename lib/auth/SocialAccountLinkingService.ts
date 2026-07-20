@@ -2,6 +2,7 @@ import { randomBytes } from "crypto";
 import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup";
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
 import { hasProfanityInUsername } from "@/lib/signup/UsernameProfanityGuard";
 import { getTierFromXP, getXPRemainingToNextTier } from "@/lib/xp-progression/TierResolver";
@@ -216,6 +217,15 @@ export async function linkSocialAccountToAppUser(
             passwordHash,
           },
           select,
+        });
+        // New OAuth account created (this is the create branch; the link-to-existing
+        // path above returns before reaching here, so login stays silent).
+        // Fire-and-forget.
+        void notifyOwnerOfNewSignup({
+          email: user.email,
+          method: `oauth:${input.provider}`,
+          userId: user.id,
+          username: user.username,
         });
       } catch (error) {
         if (!isUniqueConstraintError(error)) {
