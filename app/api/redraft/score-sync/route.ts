@@ -108,17 +108,18 @@ async function runLegacyAutomationBridge() {
   }
 }
 
-/**
- * Vercel cron invokes the `*/5 * * * *` schedule with GET and an
- * `Authorization: Bearer $CRON_SECRET` header. This route was POST-only and gated
- * by requireAdminOrBearer, which compares the bearer against ADMIN_PASSWORD rather
- * than CRON_SECRET — so the schedule 405'd, and would have 401'd even as a POST.
- *
- * A cron call carries no body, which is exactly the no-leagueId/no-seasonId branch
- * POST already takes: the legacy automation bridge (survivor/zombie/c2c). Note this
- * route is the reconciliation fallback — the primary NFL scoring driver is
- * /api/cron/live-score-tick.
- */
+// Vercel cron invokes the `*/5 * * * *` schedule with GET and an
+// `Authorization: Bearer $CRON_SECRET` header. This route was POST-only and gated
+// by requireAdminOrBearer, which compares the bearer against ADMIN_PASSWORD rather
+// than CRON_SECRET — so the schedule 405'd, and would have 401'd even as a POST.
+//
+// A cron call carries no body, which is exactly the no-leagueId/no-seasonId branch
+// POST already takes: the legacy automation bridge (survivor/zombie/c2c). Note this
+// route is the reconciliation fallback — the primary NFL scoring driver is
+// /api/cron/live-score-tick.
+//
+// Line comments, not a /** */ block: the `*/` inside the cron expression closes a
+// block comment early and breaks the build.
 export async function GET(request: NextRequest) {
   if (!requireCronAuth(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
