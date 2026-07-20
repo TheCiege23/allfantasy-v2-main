@@ -1,26 +1,25 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { cookies } from 'next/headers'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade/feedback", tool: "LegacyTradeFeedback" })(async (req: NextRequest) => {
   try {
-    const ip = getClientIp(req)
-    const allowed = consumeRateLimit({
-      scope: 'legacy',
-      action: 'trade_feedback',
-      ip,
-      maxRequests: 20,
-      windowMs: 60_000,
-    })
-    if (!allowed) {
-      return NextResponse.json({ error: 'Too many requests' }, { status: 429 })
-    }
-
     const body = await req.json()
-    
-    const sleeperUsername = String(body.sleeper_username || '').trim().slice(0, 50)
+
+    /*
+     * Replaces a hand-rolled limiter that never fired: it did `if (!allowed)` on
+     * `consumeRateLimit`'s RESULT OBJECT, which is always truthy, so the 429 branch was
+     * dead. PR #278 fixes that same line independently — expect a conflict on this hunk
+     * and keep this version, which routes the limit through the shared gate.
+     */
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: String(body.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'trade_feedback', maxRequests: 20, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeperUsername = gate.identity.sleeperUsername.slice(0, 50)
     const leagueId = String(body.league_id || '').trim().slice(0, 50)
     const leagueName = body.league_name ? String(body.league_name).slice(0, 100) : null
     const targetManager = String(body.target_manager || '').trim().slice(0, 50)

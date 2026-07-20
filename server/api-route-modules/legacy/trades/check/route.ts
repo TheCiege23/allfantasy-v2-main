@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
 import { getAllPlayers, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/sleeper-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 type SleeperTransaction = {
   transaction_id: string
@@ -150,11 +151,12 @@ Return JSON only:
 export const POST = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "LegacyTradesCheck" })(async (req: NextRequest) => {
   try {
     const body = await req.json()
-    const sleeperUsername = String(body.sleeper_username || '').trim()
-
-    if (!sleeperUsername) {
-      return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
-    }
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: String(body.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'trades_check', maxRequests: 30, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeperUsername = gate.identity.sleeperUsername
 
     // 1) Find user in DB
     const legacyUser = await prisma.legacyUser.findUnique({
@@ -446,12 +448,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/trades/check", tool: "LegacyTradesCheck" })(async (req: NextRequest) => {
   try {
-    const sleeperUsername = req.nextUrl.searchParams?.get('sleeper_username')
     const unseenOnly = req.nextUrl.searchParams?.get('unseen_only') === 'true'
-
-    if (!sleeperUsername) {
-      return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
-    }
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: req.nextUrl.searchParams?.get('sleeper_username')?.trim() ?? null,
+      rateLimit: { action: 'trades_check_read', maxRequests: 60, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeperUsername = gate.identity.sleeperUsername
 
     const legacyUser = await prisma.legacyUser.findUnique({
       where: { sleeperUsername },

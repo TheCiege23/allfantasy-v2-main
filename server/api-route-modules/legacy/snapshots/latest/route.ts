@@ -2,13 +2,20 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { readLatestSnapshot } from '@/lib/trade-engine/snapshots'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/snapshots/latest", tool: "LegacySnapshotsLatest" })(async (req: NextRequest) => {
   try {
     const body = await req.json()
 
     const leagueId = String(body?.league_id || '').trim()
-    const sleeperUsername = String(body?.sleeper_username || '').trim().toLowerCase()
+    // Identity is server-derived; the body's `sleeper_username` is only compared.
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: String(body?.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'snapshots_latest', maxRequests: 60, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeperUsername = gate.identity.sleeperUsername.toLowerCase()
     const snapshotType = String(body?.snapshot_type || '').trim() as 'league_analyze' | 'rankings_analyze' | 'otb_packages'
     const contextKey = body?.context_key ? String(body.context_key).trim() : null
 

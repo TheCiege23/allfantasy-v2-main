@@ -1,12 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { sleeper_username, share_type, platform, action, style } = body
+    const { share_type, platform, action, style } = body
 
-    if (!sleeper_username || !share_type || !platform || !action) {
+    // A write attributing engagement to a username — previously any caller could file
+    // engagement rows against anyone.
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: String(body?.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'share_engagement', maxRequests: 60, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeper_username = gate.identity.sleeperUsername
+
+    if (!share_type || !platform || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 
@@ -29,10 +39,13 @@ export async function POST(req: NextRequest) {
 
 export async function GET(req: NextRequest) {
   try {
-    const username = req.nextUrl.searchParams?.get('sleeper_username')
-    if (!username) {
-      return NextResponse.json({ error: 'Missing username' }, { status: 400 })
-    }
+    // Read side of the same surface — returned any user's engagement history by name.
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: req.nextUrl.searchParams?.get('sleeper_username')?.trim() ?? null,
+      rateLimit: { action: 'share_engagement_read', maxRequests: 60, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
 
     const recent = await prisma.shareEngagement.findMany({
       where: { sleeperUsername: username },
