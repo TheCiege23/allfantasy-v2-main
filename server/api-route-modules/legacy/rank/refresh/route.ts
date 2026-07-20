@@ -2,8 +2,8 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { computeLegacyRankPreview } from "@/lib/ranking/computeLegacyRank";
-import { consumeRateLimit, getClientIp } from "@/lib/rate-limit";
 import { trackLegacyToolUsage } from "@/lib/analytics-server";
+import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperIdentity";
 
 function safeNum(v: unknown, fallback = 0): number {
   const n = Number(v);
@@ -11,37 +11,27 @@ function safeNum(v: unknown, fallback = 0): number {
 }
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/rank/refresh", tool: "LegacyRankRefresh" })(async (request: NextRequest) => {
-  const raw = request.nextUrl.searchParams?.get("sleeper_username")?.trim();
-  if (!raw) return NextResponse.json({ error: "Missing sleeper_username" }, { status: 400 });
+  const requestedUsername = request.nextUrl.searchParams?.get("sleeper_username");
 
-  const uname = raw.toLowerCase();
-
-  // Unified per-user limiter (1 refresh per 60 seconds)
-  // Note: we keep IP available for future anti-abuse, but you asked "per user instead of IP"
-  const ip = getClientIp(request);
-  const rl = consumeRateLimit({
-    scope: "legacy",
-    action: "rank_refresh",
-    sleeperUsername: uname,
-    ip,
-    maxRequests: 1,
-    windowMs: 60_000,
-    includeIpInKey: false,
+  /*
+   * This route carried BOTH defects at once. It recomputed rankings for whatever username
+   * the query string named — an unauthenticated write anyone could trigger for anyone —
+   * and its limiter keyed on that same self-asserted username with `includeIpInKey: false`,
+   * so rotating the username reset the budget and the "1 per 60s" cap never bound.
+   *
+   * Resolving identity server-side fixes both: the username can no longer be chosen, and
+   * the limiter below keys on the resolved actor, which a caller cannot vary.
+   *
+   * allowGuest: the ranking surface is reachable right after a guest import.
+   */
+  const gate = await requireLegacySleeperIdentity(request, {
+    allowGuest: true,
+    requestedUsername,
+    rateLimit: { action: "rank_refresh", maxRequests: 1, windowMs: 60_000 },
   });
+  if (!gate.ok) return gate.response;
 
-  if (!rl.success) {
-    return NextResponse.json(
-      {
-        error: "Please wait before refreshing again.",
-        retryAfterSec: rl.retryAfterSec || 60,
-        remaining: rl.remaining ?? 0,
-      },
-      {
-        status: 429,
-        headers: { "Retry-After": String(rl.retryAfterSec || 60) },
-      }
-    );
-  }
+  const uname = gate.identity.sleeperUsername.toLowerCase();
 
   const legacyUser = await prisma.legacyUser.findFirst({
     where: { sleeperUsername: uname },
@@ -185,7 +175,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rank/refresh", tool: "
   return NextResponse.json({
     ok: true,
     ranking_preview: preview,
-    rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
+    // Preserved from the old hand-rolled limiter: app/af-legacy reads this to render the
+    // remaining-refreshes counter, so dropping it would blank that UI rather than error.
+    rate_limit: gate.rateLimit ?? null,
   });
 })
 

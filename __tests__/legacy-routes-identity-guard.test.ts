@@ -65,19 +65,67 @@ const UNGATED_HANDLER_ALLOWANCE: Record<string, number> = {
 }
 
 /**
+ * PRE-EXISTING UNGATED DEBT — a RATCHET, not an approval.
+ *
+ * Deliberately separate from `PUBLIC_ALLOWLIST`: those routes are legitimately public and
+ * justified. These are not. Every one takes a caller-supplied `username` from the query
+ * string and serves whoever it names; 9 of them "gate" on `requireAuthOrOrigin`, which
+ * returns `authenticated: true` for an anonymous caller and so authenticates nobody.
+ *
+ * They are listed rather than fixed because they were invisible until the `searchParams?.`
+ * regex fix in this file, and they are NOT the legacy-Sleeper class this sweep closed:
+ *  - the five `leagues/[leagueId]/*` entries are copy-paste duplicates of the `insights`
+ *    handler (`team-scan` is literally tagged `endpoint: "/api/legacy/insights"`) and are
+ *    already slated for deletion rather than repair;
+ *  - `cfb-players` and `fantrax` key on a FANTRAX username — a different identity space
+ *    that `requireLegacySleeperIdentity` cannot resolve, so gating them needs its own
+ *    helper designed on purpose, not improvised here.
+ *
+ * The list may only ever SHRINK — see the ratchet test below. Adding a route here to make
+ * CI green is the exact failure this file exists to prevent.
+ */
+const KNOWN_UNGATED: Record<string, string> = {
+  'insights/route.ts': 'Serves getUnreadInsights(username) behind requireAuthOrOrigin.',
+  'badges/route.ts': 'Reads badges for the named user behind requireAuthOrOrigin.',
+  'ai-gm-analyze/route.ts': 'LLM-calling; requireAuthOrOrigin only — also a billing vector.',
+  'pre-analysis/route.ts': 'Reads analysis for the named user; ungated.',
+  'simulations/route.ts': 'Reads simulations for the named user behind requireAuthOrOrigin.',
+  'cfb-players/route.ts': 'FANTRAX identity space (fantraxUsername) — needs a different gate.',
+  'fantrax/route.ts': 'FANTRAX identity space — needs a different gate.',
+  'leagues/[leagueId]/team-scan/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
+  'leagues/[leagueId]/draft-war-room/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
+  'leagues/[leagueId]/market-board/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
+  'leagues/[leagueId]/trade-command-center/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
+  'leagues/[leagueId]/[...path]/route.ts': 'Dead dispatcher catch-all; slated for deletion.',
+}
+
+/** Ratchet ceiling. Lower it as routes are fixed; never raise it. */
+const KNOWN_UNGATED_CEILING = 12
+
+/**
  * Username arriving from the caller — property access, destructuring, or a query param.
  *
  * The destructuring pattern matches `= body`, `= body ?? {}`, `= await req.json()` and so
  * on rather than only `= req`: an earlier version required `req` on the right-hand side
  * and silently missed `const { sleeper_username } = body ?? {}`, which is how
  * `guest-import` reads it. A missed pattern here is a route that skips the guard.
+ *
+ * The query-param patterns allow OPTIONAL CHAINING (`searchParams?.get`) for the same
+ * reason. They originally required a plain dot while the body pattern already handled
+ * `body?.sleeper_username` — an inconsistency, and every route that reads the username
+ * off the query string in this repo happens to use `?.`. The result was a guard that
+ * passed green while `import/status`, `rank/refresh`, `trade/roster` and `waiver/leagues`
+ * served any caller-named user's data with no gate at all. Widening the regex by two
+ * characters moved all four in scope. When adding an input pattern, write the optional-
+ * chained form too, and confirm it FAILS before the fix — a pattern that matches nothing
+ * is indistinguishable from a clean surface.
  */
 const INPUT_PATTERNS: RegExp[] = [
   /body\s*\.\s*sleeper_username/,
   /body\s*\?\.\s*sleeper_username/,
   /\{[^}]*\bsleeper_username\b[^}]*\}\s*=/s,
-  /searchParams\s*\.\s*get\(\s*['"]sleeper_username['"]/,
-  /searchParams\s*\.\s*get\(\s*['"]username['"]/,
+  /searchParams\s*\??\.\s*get\(\s*['"]sleeper_username['"]/,
+  /searchParams\s*\??\.\s*get\(\s*['"]username['"]/,
 ]
 
 function walk(dir: string, out: string[] = []): string[] {
@@ -120,6 +168,7 @@ describe('legacy routes taking a Sleeper username must resolve identity server-s
     for (const file of inScope) {
       const rel = relative(LEGACY_DIR, file).replace(/\\/g, '/')
       if (rel in PUBLIC_ALLOWLIST) continue
+      if (rel in KNOWN_UNGATED) continue // tracked debt — see the ratchet test
       const code = stripComments(readFileSync(file, 'utf8'))
       /*
        * Require an actual CALL and an actual check of its result — not merely the
@@ -153,6 +202,35 @@ describe('legacy routes taking a Sleeper username must resolve identity server-s
     ).toEqual([])
   })
 
+  it('the known-ungated debt list only shrinks', () => {
+    /*
+     * Without this, KNOWN_UNGATED is just a mute button: the next ungated route gets
+     * appended and the guard stays green forever. The ceiling makes adding one a visible,
+     * deliberate edit to a number rather than a quiet one-line append.
+     */
+    const count = Object.keys(KNOWN_UNGATED).length
+    expect(
+      count,
+      `KNOWN_UNGATED grew to ${count} (ceiling ${KNOWN_UNGATED_CEILING}). Gate the route ` +
+        `instead of listing it. If you genuinely fixed routes, LOWER the ceiling to ${count}.`,
+    ).toBeLessThanOrEqual(KNOWN_UNGATED_CEILING)
+  })
+
+  it('the known-ungated debt list has no stale entries', () => {
+    /*
+     * A stale entry means a route was fixed, deleted or renamed while its exemption stayed
+     * behind — which then silently exempts whatever later takes that path. Same reasoning as
+     * the PUBLIC_ALLOWLIST staleness check below; both must hold or the ratchet rots.
+     */
+    const inScopeRel = new Set(inScope.map((f) => relative(LEGACY_DIR, f).replace(/\\/g, '/')))
+    const stale = Object.keys(KNOWN_UNGATED).filter((k) => !inScopeRel.has(k))
+    expect(
+      stale,
+      `KNOWN_UNGATED entries no longer matching a username-taking route: ${stale.join(', ')}. ` +
+        `Remove them and lower KNOWN_UNGATED_CEILING.`,
+    ).toEqual([])
+  })
+
   it('the allowlist has no stale entries', () => {
     // A stale entry silently exempts a route that no longer exists — or worse, one that was
     // renamed and now bypasses the guard under a new path.
@@ -176,6 +254,7 @@ describe('legacy routes taking a Sleeper username must resolve identity server-s
     for (const file of inScope) {
       const code = stripComments(readFileSync(file, 'utf8'))
       const rel = relative(LEGACY_DIR, file).replace(/\\/g, '/')
+      if (rel in KNOWN_UNGATED) continue // tracked debt — see the ratchet test
       if (/requireAuthOrOrigin\s*\(/.test(code)) offenders.push(`${rel} (requireAuthOrOrigin)`)
     }
     expect(

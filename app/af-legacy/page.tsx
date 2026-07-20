@@ -1285,6 +1285,13 @@ function AFLegacyContent() {
   const [playerSearchLoading, setPlayerSearchLoading] = useState(false)
   const [playerSearchError, setPlayerSearchError] = useState('')
   const [playerSearchResults, setPlayerSearchResults] = useState<any[]>([])
+  /*
+   * Mount time, used as `form_rendered_at` when the Team Scan funnel claims a guest
+   * session. `guest-import` rejects anything submitted less than MIN_HUMAN_FILL_TIME_MS
+   * after the form rendered, so this must be a real earlier timestamp — passing
+   * Date.now() at request time reads as a 0ms fill and is refused as a bot.
+   */
+  const pageRenderedAtRef = useRef<number>(Date.now())
   const [selectedPlayerCard, setSelectedPlayerCard] = useState<any | null>(null)
   const [playerDb, setPlayerDb] = useState<{ id: string; name: string; position: string; team: string | null }[]>([])
   const [playerDbLoaded, setPlayerDbLoaded] = useState(false)
@@ -3679,6 +3686,31 @@ function AFLegacyContent() {
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
+  /**
+   * Team Scan now resolves identity server-side, so an anonymous visitor gets 401 (no
+   * identity) or 409 (signed in, no Sleeper account linked) instead of whatever roster the
+   * username box happened to contain.
+   *
+   * Rather than dead-ending on "sign in", carry a first-timer forward: claim the handle as
+   * a guest, then retry the scan automatically, so they still see their own team with no
+   * account.
+   *
+   * The claim is NOT unconditional. `guest-import` answers 409 `HANDLE_CLAIMED` when an
+   * AppUser already owns the handle, and that case falls through to a sign-in prompt —
+   * auto-claiming there would mint a guest session bound to someone else's LegacyUser and
+   * reopen the very IDOR this sweep closed, just via two calls instead of one.
+   */
+  const runPlayerFinder = async () =>
+    fetch('/api/legacy/player-finder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sleeper_username: username,
+        query: playerSearchQuery,
+        sport: 'nfl',
+      }),
+    })
+
   const searchPlayers = async () => {
     if (!username || !playerSearchQuery || playerSearchQuery.length < 2) return
     setShowAutoSuggestions(false)
@@ -3686,24 +3718,45 @@ function AFLegacyContent() {
     setPlayerSearchError('')
     setPlayerSearchResults([])
     trackToolUse('player_finder', { username, query: playerSearchQuery })
-    
+
     try {
-      const res = await fetch('/api/legacy/player-finder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          sleeper_username: username,
-          query: playerSearchQuery,
-          sport: 'nfl',
-        }),
-      })
+      let res = await runPlayerFinder()
+
+      if (res.status === 401 || res.status === 409) {
+        const claim = await fetch('/api/legacy/guest-import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            sleeper_username: username,
+            // Honeypot field, deliberately empty. `form_rendered_at` is the real mount
+            // time — sending Date.now() here would read as a 0ms fill and be rejected as
+            // a bot by guest-import's MIN_HUMAN_FILL_TIME_MS check.
+            website: '',
+            form_rendered_at: pageRenderedAtRef.current,
+          }),
+        })
+
+        if (claim.ok) {
+          // Guest session cookie is set; the retry now carries an identity.
+          res = await runPlayerFinder()
+        } else {
+          const claimData = await claim.json().catch(() => ({}))
+          setPlayerSearchError(
+            claimData?.code === 'HANDLE_CLAIMED'
+              ? 'That Sleeper account belongs to an AllFantasy login. Sign in to scan your team.'
+              : claimData?.error || 'Could not start a guest session. Please try again.',
+          )
+          return
+        }
+      }
+
       const data = await res.json()
-      
+
       if (!res.ok) {
         setPlayerSearchError(data.error || 'Failed to search players')
         return
       }
-      
+
       if (data.success) {
         setPlayerSearchResults(data.players || [])
         if (data.players?.length === 0) {

@@ -62,8 +62,15 @@ export type LegacyIdentity = {
   source: 'session' | 'guest'
 }
 
+/**
+ * Remaining per-actor budget, surfaced on success so a route can keep returning the
+ * `rate_limit` block its clients already read (af-legacy's rank counter, for one). Without
+ * this, moving a hand-rolled limiter into the gate silently nulls that UI.
+ */
+export type LegacyRateLimitBudget = { remaining: number; retryAfterSec: number }
+
 export type LegacyIdentityResult =
-  | { ok: true; identity: LegacyIdentity }
+  | { ok: true; identity: LegacyIdentity; rateLimit?: LegacyRateLimitBudget }
   | { ok: false; response: NextResponse }
 
 export type RequireLegacyIdentityOptions = {
@@ -148,6 +155,7 @@ export async function requireLegacySleeperIdentity(
   }
 
   // ── 4. Per-actor rate limit, after the gate ────────────────────────────────
+  let budget: LegacyRateLimitBudget | undefined
   if (rateLimit) {
     /*
      * Keyed on `actorId`, with the client IP folded in via `includeIpInKey`. That flag
@@ -173,7 +181,8 @@ export async function requireLegacySleeperIdentity(
         ),
       }
     }
+    budget = { remaining: rl.remaining ?? 0, retryAfterSec: rl.retryAfterSec ?? 0 }
   }
 
-  return { ok: true, identity }
+  return { ok: true, identity, rateLimit: budget }
 }

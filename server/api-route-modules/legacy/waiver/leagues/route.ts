@@ -1,14 +1,23 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/waiver/leagues", tool: "LegacyWaiverLeagues" })(async (request: NextRequest) => {
-  const searchParams = request.nextUrl.searchParams
-  const sleeperUsername = searchParams?.get('sleeper_username')
+  // Read the caller's claim ONLY to cross-check it — the lookup below uses the
+  // server-resolved identity. This route previously selected on the raw query
+  // param with no gate at all, so `?sleeper_username=<anyone>` returned that
+  // person's full league list.
+  const requestedUsername = request.nextUrl.searchParams?.get('sleeper_username')
 
-  if (!sleeperUsername) {
-    return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
-  }
+  // allowGuest: the waiver surface is reachable straight after a guest import,
+  // before any account exists.
+  const gate = await requireLegacySleeperIdentity(request, {
+    allowGuest: true,
+    requestedUsername,
+  })
+  if (!gate.ok) return gate.response
+  const sleeperUsername = gate.identity.sleeperUsername
 
   try {
     const user = await prisma.legacyUser.findUnique({

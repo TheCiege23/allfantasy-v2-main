@@ -81,6 +81,35 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/guest-import", tool: "
       return NextResponse.json({ error: 'Sleeper user not found' }, { status: 404 });
     }
 
+    /*
+     * A guest session must never be minted for a handle somebody already owns.
+     *
+     * `resolveOrCreateLegacyUser` returns the EXISTING LegacyUser when the handle is known,
+     * so without this check the legacy IDOR reopens in two steps rather than one: type a
+     * victim's handle here, receive an `af_guest_session` bound to their LegacyUser, then
+     * call any gated route and be served their data. That path would defeat the entire
+     * identity sweep, since `requireLegacySleeperIdentity` trusts this token by design.
+     *
+     * `AppUser.legacyUserId` is `@unique`, so at most one account can own a handle and this
+     * is an exact ownership test rather than a heuristic.
+     *
+     * 409 (not 403) because nothing is wrong with the CALLER — the handle is simply taken,
+     * and the client's correct next move is to sign in rather than to retry as a guest.
+     */
+    const owner = await prisma.appUser.findUnique({
+      where: { legacyUserId: resolved.id },
+      select: { id: true },
+    });
+    if (owner) {
+      return NextResponse.json(
+        {
+          error: 'That Sleeper account is already linked to an AllFantasy login. Sign in to use it.',
+          code: 'HANDLE_CLAIMED',
+        },
+        { status: 409 },
+      );
+    }
+
     const guestToken = await signGuestSessionToken({
       legacyUserId: resolved.id,
       sleeperUsername: resolved.sleeperUsername,
