@@ -3,6 +3,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getLeagueRosters, getLeagueUsers, getPlayersBySport } from '@/lib/sleeper-client'
+import { requireAuth } from '@/lib/auth-guard'
+import { buildRateLimit429, consumeRateLimit } from '@/lib/rate-limit'
 
 const openai = getOpenAIRouteClient()
 
@@ -240,14 +242,61 @@ Return JSON only:
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/player-finder", tool: "LegacyPlayerFinder" })(async (req: NextRequest) => {
   try {
+    // NOTE: this must be `requireAuth` from '@/lib/auth-guard' (a real session gate).
+    // '@/lib/api-auth' exports a same-named `requireAuth`, plus `requireAuthOrOrigin`,
+    // which resolve a self-asserted `af_session` cookie / a spoofable Origin header and
+    // would leave this route exactly as open as it was.
+    const auth = await requireAuth()
+    if (!auth.ok) return auth.response
+
+    // Authorization key: the server-managed AppUser -> LegacyUser link, which is
+    // exclusive (linkAfUserToLegacy 409s if another account already claimed it).
+    // Deliberately NOT UserProfile.sleeperUsername — the schema marks that a mutable
+    // display handle — and never the request body, which the caller controls.
+    const appUser = await prisma.appUser.findUnique({
+      where: { id: auth.userId },
+      select: { legacyUser: { select: { sleeperUsername: true } } },
+    })
+    const sleeperUsername = appUser?.legacyUser?.sleeperUsername ?? ''
+
+    if (!sleeperUsername) {
+      return NextResponse.json(
+        { error: 'No Sleeper account is linked to this login. Import your leagues first.' },
+        { status: 409 }
+      )
+    }
+
+    // Keyed on the account id, after the gate, so one user cannot burn everyone's
+    // budget. Each call can fan out to ~20 OpenAI completions (one per matched player).
+    const rl = consumeRateLimit({
+      scope: 'legacy',
+      action: 'player_finder',
+      sleeperUsername: auth.userId, // param is legacy-named; any stable user id works
+      maxRequests: 10,
+      windowMs: 60_000,
+    })
+    if (!rl.success) {
+      return NextResponse.json(
+        buildRateLimit429({ message: 'Player finder cooldown active.', rl }),
+        { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
+      )
+    }
+
     const body = await req.json()
-    const sleeperUsername = String(body.sleeper_username || '').trim()
     const searchQuery = String(body.query || '').trim()
     const sportRaw = String(body.sport || 'nfl').trim().toLowerCase()
 
-    if (!sleeperUsername) {
-      return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
+    // The body may still carry the old caller-supplied username. It is never used to
+    // select data; it is only rejected when it disagrees with the caller's own link,
+    // so a stale client fails loudly instead of silently returning someone else's view.
+    const requestedUsername = String(body.sleeper_username || '').trim()
+    if (requestedUsername && requestedUsername.toLowerCase() !== sleeperUsername.toLowerCase()) {
+      return NextResponse.json(
+        { error: 'You can only search leagues for your own linked Sleeper account.' },
+        { status: 403 }
+      )
     }
+
     if (!searchQuery || searchQuery.length < 2) {
       return NextResponse.json({ error: 'Search query must be at least 2 characters' }, { status: 400 })
     }
