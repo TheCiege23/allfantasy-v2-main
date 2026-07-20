@@ -207,6 +207,122 @@ export async function getCanonicalPlayer(
   }
 }
 
+/**
+ * Lightweight canonical player for bulk lookups.
+ *
+ * Phase 3 note — why this exists. Every `getAllPlayers()` call site holds **Sleeper ids**
+ * (they come from Sleeper rosters/leagues) and uses the result in one of three shapes:
+ * enumerate everything, look up many ids at once, or look up one. `getCanonicalPlayer()`
+ * serves none of them directly: it is keyed by canonical `Player.id`, and it hydrates every
+ * satellite, which is far more than a name/headshot lookup needs. Calling it in a loop would
+ * turn one live fetch into N×7 queries — strictly worse than the thing being replaced.
+ *
+ * So bulk call sites migrate onto `getCanonicalPlayersBySleeperIds()`, which answers any
+ * number of ids in a fixed 3 queries and returns only the display fields those sites use.
+ */
+export interface CanonicalPlayerLite {
+  id: string
+  sleeperId: string
+  name: string
+  sport: string
+  position: string
+  team: string | null
+  active: boolean
+  /** Primary `PlayerImage` URL, falling back to the denormalized `Player.imageUrl`. */
+  imageUrl: string | null
+}
+
+/** Postgres caps bound parameters; chunk large id lists rather than letting the query fail. */
+const ID_CHUNK = 1000
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/**
+ * Resolve many Sleeper ids to canonical players in a fixed number of queries.
+ * Returns a Map keyed by the *Sleeper* id, so call sites keep indexing the way they already do.
+ * Ids with no canonical player are simply absent — callers keep their existing fallback.
+ */
+export async function getCanonicalPlayersBySleeperIds(
+  sleeperIds: string[],
+): Promise<Map<string, CanonicalPlayerLite>> {
+  const out = new Map<string, CanonicalPlayerLite>()
+  const ids = [...new Set(sleeperIds.filter((id) => typeof id === 'string' && id.trim()))]
+  if (ids.length === 0) return out
+
+  for (const batch of chunk(ids, ID_CHUNK)) {
+    const identities = await prisma.playerProviderIdentity.findMany({
+      where: { provider: 'sleeper', providerPlayerId: { in: batch } },
+      select: { playerId: true, providerPlayerId: true },
+    })
+    const playerIds = identities
+      .map((i) => i.playerId)
+      .filter((id): id is string => Boolean(id))
+    if (playerIds.length === 0) continue
+
+    const [players, images] = await Promise.all([
+      prisma.player.findMany({
+        where: { id: { in: playerIds } },
+        select: {
+          id: true, name: true, sport: true, position: true,
+          team: true, active: true, imageUrl: true,
+        },
+      }),
+      prisma.playerImage.findMany({
+        where: {
+          playerId: { in: playerIds },
+          imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
+          isPrimary: true,
+        },
+        select: { playerId: true, url: true },
+      }),
+    ])
+
+    const byId = new Map(players.map((p) => [p.id, p]))
+    const imageById = new Map(
+      images.filter((i) => i.playerId).map((i) => [i.playerId as string, i.url]),
+    )
+
+    for (const identity of identities) {
+      if (!identity.playerId) continue
+      const player = byId.get(identity.playerId)
+      if (!player) continue
+      out.set(identity.providerPlayerId, {
+        id: player.id,
+        sleeperId: identity.providerPlayerId,
+        name: player.name,
+        sport: String(player.sport ?? '').toUpperCase(),
+        position: player.position,
+        team: player.team,
+        active: player.active,
+        imageUrl: imageById.get(player.id) ?? player.imageUrl ?? null,
+      })
+    }
+  }
+
+  return out
+}
+
+/** Full canonical player, resolved from a Sleeper id rather than a canonical id. */
+export async function getCanonicalPlayerBySleeperId(
+  sleeperId: string,
+  opts: GetCanonicalPlayerOptions = {},
+): Promise<CanonicalPlayer | null> {
+  const id = sleeperId?.trim()
+  if (!id) return null
+
+  const identity = await prisma.playerProviderIdentity.findFirst({
+    where: { provider: 'sleeper', providerPlayerId: id },
+    select: { playerId: true },
+  })
+  if (!identity?.playerId) return null
+
+  return getCanonicalPlayer(identity.playerId, opts)
+}
+
 export interface CanonicalTeam {
   id: string
   sportKey: string

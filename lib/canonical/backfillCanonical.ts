@@ -50,6 +50,25 @@ export interface BackfillSummary {
   dryRun: boolean
 }
 
+/**
+ * Rows per batched write.
+ *
+ * The original per-row implementation issued ~4 queries per player (a `Player` upsert plus a
+ * find-then-write for each provider identity). Measured against the real 95,839-row
+ * `SportsPlayer` table that is ~344k sequential round trips to Neon: 4,884 players in ~12
+ * minutes, extrapolating to **~3.5 hours** — long enough that a dropped connection mid-run is
+ * likely, which is not a migration anyone should run against production. Batched
+ * `INSERT ... ON CONFLICT` brings it to a few hundred round trips.
+ */
+const WRITE_BATCH = 500
+
+/** Chunk a list for batched writes. */
+function batches<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
 /** Columns on `PlayerIdentityMap` that are provider ids, mapped to their provider name. */
 const IDENTITY_MAP_PROVIDERS: Array<[key: string, provider: string]> = [
   ['espnId', 'espn'],
@@ -166,6 +185,108 @@ async function upsertProviderIdentity(args: {
   }
 }
 
+interface PlayerWriteRow {
+  id: string
+  name: string
+  normalizedName: string
+  sport: string
+  position: string
+  league: string
+  team: string | null
+  imageUrl: string | null
+  height: string | null
+  weight: string | null
+  injuryStatus: string | null
+  providerIds: Record<string, string>
+  confidence: number
+}
+
+interface IdentityWriteRow {
+  playerId: string
+  sportKey: string
+  provider: string
+  providerPlayerId: string
+  displayName: string
+}
+
+/**
+ * Batched `INSERT ... ON CONFLICT DO UPDATE` for canonical players.
+ *
+ * Prisma has no bulk upsert, and `createMany({ skipDuplicates })` cannot update existing rows —
+ * which the backfill must do to stay idempotent. Raw parameterized SQL is the only way to get
+ * both properties in one round trip per batch. Values are bound, never interpolated.
+ */
+async function writePlayerBatches(rows: PlayerWriteRow[]): Promise<void> {
+  for (const batch of batches(rows, WRITE_BATCH)) {
+    const cols = 14
+    const values = batch
+      .map((_, i) => `(${Array.from({ length: cols }, (_, c) => `$${i * cols + c + 1}`).join(',')})`)
+      .join(',')
+    const params = batch.flatMap((r) => [
+      r.id, r.name, r.normalizedName, r.sport, r.position, r.league, r.team,
+      r.imageUrl, r.height, r.weight, r.injuryStatus, JSON.stringify(r.providerIds),
+      'phase2-backfill', r.confidence,
+    ])
+
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "Player" (
+         id, name, normalized_name, sport, position, league, team, image_url,
+         height, weight, "injuryStatus", provider_ids, source, confidence,
+         fetched_at, last_seen_at, active, "lastSyncedAt", "createdAt"
+       )
+       SELECT v.id, v.name, v.normalized_name, v.sport, v.position, v.league, v.team, v.image_url,
+              v.height, v.weight, v."injuryStatus", v.provider_ids::jsonb, v.source, v.confidence::double precision,
+              now(), now(), true, now(), now()
+       FROM (VALUES ${values}) AS v(
+         id, name, normalized_name, sport, position, league, team, image_url,
+         height, weight, "injuryStatus", provider_ids, source, confidence)
+       ON CONFLICT (id) DO UPDATE SET
+         name = EXCLUDED.name,
+         normalized_name = EXCLUDED.normalized_name,
+         team = EXCLUDED.team,
+         image_url = EXCLUDED.image_url,
+         "injuryStatus" = EXCLUDED."injuryStatus",
+         provider_ids = EXCLUDED.provider_ids,
+         last_seen_at = now(),
+         "lastSyncedAt" = now()`,
+      ...params,
+    )
+  }
+}
+
+/** Batched `INSERT ... ON CONFLICT` for provider identities. */
+async function writeIdentityBatches(rows: IdentityWriteRow[]): Promise<void> {
+  for (const batch of batches(rows, WRITE_BATCH)) {
+    const cols = 5
+    const values = batch
+      .map((_, i) => `(${Array.from({ length: cols }, (_, c) => `$${i * cols + c + 1}`).join(',')})`)
+      .join(',')
+    const params = batch.flatMap((r) => [
+      r.playerId, r.sportKey, r.provider, r.providerPlayerId, r.displayName,
+    ])
+
+    // `uniq_player_provider_identity` spans the nullable league_key. Postgres does not treat
+    // NULLs as conflicting, so a plain ON CONFLICT on that index never fires for league-agnostic
+    // rows; the partial unique index below is what makes this idempotent.
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO sports_core_player_provider_identities (
+         id, player_id, sport_key, league_key, provider, provider_player_id,
+         display_name, confidence, verified, source, last_seen_at, created_at, updated_at
+       )
+       SELECT gen_random_uuid()::text, v.player_id, v.sport_key, NULL, v.provider, v.provider_player_id,
+              v.display_name, 1, true, 'phase2-backfill', now(), now(), now()
+       FROM (VALUES ${values}) AS v(player_id, sport_key, provider, provider_player_id, display_name)
+       ON CONFLICT (provider, sport_key, provider_player_id)
+         WHERE league_key IS NULL
+       DO UPDATE SET
+         player_id = EXCLUDED.player_id,
+         display_name = EXCLUDED.display_name,
+         last_seen_at = now()`,
+      ...params,
+    )
+  }
+}
+
 /** Backfill canonical `Team` rows and their provider identities. Returns counts. */
 export async function backfillCanonicalTeams(
   opts: BackfillOptions = {},
@@ -180,13 +301,16 @@ export async function backfillCanonicalTeams(
     },
   })
 
-  let teams = 0
+  // Count DISTINCT canonical teams, not write operations: 1,738 `SportsTeam` rows collapse to
+  // ~893 canonical teams (same team across sources/seasons), and counting operations reported
+  // the source-row count instead, which read as "no collapse happened".
+  const teamIds = new Set<string>()
   let identities = 0
 
   for (const row of rows) {
     const identity = deriveCanonicalTeamIdentity({ name: row.name, sport: row.sport })
     if (!identity.normalizedName || !identity.sportKey) continue
-    if (opts.dryRun) { teams++; continue }
+    if (opts.dryRun) { teamIds.add(identity.normalizedName); continue }
 
     try {
       // Find-then-write rather than upsert: both unique constraints below span a nullable
@@ -223,7 +347,7 @@ export async function backfillCanonicalTeams(
             },
             select: { id: true },
           })
-      teams++
+      teamIds.add(team.id)
 
       if (row.externalId && row.source) {
         const existingIdentity = await prisma.teamProviderIdentity.findFirst({
@@ -264,7 +388,7 @@ export async function backfillCanonicalTeams(
     }
   }
 
-  return { teams, identities }
+  return { teams: teamIds.size, identities }
 }
 
 /**
@@ -291,12 +415,13 @@ export async function backfillCanonicalPlayers(
   const grouped = new Map<string, SourcePlayer[]>()
   const strategies: Record<CanonicalMatchStrategy, number> = {
     sleeper_id: 0,
-    name_sport_position: 0,
+    name_sport_position_team: 0,
   }
 
   for (const row of sourceRows) {
     const identity = deriveCanonicalPlayerIdentity({
-      name: row.name, sport: row.sport, position: row.position, sleeperId: row.sleeperId,
+      name: row.name, sport: row.sport, position: row.position,
+      team: row.team, sleeperId: row.sleeperId,
     })
     const list = grouped.get(identity.id) ?? []
     list.push(row)
@@ -308,13 +433,18 @@ export async function backfillCanonicalPlayers(
   let canonicalPlayers = 0
   // Count DISTINCT identities, not write operations: a Sleeper-sourced player writes the same
   // `(sleeper, sleeperId)` row twice — once explicitly, once via its `(source, externalId)`
-  // pair — so counting operations overstated the result by ~55%.
+  // pair — so counting operations overstated the result by ~55%. Deduping here also means the
+  // batched writer never sends the same identity twice in one statement.
   const identityKeys = new Set<string>()
+  const playerRows: PlayerWriteRow[] = []
+  const identityRows: IdentityWriteRow[] = []
+  const crosswalkNeeded = new Map<string, { canonicalId: string; sportKey: string; name: string }>()
 
   for (const [canonicalId, rows] of grouped) {
     const best = pickBestSourceRow(rows)
     const identity = deriveCanonicalPlayerIdentity({
-      name: best.name, sport: best.sport, position: best.position, sleeperId: best.sleeperId,
+      name: best.name, sport: best.sport, position: best.position,
+      team: best.team, sleeperId: best.sleeperId,
     })
     strategies[identity.strategy]++
 
@@ -322,82 +452,77 @@ export async function backfillCanonicalPlayers(
 
     const sportKey = normalizeSport(best.sport)
 
-    try {
-      await prisma.player.upsert({
-        where: { id: canonicalId },
-        create: {
-          id: canonicalId,
-          name: best.name,
-          normalizedName: identity.normalizedName,
-          sport: sportKey,
-          // `position` and `league` are non-null on Player; SportsPlayer.position is nullable.
-          position: best.position ?? 'UNK',
-          league: sportKey,
-          team: best.team,
-          imageUrl: best.imageUrl,
-          height: best.height,
-          weight: best.weight,
-          injuryStatus: best.status,
-          providerIds: Object.fromEntries(
-            rows.filter((r) => r.source && r.externalId).map((r) => [r.source, r.externalId]),
-          ),
-          source: 'phase2-backfill',
-          confidence: identity.strategy === 'sleeper_id' ? 1 : 0.8,
-          fetchedAt: new Date(),
-          lastSeenAt: new Date(),
-          active: true,
-        },
-        update: {
-          name: best.name,
-          normalizedName: identity.normalizedName,
-          team: best.team,
-          imageUrl: best.imageUrl,
-          injuryStatus: best.status,
-          lastSeenAt: new Date(),
-        },
-      })
-      canonicalPlayers++
+    playerRows.push({
+      id: canonicalId,
+      name: best.name,
+      normalizedName: identity.normalizedName,
+      sport: sportKey,
+      // `position` and `league` are non-null on Player; SportsPlayer.position is nullable.
+      position: best.position ?? 'UNK',
+      league: sportKey,
+      team: best.team,
+      imageUrl: best.imageUrl,
+      height: best.height,
+      weight: best.weight,
+      injuryStatus: best.status,
+      providerIds: Object.fromEntries(
+        rows.filter((r) => r.source && r.externalId).map((r) => [r.source, r.externalId]),
+      ),
+      confidence: identity.strategy === 'sleeper_id' ? 1 : 0.8,
+    })
 
-      // ── Provider identities ──
-      // 1. Sleeper, the strongest cross-platform key.
-      if (best.sleeperId) {
-        if (await upsertProviderIdentity({
-          playerId: canonicalId, sportKey, provider: 'sleeper',
-          providerPlayerId: best.sleeperId, displayName: best.name,
-        })) identityKeys.add(`sleeper|${best.sleeperId}`)
-      }
+    // ── Provider identities, deduped in memory before any write ──
+    // The dedup key MUST include sportKey, because the real uniqueness is
+    // `(provider, sport_key, provider_player_id)`. Providers reuse small numeric ids across
+    // sports — rolling_insights id "3126" exists for both NCAAB and MLB — so a key of
+    // `provider|id` alone lets whichever sport is processed first claim the id and silently
+    // drops every later sport's identity. That produced 0% identity coverage for MLB and NBA
+    // at full scale while NFL looked fine.
+    const addIdentity = (provider: string, rawId: string | null | undefined, display: string) => {
+      const providerPlayerId = normalizeProviderPlayerId(provider, (rawId ?? '').trim())
+      if (!providerPlayerId) return
+      const key = `${provider}|${sportKey}|${providerPlayerId}`
+      if (identityKeys.has(key)) return
+      identityKeys.add(key)
+      identityRows.push({ playerId: canonicalId, sportKey, provider, providerPlayerId, displayName: display })
+    }
 
-      // 2. One identity per source row that collapsed into this player.
-      for (const row of rows) {
-        if (!row.source || !row.externalId) continue
-        if (await upsertProviderIdentity({
-          playerId: canonicalId, sportKey, provider: row.source,
-          providerPlayerId: row.externalId, displayName: row.name,
-        })) identityKeys.add(`${row.source}|${normalizeProviderPlayerId(row.source, row.externalId)}`)
-      }
+    // 1. Sleeper, the strongest cross-platform key.
+    if (best.sleeperId) addIdentity('sleeper', best.sleeperId, best.name)
+    // 2. One identity per source row that collapsed into this player.
+    for (const row of rows) {
+      if (row.source && row.externalId) addIdentity(row.source, row.externalId, row.name)
+    }
+    // 3. Everything already crosswalked in PlayerIdentityMap (resolved in bulk below).
+    if (best.sleeperId) crosswalkNeeded.set(best.sleeperId, { canonicalId, sportKey, name: best.name })
 
-      // 3. Everything already crosswalked in PlayerIdentityMap, joined on sleeperId.
-      if (best.sleeperId) {
-        const map = await prisma.playerIdentityMap.findUnique({
-          where: { sleeperId: best.sleeperId },
-        })
-        if (map) {
-          for (const [key, provider] of IDENTITY_MAP_PROVIDERS) {
-            const value = (map as unknown as Record<string, string | null>)[key]
-            if (!value) continue
-            if (await upsertProviderIdentity({
-              playerId: canonicalId, sportKey, provider,
-              providerPlayerId: value, displayName: best.name,
-            })) identityKeys.add(`${provider}|${value}`)
-          }
+    canonicalPlayers++
+  }
+
+  if (!opts.dryRun) {
+    // Resolve every PlayerIdentityMap crosswalk in chunks rather than one findUnique per player.
+    for (const keys of batches([...crosswalkNeeded.keys()], WRITE_BATCH)) {
+      const maps = await prisma.playerIdentityMap.findMany({ where: { sleeperId: { in: keys } } })
+      for (const map of maps) {
+        const target = map.sleeperId ? crosswalkNeeded.get(map.sleeperId) : undefined
+        if (!target) continue
+        for (const [field, provider] of IDENTITY_MAP_PROVIDERS) {
+          const value = (map as unknown as Record<string, string | null>)[field]
+          if (!value) continue
+          const providerPlayerId = normalizeProviderPlayerId(provider, value.trim())
+          const key = `${provider}|${target.sportKey}|${providerPlayerId}`
+          if (!providerPlayerId || identityKeys.has(key)) continue
+          identityKeys.add(key)
+          identityRows.push({
+            playerId: target.canonicalId, sportKey: target.sportKey,
+            provider, providerPlayerId, displayName: target.name,
+          })
         }
       }
-    } catch (err) {
-      console.warn(
-        `[backfill] player ${best.name}:`,
-        err instanceof Error ? err.message : String(err),
-      )
     }
+
+    await writePlayerBatches(playerRows)
+    await writeIdentityBatches(identityRows)
   }
 
   return {
