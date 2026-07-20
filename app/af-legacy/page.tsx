@@ -848,6 +848,15 @@ function AFLegacyContent() {
   const [username, setUsernameState] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Anti-bot signals for the anonymous guest import. The honeypot is a field no
+  // human ever sees; form_rendered_at lets the server reject submits that land
+  // faster than a person could type. Both are optional server-side.
+  const [website, setWebsite] = useState('')
+  const formRenderedAtRef = useRef<number | null>(null)
+  useEffect(() => {
+    formRenderedAtRef.current = Date.now()
+  }, [])
+
   // Persist username to sessionStorage so it survives page navigation
   const setUsername = (val: string) => {
     setUsernameState(val)
@@ -3002,10 +3011,16 @@ function AFLegacyContent() {
 
     gtagEvent('league_import_started', { platform: 'sleeper' })
     try {
-      const res = await fetch('/api/legacy/import', {
+      // guest-import, not import: this funnel is anonymous ("No signup required"),
+      // and /api/legacy/import is gated by requireVerifiedUser so it 401s here.
+      const res = await fetch('/api/legacy/guest-import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sleeper_username: username.trim() }),
+        body: JSON.stringify({
+          sleeper_username: username.trim(),
+          website,
+          form_rendered_at: formRenderedAtRef.current ?? undefined,
+        }),
       })
       const data = await res.json()
 
@@ -4770,6 +4785,20 @@ function AFLegacyContent() {
                             Takes ~1 minute · Free · No signup required
                           </p>
                         </div>
+
+                        {/* Honeypot. Kept last so space-y-4 doesn't shift the visible
+                            fields, off-screen rather than display:none so naive bots
+                            still fill it, and hidden from tab order and screen readers. */}
+                        <input
+                          type="text"
+                          name="website"
+                          value={website}
+                          onChange={(e) => setWebsite(e.target.value)}
+                          tabIndex={-1}
+                          autoComplete="off"
+                          aria-hidden="true"
+                          className="absolute left-[-9999px] h-px w-px opacity-0"
+                        />
                       </form>
                     )}
 
