@@ -77,7 +77,19 @@ const {
     league: {
       findUnique: vi.fn(async ({ where, select }: any) => {
         const row = store.leagues.get(where.id)
-        return row ? pick(row, select) : null
+        if (!row) return null
+        const out = pick(row, select)
+        // `resolveLeagueAccess` resolves membership in one query via per-caller filtered
+        // relations, so the fake has to honour those filters the way Prisma would.
+        if (select?.rosters) {
+          const platformUserId = select.rosters.where?.platformUserId
+          out.rosters = store.rosters.filter(
+            (r) => r.leagueId === where.id && r.platformUserId === platformUserId
+          )
+        }
+        if (select?.redraftMembers) out.redraftMembers = []
+        if (select?.teams) out.teams = []
+        return out
       }),
     },
     roster: {
