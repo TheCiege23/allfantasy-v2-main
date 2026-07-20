@@ -161,6 +161,14 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/draft-tick",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/live-score-tick",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/import-projections",
       "schedule": "0 11 * * *"
     },

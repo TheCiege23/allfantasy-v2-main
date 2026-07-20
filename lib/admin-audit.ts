@@ -20,6 +20,26 @@ export type LogAdminActionInput = {
 }
 
 /**
+ * Sentinel actor for callers who authenticated with a shared secret rather than a
+ * user session. `requireAdminOrBearer()` accepts `Authorization: Bearer
+ * $ADMIN_PASSWORD` (and `x-admin-secret`/`x-cron-secret`) and returns a user object
+ * with only `{ role: "admin" }` — no id, no email. There is genuinely no per-caller
+ * identity to record, so record that fact explicitly instead of inventing one or
+ * silently dropping the audit row.
+ */
+export const ADMIN_AUDIT_SHARED_SECRET_ACTOR = "shared-secret"
+
+/**
+ * Resolve a stable actor id from a `requireAdmin()` / `requireAdminOrBearer()` gate
+ * user, so every call site records the actor the same way.
+ */
+export function resolveAdminAuditActor(
+  user: { id?: string | null; email?: string | null } | null | undefined,
+): string {
+  return user?.id?.trim() || user?.email?.trim() || ADMIN_AUDIT_SHARED_SECRET_ACTOR
+}
+
+/**
  * Append an admin action to the audit log. Safe to call from API routes after requireAdmin().
  */
 export async function logAdminAudit(input: LogAdminActionInput): Promise<void> {

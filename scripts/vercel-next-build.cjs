@@ -187,9 +187,14 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'cron', 'draft-pool-prewarm', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'fantasy-os-exec-sync', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'trade-weekly-recalibration', 'route.ts').replace(/\\/g, '/'),
-  // Scheduled in vercel.json by this stack (10 5 * * *). `app/api/cron` is excluded wholesale
-  // above, so without this line Vercel would invoke it daily and 404 every time - the
-  // write-through image cache would never populate. Same class as the regression #284 fixed.
+  // All three are scheduled in vercel.json, and `app/api/cron` is excluded wholesale above, so
+  // every one of them needs a keep-line or Vercel invokes it on schedule and 404s every time —
+  // draft-tick at 1/min is 1440 failed calls a day. Same class as the regression #284 fixed.
+  //
+  // UNION, not either-or: this branch added the first two and main added the third
+  // independently. Keeping only one side silently re-breaks the other's cron.
+  path.join('app', 'api', 'cron', 'draft-tick', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'live-score-tick', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'sync-player-images', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),

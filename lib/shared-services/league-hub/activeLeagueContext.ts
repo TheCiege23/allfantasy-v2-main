@@ -21,6 +21,7 @@
  * comment inline below for the real gap this closes.
  */
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { deriveSyncFreshness } from './syncFreshness'
 import type { ActiveLeagueContext, LeagueHubProvider } from './types'
 
@@ -54,7 +55,6 @@ export async function resolveActiveLeagueContext(args: {
       syncStatus: true,
       lastSyncedAt: true,
       settings: true,
-      redraftMembers: { where: { userId }, select: { role: true } },
       teams: {
         where: { claimedByUserId: userId },
         select: { id: true, isCommissioner: true, isCoCommissioner: true },
@@ -64,11 +64,15 @@ export async function resolveActiveLeagueContext(args: {
   if (!league) return null
 
   const isOwner = league.userId === userId
-  const isMember = league.redraftMembers.length > 0
   const myTeam = league.teams[0] ?? null
-  const hasClaimedTeam = Boolean(myTeam)
 
-  if (!isOwner && !isMember && !hasClaimedTeam) {
+  // The access decision delegates to the ONE canonical membership predicate in
+  // `lib/league-access.ts`, so this resolver cannot drift from it. That union also
+  // covers `Roster.platformUserId`, which this resolver's own owner/redraft/claimed-team
+  // reads miss entirely: an imported (e.g. Sleeper) manager who claimed their placeholder
+  // roster is represented ONLY by that column, and was previously 403'd here.
+  const access = await resolveLeagueAccess(leagueId, userId)
+  if (!access?.isMember) {
     return null
   }
 

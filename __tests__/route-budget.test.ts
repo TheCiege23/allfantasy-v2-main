@@ -85,6 +85,9 @@ const FILES_KEPT = [
   'app/api/cron/adp-refresh/route.ts', 'app/api/cron/recompute-allfantasy-adp/route.ts',
   'app/api/cron/draft-pool-prewarm/route.ts', 'app/api/cron/fantasy-os-exec-sync/route.ts',
   'app/api/cron/trade-weekly-recalibration/route.ts',
+  // scheduled in vercel.json — must be kept or they 404 (see vercel-next-build.cjs).
+  // Union of this branch's two and main's one; keeping only one side re-breaks the other.
+  'app/api/cron/draft-tick/route.ts', 'app/api/cron/live-score-tick/route.ts',
   'app/api/cron/sync-player-images/route.ts',
   'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
@@ -126,6 +129,37 @@ function getProductionSignals(): number {
   try { crons = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')).crons?.length ?? 0 } catch {}
   return (sourceTotal - netExcluded) + crons
 }
+
+describe('Every scheduled cron survives the production build', () => {
+  // This has now gone wrong three separate times: the original 13 sports-data crons (#284),
+  // and two in-flight branches that each added a cron to vercel.json without adding it to
+  // filesToKeep. `app/api/cron` is excluded from the build wholesale, so a scheduled-but-not-kept
+  // cron is invoked on schedule and 404s every single time — silently, forever. Nothing asserted
+  // that vercel.json and the keep-list agreed, so each instance had to be found by hand.
+  it('every /api/cron/* path in vercel.json is in FILES_KEPT', () => {
+    const vercelJson = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')) as {
+      crons?: { path: string }[]
+    }
+    const scheduled = (vercelJson.crons ?? [])
+      .map((c) => c.path.split('?')[0]!)
+      .filter((p) => p.startsWith('/api/cron/'))
+
+    const kept = new Set(FILES_KEPT)
+    // Collect every offender, then assert the list is empty — asserting inside the loop would
+    // abort on the first miss and hide the rest.
+    const notKept = scheduled.filter((p) => !kept.has(`app${p}/route.ts`))
+
+    expect(notKept).toEqual([])
+    expect(scheduled.length).toBeGreaterThan(0) // floor: an empty cron list must not read as a pass
+  })
+
+  it('every kept cron route actually exists on disk', () => {
+    const missing = FILES_KEPT.filter(
+      (f) => f.startsWith('app/api/cron/') && !existsSync(join(root, f))
+    )
+    expect(missing).toEqual([])
+  })
+})
 
 describe('Route budget — deleted routes must stay gone', () => {
   it('app/api/ai/context/route.ts is removed from disk', () => {

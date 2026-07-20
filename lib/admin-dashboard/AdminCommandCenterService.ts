@@ -474,6 +474,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     subscriptionsCreated7h,
     tokenGranted7h,
     tokenSpent7h,
+    firstLoginSignal,
   ] = await Promise.all([
     prisma.appUser.count(),
     prisma.appUser.count({ where: { createdAt: { gte: today } } }),
@@ -611,9 +612,16 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       },
     }).catch(() => 0),
     // ── Login / session metrics ───────────────────────────────────────────────
+    // NOTE: these counts deliberately do NOT come from AuthSession. That model has
+    // no createdAt column (id/sessionToken/userId/expires only), so the previous
+    // `authSession.count({ where: { createdAt } })` threw
+    // PrismaClientValidationError on every call and the `.catch(() => 0)` rendered
+    // it as a confident bold "0" on a live site. IdentitySignal is the real
+    // login-event source and does have createdAt — see recordIdentitySignal()
+    // wired into authOptions.events.signIn.
     prisma.authSession.count({ where: { expires: { gt: new Date() } } }).catch(() => 0),
-    prisma.authSession.count({ where: { createdAt: { gte: today } } }).catch(() => 0),
-    prisma.authSession.count({ where: { createdAt: { gte: sevenDaysAgo } } }).catch(() => 0),
+    prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: today } } }).catch(() => 0),
+    prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenDaysAgo } } }).catch(() => 0),
     // ── Subscription velocity ────────────────────────────────────────────────
     prisma.userSubscription.count({ where: { createdAt: { gte: today } } }),
     prisma.userSubscription.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
@@ -643,7 +651,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     prisma.sponsorCouponRedemption.count({ where: { status: "redeemed" } }).catch(() => 0),
     // ── 7-hour rolling window ────────────────────────────────────────────────
     prisma.appUser.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
-    prisma.authSession.count({ where: { createdAt: { gte: sevenHoursAgo } } }).catch(() => 0),
+    prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenHoursAgo } } }).catch(() => 0),
     prisma.worldCupBracketChallenge.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
     prisma.worldCupBracketEntry.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
     prisma.bracketPayment.aggregate({
@@ -659,7 +667,26 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       where: { tokenDelta: { lt: 0 }, createdAt: { gte: sevenHoursAgo } },
       _sum: { tokenDelta: true },
     }),
+    // Oldest captured login signal. Distinguishes "genuinely zero logins" from
+    // "login tracking has not recorded anything yet", so the cards below can say
+    // which one it is instead of showing a bold 0 for both.
+    prisma.identitySignal
+      .findFirst({
+        where: { context: "login" },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      })
+      .catch(() => null),
   ])
+
+  // Login counts are only meaningful once IdentitySignal has captured at least one
+  // login. Before that, a "0" would be indistinguishable from the old silent-zero
+  // bug, so report it as untracked instead of as data.
+  const loginTrackingStartedAt = firstLoginSignal?.createdAt ?? null
+  const loginMetric = (label: string, value: number, note: string): AdminMetric =>
+    loginTrackingStartedAt
+      ? metric(label, value, `${note} · tracked since ${loginTrackingStartedAt.toISOString().slice(0, 10)}`)
+      : notTracked(label, "No login signals captured yet — sign in once to start tracking")
 
   const cycleCounts = subscriptions.reduce(
     (acc, sub) => {
@@ -691,8 +718,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     morning: [
       metric("Signups last 7h", accounts7h, "Rolling 7-hour window"),
       metric("Signups today", accountsToday, "UTC day"),
-      metric("Logins last 7h", loginSessions7h, "New auth sessions last 7h"),
-      metric("Logins today", loginSessionsToday, "New auth sessions today"),
+      loginMetric("Logins last 7h", loginSessions7h, "Rolling 7-hour window"),
+      loginMetric("Logins today", loginSessionsToday, "UTC day"),
       metric("Active sessions now", activeSessionsNow),
       metric("Active subscribers", activeSubscriptionUserCount),
       metric("Pools last 7h", wcPools7h, "WC pools created last 7h"),
@@ -713,9 +740,9 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Created today", accountsToday, "UTC day"),
       metric("Created 7 days", accounts7Days),
       metric("Created 30 days", accounts30Days),
-      metric("Logins last 7h", loginSessions7h, "New auth sessions last 7h"),
-      metric("Logins today", loginSessionsToday, "New auth sessions UTC day"),
-      metric("Logins 7 days", loginSessions7Days, "New auth sessions"),
+      loginMetric("Logins last 7h", loginSessions7h, "Rolling 7-hour window"),
+      loginMetric("Logins today", loginSessionsToday, "UTC day"),
+      loginMetric("Logins 7 days", loginSessions7Days, "Rolling 7 days"),
       metric("Active sessions now", activeSessionsNow, "Sessions where expires > now()"),
       metric("Free users", Math.max(0, totalAccounts - activeSubscriptionUserCount), "Derived from active subscriptions"),
       metric("Pro/subscribed users", activeSubscriptionUserCount),
