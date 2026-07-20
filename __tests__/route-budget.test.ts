@@ -89,6 +89,7 @@ const FILES_KEPT = [
   // Union of this branch's two and main's one; keeping only one side re-breaks the other.
   'app/api/cron/draft-tick/route.ts', 'app/api/cron/live-score-tick/route.ts',
   'app/api/cron/sync-player-images/route.ts',
+  'app/api/cron/legacy-import-drain/route.ts',
   'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
   // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.

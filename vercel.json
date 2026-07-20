@@ -173,6 +173,10 @@
       "schedule": "0 11 * * *"
     },
     {
+      "path": "/api/cron/legacy-import-drain",
+      "schedule": "*/1 * * * *"
+    },
+    {
       "path": "/api/brackets/world-cup/cron/sync?job=teams&provider=apifootball",
       "schedule": "0 8 * * *"
     },
