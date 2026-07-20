@@ -80,3 +80,12 @@ export async function POST(request: NextRequest) {
   console.info(`[weather/refresh-cron] refreshed ${refreshed} cache entries`)
   return NextResponse.json({ ok: true, refreshed })
 }
+
+/**
+ * Vercel Cron issues a GET, but this route only exported POST — so every scheduled run since
+ * it was added returned 405 and refreshed nothing. Measured in production 2026-07-19.
+ * Delegates to POST, which already gates on `requireCronAuth`; no auth behaviour changes.
+ */
+export async function GET(request: NextRequest) {
+  return POST(request)
+}
