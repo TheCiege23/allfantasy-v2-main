@@ -1,0 +1,430 @@
+/*
+ * Fonts, fetched by the BROWSER at runtime — deliberately not `next/font/google`.
+ * `__tests__/root-language-provider-layout.test.tsx` asserts the document does not depend on
+ * build-time Google font fetches, and this repo's builds have failed for unrelated network
+ * and heap reasons before; a font fetch must not become a new way for the build to break.
+ * An absolute `@import` URL is passed through to the browser untouched by css-loader.
+ * If fonts.googleapis.com is unreachable the stacks in `--af-font-*` below carry the design.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
+/*
+ * Adaptive dashboard — scoped design system.
+ *
+ * Everything is namespaced under `.af-adaptive` so these tokens never collide with the
+ * app's own theme, the landing page's `.nocturne` scope, or the current dashboard's
+ * `.nocturne-dash` scope. This follows the `nocturne-dashboard.css` precedent rather than
+ * adding a `[data-theme]` block to `globals.css`: globals is a high-traffic shared file,
+ * and a scoped block cannot leak into the marketing pages' light theme.
+ *
+ * Token values are the dark-violet set already defined in the repo-root
+ * `allfantasy-dashboard.html`; its short names (--bg, --sf, --cyan …) are aliased at the
+ * bottom so markup ported straight from that reference drops in without a rename pass.
+ *
+ * Dark-theme only by design.
+ */
+
+.af-adaptive {
+  /* ── Ground ──────────────────────────────────────────────────────────── */
+  --af-bg: #110b1e;
+  --af-bg-deep: #0d0917;
+  --af-surface: #16102a;
+  --af-surface-2: #1c1535;
+  --af-surface-3: #211a3e;
+  --af-surface-4: #271f46;
+
+  /* ── Borders ─────────────────────────────────────────────────────────── */
+  --af-border: rgba(139, 92, 246, 0.18);
+  --af-border-hover: rgba(139, 92, 246, 0.3);
+  --af-border-strong: rgba(139, 92, 246, 0.5);
+
+  /* ── Text ────────────────────────────────────────────────────────────── */
+  --af-text: rgba(255, 255, 255, 0.93);
+  --af-text-muted: rgba(255, 255, 255, 0.55);
+  --af-text-dim: rgba(255, 255, 255, 0.5);
+  --af-text-faint: rgba(255, 255, 255, 0.3);
+
+  /* ── Accents ─────────────────────────────────────────────────────────── */
+  --af-cyan: #06b6d4;
+  --af-blue: #3b82f6;
+  --af-violet: #8b5cf6;
+  --af-emerald: #10b981;
+  --af-teal: #5eeadc;
+  --af-gold: #f59e0b;
+  --af-red: #ef4444;
+  --af-orange: #f97316;
+
+  --af-grad: linear-gradient(90deg, #06b6d4, #3b82f6);
+  --af-grad-135: linear-gradient(135deg, #06b6d4, #3b82f6);
+
+  /* ── Radii ───────────────────────────────────────────────────────────── */
+  --af-r-xs: 4px;
+  --af-r-sm: 6px;
+  --af-r-md: 9px;
+  --af-r-lg: 12px;
+  --af-r-xl: 16px;
+
+  /* ── Chrome metrics (read by the layout, not just CSS) ───────────────── */
+  --af-nav-h: 58px;
+  --af-sidebar-w: 232px;
+  --af-rail-w: 74px;
+
+  /*
+   * Fonts are loaded at RUNTIME via <link> in the route layout, never `next/font/google`:
+   * `__tests__/root-language-provider-layout.test.tsx` asserts the document does not depend
+   * on build-time Google font fetches, and this repo's builds have failed for unrelated
+   * network/heap reasons before. The fallback stack is deliberately complete so a blocked
+   * fonts.googleapis.com degrades the dashboard's typography rather than breaking it.
+   */
+  --af-font-ui: 'Outfit', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --af-font-display: 'Bebas Neue', 'Outfit', ui-sans-serif, system-ui, 'Segoe UI', Arial, sans-serif;
+
+  background: var(--af-bg);
+  color: var(--af-text);
+  font-family: var(--af-font-ui);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+.af-adaptive *,
+.af-adaptive *::before,
+.af-adaptive *::after { box-sizing: border-box; }
+
+/*
+ * Heading reset — app globals force h1–h6 to weight 800 and their own family. The display
+ * face carries the weight here, so re-assert both or the Bebas headings render doubled-up.
+ */
+.af-adaptive h1,
+.af-adaptive h2,
+.af-adaptive h3,
+.af-adaptive h4 {
+  font-family: var(--af-font-display);
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  line-height: 1.1;
+  margin: 0;
+}
+.af-adaptive p { margin: 0; }
+.af-adaptive a { text-decoration: none; color: inherit; }
+.af-adaptive button { font-family: var(--af-font-ui); }
+.af-adaptive input,
+.af-adaptive textarea { font-family: var(--af-font-ui); }
+.af-adaptive img { display: block; max-width: 100%; }
+.af-adaptive :focus { outline: none; }
+.af-adaptive :focus-visible { outline: 2px solid var(--af-cyan); outline-offset: 2px; }
+
+/* ── Card shell ────────────────────────────────────────────────────────── */
+.af-adaptive .af-card {
+  background: var(--af-surface);
+  border: 1px solid var(--af-border);
+  border-radius: var(--af-r-lg);
+  padding: 14px;
+}
+
+/* ── Section + card labels ─────────────────────────────────────────────── */
+.af-adaptive .af-section-title {
+  font-family: var(--af-font-display);
+  font-size: 16px;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  color: rgba(255, 255, 255, 0.85);
+}
+.af-adaptive .af-card-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--af-text-dim);
+}
+.af-adaptive .af-kicker {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--af-text-faint);
+}
+.af-adaptive .af-stat {
+  font-family: var(--af-font-display);
+  font-weight: 400;
+  color: #fff;
+  line-height: 1;
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────────── */
+.af-adaptive .af-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-family: var(--af-font-ui);
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  border-radius: var(--af-r-sm);
+  transition: filter 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+.af-adaptive .af-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.af-adaptive .af-btn-primary { background: var(--af-grad); color: #fff; }
+.af-adaptive .af-btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+.af-adaptive .af-btn-ghost {
+  background: none;
+  border: 1px solid var(--af-border-hover);
+  color: var(--af-text-muted);
+}
+.af-adaptive .af-btn-ghost:hover:not(:disabled) {
+  background: var(--af-surface-2);
+  color: var(--af-text);
+}
+
+/* ── Top-nav pills ─────────────────────────────────────────────────────── */
+.af-adaptive .af-pill {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 9px;
+  background: var(--af-surface-2);
+  border: 1px solid var(--af-border-hover);
+  border-radius: 7px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.af-adaptive .af-pill:hover { border-color: var(--af-border-strong); }
+.af-adaptive .af-pill-viewas {
+  background: linear-gradient(90deg, rgba(6, 182, 212, 0.15), rgba(59, 130, 246, 0.15));
+  border-color: rgba(6, 182, 212, 0.4);
+  color: var(--af-teal);
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: var(--af-r-md);
+}
+
+/* ── Dropdown menus ────────────────────────────────────────────────────── */
+.af-adaptive .af-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  background: var(--af-surface);
+  border: 1px solid var(--af-border-hover);
+  border-radius: 10px;
+  padding: 4px;
+  z-index: 400;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.5);
+}
+.af-adaptive .af-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 7px;
+  font-size: 12.5px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.85);
+  background: none;
+  border: none;
+  font-weight: 500;
+}
+.af-adaptive .af-menu-item:hover { background: var(--af-surface-2); }
+.af-adaptive .af-menu-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--af-text-faint);
+  padding: 6px 10px 3px;
+}
+.af-adaptive .af-menu-sep { height: 1px; background: rgba(139, 92, 246, 0.15); margin: 3px 4px; }
+
+/* ── Sidebar nav ───────────────────────────────────────────────────────── */
+.af-adaptive .af-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 11px;
+  border-radius: var(--af-r-md);
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--af-text-muted);
+  white-space: nowrap;
+}
+.af-adaptive .af-nav-item:hover { color: var(--af-text); background: rgba(28, 21, 53, 0.6); }
+.af-adaptive .af-nav-item.is-active { color: #fff; background: var(--af-surface-2); }
+.af-adaptive .af-nav-item.is-active svg { stroke: var(--af-cyan); }
+.af-adaptive .af-nav-item svg { flex-shrink: 0; }
+
+/* ── Badges ────────────────────────────────────────────────────────────── */
+.af-adaptive .af-badge {
+  font-size: 10px;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 8px;
+  line-height: 1.5;
+}
+.af-adaptive .af-badge-cyan { background: var(--af-cyan); color: #000; }
+.af-adaptive .af-badge-violet { background: var(--af-violet); color: #fff; }
+.af-adaptive .af-badge-live {
+  background: var(--af-red);
+  color: #fff;
+  font-size: 9px;
+  border-radius: 5px;
+  padding: 2px 6px;
+  letter-spacing: 0.05em;
+  animation: af-pulse 1.8s ease-in-out infinite;
+}
+.af-adaptive .af-badge-new {
+  background: var(--af-violet);
+  color: #fff;
+  font-size: 9px;
+  border-radius: 5px;
+  padding: 2px 6px;
+  letter-spacing: 0.04em;
+}
+
+/* ── Locked / gated ────────────────────────────────────────────────────── */
+.af-adaptive .af-locked-body {
+  filter: blur(5px);
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+.af-adaptive .af-lock-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  background: rgba(17, 11, 30, 0.4);
+  border-radius: inherit;
+}
+
+/* ── Token tool button ─────────────────────────────────────────────────── */
+.af-adaptive .af-token-tool {
+  flex-shrink: 0;
+  min-width: 170px;
+  text-align: left;
+  background: var(--af-surface);
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: 11px;
+  padding: 12px;
+  cursor: pointer;
+  font-family: var(--af-font-ui);
+}
+.af-adaptive .af-token-tool:hover { border-color: rgba(245, 158, 11, 0.5); background: var(--af-surface-2); }
+.af-adaptive .af-token-tool.is-commish { border-color: rgba(139, 92, 246, 0.25); }
+.af-adaptive .af-token-tool.is-commish:hover { border-color: var(--af-border-strong); }
+
+/*
+ * Horizontal strips (token tools, mobile KPI row). `scrollbar-width:none` hides the bar
+ * without disabling the scroll — these are drag/swipe surfaces on touch and shift+wheel
+ * on desktop.
+ */
+.af-adaptive .af-hscroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.af-adaptive .af-hscroll::-webkit-scrollbar { display: none; }
+/* Mobile KPI row snaps card-to-card so a swipe lands cleanly instead of mid-card. */
+.af-adaptive .af-hsnap { scroll-snap-type: x mandatory; }
+.af-adaptive .af-hsnap > * { scroll-snap-align: start; }
+
+/* ── Modal ─────────────────────────────────────────────────────────────── */
+.af-adaptive-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(7, 9, 15, 0.75);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+.af-adaptive-modal-card {
+  background: #16102a;
+  border: 1px solid rgba(139, 92, 246, 0.35);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 380px;
+  padding: 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  color: rgba(255, 255, 255, 0.93);
+}
+
+/* ── Toast ─────────────────────────────────────────────────────────────── */
+.af-adaptive-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 700;
+  background: #1c1535;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+  color: #fff;
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: var(--af-r-md, 9px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  animation: af-fadein 0.2s ease;
+}
+
+/* ── Animations ────────────────────────────────────────────────────────── */
+@keyframes af-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+@keyframes af-fadein {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.af-adaptive .af-fadein { animation: af-fadein 0.4s ease; }
+
+/* Respect reduced-motion: the pulse and fade are decorative, never load-bearing. */
+@media (prefers-reduced-motion: reduce) {
+  .af-adaptive .af-badge-live,
+  .af-adaptive .af-fadein,
+  .af-adaptive-toast { animation: none; }
+}
+
+/*
+ * ── Short-name aliases ────────────────────────────────────────────────────
+ * The names used by the repo-root `allfantasy-dashboard.html` reference. Scoped, so they
+ * cannot leak; present so future markup ported from that file works unmodified.
+ */
+.af-adaptive {
+  --bg: var(--af-bg);
+  --sf: var(--af-surface);
+  --s2: var(--af-surface-2);
+  --s3: var(--af-surface-3);
+  --bd: var(--af-border);
+  --bh: var(--af-border-hover);
+  --bs: var(--af-border-strong);
+  --cyan: var(--af-cyan);
+  --blue: var(--af-blue);
+  --violet: var(--af-violet);
+  --em: var(--af-emerald);
+  --gold: var(--af-gold);
+  --red: var(--af-red);
+  --orange: var(--af-orange);
+  --tx: var(--af-text);
+  --mu: var(--af-text-muted);
+  --mu2: var(--af-text-faint);
+  --grad: var(--af-grad);
+  --g135: var(--af-grad-135);
+}

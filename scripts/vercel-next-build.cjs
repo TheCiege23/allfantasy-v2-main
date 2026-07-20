@@ -161,6 +161,32 @@ let buildFailure = null // { step, message, stack, exitCode, signal }
 const filesToKeep = new Set([
   path.join('app', 'api', 'cron', '_auth.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'waivers', 'route.ts').replace(/\\/g, '/'),
+  // ── Sports-data ingestion crons — MUST ship (regression fix 2026-07-19) ──────
+  // `app/api/cron` is disabled wholesale above under the comment "keep non-core
+  // diagnostic/dev surfaces out of production route budget". That was never true of these
+  // 13: they are the live sports-data ingestion pipeline, every one has a real `vercel.json`
+  // schedule, and excluding them meant Vercel invoked each on schedule and got a 404 every
+  // time. Measured in production before this fix: `import-players` fired 4x/24h (correct for
+  // `0 */6 * * *`) and 404'd 4/4; `import-scores` 720x/24h, all 404. `SportsPlayer.fetchedAt`
+  // stopped advancing as a direct result.
+  //
+  // Only `waivers` had been rescued (2026-05-09), one symptom at a time, which is why it was
+  // the sole cron returning 200. Deliberately NOT re-included: the survivor / zombie /
+  // big-brother / devy crons, whose features are unshipped — those should lose their
+  // `vercel.json` entries rather than consume route budget.
+  path.join('app', 'api', 'cron', 'import-players', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-injuries', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-news', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-scores', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-standings', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-schedules', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-depth-charts', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-projections', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'adp-refresh', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'recompute-allfantasy-adp', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'draft-pool-prewarm', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'fantasy-os-exec-sync', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'trade-weekly-recalibration', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),

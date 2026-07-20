@@ -1,8 +1,17 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
 import { computeLeagueRankingsV2 } from '@/lib/rankings-engine/league-rankings-v2'
+import { resolveLegacyLeagueAccess } from '@/lib/legacy/assertLegacyLeagueAccess'
 import { openaiChatText } from '@/lib/openai-client'
 import { getCompositeWeightConfig } from '@/lib/rankings-engine/composite-weights'
+import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit'
+import { recordLlmUsage } from '@/lib/telemetry/llm-usage'
+
+type SessionUser = { user?: { id?: string } } | null
+
+const COACH_MAX_TOKENS = 400
 
 export const GET = withApiUsage({ endpoint: "/api/rankings/league-v2", tool: "RankingsLeagueV2" })(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url)
@@ -11,6 +20,17 @@ export const GET = withApiUsage({ endpoint: "/api/rankings/league-v2", tool: "Ra
 
   if (!leagueId) {
     return NextResponse.json({ error: 'leagueId is required' }, { status: 400 })
+  }
+
+  // `leagueId` here is a Sleeper league id (see computeLeagueRankingsV2 → LegacyLeague.sleeperLeagueId),
+  // so membership resolves through the legacy import graph, not prisma.league.
+  const session = (await getServerSession(authOptions as any)) as SessionUser
+  const access = await resolveLegacyLeagueAccess(leagueId, session?.user?.id)
+  if (!access.ok) {
+    return NextResponse.json(
+      { error: access.status === 401 ? 'Authentication required' : 'Forbidden' },
+      { status: access.status },
+    )
   }
 
   const week = weekParam ? parseInt(weekParam, 10) : undefined
@@ -103,6 +123,34 @@ function computeDataFreshness(leagueContext: any, computedAt?: number): { grade:
 
 export const POST = withApiUsage({ endpoint: "/api/rankings/league-v2", tool: "RankingsLeagueV2" })(async (request: NextRequest) => {
   try {
+    // Callers post their own already-computed team/leagueContext (no league id in the body), so
+    // there is nothing to scope a membership check against — but this reaches a paid LLM, so it
+    // must not be callable anonymously.
+    const session = (await getServerSession(authOptions as any)) as SessionUser
+    if (!session?.user?.id) {
+      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+    }
+    const userId = session.user.id
+
+    // Bucket per authenticated user AND per IP: a session gate alone still lets one signup (or one
+    // script cycling free signups from a host) burn unbounded model spend. `sleeperUsername` is
+    // consumeRateLimit's user-key parameter — the name is legacy, the value is any stable user id.
+    const rl = consumeRateLimit({
+      scope: 'rankings',
+      action: 'ai_coach',
+      sleeperUsername: userId,
+      ip: getClientIp(request),
+      maxRequests: 10,
+      windowMs: 60_000,
+      includeIpInKey: true,
+    })
+    if (!rl.success) {
+      return NextResponse.json(
+        buildRateLimit429({ message: 'Too many requests. Please wait a moment and try again.', rl }),
+        { status: 429 },
+      )
+    }
+
     const body = await request.json()
     const { team, leagueContext } = body
 
@@ -170,7 +218,18 @@ Format your response as JSON with this exact structure:
         { role: 'user', content: prompt },
       ],
       temperature: 0.7,
-      maxTokens: 400,
+      maxTokens: COACH_MAX_TOKENS,
+    })
+
+    // openaiChatText resolves to {ok, text, model, baseUrl} and does not surface the provider's
+    // usage block, so meter the call against its configured ceiling rather than exact counts.
+    await recordLlmUsage({
+      endpoint: '/api/rankings/league-v2',
+      tool: 'RankingsLeagueV2',
+      userId,
+      model: result.model,
+      maxTokens: COACH_MAX_TOKENS,
+      ok: result.ok,
     })
 
     if (!result.ok) {
