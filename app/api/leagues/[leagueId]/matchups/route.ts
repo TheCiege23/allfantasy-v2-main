@@ -3,7 +3,7 @@ import type { LeagueSport } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { resolveActiveLeagueContext } from '@/lib/shared-services/league-hub/activeLeagueContext'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import { getBroadcastPayload } from '@/lib/broadcast-engine'
 import { resolveScheduleContextForLeague } from '@/lib/multi-sport/MultiSportScheduleResolver'
 
@@ -45,15 +45,18 @@ export async function GET(
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
   }
 
-  // Membership gate. Deliberately `resolveActiveLeagueContext` (League.userId | RedraftLeagueMember |
-  // LeagueTeam.claimedByUserId) rather than `canViewLeague`/`resolveLeagueAccess` (League.userId |
-  // Roster.platformUserId): this route's real callers are the dashboard war-room cards, and
-  // `getDashboardLeagueListForUser` selects the leagues they render with exactly this predicate
-  // (lib/dashboard/get-dashboard-league-list.ts). Gating on `Roster.platformUserId` instead would 403 a
-  // redraft member or a claim-only manager whose league the dashboard legitimately lists, silently
-  // blanking their matchup card. Gate with the same definition of "member" that made the league visible.
-  const access = await resolveActiveLeagueContext({ leagueId, userId: viewerUserId })
-  if (!access) {
+  // Membership gate — the ONE canonical predicate (lib/league-access.ts), which is the
+  // UNION of League.userId | RedraftLeagueMember | Roster.platformUserId | LeagueTeam.claimedByUserId.
+  //
+  // This previously used `resolveActiveLeagueContext` (owner | redraft | claim), reasoning that the
+  // dashboard war-room cards are the real callers so the gate should match
+  // `getDashboardLeagueListForUser`. That reasoning was sound but the predicate it copied has a blind
+  // spot: neither includes `Roster.platformUserId`, which is the LARGEST membership population.
+  // Measured against production 2026-07-20, owner|redraft|claim rejected 134 of 176 real
+  // Roster-backed members (76%). Taking the union keeps every case the old gate allowed and adds the
+  // roster members it was silently dropping.
+  const membership = await resolveLeagueMembership(leagueId, viewerUserId)
+  if (!membership.ok) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
