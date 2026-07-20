@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,17 +49,20 @@ export async function GET(
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Check membership: commissioner OR team member
-  const isMember =
-    league.userId === session.user.id ||
-    league.teams.some((t) => t.platformUserId === session.user!.id)
-  if (!isMember) {
-    // Also check roster membership
-    const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: session.user.id },
-      select: { id: true },
-    })
-    if (!roster) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Canonical membership predicate (lib/league-access.ts): owner | redraft | roster | claim.
+  //
+  // This route was NOT part of the live 403 regression the sibling scoring/* routes had — it
+  // already fell back to a `Roster` lookup when the nullable `LeagueTeam.platformUserId` check
+  // missed, so Roster-backed members did get in. But it still had no path for a redraft member
+  // or a claim-only manager, and it was a fifth hand-rolled copy of the predicate. Routing it
+  // through the one helper closes both gaps.
+  //
+  // NOTE: `teams` deliberately stays in the select above — `league.teams.length` is the
+  // `teamCount` in the response payload, so dropping it would break the response, not just
+  // the gate.
+  const access = await resolveLeagueAccess(leagueId, session.user.id)
+  if (!access?.isMember) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   // Fetch all LeagueSeason rows for this league (covers imported + AF-native)
