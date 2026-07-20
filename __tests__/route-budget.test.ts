@@ -85,6 +85,7 @@ const FILES_KEPT = [
   'app/api/cron/adp-refresh/route.ts', 'app/api/cron/recompute-allfantasy-adp/route.ts',
   'app/api/cron/draft-pool-prewarm/route.ts', 'app/api/cron/fantasy-os-exec-sync/route.ts',
   'app/api/cron/trade-weekly-recalibration/route.ts',
+  'app/api/cron/sync-player-images/route.ts',
   'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
   // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.

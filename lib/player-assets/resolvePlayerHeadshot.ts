@@ -25,6 +25,11 @@ import { apiSportsProvider } from '@/lib/workers/providers/api-sports'
 import { sleeperChainProvider } from '@/lib/workers/providers/sleeper-chain'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { resolveNflRedraftCanonicalHeadshot } from '@/lib/nfl-provider/nflRedraftProviderCertification'
+import {
+  PLAYER_IMAGE_TYPE_HEADSHOT,
+  readPrimaryPlayerImage,
+  writePrimaryPlayerImage,
+} from '@/lib/player-assets/playerImageStore'
 
 export type HeadshotProvider =
   | 'clearsports'
@@ -46,12 +51,28 @@ export interface ResolveHeadshotInput {
     sportsDbId?: string | null
     rollingInsightsId?: string | null
   }
+  /**
+   * Phase 1 — player identity used to read/write the `PlayerImage` write-through cache.
+   * Omit it and resolution still works exactly as before, just uncached: without an id
+   * there is nothing to key a cache row on. See `lib/player-assets/playerImageStore.ts`.
+   */
+  playerId?: string | null
+  /** Optional league scope stored alongside a cached image. */
+  leagueKey?: string | null
+  /** Force a live provider resolution, ignoring (but still refreshing) the cached row. */
+  skipCache?: boolean
 }
 
 export interface ResolveHeadshotResult {
   imageUrl: string | null
   source: HeadshotProvider
   confidence: HeadshotConfidence
+  /** True when this result was served from `PlayerImage` without any provider call. */
+  cacheHit?: boolean
+  /** True when a live resolution was persisted back into `PlayerImage`. */
+  persisted?: boolean
+  /** True when providers failed and a past-TTL cached image was served instead. */
+  servedStale?: boolean
 }
 
 /**
@@ -259,7 +280,88 @@ export async function resolvePlayerHeadshot(
   return resolveOnce(input, sport, csByName)
 }
 
+/**
+ * Map the resolver's categorical confidence onto the numeric `PlayerImage.confidence`
+ * column, so cached rows stay comparable with rows written by other producers.
+ */
+function confidenceToScore(confidence: HeadshotConfidence): number | null {
+  switch (confidence) {
+    case 'exact':
+      return 1
+    case 'name_team_position':
+      return 0.8
+    case 'name_only':
+      return 0.5
+    default:
+      return null
+  }
+}
+
+/**
+ * Phase 1 write-through wrapper around the provider chain.
+ *
+ * Order of operations:
+ *   1. Fresh row in `PlayerImage`      → return it, zero provider calls.
+ *   2. Otherwise run the provider chain (`resolveFromProviders`, unchanged behaviour).
+ *   3. Success                          → persist as the player's primary image.
+ *   4. Failure but a stale row exists   → serve the stale URL rather than nothing.
+ *
+ * Every cache interaction is best-effort: `playerImageStore` swallows its own errors, so a
+ * DB outage degrades this back to the exact pre-Phase-1 live-resolution behaviour.
+ */
 async function resolveOnce(
+  input: ResolveHeadshotInput,
+  sport: string,
+  csByName: Map<string, ClearSportsPlayerLite[]>,
+): Promise<ResolveHeadshotResult> {
+  const playerId = input.playerId?.trim() || null
+
+  const cached = playerId
+    ? await readPrimaryPlayerImage({ playerId, imageType: PLAYER_IMAGE_TYPE_HEADSHOT })
+    : null
+
+  // 1. Fresh cache hit — the whole point of Phase 1. No provider call is made.
+  if (cached && !cached.stale && !input.skipCache && isValidHeadshotUrl(cached.url)) {
+    return {
+      imageUrl: cached.url,
+      source: (cached.provider as HeadshotProvider | null) ?? 'none',
+      confidence: 'exact',
+      cacheHit: true,
+    }
+  }
+
+  // 2. Live resolution through the untouched provider chain.
+  const resolved = await resolveFromProviders(input, sport, csByName)
+
+  // 3. Persist a successful resolution so the next lookup takes branch 1.
+  if (playerId && resolved.imageUrl) {
+    const write = await writePrimaryPlayerImage({
+      playerId,
+      sportKey: sport,
+      leagueKey: input.leagueKey ?? null,
+      imageType: PLAYER_IMAGE_TYPE_HEADSHOT,
+      url: resolved.imageUrl,
+      provider: resolved.source,
+      confidence: confidenceToScore(resolved.confidence),
+    })
+    return { ...resolved, cacheHit: false, persisted: write.written }
+  }
+
+  // 4. Providers came back empty but we have a past-TTL image — an old headshot beats none.
+  if (!resolved.imageUrl && cached && isValidHeadshotUrl(cached.url)) {
+    return {
+      imageUrl: cached.url,
+      source: (cached.provider as HeadshotProvider | null) ?? 'none',
+      confidence: 'name_only',
+      cacheHit: true,
+      servedStale: true,
+    }
+  }
+
+  return { ...resolved, cacheHit: false }
+}
+
+async function resolveFromProviders(
   input: ResolveHeadshotInput,
   sport: string,
   csByName: Map<string, ClearSportsPlayerLite[]>,
@@ -269,6 +371,12 @@ async function resolveOnce(
   const targetPos = normalizePosition(input.position ?? '')
   const isNfl = String(sport).trim().toUpperCase() === 'NFL'
 
+  // ── 0. NFL canonical provider (highest priority for NFL) ──
+  // Only *returns* on a hit. It previously returned unconditionally, which made tiers 2–6
+  // below unreachable for NFL: when the orchestrator fell back to `default_avatar` it
+  // handed back `headshotUrl: null` and the resolver reported "no headshot" for players
+  // whose image TheSportsDB serves on request. Falling through preserves the intended
+  // dedicated-provider-first ordering while restoring the documented fallback chain.
   if (isNfl) {
     try {
       const canonical = await resolveNflRedraftCanonicalHeadshot({
@@ -282,14 +390,16 @@ async function resolveOnce(
           input.externalIds?.clearSportsId ??
           null,
       })
-      const imageUrl = isValidHeadshotUrl(canonical.imageUrl) ? canonical.imageUrl : null
-      return {
-        imageUrl,
-        source: imageUrl ? canonical.source : 'none',
-        confidence: imageUrl ? canonical.confidence : 'none',
+      const canonicalUrl = canonical.imageUrl
+      if (canonicalUrl && isValidHeadshotUrl(canonicalUrl)) {
+        return {
+          imageUrl: canonicalUrl,
+          source: canonical.source,
+          confidence: canonical.confidence,
+        }
       }
     } catch {
-      return { imageUrl: null, source: 'none', confidence: 'none' }
+      /* swallow — continue down the fallback chain */
     }
   }
 
