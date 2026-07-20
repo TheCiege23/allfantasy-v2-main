@@ -9,6 +9,46 @@ import { apiChain } from '@/lib/workers/api-chain'
 const SPORTS_PLAYER_TTL_MS = 6 * 60 * 60 * 1000
 const UPSERT_BATCH_SIZE = 100
 
+/**
+ * Wall-clock budget for the whole import, kept under the route's `maxDuration = 300`.
+ * The margin leaves room for the per-sport stale-fallback write to land after we stop.
+ */
+const IMPORT_BUDGET_MS = 240_000
+
+/**
+ * Ceiling for the two live provider calls per sport (projections, rankings).
+ *
+ * These are the only genuinely external operations in the per-sport `Promise.all`; the other
+ * seven are local Prisma reads. Before this, a provider that hung had no ceiling at all —
+ * measured in production 2026-07-20, `rolling-insights` returned "Probe timeout after 30000ms"
+ * on nfl/projections and the function was killed at 300s with a 504, having written nothing.
+ */
+const PROVIDER_FETCH_TIMEOUT_MS = 25_000
+
+/**
+ * Resolve `value`, or fall back to `onTimeout` if it takes longer than `ms`.
+ *
+ * Deliberately does NOT reject: `apiChain.fetch` already degrades through cached/DB tiers, so a
+ * slow provider should look like "no rows from this provider" rather than failing the whole
+ * `Promise.all` and losing the sport's other eight results.
+ */
+async function withTimeout<T>(value: Promise<T>, ms: number, label: string, onTimeout: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      value,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => {
+          console.warn(`[sports-data-importer] ${label} exceeded ${ms}ms — continuing without it`)
+          resolve(onTimeout)
+        }, ms)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 type PlayerSeed = {
   id: string
   name: string
@@ -130,7 +170,13 @@ function buildDynastyValueMap(rows: Array<Record<string, unknown>>): Map<string,
 
 export async function runSportsDataImporter(options?: {
   sports?: string[]
-}): Promise<{ imported: number; sports: string[]; staleFallbackApplied: boolean }> {
+}): Promise<{
+  imported: number
+  sports: string[]
+  staleFallbackApplied: boolean
+  skippedSports: string[]
+  durationMs: number
+}> {
   const targetSports = (options?.sports?.length ? options.sports : SUPPORTED_SPORTS).map((sport) =>
     normalizeToSupportedSport(sport)
   )
@@ -138,7 +184,26 @@ export async function runSportsDataImporter(options?: {
   let imported = 0
   let staleFallbackApplied = false
 
+  const startedAt = Date.now()
+  const skippedSports: string[] = []
+
   for (const sport of uniqueSports) {
+    /**
+     * Per-sport budget. The loop is sequential and NFL is first in SUPPORTED_SPORTS, so before
+     * this a sport whose providers hung consumed the entire function and every sport behind it
+     * never ran at all. That is not hypothetical: NBA, NHL, MLB and SOCCER sat at 2026-04-26 in
+     * production — frozen the day these crons stopped being deployed — while NFL kept getting
+     * partial updates from other paths. Stopping early leaves those sports untouched rather
+     * than starved, and the next scheduled run reaches them.
+     */
+    if (Date.now() - startedAt > IMPORT_BUDGET_MS) {
+      skippedSports.push(sport)
+      console.warn(
+        `[sports-data-importer] budget exhausted (${IMPORT_BUDGET_MS}ms) — skipping ${sport}`,
+      )
+      continue
+    }
+
     const season = currentSeasonForSport()
     const [identitySeeds, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
       await Promise.all([
@@ -169,16 +234,18 @@ export async function runSportsDataImporter(options?: {
           where: { sport },
           take: 4000,
         }),
-        apiChain.fetch({
-          sport,
-          dataType: 'projections',
-          query: { season: String(season) },
-        }),
-        apiChain.fetch({
-          sport,
-          dataType: 'rankings',
-          query: { season: String(season) },
-        }),
+        withTimeout(
+          apiChain.fetch({ sport, dataType: 'projections', query: { season: String(season) } }),
+          PROVIDER_FETCH_TIMEOUT_MS,
+          `${sport} projections`,
+          { data: null, fromCache: false, error: 'provider timeout' },
+        ),
+        withTimeout(
+          apiChain.fetch({ sport, dataType: 'rankings', query: { season: String(season) } }),
+          PROVIDER_FETCH_TIMEOUT_MS,
+          `${sport} rankings`,
+          { data: null, fromCache: false, error: 'provider timeout' },
+        ),
       ])
 
     const projectionRows = asArrayRecords(projectionsResponse.data)
@@ -334,5 +401,7 @@ export async function runSportsDataImporter(options?: {
     imported,
     sports: uniqueSports,
     staleFallbackApplied,
+    skippedSports,
+    durationMs: Date.now() - startedAt,
   }
 }
