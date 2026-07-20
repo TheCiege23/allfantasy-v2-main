@@ -1,7 +1,10 @@
 import fs from 'fs'
 import path from 'path'
 
-const VALUES_DIR = path.join(process.cwd(), 'app', 'player-values')
+// Must live under `data/` so `outputFileTracingIncludes` ("/api/**": ["./data/**"])
+// ships these files with the serverless bundle. Docs must also be committed and
+// survive .vercelignore, or they load in dev and silently read empty in prod.
+const VALUES_DIR = path.join(process.cwd(), 'data', 'player-values')
 
 function inferSportFromFilename(lower: string): string {
   if (lower.includes('nba')) return 'NBA'
@@ -35,6 +38,10 @@ export type PlayerValueDocMeta = {
 }
 
 function isValueDocFile(f: string): boolean {
+  // README.md documents the folder itself; it is not player-value data and must
+  // never be injected into an LLM prompt as if it were.
+  if (f.toLowerCase() === 'readme.md') return false
+
   return (
     (f.endsWith('.md') ||
       f.endsWith('.txt') ||

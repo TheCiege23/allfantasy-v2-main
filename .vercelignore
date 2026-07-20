@@ -24,6 +24,10 @@ tmp-*
 *.log
 *.txt
 
+# ...but data/ holds runtime fs-read files, and the blanket *.txt above would
+# strip committed .txt data from the deployment while dev keeps working.
+!data/**/*.txt
+
 # Optional non-runtime docs/assets
 artifacts
 design-refs
