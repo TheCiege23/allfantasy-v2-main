@@ -72,6 +72,19 @@ const EXCLUDED_DIRS = [
 
 const FILES_KEPT = [
   'app/api/cron/_auth.ts', 'app/api/cron/waivers/route.ts',
+  // Sports-data ingestion crons, restored to the build by #284. This list is the THIRD
+  // hand-maintained copy of the build script's filesToKeep (the others being
+  // scripts/vercel-next-build.cjs and scripts/route-budget-count.mjs), and nothing
+  // asserts the three agree. Leaving these out made this guard subtract 13 routes that
+  // actually ship — under-reporting against GREEN_LIMIT, so the cap check would fire 13
+  // routes late in exactly the situation it exists to catch.
+  'app/api/cron/import-players/route.ts', 'app/api/cron/import-injuries/route.ts',
+  'app/api/cron/import-news/route.ts', 'app/api/cron/import-scores/route.ts',
+  'app/api/cron/import-standings/route.ts', 'app/api/cron/import-schedules/route.ts',
+  'app/api/cron/import-depth-charts/route.ts', 'app/api/cron/import-projections/route.ts',
+  'app/api/cron/adp-refresh/route.ts', 'app/api/cron/recompute-allfantasy-adp/route.ts',
+  'app/api/cron/draft-pool-prewarm/route.ts', 'app/api/cron/fantasy-os-exec-sync/route.ts',
+  'app/api/cron/trade-weekly-recalibration/route.ts',
   'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
   // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.

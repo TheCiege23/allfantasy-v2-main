@@ -3,6 +3,7 @@ import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { assertLeagueMember, type LeagueAccessResult } from '@/lib/league-access';
 import { z } from 'zod';
 import { isToolRankingsEnabled } from '@/lib/feature-toggle';
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
@@ -32,11 +33,24 @@ export async function POST(req: Request) {
 
     const json = await req.json();
     const { leagueId } = bodySchema.parse(json);
-    const league = await prisma.league.findUnique({
-      where: { id: leagueId },
-      select: { sport: true },
-    })
-    const playerSport = String(league?.sport ?? 'NFL').toLowerCase()
+
+    // Authentication alone left this open: `leagueId` is body-supplied, so any signed-in user could
+    // read any league's teams and performances. This route is the modern uuid id space
+    // (prisma.league / League.id), so assertLeagueMember is the correct guard — it THROWS with
+    // err.status = 403 rather than returning a result, hence the try/catch.
+    let access: LeagueAccessResult;
+    try {
+      access = await assertLeagueMember(leagueId, session.user.id);
+    } catch {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
+
+    // assertLeagueMember already loaded this league row (it selects sport alongside userId) to
+    // resolve membership, so its result is reused rather than issuing a second identical
+    // findUnique. Past the guard the league is guaranteed to exist, so the old `?? 'NFL'`
+    // fallback for a null row is no longer reachable.
+    const leagueSport = access.leagueSport
+    const playerSport = String(leagueSport).toLowerCase()
 
     const teams = await (prisma as any).leagueTeam.findMany({
       where: { leagueId },
@@ -67,7 +81,7 @@ ${teams.map((t: any) => {
   return `- ${t.teamName} (${t.ownerName}): Record ${t.wins}-${t.losses}${t.ties > 0 ? `-${t.ties}` : ''}, Total PF: ${t.pointsFor.toFixed(1)}, PA: ${t.pointsAgainst.toFixed(1)}, Weekly trend: [${trend}], Last 3 avg: ${recentAvg}`;
 }).join('\n')}
 
-${cachedPlayers.length > 0 ? `\nRecent ${String(league?.sport ?? 'NFL')} players in database: ${cachedPlayers.slice(0, 15).map((p: any) => `${p.name} (${p.position || '?'}, ${p.team || '?'})`).join(', ')}` : ''}
+${cachedPlayers.length > 0 ? `\nRecent ${leagueSport} players in database: ${cachedPlayers.slice(0, 15).map((p: any) => `${p.name} (${p.position || '?'}, ${p.team || '?'})`).join(', ')}` : ''}
 
 For each team, analyze:
 1. Scoring consistency and trajectory (trending up, down, or steady)
