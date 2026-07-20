@@ -18,11 +18,19 @@ import { fetchLastCompletedSyncAt } from '@/lib/fantasy-os/exec-data/client'
  * until the collector is explicitly enabled in an approved environment.
  */
 export const runtime = 'nodejs'
+/**
+ * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
+ * Vercel Cron presents `Authorization: Bearer $CRON_SECRET`, so a BARE call checks
+ * LEAGUE_CRON_SECRET first and 401s whenever that variable is set to anything else — which is
+ * what happened in production the moment #284 made these routes reachable again (404 -> 401,
+ * measured 2026-07-20 00:01 UTC). Naming CRON_SECRET explicitly is what `keeper/session` and
+ * `weather/refresh-cron` already do, and those are the crons that were returning 200.
+ */
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
 export async function GET(req: NextRequest) {
-  if (!requireCronAuth(req)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!requireCronAuth(req, 'CRON_SECRET')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   if (process.env.FANTASY_OS_EXEC_ENABLED !== 'true') {
     return NextResponse.json({ enabled: false, reason: 'FANTASY_OS_EXEC_ENABLED is not "true"' })
