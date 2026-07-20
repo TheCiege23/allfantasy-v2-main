@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getServerSession } from "next-auth"
 
 import { requireAdminOrBearer } from "@/lib/adminAuth"
+import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { authOptions } from "@/lib/auth"
 import { isCommissioner } from "@/lib/commissioner/permissions"
 import { processLeagueWaiversJob } from "@/lib/automation/jobs/waivers/processLeagueWaiversJob"
@@ -69,6 +70,18 @@ export async function POST(request: Request) {
       dryRun,
       actorUserId,
       scheduledFor: new Date(),
+    })
+
+    // Waiver processing awards players and moves FAAB — real roster mutations that
+    // members will see. `trigger` distinguishes the two authorised callers (site
+    // admin vs the league's own commissioner); actorUserId falls back to the
+    // shared-secret sentinel because a bearer-token admin has no per-caller identity.
+    await logAdminAudit({
+      adminUserId: resolveAdminAuditActor({ id: actorUserId }),
+      action: dryRun ? "admin_waivers_run_dry" : "admin_waivers_run",
+      targetType: "league",
+      targetId: leagueId,
+      details: { trigger, dryRun, succeeded: result.ok },
     })
 
     return NextResponse.json({
