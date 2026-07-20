@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { proxyToExisting } from '@/lib/api/proxy-adapter'
 
 export const dynamic = 'force-dynamic'
@@ -32,20 +33,14 @@ export async function GET(req: NextRequest, { params }: { params: { leagueId: st
   // Verify the user has access to this fantasy league
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: {
-      id: true,
-      userId: true,
-      teams: { select: { platformUserId: true } },
-    },
+    select: { id: true },
   })
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
 
-  const memberIds = new Set(
-    league.teams
-      .map((t: { platformUserId: string | null }) => t.platformUserId)
-      .filter((x: string | null): x is string => Boolean(x)),
-  )
-  if (league.userId !== userId && !memberIds.has(userId)) {
+  // Canonical membership predicate. Was gating on the nullable `LeagueTeam.platformUserId`,
+  // which 403'd real members of imported leagues (their membership lives in `Roster`).
+  const access = await resolveLeagueAccess(leagueId, userId)
+  if (!access?.isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

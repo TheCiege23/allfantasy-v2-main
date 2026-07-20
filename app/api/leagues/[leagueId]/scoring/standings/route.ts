@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 
 export async function GET(
@@ -17,9 +18,7 @@ export async function GET(
     select: {
       id: true,
       season: true,
-      userId: true,
       settings: true,
-      teams: { select: { platformUserId: true } },
     },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -31,10 +30,10 @@ export async function GET(
   const scoringMode: 'points' | 'h2h_category' | 'roto' =
     rawMode === 'h2h_category' || rawMode === 'roto' ? rawMode : 'points'
 
-  const memberIds = new Set(
-    league.teams.map((t) => t.platformUserId).filter((x): x is string => Boolean(x)),
-  )
-  if (league.userId !== session.user.id && !memberIds.has(session.user.id)) {
+  // Canonical membership predicate. Was gating on the nullable `LeagueTeam.platformUserId`,
+  // which 403'd real members of imported leagues (their membership lives in `Roster`).
+  const access = await resolveLeagueAccess(leagueId, session.user.id)
+  if (!access?.isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
