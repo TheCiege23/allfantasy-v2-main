@@ -237,6 +237,19 @@ export interface RawProjectionRow {
   expiresAt: Date
 }
 
+/** One warehouse per-game fact row (dw_player_game_facts) — see ADR F2.9. */
+export interface RawPlayerGameFactRow {
+  /** Raw provider id — same id space as EnrichedPlayer.playerId (verified in the P0 release). */
+  playerId: string
+  sport: string
+  season: number | null
+  weekOrRound: number | null
+  fantasyPoints: number
+  /** Canonical stat keys — carried as provenance, never parsed for decision logic. */
+  normalizedStats: unknown
+  createdAt: Date
+}
+
 /**
  * Raw news row for the F2.7 news-signal enrichment seam. Sourced from `PlayerNewsRecord`
  * (`player_news` table) — the already-persisted provider news cache written by the 15-min

@@ -17,6 +17,7 @@ import type {
   RawMarketValueRow,
   RawNewsRow,
   RawPerformanceRow,
+  RawPlayerGameFactRow,
   RawPlayerMetadataRow,
   RawProjectionRow,
   RawRosterRow,
@@ -671,6 +672,49 @@ export async function loadProjectionRows(
     source: row.source,
     fetchedAt: row.fetchedAt,
     expiresAt: row.expiresAt,
+  }))
+}
+
+/**
+ * READ-ONLY warehouse per-game fact read for the F2.9 performance enrichment seam (ADR F2.9).
+ *
+ * One bounded batched query for the whole roster id set — this IS the batch-loading
+ * optimization; callers must never loop per player. `season` is optional: when omitted the
+ * newest season present in the warehouse for these players is served (offseason honesty —
+ * the view reports which season the facts came from).
+ */
+export async function loadPlayerGameFactRows(
+  sport: string,
+  ids: string[],
+  season?: number,
+): Promise<RawPlayerGameFactRow[]> {
+  const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
+  if (clean.length === 0) return []
+  const rows = await prisma.playerGameFact.findMany({
+    where: {
+      playerId: { in: clean },
+      sport: sport.toUpperCase(),
+      ...(season != null ? { season } : {}),
+    },
+    orderBy: [{ season: 'desc' }, { weekOrRound: 'asc' }],
+    select: {
+      playerId: true,
+      sport: true,
+      season: true,
+      weekOrRound: true,
+      fantasyPoints: true,
+      normalizedStats: true,
+      createdAt: true,
+    },
+  })
+  return rows.map((row) => ({
+    playerId: row.playerId,
+    sport: row.sport,
+    season: row.season,
+    weekOrRound: row.weekOrRound,
+    fantasyPoints: row.fantasyPoints,
+    normalizedStats: row.normalizedStats,
+    createdAt: row.createdAt,
   }))
 }
 
