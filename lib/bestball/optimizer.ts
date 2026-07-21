@@ -22,6 +22,11 @@ async function loadTemplate(sport: string, variant: string) {
   })
 }
 
+/**
+ * Only players with a real (finalized-if-required) `PlayerWeeklyScore` row end up in the
+ * returned map. A missing row is absent from the map — never coerced to a fabricated 0 — so
+ * callers can tell "no data" apart from a real zero-point week.
+ */
 async function loadWeeklyPoints(
   players: { playerId: string; sport: string }[],
   week: number,
@@ -45,6 +50,33 @@ async function loadWeeklyPoints(
     map.set(p.playerId, row.fantasyPts)
   }
   return map
+}
+
+export type BestBallDataQuality = {
+  status: 'AVAILABLE' | 'PARTIAL' | 'UNAVAILABLE'
+  excludedPlayerIds: string[]
+  warnings: string[]
+}
+
+export function buildDataQuality(rosterPlayerIds: string[], availablePlayerIds: Set<string>): BestBallDataQuality {
+  const excludedPlayerIds = rosterPlayerIds.filter((id) => !availablePlayerIds.has(id))
+  if (excludedPlayerIds.length === 0) {
+    return { status: 'AVAILABLE', excludedPlayerIds: [], warnings: [] }
+  }
+  if (excludedPlayerIds.length === rosterPlayerIds.length) {
+    return {
+      status: 'UNAVAILABLE',
+      excludedPlayerIds,
+      warnings: ['No rostered player has a finalized PlayerWeeklyScore row for this week — nothing was optimized.'],
+    }
+  }
+  return {
+    status: 'PARTIAL',
+    excludedPlayerIds,
+    warnings: [
+      `${excludedPlayerIds.length} rostered player(s) excluded from optimization — no PlayerWeeklyScore row for this week: ${excludedPlayerIds.join(', ')}`,
+    ],
+  }
 }
 
 /**
@@ -82,6 +114,8 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
 
     const slots = templateSlotsToLineupSlots(template.lineupSlots)
     const roster = (entry.roster as unknown as { playerId?: string; playerName?: string; position?: string }[]) ?? []
+    const rosterPlayerIds = roster.filter((r) => r.playerId && r.position).map((r) => r.playerId!)
+    const availablePlayerIds = new Set<string>()
     const players: OptimizerPlayer[] = []
     for (const r of roster) {
       if (!r.playerId || !r.position) continue
@@ -95,18 +129,17 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
           },
         },
       })
-      let pts = 0
-      if (row) {
-        if (requireFinalized && !row.isFinalized) pts = 0
-        else pts = row.fantasyPts
-      }
+      const hasRealData = Boolean(row) && (!requireFinalized || row!.isFinalized)
+      if (!hasRealData) continue
+      availablePlayerIds.add(r.playerId)
       players.push({
         playerId: r.playerId,
         playerName: String(r.playerName ?? r.playerId),
         position: r.position,
-        points: pts,
+        points: row!.fantasyPts,
       })
     }
+    const dataQuality = buildDataQuality(rosterPlayerIds, availablePlayerIds)
 
     const opt = optimizeLineupForSport(players, slots as LineupSlotDef[], sport)
     const starterIds = opt.assignments.map((a) => a.player.playerId)
@@ -139,7 +172,7 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
       lineupBreakdown,
       alternateExists: opt.alternateExists,
       alternateLineup: opt.alternateLineup as object | undefined,
-      optimizerLog: opt.optimizerLog as object,
+      optimizerLog: { ...(opt.optimizerLog as object), dataQuality },
       isFinalized: requireFinalized,
       finalizedAt: requireFinalized ? new Date() : null,
     }
@@ -188,12 +221,18 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
     requireFinalized,
   )
 
-  const players: OptimizerPlayer[] = roster.players.map((p) => ({
-    playerId: p.playerId,
-    playerName: p.playerName,
-    position: p.position,
-    points: ptsMap.get(p.playerId) ?? 0,
-  }))
+  const players: OptimizerPlayer[] = roster.players
+    .filter((p) => ptsMap.has(p.playerId))
+    .map((p) => ({
+      playerId: p.playerId,
+      playerName: p.playerName,
+      position: p.position,
+      points: ptsMap.get(p.playerId)!,
+    }))
+  const dataQuality = buildDataQuality(
+    roster.players.map((p) => p.playerId),
+    new Set(ptsMap.keys()),
+  )
 
   const opt = optimizeLineupForSport(players, slots as LineupSlotDef[], sport)
   const starterIds = opt.assignments.map((a) => a.player.playerId)
@@ -227,7 +266,7 @@ export async function runBestBallOptimizer(args: RunBestBallOptimizerArgs): Prom
     lineupBreakdown,
     alternateExists: opt.alternateExists,
     alternateLineup: opt.alternateLineup as object | undefined,
-    optimizerLog: opt.optimizerLog as object,
+    optimizerLog: { ...(opt.optimizerLog as object), dataQuality },
     isFinalized: requireFinalized,
     finalizedAt: requireFinalized ? new Date() : null,
   }
