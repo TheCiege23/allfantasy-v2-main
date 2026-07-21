@@ -24,7 +24,7 @@ const JOB = 'cron-nfl-team-defense-import'
  * provider omits it. NCAAF/non-NFL seasons are ignored (NFL-only feed).
  */
 export async function GET(request: Request) {
-  if (!requireCronAuth(request as unknown as NextRequest)) {
+  if (!requireCronAuth(request as unknown as NextRequest, 'CRON_SECRET')) {
     const gate = await requireAdminOrBearer(request)
     if (!gate.ok) return gate.res
   }

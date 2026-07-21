@@ -61,12 +61,16 @@ function getErrorMessage(error: unknown): string {
 export async function syncSleeperHistoricalBackfillAfterImport(args: {
   leagueId: string
   isDynasty: boolean
+  /** Admin/internal-only escape hatch to force a full refetch of already-imported seasons. */
+  force?: boolean
 }): Promise<SleeperHistoricalBackfillSummary> {
   const drafts = await syncSleeperHistoricalDraftFactsAfterImport({
     leagueId: args.leagueId,
+    force: args.force,
   })
   const seasonState = await syncSleeperHistoricalSeasonStateAfterImport({
     leagueId: args.leagueId,
+    force: args.force,
   })
   const matchups = await syncSleeperHistoricalMatchupsAfterImport({
     leagueId: args.leagueId,

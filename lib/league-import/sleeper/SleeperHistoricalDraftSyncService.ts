@@ -24,6 +24,10 @@ export interface SleeperHistoricalDraftSyncSummary {
   importedDraftCount?: number
   importedPickCount?: number
   error?: string
+  /** Completion-gate counters (P0-D). */
+  seasonsConsidered?: number
+  seasonsSkippedAlreadyComplete?: number
+  providerCallsAvoided?: number
 }
 
 function getErrorMessage(error: unknown): string {
@@ -78,17 +82,38 @@ async function collectSleeperDraftFacts(args: {
   sport: string
   startingLeagueId: string
   maxPreviousSeasons: number
+  force: boolean
 }): Promise<{
   rows: Array<Omit<PendingSleeperDraftFact, 'sourceDraftId'>>
   seasons: number[]
   importedDraftCount: number
+  seasonsConsidered: number
+  seasonsSkippedAlreadyComplete: number
+  providerCallsAvoided: number
 }> {
   const historyChain = await getSleeperHistoricalLeagueChain(args.startingLeagueId, args.maxPreviousSeasons)
   const pendingRows: PendingSleeperDraftFact[] = []
   const seasonsWithDrafts = new Set<number>()
   let importedDraftCount = 0
+  let seasonsSkippedAlreadyComplete = 0
+  let providerCallsAvoided = 0
 
   for (const seasonLeague of historyChain) {
+    // Completion gate (P0-D): a completed historical season's DraftFact rows are stable —
+    // don't re-hit Sleeper's draft/pick endpoints for a season we already imported. Mirrors the
+    // `skipExistingSeasons` pattern in `lib/dynasty-import/backfill-orchestrator.ts`.
+    if (!args.force) {
+      const existing = await prisma.draftFact.findFirst({
+        where: { leagueId: args.internalLeagueId, season: seasonLeague.season },
+        select: { draftId: true },
+      })
+      if (existing) {
+        seasonsSkippedAlreadyComplete += 1
+        providerCallsAvoided += 1
+        continue
+      }
+    }
+
     const drafts = await getLeagueDrafts(seasonLeague.externalLeagueId)
     const seenDraftIds = new Set<string>()
 
@@ -180,12 +205,17 @@ async function collectSleeperDraftFacts(args: {
     rows: dedupedRows,
     seasons: Array.from(seasonsWithDrafts).sort((a, b) => b - a),
     importedDraftCount,
+    seasonsConsidered: historyChain.length,
+    seasonsSkippedAlreadyComplete,
+    providerCallsAvoided,
   }
 }
 
 export async function syncSleeperHistoricalDraftFactsAfterImport(args: {
   leagueId: string
   maxPreviousSeasons?: number
+  /** Admin/internal-only escape hatch to force a full refetch of already-imported seasons. */
+  force?: boolean
 }): Promise<SleeperHistoricalDraftSyncSummary> {
   const league = await prisma.league.findUnique({
     where: { id: args.leagueId },
@@ -221,18 +251,26 @@ export async function syncSleeperHistoricalDraftFactsAfterImport(args: {
       sport: normalizeSportForWarehouse(league.sport),
       startingLeagueId: league.platformLeagueId,
       maxPreviousSeasons: args.maxPreviousSeasons ?? 10,
+      force: args.force ?? false,
     })
 
     if (!collected.rows.length || !collected.seasons.length) {
+      const allAlreadyComplete =
+        collected.seasonsConsidered > 0 && collected.seasonsSkippedAlreadyComplete === collected.seasonsConsidered
       return {
         attempted: true,
         refreshed: false,
         skipped: true,
-        reason: 'No historical Sleeper draft picks were available to import.',
+        reason: allAlreadyComplete
+          ? 'All discovered seasons already have imported draft data; nothing to refetch.'
+          : 'No historical Sleeper draft picks were available to import.',
         seasonsImported: 0,
         seasonsReplaced: 0,
         importedDraftCount: 0,
         importedPickCount: 0,
+        seasonsConsidered: collected.seasonsConsidered,
+        seasonsSkippedAlreadyComplete: collected.seasonsSkippedAlreadyComplete,
+        providerCallsAvoided: collected.providerCallsAvoided,
       }
     }
 
@@ -255,6 +293,9 @@ export async function syncSleeperHistoricalDraftFactsAfterImport(args: {
       seasonsImported: collected.seasons.length,
       seasonsReplaced: collected.seasons.length,
       importedDraftCount: collected.importedDraftCount,
+      seasonsConsidered: collected.seasonsConsidered,
+      seasonsSkippedAlreadyComplete: collected.seasonsSkippedAlreadyComplete,
+      providerCallsAvoided: collected.providerCallsAvoided,
       importedPickCount: collected.rows.length,
     }
   } catch (error) {
