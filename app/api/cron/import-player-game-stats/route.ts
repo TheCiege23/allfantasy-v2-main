@@ -3,24 +3,21 @@
  *
  * Vercel Cron: daily at 06:40 UTC (see vercel.json).
  *
- * `PlayerGameStat` had ZERO production rows — its write path existed but nothing called it
- * (the only wired route, /api/internal/schedule-stats/ingest, is a dormant external-push
- * design gated on an unset STATS_INGESTION_API_KEY). Downstream, best-ball treated the empty
- * table as legitimate all-zero stats and the warehouse history UI rendered empty data as real.
- * This cron is the active, authenticated ingestion path: Sleeper week stats → ingestSportStats
- * (normalization + fantasy points) → PlayerGameStat → generateGameFactsFromExistingStats →
- * PlayerGameFact.
+ * Sleeper week stats → ingestSportStats (normalization + fantasy points) → PlayerGameStat →
+ * generateGameFactsFromExistingStats → PlayerGameFact, with an explicit per-week completion
+ * ledger. See lib/player-game-stats/importPlayerGameStats.ts for the full design rationale.
  *
- * Behavior per run: resolve the newest season with data (bounded walk-back — it is the
- * offseason, the current year 400s/empties), then ingest missing weeks oldest-first, bounded
- * by maxWeeks and a wall-clock budget. Idempotent; once a season is fully ingested this is a
- * cheap no-op until next season starts. Concurrency-guarded via SyncJobRun.
+ * Per run: sweep stale telemetry → acquire the atomic run lock → resolve the newest season
+ * with data → repair PARTIAL weeks first (facts-only regeneration, no provider call) → ingest
+ * MISSING weeks oldest-first, bounded by maxWeeks and a wall-clock budget. Provider failures
+ * are tagged (timeout/http/network) per week and never abort the run. Idempotent throughout;
+ * once a season reconciles this is a cheap no-op.
  *
  * Query params:
  *   season   — override season (default: current UTC year, with fallback walk-back)
- *   week     — ingest exactly this week
+ *   week     — process exactly this week (full fetch+ingest, even if completed)
  *   maxWeeks — cap weeks per run (default 6)
- *   limit    — cap player rows per week (smoke tests)
+ *   limit    — cap player rows per week (smoke tests; such weeks stay `partial` by design)
  *   dryRun   — "true" to fetch/count without writing
  */
 
@@ -28,23 +25,32 @@ import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
+import { toPrismaJsonInput } from "@/lib/prisma-json"
 import {
   SleeperWeeklyStatsFetcher,
-  findMissingWeeks,
+  acquireRunLock,
+  findWeeksNeedingWork,
   importPlayerGameStatsForWeek,
   isPlayerGameStatsSchemaReady,
   loadKnownNflPlayerIds,
+  repairWeekFacts,
   resolveIngestableSeason,
+  sweepStaleIngestionState,
   type ImportWeekReport,
 } from "@/lib/player-game-stats/importPlayerGameStats"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
 
-const JOB_NAME = "import-player-game-stats"
 const RUN_BUDGET_MS = 240_000
-const LOCK_WINDOW_MS = 10 * 60 * 1000
 const DEFAULT_MAX_WEEKS = 6
+
+type WeekOutcome = ImportWeekReport | {
+  season: number
+  week: number
+  providerFailure: string
+  status?: number
+}
 
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
@@ -56,8 +62,7 @@ async function handle(req: NextRequest) {
   const startedAt = Date.now()
 
   // Deploy-ordering safety: until the additive player_game_stats migration is applied, this
-  // run is a clean no-op — 200, zero writes (not even a lock row). Merging the code before
-  // the migration is therefore inert; the cron self-arms the moment the schema is ready.
+  // run is a clean no-op — 200, zero writes (not even a lock row).
   if (!(await isPlayerGameStatsSchemaReady())) {
     return NextResponse.json({
       ok: false,
@@ -67,28 +72,19 @@ async function handle(req: NextRequest) {
     })
   }
 
-  // Durable lock: a concurrent run inside the window is skipped, not doubled.
-  const running = await prisma.syncJobRun.findFirst({
-    where: {
-      jobName: JOB_NAME,
-      status: "running",
-      startedAt: { gt: new Date(Date.now() - LOCK_WINDOW_MS) },
-    },
-    select: { id: true, startedAt: true },
-  })
-  if (running) {
+  // Stale-state sweep BEFORE lock acquisition: a function killed mid-run must not block the
+  // next scheduled run beyond the stale threshold, and its telemetry row is truthfully
+  // closed as timed_out rather than lingering as 'running' forever.
+  const swept = dryRun ? { sweptRuns: 0, sweptLedger: 0 } : await sweepStaleIngestionState()
+
+  // Atomic lock: single INSERT ... WHERE NOT EXISTS — concurrent invocations cannot both win.
+  const lockId = dryRun ? null : await acquireRunLock("cron")
+  if (!dryRun && lockId == null) {
     return NextResponse.json(
-      { ok: false, skipped: true, reason: `already running since ${running.startedAt.toISOString()}` },
+      { ok: false, skipped: true, reason: "another run holds the lock", swept },
       { status: 409 },
     )
   }
-
-  const run = dryRun
-    ? null
-    : await prisma.syncJobRun.create({
-        data: { jobName: JOB_NAME, jobScope: "NFL", trigger: "cron", status: "running" },
-        select: { id: true },
-      })
 
   try {
     const fetcher = new SleeperWeeklyStatsFetcher()
@@ -101,24 +97,38 @@ async function handle(req: NextRequest) {
       throw new Error(`no ingestable season found walking back from ${requestedSeason}`)
     }
 
-    const weeks = Number.isFinite(weekParam) && weekParam >= 1
-      ? [Math.floor(weekParam)]
-      : await findMissingWeeks(resolved.season)
-
     const maxWeeks = Number.isFinite(maxWeeksParam) && maxWeeksParam > 0
       ? Math.floor(maxWeeksParam)
       : DEFAULT_MAX_WEEKS
 
-    const knownPlayerIds = await loadKnownNflPlayerIds()
-    const reports: ImportWeekReport[] = []
-    let budgetExhausted = false
+    const explicitWeek = Number.isFinite(weekParam) && weekParam >= 1 ? Math.floor(weekParam) : null
+    const plan = explicitWeek
+      ? { missing: [explicitWeek], partial: [] as number[], completed: [] as number[] }
+      : await findWeeksNeedingWork(resolved.season)
 
-    for (const week of weeks.slice(0, maxWeeks)) {
-      if (Date.now() - startedAt > RUN_BUDGET_MS) {
-        budgetExhausted = true
-        break
+    const reports: WeekOutcome[] = []
+    const repairs: WeekOutcome[] = []
+    let budgetExhausted = false
+    let processed = 0
+
+    // Partial weeks first: facts-only regeneration is cheap (no provider call) and closes
+    // the exact stats-without-facts gap the release hit on week 16.
+    for (const week of plan.partial) {
+      if (processed >= maxWeeks || Date.now() - startedAt > RUN_BUDGET_MS) { budgetExhausted = true; break }
+      if (dryRun) { repairs.push({ season: resolved.season, week, providerFailure: "dry_run_skip" }); continue }
+      try {
+        repairs.push(await repairWeekFacts(resolved.season, week))
+        processed += 1
+      } catch (err) {
+        repairs.push({ season: resolved.season, week, providerFailure: `repair_failed: ${err instanceof Error ? err.message : String(err)}` })
       }
-      const report = await importPlayerGameStatsForWeek({
+    }
+
+    const knownPlayerIds = plan.missing.length > 0 ? await loadKnownNflPlayerIds() : new Set<string>()
+
+    for (const week of plan.missing.slice(0, Math.max(0, maxWeeks - processed))) {
+      if (Date.now() - startedAt > RUN_BUDGET_MS) { budgetExhausted = true; break }
+      const result = await importPlayerGameStatsForWeek({
         season: resolved.season,
         week,
         fetcher,
@@ -126,28 +136,36 @@ async function handle(req: NextRequest) {
         dryRun,
         ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: Math.floor(limitParam) } : {}),
       })
-      // null = provider failure for that week; report truthfully and keep going.
-      if (report) reports.push(report)
-      else reports.push({
-        season: resolved.season, week, fetched: 0, teamRowsFiltered: 0, ingested: 0, matchedPlayers: 0,
-        unresolvedPlayers: 0, playerFactsGenerated: 0, factStatus: "provider_failed", dryRun,
-      })
+      if ("providerFailure" in result) {
+        reports.push({ season: resolved.season, week, providerFailure: result.providerFailure, status: result.status })
+      } else {
+        reports.push(result)
+        processed += 1
+      }
     }
 
-    const totals = reports.reduce(
+    const ingestReports = reports.filter((r): r is ImportWeekReport => !("providerFailure" in r))
+    const totals = ingestReports.reduce(
       (acc, r) => ({
         fetched: acc.fetched + r.fetched,
+        teamRowsFiltered: acc.teamRowsFiltered + r.teamRowsFiltered,
         ingested: acc.ingested + r.ingested,
         matchedPlayers: acc.matchedPlayers + r.matchedPlayers,
         unresolvedPlayers: acc.unresolvedPlayers + r.unresolvedPlayers,
         playerFactsGenerated: acc.playerFactsGenerated + r.playerFactsGenerated,
       }),
-      { fetched: 0, ingested: 0, matchedPlayers: 0, unresolvedPlayers: 0, playerFactsGenerated: 0 },
+      { fetched: 0, teamRowsFiltered: 0, ingested: 0, matchedPlayers: 0, unresolvedPlayers: 0, playerFactsGenerated: 0 },
     )
+    const providerFailures = reports.filter((r) => "providerFailure" in r)
+    const weeksRemaining = explicitWeek
+      ? []
+      : [...plan.partial, ...plan.missing].filter(
+          (week) => ![...repairs, ...reports].some((r) => r.week === week && !("providerFailure" in r)),
+        )
 
-    if (run) {
+    if (lockId) {
       await prisma.syncJobRun.update({
-        where: { id: run.id },
+        where: { id: lockId },
         data: {
           status: "completed",
           rowsRead: totals.fetched,
@@ -155,28 +173,35 @@ async function handle(req: NextRequest) {
           rowsSkipped: totals.unresolvedPlayers,
           completedAt: new Date(),
           durationMs: Date.now() - startedAt,
-          metadata: {
+          metadata: toPrismaJsonInput({
             season: resolved.season,
             fallbackSeasonUsed: resolved.fallbackUsed,
-            weeksProcessed: reports.map((r) => r.week),
-            weeksRemaining: weeks.slice(reports.length).length,
+            weeksIngested: ingestReports.map((r) => r.week),
+            weeksRepaired: repairs.filter((r) => !("providerFailure" in r)).map((r) => r.week),
+            weeksRemaining,
+            providerFailures: providerFailures.map((r) => ({ week: r.week, kind: (r as { providerFailure: string }).providerFailure })),
             budgetExhausted,
+            swept,
             playerFactsGenerated: totals.playerFactsGenerated,
-          },
+          }),
         },
       })
     }
 
     return NextResponse.json({
-      ok: true,
+      ok: providerFailures.length === 0,
       dryRun,
       provider: "sleeper",
       sport: "NFL",
       requestedSeason,
       season: resolved.season,
       fallbackSeasonUsed: resolved.fallbackUsed,
-      weeksProcessed: reports.map((r) => r.week),
-      weeksRemaining: weeks.slice(reports.length),
+      swept,
+      plan: { partial: plan.partial, missing: plan.missing, completed: plan.completed.length },
+      repairs,
+      weeksProcessed: ingestReports.map((r) => r.week),
+      weeksRemaining,
+      providerFailures,
       budgetExhausted,
       ...totals,
       perWeek: reports,
@@ -185,9 +210,9 @@ async function handle(req: NextRequest) {
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    if (run) {
+    if (lockId) {
       await prisma.syncJobRun.update({
-        where: { id: run.id },
+        where: { id: lockId },
         data: {
           status: "failed",
           errorMessage: message.slice(0, 500),

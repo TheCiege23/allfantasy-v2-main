@@ -111,6 +111,89 @@ function resolveTeamCode(ctx: TeamCodeContext, rawTeam: string | null | undefine
   return result.code ?? 'FA'
 }
 
+/**
+ * College seed pagination. The apiChain 'players' DB tier serves a fixed default of 200 rows
+ * (`readFromNormalizedTables` → `toPositiveInt(mergedQuery.limit, 200)`) — a pagination
+ * default, not a safety limit — which capped NCAAF/NCAAB pool growth at ~200/sport/run while
+ * their source tables hold tens of thousands. These sports get a supplementary CURSOR-PAGED
+ * read of SportsPlayer with a checkpoint carried in the import-players SyncJobRun metadata:
+ * each run continues where the last one stopped (no rescanning), bounded per run, and wraps
+ * to the start once the source is exhausted so later source changes are re-observed.
+ */
+const COLLEGE_PAGED_SPORTS = new Set<SupportedSport>(['NCAAF', 'NCAAB'] as SupportedSport[])
+export const DEFAULT_SEED_PAGE_SIZE = 2_500
+export const MAX_SEED_PAGE_SIZE = 25_000
+
+export interface PagedSeedTelemetry {
+  count: number
+  cursorStart: string | null
+  cursorEnd: string | null
+  exhausted: boolean
+}
+
+/** Latest per-sport seed cursors from the most recent import-players run record. */
+async function loadSeedCheckpoints(): Promise<Record<string, string>> {
+  const latest = await prisma.syncJobRun.findFirst({
+    where: { jobName: 'import-players' },
+    orderBy: { startedAt: 'desc' },
+    select: { metadata: true },
+  })
+  const meta = latest?.metadata
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const cursors = (meta as Record<string, unknown>).seedCursors
+    if (cursors && typeof cursors === 'object' && !Array.isArray(cursors)) {
+      const out: Record<string, string> = {}
+      for (const [sport, cursor] of Object.entries(cursors as Record<string, unknown>)) {
+        if (typeof cursor === 'string' && cursor) out[sport] = cursor
+      }
+      return out
+    }
+  }
+  return {}
+}
+
+/** One bounded page of source players → seeds, resuming from `cursor`. */
+async function fetchPagedSourceSeeds(
+  sport: SupportedSport,
+  teamCtx: TeamCodeContext,
+  cursor: string | null,
+  pageSize: number
+): Promise<{ seeds: PlayerSeed[]; telemetry: PagedSeedTelemetry }> {
+  const rows = await prisma.sportsPlayer.findMany({
+    where: { sport },
+    orderBy: { id: 'asc' },
+    take: pageSize,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: { id: true, externalId: true, name: true, team: true, position: true, status: true },
+  })
+
+  const seeds: PlayerSeed[] = []
+  for (const row of rows) {
+    const name = row.name?.trim()
+    if (!name) continue
+    seeds.push({
+      id: buildPlayerId(sport, row.externalId || null, name, row.team),
+      name,
+      team: resolveTeamCode(teamCtx, row.team),
+      position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
+      status: row.status,
+      source: 'cached',
+    })
+  }
+
+  const exhausted = rows.length < pageSize
+  return {
+    seeds,
+    telemetry: {
+      count: seeds.length,
+      cursorStart: cursor,
+      // Wrap on exhaustion so the next cycle re-observes the source from the top.
+      cursorEnd: exhausted ? null : rows[rows.length - 1]?.id ?? cursor,
+      exhausted,
+    },
+  }
+}
+
 /** Build the UPPERCASED SportsTeam.name → shortName map used as the provider-code tier. */
 async function loadTeamCodeMap(sport: SupportedSport): Promise<Map<string, string>> {
   const teams = await prisma.sportsTeam.findMany({
@@ -223,6 +306,8 @@ function buildDynastyValueMap(rows: Array<Record<string, unknown>>): Map<string,
 
 export async function runSportsDataImporter(options?: {
   sports?: string[]
+  /** College source-page size per sport per run; clamped to MAX_SEED_PAGE_SIZE. */
+  seedPageSize?: number
 }): Promise<{
   imported: number
   sports: string[]
@@ -231,6 +316,8 @@ export async function runSportsDataImporter(options?: {
   durationMs: number
   teamCodeCounts: Record<string, TeamCodeCounts>
   rowsSkippedByGuard: number
+  pagedSeeds: Record<string, PagedSeedTelemetry>
+  seedCursors: Record<string, string>
 }> {
   const targetSports = (options?.sports?.length ? options.sports : SUPPORTED_SPORTS).map((sport) =>
     normalizeToSupportedSport(sport)
@@ -243,6 +330,16 @@ export async function runSportsDataImporter(options?: {
   const skippedSports: string[] = []
   const teamCodeCounts: Record<string, TeamCodeCounts> = {}
   let rowsSkippedByGuard = 0
+
+  const seedPageSize = Math.min(
+    Math.max(1, Math.floor(options?.seedPageSize ?? DEFAULT_SEED_PAGE_SIZE)),
+    MAX_SEED_PAGE_SIZE
+  )
+  const seedCheckpoints = uniqueSports.some((sport) => COLLEGE_PAGED_SPORTS.has(sport))
+    ? await loadSeedCheckpoints()
+    : {}
+  const pagedSeeds: Record<string, PagedSeedTelemetry> = {}
+  const seedCursors: Record<string, string> = { ...seedCheckpoints }
 
   for (const sport of uniqueSports) {
     /**
@@ -322,8 +419,18 @@ export async function runSportsDataImporter(options?: {
     const projectionRows = asArrayRecords(projectionsResponse.data)
     const rankingRows = asArrayRecords(rankingsResponse.data)
 
+    // Supplementary paged source read for college sports (see COLLEGE_PAGED_SPORTS note).
+    let pagedSportSeeds: PlayerSeed[] = []
+    if (COLLEGE_PAGED_SPORTS.has(sport)) {
+      const page = await fetchPagedSourceSeeds(sport, teamCtx, seedCheckpoints[sport] ?? null, seedPageSize)
+      pagedSportSeeds = page.seeds
+      pagedSeeds[sport] = page.telemetry
+      if (page.telemetry.cursorEnd) seedCursors[sport] = page.telemetry.cursorEnd
+      else delete seedCursors[sport]
+    }
+
     const seedMap = new Map<string, PlayerSeed>()
-    for (const seed of [...identitySeeds, ...providerSeeds]) {
+    for (const seed of [...identitySeeds, ...providerSeeds, ...pagedSportSeeds]) {
       const key = normalizePlayerName(seed.name)
       if (!key) continue
       if (!seedMap.has(key) || seed.source !== 'manual') seedMap.set(key, seed)
@@ -490,5 +597,7 @@ export async function runSportsDataImporter(options?: {
     durationMs: Date.now() - startedAt,
     teamCodeCounts,
     rowsSkippedByGuard,
+    pagedSeeds,
+    seedCursors,
   }
 }
