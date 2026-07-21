@@ -74,6 +74,16 @@ const routeDirsToDisable = [
   path.join('app', 'api', 'brackets', 'world-cup', '[challengeId]', 'admin'),
   // Auth debug endpoint — admin-only debug tool, no production UI callers.
   path.join('app', 'api', 'auth', 'admin-debug'),
+  /*
+   * Provider key-probe diagnostic (`requireAdminOrBearer`, force-dynamic). Same
+   * class as af-debug / admin-debug above: admin-only, and a repo-wide search
+   * finds no caller — the only references are a lint artifact and a comment in
+   * lib/clear-sports/client.ts. Excluding it frees one DYNAMIC route entry,
+   * which is what the 2048 cap actually counts (static pages do not count:
+   * excluding the two pages/e2e-* harnesses above left the total unchanged at
+   * 2049 — measured, not assumed).
+   */
+  path.join('app', 'api', 'test-keys'),
   // Internal recompute worker endpoint; no production UI callers and costs one route.
   path.join('app', 'api', 'bracket', 'workers', 'health'),
   // Admin-only KPI rollup; consumed by components/admin/ChimmyKPIReadout which
