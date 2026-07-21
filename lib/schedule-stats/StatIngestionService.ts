@@ -171,6 +171,10 @@ export async function ingestSportStats(
               normalizedStatMap: normalized,
               fantasyPoints,
             },
+            // RETURNING trimmed to id: callers ignore the row, and selecting every column
+            // breaks against a DB whose table lags schema.prisma (P2022) — which prod's
+            // player_game_stats did until the provider-telemetry migration.
+            select: { id: true },
           })
         )
       )
@@ -201,6 +205,7 @@ export async function ingestSportStats(
               weekOrRound: input.weekOrRound,
               statPayload: row.statPayload,
             },
+            select: { id: true },
           })
         )
       )

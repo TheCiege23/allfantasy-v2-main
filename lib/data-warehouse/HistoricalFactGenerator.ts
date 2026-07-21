@@ -42,9 +42,18 @@ export async function generateGameFactsFromExistingStats(
   const sportNorm = normalizeSportForWarehouse(sport)
   const warnings: string[] = []
 
+  // Explicit selects: a bare findMany requests every schema column, and prod's
+  // player_game_stats has drifted behind schema.prisma before — Postgres rejects unknown
+  // columns at parse time, so the bare read threw P2022 even against an empty table.
   const [playerStats, teamStats] = await Promise.all([
-    prisma.playerGameStat.findMany({ where: { sportType: sportNorm, season, weekOrRound } }),
-    prisma.teamGameStat.findMany({ where: { sportType: sportNorm, season, weekOrRound } }),
+    prisma.playerGameStat.findMany({
+      where: { sportType: sportNorm, season, weekOrRound },
+      select: { playerId: true, gameId: true, statPayload: true, normalizedStatMap: true, fantasyPoints: true },
+    }),
+    prisma.teamGameStat.findMany({
+      where: { sportType: sportNorm, season, weekOrRound },
+      select: { teamId: true, gameId: true, statPayload: true },
+    }),
   ])
 
   if (playerStats.length === 0 && teamStats.length === 0) {
