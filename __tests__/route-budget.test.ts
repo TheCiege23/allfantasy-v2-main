@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { resolve, join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import vercelBuildConfig from '../scripts/vercel-next-build.cjs'
 
 const root = resolve(__dirname, '..')
 function read(rel: string): string {
@@ -30,53 +31,14 @@ function walkRouteFiles(dir: string): string[] {
   return result
 }
 
-const EXCLUDED_DIRS = [
-  'app/e2e', 'app/tools/social-share-engine-harness', 'app/tools/public-league-discovery-harness',
-  'app/admin', 'app/api/admin', 'app/api/cron', 'app/api/audio-metadata',
-  'app/ai-lab', 'app/lab', 'app/bracket-review', 'app/createor',
-  'app/api/dev', 'app/api/e2e', 'app/api/lab', 'app/api/simulation-lab',
-  'app/march-madness', 'app/wallet/deposit',
-  'app/zombie/[leagueId]', 'app/zombie/universe',
-  'app/survivor/[leagueId]', 'app/api/zombie', 'app/api/survivor',
-  'app/dev', 'app/api/internal', 'app/app/simulation-lab', 'app/app/zombie-universe',
-  'app/api/brackets/world-cup/[challengeId]/admin',
-  'app/api/auth/admin-debug', 'app/api/bracket/workers/health',
-  'app/api/ai/analytics/rollup', 'app/api/marketplace/seed',
-  'app/api/ai/providers', 'app/api/ai/tools',
-  // Route-budget cleanup (2026-06-22): internal diagnostics/metrics/meta with no
-  // production caller. Mirrors scripts/vercel-next-build.cjs routeDirsToDisable.
-  // (league-health removed 2026-07-06 — Dashboard Sprint 2's MyLeagueCard is now a
-  // real production caller; it must stay built. See vercel-next-build.cjs.)
-  'app/api/meta/logs', 'app/api/intelligence/snapshot', 'app/api/providers/status',
-  'app/api/chaos-detector', 'app/api/league-meta',
-  'app/api/platform/service-map', 'app/api/ai/decision-log', 'app/api/ai/validation',
-  'app/api/ai/memory/quality',
-  'app/api/health/fantasycalc', 'app/api/health/player-valuations', 'app/api/system/health',
-  // Route-headroom pass (2026-06-22): deferred-mode (big-brother/zombie/devy) leftover
-  // gameplay/admin routes with no live caller. Mirrors scripts/vercel-next-build.cjs.
-  'app/api/leagues/[leagueId]/big-brother/ballot', 'app/api/leagues/[leagueId]/big-brother/cycle',
-  'app/api/leagues/[leagueId]/big-brother/finalists', 'app/api/leagues/[leagueId]/big-brother/have-not',
-  'app/api/leagues/[leagueId]/big-brother/hoh', 'app/api/leagues/[leagueId]/big-brother/hoh-room',
-  'app/api/leagues/[leagueId]/big-brother/nominations', 'app/api/leagues/[leagueId]/big-brother/replacement',
-  'app/api/leagues/[leagueId]/big-brother/veto-challenge', 'app/api/leagues/[leagueId]/big-brother/veto-decision',
-  'app/api/leagues/[leagueId]/zombie/attach-universe', 'app/api/leagues/[leagueId]/zombie/can-trade',
-  'app/api/leagues/[leagueId]/zombie/config', 'app/api/leagues/[leagueId]/zombie/finalize',
-  'app/api/leagues/[leagueId]/zombie/horde-sit-outs',
-  'app/api/leagues/[leagueId]/devy/admin/automation', 'app/api/leagues/[leagueId]/devy/admin/force-promote',
-  'app/api/leagues/[leagueId]/devy/admin/recalc', 'app/api/leagues/[leagueId]/devy/admin/regenerate-devy-pool',
-  'app/api/leagues/[leagueId]/devy/admin/regenerate-rookie-pool', 'app/api/leagues/[leagueId]/devy/admin/reopen-window',
-  'app/api/leagues/[leagueId]/devy/admin/repair-duplicate-rights', 'app/api/leagues/[leagueId]/devy/admin/revoke-promotion',
-  'app/api/leagues/[leagueId]/devy/audit', 'app/api/leagues/[leagueId]/devy/outlook',
-  'app/api/leagues/[leagueId]/devy/scoring-presets',
-]
-
-const FILES_KEPT = [
-  'app/api/cron/_auth.ts', 'app/api/cron/waivers/route.ts',
-  'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
-  'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
-  // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.
-  'app/api/admin/sports/sync/route.ts', 'app/api/admin/fantasy-data/import/route.ts',
-]
+// Imported (not hand-duplicated) from scripts/vercel-next-build.cjs — the file
+// that actually gates the production build. This list drifting out of sync with
+// the real build config (independently, in up to 4 places at once) is exactly
+// how the /api/admin/{visitor-analytics,api-health,chimmy/health,monetization/
+// checkout-link-mapping} 404 regression (#312) and the /api/ai/analytics/rollup
+// staleness both shipped unnoticed. Do not hand-copy entries here again.
+const EXCLUDED_DIRS = vercelBuildConfig.routeDirsToDisable
+const FILES_KEPT = vercelBuildConfig.filesToKeep
 
 function getProductionSignals(): number {
   const appDir = join(root, 'app')
@@ -176,10 +138,16 @@ describe('Route budget — build-excluded routes have no active production fetch
   const SOURCE_DIRS = ['app', 'components', 'lib']
 
   // Prefixes excluded from production build — callers here never run in prod.
+  // NOTE: components/admin/ was removed from this list deliberately (2026-07-21).
+  // app/admin/** (the admin UI) is NOT build-excluded — only app/api/admin/** is,
+  // and only partially (see filesToKeep in vercel-next-build.cjs) — so its
+  // components DO run in production and must be scanned as real callers. Excluding
+  // components/admin/ here previously hid a real bug: ChimmyKPIReadout.tsx (under
+  // components/admin/) fetches /api/ai/analytics/rollup, which was excluded from
+  // the build — a 404 that this exact test category exists to catch, but couldn't,
+  // because its caller lived in a prefix this list told the scanner to skip.
   const EXCLUDED_SOURCE_PREFIXES = [
-    'app/admin/',
     'app/api/admin/',
-    'components/admin/',
   ]
 
   /**
@@ -283,6 +251,107 @@ describe('Route budget — production-adjusted signals must stay GREEN', () => {
   })
 })
 
+// ── The number Vercel actually enforces ───────────────────────────────────────
+//
+// `getProductionSignals()` above counts deployed function FILES. That metric read
+// 1772 while the real deployment reported 2049 and failed at
+// `process-and-upload-routes` with `too_many_routes` — so the suite above was
+// reporting GREEN with the deployment sitting on the ceiling. Three reasons for
+// the 277-entry gap:
+//
+//   1. an App Router PAGE costs TWO entries — the page plus its `.rsc` payload
+//      variant (see `rsc.suffix` in .next/routes-manifest.json). Route handlers
+//      cost one.
+//   2. crons cost ZERO. They invoke `/api/*` paths already counted as handlers;
+//      `getProductionSignals()` adds +49 for them, double-counting.
+//   3. next.config.js redirects()/headers() entries were not counted at all.
+//
+// Reconciliation: 1772 + 303 (.rsc) - 49 (crons) + 11 (config) + 11 (overhead) = 2048.
+//
+// Keep this in sync with scripts/vercel-route-budget.mjs.
+
+describe('Route budget — Vercel deployment entries must stay under the platform ceiling', () => {
+  const VERCEL_CEILING = 2048
+  const FRAMEWORK_OVERHEAD = 11
+
+  function countConfigEntries(): number {
+    const src = read('next.config.js')
+    const block = (header: string): string => {
+      const start = src.indexOf(header)
+      if (start === -1) return ''
+      const open = src.indexOf('{', start)
+      if (open === -1) return ''
+      let depth = 0
+      for (let i = open; i < src.length; i++) {
+        if (src[i] === '{') depth++
+        else if (src[i] === '}' && --depth === 0) return src.slice(open, i + 1)
+      }
+      return ''
+    }
+    const countSources = (b: string) =>
+      (b.replace(/^\s*\/\/.*$/gm, '').match(/(^|[\s{,])source\s*:/g) ?? []).length
+    return countSources(block('async redirects()')) +
+      countSources(block('async headers()')) +
+      countSources(block('async rewrites()'))
+  }
+
+  function vercelRouteEntries(): number {
+    const appDir = join(root, 'app')
+    const all = walkRouteFiles(appDir)
+    const excluded = new Set<string>()
+    for (const relDir of EXCLUDED_DIRS as string[]) {
+      const abs = join(root, relDir)
+      if (!existsSync(abs)) continue
+      const files = statSync(abs).isDirectory()
+        ? walkRouteFiles(abs)
+        : (/\/(route|page)\.(ts|tsx|js|jsx)$/.test(relDir) ? [relDir] : [])
+      for (const f of files) if (!(FILES_KEPT as string[]).includes(f)) excluded.add(f)
+    }
+    const production = all.filter((f) => !excluded.has(f))
+    const handlers = production.filter((f) => /\/route\.(ts|tsx|js|jsx)$/.test(f)).length
+    const pages = production.filter((f) => /\/page\.(ts|tsx|js|jsx)$/.test(f)).length
+    return handlers + pages * 2 + countConfigEntries() + FRAMEWORK_OVERHEAD
+  }
+
+  it(`stays under Vercel's hard ceiling of ${VERCEL_CEILING}`, () => {
+    const entries = vercelRouteEntries()
+    expect(
+      entries,
+      `${entries} route entries — Vercel rejects the deployment above ${VERCEL_CEILING} ` +
+      `("too_many_routes" at process-and-upload-routes, AFTER a successful build). ` +
+      `A new page costs 2 entries, a new API handler costs 1. Free budget in ` +
+      `scripts/vercel-next-build.cjs before adding routes.`
+    ).toBeLessThanOrEqual(VERCEL_CEILING)
+  })
+
+  it('every vercel.json cron resolves to a route that actually ships', () => {
+    const crons: { path: string }[] =
+      JSON.parse(read('vercel.json')).crons ?? []
+    const excludedDirs = EXCLUDED_DIRS as string[]
+    const kept = FILES_KEPT as string[]
+    const broken: string[] = []
+    for (const { path: cronPath } of crons) {
+      const urlPath = cronPath.split('?')[0].replace(/^\//, '')
+      const file = ['ts', 'tsx', 'js']
+        .map((ext) => `app/${urlPath}/route.${ext}`)
+        .find((f) => exists(f))
+      if (!file) { broken.push(`${cronPath} (no route file)`); continue }
+      const underDisabled = excludedDirs.some((d) => file === d || file.startsWith(`${d}/`))
+      if (underDisabled && !kept.includes(file)) broken.push(`${cronPath} (excluded from build)`)
+    }
+    // 10 game-mode crons (survivor/zombie/big-brother/devy) are already broken on
+    // main — their handlers were build-excluded while the schedules stayed in
+    // vercel.json, so they fire and 404. Documented here rather than asserted to
+    // zero so this guard can land without failing CI on a pre-existing bug; the
+    // list must not GROW. This is the PR #284 failure mode.
+    const KNOWN_BROKEN = 10
+    expect(
+      broken.length,
+      `${broken.length} cron(s) point at routes that do not ship (was ${KNOWN_BROKEN}): ${broken.join(', ')}`
+    ).toBeLessThanOrEqual(KNOWN_BROKEN)
+  })
+})
+
 // ── World Cup chat consolidation stays consolidated ───────────────────────────
 
 describe('Route budget — World Cup chat stays consolidated', () => {
@@ -303,4 +372,103 @@ describe('Route budget — World Cup chat stays consolidated', () => {
       expect(exists(route), `${route} was re-created — use ?action= dispatch instead`).toBe(false)
     })
   }
+})
+
+// ── Admin endpoint contract — every referenced /api/admin|/api/ai route must ──
+// ── actually exist AND actually ship to production ────────────────────────────
+//
+// This is the drift-protection guard requested after the #312 regression: a UI
+// fetching a URL is not proof the URL works. Scans the same surfaces the manual
+// audit did (app/admin, components/admin) for literal /api/admin/* and /api/ai/*
+// references — whether inside fetch() or an href — and fails if the referenced
+// route either (a) has no route.ts on disk, or (b) exists but is excluded from
+// the production build and not in filesToKeep. Both failure modes render as
+// zeros/empty cards or dead links in prod without ever failing a build.
+
+describe('Admin endpoint contract — referenced routes exist and ship', () => {
+  const CONTRACT_SCAN_DIRS = ['app/admin', 'components/admin']
+  const URL_PATTERN = /\/api\/(?:admin|ai)\/[A-Za-z0-9\-_/]*/g
+
+  function walkSourceFiles(dir: string): string[] {
+    const abs = join(root, dir)
+    if (!existsSync(abs)) return []
+    const result: string[] = []
+    const stack = [abs]
+    while (stack.length) {
+      const cur = stack.pop()!
+      for (const entry of readdirSync(cur, { withFileTypes: true })) {
+        const child = join(cur, entry.name)
+        if (entry.isDirectory()) { stack.push(child); continue }
+        if (/\.(ts|tsx)$/.test(entry.name)) result.push(child)
+      }
+    }
+    return result
+  }
+
+  function findReferencedUrls(): { url: string; file: string }[] {
+    const found: { url: string; file: string }[] = []
+    for (const dir of CONTRACT_SCAN_DIRS) {
+      for (const abs of walkSourceFiles(dir)) {
+        const rel = relative(root, abs).replace(/\\/g, '/')
+        const src = readFileSync(abs, 'utf8')
+        const matches = src.match(URL_PATTERN)
+        if (!matches) continue
+        for (const raw of matches) {
+          const url = raw.replace(/\/$/, '') // drop a trailing slash before an interpolation/param
+          found.push({ url, file: rel })
+        }
+      }
+    }
+    return found
+  }
+
+  function routeFileFor(url: string): string {
+    return `app${url}/route.ts`
+  }
+
+  function isExcludedFromBuild(routeFile: string): boolean {
+    const isUnderDisabledDir = (EXCLUDED_DIRS as string[]).some(
+      (d) => routeFile === d || routeFile.startsWith(`${d}/`)
+    )
+    if (!isUnderDisabledDir) return false
+    return !(FILES_KEPT as string[]).includes(routeFile)
+  }
+
+  const referenced = findReferencedUrls()
+  const uniqueByUrl = new Map<string, string>() // url -> first file that referenced it
+  for (const { url, file } of referenced) {
+    if (!uniqueByUrl.has(url)) uniqueByUrl.set(url, file)
+  }
+
+  it('scanned at least one /api/admin or /api/ai reference (guard against a broken walk)', () => {
+    expect(referenced.length, 'found zero references — app/admin or components/admin may have moved').toBeGreaterThan(0)
+  })
+
+  for (const [url, file] of uniqueByUrl) {
+    const routeFile = routeFileFor(url)
+    it(`${url} (referenced from ${file}) resolves to a route file that exists on disk`, () => {
+      expect(exists(routeFile), `${file} references ${url}, but ${routeFile} does not exist`).toBe(true)
+    })
+    it(`${url} is not excluded from the production build`, () => {
+      expect(
+        isExcludedFromBuild(routeFile),
+        `${file} references ${url} (${routeFile}), but it is excluded from the production build and not in filesToKeep — this 404s in prod exactly like #312`
+      ).toBe(false)
+    })
+  }
+
+  // Regression guard for a specifically-reported drift: the admin UI fetching
+  // /api/admin/ai/metrics when only /api/admin/metrics exists. Not a vacuous
+  // string-literal check — it reads the real scan result above, so it fails the
+  // moment anything under app/admin or components/admin references the wrong
+  // path again, and stays silent while nothing does.
+  it('does not regress the /api/admin/ai/metrics vs /api/admin/metrics naming drift', () => {
+    const regressed = referenced.find((c) => c.url === '/api/admin/ai/metrics')
+    if (regressed) {
+      expect(
+        exists('app/api/admin/ai/metrics/route.ts'),
+        `${regressed.file} fetches /api/admin/ai/metrics, which has no route file — the real endpoint is /api/admin/metrics`
+      ).toBe(true)
+    }
+  })
 })

@@ -7,9 +7,16 @@
 //   node scripts/route-budget-count.mjs --baseline # pre-cleanup disable set
 import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import vercelBuildConfig from './vercel-next-build.cjs'
 
 const root = process.cwd()
 const baseline = process.argv.includes('--baseline')
+// CURRENT canonical lists — imported (not duplicated) from the single source of
+// truth that actually gates the production build. Only used for the default
+// (non-baseline, non---main) report; --baseline/--main intentionally freeze
+// historical snapshots below, since those describe past states this file no
+// longer reflects.
+const { routeDirsToDisable: CURRENT_DISABLE, filesToKeep: CURRENT_KEEP } = vercelBuildConfig
 
 function walk(dir) {
   if (!existsSync(dir)) return []
@@ -74,19 +81,23 @@ const KEEP = new Set([
 ])
 
 const mainOnly = process.argv.includes('--main') // current main (pre-headroom): BASE + #100
+// --baseline and --main freeze historical snapshots (states that no longer exist
+// anywhere else); the default (neither flag) reports the ACTUAL current build
+// config, imported live from vercel-next-build.cjs rather than a hand-copied list.
 const DISABLE = baseline
   ? DISABLE_BASE
   : mainOnly
     ? [...DISABLE_BASE, ...DISABLE_NEW]
-    : [...DISABLE_BASE, ...DISABLE_NEW, ...DISABLE_HEADROOM]
+    : CURRENT_DISABLE
+const KEEP_SET = baseline || mainOnly ? KEEP : new Set(CURRENT_KEEP)
 const all = walk(join(root, 'app'))
 const disabled = new Set()
-for (const d of DISABLE) for (const f of walk(join(root, d))) if (!KEEP.has(f)) disabled.add(f)
+for (const d of DISABLE) for (const f of walk(join(root, d))) if (!KEEP_SET.has(f)) disabled.add(f)
 const production = all.filter((f) => !disabled.has(f))
 let crons = 0
 try { crons = JSON.parse(readFileSync('vercel.json', 'utf8')).crons?.length || 0 } catch {}
 
-console.log(`mode: ${baseline ? 'BASELINE (pre-cleanup)' : 'CURRENT (post-cleanup)'}`)
+console.log(`mode: ${baseline ? 'BASELINE (pre-cleanup)' : mainOnly ? 'MAIN (pre-headroom snapshot)' : 'CURRENT (live from vercel-next-build.cjs)'}`)
 console.log(`  total route+page files:       ${all.length}`)
 console.log(`  disabled (moved out of build): ${disabled.size}`)
 console.log(`  PRODUCTION deployed functions: ${production.length}`)
