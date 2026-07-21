@@ -46,6 +46,8 @@ export interface ImportWeekReport {
   season: number
   week: number
   fetched: number
+  /** Provider TEAM_* whole-team aggregate rows excluded before persistence. */
+  teamRowsFiltered: number
   ingested: number
   matchedPlayers: number
   unresolvedPlayers: number
@@ -128,7 +130,15 @@ export async function importPlayerGameStatsForWeek(args: {
   const rows = await args.fetcher.fetchWeek({ sport: 'NFL', season: args.season, week: args.week, seasonType })
   if (rows == null) return null
 
-  const bounded = typeof args.limit === 'number' && args.limit > 0 ? rows.slice(0, args.limit) : rows
+  // Sleeper's week payload includes TEAM_* whole-team aggregate rows (e.g. TEAM_BUF) alongside
+  // players. Scored under player rules they produce absurd values (~110 fantasy points) and
+  // would pollute PlayerGameStat, PlayerGameFact, and every aggregate built on them. They are
+  // NOT the same as team-DST rows (plain codes like "SF"), which are legitimate roster player
+  // ids and are kept. Team-level statistics belong in TeamGameStat via a dedicated pipeline.
+  const playerRows = rows.filter((row) => !row.playerId.startsWith('TEAM_'))
+  const teamRowsFiltered = rows.length - playerRows.length
+
+  const bounded = typeof args.limit === 'number' && args.limit > 0 ? playerRows.slice(0, args.limit) : playerRows
   let matchedPlayers = 0
   let unresolvedPlayers = 0
   const playerStats = bounded.map((row) => {
@@ -169,6 +179,7 @@ export async function importPlayerGameStatsForWeek(args: {
     season: args.season,
     week: args.week,
     fetched: rows.length,
+    teamRowsFiltered,
     ingested,
     matchedPlayers,
     unresolvedPlayers,
@@ -176,6 +187,24 @@ export async function importPlayerGameStatsForWeek(args: {
     factStatus,
     dryRun: Boolean(args.dryRun),
   }
+}
+
+/**
+ * Schema preflight: true only when prod's player_game_stats table carries the
+ * provider-telemetry columns the Prisma client's upsert RETURNING requires.
+ *
+ * This is the deploy-ordering safety gate: the cron route refuses to run (clean 200
+ * `migration_pending` skip, ZERO writes — not even a lock row) until the additive migration
+ * has been applied, so merging code before the migration is completely inert instead of a
+ * recorded failure. Pure information_schema read; self-arms the moment the migration lands,
+ * no second deploy or env toggle needed.
+ */
+export async function isPlayerGameStatsSchemaReady(): Promise<boolean> {
+  const rows = await prisma.$queryRaw<Array<{ ok: number }>>`
+    SELECT 1 AS ok FROM information_schema.columns
+    WHERE table_name = 'player_game_stats' AND column_name = 'provider_player_id'
+    LIMIT 1`
+  return rows.length > 0
 }
 
 /**

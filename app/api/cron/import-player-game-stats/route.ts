@@ -32,6 +32,7 @@ import {
   SleeperWeeklyStatsFetcher,
   findMissingWeeks,
   importPlayerGameStatsForWeek,
+  isPlayerGameStatsSchemaReady,
   loadKnownNflPlayerIds,
   resolveIngestableSeason,
   type ImportWeekReport,
@@ -53,6 +54,18 @@ async function handle(req: NextRequest) {
   const limitParam = Number(url.searchParams.get("limit"))
   const maxWeeksParam = Number(url.searchParams.get("maxWeeks"))
   const startedAt = Date.now()
+
+  // Deploy-ordering safety: until the additive player_game_stats migration is applied, this
+  // run is a clean no-op — 200, zero writes (not even a lock row). Merging the code before
+  // the migration is therefore inert; the cron self-arms the moment the schema is ready.
+  if (!(await isPlayerGameStatsSchemaReady())) {
+    return NextResponse.json({
+      ok: false,
+      skipped: true,
+      reason: "migration_pending: player_game_stats lacks the provider-telemetry columns; apply 20260721120000_player_game_stats_provider_telemetry",
+      durationMs: Date.now() - startedAt,
+    })
+  }
 
   // Durable lock: a concurrent run inside the window is skipped, not doubled.
   const running = await prisma.syncJobRun.findFirst({
@@ -116,7 +129,7 @@ async function handle(req: NextRequest) {
       // null = provider failure for that week; report truthfully and keep going.
       if (report) reports.push(report)
       else reports.push({
-        season: resolved.season, week, fetched: 0, ingested: 0, matchedPlayers: 0,
+        season: resolved.season, week, fetched: 0, teamRowsFiltered: 0, ingested: 0, matchedPlayers: 0,
         unresolvedPlayers: 0, playerFactsGenerated: 0, factStatus: "provider_failed", dryRun,
       })
     }

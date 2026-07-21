@@ -79,8 +79,37 @@ describe('importPlayerGameStatsForWeek', () => {
     expect(report).toBeNull()
   })
 
+  it('filters TEAM_* whole-team aggregate rows before persistence, keeps DST codes', async () => {
+    const { ingestSportStats } = await import('@/lib/schedule-stats')
+    vi.mocked(ingestSportStats).mockClear()
+    const withTeamRows: WeeklyStatsFetcher = {
+      fetchWeek: async () => [
+        { playerId: '4984', gameId: null, stats: { pass_yd: 394 } },
+        { playerId: 'TEAM_BUF', gameId: null, stats: { tkl: 44, td: 5 } }, // team aggregate — must never persist
+        { playerId: 'SF', gameId: null, stats: { sack: 4 } },              // DST — legitimate roster id, kept
+        { playerId: 'TEAM_BAL', gameId: null, stats: { tkl: 67 } },
+      ],
+    }
+    const report = await importPlayerGameStatsForWeek({
+      season: 2025, week: 1, fetcher: withTeamRows, knownPlayerIds: new Set(['4984', 'SF']), dryRun: true,
+    })
+    expect(report).toMatchObject({ fetched: 4, teamRowsFiltered: 2, matchedPlayers: 2, unresolvedPlayers: 0 })
+    // Non-dry-run persistence path receives ONLY the non-TEAM_ rows.
+    vi.mocked(ingestSportStats).mockResolvedValue({ jobId: 'j', gameCount: 0, playerStatCount: 2, teamStatCount: 0 })
+    const { generateGameFactsFromExistingStats } = await import('@/lib/data-warehouse/HistoricalFactGenerator')
+    vi.mocked(generateGameFactsFromExistingStats).mockResolvedValue({
+      status: 'COMPLETED', playerFacts: 2, teamFacts: 0, sourcePlayerGameStats: 2, sourceTeamGameStats: 0, warnings: [],
+    })
+    await importPlayerGameStatsForWeek({ season: 2025, week: 1, fetcher: withTeamRows })
+    const persisted = vi.mocked(ingestSportStats).mock.calls.at(-1)![0]
+    const persistedIds = (persisted.playerStats ?? []).map((row) => row.playerId)
+    expect(persistedIds).toEqual(['4984', 'SF'])
+    expect(persistedIds.some((id) => id.startsWith('TEAM_'))).toBe(false)
+  })
+
   it('builds a deterministic per-week gameId when the provider omits one (idempotent key)', async () => {
     const { ingestSportStats } = await import('@/lib/schedule-stats')
+    vi.mocked(ingestSportStats).mockClear()
     vi.mocked(ingestSportStats).mockResolvedValue({ jobId: 'j1', gameCount: 0, playerStatCount: 2, teamStatCount: 0 })
     const { generateGameFactsFromExistingStats } = await import('@/lib/data-warehouse/HistoricalFactGenerator')
     vi.mocked(generateGameFactsFromExistingStats).mockResolvedValue({
