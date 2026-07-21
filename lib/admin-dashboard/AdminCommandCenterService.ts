@@ -130,6 +130,8 @@ export type AdminCommandCenterMetrics = {
     summaries: ProviderTeamReconciliationSummary[]
     totalProblems: number
     generatedAt: string
+    /** True if the reconciliation query itself failed — totalProblems is NOT a real 0 in that case. */
+    unavailable: boolean
   }
   traffic: AdminMetric[]
   integrity: AdminMetric[]
@@ -570,7 +572,9 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     getAdminProductionReadiness(),
     getEmailCenterStatus(),
     getSportsIdentityHealthSnapshot(),
-    getProviderTeamReconciliationSummaries().catch(() => ({ summaries: [], totalProblems: 0, generatedAt: new Date().toISOString() })),
+    getProviderTeamReconciliationSummaries()
+      .then((r) => ({ ...r, unavailable: false }))
+      .catch(() => ({ summaries: [], totalProblems: 0, generatedAt: new Date().toISOString(), unavailable: true })),
     prisma.analyticsEvent.count({ where: { createdAt: { gte: today } } }),
     prisma.analyticsEvent.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     prisma.analyticsEvent.groupBy({
@@ -596,7 +600,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       by: ["referrer"],
       where: { createdAt: { gte: sevenDaysAgo }, referrer: { not: null } },
       _count: { _all: true },
-    }).then((rows) => rows.sort((a, b) => b._count._all - a._count._all).slice(0, 5)).catch(() => []),
+    }).then((rows) => rows.sort((a, b) => b._count._all - a._count._all).slice(0, 5)).catch(() => null),
     prisma.visitorLocation
       .findMany({
         where: { visits: { gte: 5 } },
@@ -604,13 +608,13 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
         orderBy: { visits: "desc" },
         take: 5,
       })
-      .catch(() => []),
+      .catch(() => null),
     prisma.syncJobRun.count({
       where: {
         status: { in: ["failed", "error"] },
         startedAt: { gte: daysAgo(1) },
       },
-    }).catch(() => 0),
+    }).catch(() => null),
     // ── Login / session metrics ───────────────────────────────────────────────
     // NOTE: these counts deliberately do NOT come from AuthSession. That model has
     // no createdAt column (id/sessionToken/userId/expires only), so the previous
@@ -619,7 +623,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     // it as a confident bold "0" on a live site. IdentitySignal is the real
     // login-event source and does have createdAt — see recordIdentitySignal()
     // wired into authOptions.events.signIn.
-    prisma.authSession.count({ where: { expires: { gt: new Date() } } }).catch(() => 0),
+    prisma.authSession.count({ where: { expires: { gt: new Date() } } }).catch(() => null),
     prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: today } } }).catch(() => 0),
     prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenDaysAgo } } }).catch(() => 0),
     // ── Subscription velocity ────────────────────────────────────────────────
@@ -647,8 +651,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       _sum: { tokenDelta: true },
     }),
     // ── Coupon redemptions ───────────────────────────────────────────────────
-    prisma.sponsorCouponRedemption.count().catch(() => 0),
-    prisma.sponsorCouponRedemption.count({ where: { status: "redeemed" } }).catch(() => 0),
+    prisma.sponsorCouponRedemption.count().catch(() => null),
+    prisma.sponsorCouponRedemption.count({ where: { status: "redeemed" } }).catch(() => null),
     // ── 7-hour rolling window ────────────────────────────────────────────────
     prisma.appUser.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
     prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenHoursAgo } } }).catch(() => 0),
@@ -720,7 +724,9 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Signups today", accountsToday, "UTC day"),
       loginMetric("Logins last 7h", loginSessions7h, "Rolling 7-hour window"),
       loginMetric("Logins today", loginSessionsToday, "UTC day"),
-      metric("Active sessions now", activeSessionsNow),
+      activeSessionsNow === null
+        ? notTracked("Active sessions now", "Session count query failed")
+        : metric("Active sessions now", activeSessionsNow),
       metric("Active subscribers", activeSubscriptionUserCount),
       metric("Pools last 7h", wcPools7h, "WC pools created last 7h"),
       metric("Brackets last 7h", wcEntries7h, "WC entries created last 7h"),
@@ -743,7 +749,9 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       loginMetric("Logins last 7h", loginSessions7h, "Rolling 7-hour window"),
       loginMetric("Logins today", loginSessionsToday, "UTC day"),
       loginMetric("Logins 7 days", loginSessions7Days, "Rolling 7 days"),
-      metric("Active sessions now", activeSessionsNow, "Sessions where expires > now()"),
+      activeSessionsNow === null
+        ? notTracked("Active sessions now", "Session count query failed")
+        : metric("Active sessions now", activeSessionsNow, "Sessions where expires > now()"),
       metric("Free users", Math.max(0, totalAccounts - activeSubscriptionUserCount), "Derived from active subscriptions"),
       metric("Pro/subscribed users", activeSubscriptionUserCount),
       metric("Admin users", adminUsers, "Derived from ADMIN_EMAILS allowlist"),
@@ -766,7 +774,9 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Revenue today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "UTC day"),
       metric("Revenue 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`),
       metric("Token sales revenue", `$${(tokenSalesRevenueCents / 100).toFixed(2)}`, `${tokenSalesPayments} completed token payment rows`),
-      metric("Coupon redemptions", couponRedemptions, `${couponRedemptionsRedeemed} redeemed`),
+      couponRedemptions === null || couponRedemptionsRedeemed === null
+        ? notTracked("Coupon redemptions", "Coupon redemption query failed")
+        : metric("Coupon redemptions", couponRedemptions, `${couponRedemptionsRedeemed} redeemed`),
       notTracked("MRR estimate", "Subscription prices are not reliably stored on subscription rows"),
     ],
     tokens: [
@@ -828,17 +838,23 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Approx unique IPs today", visitorLocationsToday || "Not tracked yet", "Uses aggregate VisitorLocation rows only"),
       metric("Approx unique IPs 7 days", visitorLocations7Days || "Not tracked yet"),
       metric("World Cup visitor events", worldCupVisitors7Days, "7-day paths containing world-cup/brackets"),
-      metric(
-        "Top referrers",
-        topReferrers.length,
-        topReferrers
-          .map((row) => `${row.referrer ?? "unknown"} (${row._count._all})`)
-          .join(", ") || "Not tracked yet"
-      ),
+      topReferrers === null
+        ? notTracked("Top referrers", "Referrer query failed")
+        : metric(
+            "Top referrers",
+            topReferrers.length,
+            topReferrers
+              .map((row) => `${row.referrer ?? "unknown"} (${row._count._all})`)
+              .join(", ") || "No referrer data in the last 7 days"
+          ),
     ],
     integrity: [
-      metric("High-repeat visitor locations", multipleAccountsSameLocation.length, "Approximate geo rows with 5+ visits; no raw IP rendered"),
-      metric("Failed sync jobs 24h", syncJobsFailed24h),
+      multipleAccountsSameLocation === null
+        ? notTracked("High-repeat visitor locations", "Visitor-location query failed")
+        : metric("High-repeat visitor locations", multipleAccountsSameLocation.length, "Approximate geo rows with 5+ visits; no raw IP rendered"),
+      syncJobsFailed24h === null
+        ? notTracked("Failed sync jobs 24h", "Sync-job query failed — do not read as zero failures")
+        : metric("Failed sync jobs 24h", syncJobsFailed24h),
       notTracked("Duplicate-account confidence score", "Requires privacy-safe IP/session/device aggregation beyond current tables"),
       notTracked("Lock bypass attempts", "No unified lock-bypass event table is tracked yet"),
     ],
