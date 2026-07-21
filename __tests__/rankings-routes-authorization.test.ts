@@ -88,9 +88,15 @@ const {
       ),
     },
     leagueTradeHistory: { findFirst: vi.fn(async () => null) },
+    // The canonical membership predicate consults redraft membership and claimed teams
+    // before/alongside rosters. Neither applies to these fixtures — the roster path is what
+    // grants access here — but they must be present or the helper throws and a legitimate
+    // member 403s, which reads exactly like a real authorization regression.
+    redraftLeagueMember: { findUnique: vi.fn(async () => null) },
     leagueTeam: {
       findMany: vi.fn(async () => []),
       updateMany: vi.fn(async () => ({ count: 0 })),
+      count: vi.fn(async () => 0),
     },
     sportsPlayer: { findMany: vi.fn(async () => []) },
   }

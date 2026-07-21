@@ -13,6 +13,8 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { prisma } from "@/lib/prisma"
+import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
 
 /**
@@ -30,6 +32,7 @@ async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const sportParam = url.searchParams.get("sport")
   const dryRun = url.searchParams.get("dryRun") === "true"
+  const seedPageSizeParam = Number(url.searchParams.get("seedPageSize"))
 
   const sports = sportParam
     ? sportParam
@@ -51,7 +54,35 @@ async function handle(req: NextRequest) {
       })
     }
 
-    const result = await runSportsDataImporter({ sports })
+    const result = await runSportsDataImporter({
+      sports,
+      ...(Number.isFinite(seedPageSizeParam) && seedPageSizeParam > 0 ? { seedPageSize: seedPageSizeParam } : {}),
+    })
+
+    // Durable run record: admin production-health (?view=warehouse) reads teamCodeCounts from
+    // here to flag truncated_fallback growth, and the NEXT run reads seedCursors from here to
+    // resume the paged college source read where this one stopped (no rescanning).
+    await prisma.syncJobRun.create({
+      data: {
+        jobName: "import-players",
+        jobScope: result.sports.join(","),
+        trigger: "cron",
+        status: "completed",
+        rowsWritten: result.imported,
+        rowsSkipped: result.rowsSkippedByGuard,
+        completedAt: new Date(),
+        durationMs: result.durationMs,
+        metadata: toPrismaJsonInput({
+          teamCodeCounts: result.teamCodeCounts,
+          skippedSports: result.skippedSports,
+          staleFallbackApplied: result.staleFallbackApplied,
+          pagedSeeds: result.pagedSeeds,
+          seedCursors: result.seedCursors,
+        }),
+      },
+    }).catch((telemetryError) => {
+      console.error("[cron/import-players] telemetry write failed:", telemetryError)
+    })
 
     return NextResponse.json({
       ok: true,
@@ -59,6 +90,11 @@ async function handle(req: NextRequest) {
       imported: result.imported,
       sports: result.sports,
       staleFallbackApplied: result.staleFallbackApplied,
+      skippedSports: result.skippedSports,
+      teamCodeCounts: result.teamCodeCounts,
+      rowsSkippedByGuard: result.rowsSkippedByGuard,
+      pagedSeeds: result.pagedSeeds,
+      seedCursors: result.seedCursors,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdminOrBearer } from "@/lib/adminAuth"
+import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { runAdminSportsSync } from "@/lib/admin-dashboard/AdminSportsSyncService"
 import { getAdminPerSportDataReliabilityRows } from "@/lib/admin-dashboard/AdminProviderHealthService"
 import {
@@ -83,6 +84,28 @@ export async function POST(request: NextRequest) {
       limit: body.limit,
       dryRun: body.dryRun === true,
     })
+
+    // Writes provider data into canonical sports tables. dryRun is recorded rather
+    // than skipped — knowing an operator probed a sync is itself useful, and the
+    // volume here is low (unlike email previews).
+    await logAdminAudit({
+      adminUserId: resolveAdminAuditActor(gate.user),
+      action: "admin_sports_sync",
+      targetType: "sports_sync",
+      targetId: body.type ?? "all",
+      details: {
+        type: body.type ?? null,
+        sports: body.sports ?? null,
+        season: parseSeason(body.season),
+        leagueId: body.leagueId ?? null,
+        seasonId: body.seasonId ?? null,
+        playerIdCount: Array.isArray(body.playerIds) ? body.playerIds.length : 0,
+        limit: body.limit ?? null,
+        dryRun: body.dryRun === true,
+        succeeded: result.ok,
+      },
+    })
+
     return NextResponse.json(result, { status: result.ok ? 200 : 429 })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

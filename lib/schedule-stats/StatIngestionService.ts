@@ -10,6 +10,16 @@ import { getLeagueScoringRules, getScoringTemplate } from '@/lib/multi-sport/Sco
 import { toSportType, type SportType } from '@/lib/multi-sport/sport-types'
 import { upsertGameSchedule, type GameScheduleInput } from './ScheduleIngestionService'
 
+const UPSERT_CHUNK_SIZE = 100
+
+function chunkRows<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
 export interface PlayerGameStatIngestInput {
   playerId: string
   gameId: string
@@ -119,63 +129,86 @@ export async function ingestSportStats(
       })
     }
 
-    for (const row of playerStats) {
+    // Normalization/fantasy-point math is precomputed, then upserts run in chunked
+    // transactions instead of one awaited round-trip per row — a full NFL week is ~1,500
+    // player rows, and sequential upserts over a pooled connection cannot fit a multi-week
+    // backfill inside a 300s function budget. Same upserts, same semantics, batched.
+    const preparedPlayerStats = playerStats.map((row) => {
       const normalized = normalizeStatPayload(sport, row.statPayload)
-      const fantasyPoints = computeFantasyPoints(normalized as PlayerStatsRecord, rules)
+      return {
+        row,
+        normalized,
+        fantasyPoints: computeFantasyPoints(normalized as PlayerStatsRecord, rules),
+      }
+    })
 
-      await prisma.playerGameStat.upsert({
-        where: {
-          playerId_sportType_gameId: {
-            playerId: row.playerId,
-            sportType: sport,
-            gameId: row.gameId,
-          },
-        },
-        update: {
-          season: input.season,
-          weekOrRound: input.weekOrRound,
-          statPayload: row.statPayload,
-          normalizedStatMap: normalized,
-          fantasyPoints,
-          updatedAt: new Date(),
-        },
-        create: {
-          playerId: row.playerId,
-          sportType: sport,
-          gameId: row.gameId,
-          season: input.season,
-          weekOrRound: input.weekOrRound,
-          statPayload: row.statPayload,
-          normalizedStatMap: normalized,
-          fantasyPoints,
-        },
-      })
+    for (const batch of chunkRows(preparedPlayerStats, UPSERT_CHUNK_SIZE)) {
+      await prisma.$transaction(
+        batch.map(({ row, normalized, fantasyPoints }) =>
+          prisma.playerGameStat.upsert({
+            where: {
+              playerId_sportType_gameId: {
+                playerId: row.playerId,
+                sportType: sport,
+                gameId: row.gameId,
+              },
+            },
+            update: {
+              season: input.season,
+              weekOrRound: input.weekOrRound,
+              statPayload: row.statPayload,
+              normalizedStatMap: normalized,
+              fantasyPoints,
+              updatedAt: new Date(),
+            },
+            create: {
+              playerId: row.playerId,
+              sportType: sport,
+              gameId: row.gameId,
+              season: input.season,
+              weekOrRound: input.weekOrRound,
+              statPayload: row.statPayload,
+              normalizedStatMap: normalized,
+              fantasyPoints,
+            },
+            // RETURNING trimmed to id: callers ignore the row, and selecting every column
+            // breaks against a DB whose table lags schema.prisma (P2022) — which prod's
+            // player_game_stats did until the provider-telemetry migration.
+            select: { id: true },
+          })
+        )
+      )
     }
 
-    for (const row of teamStats) {
-      await prisma.teamGameStat.upsert({
-        where: {
-          sportType_gameId_teamId: {
-            sportType: sport,
-            gameId: row.gameId,
-            teamId: row.teamId,
-          },
-        },
-        update: {
-          season: input.season,
-          weekOrRound: input.weekOrRound,
-          statPayload: row.statPayload,
-          updatedAt: new Date(),
-        },
-        create: {
-          sportType: sport,
-          gameId: row.gameId,
-          teamId: row.teamId,
-          season: input.season,
-          weekOrRound: input.weekOrRound,
-          statPayload: row.statPayload,
-        },
-      })
+    for (const batch of chunkRows(teamStats, UPSERT_CHUNK_SIZE)) {
+      await prisma.$transaction(
+        batch.map((row) =>
+          prisma.teamGameStat.upsert({
+            where: {
+              sportType_gameId_teamId: {
+                sportType: sport,
+                gameId: row.gameId,
+                teamId: row.teamId,
+              },
+            },
+            update: {
+              season: input.season,
+              weekOrRound: input.weekOrRound,
+              statPayload: row.statPayload,
+              updatedAt: new Date(),
+            },
+            create: {
+              sportType: sport,
+              gameId: row.gameId,
+              teamId: row.teamId,
+              season: input.season,
+              weekOrRound: input.weekOrRound,
+              statPayload: row.statPayload,
+            },
+            select: { id: true },
+          })
+        )
+      )
     }
 
     await completeStatIngestionJob(jobId, {

@@ -13,6 +13,18 @@
       "schedule": "0 */6 * * *"
     },
     {
+      "path": "/api/cron/import-season-stats",
+      "schedule": "20 6 * * *"
+    },
+    {
+      "path": "/api/cron/import-player-game-stats",
+      "schedule": "40 6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-player-images",
+      "schedule": "10 5 * * *"
+    },
+    {
       "path": "/api/cron/waivers",
       "schedule": "*/5 * * * *"
     },
@@ -157,8 +169,20 @@
       "schedule": "*/30 * * * *"
     },
     {
+      "path": "/api/cron/draft-tick",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/live-score-tick",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/import-projections",
       "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/legacy-import-drain",
+      "schedule": "*/1 * * * *"
     },
     {
       "path": "/api/brackets/world-cup/cron/sync?job=teams&provider=apifootball",

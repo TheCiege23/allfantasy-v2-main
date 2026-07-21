@@ -13,6 +13,7 @@ import { resolveLineupWorld, type LineupWorld, type LineupWorldDeps } from './wo
 import { buildLineupDCO, type LineupDCO } from './dco'
 import { decideLineupSet, type LineupDecisionDeps } from './decision'
 import { compareLineupParity, type LineupParityResult } from './parity'
+import type { LineupWarehouseFacts } from './warehouseFacts'
 
 export * from './world'
 export * from './dco'
@@ -34,6 +35,8 @@ export interface RunLineupSetInput {
   proposed?: RedraftLineupPlayer[]
   projectionConfidence?: number | null
   scanIncomplete?: boolean
+  /** Optional F2.9/F2.10 warehouse grounding (ADR F2.10) — memo/explainability enrichment only. */
+  warehouse?: LineupWarehouseFacts
 }
 
 export interface RunLineupSetDeps {
@@ -65,6 +68,7 @@ export async function runLineupSetDecision(input: RunLineupSetInput, deps: RunLi
     proposed: input.proposed,
     projectionConfidence: input.projectionConfidence,
     scanIncomplete: input.scanIncomplete,
+    warehouse: input.warehouse,
   })
   const decision = await decideLineupSet(dco, deps.decision)
 

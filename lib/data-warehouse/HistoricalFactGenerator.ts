@@ -10,41 +10,83 @@ import { normalizeSportForWarehouse } from './types'
 
 const ingestion = new WarehouseIngestionService()
 
+export type HistoricalFactGenerationStatus = 'COMPLETED' | 'PARTIAL' | 'MISSING_SOURCE_DATA' | 'FAILED'
+
+export interface GameFactGenerationResult {
+  status: HistoricalFactGenerationStatus
+  playerFacts: number
+  teamFacts: number
+  sourcePlayerGameStats: number
+  sourceTeamGameStats: number
+  warnings: string[]
+}
+
 /**
  * Generate PlayerGameFact and TeamGameFact from existing PlayerGameStat / TeamGameStat.
+ *
+ * Zero source rows is a MISSING_SOURCE_DATA condition, not a quiet success — for months this
+ * returned {playerFacts: 0} truthfully while every layer above aggregated it into a normal
+ * result, so the warehouse UI rendered "no history" as if it were real data.
+ *
+ * Idempotent by scoped regeneration: the fact tables have NO unique key on
+ * (playerId, sport, gameId), so the old per-row `create` silently duplicated facts on every
+ * re-run. Facts are pure derivations of the stat rows, so the week's facts are deleted and
+ * rebuilt in one transaction (delete + createMany — also removes ~1,500 sequential awaited
+ * creates per NFL week).
  */
 export async function generateGameFactsFromExistingStats(
   sport: string,
   season: number,
   weekOrRound: number
-): Promise<{ playerFacts: number; teamFacts: number }> {
+): Promise<GameFactGenerationResult> {
   const sportNorm = normalizeSportForWarehouse(sport)
-  const playerStats = await prisma.playerGameStat.findMany({
-    where: { sportType: sportNorm, season, weekOrRound },
-  })
-  let playerFacts = 0
-  for (const s of playerStats) {
-    const normalized = normalizeStatPayload(sport, (s.normalizedStatMap as Record<string, unknown>) ?? {})
-    await ingestion.ingestPlayerGameFact({
-      playerId: s.playerId,
-      sport: sportNorm,
-      gameId: s.gameId,
-      statPayload: (s.statPayload as Record<string, unknown>) ?? {},
-      normalizedStats: normalized,
-      fantasyPoints: s.fantasyPoints,
-      scoringPeriod: weekOrRound,
-      season,
-      weekOrRound,
-    })
-    playerFacts++
+  const warnings: string[] = []
+
+  // Explicit selects: a bare findMany requests every schema column, and prod's
+  // player_game_stats has drifted behind schema.prisma before — Postgres rejects unknown
+  // columns at parse time, so the bare read threw P2022 even against an empty table.
+  const [playerStats, teamStats] = await Promise.all([
+    prisma.playerGameStat.findMany({
+      where: { sportType: sportNorm, season, weekOrRound },
+      select: { playerId: true, gameId: true, statPayload: true, normalizedStatMap: true, fantasyPoints: true },
+    }),
+    prisma.teamGameStat.findMany({
+      where: { sportType: sportNorm, season, weekOrRound },
+      select: { teamId: true, gameId: true, statPayload: true },
+    }),
+  ])
+
+  if (playerStats.length === 0 && teamStats.length === 0) {
+    return {
+      status: 'MISSING_SOURCE_DATA',
+      playerFacts: 0,
+      teamFacts: 0,
+      sourcePlayerGameStats: 0,
+      sourceTeamGameStats: 0,
+      warnings: [
+        `PlayerGameStat/TeamGameStat contain no source rows for ${sportNorm} season ${season} week ${weekOrRound} — nothing to generate facts from.`,
+      ],
+    }
   }
-  const teamStats = await prisma.teamGameStat.findMany({
-    where: { sportType: sportNorm, season, weekOrRound },
-  })
-  let teamFacts = 0
-  for (const s of teamStats) {
+  if (playerStats.length === 0) {
+    warnings.push(`PlayerGameStat has no source rows for ${sportNorm} season ${season} week ${weekOrRound}.`)
+  }
+
+  const playerFactRows = playerStats.map((s) => ({
+    playerId: s.playerId,
+    sport: sportNorm,
+    gameId: s.gameId,
+    statPayload: (s.statPayload ?? {}) as object,
+    normalizedStats: normalizeStatPayload(sport, (s.normalizedStatMap as Record<string, unknown>) ?? {}) as object,
+    fantasyPoints: s.fantasyPoints,
+    scoringPeriod: weekOrRound,
+    season,
+    weekOrRound,
+  }))
+
+  const teamFactRows = teamStats.map((s) => {
     const payload = (s.statPayload as { points?: number; opponentPoints?: number }) ?? {}
-    await ingestion.ingestTeamGameFact({
+    return {
       teamId: s.teamId,
       sport: sportNorm,
       gameId: s.gameId,
@@ -52,13 +94,27 @@ export async function generateGameFactsFromExistingStats(
       opponentPoints: typeof payload.opponentPoints === 'number' ? payload.opponentPoints : 0,
       result: payload.points != null && payload.opponentPoints != null
         ? (payload.points > payload.opponentPoints ? 'W' : payload.points < payload.opponentPoints ? 'L' : 'T')
-        : undefined,
+        : null,
       season,
       weekOrRound,
-    })
-    teamFacts++
+    }
+  })
+
+  await prisma.$transaction([
+    prisma.playerGameFact.deleteMany({ where: { sport: sportNorm, season, weekOrRound } }),
+    ...(playerFactRows.length > 0 ? [prisma.playerGameFact.createMany({ data: playerFactRows })] : []),
+    prisma.teamGameFact.deleteMany({ where: { sport: sportNorm, season, weekOrRound } }),
+    ...(teamFactRows.length > 0 ? [prisma.teamGameFact.createMany({ data: teamFactRows })] : []),
+  ])
+
+  return {
+    status: warnings.length > 0 ? 'PARTIAL' : 'COMPLETED',
+    playerFacts: playerFactRows.length,
+    teamFacts: teamFactRows.length,
+    sourcePlayerGameStats: playerStats.length,
+    sourceTeamGameStats: teamStats.length,
+    warnings,
   }
-  return { playerFacts, teamFacts }
 }
 
 /**

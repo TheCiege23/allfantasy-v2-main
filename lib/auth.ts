@@ -8,6 +8,7 @@ import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import { linkSocialAccountToAppUser } from "@/lib/auth/SocialAccountLinkingService";
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
@@ -269,6 +270,16 @@ const providers: NextAuthOptions["providers"] = [
             displayName,
             avatarUrl,
           },
+        });
+        // New Sleeper-auth account (create branch only; the `else` below is an
+        // update of an existing account, which must stay silent). The email is a
+        // synthetic non-inbox address — included but clearly labeled by method.
+        // Fire-and-forget.
+        void notifyOwnerOfNewSignup({
+          email: user.email,
+          method: "sleeper",
+          userId: user.id,
+          username: user.username,
         });
       } else {
         const needsUpdate =
@@ -782,6 +793,30 @@ export const authOptions: NextAuthOptions = {
         }
       } catch (claimErr) {
         console.warn("[auth] guest trial claim (signIn event) failed (non-blocking):", claimErr);
+      }
+
+      // Capture a "login" IdentitySignal. Two consumers:
+      //  1. DuplicateManagerRiskService — correlating shared IP/device across accounts.
+      //  2. The admin Command Center login metrics, which previously counted
+      //     AuthSession.createdAt — a column that does not exist, so every login
+      //     card silently rendered 0. IdentitySignal is the real event source.
+      // Only "league_join" was ever recorded before this, so no login was captured
+      // anywhere in the real auth flow.
+      // Deliberately its OWN try/catch: sharing the block above would mean a guest
+      // -claim throw silently skips login capture entirely. IP/UA are HMAC-hashed by
+      // the recorder — raw values are never stored. Best-effort; never blocks sign-in.
+      try {
+        const { headers } = await import("next/headers");
+        const h = await headers();
+        const { recordIdentitySignal } = await import("@/lib/identity/IdentitySignalRecorder");
+        await recordIdentitySignal({
+          userId: user.id,
+          ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+          userAgent: h.get("user-agent"),
+          context: "login",
+        });
+      } catch (signalErr) {
+        console.warn("[auth] identity signal capture (signIn event) failed (non-blocking):", signalErr);
       }
     },
   },

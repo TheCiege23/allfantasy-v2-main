@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
@@ -125,13 +126,19 @@ export async function buildMatchupCenterPayload(params: {
       settings: true,
       leagueVariant: true,
       userId: true,
-      teams: { select: { platformUserId: true } },
     },
   })
   if (!league) return { error: 'League not found', status: 404 }
 
-  const memberIds = new Set(league.teams.map((t) => t.platformUserId).filter(Boolean) as string[])
-  if (league.userId !== params.viewerUserId && !memberIds.has(params.viewerUserId)) {
+  // Membership gate — the ONE canonical predicate (lib/league-access.ts).
+  //
+  // This used to build `memberIds` from `LeagueTeam.platformUserId`, which is `String?` and, more
+  // importantly, covers a different population than `Roster`. Measured against production
+  // 2026-07-20 that gate rejected 98 of 176 real Roster-backed members (55.7%) — a live 403 for
+  // over half the members of this surface. The giveaway was three lines below: the very next query
+  // reads `Roster.platformUserId`, the NOT NULL column, for the same viewer.
+  const membership = await resolveLeagueMembership(params.leagueId, params.viewerUserId)
+  if (!membership.ok) {
     return { error: 'Forbidden', status: 403 }
   }
 

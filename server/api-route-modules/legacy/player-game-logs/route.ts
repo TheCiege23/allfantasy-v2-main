@@ -127,10 +127,12 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/player-game-logs", too
       if (schedRes.ok) {
         const schedData = await schedRes.json()
         if (Array.isArray(schedData)) {
-          const { getAllPlayers } = await import('@/lib/sleeper-client')
-          const allPlayers = await getAllPlayers()
-          const playerInfo = allPlayers[player_id]
-          const playerTeam = playerInfo?.team
+          // Phase 3: canonical read path. This site needs only the player's team, so it uses
+          // the lightweight bulk accessor rather than `getCanonicalPlayerBySleeperId`, which
+          // would hydrate all seven satellites to answer a one-field question.
+          const { getCanonicalPlayersBySleeperIds } = await import('@/lib/canonical/getCanonicalPlayer')
+          const canonical = await getCanonicalPlayersBySleeperIds([player_id])
+          const playerTeam = canonical.get(player_id)?.team
 
           if (playerTeam) {
             for (const game of schedData) {

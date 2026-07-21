@@ -49,7 +49,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ leag
   )
 
   if ('error' in out) {
-    return NextResponse.json({ error: out.error }, { status: out.status })
+    // Do not leak the engine's internal string ("Forbidden", "Roster not found") to the client.
+    // Map to a stable, user-facing message keyed on status; the engine detail stays server-side.
+    const clientError =
+      out.status === 403
+        ? 'You do not have access to this league.'
+        : out.status === 404
+          ? 'League not found.'
+          : 'Unable to load the matchup center.'
+    if (out.status >= 500) console.warn('[matchup-center] engine error', out)
+    return NextResponse.json({ error: clientError }, { status: out.status })
   }
 
   const v = assertValidMatchupPayload(out)

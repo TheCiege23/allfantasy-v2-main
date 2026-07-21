@@ -20,6 +20,7 @@ import {
   type ResolvedLineupInputs,
 } from './canonicalBridge'
 import { buildProductionCanonicalValidatorDep } from './deps'
+import { loadLineupWarehouseFacts, type LineupWarehouseFacts } from './warehouseFacts'
 
 export function shouldRunLineupShadow(
   env: NodeJS.ProcessEnv = process.env,
@@ -72,6 +73,13 @@ export interface LineupShadowDeps {
   loadCanonicalContext?: (leagueId: string, week: number) => Promise<LineupValidationContext | null>
   /** Build the `validateCanonical` dep from a loaded context (injected so tests bypass the real validator). */
   buildCanonicalDep?: (ctx: LineupValidationContext) => (ruleCtx: LineupRuleContext) => RuleVerdict[]
+  /**
+   * F2.9/F2.10 warehouse grounding loader (ADR F2.10) — SHADOW memo enrichment only. Default
+   * reads the warehouse ports; tests inject fixtures. Failure/absence degrades to uncertainty
+   * inside the returned facts; when the loader itself is absent the DCO simply carries no
+   * warehouse block (older behavior).
+   */
+  loadWarehouseFacts?: (args: { leagueId: string; sport: string; userId: string; playerIds: string[] }) => Promise<LineupWarehouseFacts | null>
 }
 
 const defaultShadowDeps: LineupShadowDeps = {
@@ -82,6 +90,7 @@ const defaultShadowDeps: LineupShadowDeps = {
   // Default-ON within shadow mode: the route already gates this whole path behind the shadow flag.
   loadCanonicalContext: (leagueId, week) => loadCanonicalValidatorContext(leagueId, week),
   buildCanonicalDep: (ctx) => buildProductionCanonicalValidatorDep(ctx),
+  loadWarehouseFacts: (args) => loadLineupWarehouseFacts(args),
 }
 
 /**
@@ -112,6 +121,19 @@ export async function runLineupShadow(
     if (!input) {
       emitShadowParity('manager.lineup.set', { shadow: true, ran: false, reason: 'inputs_unavailable', source, warnings, leagueId: args.leagueId })
       return { ran: false, leagueId: args.leagueId, source, warnings, error: 'inputs_unavailable' }
+    }
+    // F2.9/F2.10 warehouse grounding (SHADOW memo enrichment only — deterministic rules never
+    // read it, live behavior unchanged). The loader never throws; a failure arrives as
+    // uncertainty entries inside the facts.
+    const loadWarehouse = deps.loadWarehouseFacts ?? defaultShadowDeps.loadWarehouseFacts
+    if (loadWarehouse) {
+      const warehouse = await loadWarehouse({
+        leagueId: args.leagueId,
+        sport: input.sport,
+        userId: args.userId,
+        playerIds: input.players.map((p) => p.playerId),
+      }).catch(() => null)
+      if (warehouse) input = { ...input, warehouse }
     }
     const memo = args.legacySummary
     const result = await runLineupSetDecision(input, {
