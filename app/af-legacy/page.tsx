@@ -55,6 +55,8 @@ import DataFreshnessBanner from "@/components/DataFreshnessBanner"
 import ConfidenceFreshnessLabel from "@/components/ConfidenceFreshnessLabel"
 import { LegacyDataNotice } from "@/components/legacy/LegacyDataNotice"
 import { mapLegacyAuthError, type LegacyDataStatus } from "@/lib/legacy/dataStatus"
+import { sendProductAnalyticsBeacon } from "@/lib/analytics/client"
+import { LEGACY_HONESTY } from "@/lib/analytics/eventNames"
 import ActionHandoffButtons, { parseAIHandoffs } from "@/components/ActionHandoffButtons"
 import RankChangeDrivers from "@/components/RankChangeDrivers"
 import OverviewLanes from "@/app/af-legacy/components/OverviewLanes"
@@ -902,6 +904,8 @@ function AFLegacyContent() {
   const [importProgress, setImportProgress] = useState(0)
   // Honest data-state banner (partial import, stale refresh, poll failures, auth/link errors).
   const [importNotice, setImportNotice] = useState<LegacyDataStatus | null>(null)
+  // One impression beacon per distinct notice (state+reason), never per status poll.
+  const firedNoticeBeacons = useRef<Set<string>>(new Set())
   const [jobId, setJobId] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState<ProfileStats | null>(null)
@@ -2938,6 +2942,31 @@ function AFLegacyContent() {
       loadAndRun()
     }
   }, [importStatus, username, pendingShareLeague])
+
+  // Honesty impression analytics: exactly one beacon per distinct notice shown. Payloads are
+  // state/reason codes only — no usernames, league names, or provider data.
+  useEffect(() => {
+    if (!importNotice) return
+    const key = `${importNotice.state}:${importNotice.reasonCode ?? ''}`
+    if (firedNoticeBeacons.current.has(key)) return
+    firedNoticeBeacons.current.add(key)
+
+    const eventByState: Record<string, string | undefined> = {
+      auth_required: LEGACY_HONESTY.AUTH_REQUIRED_SHOWN,
+      link_required: LEGACY_HONESTY.LINK_REQUIRED_SHOWN,
+      partial: LEGACY_HONESTY.IMPORT_PARTIAL_SHOWN,
+      failed: LEGACY_HONESTY.IMPORT_FAILED_SHOWN,
+      stale: LEGACY_HONESTY.DATA_STALE_SHOWN,
+    }
+    const event = eventByState[importNotice.state]
+    if (event) {
+      sendProductAnalyticsBeacon(event, {
+        surface: 'af_legacy',
+        platform: 'sleeper',
+        reasonCode: importNotice.reasonCode ?? null,
+      })
+    }
+  }, [importNotice])
 
   // countdown tick
   useEffect(() => {
@@ -6556,6 +6585,12 @@ function AFLegacyContent() {
                       onRetry={
                         importNotice.retryable && username
                           ? () => {
+                              if (loading || importStatus === 'importing') return
+                              sendProductAnalyticsBeacon(LEGACY_HONESTY.RETRY_CLICKED, {
+                                surface: 'af_legacy',
+                                platform: 'sleeper',
+                                reasonCode: importNotice.reasonCode ?? null,
+                              })
                               setImportNotice(null)
                               triggerFreshImport(username)
                             }

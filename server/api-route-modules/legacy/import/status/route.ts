@@ -6,8 +6,6 @@ import {
   importDisplayStateToStatus,
   resolveLegacyImportDisplayState,
 } from '@/lib/legacy/dataStatus';
-import { recordProductEvent } from '@/lib/analytics';
-import { LEGACY_HONESTY } from '@/lib/analytics/eventNames';
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/import/status", tool: "LegacyImportStatus" })(async (request: NextRequest) => {
   const jobId = request.nextUrl.searchParams?.get('job_id');
@@ -84,24 +82,10 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/import/status", tool: "
     errorMessage: job.error,
   });
 
-  if (displayState === 'partial' || displayState === 'failed') {
-    // Honesty telemetry — counts only, never usernames/league names.
-    recordProductEvent(
-      displayState === 'partial'
-        ? LEGACY_HONESTY.IMPORT_PARTIAL_SHOWN
-        : LEGACY_HONESTY.IMPORT_FAILED_SHOWN,
-      {
-        path: '/api/legacy/import/status',
-        meta: {
-          surface: 'import_status',
-          platform: 'sleeper',
-          seasonsCompleted: job.seasonsCompleted,
-          totalSeasons: job.totalSeasons,
-        },
-      },
-    );
-  }
-
+  // NOTE: honesty impression analytics deliberately do NOT fire here — this route is polled
+  // every 3s during an import and re-hit on every page load afterwards, so a server-side event
+  // would duplicate hundreds of times per user. The client (app/af-legacy) beacons the
+  // impression exactly once per job via sendProductAnalyticsBeacon.
   return NextResponse.json({
     job_id: job.id,
     status: job.status,

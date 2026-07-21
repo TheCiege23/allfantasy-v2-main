@@ -35,12 +35,32 @@ export type LegacyDataNoticeProps = {
   className?: string
 }
 
+/** Only https links to external platforms are renderable — `javascript:` or malformed URLs
+ * coming through a status object must never become a clickable href. */
+function safeExternalUrl(url: string | undefined): string | null {
+  if (!url) return null
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' ? parsed.toString() : null
+  } catch {
+    return null
+  }
+}
+
+function formatLastUpdated(iso: string): string | null {
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+}
+
 /**
  * The one shared way Legacy surfaces say "here is what we actually know". Replaces silent
  * empty states, fabricated zeros, and swallowed failures. role/aria follow the state:
  * failures are alerts, processing politely announces.
  */
 export function LegacyDataNotice({ status, compact = false, onRetry, className }: LegacyDataNoticeProps) {
+  const externalUrl = safeExternalUrl(status.externalActionUrl)
+  const lastUpdated = status.lastUpdatedAt ? formatLastUpdated(status.lastUpdatedAt) : null
   return (
     <section
       role={status.state === 'failed' ? 'alert' : 'status'}
@@ -53,19 +73,14 @@ export function LegacyDataNotice({ status, compact = false, onRetry, className }
         <p className={compact ? 'truncate text-white/70' : 'text-white/70'}>{status.message}</p>
       </div>
 
-      {!compact && status.lastUpdatedAt ? (
-        <p className="mt-1 text-xs text-white/50">
-          Last updated{' '}
-          {new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(
-            new Date(status.lastUpdatedAt),
-          )}
-        </p>
+      {!compact && lastUpdated ? (
+        <p className="mt-1 text-xs text-white/50">Last updated {lastUpdated}</p>
       ) : null}
 
       <div className={`flex items-center gap-3 ${compact ? 'mt-1' : 'mt-2'}`}>
-        {status.externalActionRequired && status.externalActionUrl && status.externalActionLabel ? (
+        {status.externalActionRequired && externalUrl && status.externalActionLabel ? (
           <a
-            href={status.externalActionUrl}
+            href={externalUrl}
             target="_blank"
             rel="noreferrer"
             className="text-xs font-medium underline underline-offset-2 hover:opacity-80"

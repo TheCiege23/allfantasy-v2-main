@@ -143,12 +143,15 @@ export const ENGINE = {
  * Payloads must never contain Sleeper usernames, emails, league names, or provider data.
  */
 export const LEGACY_HONESTY = {
-  AUTH_REQUIRED_SHOWN: 'legacy.honesty.auth_required_shown',
-  LINK_REQUIRED_SHOWN: 'legacy.honesty.link_required_shown',
-  IMPORT_PARTIAL_SHOWN: 'legacy.honesty.import_partial_shown',
-  IMPORT_FAILED_SHOWN: 'legacy.honesty.import_failed_shown',
-  DATA_STALE_SHOWN: 'legacy.honesty.data_stale_shown',
-  EXTERNAL_PLATFORM_REDIRECT_CLICKED: 'legacy.honesty.external_platform_redirect_clicked',
-  INTELLIGENCE_LOW_CONFIDENCE_SHOWN: 'legacy.honesty.intelligence_low_confidence_shown',
-  RETRY_CLICKED: 'legacy.honesty.retry_clicked',
+  // `product.` prefix keeps these inside the client beacon's allowlist
+  // (app/api/analytics/beacon) so impressions fire client-side ONCE per notice, never
+  // per status poll.
+  AUTH_REQUIRED_SHOWN: 'product.legacy_honesty.auth_required_shown',
+  LINK_REQUIRED_SHOWN: 'product.legacy_honesty.link_required_shown',
+  IMPORT_PARTIAL_SHOWN: 'product.legacy_honesty.import_partial_shown',
+  IMPORT_FAILED_SHOWN: 'product.legacy_honesty.import_failed_shown',
+  DATA_STALE_SHOWN: 'product.legacy_honesty.data_stale_shown',
+  EXTERNAL_PLATFORM_REDIRECT_CLICKED: 'product.legacy_honesty.external_platform_redirect_clicked',
+  INTELLIGENCE_LOW_CONFIDENCE_SHOWN: 'product.legacy_honesty.intelligence_low_confidence_shown',
+  RETRY_CLICKED: 'product.legacy_honesty.retry_clicked',
 } as const

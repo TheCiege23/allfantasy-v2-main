@@ -76,6 +76,52 @@ describe('LegacyDataNotice', () => {
   })
 })
 
+describe('LegacyDataNotice — URL and timestamp safety', () => {
+  it('never renders a javascript: URL as a link', () => {
+    render(
+      <LegacyDataNotice
+        status={{
+          ...baseStatus,
+          externalActionRequired: true,
+          externalActionLabel: 'Open in Sleeper',
+          externalActionUrl: 'javascript:alert(1)',
+        }}
+      />,
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('never renders an http: (non-https) or malformed URL as a link', () => {
+    const { rerender } = render(
+      <LegacyDataNotice
+        status={{
+          ...baseStatus,
+          externalActionRequired: true,
+          externalActionLabel: 'Open in Sleeper',
+          externalActionUrl: 'http://sleeper.com/x',
+        }}
+      />,
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+    rerender(
+      <LegacyDataNotice
+        status={{
+          ...baseStatus,
+          externalActionRequired: true,
+          externalActionLabel: 'Open in Sleeper',
+          externalActionUrl: 'not a url',
+        }}
+      />,
+    )
+    expect(screen.queryByRole('link')).toBeNull()
+  })
+
+  it('does not throw or render garbage for an invalid lastUpdatedAt', () => {
+    render(<LegacyDataNotice status={{ ...baseStatus, lastUpdatedAt: 'not-a-date' }} />)
+    expect(screen.queryByText(/Last updated/)).toBeNull()
+  })
+})
+
 describe('LegacyUnavailableValue', () => {
   it('does not render zero for unavailable data', () => {
     render(<LegacyUnavailableValue value={null} label="Score unavailable" />)
