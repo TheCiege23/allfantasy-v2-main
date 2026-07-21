@@ -94,6 +94,10 @@ const FILES_KEPT = [
   'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
   // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.
   'app/api/admin/sports/sync/route.ts', 'app/api/admin/fantasy-data/import/route.ts',
+  // Fetched by the admin dashboard UI itself (app/admin/** is NOT excluded and does ship, so
+  // excluding these made the panel render against 404s).
+  'app/api/admin/visitor-analytics/route.ts', 'app/api/admin/api-health/route.ts',
+  'app/api/admin/chimmy/health/route.ts', 'app/api/admin/monetization/checkout-link-mapping/route.ts',
 ]
 
 function getProductionSignals(): number {

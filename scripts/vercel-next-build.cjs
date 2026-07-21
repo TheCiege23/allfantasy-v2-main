@@ -218,6 +218,18 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'admin', 'fantasy-data', 'status', 'route.ts').replace(/\\/g, '/'),
   // Duplicate-manager fraud-hardening verification tool — used from /admin/duplicate-manager-verify.
   path.join('app', 'api', 'admin', 'duplicate-manager-verify', 'route.ts').replace(/\\/g, '/'),
+  // The `app/api/admin` exclusion above is justified as "verified to have zero production
+  // (non-admin) fetch callers". That is true of most of the tree, but NOT of these four: the
+  // admin dashboard UI (app/admin/**, which is NOT excluded and does ship) fetches all of them.
+  // Excluded but rendered = the panel loads and every one of these returns 404, so the cards fall
+  // back to zeros/empty. Verified against production: these returned 404 while kept siblings
+  // (status, ai/audit-logs) correctly returned 401.
+  path.join('app', 'api', 'admin', 'visitor-analytics', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'api-health', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'chimmy', 'health', 'route.ts').replace(/\\/g, '/'),
+  // Also the endpoint the Stripe checkout-link verification step depends on — it has been
+  // recommended as the P0-A verification for days while silently 404ing in production.
+  path.join('app', 'api', 'admin', 'monetization', 'checkout-link-mapping', 'route.ts').replace(/\\/g, '/'),
 ])
 
 function directoryExists(targetPath) {
