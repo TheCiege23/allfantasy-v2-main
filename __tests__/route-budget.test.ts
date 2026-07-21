@@ -91,6 +91,7 @@ const FILES_KEPT = [
   'app/api/cron/sync-player-images/route.ts',
   'app/api/cron/legacy-import-drain/route.ts', 'app/api/cron/import-season-stats/route.ts',
   'app/api/cron/import-player-game-stats/route.ts',
+  'app/api/cron/import-nfl-team-defense/route.ts',
   'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
   // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.
