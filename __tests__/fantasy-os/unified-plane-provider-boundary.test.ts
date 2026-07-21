@@ -26,9 +26,25 @@ function walk(dir: string): string[] {
   return out
 }
 
+/**
+ * Walks a tree this suite is supposed to be policing, and fails if that tree turned up
+ * empty.
+ *
+ * Every guard below concludes "no violations found" from an empty walk, which is exactly
+ * what a renamed or moved directory also produces — so without this the whole file would
+ * keep passing while policing nothing. These are architecture boundaries; they have to
+ * fail closed.
+ */
+function filesUnder(relDir: string): string[] {
+  const files = walk(path.join(root, relDir))
+  expect(files.length, `${relDir} contains no scannable source files — this boundary guard is inspecting nothing, so its clean result is meaningless. Did the directory move?`)
+    .toBeGreaterThan(0)
+  return files
+}
+
 function scan(relDir: string): { file: string; line: string }[] {
   const violations: { file: string; line: string }[] = []
-  for (const file of walk(path.join(root, relDir))) {
+  for (const file of filesUnder(relDir)) {
     const src = fs.readFileSync(file, 'utf8')
     for (const line of src.split('\n')) {
       if (line.trim().startsWith('import') && FORBIDDEN_IMPORT.test(line)) violations.push({ file: path.relative(root, file), line: line.trim() })
@@ -52,10 +68,12 @@ describe('5H — certified sports-runtime integration services are provider-agno
   it('no lib/fantasy-os/sports-runtime service imports a provider client or hits a provider URL', () => {
     const importV = scan('lib/fantasy-os/sports-runtime')
     expect(importV, JSON.stringify(importV)).toEqual([])
-    for (const file of walk(path.join(root, 'lib/fantasy-os/sports-runtime'))) {
-      const src = fs.readFileSync(file, 'utf8')
-      expect(FORBIDDEN_URL.test(src), `${path.relative(root, file)} hits a provider URL`).toBe(false)
-    }
+    // Collect every offender rather than asserting per file — aborting on the first
+    // means one run only ever names one bypass, even when several exist.
+    const urlOffenders = filesUnder('lib/fantasy-os/sports-runtime')
+      .filter((file) => FORBIDDEN_URL.test(fs.readFileSync(file, 'utf8')))
+      .map((file) => path.relative(root, file))
+    expect(urlOffenders, `sports-runtime modules hitting a provider URL directly: ${urlOffenders.join(', ')}`).toEqual([])
   })
 })
 
@@ -64,7 +82,7 @@ describe('5H-b — provider access is confined to gateway adapters (adapter puri
   // now live ONLY in lib/sports-data-gateway/providers/*. A runtime module hitting a provider URL is a bypass.
   it('NO gateway runtime module contains a provider URL — all provider access is in providers/*', () => {
     const offenders: string[] = []
-    for (const file of walk(path.join(root, 'lib/sports-data-gateway/runtime'))) {
+    for (const file of filesUnder('lib/sports-data-gateway/runtime')) {
       if (FORBIDDEN_URL.test(fs.readFileSync(file, 'utf8'))) offenders.push(path.relative(root, file))
     }
     expect(offenders, `runtime modules with a provider URL: ${offenders.join(', ')}`).toEqual([])
@@ -118,16 +136,22 @@ describe('5H-b2 — canonical position governance (no NEW competing broad-collap
       return out
     }
     const offenders: string[] = []
+    let scanned = 0
     for (const dir of ['lib', 'app']) {
       for (const file of srcWalk(path.join(root, dir))) {
+        scanned += 1
         const rel = path.relative(root, file).split(path.sep).join('/')
         if (rel.startsWith('lib/sports-data-gateway/canonical/')) continue
         if (ALLOWLIST.has(rel.split('/').join(path.sep))) continue
         if (COLLAPSE_SIGNATURE.test(fs.readFileSync(file, 'utf8'))) offenders.push(rel)
       }
     }
+    // `srcWalk` returns [] for a missing directory, so an empty offender list is also what
+    // a broken scan produces. Require the scan to have actually happened.
+    expect(scanned, `only scanned ${scanned} files under lib/ + app/ — the walk is broken, so "no offenders" proves nothing`)
+      .toBeGreaterThan(500)
     expect(offenders, `NEW competing position-collapse map(s) — route through canonical/canonicalPosition.ts or add a documented allowlist reason: ${offenders.join(', ')}`).toEqual([])
-  })
+  }, 120_000) // whole-repo scan; the 30s default times out on a cold/loaded machine
 
   it('the governed canonical position service exists and exposes the sport-isolation guard', () => {
     const src = fs.readFileSync(path.join(root, 'lib/sports-data-gateway/canonical/canonicalPosition.ts'), 'utf8')

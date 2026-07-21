@@ -1,7 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from "next/server";
-import { consumeRateLimit, getClientIp } from "@/lib/rate-limit";
 import { trackLegacyToolUsage } from "@/lib/analytics-server";
+import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperIdentity";
 import { getDecisionLogsForCoach, getDecisionSummary } from "@/lib/decision-log";
 import { getCachedDNA, formatDNAForPrompt } from "@/lib/manager-dna";
 
@@ -88,37 +88,20 @@ function compactRankPreview(preview: any) {
 export const POST = withApiUsage({ endpoint: "/api/legacy/ai-coach", tool: "LegacyAiCoach" })(async (request: NextRequest) => {
   const body = (await request.json().catch(() => null)) as CoachInput | null;
 
-  if (!body?.sleeper_username) {
-    return NextResponse.json({ error: "Missing sleeper_username" }, { status: 400 });
-  }
-
-  const sleeper_username = String(body.sleeper_username).trim();
-  if (!sleeper_username) {
-    return NextResponse.json({ error: "Missing sleeper_username" }, { status: 400 });
-  }
-
-  const ip = getClientIp(request);
-  const rl = consumeRateLimit({
-    scope: "legacy",
-    action: "ai_coach",
-    sleeperUsername: sleeper_username,
-    ip,
-    maxRequests: 3,
-    windowMs: 60_000,
-    includeIpInKey: false,
+  /*
+   * Replaces a limiter keyed on the CALLER-SUPPLIED username with `includeIpInKey: false`,
+   * so rotating the username bought unlimited budget on an endpoint that calls a model.
+   * The shared gate keys on the authenticated actor and folds in the IP.
+   */
+  const gate = await requireLegacySleeperIdentity(request, {
+    requestedUsername: String(body?.sleeper_username || "").trim() || null,
+    rateLimit: { action: "ai_coach", maxRequests: 3, windowMs: 60_000 },
   });
+  if (!gate.ok) return gate.response;
+  const sleeper_username = gate.identity.sleeperUsername;
 
-  if (!rl.success) {
-    return NextResponse.json(
-      { error: "Rate limit exceeded.", retryAfterSec: rl.retryAfterSec, remaining: rl.remaining },
-      {
-        status: 429,
-        headers: {
-          "Retry-After": String(rl.retryAfterSec || 60),
-          "X-RateLimit-Remaining": String(rl.remaining ?? 0),
-        },
-      }
-    );
+  if (!body) {
+    return NextResponse.json({ error: "Missing request body" }, { status: 400 });
   }
 
   const apiKey = (process.env.OPENAI_API_KEY || "").trim();
@@ -272,7 +255,6 @@ Always respond with valid JSON only.`,
       {
         error: "OpenAI request failed (network)",
         details: String(e?.message || e || "").slice(0, 500),
-        rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
       },
       { status: 500 }
     );
@@ -293,7 +275,6 @@ Always respond with valid JSON only.`,
         error: "OpenAI request failed",
         status: resp.status,
         details: errText.slice(0, 500),
-        rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
       },
       { status: 500 }
     );
@@ -316,6 +297,5 @@ Always respond with valid JSON only.`,
   return NextResponse.json({
     ok: true,
     coach,
-    rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
   });
 })

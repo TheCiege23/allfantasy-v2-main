@@ -1,0 +1,915 @@
+/*
+ * League Command Center — scoped design system.
+ *
+ * Everything is namespaced under `.af-cc` so these tokens can never collide
+ * with the app's global theme, the landing page's `.nocturne` scope, or the
+ * dashboard's `.nocturne-dash` scope.
+ *
+ * This is the SAME Nocturne palette the dashboard and landing already ship
+ * (`#9184d9` accent, the `#9397ab → #292b31` neutral ramp, `#e9e9ed` text) —
+ * only the ground colors differ, because the Command Center sits one layer
+ * deeper than the dashboard and the design handoff specifies a darker base.
+ * Deliberately NOT a second design system.
+ *
+ * Dark-theme only by design, matching the handoff.
+ */
+
+.af-cc {
+  /* ── Ground ──────────────────────────────────────────────────────── */
+  --cc-bg: #12131c;
+  --cc-panel: #1c1e2b;
+  --cc-panel-raised: #21232e;
+  --cc-border: #292b31;
+  --cc-border-control: #3f424d;
+
+  /* ── Brand (personal / manager content) ──────────────────────────── */
+  --cc-brand: #9184d9;
+  --cc-brand-bright: #b5abfc;
+  --cc-brand-pale: #d2cefd;
+  --cc-brand-deep: #423a6a;
+  --cc-brand-wash: rgba(145, 132, 217, 0.15);
+  --cc-brand-edge: rgba(145, 132, 217, 0.35);
+
+  /*
+   * Commissioner-operations accent. Gold, never red — red is reserved
+   * exclusively for confirmed critical states, so an ops section must not
+   * read as an emergency just for existing.
+   */
+  --cc-ops: #f0c040;
+  --cc-ops-wash: rgba(240, 192, 64, 0.12);
+  --cc-ops-edge: rgba(240, 192, 64, 0.32);
+
+  /* ── Semantic ────────────────────────────────────────────────────── */
+  --cc-good: #7ee081;
+  --cc-bad: #e0785a;
+  --cc-info: #6fc2c9;
+  --cc-alt: #d979b5;
+
+  /* ── Text ramp ───────────────────────────────────────────────────── */
+  --cc-text: #e9e9ed;
+  --cc-text-2: #c7cadb;
+  --cc-text-3: #9397ab;
+  --cc-text-4: #75798c;
+  --cc-text-5: #595d6c;
+
+  /* ── Position colors (shared with the draft room) ────────────────── */
+  --cc-pos-qb: #e0785a;
+  --cc-pos-rb: #7ee081;
+  --cc-pos-wr: #6fc2c9;
+  --cc-pos-te: #f0c040;
+  --cc-pos-k: #d979b5;
+  --cc-pos-def: #9397ab;
+  --cc-pos-flex: #b5abfc;
+
+  /* ── Shape ───────────────────────────────────────────────────────── */
+  --cc-r-sm: 6px;
+  --cc-r-md: 9px;
+  --cc-r-lg: 14px;
+  --cc-r-pill: 999px;
+
+  background: var(--cc-bg);
+  color: var(--cc-text);
+  font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  min-height: 100vh;
+}
+
+.af-cc *,
+.af-cc *::before,
+.af-cc *::after {
+  box-sizing: border-box;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────── */
+
+.af-cc__body {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 20px 28px;
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.af-cc__rail {
+  position: sticky;
+  top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.af-cc__main {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 1080px) {
+  .af-cc__body {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 16px;
+  }
+  .af-cc__rail {
+    position: static;
+  }
+}
+
+/* ── Hero ──────────────────────────────────────────────────────────── */
+
+.af-cc__hero {
+  position: relative;
+  min-height: 180px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #2b2741 0%, #1c1e2b 60%, #12131c 100%);
+}
+
+.af-cc__hero-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(600px 300px at 85% -20%, rgba(145, 132, 217, 0.35), transparent 60%);
+  pointer-events: none;
+}
+
+.af-cc__hero-inner {
+  position: relative;
+  z-index: 2;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 28px;
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+}
+
+.af-cc__hero-logo {
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  flex: none;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  background: var(--cc-brand-deep);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 800;
+  color: var(--cc-brand-pale);
+}
+
+.af-cc__hero-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.af-cc__hero-title {
+  font-size: 28px;
+  font-weight: 800;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.af-cc__hero-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12.5px;
+  color: var(--cc-text-2);
+  margin-top: 6px;
+}
+
+.af-cc__hero-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+@media (max-width: 700px) {
+  .af-cc__hero-inner {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 20px 16px;
+  }
+  .af-cc__hero-title {
+    font-size: 22px;
+  }
+}
+
+/* ── Panels ────────────────────────────────────────────────────────── */
+
+.af-cc-panel {
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-r-lg);
+  padding: 20px;
+}
+
+.af-cc-panel--tight {
+  padding: 14px;
+}
+
+.af-cc-panel__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-text-3);
+  margin: 0 0 14px;
+}
+
+.af-cc-panel__subtitle {
+  font-size: 11.5px;
+  color: var(--cc-text-4);
+  margin: -8px 0 12px;
+}
+
+/* ── Layer sections (the three-layer rule, made visible) ───────────── */
+
+.af-cc-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-cc-layer__head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.af-cc-layer__label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.af-cc-layer--personal .af-cc-layer__label {
+  color: var(--cc-brand-bright);
+}
+
+.af-cc-layer--shared .af-cc-layer__label {
+  color: var(--cc-text-3);
+}
+
+/*
+ * Commissioner operations get a distinct gold treatment and a visible left
+ * edge, so an ops block is never mistaken for personal content — and, just as
+ * importantly, so it reads as an ADDITION to the page rather than a
+ * replacement of it.
+ */
+.af-cc-layer--commissioner {
+  border-left: 3px solid var(--cc-ops);
+  border-radius: 0 var(--cc-r-lg) var(--cc-r-lg) 0;
+  padding-left: 16px;
+  background: linear-gradient(90deg, var(--cc-ops-wash), transparent 55%);
+}
+
+.af-cc-layer--commissioner .af-cc-layer__label {
+  color: var(--cc-ops);
+}
+
+.af-cc-layer__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--cc-border);
+  min-width: 20px;
+}
+
+/* ── Badges ────────────────────────────────────────────────────────── */
+
+.af-cc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: var(--cc-r-sm);
+  white-space: nowrap;
+}
+
+.af-cc-badge--brand {
+  color: var(--cc-brand-bright);
+  background: var(--cc-brand-wash);
+  border: 1px solid var(--cc-brand-edge);
+}
+
+.af-cc-badge--neutral {
+  color: var(--cc-text-3);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.af-cc-badge--ops {
+  color: var(--cc-ops);
+  background: var(--cc-ops-wash);
+  border: 1px solid var(--cc-ops-edge);
+}
+
+.af-cc-badge--good {
+  color: var(--cc-good);
+  background: rgba(126, 224, 129, 0.12);
+}
+
+.af-cc-badge--warn {
+  color: var(--cc-ops);
+  background: var(--cc-ops-wash);
+}
+
+.af-cc-badge--bad {
+  color: var(--cc-bad);
+  background: rgba(224, 120, 90, 0.12);
+}
+
+/* ── Nav ───────────────────────────────────────────────────────────── */
+
+.af-cc-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-cc-nav__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--cc-r-md);
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  background: transparent;
+  color: var(--cc-text-3);
+  text-decoration: none;
+  width: 100%;
+}
+
+.af-cc-nav__item:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--cc-text-2);
+}
+
+.af-cc-nav__item[aria-current="page"] {
+  background: var(--cc-border);
+  color: var(--cc-text);
+}
+
+.af-cc-nav__item i {
+  font-size: 15px;
+  flex: none;
+}
+
+.af-cc-nav__soon {
+  margin-left: auto;
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--cc-text-5);
+  text-transform: uppercase;
+}
+
+/* ── Data trust strip ──────────────────────────────────────────────── */
+
+.af-cc-trust {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 11.5px;
+  color: var(--cc-text-4);
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-r-md);
+  padding: 8px 14px;
+}
+
+.af-cc-trust__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+/* ── Key/value rows ────────────────────────────────────────────────── */
+
+.af-cc-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  font-size: 12px;
+}
+
+.af-cc-kv__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.af-cc-kv__k {
+  color: var(--cc-text-4);
+}
+
+.af-cc-kv__v {
+  font-weight: 600;
+  text-align: right;
+}
+
+/* ── Capability action ─────────────────────────────────────────────── */
+
+.af-cc-cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--cc-text-4);
+}
+
+.af-cc-cap i {
+  font-size: 12px;
+}
+
+.af-cc-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 13px;
+  border-radius: var(--cc-r-md);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+  border: 1px solid var(--cc-border-control);
+  background: transparent;
+  color: var(--cc-text-2);
+}
+
+.af-cc-action:hover {
+  border-color: var(--cc-brand);
+  color: var(--cc-text);
+}
+
+.af-cc-action--primary {
+  background: var(--cc-brand);
+  border-color: var(--cc-brand);
+  color: #fff;
+}
+
+.af-cc-action--primary:hover {
+  background: #a094e4;
+  color: #fff;
+}
+
+.af-cc-action--ops {
+  border-color: var(--cc-ops-edge);
+  color: var(--cc-ops);
+  background: var(--cc-ops-wash);
+}
+
+.af-cc-action--ops:hover {
+  border-color: var(--cc-ops);
+  color: var(--cc-ops);
+}
+
+.af-cc-action[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Entitlement gate ──────────────────────────────────────────────── */
+
+.af-cc-gate {
+  position: relative;
+  border-radius: var(--cc-r-lg);
+  overflow: hidden;
+}
+
+.af-cc-gate__preview {
+  filter: blur(6px);
+  opacity: 0.45;
+  pointer-events: none;
+  user-select: none;
+}
+
+.af-cc-gate__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  text-align: center;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(18, 19, 28, 0.55), rgba(18, 19, 28, 0.85));
+}
+
+.af-cc-gate__title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--cc-text);
+}
+
+.af-cc-gate__body {
+  font-size: 11.5px;
+  color: var(--cc-text-3);
+  max-width: 320px;
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ── Empty / not-built states ──────────────────────────────────────── */
+
+.af-cc-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  padding: 40px 24px;
+  color: var(--cc-text-4);
+}
+
+.af-cc-empty i {
+  font-size: 28px;
+  color: var(--cc-text-5);
+}
+
+.af-cc-empty__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--cc-text-2);
+}
+
+.af-cc-empty__body {
+  font-size: 12px;
+  max-width: 420px;
+  line-height: 1.55;
+  margin: 0;
+}
+
+/* ── Decision OS footer ────────────────────────────────────────────── */
+
+.af-cc-dos {
+  background: var(--cc-panel);
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-r-lg);
+  padding: 18px 20px;
+}
+
+.af-cc-dos__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.af-cc-dos__title {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cc-text-3);
+}
+
+.af-cc-dos__chips {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.af-cc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: var(--cc-r-pill);
+  border: 1px solid var(--cc-border-control);
+  background: transparent;
+  color: var(--cc-text-3);
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.af-cc-chip:hover {
+  border-color: var(--cc-brand);
+  color: var(--cc-brand-bright);
+}
+
+/* ── Utility ───────────────────────────────────────────────────────── */
+
+.af-cc-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.af-cc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-cc-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.af-cc-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+@media (max-width: 860px) {
+  .af-cc-grid-2,
+  .af-cc-grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.af-cc-muted {
+  color: var(--cc-text-4);
+}
+
+.af-cc-num {
+  font-variant-numeric: tabular-nums;
+}
+
+.af-cc-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Hero week card ────────────────────────────────────────────────────────── */
+
+.af-cc__hero-week {
+  flex: none;
+  align-self: flex-start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  padding: 9px 14px;
+  border: 1px solid var(--cc-border-control);
+  border-radius: var(--cc-r-lg);
+  background: rgba(28, 30, 43, 0.6);
+  backdrop-filter: blur(6px);
+  text-align: right;
+}
+
+.af-cc__hero-week-eyebrow {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cc-text-4);
+}
+
+.af-cc__hero-week-value {
+  font-size: 17px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--cc-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-cc__hero-week-season {
+  font-size: 11px;
+  color: var(--cc-text-3);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 700px) {
+  .af-cc__hero-week {
+    align-self: stretch;
+    align-items: flex-start;
+    text-align: left;
+  }
+}
+
+/* ── League Mission Control ────────────────────────────────────────────────── */
+
+.af-cc-mc {
+  margin: 0 0 18px;
+}
+
+.af-cc-mc__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0 0 10px;
+}
+
+.af-cc-mc__title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--cc-text-3);
+}
+
+.af-cc-mc__hint {
+  font-size: 11.5px;
+  color: var(--cc-text-4);
+}
+
+.af-cc-mc__grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.af-cc-mc__tile {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid var(--cc-border);
+  border-radius: var(--cc-r-lg);
+  background: var(--cc-panel);
+  text-decoration: none;
+  color: inherit;
+  min-width: 0;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+a.af-cc-mc__tile:hover,
+a.af-cc-mc__tile:focus-visible {
+  border-color: var(--cc-brand-edge);
+  background: var(--cc-panel-raised);
+}
+
+/*
+ * A withheld tile is visually distinct from a populated one — dashed edge, no
+ * hover promise of depth. "We are not measuring this" must not read as a normal
+ * card that happens to be quiet.
+ */
+.af-cc-mc__tile--withheld {
+  border-style: dashed;
+  background: transparent;
+}
+
+.af-cc-mc__icon {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--cc-r-pill);
+  border: 1px solid currentColor;
+  background: rgba(255, 255, 255, 0.03);
+  font-size: 15px;
+}
+
+.af-cc-mc__body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.af-cc-mc__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--cc-text-4);
+}
+
+.af-cc-mc__value {
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.af-cc-mc__detail {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--cc-text-3);
+  overflow-wrap: anywhere;
+}
+
+.af-cc-mc__caret {
+  flex: none;
+  align-self: center;
+  font-size: 13px;
+  color: var(--cc-text-5);
+}
+
+.af-cc-coverage {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--cc-text-4);
+  font-variant-numeric: tabular-nums;
+  cursor: help;
+}
+
+@media (max-width: 1280px) {
+  .af-cc-mc__grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 860px) {
+  .af-cc-mc__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .af-cc-mc__grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-cc *,
+  .af-cc *::before,
+  .af-cc *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ── Dual-role switcher (hero) ─────────────────────────────────────────────
+   My Team ⇄ Commissioner HQ. Commissioner-only; the active segment takes the
+   personal (brand) or commissioner (ops/gold) accent so the current mode is
+   unmistakable without relying on colour alone (the icon + label also change). */
+.af-cc-roleswitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--cc-border);
+  border-radius: 999px;
+  background: rgba(28, 30, 43, 0.6);
+  backdrop-filter: blur(6px);
+}
+.af-cc-roleswitch__seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--cc-text-4);
+  text-decoration: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.af-cc-roleswitch__seg:hover {
+  color: var(--cc-text-2);
+}
+.af-cc-roleswitch__seg[data-active='true'] {
+  background: var(--cc-panel);
+  color: var(--cc-text);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.af-cc-roleswitch__seg:first-child[data-active='true'] {
+  color: var(--cc-brand-bright);
+}
+.af-cc-roleswitch__seg:last-child[data-active='true'] {
+  color: var(--cc-ops);
+}
+.af-cc-roleswitch__seg:focus-visible {
+  outline: 2px solid var(--cc-brand-bright);
+  outline-offset: 2px;
+}

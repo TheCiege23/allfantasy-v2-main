@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getLeagueInfo, getLeagueRosters, getLeagueUsers, getNflState } from '@/lib/sleeper-client'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 const openai = getOpenAIRouteClient()
 
@@ -258,9 +259,16 @@ function determineStatus(
 export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/playoff-forecast", tool: "LegacyRankingsPlayoffForecast" })(async (request: NextRequest) => {
   try {
     const body = await request.json()
-    const { sleeper_username, league_id, forecast_year, forecast_type = 'traditional' } = body
+    const { league_id, forecast_year, forecast_type = 'traditional' } = body
 
-    if (!sleeper_username || !league_id) {
+    const gate = await requireLegacySleeperIdentity(request, {
+      requestedUsername: String(body?.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'playoff_forecast', maxRequests: 10, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeper_username = gate.identity.sleeperUsername
+
+    if (!league_id) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 

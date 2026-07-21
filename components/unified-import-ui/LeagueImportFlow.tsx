@@ -12,6 +12,7 @@ import {
   submitImportCreation,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
 import type { ImportProvider } from '@/lib/league-import/types'
+import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import type { LegacyPlatformTab } from '@/lib/import/importSearchParams'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useLegacySleeperImport } from '@/hooks/useLegacySleeperImport'
@@ -102,16 +103,21 @@ export function LeagueImportFlow({
     }
   }, [sleeperPhase, sleeperUsername])
 
+  // Availability MUST come from the same source the provider tabs use
+  // (isImportProviderAvailable → provider-ui-config), or this panel drifts back
+  // into claiming "Enabled" for a provider whose own tab says "coming soon".
+  // That mismatch — panel says ENABLED, tab says coming soon — is exactly what a
+  // real user hit on Fantrax/MFL. Deriving from one source makes it impossible.
   const commissionerSupport = useMemo(
     () =>
       ({
-        sleeper: { status: 'verified' as const, detail: t('import.provider.sleeper.detail') },
-        espn: { status: 'verified' as const, detail: t('import.provider.espn.detail') },
-        yahoo: { status: 'verified' as const, detail: t('import.provider.yahoo.detail') },
-        fantrax: { status: 'verified' as const, detail: t('import.provider.fantrax.detail') },
-        mfl: { status: 'verified' as const, detail: t('import.provider.mfl.detail') },
-        fleaflicker: { status: 'verified' as const, detail: t('import.provider.fleaflicker.detail') },
-      }) satisfies Record<ImportProvider, { status: 'verified' | 'blocked'; detail: string }>,
+        sleeper: { available: isImportProviderAvailable('sleeper'), detail: t('import.provider.sleeper.detail') },
+        espn: { available: isImportProviderAvailable('espn'), detail: t('import.provider.espn.detail') },
+        yahoo: { available: isImportProviderAvailable('yahoo'), detail: t('import.provider.yahoo.detail') },
+        fantrax: { available: isImportProviderAvailable('fantrax'), detail: t('import.provider.fantrax.detail') },
+        mfl: { available: isImportProviderAvailable('mfl'), detail: t('import.provider.mfl.detail') },
+        fleaflicker: { available: isImportProviderAvailable('fleaflicker'), detail: t('import.provider.fleaflicker.detail') },
+      }) satisfies Record<ImportProvider, { available: boolean; detail: string }>,
     [t]
   )
 
@@ -535,15 +541,21 @@ export function LeagueImportFlow({
                   <div
                     key={provider}
                     className={`rounded-xl border px-3 py-3 text-left ${
-                      support.status === 'verified'
+                      support.available
                         ? 'border-emerald-500/20 bg-emerald-500/[0.08]'
                         : 'border-amber-500/20 bg-amber-500/[0.08]'
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="text-sm font-semibold capitalize text-white">{provider}</span>
-                      <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
-                        {support.status === 'verified' ? t('import.status.enabled') : t('import.status.blocked')}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                          support.available
+                            ? 'bg-emerald-400/20 text-emerald-200'
+                            : 'bg-amber-400/20 text-amber-200'
+                        }`}
+                      >
+                        {support.available ? t('import.status.enabled') : t('import.status.comingSoon')}
                       </span>
                     </div>
                     <p className="mt-2 text-[12px] leading-5 text-white/65">{support.detail}</p>

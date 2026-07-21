@@ -39,6 +39,26 @@
       }
     },
     {
+      "name": "next-dev-myteam",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "node@20",
+        "node_modules/next/dist/bin/next",
+        "dev",
+        "-p",
+        "3100",
+        "--hostname",
+        "127.0.0.1"
+      ],
+      "port": 3100,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-myteam-3100",
+        "NEXTAUTH_URL": "http://localhost:3100",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
       "name": "prisma-studio",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["prisma", "studio"],

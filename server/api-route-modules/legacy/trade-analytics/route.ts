@@ -4,6 +4,7 @@ import { computeDualModeTradeDelta, UserTrade, ValuationMode } from '@/lib/hybri
 import { computeReportCard } from '@/lib/trade-engine/report-card-engine'
 import { isUserParty } from '@/lib/user-matching'
 import { logUserEventByUsername } from '@/lib/user-events'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 interface TradeAnalyticsRequest {
   league_id: string
@@ -72,7 +73,14 @@ function adaptTradeForDualMode(
 export const POST = withApiUsage({ endpoint: "/api/legacy/trade-analytics", tool: "LegacyTradeAnalytics" })(async (req: NextRequest) => {
   try {
     const body: TradeAnalyticsRequest = await req.json()
-    const { league_id, sleeper_username, sleeper_user_id, trades, managers } = body
+    const { league_id, sleeper_user_id, trades, managers } = body
+
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: String(body.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'trade_analytics', maxRequests: 15, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeper_username = gate.identity.sleeperUsername
 
     if (!league_id || !trades || trades.length === 0) {
       return NextResponse.json({ error: 'league_id and trades are required' }, { status: 400 })

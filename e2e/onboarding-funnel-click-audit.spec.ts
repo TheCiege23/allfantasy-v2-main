@@ -381,12 +381,14 @@ test.describe("@activation onboarding funnel click audit", () => {
       elements.map((el) => (el as HTMLAnchorElement).getAttribute("href") || "")
     )
     expect(hrefs.length).toBeGreaterThan(0)
-    for (const href of hrefs) {
-      expect(href).toMatch(/^\/(dashboard|feed|onboarding\/funnel|leagues|chimmy|creators|app)(\/.*)?$/)
-      expect(href).not.toContain("undefined")
-      expect(href).not.toContain("null")
-      expect(href).not.toBe("#")
-    }
+    // Collect every bad href before asserting. Asserting inside the loop aborts on the
+    // first one, so a run only ever reveals a single broken nudge link even when several
+    // are broken — you fix, re-run, discover the next.
+    const ALLOWED = /^\/(dashboard|feed|onboarding\/funnel|leagues|chimmy|creators|app)(\/.*)?$/
+    const badHrefs = hrefs.filter((href) =>
+      !ALLOWED.test(href) || href.includes("undefined") || href.includes("null") || href === "#"
+    )
+    expect(badHrefs, `retention nudge links with unroutable hrefs: ${badHrefs.join(", ")}`).toEqual([])
 
     await page.getByTestId("retention-nudge-link-recap_weekly").click()
     await page.getByTestId("retention-nudge-link-reminder_onboarding").click()

@@ -118,7 +118,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
         {variant === 'dashboard' ? (
           <Link
             href="/af-rankings"
-            className="shrink-0 text-xs font-semibold text-cyan-300/90 hover:text-cyan-200"
+            className="shrink-0 text-xs font-semibold text-violet-300/90 hover:text-violet-200"
           >
             Full rankings page →
           </Link>
@@ -154,7 +154,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
                         setImportInputs((inputs) => ({ ...inputs, [providerId]: e.target.value }))
                       }
                       placeholder="Sleeper username"
-                      className="w-full rounded border border-white/10 bg-white/10 px-2 py-1 text-sm text-white placeholder:text-white/30 focus:border-cyan-500/50 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+                      className="w-full rounded border border-white/10 bg-white/10 px-2 py-1 text-sm text-white placeholder:text-white/30 focus:border-violet-500/50 focus:outline-none focus:ring-1 focus:ring-violet-500/30"
                       disabled={isDisabled}
                     />
                     {importError[providerId] && (
@@ -164,7 +164,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
                       type="button"
                       onClick={() => void handleLegacyProviderImport(providerId)}
                       disabled={isDisabled || !importInputs[providerId]?.trim()}
-                      className="mt-2 w-full rounded bg-gradient-to-r from-cyan-600 to-purple-600 py-2 text-xs font-bold text-white disabled:opacity-40"
+                      className="mt-2 w-full rounded bg-gradient-to-r from-violet-600 to-purple-600 py-2 text-xs font-bold text-white disabled:opacity-40"
                     >
                       {importing[providerId] ? 'Importing…' : `Import from ${name}`}
                     </button>
@@ -180,7 +180,7 @@ export function LegacyRankingsImportPanel({ onImportSuccess, variant = 'default'
                     ) : null}
                     <Link
                       href="/import?returnTo=/dashboard"
-                      className="mt-2 flex w-full items-center justify-center rounded bg-gradient-to-r from-cyan-600 to-purple-600 py-2 text-xs font-bold text-white hover:opacity-95"
+                      className="mt-2 flex w-full items-center justify-center rounded bg-gradient-to-r from-violet-600 to-purple-600 py-2 text-xs font-bold text-white hover:opacity-95"
                     >
                       Open import tool →
                     </Link>

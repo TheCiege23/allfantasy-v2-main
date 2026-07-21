@@ -142,7 +142,7 @@ export function BillingSettingsSection() {
         ) : null}
         <Link
           href="/pricing"
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-2 text-sm font-bold text-[#030b14] transition hover:from-cyan-400 hover:to-sky-400"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 px-4 py-2 text-sm font-bold text-[#0b0714] transition hover:from-violet-400 hover:to-purple-400"
           data-testid="settings-billing-pricing"
         >
           {hasAnySub ? t("settings.billing.changePlan") : t("settings.billing.viewPlans")}

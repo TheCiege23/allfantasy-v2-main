@@ -15,6 +15,7 @@ export const PRIMARY_NAV_ITEMS: NavLinkItem[] = [
   { href: "/manager-hub", label: "Manager Hub" },
   { href: "/war-room", label: "AF Legacy" },
   { href: "/discover/leagues", label: "Leagues" },
+  { href: "/players", label: "Players" },
   { href: "/ai/tools", label: "Intelligence Hub" },
   { href: "/af-rankings", label: "Rankings" },
   { href: "/profile", label: "Profile" },

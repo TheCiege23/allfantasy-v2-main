@@ -1,9 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
-import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { getOrComputeStrategy, getStrategyHistory } from '@/lib/season-strategy'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 const PostSchema = z.object({
   league_id: z.string().min(1).max(64),
@@ -13,25 +12,6 @@ const PostSchema = z.object({
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/season-strategy", tool: "LegacySeasonStrategy" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
-
-  const ip = getClientIp(req)
-  const rl = consumeRateLimit({
-    scope: 'legacy',
-    action: 'season_strategy',
-    ip,
-    maxRequests: 3,
-    windowMs: 60_000,
-    includeIpInKey: true,
-  })
-  if (!rl.success) {
-    return NextResponse.json(
-      { error: 'Rate limit exceeded. Strategy computation is intensive — please wait a moment.' },
-      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } },
-    )
-  }
-
   try {
     const body = await req.json()
     const parsed = PostSchema.safeParse(body)
@@ -42,14 +22,20 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/season-strategy", tool
       )
     }
 
-    const { league_id, roster_id, sleeper_username, force_refresh } = parsed.data
+    const { league_id, roster_id, force_refresh } = parsed.data
 
-    const result = await getOrComputeStrategy(league_id, roster_id, sleeper_username, force_refresh)
+    // Was `requireAuthOrOrigin` — open to any caller sending an Origin header.
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: parsed.data.sleeper_username ?? null,
+      rateLimit: { action: 'season_strategy', maxRequests: 3, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+
+    const result = await getOrComputeStrategy(league_id, roster_id, gate.identity.sleeperUsername, force_refresh)
 
     return NextResponse.json({
       ok: true,
       ...result,
-      rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
     })
   } catch (error) {
     console.error('Season strategy error:', error)
@@ -64,24 +50,15 @@ const GetSchema = z.object({
 })
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/season-strategy", tool: "LegacySeasonStrategy" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
-
-  const ip = getClientIp(req)
-  const rl = consumeRateLimit({
-    scope: 'legacy',
-    action: 'season_strategy_get',
-    ip,
-    maxRequests: 30,
-    windowMs: 60_000,
-    includeIpInKey: true,
+  /*
+   * No username in this request — it is league+roster scoped — so there is nothing to
+   * compare. It still needs a real session: it returns a league's strategy history, and
+   * `requireAuthOrOrigin` left that readable by anyone.
+   */
+  const gate = await requireLegacySleeperIdentity(req, {
+    rateLimit: { action: 'season_strategy_get', maxRequests: 30, windowMs: 60_000 },
   })
-  if (!rl.success) {
-    return NextResponse.json(
-      { error: 'Rate limit exceeded.' },
-      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } },
-    )
-  }
+  if (!gate.ok) return gate.response
 
   const url = new URL(req.url)
   const parsed = GetSchema.safeParse({
@@ -108,7 +85,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/season-strategy", tool:
     return NextResponse.json({
       ok: true,
       history,
-      rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
     })
   } catch (error) {
     console.error('Season strategy GET error:', error)

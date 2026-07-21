@@ -1,0 +1,273 @@
+/*
+ * Nocturne — scoped visual system for the Rankings Center (/af-rankings).
+ *
+ * Same two-job pattern as `app/settings/nocturne-settings.css`:
+ *  1. REMAP the app's own theme variables (--bg / --panel / --accent-cyan / …)
+ *     to the Nocturne palette *for this subtree only*, so variable-driven
+ *     rankings components recolor without being rewritten. Custom properties
+ *     inherit, so the nearest ancestor that sets them (this class) wins over
+ *     `:root` / `html[data-mode]` regardless of the user's app theme.
+ *  2. Provide the `nr-*` classes + TIER tokens the Rankings design needs.
+ *
+ * Namespaced under `.nocturne-rankings` so nothing leaks into the rest of the
+ * app. Ported from the design handoff `design_handoff_rankings` (v4 rebuild).
+ *
+ * NOTE: this ground is #14151f — a touch deeper than the settings/auth ground
+ * (#161826) — because the Rankings reference is a denser, table-heavy surface
+ * and the darker base keeps the tier metals readable.
+ */
+
+.nocturne-rankings {
+  /* ── Ground + accent ──────────────────────────────────────────────── */
+  --nr-bg: #14151f;
+  --nr-panel: #1c1e2b;
+  --nr-panel-2: #181a25;
+  --nr-row-alt: #20222f;
+  --nr-text: #e9e9ed;
+  --nr-text-soft: #c7cadb;
+  --nr-muted: #9397ab;
+  --nr-dim: #75798c;
+  --nr-faint: #595d6c;
+  --nr-border: #292b31;
+  --nr-border-strong: #3f424d;
+  --nr-accent: #9184d9;
+  --nr-accent-bright: #b5abfc;
+  --nr-accent-pale: #d2cefd;
+  --nr-accent-deep: #423a6a;
+  --nr-accent-wash: #292140;
+
+  /* ── Semantic ─────────────────────────────────────────────────────── */
+  --nr-up: #7ee081;
+  --nr-down: #e0785a;
+  --nr-gold: #f0c040;
+
+  /* ── Tier metals (new in this design) ─────────────────────────────── */
+  --tier-bronze: #b3773f;
+  --tier-silver: #9ca3ae;
+  --tier-gold: #d9b048;
+  --tier-platinum: #6fc2c9;
+  --tier-diamond: #7db8e8;
+  --tier-master: #9184d9;
+  --tier-grandmaster: #c25ad9;
+  --tier-legend: #f0c040;
+
+  /* ── Remap the app theme vars the existing components consume ─────── */
+  --bg: var(--nr-bg);
+  --panel: var(--nr-panel);
+  --panel2: var(--nr-panel-2);
+  --surface-card-soft: var(--nr-panel-2);
+  --text: var(--nr-text);
+  --muted: var(--nr-muted);
+  --muted2: var(--nr-text-soft);
+  --border: var(--nr-border);
+  --accent: var(--nr-accent);
+  --accent-cyan: var(--nr-accent);
+  --accent-cyan-strong: var(--nr-accent-bright);
+  --accent-purple: #796cbf;
+  --accent-red: #cf6b6f;
+  --accent-red-strong: var(--nr-down);
+  --on-accent-bg: #14151f;
+
+  background: var(--nr-bg);
+  color: var(--nr-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nocturne-rankings *,
+.nocturne-rankings *::before,
+.nocturne-rankings *::after { box-sizing: border-box; }
+
+.nocturne-rankings ::selection { background: color-mix(in srgb, var(--nr-accent) 30%, transparent); }
+.nocturne-rankings :focus-visible { outline: 2px solid var(--nr-accent); outline-offset: 2px; }
+.nocturne-rankings ::placeholder { color: var(--nr-faint); }
+.nocturne-rankings ::-webkit-scrollbar { width: 9px; height: 9px; }
+.nocturne-rankings ::-webkit-scrollbar-thumb { background: var(--nr-border-strong); border-radius: 5px; }
+
+/* ── Page frame ─────────────────────────────────────────────────────── */
+.nr-root { min-height: 100dvh; padding: 28px 32px 60px; }
+.nr-wrap { max-width: 1440px; margin: 0 auto; }
+.nr-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 20px; margin-bottom: 22px; flex-wrap: wrap;
+}
+.nr-title { font-size: 30px; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.02em; color: var(--nr-text); }
+.nr-subtitle { font-size: 14px; color: var(--nr-muted); margin: 0; }
+.nr-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ── Buttons / inputs ───────────────────────────────────────────────── */
+.nr-action {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 13px; border-radius: 8px;
+  border: 1px solid var(--nr-border-strong); background: transparent;
+  color: var(--nr-text-soft); font-size: 12.5px; font-weight: 600; cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.nr-action:hover { background: color-mix(in srgb, var(--nr-text) 6%, transparent); color: var(--nr-text); }
+.nr-action > svg { width: 15px; height: 15px; flex: none; }
+.nr-input {
+  background: var(--nr-panel); border: 1px solid var(--nr-border-strong);
+  border-radius: 8px; padding: 9px 14px; font-size: 13px; color: var(--nr-text);
+  outline: none; transition: border-color 0.15s ease;
+}
+.nr-input:focus-visible { border-color: var(--nr-accent); }
+
+/* ── Panels ─────────────────────────────────────────────────────────── */
+.nr-panel {
+  background: var(--nr-panel); border: 1px solid var(--nr-border);
+  border-radius: 14px; padding: 18px 20px;
+}
+.nr-panel-flush { padding: 0; overflow: hidden; }
+.nr-panel-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.05em; color: var(--nr-dim); margin-bottom: 12px;
+}
+.nr-section-h2 { font-size: 18px; margin: 0 0 3px; color: var(--nr-text); }
+.nr-section-sub { font-size: 12.5px; color: var(--nr-dim); margin: 0; }
+
+/* ── Hero stat row ──────────────────────────────────────────────────── */
+.nr-hero-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 22px; }
+.nr-hero-card {
+  background: var(--nr-panel); border: 1px solid var(--nr-border);
+  border-radius: 14px; padding: 14px 16px; min-width: 0;
+}
+.nr-hero-label {
+  font-size: 10.5px; color: var(--nr-dim); text-transform: uppercase;
+  letter-spacing: 0.05em; display: flex; align-items: center; gap: 4px;
+}
+.nr-hero-value { font-size: 22px; font-weight: 800; margin-top: 4px; color: var(--nr-text); }
+.nr-hero-note { font-size: 11px; color: var(--nr-dim); margin-top: 2px; }
+.nr-hero-note.is-up { color: var(--nr-up); }
+
+/* ── Layout: nav / content / rail ───────────────────────────────────── */
+.nr-shell { display: grid; grid-template-columns: 220px minmax(0, 1fr) 260px; gap: 20px; align-items: start; }
+.nr-nav { position: sticky; top: 20px; }
+.nr-nav-list { display: flex; flex-direction: column; gap: 2px; }
+.nr-nav-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 9px 10px; border-radius: 8px; border: none; cursor: pointer;
+  text-align: left; font-size: 13px; font-weight: 600;
+  background: transparent; color: var(--nr-muted);
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.nr-nav-item:hover { background: color-mix(in srgb, var(--nr-text) 5%, transparent); color: var(--nr-text); }
+.nr-nav-item.is-active { background: var(--nr-accent-wash); color: var(--nr-accent-pale); }
+.nr-nav-item > svg { width: 15px; height: 15px; flex: none; }
+.nr-nav-cta {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 9px 10px; border-radius: 8px; border: 1px solid var(--nr-accent-deep);
+  color: var(--nr-accent-bright); font-size: 12.5px; font-weight: 600;
+  margin-bottom: 10px; background: transparent; cursor: pointer; width: 100%;
+}
+.nr-nav-cta:hover { background: color-mix(in srgb, var(--nr-accent) 12%, transparent); }
+.nr-rail { display: flex; flex-direction: column; gap: 14px; }
+
+/* ── Chips ──────────────────────────────────────────────────────────── */
+.nr-chip {
+  padding: 6px 13px; border-radius: 999px; border: 1px solid var(--nr-border-strong);
+  background: transparent; color: var(--nr-muted);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+.nr-chip:hover { color: var(--nr-text); }
+.nr-chip.is-active {
+  border-color: var(--nr-accent);
+  background: color-mix(in srgb, var(--nr-accent) 13%, transparent);
+  color: var(--nr-accent-pale);
+}
+
+/* ── Tier ring / badge ──────────────────────────────────────────────── */
+.nr-tier-badge {
+  width: 22px; height: 22px; border-radius: 7px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--tier, var(--nr-accent)) 14%, transparent);
+  border: 1px solid color-mix(in srgb, var(--tier, var(--nr-accent)) 34%, transparent);
+  color: var(--tier, var(--nr-accent));
+}
+.nr-tier-badge > svg { width: 12px; height: 12px; }
+.nr-tier-ring {
+  width: 52px; height: 52px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: color-mix(in srgb, var(--tier, var(--nr-accent)) 13%, transparent);
+  border: 2px solid color-mix(in srgb, var(--tier, var(--nr-accent)) 47%, transparent);
+  color: var(--tier, var(--nr-accent));
+}
+.nr-tier-ring.is-locked {
+  background: #20222c; border-color: #2f313c; color: #4a4d59;
+}
+.nr-tier-ring.is-you {
+  border-color: var(--nr-accent-bright);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--nr-accent) 20%, transparent);
+}
+
+/* ── Progress ───────────────────────────────────────────────────────── */
+.nr-meter { height: 10px; border-radius: 5px; background: var(--nr-border); overflow: hidden; }
+.nr-meter > span {
+  display: block; height: 100%; border-radius: 5px;
+  background: linear-gradient(90deg, #796cbf, var(--nr-accent));
+  transition: width 0.3s ease;
+}
+.nr-meter-sm { height: 6px; border-radius: 3px; }
+.nr-meter-sm > span { border-radius: 3px; background: var(--nr-accent); }
+
+/* ── Leaderboard table ──────────────────────────────────────────────── */
+.nr-lb-head, .nr-lb-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1.6fr) 70px 70px 60px 60px 56px;
+  gap: 8px; align-items: center; padding: 10px 16px;
+}
+.nr-lb-head {
+  font-size: 10.5px; color: var(--nr-dim); font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  border-bottom: 1px solid var(--nr-border);
+}
+.nr-lb-row {
+  border-bottom: 1px solid #21232e; width: 100%; text-align: left;
+  background: none; border-left: 0; border-right: 0; border-top: 0;
+  color: inherit; font: inherit; cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+.nr-lb-row:hover { background: var(--nr-row-alt); }
+.nr-lb-row.is-you { background: var(--nr-panel-2); cursor: default; }
+.nr-lb-rank { font-size: 13px; font-weight: 700; color: var(--nr-dim); }
+.nr-lb-row.is-you .nr-lb-rank { color: var(--nr-accent-bright); }
+.nr-lb-name {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  font-size: 13px; font-weight: 600; color: var(--nr-text);
+}
+.nr-lb-name > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nr-lb-cell { font-size: 12.5px; color: var(--nr-muted); font-variant-numeric: tabular-nums; }
+.nr-lb-move { font-size: 12px; font-weight: 700; text-align: right; }
+.nr-lb-move.is-up { color: var(--nr-up); }
+.nr-lb-move.is-down { color: var(--nr-down); }
+
+/* ── Misc ───────────────────────────────────────────────────────────── */
+.nr-stat-box { background: var(--nr-panel-2); border-radius: 9px; padding: 10px; text-align: center; }
+.nr-empty {
+  display: flex; flex-direction: column; align-items: center; text-align: center;
+  gap: 10px; padding: 56px 20px;
+}
+.nr-empty > svg { width: 32px; height: 32px; color: var(--nr-accent-bright); }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .nr-hero-grid { grid-template-columns: repeat(3, 1fr); }
+  .nr-shell { grid-template-columns: 200px minmax(0, 1fr); }
+  .nr-rail { grid-column: 1 / -1; flex-direction: row; flex-wrap: wrap; }
+  .nr-rail > * { flex: 1 1 240px; }
+}
+@media (max-width: 860px) {
+  .nr-root { padding: 18px 14px 60px; }
+  .nr-hero-grid { grid-template-columns: repeat(2, 1fr); }
+  .nr-shell { grid-template-columns: minmax(0, 1fr); }
+  .nr-nav { position: static; }
+  .nr-nav-list { flex-direction: row; overflow-x: auto; gap: 4px; }
+  .nr-nav-item { width: auto; white-space: nowrap; flex: none; }
+  /* keep the dense leaderboard from clipping on small screens */
+  .nr-lb-scroll { overflow-x: auto; }
+  .nr-lb-scroll .nr-lb-head, .nr-lb-scroll .nr-lb-row { min-width: 620px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nocturne-rankings * { transition: none !important; }
+}

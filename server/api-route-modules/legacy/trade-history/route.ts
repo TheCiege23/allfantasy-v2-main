@@ -5,10 +5,10 @@ import {
   getLeagueTransactions,
   getLeagueRosters,
   getLeagueUsers,
-  getAllPlayers,
   getLeagueHistory,
   resolveSleeperUser,
 } from '@/lib/sleeper-client'
+import { getCanonicalPlayerMapForSport } from '@/lib/canonical/getCanonicalPlayer'
 import { pricePlayer, pricePick, ValuationContext } from '@/lib/hybrid-valuation'
 import { assertSleeperBoundaryForLeagueId } from '@/lib/legacy/sleeper-boundary'
 
@@ -123,7 +123,18 @@ async function fetchAllLeagueTrades(leagueId: string, userId: string): Promise<{
   
   // Pass userId to getLeagueHistory to enable searching for leagues by name across seasons
   const leagueHistory = await getLeagueHistory(leagueId, userId)
-  const allPlayers = await getAllPlayers()
+  // Phase 3 batch 2 — canonical read path. Historical trade/waiver log: it renders what already
+  // happened, so cache-only is correct here; nothing downstream acts on live roster state.
+  // Reshaped to the `Record<sleeperId, {...}>` the helper below already expects, so the
+  // surrounding logic is untouched.
+  const canonicalPlayers = await getCanonicalPlayerMapForSport('NFL')
+  const allPlayers: Record<string, { full_name: string; position: string; team: string | null }> =
+    Object.fromEntries(
+      [...canonicalPlayers].map(([sleeperId, p]) => [
+        sleeperId,
+        { full_name: p.name, position: p.position, team: p.team },
+      ]),
+    )
   
   console.log('[TRADE-HISTORY] League history found:', leagueHistory.map(l => ({ id: l.league_id, name: l.name, season: l.season, prev: l.previous_league_id })))
   

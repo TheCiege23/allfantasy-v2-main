@@ -38,7 +38,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
 
       <div className="space-y-2 text-sm text-white/70">
         <details className={detailClass}>
-          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
+          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-violet-100/95">
             How does AllFantasy rank XP work?
             <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
@@ -51,7 +51,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
         </details>
 
         <details className={detailClass}>
-          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
+          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-violet-100/95">
             What is each win, playoff, or title worth?
             <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
@@ -83,7 +83,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
         </details>
 
         <details className={detailClass}>
-          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
+          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-violet-100/95">
             How do I level up?
             <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
@@ -96,7 +96,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
         </details>
 
         <details className={detailClass} open>
-          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-cyan-100/95">
+          <summary className="flex items-center justify-between gap-2 text-[13px] font-semibold text-violet-100/95">
             All 25 levels (min XP to reach)
             <span className="text-[10px] font-normal text-white/35 group-open:rotate-180">▼</span>
           </summary>
@@ -117,7 +117,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
                       key={row.level}
                       className={
                         isYou
-                          ? 'bg-cyan-500/15 text-white ring-1 ring-cyan-400/30'
+                          ? 'bg-violet-500/15 text-white ring-1 ring-violet-400/30'
                           : row.level % 2 === 0
                             ? 'bg-white/[0.02]'
                             : ''
@@ -127,7 +127,7 @@ export function RankingFaqPanel({ currentLevel }: RankingFaqPanelProps) {
                       <td className="px-2 py-1.5 text-white/70">
                         {row.name}
                         {isYou ? (
-                          <span className="ml-1.5 rounded bg-cyan-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-200">
+                          <span className="ml-1.5 rounded bg-violet-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase text-violet-200">
                             You
                           </span>
                         ) : null}

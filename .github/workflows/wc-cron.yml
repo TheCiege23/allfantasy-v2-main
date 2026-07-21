@@ -1,83 +1,130 @@
 name: World Cup Live Sync
 
-# Replaces the Vercel cron entries in vercel.json (non-functional on Railway).
-# Required GitHub secrets:  WORLD_CUP_CRON_SECRET, CRON_SECRET
+# Drives the World Cup bracket cron against the deployed app (Railway).
+#
+# Required GitHub secrets:   WORLD_CUP_CRON_SECRET, CRON_SECRET
 # Required GitHub variables: APP_URL  (e.g. https://your-app.railway.app)
 #
-# Schedule mapping:
-#   */5  * * * *  — live scores + recalculate
-#   */15 * * * *  — bracket lock reminders (24h / 6h / 1h / 15m windows)
-#   */30 * * * *  — standings
-#   15   * * * *  — recalculate (hourly backup)
-#   0    8 * * *  — teams (daily)
-#   30   8 * * *  — fixtures (daily)
+# If APP_URL or both secrets are missing, this workflow no-ops instead of failing.
+# An unconfigured copy of the repo used to fail every run with the useless
+# "curl: (3) URL rejected: No host part in the URL" and mail the owner about it.
+#
+# Retirement: the 2026 final is 2026-07-19. Once WC_CRON_CUTOFF_UTC passes, this
+# workflow stops working and disables its own schedule, so it cannot run forever.
+#
+# The provider jobs (live / standings / fixtures / teams) were removed 2026-07-18.
+# API-Football answers every seasonYear=2026 request with "Free plans do not have
+# access to this season, try from 2022 to 2024", so each one returned HTTP 500 on
+# every run and never delivered a single row. Restore them only together with a
+# paid API-Football plan that covers the 2026 season.
 
 on:
   schedule:
-    - cron: '*/5 * * * *'
+    # Bracket lock reminders + leaderboard recalculate. Both are database-only.
     - cron: '*/15 * * * *'
-    - cron: '*/30 * * * *'
-    - cron: '15 * * * *'
-    - cron: '0 8 * * *'
-    - cron: '30 8 * * *'
   workflow_dispatch:
     inputs:
       job:
-        description: 'Cron job: live, standings, teams, fixtures, recalculate, all'
+        description: 'Cron job: all, reminders, recalculate'
         required: false
-        default: live
+        default: all
+        type: choice
+        options: [all, reminders, recalculate]
+
+permissions:
+  contents: read
+  actions: write # lets the cutoff step disable this workflow's own schedule
+
+env:
+  # 2026 final kicks off 2026-07-19 19:00 UTC. This leaves a wide buffer for extra
+  # time, penalties and the final recalculate pass.
+  WC_CRON_CUTOFF_UTC: '2026-07-20T06:00:00Z'
 
 jobs:
   sync:
     name: WC Cron Sync
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Live scores + recalculate
-        if: ${{ github.event.schedule == '*/5 * * * *' }}
+      - name: Check window and configuration
+        id: guard
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          WC_SECRET: ${{ secrets.WORLD_CUP_CRON_SECRET }}
+          FALLBACK_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail --silent --show-error \
-            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=live&provider=apifootball&recalculate=true" \
-            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
+          set -euo pipefail
+          run=true
+          retire=false
+
+          now=$(date -u +%s)
+          cutoff=$(date -u -d "$WC_CRON_CUTOFF_UTC" +%s)
+          if [ "$now" -ge "$cutoff" ]; then
+            echo "::notice::World Cup is over (cutoff $WC_CRON_CUTOFF_UTC). Retiring this schedule."
+            run=false
+            retire=true
+          fi
+
+          if [ -z "${APP_URL:-}" ]; then
+            echo "::notice::APP_URL repository variable is not set - nothing to call. Skipping."
+            run=false
+          fi
+
+          if [ -z "${WC_SECRET:-}" ] && [ -z "${FALLBACK_SECRET:-}" ]; then
+            echo "::notice::Neither WORLD_CUP_CRON_SECRET nor CRON_SECRET is set. Skipping."
+            run=false
+          fi
+
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "retire=$retire" >> "$GITHUB_OUTPUT"
+
+      # Best effort: the guard above already makes every later run a green no-op,
+      # so a permissions failure here must not turn into a failure notification.
+      - name: Retire schedule
+        if: steps.guard.outputs.retire == 'true' && github.event_name == 'schedule'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow disable "${{ github.workflow }}" --repo "${{ github.repository }}"
+          echo "::notice::Disabled. Re-enable with: gh workflow enable \"${{ github.workflow }}\" --repo ${{ github.repository }}"
 
       - name: Bracket lock reminders
-        if: ${{ github.event.schedule == '*/15 * * * *' }}
+        if: >-
+          steps.guard.outputs.run == 'true' &&
+          (github.event_name == 'schedule' || inputs.job == 'all' || inputs.job == 'reminders')
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}
         run: |
-          curl --fail --silent --show-error \
-            -X GET "${{ vars.APP_URL }}/api/cron/world-cup-bracket-reminders" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"
+          set -euo pipefail
+          code=$(curl --silent --show-error --location \
+            --max-time 120 --retry 2 --retry-delay 10 \
+            --write-out '%{http_code}' --output response.json \
+            -X GET "${APP_URL}/api/cron/world-cup-bracket-reminders" \
+            -H "Authorization: Bearer ${SECRET}")
+          echo "HTTP $code"
+          # Echo the body: the old `curl --fail --silent` discarded it, which left
+          # every failure in this workflow undiagnosable from the run log alone.
+          head -c 2000 response.json || true
+          echo
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]
 
-      - name: Standings sync
-        if: ${{ github.event.schedule == '*/30 * * * *' }}
+      - name: Recalculate leaderboards
+        if: >-
+          steps.guard.outputs.run == 'true' &&
+          (github.event_name == 'schedule' || inputs.job == 'all' || inputs.job == 'recalculate')
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          SECRET: ${{ secrets.WORLD_CUP_CRON_SECRET }}
         run: |
-          curl --fail --silent --show-error \
-            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=standings&provider=apifootball" \
-            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
-
-      - name: Recalculate (hourly)
-        if: ${{ github.event.schedule == '15 * * * *' }}
-        run: |
-          curl --fail --silent --show-error \
-            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=recalculate" \
-            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
-
-      - name: Teams sync (daily)
-        if: ${{ github.event.schedule == '0 8 * * *' }}
-        run: |
-          curl --fail --silent --show-error \
-            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=teams&provider=apifootball" \
-            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
-
-      - name: Fixtures sync (daily)
-        if: ${{ github.event.schedule == '30 8 * * *' }}
-        run: |
-          curl --fail --silent --show-error \
-            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=fixtures&provider=apifootball" \
-            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
-
-      - name: Manual dispatch
-        if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: |
-          curl --fail --silent --show-error \
-            -X GET "${{ vars.APP_URL }}/api/brackets/world-cup/cron/sync?job=${{ inputs.job }}&provider=apifootball&recalculate=true" \
-            -H "Authorization: Bearer ${{ secrets.WORLD_CUP_CRON_SECRET }}"
+          set -euo pipefail
+          code=$(curl --silent --show-error --location \
+            --max-time 180 --retry 2 --retry-delay 10 \
+            --write-out '%{http_code}' --output response.json \
+            -X GET "${APP_URL}/api/brackets/world-cup/cron/sync?job=recalculate" \
+            -H "Authorization: Bearer ${SECRET}")
+          echo "HTTP $code"
+          head -c 2000 response.json || true
+          echo
+          [ "$code" -ge 200 ] && [ "$code" -lt 300 ]

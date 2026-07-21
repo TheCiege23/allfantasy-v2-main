@@ -1,67 +1,45 @@
 "use client"
 
-import { useState, useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
-import { useSearchParams, useRouter } from "next/navigation"
-import { signIn } from "next-auth/react"
+import { useSearchParams } from "next/navigation"
 import { loginUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
-import {
-  sendSignupPhoneVerificationCode,
-  verifySignupPhoneCode,
-} from "@/lib/auth/PhoneVerificationService"
-import {
-  resolvePostSignupCallbackUrl,
-  resolveSignupRedirectPath,
-} from "@/lib/auth/SignupFlowController"
-import {
-  clearUnifiedAuthDestination,
-  rememberUnifiedAuthDestination,
-} from "@/lib/auth/UnifiedAuthOrchestrator"
-import { pickPostCredentialSignupNavigation } from "@/lib/auth/postSignupRedirectPolicy"
+import { resolveSignupRedirectPath } from "@/lib/auth/SignupFlowController"
+import { rememberUnifiedAuthDestination } from "@/lib/auth/UnifiedAuthOrchestrator"
 import { getTermsUrl, getPrivacyUrl, getNoGamblingPolicyUrl } from "@/lib/legal/LegalRouteResolver"
-import { SIGNUP_TIMEZONES, DEFAULT_SIGNUP_TIMEZONE } from "@/lib/signup/timezones"
 import { getPasswordStrength } from "@/lib/signup/PasswordStrengthResolver"
-import { normalizePhoneForSubmit } from "@/lib/signup/SignupFlowController"
-import {
-  checkUsernameAvailability,
-  suggestUsername,
-} from "@/lib/signup/UsernameAvailabilityService"
-import {
-  getLegacyImportProviderMessage,
-  type LegacyImportProvider,
-} from "@/lib/signup/LegacyImportOnboardingService"
 import { validateSignupAgreements } from "@/lib/signup/AgreementAcceptanceService"
-import OAuthButtonRow from "@/components/auth/OAuthButtonRow"
-import AccountBenefitsCard from "@/components/auth/AccountBenefitsCard"
-import TrustBar from "@/components/auth/TrustBar"
-import SignupProgressIndicator from "@/components/auth/SignupProgressIndicator"
-import AdvancedOptionsSection from "@/components/auth/AdvancedOptionsSection"
 import { useOptionalLanguage } from "@/components/i18n/LanguageProviderClient"
-import LanguageToggle from "@/components/i18n/LanguageToggle"
-import { ModeToggle } from "@/components/theme/ModeToggle"
 import { useThemeMode } from "@/components/theme/ThemeProvider"
-import {
-  resolveLanguage,
-  type LanguageCode,
-} from "@/lib/i18n/constants"
+import { resolveLanguage } from "@/lib/i18n/constants"
 import { trackLandingSignupComplete } from "@/lib/landing-analytics"
 import { trackMetaEventsFromResponse } from "@/lib/meta-client"
 import { useGeoRestriction } from "@/lib/geo/useGeoRestriction"
-import {
-  Loader2,
-  TriangleAlert,
-  Eye,
-  EyeOff,
-  CheckCircle2,
-  X,
-  CreditCard,
-} from "lucide-react"
+import { NocturneAuthShell } from "@/components/auth/NocturneAuthShell"
+import NocturneOAuthGrid from "@/components/auth/NocturneOAuthGrid"
+import { Loader2, TriangleAlert, Eye, EyeOff, CheckCircle2, ShieldCheck } from "lucide-react"
+
+/** Password-strength segment colors, level 1 → 4 (weak → strong). */
+const STRENGTH_COLORS = [
+  "var(--color-error)", // 1 · weak
+  "var(--color-accent-2-500)", // 2 · fair
+  "var(--color-accent-400)", // 3 · good
+  "var(--color-accent)", // 4 · strong
+]
+
+const CARD_STYLE: React.CSSProperties = {
+  maxWidth: 420,
+  width: "100%",
+  padding: 36,
+  border: "1px solid var(--color-neutral-800)",
+  borderRadius: "var(--radius-lg)",
+  background: "var(--color-surface)",
+}
 
 export default function SignupContent() {
-  const { t, language } = useOptionalLanguage()
+  const { language } = useOptionalLanguage()
   const { mode } = useThemeMode()
   const searchParams = useSearchParams()
-  const router = useRouter()
   const nextParam = searchParams?.get("next") ?? undefined
   const postSignupDestination = useMemo(
     () =>
@@ -76,340 +54,87 @@ export default function SignupContent() {
   const refParam = searchParams?.get("ref")?.trim() || undefined
 
   const [fullName, setFullName] = useState("")
-  const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
-  const [timezone, setTimezone] = useState(DEFAULT_SIGNUP_TIMEZONE)
-  const [preferredLanguage, setPreferredLanguage] = useState<LanguageCode>(() => resolveLanguage(language))
-  const [preferredLanguageTouched, setPreferredLanguageTouched] = useState(false)
-  const [avatarPreset, setAvatarPreset] = useState<string | null>("crest")
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
-  const [avatarFileError, setAvatarFileError] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
-  const [phoneCountryCode, setPhoneCountryCode] = useState("+1")
-  const [phone, setPhone] = useState("")
-  const [phoneCodeSent, setPhoneCodeSent] = useState(false)
-  const [phoneCode, setPhoneCode] = useState("")
-  const [phoneCodeVerified, setPhoneCodeVerified] = useState(false)
-  const [phoneSendingCode, setPhoneSendingCode] = useState(false)
-  const [phoneVerifyingCode, setPhoneVerifyingCode] = useState(false)
-  const [phoneVerificationMessage, setPhoneVerificationMessage] = useState<string | null>(null)
-  const [showDlModal, setShowDlModal] = useState(false)
-  const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
-  const [legacyImportMessage, setLegacyImportMessage] = useState<string | null>(null)
-  const [ageConfirmed, setAgeConfirmed] = useState(false)
   const [consentChecked, setConsentChecked] = useState(false)
-  const [verificationMethod, setVerificationMethod] = useState<"EMAIL" | "PHONE">("EMAIL")
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
   const [emailVerificationPrepared, setEmailVerificationPrepared] = useState(true)
-  const [usernameStatus, setUsernameStatus] = useState<
-    "idle" | "checking" | "ok" | "taken" | "invalid" | "unvalidated" | "unchecked"
-  >("idle")
-  const [usernameMessage, setUsernameMessage] = useState<string>("")
-  const [usernameSuggestion, setUsernameSuggestion] = useState<string | null>(null)
-  const [usernameContinueAttempted, setUsernameContinueAttempted] = useState(false)
-  const [disclaimerAgreed, setDisclaimerAgreed] = useState(false)
-  const [termsAgreed, setTermsAgreed] = useState(false)
-  const [suggestingUsername, setSuggestingUsername] = useState(false)
   const signupConversionTrackedRef = useRef(false)
-  const autoTimezoneResolvedRef = useRef(false)
   const geo = useGeoRestriction()
 
   const passwordStrength = useMemo(() => getPasswordStrength(password), [password])
-  const passwordsMatch = useMemo(() => {
-    if (!confirmPassword.length) return false
-    return password === confirmPassword
-  }, [password, confirmPassword])
-  const trackSignupConversion = useCallback((source: string) => {
-    if (signupConversionTrackedRef.current) return
-    signupConversionTrackedRef.current = true
-    trackLandingSignupComplete({
-      existing_user: false,
-      source,
-    })
-  }, [])
-  const timezoneGroups = useMemo(() => {
-    return SIGNUP_TIMEZONES.reduce<Record<string, typeof SIGNUP_TIMEZONES>>((acc, item) => {
-      if (!acc[item.region]) acc[item.region] = []
-      acc[item.region].push(item)
-      return acc
-    }, {})
-  }, [])
-  const hasAdvancedValues = useMemo(() => {
-    return Boolean(
-      phone.trim() ||
-      avatarPreview ||
-      avatarPreset !== "crest" ||
-      legacyImportMessage ||
-      timezone !== DEFAULT_SIGNUP_TIMEZONE ||
-      preferredLanguageTouched
-    )
-  }, [phone, avatarPreview, avatarPreset, legacyImportMessage, timezone, preferredLanguageTouched])
-
-  const applyUsernameSuggestion = useCallback(async () => {
-    const base = username.trim() || "user"
-    setSuggestingUsername(true)
-    setUsernameSuggestion(null)
-    try {
-      const suggestion = await suggestUsername(base)
-      if (suggestion) {
-        setUsername(suggestion)
-        setUsernameSuggestion(suggestion)
-      }
-    } finally {
-      setSuggestingUsername(false)
-    }
-  }, [username])
-
-  async function handleSendPhoneCode() {
-    const normalizedPhone = normalizePhoneForSubmit(phone, phoneCountryCode)
-    if (!normalizedPhone) {
-      setPhoneVerificationMessage("Enter your phone number first.")
-      return
-    }
-    setPhoneSendingCode(true)
-    setPhoneVerificationMessage(null)
-    try {
-      const res = await sendSignupPhoneVerificationCode(normalizedPhone)
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        if (data?.error === "RATE_LIMITED") {
-          setPhoneVerificationMessage("Please wait before requesting another code.")
-        } else {
-          setPhoneVerificationMessage(data?.message || "Could not send verification code.")
-        }
-        return
-      }
-      setPhoneCodeSent(true)
-      setPhoneCodeVerified(false)
-      setPhoneVerificationMessage("Verification code sent.")
-    } catch {
-      setPhoneVerificationMessage("Could not send verification code.")
-    } finally {
-      setPhoneSendingCode(false)
-    }
-  }
-
-  async function handleVerifyPhoneCode() {
-    const normalizedPhone = normalizePhoneForSubmit(phone, phoneCountryCode)
-    if (!normalizedPhone) {
-      setPhoneVerificationMessage("Enter your phone number first.")
-      return
-    }
-    if (!phoneCode.trim()) {
-      setPhoneVerificationMessage("Enter the verification code.")
-      return
-    }
-    setPhoneVerifyingCode(true)
-    setPhoneVerificationMessage(null)
-    try {
-      const res = await verifySignupPhoneCode({
-        phone: normalizedPhone,
-        code: phoneCode.trim(),
-      })
-      const data = await res.json().catch(() => ({}))
-      if (!res.ok) {
-        if (data?.error === "INVALID_CODE") {
-          setPhoneCodeVerified(false)
-          setPhoneVerificationMessage("Invalid code. Please try again.")
-        } else if (data?.error === "RATE_LIMITED") {
-          setPhoneCodeVerified(false)
-          setPhoneVerificationMessage("Too many attempts. Please wait.")
-        } else {
-          setPhoneCodeVerified(false)
-          setPhoneVerificationMessage(data?.message || "Verification failed.")
-        }
-        return
-      }
-      setPhoneCodeVerified(true)
-      setPhoneVerificationMessage("Phone verified.")
-    } catch {
-      setPhoneCodeVerified(false)
-      setPhoneVerificationMessage("Verification failed.")
-    } finally {
-      setPhoneVerifyingCode(false)
-    }
-  }
-
-  const handlePhoneNumberChange = useCallback((digits: string) => {
-    setPhone(digits)
-    setPhoneCodeSent(false)
-    setPhoneCode("")
-    setPhoneCodeVerified(false)
-    setPhoneVerificationMessage(null)
-  }, [])
-
-  const handlePhoneCountryCodeChange = useCallback((code: string) => {
-    setPhoneCountryCode(code)
-    setPhoneCodeSent(false)
-    setPhoneCode("")
-    setPhoneCodeVerified(false)
-    setPhoneVerificationMessage(null)
-  }, [])
-
-  function handleLegacyImportProviderClick(provider: LegacyImportProvider) {
-    setLegacyImportMessage(getLegacyImportProviderMessage(provider))
-  }
-
-  const handleConsentChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const v = e.target.checked
-    setConsentChecked(v)
-    setAgeConfirmed(v)
-    setDisclaimerAgreed(v)
-    setTermsAgreed(v)
-  }, [])
+  const passwordsMatch = useMemo(
+    () => confirmPassword.length > 0 && password === confirmPassword,
+    [password, confirmPassword]
+  )
 
   useEffect(() => {
     rememberUnifiedAuthDestination(postSignupDestination)
   }, [postSignupDestination])
 
-  useEffect(() => {
-    if (preferredLanguageTouched) return
-    setPreferredLanguage(resolveLanguage(language))
-  }, [language, preferredLanguageTouched])
-
-  useEffect(() => {
-    if (autoTimezoneResolvedRef.current) return
-    autoTimezoneResolvedRef.current = true
-    try {
-      const detected = Intl.DateTimeFormat().resolvedOptions().timeZone
-      if (SIGNUP_TIMEZONES.some((tz) => tz.value === detected)) {
-        setTimezone(detected)
-      }
-    } catch {
-      // no-op
-    }
+  const trackSignupConversion = useCallback((source: string) => {
+    if (signupConversionTrackedRef.current) return
+    signupConversionTrackedRef.current = true
+    trackLandingSignupComplete({ existing_user: false, source })
   }, [])
 
-  useEffect(() => {
-    if (hasAdvancedValues && !showAdvancedOptions) {
-      setShowAdvancedOptions(true)
-    }
-  }, [hasAdvancedValues, showAdvancedOptions])
+  const handleConsentChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setConsentChecked(e.target.checked)
+    if (e.target.checked) setError("")
+  }, [])
 
-  // Debounced username availability + profanity check
-  useEffect(() => {
-    if (!username.trim()) {
-      setUsernameStatus("idle")
-      setUsernameMessage("")
-      return
-    }
-    const normalized = username.trim()
-    if (normalized.length < 3 || normalized.length > 30) {
-      setUsernameStatus("invalid")
-      setUsernameMessage(t("signup.username.length"))
-      return
-    }
-    if (!/^[A-Za-z0-9_]+$/.test(normalized)) {
-      setUsernameStatus("invalid")
-      setUsernameMessage(t("signup.username.charset"))
-      return
-    }
-
-    let cancelled = false
-    setUsernameStatus("checking")
-    setUsernameMessage("Checking availability…")
-
-    const timer = setTimeout(async () => {
-      try {
-        const data = await checkUsernameAvailability(normalized)
-        if (cancelled) return
-        if (!data.ok) {
-          setUsernameStatus("unvalidated")
-          setUsernameMessage(t("signup.username.unable"))
-          return
-        }
-        if (data.status === "unchecked" || (data.ok && data.available && data.reason === "unchecked")) {
-          setUsernameStatus("unchecked")
-          setUsernameMessage(
-            "Couldn't verify availability right now. You can continue — if this name is taken, signup will tell you."
-          )
-          return
-        }
-        if (!data.available) {
-          if (data.reason === "taken") {
-            setUsernameStatus("taken")
-            setUsernameMessage(t("signup.username.taken"))
-          } else if (data.reason === "profanity") {
-            setUsernameStatus("invalid")
-            setUsernameMessage(t("signup.username.profanity"))
-          } else if (data.reason === "length") {
-            setUsernameStatus("invalid")
-            setUsernameMessage(t("signup.username.length"))
-          } else if (data.reason === "charset") {
-            setUsernameStatus("invalid")
-            setUsernameMessage(t("signup.username.charset"))
-          } else {
-            setUsernameStatus("invalid")
-            setUsernameMessage(t("signup.username.notAllowed"))
-          }
-        } else {
-          setUsernameStatus("ok")
-          setUsernameMessage(t("signup.username.available"))
-        }
-      } catch {
-        if (cancelled) return
-        setUsernameStatus("unvalidated")
-        setUsernameMessage(t("signup.username.unable"))
-      }
-    }, 400)
-
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
-  }, [username, t])
+  const submitDisabled =
+    loading ||
+    !fullName.trim() ||
+    !email.trim() ||
+    !password ||
+    !confirmPassword ||
+    password !== confirmPassword ||
+    !passwordStrength.valid ||
+    !consentChecked
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setUsernameContinueAttempted(true)
     setLoading(true)
     setError("")
 
     try {
-      const agreementsValidation = validateSignupAgreements({
-        ageConfirmed,
-        disclaimerAgreed,
-        termsAgreed,
+      // One consent checkbox drives all three backend agreement booleans in
+      // lockstep (age/disclaimer/terms) — deliberate: minimal UI, unchanged
+      // consent contract. Do not split back into separate checkboxes.
+      const agreements = validateSignupAgreements({
+        ageConfirmed: consentChecked,
+        disclaimerAgreed: consentChecked,
+        termsAgreed: consentChecked,
       })
-      if (!agreementsValidation.ok) {
-        setError(agreementsValidation.error)
+      if (!agreements.ok) {
+        setError(agreements.error)
         return
       }
-
       if (password !== confirmPassword) {
-        setError(t("signup.error.passwordMismatch"))
+        setError("Passwords do not match.")
         return
       }
 
-      if (verificationMethod === "PHONE" && !phoneCodeVerified) {
-        setError("Verify your phone number before creating your account.")
-        return
-      }
-
+      // No username field — the server generates one from the display name and
+      // marks the profile incomplete so onboarding can collect the real handle.
       const res = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username: username.trim(),
           email: email.trim(),
           password,
-          displayName: fullName.trim() || username.trim(),
-          phone: normalizePhoneForSubmit(phone, phoneCountryCode) || undefined,
-          ageConfirmed,
-          verificationMethod,
-          phoneVerificationCode:
-            verificationMethod === "PHONE" ? phoneCode.trim() : undefined,
-          timezone,
-          preferredLanguage,
+          displayName: fullName.trim(),
+          ageConfirmed: consentChecked,
+          disclaimerAgreed: consentChecked,
+          termsAgreed: consentChecked,
+          verificationMethod: "EMAIL",
+          preferredLanguage: resolveLanguage(language),
           themePreference: mode,
-          avatarPreset,
-          avatarDataUrl: avatarPreview || undefined,
-          disclaimerAgreed,
-          termsAgreed,
           referralCode: refParam,
         }),
       })
@@ -418,18 +143,14 @@ export default function SignupContent() {
       let responseText = ""
       try {
         responseText = await res.text()
-        data = responseText
-          ? (JSON.parse(responseText) as Record<string, unknown>)
-          : {}
+        data = responseText ? (JSON.parse(responseText) as Record<string, unknown>) : {}
       } catch {
         data = {}
       }
 
       if (!res.ok) {
         if (data.code === "DB_UNAVAILABLE") {
-          setError(
-            "Our servers are briefly unavailable. Please try again in a moment."
-          )
+          setError("Our servers are briefly unavailable. Please try again in a moment.")
         } else {
           const backendError =
             typeof data.error === "string"
@@ -437,9 +158,7 @@ export default function SignupContent() {
               : responseText && !responseText.trim().startsWith("<")
                 ? responseText.trim()
                 : ""
-          setError(
-            backendError || "Account creation failed. Please try again."
-          )
+          setError(backendError || "Account creation failed. Please try again.")
         }
         return
       }
@@ -450,819 +169,344 @@ export default function SignupContent() {
       if (typeof data.emailVerificationPrepared === "boolean") {
         setEmailVerificationPrepared(data.emailVerificationPrepared)
       }
-
-      const apiVerificationMethod =
-        typeof data.verificationMethod === "string"
-          ? data.verificationMethod
-          : null
-      const isEmailSignup =
-        verificationMethod === "EMAIL" || apiVerificationMethod === "EMAIL"
-
-      // Email signup: the server creates the user and sends a verification link.
-      // Do not await client signIn here — NextAuth's signIn() can hang on _getSession
-      // or throw while parsing callback URLs, which left the UI with no navigation
-      // and no success state. Show the inbox confirmation screen immediately.
-      if (isEmailSignup) {
-        setSuccess(true)
-        return
-      }
-
-      const callbackTarget = resolvePostSignupCallbackUrl({
-        redirectAfterSignup: postSignupDestination,
-        verificationMethod: apiVerificationMethod,
-      })
-
-      const signInResult = await signIn("credentials", {
-        login: email.trim(),
-        password,
-        redirect: false,
-        callbackUrl: callbackTarget,
-      })
-
-      if (!signInResult?.error) {
-        if (typeof window !== "undefined") {
-          window.localStorage.setItem("af_lang", preferredLanguage)
-          window.localStorage.setItem("af_mode", mode)
-        }
-        clearUnifiedAuthDestination()
-        router.push(
-          pickPostCredentialSignupNavigation(signInResult?.url, callbackTarget)
-        )
-        return
-      }
-
-      // e.g. sign-in failed after phone signup — still show success / next steps
       setSuccess(true)
     } catch (err: unknown) {
       console.error("[signup] Create account failed:", err)
-      const message =
-        err instanceof Error ? err.message.trim() : ""
-      setError(message || t("common.error.tryAgain"))
+      const message = err instanceof Error ? err.message.trim() : ""
+      setError(message || "Something went wrong. Please try again.")
     } finally {
       setLoading(false)
     }
   }
 
+  // ── Geo: fully blocked ────────────────────────────────────────────────────
   if (!geo.loading && geo.isFullyBlocked) {
     const sc = geo.stateCode ?? "WA"
     return (
-      <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--text)" }}>
-        <header
-          className="sticky top-0 z-40 border-b"
-          style={{
-            borderColor: "var(--border)",
-            background: "color-mix(in srgb, var(--bg) 90%, transparent)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-          }}
-        >
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-            <Link href="/" className="flex items-center gap-2.5">
-              <img src="/af-crest.png" alt="AllFantasy crest" className="h-7 w-7 object-contain" />
-              <span
-                className="text-xl font-semibold tracking-[0.08em]"
-                style={{
-                  backgroundImage: "linear-gradient(90deg, var(--accent-cyan), #3b82f6)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                AllFantasy
-              </span>
-            </Link>
-          </div>
-        </header>
-        <main className="flex justify-center px-4 py-16">
-          <div className="w-full max-w-lg text-center">
-            <img
-              src="/af-crest.png"
-              alt=""
-              className="mx-auto mb-6 h-16 w-16 object-contain opacity-90"
-              style={{ filter: "drop-shadow(0 0 14px rgba(6,182,212,0.4))" }}
-            />
-            <h1 className="mb-3 text-2xl font-semibold">
-              🔴 AllFantasy.ai is not available in {geo.stateName ?? sc}
-            </h1>
-            <p className="mb-6 text-sm leading-7" style={{ color: "var(--muted)" }}>
-              State law prohibits fantasy sports services here. Account creation is not available from this location.
-            </p>
-            <Link
-              href={`/geo-blocked?state=${encodeURIComponent(sc)}`}
-              className="inline-flex rounded-xl px-5 py-3 text-sm font-semibold"
-              style={{
-                backgroundImage: "linear-gradient(90deg, var(--accent-cyan), #3b82f6)",
-                color: "var(--on-accent-bg)",
-              }}
-            >
-              View details →
-            </Link>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  if (success) {
-    const isPhone = verificationMethod === "PHONE"
-    return (
-      <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--text)" }}>
-        <header
-          className="sticky top-0 z-40 border-b"
-          style={{
-            borderColor: "var(--border)",
-            background: "color-mix(in srgb, var(--bg) 90%, transparent)",
-            backdropFilter: "blur(16px)",
-            WebkitBackdropFilter: "blur(16px)",
-          }}
-        >
-          <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
-            <Link href="/" className="flex items-center gap-2.5">
-              <img src="/af-crest.png" alt="AllFantasy crest" className="h-7 w-7 object-contain" />
-              <span
-                className="text-xl font-semibold tracking-[0.08em]"
-                style={{
-                  backgroundImage: "linear-gradient(90deg, var(--accent-cyan), #3b82f6)",
-                  WebkitBackgroundClip: "text",
-                  WebkitTextFillColor: "transparent",
-                  backgroundClip: "text",
-                }}
-              >
-                AllFantasy
-              </span>
-            </Link>
-            <Link
-              href={loginUrlWithIntent(postSignupDestination)}
-              className="rounded-lg border px-4 py-2 text-sm font-medium transition hover:opacity-90"
-              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-            >
-              Sign In
-            </Link>
-          </div>
-        </header>
-
-        <main className="flex min-h-[calc(100vh-56px)] items-start justify-center px-4 py-10">
-          <div className="w-full max-w-lg">
-            <SignupProgressIndicator currentStepIndex={2} />
-            <div
-              className="rounded-2xl border p-8 text-center shadow-2xl"
-              style={{ borderColor: "var(--border)", background: "var(--panel)" }}
-            >
-              <div
-                className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border"
-                style={{
-                  borderColor: "color-mix(in srgb, var(--accent-emerald-strong) 35%, transparent)",
-                  background: "color-mix(in srgb, var(--accent-emerald-strong) 12%, transparent)",
-                }}
-              >
-                <CheckCircle2 className="h-7 w-7" style={{ color: "var(--accent-emerald-strong)" }} />
-              </div>
-              <h1 className="mb-3 text-2xl font-semibold">Account created!</h1>
-              {isPhone ? (
-                <>
-                  <p className="text-sm leading-7" style={{ color: "var(--muted)" }}>
-                    Sign in to verify your phone number <span style={{ color: "var(--text)" }}>{phone}</span> and complete setup.
-                  </p>
-                  <p className="mt-2 text-xs" style={{ color: "var(--muted2)" }}>
-                    You&apos;ll receive a verification code via SMS after signing in.
-                  </p>
-                </>
-              ) : emailVerificationPrepared ? (
-                <>
-                  <p className="text-sm leading-7" style={{ color: "var(--muted)" }}>
-                    We sent a verification link to <span style={{ color: "var(--text)" }}>{email}</span>. Click the link to verify your email, then sign in.
-                  </p>
-                  <div
-                    className="mt-3 rounded-xl border px-4 py-3 text-left text-sm"
-                    style={{
-                      borderColor: "color-mix(in srgb, var(--accent-amber-strong) 40%, transparent)",
-                      background: "color-mix(in srgb, var(--accent-amber-strong) 10%, transparent)",
-                      color: "var(--muted)",
-                    }}
-                  >
-                    <p className="font-medium" style={{ color: "color-mix(in srgb, var(--accent-amber-strong) 90%, var(--text))" }}>
-                      Check your inbox, spam, and junk folder.
-                    </p>
-                    <p className="mt-1 text-xs" style={{ color: "var(--muted)" }}>
-                      The link expires in 1 hour. If you don&apos;t see it within 2 minutes,{" "}
-                      <Link
-                        href={loginUrlWithIntent(postSignupDestination)}
-                        className="underline"
-                        style={{ color: "var(--accent-cyan)" }}
-                      >
-                        sign in
-                      </Link>{" "}
-                      and use <strong>Resend verification email</strong> from the verify page.
-                    </p>
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm leading-7" style={{ color: "var(--muted)" }}>
-                  Your account was created, but email verification setup is temporarily unavailable. Please sign in to continue and retry verification from your account.
-                </p>
-              )}
-              <Link
-                href={loginUrlWithIntent(postSignupDestination)}
-                className="mt-6 inline-flex items-center justify-center rounded-xl px-6 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90"
-                style={{
-                  backgroundImage: "linear-gradient(90deg, var(--accent-cyan), #3b82f6)",
-                  color: "var(--on-accent-bg)",
-                }}
-              >
-                {t("signup.success.goSignIn")}
-              </Link>
-            </div>
-          </div>
-        </main>
-      </div>
-    )
-  }
-
-  const submitDisabled =
-    loading ||
-    !fullName.trim() ||
-    (usernameStatus !== "ok" &&
-      usernameStatus !== "unvalidated" &&
-      usernameStatus !== "unchecked") ||
-    !username.trim() ||
-    !email.trim() ||
-    !password ||
-    !confirmPassword ||
-    password !== confirmPassword ||
-    !passwordStrength.valid ||
-    !consentChecked ||
-    (verificationMethod === "PHONE" && (!phone.trim() || !phoneCodeVerified))
-
-  return (
-    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--text)" }}>
-      <header
-        className="sticky top-0 z-40 border-b"
-        style={{
-          borderColor: "var(--border)",
-          background: "color-mix(in srgb, var(--bg) 90%, transparent)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
-        }}
+      <div
+        className="nocturne-auth flex min-h-screen items-center justify-center"
+        style={{ padding: 24 }}
       >
-        <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-2 px-4 sm:px-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <img src="/af-crest.png" alt="AllFantasy crest" className="h-7 w-7 object-contain" />
-            <span
-              className="text-xl font-semibold tracking-[0.08em]"
-              style={{
-                backgroundImage: "linear-gradient(90deg, var(--accent-cyan), #3b82f6)",
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-              }}
-            >
-              AllFantasy
-            </span>
+        <div className="card" style={{ ...CARD_STYLE, textAlign: "center" }}>
+          <img
+            src="/brand/af-shield-transparent.png"
+            alt=""
+            style={{ height: 48, width: "auto", margin: "0 auto 20px" }}
+          />
+          <h1 style={{ fontSize: 22, lineHeight: 1.25, margin: "0 0 10px" }}>
+            AllFantasy isn&apos;t available in {geo.stateName ?? sc}
+          </h1>
+          <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--color-neutral-400)", margin: "0 0 22px" }}>
+            State law prohibits fantasy sports services here, so account creation is not available from
+            this location.
+          </p>
+          <Link
+            href={`/geo-blocked?state=${encodeURIComponent(sc)}`}
+            className="btn btn-primary btn-block"
+            style={{ minHeight: 46, fontSize: 15 }}
+          >
+            View details
           </Link>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <LanguageToggle variant="compact" />
-            <ModeToggle />
-            <Link
-              href={loginUrlWithIntent(postSignupDestination)}
-              className="rounded-lg border px-3 py-2 text-sm font-medium transition hover:opacity-90"
-              style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-            >
-              <span className="hidden sm:inline">{t("signup.alreadyHaveAccount")} </span>
-              {t("common.signIn")}
+        </div>
+      </div>
+    )
+  }
+
+  // ── Success: check your inbox ─────────────────────────────────────────────
+  if (success) {
+    return (
+      <NocturneAuthShell
+        navRight={
+          <>
+            Already have an account?{" "}
+            <Link href={loginUrlWithIntent(postSignupDestination)} style={{ fontWeight: 600 }}>
+              Sign in
             </Link>
-          </div>
-        </div>
-      </header>
-
-      <main
-        className="flex justify-center px-4 py-8 sm:py-10"
-        style={{
-          background:
-            "radial-gradient(ellipse 60% 50% at 50% 0%, color-mix(in srgb, var(--accent-cyan) 8%, transparent) 0%, transparent 65%)",
-        }}
+          </>
+        }
       >
-        <div className="w-full max-w-5xl">
-          <div className="mb-8 text-center">
-            <img
-              src="/af-crest.png"
-              alt="AllFantasy crest"
-              className="mx-auto mb-4 h-16 w-16 object-contain"
-              style={{ filter: "drop-shadow(0 0 14px rgba(6,182,212,0.4))" }}
-            />
-            <h1 className="mb-1 text-3xl font-semibold tracking-tight">{t("signup.headline")}</h1>
-            <p className="text-sm" style={{ color: "var(--muted)" }}>
-              {t("signup.subheadline")}
-            </p>
+        <div className="card" style={{ ...CARD_STYLE, textAlign: "center" }}>
+          <div
+            style={{
+              width: 48,
+              height: 48,
+              margin: "0 auto 18px",
+              display: "grid",
+              placeItems: "center",
+              borderRadius: "var(--radius-md)",
+              background: "var(--color-accent-900)",
+            }}
+          >
+            <CheckCircle2 size={26} style={{ color: "var(--color-accent-400)" }} />
           </div>
-
-          <SignupProgressIndicator currentStepIndex={1} />
-
-          {error && (
-            <div
-              className="mx-auto mb-4 max-w-xl rounded-2xl border p-3 text-sm"
-              style={{
-                borderColor: "color-mix(in srgb, var(--accent-red-strong) 40%, transparent)",
-                background: "color-mix(in srgb, var(--accent-red-strong) 10%, transparent)",
-                color: "color-mix(in srgb, #fff 88%, var(--accent-red-strong))",
-              }}
-            >
-              <div className="flex items-start gap-2">
-                <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
-                <div>{error}</div>
-              </div>
-            </div>
+          <h1 style={{ fontSize: 24, lineHeight: 1.2, margin: "0 0 8px" }}>Check your inbox</h1>
+          {emailVerificationPrepared ? (
+            <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--color-neutral-400)", margin: "0 0 8px" }}>
+              We sent a verification link to <strong style={{ color: "var(--color-text)" }}>{email}</strong>.
+              Verify it and sign in — you&apos;ll choose your username and finish your profile (photo,
+              timezone) next.
+            </p>
+          ) : (
+            <p style={{ fontSize: 14, lineHeight: 1.6, color: "var(--color-neutral-400)", margin: "0 0 8px" }}>
+              Your account was created, but email verification is briefly unavailable. Sign in to continue
+              and retry verification from your account.
+            </p>
           )}
+          <p style={{ fontSize: 12.5, color: "var(--color-neutral-600)", margin: "0 0 24px" }}>
+            Check your spam and junk folders if it doesn&apos;t arrive within a couple of minutes.
+          </p>
+          <Link
+            href={loginUrlWithIntent(postSignupDestination)}
+            className="btn btn-primary btn-block"
+            style={{ minHeight: 46, fontSize: 15 }}
+          >
+            Go to sign in
+          </Link>
+        </div>
+      </NocturneAuthShell>
+    )
+  }
 
-          {!geo.loading && geo.isPaidBlocked && geo.stateCode ? (
-            <div
-              className="mx-auto mb-4 max-w-xl rounded-2xl border p-4 text-sm leading-6"
-              style={{
-                borderColor: "color-mix(in srgb, var(--accent-amber-strong) 35%, transparent)",
-                background: "color-mix(in srgb, var(--accent-amber-strong) 10%, transparent)",
-                color: "var(--muted)",
-              }}
-            >
-              <p className="font-semibold text-amber-200">
-                🟡 Important: You&apos;re in {geo.stateName ?? geo.stateCode}
-              </p>
-              <p className="mt-2">
-                You can create a free account, but paid leagues and subscriptions are not available in your state due to state
-                law.{" "}
-                <Link
-                  href={`/paid-restricted?state=${encodeURIComponent(geo.stateCode)}`}
-                  className="font-medium text-cyan-400 underline"
-                >
-                  Learn more →
-                </Link>
-              </p>
+  // ── Create account form ───────────────────────────────────────────────────
+  return (
+    <NocturneAuthShell
+      navRight={
+        <>
+          Already have an account?{" "}
+          <Link href={loginUrlWithIntent(postSignupDestination)} style={{ fontWeight: 600 }}>
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <div className="card" style={CARD_STYLE}>
+        <h1 style={{ fontSize: 26, lineHeight: 1.2, margin: "0 0 6px" }}>Create your account</h1>
+        <p style={{ fontSize: 14, color: "var(--color-neutral-500)", margin: "0 0 24px" }}>
+          Free to start — no gambling, no DFS.
+        </p>
+
+        {error && (
+          <div
+            role="alert"
+            style={{
+              display: "flex",
+              gap: 8,
+              alignItems: "flex-start",
+              marginBottom: 16,
+              padding: "11px 13px",
+              fontSize: 13,
+              lineHeight: 1.5,
+              borderRadius: "var(--radius-md)",
+              border: "1px solid color-mix(in srgb, var(--color-error) 45%, transparent)",
+              background: "var(--color-neutral-900)",
+              color: "color-mix(in srgb, #fff 82%, var(--color-error))",
+            }}
+          >
+            <TriangleAlert size={16} style={{ marginTop: 1, flex: "none", color: "var(--color-error)" }} />
+            <div>{error}</div>
+          </div>
+        )}
+
+        {!geo.loading && geo.isPaidBlocked && geo.stateCode ? (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: "11px 13px",
+              fontSize: 13,
+              lineHeight: 1.55,
+              borderRadius: "var(--radius-md)",
+              border: "1px solid var(--color-neutral-800)",
+              background: "color-mix(in srgb, var(--color-surface) 60%, transparent)",
+              color: "var(--color-neutral-400)",
+            }}
+          >
+            You can create a free account, but paid leagues and subscriptions aren&apos;t available in{" "}
+            {geo.stateName ?? geo.stateCode} due to state law.{" "}
+            <Link href={`/paid-restricted?state=${encodeURIComponent(geo.stateCode)}`}>Learn more</Link>
+          </div>
+        ) : null}
+
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div className="field">
+            <label htmlFor="signup-fullname">Full name</label>
+            <input
+              id="signup-fullname"
+              className="input"
+              type="text"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+              placeholder="Jordan Rivera"
+              autoComplete="name"
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="signup-email">Email</label>
+            <input
+              id="signup-email"
+              className="input"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label htmlFor="signup-password">Password</label>
+            <div style={{ position: "relative" }}>
+              <input
+                id="signup-password"
+                className="input"
+                type={showPassword ? "text" : "password"}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 8 characters"
+                autoComplete="new-password"
+                minLength={8}
+                required
+                style={{ paddingRight: 44 }}
+              />
+              <button
+                type="button"
+                className="input-affordance"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+                onClick={() => setShowPassword((v) => !v)}
+              >
+                {showPassword ? <EyeOff size={17} /> : <Eye size={17} />}
+              </button>
             </div>
-          ) : null}
-
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]">
-            <form onSubmit={handleSubmit} className="order-1 space-y-4">
-              <div className="rounded-2xl border p-6" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
-                <div className="mb-1 text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--accent-emerald-strong)" }}>
-                  {t("signup.step1.eyebrow")}
-                </div>
-                <p className="mb-5 text-xs" style={{ color: "var(--muted2)" }}>
-                  {t("signup.step1.helper")}
-                </p>
-
-                <div className="space-y-4">
-                  <div>
-                    <label htmlFor="signup-fullname" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>
-                      {t("signup.field.fullName.label")} <span style={{ color: "var(--accent-cyan)" }}>*</span>
-                    </label>
-                    <input
-                      id="signup-fullname"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="w-full rounded-xl border px-4 py-3 text-sm transition focus-ring"
-                      style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
-                      placeholder={t("signup.field.fullName.placeholder")}
-                      autoComplete="name"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="signup-email" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>
-                      {t("signup.field.email.label")} <span style={{ color: "var(--accent-cyan)" }}>*</span>
-                    </label>
-                    <input
-                      id="signup-email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      type="email"
-                      className="w-full rounded-xl border px-4 py-3 text-sm transition focus-ring"
-                      style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label htmlFor="signup-username" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>
-                      {t("signup.field.username.label")} <span style={{ color: "var(--accent-cyan)" }}>*</span>
-                    </label>
-                    <input
-                      id="signup-username"
-                      value={username}
-                      onChange={(e) => {
-                        const v = e.target.value.replace(/[^A-Za-z0-9_]/g, "")
-                        setUsername(v)
-                        if (v.trim().length >= 3) {
-                          setError("")
-                        }
-                      }}
-                      className="w-full rounded-xl border px-4 py-3 text-sm transition focus-ring"
-                      style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
-                      placeholder="your_username"
-                      maxLength={30}
-                      autoComplete="username"
-                      required
-                    />
-                    <div className="mt-2 flex items-center justify-between text-xs">
-                      <span style={{ color: "var(--muted2)" }}>Letters, numbers, and underscores · 3-30 characters</span>
-                      {usernameStatus === "checking" && <span style={{ color: "var(--muted2)" }}>Checking...</span>}
-                      {usernameStatus === "ok" && (
-                        <span className="inline-flex items-center gap-1" style={{ color: "var(--accent-emerald-strong)" }}>
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                          Available
-                        </span>
-                      )}
-                      {usernameStatus === "taken" && (
-                        <span className="inline-flex items-center gap-1" style={{ color: "var(--accent-amber-strong)" }}>
-                          <TriangleAlert className="h-3.5 w-3.5" />
-                          Taken
-                        </span>
-                      )}
-                      {usernameStatus === "unvalidated" && (
-                        <span className="inline-flex items-center gap-1" style={{ color: "var(--muted2)" }}>
-                          <TriangleAlert className="h-3.5 w-3.5" />
-                          Could not verify
-                        </span>
-                      )}
-                      {usernameStatus === "unchecked" && usernameContinueAttempted && (
-                        <span className="text-xs" style={{ color: "var(--muted2)" }}>
-                          Not verified live
-                        </span>
-                      )}
-                    </div>
-                    {usernameMessage &&
-                      (usernameStatus !== "unchecked" || usernameContinueAttempted) && (
-                        <p className="mt-1 text-xs" style={{ color: "var(--muted2)" }}>
-                          {usernameMessage}
-                        </p>
-                      )}
-                    {usernameStatus === "taken" && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={applyUsernameSuggestion}
-                          disabled={suggestingUsername}
-                          style={{ color: "var(--accent-cyan)" }}
-                          className="transition hover:opacity-80 disabled:opacity-50"
-                        >
-                          {suggestingUsername ? "Finding suggestion..." : "Suggest a similar username"}
-                        </button>
-                        {usernameSuggestion && (
-                          <span style={{ color: "var(--accent-emerald-strong)" }}>Try: {usernameSuggestion}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label htmlFor="signup-password" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>
-                      {t("signup.field.password.label")} <span style={{ color: "var(--accent-cyan)" }}>*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="signup-password"
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        type={showPassword ? "text" : "password"}
-                        className="w-full rounded-xl border px-4 py-3 pr-12 text-sm transition focus-ring"
-                        style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
-                        placeholder="At least 8 characters"
-                        autoComplete="new-password"
-                        minLength={8}
-                        required
-                      />
-                      <button
-                        type="button"
-                        aria-label={showPassword ? t("common.hidePassword") : t("common.showPassword")}
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 transition"
-                        style={{ color: "var(--muted2)" }}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <div className="mt-2 flex gap-1">
-                      {[1, 2, 3, 4].map((i) => (
-                        <div
-                          key={i}
-                          className="h-1 flex-1 rounded-full"
-                          style={{
-                            background:
-                              i <= passwordStrength.level
-                                ? passwordStrength.level <= 1
-                                  ? "var(--accent-red-strong)"
-                                  : passwordStrength.level === 2
-                                    ? "var(--accent-amber-strong)"
-                                    : passwordStrength.level === 3
-                                      ? "var(--accent-emerald-strong)"
-                                      : "var(--accent-cyan)"
-                                : "color-mix(in srgb, var(--border) 90%, transparent)",
-                          }}
-                        />
-                      ))}
-                    </div>
-                    <p className="mt-1 text-xs" style={{ color: passwordStrength.valid ? "var(--accent-emerald-strong)" : "var(--muted2)" }}>
-                      {passwordStrength.label}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label htmlFor="signup-confirm-password" className="mb-1 block text-sm font-medium" style={{ color: "var(--muted)" }}>
-                      {t("signup.field.confirmPassword.label")} <span style={{ color: "var(--accent-cyan)" }}>*</span>
-                    </label>
-                    <div className="relative">
-                      <input
-                        id="signup-confirm-password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        type={showPassword ? "text" : "password"}
-                        className="w-full rounded-xl border px-4 py-3 pr-12 text-sm transition focus-ring"
-                        style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
-                        placeholder="Re-enter your password"
-                        autoComplete="new-password"
-                        minLength={8}
-                        required
-                      />
-                      <button
-                        type="button"
-                        aria-label={showPassword ? "Hide confirm password" : "Show confirm password"}
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 transition"
-                        style={{ color: "var(--muted2)" }}
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <p className="mt-1 text-xs" style={{ color: !confirmPassword ? "var(--muted2)" : passwordsMatch ? "var(--accent-emerald-strong)" : "var(--accent-amber-strong)" }}>
-                      {!confirmPassword ? "Re-enter your password to confirm." : passwordsMatch ? "Passwords match." : "Passwords do not match."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mt-5">
-                  <button
-                    type="button"
-                    onClick={() => setShowAdvancedOptions((prev) => !prev)}
-                    className="flex w-full items-center justify-between rounded-xl border px-4 py-3 text-left text-sm font-medium transition hover:opacity-90"
-                    style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--text)" }}
-                    aria-expanded={showAdvancedOptions}
-                  >
-                    <span>{showAdvancedOptions ? t("signup.advanced.toggle.hide") : t("signup.advanced.toggle.show")}</span>
-                    <span style={{ color: "var(--muted2)" }}>{showAdvancedOptions ? "▲" : "▼"}</span>
-                  </button>
-                  {!showAdvancedOptions && (
-                    <p className="mt-2 text-xs" style={{ color: "var(--muted2)" }}>
-                      {t("signup.advanced.helper")}
-                    </p>
-                  )}
-                  {showAdvancedOptions && (
-                    <div className="mt-4 rounded-xl border p-4" style={{ borderColor: "var(--border)", background: "color-mix(in srgb, var(--panel2) 60%, transparent)" }}>
-                      <AdvancedOptionsSection
-                        verificationMethod={verificationMethod}
-                        onVerificationMethodChange={setVerificationMethod}
-                        phone={{
-                          countryCode: phoneCountryCode,
-                          onCountryCodeChange: handlePhoneCountryCodeChange,
-                          number: phone,
-                          onNumberChange: handlePhoneNumberChange,
-                          codeSent: phoneCodeSent,
-                          code: phoneCode,
-                          onCodeChange: (v) => {
-                            setPhoneCode(v)
-                            setPhoneCodeVerified(false)
-                          },
-                          codeVerified: phoneCodeVerified,
-                          sendingCode: phoneSendingCode,
-                          verifyingCode: phoneVerifyingCode,
-                          verificationMessage: phoneVerificationMessage,
-                          onSendCode: handleSendPhoneCode,
-                          onVerifyCode: handleVerifyPhoneCode,
-                        }}
-                        avatar={{
-                          preset: avatarPreset,
-                          onPresetChange: setAvatarPreset,
-                          preview: avatarPreview,
-                          onPreviewChange: setAvatarPreview,
-                          fileError: avatarFileError,
-                          onFileErrorChange: setAvatarFileError,
-                          fallbackName: fullName || username || email,
-                        }}
-                        legacyImport={{
-                          message: legacyImportMessage,
-                          onProviderClick: handleLegacyImportProviderClick,
-                          onSkip: () => setLegacyImportMessage("No problem. Skip import for now and import later from Settings."),
-                        }}
-                        timezone={{
-                          value: timezone,
-                          onChange: setTimezone,
-                          groups: timezoneGroups,
-                        }}
-                        language={{
-                          value: preferredLanguage,
-                          onChange: (lang) => {
-                            setPreferredLanguageTouched(true)
-                            setPreferredLanguage(lang)
-                          },
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-
-                <div className="mt-5">
-                  <label
-                    className="flex cursor-pointer items-start gap-3 rounded-xl border p-4"
-                    style={{ borderColor: "var(--border)", background: "var(--panel2)" }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={consentChecked}
-                      onChange={handleConsentChange}
-                      required
-                      aria-required="true"
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-white/30 bg-transparent accent-cyan-400"
-                    />
-                    <span className="text-sm leading-6" style={{ color: "var(--muted)" }}>
-                      <strong style={{ color: "var(--text)" }}>{t("signup.consent.intro")}</strong>
-                      <ul className="mt-1 list-disc space-y-1 pl-4">
-                        <li>{t("signup.consent.bullet1")}</li>
-                        <li>
-                          {t("signup.consent.bullet2Prefix")}{" "}
-                          <Link
-                            href={getTermsUrl(true, nextParam)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline"
-                            style={{ color: "var(--accent-cyan)" }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {t("signup.consent.bullet2TermsLink")}
-                          </Link>{" "}
-                          {t("signup.consent.bullet2And")}{" "}
-                          <Link
-                            href={getPrivacyUrl(true, nextParam)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline"
-                            style={{ color: "var(--accent-cyan)" }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {t("signup.consent.bullet2PrivacyLink")}
-                          </Link>
-                          .
-                        </li>
-                        <li>
-                          {t("signup.consent.bullet3Prefix")} (
-                          <Link
-                            href={getNoGamblingPolicyUrl(true, nextParam)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="underline"
-                            style={{ color: "var(--accent-cyan)" }}
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            {t("signup.consent.bullet3Link")}
-                          </Link>
-                          ).
-                        </li>
-                      </ul>
-                    </span>
-                  </label>
-                  <p className="mt-2 pl-7 text-xs" style={{ color: "var(--muted2)" }}>
-                    Optional:{" "}
-                    <button
-                      type="button"
-                      onClick={() => setShowDlModal(true)}
-                      className="underline"
-                      style={{ color: "var(--muted)" }}
-                    >
-                      {t("signup.consent.driverLicenseLink")}
-                    </button>{" "}
-                    {t("signup.consent.driverLicenseSuffix")}
-                  </p>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={submitDisabled}
-                  className="mt-5 w-full rounded-xl px-4 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+            <div style={{ display: "flex", gap: 4, marginTop: 8 }}>
+              {[1, 2, 3, 4].map((seg) => (
+                <div
+                  key={seg}
                   style={{
-                    backgroundImage: "linear-gradient(90deg, var(--accent-cyan), #3b82f6)",
-                    color: "var(--on-accent-bg)",
+                    height: 3,
+                    flex: 1,
+                    borderRadius: 2,
+                    background:
+                      seg <= passwordStrength.level
+                        ? STRENGTH_COLORS[passwordStrength.level - 1]
+                        : "var(--color-neutral-800)",
                   }}
-                >
-                  {loading ? (
-                    <span className="inline-flex items-center gap-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      {t("signup.creatingAccount")}
-                    </span>
-                  ) : (
-                    t("signup.createAccount")
-                  )}
-                </button>
-
-                <div className="my-6 flex items-center gap-3">
-                  <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-                  <span className="text-xs uppercase tracking-[0.08em]" style={{ color: "var(--muted2)" }}>
-                    {t("signup.oauth.divider")}
-                  </span>
-                  <div className="h-px flex-1" style={{ background: "var(--border)" }} />
-                </div>
-
-                <OAuthButtonRow callbackUrl={postSignupDestination} />
-
-                <p className="mt-4 text-center text-[11px] leading-5" style={{ color: "var(--muted2)" }}>
-                  {t("signup.legal.notice")}
-                </p>
-
-                <p className="mt-4 text-center text-sm" style={{ color: "var(--muted)" }}>
-                  {t("signup.alreadyHaveAccount")}{" "}
-                  <Link href={loginUrlWithIntent(postSignupDestination)} className="underline" style={{ color: "var(--accent-cyan)" }}>
-                    {t("common.signIn")}
-                  </Link>
-                </p>
-              </div>
-            </form>
-
-            <div className="order-2">
-              <AccountBenefitsCard />
+                />
+              ))}
             </div>
-          </div>
-
-          <div className="mt-8">
-            <TrustBar />
-          </div>
-        </div>
-      </main>
-
-      {showDlModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.72)" }}>
-          <div className="relative w-full max-w-md rounded-2xl border p-6" style={{ borderColor: "var(--border)", background: "var(--panel)" }}>
-            <button
-              type="button"
-              onClick={() => setShowDlModal(false)}
-              className="absolute right-4 top-4 transition"
-              aria-label="Close"
-              style={{ color: "var(--muted2)" }}
-            >
-              <X className="h-5 w-5" />
-            </button>
-            <div className="mb-4 flex items-center gap-3">
-              <div
-                className="rounded-xl border p-2"
+            {password.length > 0 && (
+              <p
                 style={{
-                  borderColor: "color-mix(in srgb, var(--accent-cyan) 22%, transparent)",
-                  background: "color-mix(in srgb, var(--accent-cyan) 10%, transparent)",
+                  fontSize: 12,
+                  margin: "6px 0 0",
+                  color: passwordStrength.valid ? "var(--color-accent-400)" : "var(--color-neutral-500)",
                 }}
               >
-                <CreditCard className="h-5 w-5" style={{ color: "var(--accent-cyan)" }} />
-              </div>
-              <div>
-                <h2 className="text-base font-semibold">Driver&apos;s License Verification</h2>
-                <p className="text-xs" style={{ color: "var(--muted2)" }}>
-                  Age verification for legal protection
-                </p>
-              </div>
-            </div>
-            <p className="mb-3 text-sm leading-6" style={{ color: "var(--muted)" }}>
-              Verifying your driver&apos;s license confirms you are 18+ and protects your account in future legal or compliance flows.
-            </p>
-            <p className="mb-4 text-sm leading-6" style={{ color: "var(--muted)" }}>
-              This step is optional. You can verify your age now or complete it later in Settings.
-            </p>
-            <div className="mb-4 rounded-xl border p-4 text-xs leading-6" style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--muted)" }}>
-              <p className="font-medium" style={{ color: "var(--text)" }}>What you&apos;ll need:</p>
-              <p>• A valid government-issued driver&apos;s license</p>
-              <p>• A photo or scan of the front of your license</p>
-              <p>• Your date of birth must be visible</p>
-            </div>
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setShowDlModal(false)}
-                className="flex-1 rounded-xl border px-4 py-3 text-sm transition hover:opacity-90"
-                style={{ borderColor: "var(--border)", color: "var(--muted)" }}
-              >
-                Skip for now
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowDlModal(false)
-                  window.open("/settings/verify-identity", "_blank")
-                }}
-                className="flex-1 rounded-xl px-4 py-3 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90"
-                style={{
-                  backgroundImage: "linear-gradient(90deg, var(--accent-cyan), #3b82f6)",
-                  color: "var(--on-accent-bg)",
-                }}
-              >
-                Verify Now
-              </button>
-            </div>
+                {passwordStrength.label}
+              </p>
+            )}
           </div>
+
+          <div className="field">
+            <label htmlFor="signup-confirm">Confirm password</label>
+            <input
+              id="signup-confirm"
+              className="input"
+              type={showPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
+            {confirmPassword.length > 0 && (
+              <p
+                style={{
+                  fontSize: 12,
+                  margin: "6px 0 0",
+                  color: passwordsMatch ? "var(--color-accent-400)" : "var(--color-error)",
+                }}
+              >
+                {passwordsMatch ? "Passwords match." : "Passwords do not match."}
+              </p>
+            )}
+          </div>
+
+          <label
+            style={{
+              display: "flex",
+              gap: 10,
+              alignItems: "flex-start",
+              fontSize: 13,
+              lineHeight: 1.5,
+              color: "var(--color-neutral-400)",
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={consentChecked}
+              onChange={handleConsentChange}
+              required
+              aria-required="true"
+              style={{ accentColor: "var(--color-accent)", width: 16, height: 16, flex: "none", marginTop: 1 }}
+            />
+            <span>
+              I&apos;m 18+ and agree to the{" "}
+              <Link href={getTermsUrl(true, nextParam)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                Terms
+              </Link>
+              ,{" "}
+              <Link href={getPrivacyUrl(true, nextParam)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                Privacy Policy
+              </Link>{" "}
+              and{" "}
+              <Link href={getNoGamblingPolicyUrl(true, nextParam)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>
+                No-Gambling Policy
+              </Link>
+              .
+            </span>
+          </label>
+
+          <button
+            type="submit"
+            className="btn btn-primary btn-block"
+            disabled={submitDisabled}
+            style={{ minHeight: 46, fontSize: 15 }}
+          >
+            {loading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                Creating account…
+              </>
+            ) : (
+              "Create account"
+            )}
+          </button>
+        </form>
+
+        <div className="n-divider" style={{ margin: "22px 0 16px" }}>
+          <span>or continue with</span>
         </div>
-      )}
-    </div>
+
+        <NocturneOAuthGrid callbackUrl={postSignupDestination} />
+
+        <p
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+            margin: "20px 0 0",
+            fontSize: 12,
+            color: "var(--color-neutral-600)",
+          }}
+        >
+          <ShieldCheck size={13} />
+          Fantasy sports only — never gambling or DFS.
+        </p>
+      </div>
+    </NocturneAuthShell>
   )
 }

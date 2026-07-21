@@ -1648,6 +1648,7 @@ export const translations: Record<string, Record<string, string>> = {
 
     "settings.title": "Settings",
     "settings.home": "Home",
+    "settings.searchPlaceholder": "Search settings…",
     "settings.aria.sections": "Settings sections",
     "settings.aria.navigation": "Settings navigation",
     "settings.nav.profile": "Profile",
@@ -1658,7 +1659,9 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.nav.chimmy": "Chimmy",
     "settings.nav.billing": "Subscription & Billing",
     "settings.nav.referral": "Referrals",
-    "settings.nav.legacy": "Legacy Import",
+    "settings.nav.legacy": "League Imports",
+    "settings.nav.rank": "Legacy",
+    "settings.nav.command": "Command Center",
     "settings.nav.legal": "Legal & Agreements",
     "settings.nav.account": "Account",
     "settings.loading": "Loading settings...",
@@ -2140,7 +2143,7 @@ export const translations: Record<string, Record<string, string>> = {
     "import.settingsWord": "Settings",
     "import.providerStatus": "Provider status",
     "import.providerHelp":
-      "Any member of a league can import it. Sleeper, ESPN, and Yahoo require you to link the matching account in Settings. Fantrax, MFL, and Fleaflicker use public league reads — just paste your league ID.",
+      "Any member of a league can import it. Sleeper, ESPN, and Yahoo require you to link the matching account in Settings. Fantrax, MFL, and Fleaflicker import is coming soon.",
     "import.backToCreate": "Back to Create",
     "import.home": "Home",
     "import.otherPlatforms": "Other platforms",
@@ -2161,14 +2164,15 @@ export const translations: Record<string, Record<string, string>> = {
     "import.leagueDefaultName": "League",
     "import.status.enabled": "Enabled",
     "import.status.blocked": "Blocked",
+    "import.status.comingSoon": "Coming soon",
     "import.provider.sleeper.detail": "Any league member with a linked Sleeper account can import.",
     "import.provider.espn.detail":
       "Any league member with a linked ESPN account can import. Private leagues require your ESPN cookies saved in Settings.",
     "import.provider.yahoo.detail": "Any league member with a linked Yahoo account can import.",
-    "import.provider.fantrax.detail": "Fantrax leagues are publicly readable. Paste your league ID to import.",
-    "import.provider.mfl.detail": "MFL leagues are importable via your saved MFL API key in Settings.",
+    "import.provider.fantrax.detail": "Fantrax import is coming soon — not available yet.",
+    "import.provider.mfl.detail": "MFL import is coming soon — not available yet.",
     "import.provider.fleaflicker.detail":
-      "Fleaflicker leagues are publicly readable. Paste your league ID (or SPORT:ID:YEAR) to import.",
+      "Fleaflicker import is coming soon — not available yet.",
 
     // Create League v2 (wired)
     "createLeague.v2.eyebrow": "Create league",
@@ -4198,7 +4202,7 @@ export const translations: Record<string, Record<string, string>> = {
     "import.settingsWord": "Ajustes",
     "import.providerStatus": "Estado del proveedor",
     "import.providerHelp":
-      "Cualquier miembro puede importar la liga. Sleeper, ESPN y Yahoo requieren vincular la cuenta en Ajustes. Fantrax, MFL y Fleaflicker leen ligas públicas: pega el ID de la liga.",
+      "Cualquier miembro puede importar la liga. Sleeper, ESPN y Yahoo requieren vincular la cuenta en Ajustes. La importación de Fantrax, MFL y Fleaflicker estará disponible pronto.",
     "import.backToCreate": "Volver a crear",
     "import.home": "Inicio",
     "import.otherPlatforms": "Otras plataformas",
@@ -4219,14 +4223,15 @@ export const translations: Record<string, Record<string, string>> = {
     "import.leagueDefaultName": "Liga",
     "import.status.enabled": "Activo",
     "import.status.blocked": "Bloqueado",
+    "import.status.comingSoon": "Próximamente",
     "import.provider.sleeper.detail": "Cualquier miembro con cuenta Sleeper vinculada puede importar.",
     "import.provider.espn.detail":
       "Cualquier miembro con ESPN vinculada puede importar. Las ligas privadas requieren cookies de ESPN guardadas en Ajustes.",
     "import.provider.yahoo.detail": "Cualquier miembro con Yahoo vinculada puede importar.",
-    "import.provider.fantrax.detail": "Las ligas Fantrax son legibles públicamente. Pega el ID de tu liga para importar.",
-    "import.provider.mfl.detail": "Las ligas MFL se importan con tu clave API de MFL guardada en Ajustes.",
+    "import.provider.fantrax.detail": "La importación de Fantrax estará disponible pronto.",
+    "import.provider.mfl.detail": "La importación de MFL estará disponible pronto.",
     "import.provider.fleaflicker.detail":
-      "Fleaflicker es legible públicamente. Pega el ID de la liga (o DEPORTE:ID:AÑO) para importar.",
+      "La importación de Fleaflicker estará disponible pronto.",
 
     // Create League v2 (wired)
     "createLeague.v2.eyebrow": "Crear liga",

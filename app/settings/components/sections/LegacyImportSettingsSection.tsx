@@ -18,6 +18,7 @@ import {
 import { EmptyStateRenderer } from "@/components/ui-states"
 import { resolveNoResultsState } from "@/lib/ui-state"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
+import { ImportedLeaguesPanel } from "./ImportedLeaguesPanel"
 
 export function LegacyImportSettingsSection() {
   const { t, tInterpolate } = useLanguage()
@@ -86,6 +87,10 @@ export function LegacyImportSettingsSection() {
           {tInterpolate("settings.legacy.subtitle", { sports: SUPPORTED_SPORTS.join(", ") })}
         </p>
       </div>
+
+      <ImportedLeaguesPanel />
+
+      <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: "var(--muted2)" }}>Import sources</p>
       <div className="rounded-xl border p-4 text-sm" style={{ borderColor: "var(--border)", background: "var(--panel2)", color: "var(--muted)" }}>
         <p className="font-medium" style={{ color: "var(--text)" }}>{t("settings.legacy.rankingsLevel")}</p>
         <p className="mt-1">{t("settings.legacy.rankingsBody")}</p>

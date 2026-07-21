@@ -1,8 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
-import { consumeRateLimit, getClientIp, buildRateLimit429 } from '@/lib/rate-limit'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 type ShareType = 'legacy' | 'trade' | 'rankings' | 'exposure' | 'waiver'
 
@@ -273,43 +272,21 @@ Return ONLY valid JSON, no other text.`
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/share", tool: "LegacyShare" })(async (request: NextRequest) => {
   try {
-    const auth = requireAuthOrOrigin(request)
-    if (!auth.authenticated) {
-      return forbiddenResponse(auth.error || 'Unauthorized')
-    }
-
     const body = (await request.json().catch(() => null)) as ShareInput | null
-    const sleeper_username = body?.sleeper_username?.trim()?.toLowerCase()
     const style = (body?.style ?? 'balanced') as ShareInput['style']
     const platform = (body?.platform ?? 'x') as ShareInput['platform']
 
-    if (!sleeper_username) {
-      return NextResponse.json({ success: false, error: 'Missing sleeper_username' }, { status: 400 })
-    }
-
-    // Unified per-user rate limit (share can be a little higher)
-    const ip = getClientIp(request)
-    const rl = consumeRateLimit({
-      scope: 'legacy',
-      action: 'share',
-      sleeperUsername: sleeper_username,
-      ip,
-      maxRequests: 5,
-      windowMs: 60_000,
-      includeIpInKey: false,
+    /*
+     * Was `requireAuthOrOrigin` plus a limiter keyed on the caller-supplied username with
+     * `includeIpInKey: false` — so rotating the username bought unlimited model calls.
+     * The shared gate keys on the authenticated actor and folds in the IP.
+     */
+    const gate = await requireLegacySleeperIdentity(request, {
+      requestedUsername: body?.sleeper_username?.trim() || null,
+      rateLimit: { action: 'share', maxRequests: 5, windowMs: 60_000 },
     })
-
-    if (!rl.success) {
-      const payload = buildRateLimit429({
-        message: 'Please wait before generating another share caption.',
-        rl,
-      })
-
-      return NextResponse.json(payload, {
-        status: 429,
-        headers: { 'Retry-After': String(rl.retryAfterSec || 60) },
-      })
-    }
+    if (!gate.ok) return gate.response
+    const sleeper_username = gate.identity.sleeperUsername.toLowerCase()
 
     const xaiApiKey = process.env.XAI_API_KEY || process.env.GROK_API_KEY
     if (!xaiApiKey) {
@@ -383,11 +360,6 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/share", tool: "LegacyS
       hashtags: parsed.hashtags,
       platform,
       style,
-      rate_limit: {
-        remaining: rl.remaining,
-        retryAfterSec: rl.retryAfterSec,
-        retryAfterMs: rl.retryAfterSec * 1000,
-      },
     })
   } catch (error) {
     return NextResponse.json(

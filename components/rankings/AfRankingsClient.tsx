@@ -401,7 +401,7 @@ function CareerStats({ rank }: { rank: PlayerRank }) {
   const recordLabel = ties > 0 ? `${wins}-${losses}-${ties}` : `${wins}-${losses}`
   const stats = [
     {
-      icon: <BarChart3 className="h-4 w-4 text-cyan-300/80" aria-hidden />,
+      icon: <BarChart3 className="h-4 w-4 text-violet-300/80" aria-hidden />,
       label: 'Record',
       value: wins + losses + ties > 0 ? recordLabel : 'No games yet',
       sub: 'Imported leagues (connected providers)',
@@ -419,7 +419,7 @@ function CareerStats({ rank }: { rank: PlayerRank }) {
       sub: 'Qualified seasons',
     },
     {
-      icon: <Target className="h-4 w-4 text-sky-300/80" aria-hidden />,
+      icon: <Target className="h-4 w-4 text-violet-300/80" aria-hidden />,
       label: 'Playoff rate',
       value: `${playoffRateSafe.toFixed(0)}%`,
       sub: 'Of league seasons',
@@ -501,8 +501,8 @@ function LeagueAccessRules({ rank }: { rank: PlayerRank }) {
           </div>
         </div>
 
-        <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
-          <div className="text-[11px] font-bold text-cyan-400 uppercase tracking-wide mb-1">Invitations</div>
+        <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3">
+          <div className="text-[11px] font-bold text-violet-400 uppercase tracking-wide mb-1">Invitations</div>
           <p className="text-xs text-white/50">
             Anyone can invite you to any tier league. Rank limits only apply when you are requesting access.
           </p>
@@ -522,9 +522,9 @@ function LeagueAccessRules({ rank }: { rank: PlayerRank }) {
 function ProcessingImportState() {
   return (
     <div className="space-y-6">
-      <div className="rounded-3xl border border-cyan-500/20 bg-gradient-to-br from-[#0a1228] to-[#07071a] p-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
+      <div className="rounded-3xl border border-violet-500/20 bg-gradient-to-br from-[#0a1228] to-[#07071a] p-10 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]">
         <div className="mx-auto mb-5 flex h-12 w-12 items-center justify-center">
-          <div className="h-10 w-10 animate-spin rounded-full border-2 border-cyan-500/35 border-t-cyan-400" />
+          <div className="h-10 w-10 animate-spin rounded-full border-2 border-violet-500/35 border-t-violet-400" />
         </div>
         <h2 className="text-xl font-black text-white">Import in progress</h2>
         <p className="mt-2 text-sm text-white/50">
@@ -549,7 +549,7 @@ function CalculatingRankState({ onRetry }: { onRetry: () => void }) {
         <button
           type="button"
           onClick={() => void onRetry()}
-          className="mt-6 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-white/80 hover:border-cyan-500/35 hover:text-white"
+          className="mt-6 rounded-xl border border-white/15 bg-white/[0.04] px-4 py-2 text-xs font-semibold text-white/80 hover:border-violet-500/35 hover:text-white"
         >
           Refresh now
         </button>
@@ -569,7 +569,7 @@ function RankImportTimeoutState() {
         <button
           type="button"
           onClick={() => router.push('/af-rankings')}
-          className="mt-6 rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-4 py-2.5 text-sm font-semibold text-cyan-100 hover:border-cyan-400/50 hover:text-white"
+          className="mt-6 rounded-xl border border-violet-500/35 bg-violet-500/10 px-4 py-2.5 text-sm font-semibold text-violet-100 hover:border-violet-400/50 hover:text-white"
         >
           Try importing again
         </button>
@@ -603,7 +603,7 @@ function LevelJourneyStrip({
         </p>
         <p className={`text-[11px] font-bold tabular-nums ${dark ? 'text-white/55' : 'text-[#0a0a12]/80'}`}>
           You are{' '}
-          <span className={dark ? 'text-cyan-200/95' : 'text-[#0a0a12]'}>Level {lv}</span>
+          <span className={dark ? 'text-violet-200/95' : 'text-[#0a0a12]'}>Level {lv}</span>
         </p>
       </div>
 
@@ -687,7 +687,7 @@ function RankingSystemOverview() {
       <div className="space-y-5">
         {tierGroups.order.map((tierName) => (
           <div key={tierName}>
-            <p className="text-[11px] font-bold text-cyan-300/90 mb-2 flex items-center gap-2">
+            <p className="text-[11px] font-bold text-violet-300/90 mb-2 flex items-center gap-2">
               <span>{getLevelIcon((tierGroups.map.get(tierName) ?? [])[0]?.tierGroup ?? 1)}</span>
               {tierName}
             </p>
@@ -725,7 +725,7 @@ function EmptyRankState({ onImported }: { onImported: () => void }) {
           <div className="text-6xl mb-4">🏆</div>
           <h2 className="text-2xl sm:text-3xl font-black text-white mb-2">
             Turn your fantasy history into a{' '}
-            <span className="bg-gradient-to-r from-violet-400 to-cyan-400 bg-clip-text text-transparent">Legacy Profile</span>
+            <span className="bg-gradient-to-r from-violet-400 to-violet-400 bg-clip-text text-transparent">Legacy Profile</span>
           </h2>
           <p className="text-white/50 text-sm max-w-md mx-auto mb-2">
             Import your career data to unlock your rank badge, AI insight, league access tier, and progression path.
@@ -741,7 +741,7 @@ function EmptyRankState({ onImported }: { onImported: () => void }) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+      <div className="rounded-2xl border border-violet-500/20 bg-violet-500/5 p-5">
         <div className="flex items-start gap-4">
           <div className="text-3xl">🔒</div>
           <div>
@@ -827,7 +827,7 @@ function FullRankView({
                   type="button"
                   disabled={recalculateLoading}
                   onClick={onRecalculate}
-                  className="rounded-xl px-4 py-2 text-xs font-bold border border-cyan-500/35 text-cyan-200 hover:border-cyan-400/50 hover:text-white transition-all disabled:opacity-40"
+                  className="rounded-xl px-4 py-2 text-xs font-bold border border-violet-500/35 text-violet-200 hover:border-violet-400/50 hover:text-white transition-all disabled:opacity-40"
                   data-testid="rank-recalculate-button"
                 >
                   {recalculateLoading ? 'Recalculating…' : 'Recalculate'}
@@ -864,7 +864,7 @@ function RankingsLoadingShell() {
         <div className="mb-8">
           <Link
             href="/dashboard"
-            className="group mb-5 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/35 transition-colors hover:text-cyan-300"
+            className="group mb-5 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/35 transition-colors hover:text-violet-300"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -1186,7 +1186,7 @@ function MyRankingsPageInner() {
               rankFetchError
                 ? 'border-amber-500/35 bg-amber-500/10'
                 : importProcessing
-                  ? 'border-cyan-500/35 bg-cyan-500/10'
+                  ? 'border-violet-500/35 bg-violet-500/10'
                   : rank
                     ? 'border-emerald-500/30 bg-emerald-500/10'
                     : 'border-white/15 bg-white/[0.04]'
@@ -1194,14 +1194,14 @@ function MyRankingsPageInner() {
           >
             <div className="flex items-start gap-3">
               {importProcessing && !rankFetchError ? (
-                <div className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-300" />
+                <div className="mt-0.5 h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-violet-400/30 border-t-violet-300" />
               ) : null}
               <p
                 className={`text-sm font-semibold ${
                   rankFetchError
                     ? 'text-amber-100'
                     : importProcessing
-                      ? 'text-cyan-100'
+                      ? 'text-violet-100'
                       : rank
                         ? 'text-emerald-100'
                         : 'text-white/70'
@@ -1226,7 +1226,7 @@ function MyRankingsPageInner() {
                 rankFetchError
                   ? 'text-amber-200/80 hover:text-amber-50'
                   : importProcessing
-                    ? 'text-cyan-200/80 hover:text-cyan-50'
+                    ? 'text-violet-200/80 hover:text-violet-50'
                     : rank
                       ? 'text-emerald-200/80 hover:text-emerald-50'
                       : 'text-white/40 hover:text-white/70'
@@ -1267,7 +1267,7 @@ function MyRankingsPageInner() {
         <div className="mb-8">
           <Link
             href="/dashboard"
-            className="group mb-5 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/35 transition-colors hover:text-cyan-300"
+            className="group mb-5 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-widest text-white/35 transition-colors hover:text-violet-300"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"

@@ -125,11 +125,19 @@ describe('Route budget — deleted routes must stay gone', () => {
       'app/dashboard/page.tsx',
       'app/dashboard/DashboardShell.tsx',
     ]
+    // Skipping a missing suspect used to be the whole loop body's escape hatch, so if
+    // both were ever renamed this asserted nothing and still passed. Track what was
+    // actually inspected and require it to be non-empty.
+    const inspected: string[] = []
+    const offenders: string[] = []
     for (const rel of suspects) {
       if (!exists(rel)) continue
-      const src = read(rel)
-      expect(src, `${rel} should not reference /api/ai/context`).not.toContain('/api/ai/context')
+      inspected.push(rel)
+      if (read(rel).includes('/api/ai/context')) offenders.push(rel)
     }
+    expect(inspected.length, `none of the suspect files exist any more (${suspects.join(', ')}) — this guard is checking nothing; re-point it`)
+      .toBeGreaterThan(0)
+    expect(offenders, `these still reference the deleted /api/ai/context route: ${offenders.join(', ')}`).toEqual([])
   })
 })
 
@@ -174,8 +182,28 @@ describe('Route budget — build-excluded routes have no active production fetch
     'components/admin/',
   ]
 
-  function anyCallerOf(urlFragment: string, routePrefix: string): boolean {
+  /**
+   * Minimum production source files this scan must see before its verdict means
+   * anything. `app/` + `components/` + `lib/` are thousands of files; if a walk ever
+   * returns a handful, it broke rather than found a clean tree.
+   */
+  const MIN_SCANNED = 500
+
+  /*
+   * Returns whether any production source fetches `urlFragment`, and how many files
+   * it actually read to decide that.
+   *
+   * The count is not decoration. This helper previously returned a bare `false` —
+   * "no caller found", i.e. PASS — whenever the walk came up empty, so a renamed
+   * source dir or an unreadable file made all seven tests below pass while scanning
+   * nothing. A guard against shipping a caller to a build-excluded route must fail
+   * closed, so callers assert on `scanned` too. Read errors are surfaced for the same
+   * reason rather than swallowed: an unreadable file is an unchecked file.
+   */
+  function anyCallerOf(urlFragment: string, routePrefix: string): { found: boolean; scanned: number; unreadable: string[] } {
     const pattern = new RegExp(`fetch\\([^)]*${urlFragment.replace(/\//g, '\\/')}`)
+    let scanned = 0
+    const unreadable: string[] = []
     for (const dir of SOURCE_DIRS) {
       const abs = join(root, dir)
       if (!existsSync(abs)) continue
@@ -190,37 +218,49 @@ describe('Route budget — build-excluded routes have no active production fetch
           // Skip the route file itself and any excluded-from-production source.
           if (rel.startsWith(routePrefix)) continue
           if (EXCLUDED_SOURCE_PREFIXES.some((p) => rel.startsWith(p))) continue
-          try { if (pattern.test(readFileSync(child, 'utf8'))) return true } catch {}
+          let src: string
+          try { src = readFileSync(child, 'utf8') } catch { unreadable.push(rel); continue }
+          scanned += 1
+          if (pattern.test(src)) return { found: true, scanned, unreadable }
         }
       }
     }
-    return false
+    return { found: false, scanned, unreadable }
+  }
+
+  /** Asserts the verdict AND that the scan was real enough to have produced one. */
+  function expectNoProductionCaller(urlFragment: string, routePrefix: string) {
+    const { found, scanned, unreadable } = anyCallerOf(urlFragment, routePrefix)
+    expect(unreadable, `unreadable source files — these went unchecked: ${unreadable.join(', ')}`).toEqual([])
+    expect(scanned, `only scanned ${scanned} files (<${MIN_SCANNED}) — the walk is broken, so a clean result proves nothing`)
+      .toBeGreaterThan(MIN_SCANNED)
+    expect(found, `${urlFragment} is fetched from production source but its route is excluded from the production build — that call 404s in prod`).toBe(false)
   }
 
   it('/api/ai/providers is not fetched from production source', () => {
-    expect(anyCallerOf('/api/ai/providers', 'app/api/ai/providers/')).toBe(false)
+    expectNoProductionCaller('/api/ai/providers', 'app/api/ai/providers/')
   })
 
   it('/api/ai/tools is not fetched from production source', () => {
-    expect(anyCallerOf('/api/ai/tools', 'app/api/ai/tools/')).toBe(false)
+    expectNoProductionCaller('/api/ai/tools', 'app/api/ai/tools/')
   })
 
   it('/api/ai/analytics/rollup is not fetched from production source', () => {
-    expect(anyCallerOf('/api/ai/analytics/rollup', 'app/api/ai/analytics/')).toBe(false)
+    expectNoProductionCaller('/api/ai/analytics/rollup', 'app/api/ai/analytics/')
   })
 
   // Route-budget cleanup (2026-06-22): newly build-excluded internal diagnostics.
   it('/api/meta/logs is not fetched from production source', () => {
-    expect(anyCallerOf('/api/meta/logs', 'app/api/meta/logs/')).toBe(false)
+    expectNoProductionCaller('/api/meta/logs', 'app/api/meta/logs/')
   })
   it('/api/intelligence/snapshot is not fetched from production source', () => {
-    expect(anyCallerOf('/api/intelligence/snapshot', 'app/api/intelligence/snapshot/')).toBe(false)
+    expectNoProductionCaller('/api/intelligence/snapshot', 'app/api/intelligence/snapshot/')
   })
   it('/api/providers/status is not fetched from production source', () => {
-    expect(anyCallerOf('/api/providers/status', 'app/api/providers/status/')).toBe(false)
+    expectNoProductionCaller('/api/providers/status', 'app/api/providers/status/')
   })
   it('/api/platform/service-map is not fetched from production source', () => {
-    expect(anyCallerOf('/api/platform/service-map', 'app/api/platform/service-map/')).toBe(false)
+    expectNoProductionCaller('/api/platform/service-map', 'app/api/platform/service-map/')
   })
 })
 

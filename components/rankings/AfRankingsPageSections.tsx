@@ -58,7 +58,7 @@ export function AfRankingsTierLadder({ currentLevel }: { currentLevel: number })
     <section className="rounded-3xl border border-white/[0.08] bg-gradient-to-b from-[#0c1224]/90 to-[#070a14] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] sm:p-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-cyan-400/80">Tier track</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-violet-400/80">Tier track</p>
           <h2 className="mt-1 text-lg font-black text-white sm:text-xl">Where you sit on the ladder</h2>
         </div>
         <p className="text-[11px] text-white/45">
@@ -77,7 +77,7 @@ export function AfRankingsTierLadder({ currentLevel }: { currentLevel: number })
               key={step.group}
               className={`relative min-w-[calc(50%-0.25rem)] flex-1 rounded-2xl border px-3 py-3 sm:min-w-[8.5rem] ${
                 active
-                  ? 'border-white/20 shadow-[0_0_24px_rgba(34,211,238,0.08)]'
+                  ? 'border-white/20 shadow-[0_0_24px_rgba(145,132,217,0.08)]'
                   : 'border-white/[0.06] bg-white/[0.02]'
               }`}
               style={
@@ -91,7 +91,7 @@ export function AfRankingsTierLadder({ currentLevel }: { currentLevel: number })
               }
             >
               {active ? (
-                <span className="absolute -top-2 left-3 rounded-full border border-cyan-400/40 bg-cyan-500/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-100">
+                <span className="absolute -top-2 left-3 rounded-full border border-violet-400/40 bg-violet-500/20 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-violet-100">
                   You
                 </span>
               ) : null}
@@ -112,7 +112,7 @@ export function AfRankingsXpBreakdown({ id }: { id?: string }) {
   const rows = [
     { icon: <Trophy className="h-4 w-4 text-amber-300/90" />, t: 'Wins & results', d: 'Matchups and seasons that finish in the win column.' },
     { icon: <Crown className="h-4 w-4 text-violet-300/90" />, t: 'Titles & finals', d: 'Championships and deep playoff runs weighted heavily.' },
-    { icon: <Brackets className="h-4 w-4 text-cyan-300/90" />, t: 'Playoff appearances', d: 'Consistent contention across imported leagues.' },
+    { icon: <Brackets className="h-4 w-4 text-violet-300/90" />, t: 'Playoff appearances', d: 'Consistent contention across imported leagues.' },
     { icon: <CalendarDays className="h-4 w-4 text-emerald-300/90" />, t: 'Seasons & activity', d: 'Longevity and participation across years.' },
     { icon: <Zap className="h-4 w-4 text-amber-200/90" />, t: 'Imports & sync', d: 'Connected history from Sleeper and other providers.' },
   ]
@@ -249,7 +249,7 @@ export function AfRankingsPerformanceSummary({ rank }: { rank: PlayerRankLite })
       </div>
       {winPct != null ? (
         <p className="mt-4 text-[13px] text-white/50">
-          Career win %: <span className="font-bold text-cyan-200/90">{winPct.toFixed(1)}%</span>
+          Career win %: <span className="font-bold text-violet-200/90">{winPct.toFixed(1)}%</span>
         </p>
       ) : null}
     </section>
@@ -264,7 +264,7 @@ export function AfRankingsHistoryPlaceholder() {
           <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/35">Momentum & history</p>
           <h2 className="mt-1 text-lg font-black text-white">Rank trend</h2>
         </div>
-        <span className="shrink-0 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold text-cyan-300">
+        <span className="shrink-0 rounded-full border border-violet-500/25 bg-violet-500/10 px-2.5 py-1 text-[10px] font-semibold text-violet-300">
           Unlocks with history
         </span>
       </div>
@@ -272,7 +272,7 @@ export function AfRankingsHistoryPlaceholder() {
         {[
           { label: 'Season win streak', color: 'text-amber-300/70' },
           { label: 'Win rate trend', color: 'text-emerald-300/70' },
-          { label: 'XP earned this season', color: 'text-cyan-300/70' },
+          { label: 'XP earned this season', color: 'text-violet-300/70' },
         ].map((row) => (
           <div key={row.label} className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.03] px-3 py-2.5">
             <span className="text-xs text-white/40">{row.label}</span>

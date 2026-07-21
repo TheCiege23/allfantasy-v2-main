@@ -1,6 +1,7 @@
 'use client'
 
 import type { ComponentType, ReactNode } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   AlertTriangle,
@@ -10,13 +11,20 @@ import {
   FileText,
   Gift,
   Home,
+  LayoutDashboard,
   Link2,
+  Search,
   Shield,
   Sliders,
   Sparkles,
+  Trophy,
   User,
 } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
+import { useEntitlement } from '@/hooks/useEntitlement'
+import { AVATAR_PRESET_EMOJI } from '@/lib/avatar'
+import type { SettingsProfile } from './sections/settings-types'
+import '../nocturne-settings.css'
 
 export type SettingsTabId =
   | 'profile'
@@ -27,6 +35,8 @@ export type SettingsTabId =
   | 'billing'
   | 'referral'
   | 'legacy'
+  | 'rank'
+  | 'command'
   | 'legal'
   | 'chimmy'
   | 'account'
@@ -40,12 +50,14 @@ const NAV_DEFS: NavDef[] = [
   { id: 'profile', icon: User },
   { id: 'preferences', icon: Sliders },
   { id: 'chimmy', icon: Sparkles },
+  { id: 'command', icon: LayoutDashboard },
   { id: 'security', icon: Shield },
   { id: 'notifications', icon: Bell },
   { id: 'connected', icon: Link2 },
+  { id: 'legacy', icon: Archive },
+  { id: 'rank', icon: Trophy },
   { id: 'billing', icon: CreditCard },
   { id: 'referral', icon: Gift },
-  { id: 'legacy', icon: Archive },
   { id: 'legal', icon: FileText },
   { id: 'account', icon: AlertTriangle },
 ]
@@ -57,115 +69,190 @@ export function isSettingsTabId(value: string | null | undefined): value is Sett
   return NAV_DEFS.some((n) => n.id === value)
 }
 
+function initialsFrom(name: string): string {
+  const t = name.trim()
+  if (!t) return '?'
+  const parts = t.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
+  return t.slice(0, 2).toUpperCase()
+}
+
+/**
+ * Honest profile-completion score — measures which optional profile fields the
+ * user has actually filled. No fabricated denominator.
+ */
+function completionPct(profile: SettingsProfile): number {
+  if (!profile) return 0
+  const checks = [
+    Boolean(profile.displayName),
+    Boolean(profile.bio),
+    Boolean(profile.profileImageUrl || profile.avatarPreset),
+    Boolean(profile.preferredSports && profile.preferredSports.length > 0),
+    Boolean(profile.timezone),
+  ]
+  return Math.round((checks.filter(Boolean).length / checks.length) * 100)
+}
+
+function SidebarProfileCard({
+  profile,
+  planLabel,
+}: {
+  profile: SettingsProfile
+  planLabel: string | null
+}) {
+  const ent = useEntitlement('pro_autocoach')
+  const isPro = ent.isActiveOrGrace
+  const planText = planLabel ?? (isPro ? 'Pro' : 'Free')
+
+  const name = profile?.displayName || profile?.username || 'Your profile'
+  const username = profile?.username
+  const level = profile?.xpLevel
+  const tier = profile?.rankTier
+  const sports = (profile?.preferredSports ?? []).slice(0, 5)
+  const pct = completionPct(profile)
+
+  const presetEmoji =
+    profile?.avatarPreset && !profile?.profileImageUrl
+      ? AVATAR_PRESET_EMOJI[profile.avatarPreset as keyof typeof AVATAR_PRESET_EMOJI]
+      : null
+
+  return (
+    <div className="ns-profile-card">
+      <div className="ns-pc-head">
+        <span className="ns-avatar">
+          {profile?.profileImageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={profile.profileImageUrl} alt="" />
+          ) : presetEmoji ? (
+            <span className="ns-avatar-emoji">{presetEmoji}</span>
+          ) : (
+            initialsFrom(name)
+          )}
+        </span>
+        <div className="ns-pc-id">
+          <div className="ns-pc-name">{name}</div>
+          {username ? <div className="ns-pc-username">@{username}</div> : null}
+        </div>
+      </div>
+
+      <div className="ns-pc-meta">
+        {level != null && tier ? (
+          <span className="ns-rank">
+            Lv.{level} · {tier}
+          </span>
+        ) : level != null ? (
+          <span className="ns-rank">Lv.{level}</span>
+        ) : null}
+        <span className={`ns-plan ${isPro ? 'is-pro' : 'is-free'}`}>{planText}</span>
+      </div>
+
+      {sports.length > 0 ? (
+        <div className="ns-chips">
+          {sports.map((s) => (
+            <span key={s} className="ns-chip">
+              {s}
+            </span>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="ns-completion">
+        <div className="ns-completion-row">
+          <span>Profile completion</span>
+          <b>{pct}%</b>
+        </div>
+        <div className="ns-meter" aria-hidden="true">
+          <span style={{ width: `${pct}%` }} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function SettingsChrome({
   activeTab,
   onTabChange,
+  profile = null,
+  planLabel = null,
   children,
 }: {
   activeTab: SettingsTabId
   onTabChange: (id: SettingsTabId) => void
+  profile?: SettingsProfile
+  planLabel?: string | null
   children: ReactNode
 }) {
   const router = useRouter()
   const { t } = useLanguage()
+  const [query, setQuery] = useState('')
 
-  const NavButton = ({ tab, mobile }: { tab: NavDef; mobile?: boolean }) => {
-    const Icon = tab.icon
-    const active = activeTab === tab.id
-    const label = t(`settings.nav.${tab.id}`)
-    return (
-      <button
-        type="button"
-        onClick={() => onTabChange(tab.id)}
-        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition ${
-          active ? 'font-semibold' : 'font-medium hover:bg-white/[0.04]'
-        } ${
-          mobile ? 'shrink-0 whitespace-nowrap' : ''
-        } ${active ? 'border-l-2 border-cyan-400' : 'border-l-2 border-transparent'}`}
-        style={
-          active
-            ? {
-                background: 'color-mix(in srgb, var(--accent-cyan) 15%, transparent)',
-                color: 'var(--text)',
-              }
-            : {
-                color: 'var(--muted)',
-              }
-        }
-      >
-        <Icon
-          className="h-4 w-4 shrink-0"
-          style={{ color: 'var(--accent-cyan-strong)' }}
-        />
-        {label}
-      </button>
-    )
-  }
+  const filteredNav = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return NAV_DEFS
+    return NAV_DEFS.filter((n) => t(`settings.nav.${n.id}`).toLowerCase().includes(q))
+  }, [query, t])
 
   return (
-    <div
-      className="flex min-h-[100dvh] flex-col"
-      style={{ background: 'var(--bg)', color: 'var(--text)' }}
-    >
-      <header
-        className="flex shrink-0 items-center gap-3 border-b px-4 py-3"
-        style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
-      >
+    <div className="nocturne-settings ns-root">
+      <header className="ns-topbar">
+        <div className="ns-brand">
+          <span className="ns-brand-mark">AF</span>
+          <span className="ns-brand-title">{t('settings.title')}</span>
+        </div>
+
+        <div className="ns-search">
+          <Search />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('settings.searchPlaceholder')}
+            aria-label={t('settings.searchPlaceholder')}
+          />
+        </div>
+
+        <div className="ns-spacer" />
+
         <button
           type="button"
+          className="ns-home"
           onClick={() => router.push('/dashboard')}
-          className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition hover:opacity-90"
-          style={{
-            borderColor: 'var(--border)',
-            background: 'var(--panel2)',
-            color: 'var(--text)',
-          }}
           data-testid="settings-home"
         >
-          <Home className="h-5 w-5" style={{ color: 'var(--accent-cyan-strong)' }} strokeWidth={2} />
+          <Home strokeWidth={2} />
           {t('settings.home')}
         </button>
-        <h1
-          className="text-lg font-bold tracking-tight"
-          style={{ color: 'var(--text)' }}
-        >
-          {t('settings.title')}
-        </h1>
       </header>
 
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-        <nav
-          className="flex shrink-0 gap-0.5 overflow-x-auto border-b px-2 py-2 md:hidden"
-          style={{ borderColor: 'var(--border)' }}
-          aria-label={t('settings.aria.sections')}
-        >
-          {SETTINGS_NAV.map((tab) => (
-            <NavButton key={tab.id} tab={tab} mobile />
-          ))}
-        </nav>
+      <div className="ns-shell">
+        <aside className="ns-sidebar" aria-label={t('settings.aria.navigation')}>
+          <SidebarProfileCard profile={profile} planLabel={planLabel} />
 
-        <aside
-          className="hidden w-60 shrink-0 flex-col border-r p-3 md:flex"
-          style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}
-          aria-label={t('settings.aria.navigation')}
-        >
-          <div
-            className="rounded-xl border p-2"
-            style={{ borderColor: 'var(--border)', background: 'var(--panel)' }}
-          >
-            {SETTINGS_NAV.map((tab) => (
-              <NavButton key={tab.id} tab={tab} />
-            ))}
-          </div>
+          <nav className="ns-nav" aria-label={t('settings.aria.sections')}>
+            {filteredNav.map((tab) => {
+              const Icon = tab.icon
+              const active = activeTab === tab.id
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => onTabChange(tab.id)}
+                  className={`ns-nav-item${active ? ' is-active' : ''}`}
+                  aria-current={active ? 'page' : undefined}
+                >
+                  <Icon />
+                  <span className="ns-nav-label">{t(`settings.nav.${tab.id}`)}</span>
+                </button>
+              )
+            })}
+            {filteredNav.length === 0 ? (
+              <p className="ns-nav-empty">No settings match “{query}”.</p>
+            ) : null}
+          </nav>
         </aside>
 
-        <main className="min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 md:px-10">
-          <div
-            className="mx-auto max-w-3xl rounded-2xl border p-5 shadow-xl sm:p-8"
-            style={{ borderColor: 'var(--border)', background: 'var(--panel2)' }}
-          >
-            {children}
-          </div>
+        <main className="ns-main">
+          <div className="ns-content-card">{children}</div>
         </main>
       </div>
     </div>

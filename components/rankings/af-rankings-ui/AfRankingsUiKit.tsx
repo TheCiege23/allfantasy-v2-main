@@ -34,7 +34,7 @@ export function RankMovementChip({ movement }: { movement: RankMovement | null |
       ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-200'
       : movement.kind === 'down'
         ? 'border-rose-500/35 bg-rose-500/10 text-rose-200'
-        : 'border-slate-500/30 bg-slate-500/10 text-slate-300'
+        : 'border-violet-500/25 bg-violet-500/10 text-violet-200/90'
 
   return (
     <span
@@ -66,7 +66,7 @@ export function RankPrestigeEmblem({
         aria-hidden
       />
       <div
-        className="relative flex h-full w-full flex-col items-center justify-center rounded-2xl border-2 bg-[#0a1020]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
+        className="relative flex h-full w-full flex-col items-center justify-center rounded-2xl border-2 bg-[#1c1e2b]/95 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)]"
         style={{
           borderColor: theme.borderGlow,
           boxShadow: `0 0 24px ${theme.glow}, inset 0 1px 0 rgba(255,255,255,0.06)`,
@@ -189,7 +189,7 @@ export function XpProgressPremium({
           <span className="tabular-nums text-white/55">{xpForLevel.toLocaleString()}</span>
           <span className="ml-1 text-white/35">XP in level</span>
         </span>
-        <span className="font-bold tabular-nums text-cyan-200/90">{pct}%</span>
+        <span className="font-bold tabular-nums text-violet-200/90">{pct}%</span>
       </div>
 
       <div className="relative h-3 overflow-hidden rounded-full bg-white/[0.07] ring-1 ring-white/[0.06]">
@@ -255,8 +255,8 @@ export function RankingStatMiniCard({
 export function RankInsightBanner({ text }: { text: string }) {
   if (!text?.trim()) return null
   return (
-    <div className="flex gap-2 rounded-xl border border-cyan-500/15 bg-cyan-500/[0.06] px-3 py-2.5">
-      <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-cyan-400/90">Chimmy</span>
+    <div className="flex gap-2 rounded-xl border border-violet-500/20 bg-violet-500/[0.07] px-3 py-2.5">
+      <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-violet-300/90">Chimmy</span>
       <p className="text-[12px] leading-relaxed text-white/70">{text}</p>
     </div>
   )
@@ -284,7 +284,7 @@ export function RankingsCtaRow({
     <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
       <Link
         href={fullRankingsHref}
-        className="inline-flex items-center justify-center rounded-xl border border-cyan-500/40 bg-cyan-500/[0.12] px-4 py-2.5 text-sm font-bold text-cyan-100 shadow-[0_0_20px_rgba(34,211,238,0.12)] transition hover:border-cyan-400/55 hover:bg-cyan-500/[0.18]"
+        className="inline-flex items-center justify-center rounded-xl border border-violet-500/40 bg-violet-500/[0.12] px-4 py-2.5 text-sm font-bold text-violet-100 shadow-[0_0_20px_rgba(145,132,217,0.16)] transition hover:border-violet-400/55 hover:bg-violet-500/[0.18]"
         data-testid="rankings-cta-full"
       >
         {viewFullLabel}
@@ -294,13 +294,13 @@ export function RankingsCtaRow({
           <button
             type="button"
             onClick={onAskChimmy}
-            className="text-cyan-300/90 underline-offset-2 transition hover:text-cyan-200 hover:underline"
+            className="text-violet-300/90 underline-offset-2 transition hover:text-violet-200 hover:underline"
             data-testid="rankings-cta-chimmy-why"
           >
             {chimmyWhyLabel}
           </button>
         ) : chimmyHref ? (
-          <Link href={chimmyHref} className="text-cyan-300/90 underline-offset-2 hover:underline">
+          <Link href={chimmyHref} className="text-violet-300/90 underline-offset-2 hover:underline">
             {chimmyWhyLabel}
           </Link>
         ) : null}

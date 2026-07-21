@@ -41,12 +41,17 @@ function chainForDomain(domain: DataDomain, sport: LeagueSport): ProviderName[] 
   switch (domain) {
     case 'player_profile':
       return ['rolling_insights', 'thesportsdb', 'clearsports', 'sleeper', 'allfantasy_internal']
+    // `clearsports` is deliberately absent from the two image chains below. It has no image or
+    // logo product at all: `CLEARSPORTS_NFL_ENDPOINTS` exposes only player-stats, team-stats,
+    // injury-stats, team-by-id and games — and those are NFL-only (`/api/v1/nfl/...`). Leaving
+    // it in the chain implied coverage that could never fire for any sport. Rolling Insights
+    // (primary) and TheSportsDB (secondary) already span all 7 supported sports here.
     case 'player_images':
-      return ['rolling_insights', 'thesportsdb', 'sleeper', 'clearsports', 'allfantasy_internal']
+      return ['rolling_insights', 'thesportsdb', 'sleeper', 'allfantasy_internal']
     case 'team_profile':
       return ['rolling_insights', 'thesportsdb', 'clearsports', 'allfantasy_internal']
     case 'team_logos':
-      return ['rolling_insights', 'thesportsdb', 'clearsports', 'allfantasy_internal']
+      return ['rolling_insights', 'thesportsdb', 'allfantasy_internal']
     case 'player_stats':
     case 'team_stats':
       return ['rolling_insights', 'clearsports', 'thesportsdb', 'allfantasy_internal']

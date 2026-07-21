@@ -1,9 +1,8 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
-import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { getOrComputeManagerDNA, getCachedDNA } from '@/lib/manager-dna'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 const PostSchema = z.object({
   sleeper_username: z.string().min(1).max(40),
@@ -12,25 +11,6 @@ const PostSchema = z.object({
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/manager-dna", tool: "LegacyManagerDna" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
-
-  const ip = getClientIp(req)
-  const rl = consumeRateLimit({
-    scope: 'legacy',
-    action: 'manager_dna',
-    ip,
-    maxRequests: 5,
-    windowMs: 60_000,
-    includeIpInKey: true,
-  })
-  if (!rl.success) {
-    return NextResponse.json(
-      { error: 'Rate limit exceeded. DNA profiling is compute-intensive.' },
-      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } },
-    )
-  }
-
   try {
     const body = await req.json()
     const parsed = PostSchema.safeParse(body)
@@ -41,14 +21,25 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/manager-dna", tool: "L
       )
     }
 
-    const { sleeper_username, league_ids, force_refresh } = parsed.data
+    const { league_ids, force_refresh } = parsed.data
 
-    const profile = await getOrComputeManagerDNA(sleeper_username, league_ids, force_refresh)
+    /*
+     * Was `requireAuthOrOrigin`, which returns authenticated:true with a null user for any
+     * caller that sets an Origin header — so this compute-intensive profiler was open, and
+     * profiled whatever username the body named. Parse first so there is a single 403 path
+     * comparing the body's username against the caller's own link.
+     */
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: parsed.data.sleeper_username,
+      rateLimit: { action: 'manager_dna', maxRequests: 5, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+
+    const profile = await getOrComputeManagerDNA(gate.identity.sleeperUsername, league_ids, force_refresh)
 
     return NextResponse.json({
       ok: true,
       profile,
-      rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
     })
   } catch (error) {
     console.error('Manager DNA error:', error)
@@ -64,33 +55,21 @@ const GetSchema = z.object({
 })
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/manager-dna", tool: "LegacyManagerDna" })(async (req: NextRequest) => {
-  const authResult = requireAuthOrOrigin(req)
-  if (!authResult.authenticated) return forbiddenResponse(authResult.error || 'Unauthorized')
-
-  const ip = getClientIp(req)
-  const rl = consumeRateLimit({
-    scope: 'legacy',
-    action: 'manager_dna_get',
-    ip,
-    maxRequests: 30,
-    windowMs: 60_000,
-    includeIpInKey: true,
-  })
-  if (!rl.success) {
-    return NextResponse.json(
-      { error: 'Rate limit exceeded.' },
-      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } },
-    )
-  }
-
   const url = new URL(req.url)
   const parsed = GetSchema.safeParse({ username: url.searchParams?.get('username') })
   if (!parsed.success) {
     return NextResponse.json({ error: 'Missing username parameter' }, { status: 400 })
   }
 
+  // `?username=` named whoever the caller liked; it is now only compared, never read from.
+  const gate = await requireLegacySleeperIdentity(req, {
+    requestedUsername: parsed.data.username,
+    rateLimit: { action: 'manager_dna_get', maxRequests: 30, windowMs: 60_000 },
+  })
+  if (!gate.ok) return gate.response
+
   try {
-    const profile = await getCachedDNA(parsed.data.username)
+    const profile = await getCachedDNA(gate.identity.sleeperUsername)
 
     if (!profile) {
       return NextResponse.json(
@@ -102,7 +81,6 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/manager-dna", tool: "Le
     return NextResponse.json({
       ok: true,
       profile,
-      rate_limit: { remaining: rl.remaining, retryAfterSec: rl.retryAfterSec },
     })
   } catch (error) {
     console.error('Manager DNA GET error:', error)

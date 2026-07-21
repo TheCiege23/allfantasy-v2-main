@@ -42,6 +42,10 @@ export const API_CHAIN_TTLS = {
   player_headshots: 604800,
   team_logos: 604800,
   roster: 3600,
+  /** Season-long player stat totals — refresh twice daily (12h). */
+  season_stats: 43200,
+  /** Per-week player stat lines — refresh every 15m during live windows. */
+  weekly_stats: 900,
   rolling_insights: 1800,
   adp: 21600,
 } as const

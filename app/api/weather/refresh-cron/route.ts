@@ -25,6 +25,15 @@ function resolveVenueCoords(venue: string | null): { lat: number; lng: number } 
   return null
 }
 
+/**
+ * Vercel cron invokes scheduled paths with GET. This route was POST-only, so the
+ * `0 */3 * * *` schedule in vercel.json 405'd on every run and weather was never
+ * refreshed. Auth is unchanged — GET simply delegates to the POST handler.
+ */
+export async function GET(request: NextRequest) {
+  return POST(request)
+}
+
 export async function POST(request: NextRequest) {
   if (!requireCronAuth(request, 'CRON_SECRET')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

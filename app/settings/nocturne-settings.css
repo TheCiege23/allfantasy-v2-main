@@ -1,0 +1,321 @@
+/*
+ * Nocturne — scoped visual system for the Settings tab (/settings).
+ *
+ * Two jobs:
+ *  1. REMAP the app's own theme variables (--bg / --panel / --accent-cyan / …)
+ *     to the Nocturne blurple palette *for this subtree only*. Every settings
+ *     section is already variable-driven (127 `var(--text)`, 30 `var(--accent-cyan)`,
+ *     …), so redefining those custom properties on `.nocturne-settings` recolors
+ *     all of them at once without editing a single section file. Custom properties
+ *     inherit, so the nearest ancestor that sets them (this class) wins over
+ *     `:root` / `html[data-mode]` regardless of the user's app theme.
+ *  2. Provide the `ns-*` chrome classes for the redesigned two-pane shell
+ *     (top bar, sidebar profile card, searchable nav).
+ *
+ * Namespaced under `.nocturne-settings` so nothing leaks into the rest of the
+ * app. Same isolation pattern as `components/auth/nocturne-auth.css` and the
+ * landing's `components/landing/nocturne/nocturne.css`. Dark by design — the
+ * Settings surface is always Nocturne, independent of the app theme toggle.
+ *
+ * Ported from the design handoff `design_handoff_settings` (direction "1a").
+ * Note: portalled overlays (subscription gate, delete dialog, toasts) render
+ * outside this subtree and keep the app theme — acceptable for transient UI.
+ */
+
+.nocturne-settings {
+  /* ── Nocturne ground + accent ─────────────────────────────────────── */
+  --ns-bg: #161826;
+  --ns-panel: #1c1e2b;
+  --ns-panel-2: #161826;
+  --ns-text: #e9e9ed;
+  --ns-muted: #9397ab;
+  --ns-muted-2: #b2b6ca;
+  --ns-dim: #75798c;
+  --ns-border: #33353f;
+  --ns-border-soft: #292b31;
+  --ns-accent: #9184d9;
+  --ns-accent-bright: #b5abfc;
+  --ns-accent-deep: #5d5294;
+
+  /* ── Remap the app theme vars the sections consume ────────────────── */
+  --bg: var(--ns-bg);
+  --panel: var(--ns-panel);
+  --panel2: var(--ns-panel-2);
+  --surface-card-soft: var(--ns-panel-2);
+  --text: var(--ns-text);
+  --muted: var(--ns-muted);
+  --muted2: var(--ns-muted-2);
+  --border: var(--ns-border);
+  --accent: var(--ns-accent);
+  --accent-cyan: var(--ns-accent);
+  --accent-cyan-strong: var(--ns-accent-bright);
+  --accent-purple: #796cbf; /* gives the accent gradients some depth */
+  --accent-red: #cf6b6f;
+  --accent-red-strong: #e5686c;
+  --on-accent-bg: #161826; /* dark text sits on the light-blurple accent */
+
+  background: var(--ns-bg);
+  color: var(--ns-text);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nocturne-settings *,
+.nocturne-settings *::before,
+.nocturne-settings *::after { box-sizing: border-box; }
+
+.nocturne-settings ::selection { background: color-mix(in srgb, var(--ns-accent) 30%, transparent); }
+.nocturne-settings :focus-visible { outline: 2px solid var(--ns-accent); outline-offset: 2px; }
+
+.nocturne-settings ::-webkit-scrollbar { width: 9px; height: 9px; }
+.nocturne-settings ::-webkit-scrollbar-thumb { background: var(--ns-border); border-radius: 5px; }
+.nocturne-settings ::-webkit-scrollbar-thumb:hover { background: var(--ns-dim); }
+
+/* ── Root / layout ──────────────────────────────────────────────────── */
+.ns-root { min-height: 100dvh; }
+
+/* ── Top bar ────────────────────────────────────────────────────────── */
+.ns-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  background: color-mix(in srgb, var(--ns-bg) 88%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--ns-border-soft);
+}
+.ns-brand { display: flex; align-items: center; gap: 10px; flex: none; }
+.ns-brand-mark {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--ns-accent-bright), var(--ns-accent-deep));
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  font-size: 13px;
+  color: #161826;
+}
+.ns-brand-title { font-size: 16px; font-weight: 600; letter-spacing: -0.01em; color: var(--ns-text); }
+
+.ns-search { position: relative; flex: 1; max-width: 420px; }
+.ns-search > svg {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 15px;
+  height: 15px;
+  color: var(--ns-muted);
+  pointer-events: none;
+}
+.ns-search input {
+  width: 100%;
+  height: 38px;
+  background: var(--ns-panel);
+  border: 1px solid var(--ns-border);
+  border-radius: 8px;
+  padding: 0 12px 0 34px;
+  color: var(--ns-text);
+  font-size: 13.5px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.ns-search input::placeholder { color: var(--ns-muted); }
+.ns-search input:focus-visible { border-color: var(--ns-accent); outline: none; }
+
+.ns-spacer { flex: 1; }
+
+.ns-home {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 14px;
+  border-radius: 8px;
+  border: 1px solid var(--ns-border);
+  background: var(--ns-panel);
+  color: var(--ns-text);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  flex: none;
+  transition: background-color 0.15s ease;
+}
+.ns-home:hover { background: color-mix(in srgb, var(--ns-text) 6%, var(--ns-panel)); }
+.ns-home > svg { width: 16px; height: 16px; color: var(--ns-accent-bright); }
+
+/* ── Shell ──────────────────────────────────────────────────────────── */
+.ns-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 20px 96px;
+}
+.ns-sidebar {
+  width: 280px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: sticky;
+  top: 78px;
+}
+.ns-main { flex: 1; min-width: 0; max-width: 880px; }
+.ns-content-card {
+  background: var(--ns-panel);
+  border: 1px solid var(--ns-border-soft);
+  border-radius: 16px;
+  padding: 24px;
+}
+
+/* ── Sidebar profile card ───────────────────────────────────────────── */
+.ns-profile-card {
+  background: var(--ns-panel);
+  border: 1px solid var(--ns-border-soft);
+  border-radius: 16px;
+  padding: 18px;
+}
+.ns-pc-head { display: flex; align-items: center; gap: 12px; }
+.ns-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex: none;
+  background: linear-gradient(135deg, var(--ns-accent-bright), var(--ns-accent-deep));
+  display: grid;
+  place-items: center;
+  color: #161826;
+  font-weight: 800;
+  font-size: 18px;
+}
+.ns-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.ns-avatar-emoji { font-size: 24px; }
+.ns-pc-id { min-width: 0; }
+.ns-pc-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ns-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ns-pc-username { font-size: 11.5px; color: var(--ns-muted); }
+
+.ns-pc-meta { margin-top: 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ns-rank {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--ns-accent-bright);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.ns-plan {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.ns-plan.is-pro { background: color-mix(in srgb, var(--ns-accent) 28%, transparent); color: #d2cefd; }
+.ns-plan.is-free { background: color-mix(in srgb, var(--ns-text) 8%, transparent); color: var(--ns-dim); }
+
+.ns-chips { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+.ns-chip {
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--ns-text) 7%, transparent);
+  display: grid;
+  place-items: center;
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--ns-muted);
+}
+
+.ns-completion { margin-top: 14px; }
+.ns-completion-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10.5px;
+  color: var(--ns-dim);
+}
+.ns-completion-row b { color: var(--ns-accent-bright); font-weight: 700; }
+.ns-meter {
+  height: 4px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ns-text) 10%, transparent);
+  margin-top: 5px;
+  overflow: hidden;
+}
+.ns-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--ns-accent), var(--ns-accent-bright));
+  transition: width 0.3s ease;
+}
+
+/* ── Nav ────────────────────────────────────────────────────────────── */
+.ns-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--ns-panel);
+  border: 1px solid var(--ns-border-soft);
+  border-radius: 16px;
+  padding: 8px;
+}
+.ns-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: var(--ns-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+}
+.ns-nav-item:hover { background: color-mix(in srgb, var(--ns-text) 5%, transparent); color: var(--ns-text); }
+.ns-nav-item.is-active {
+  background: color-mix(in srgb, var(--ns-accent) 16%, transparent);
+  color: var(--ns-text);
+  font-weight: 600;
+}
+.ns-nav-item > svg { width: 16px; height: 16px; flex: none; color: var(--ns-accent-bright); }
+.ns-nav-label { flex: 1; }
+.ns-nav-empty { padding: 12px; font-size: 12px; color: var(--ns-muted); }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 860px) {
+  .ns-shell { flex-direction: column; gap: 14px; padding: 16px 14px 80px; }
+  .ns-sidebar { width: 100%; position: static; }
+  .ns-nav { flex-direction: row; overflow-x: auto; gap: 4px; }
+  .ns-nav-item { width: auto; white-space: nowrap; flex: none; }
+  .ns-main { max-width: none; }
+  .ns-content-card { padding: 18px; }
+}
+@media (max-width: 640px) {
+  .ns-topbar { flex-wrap: wrap; gap: 12px; }
+  .ns-search { order: 3; flex-basis: 100%; max-width: none; }
+  .ns-brand-title { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nocturne-settings * { transition: none !important; }
+}

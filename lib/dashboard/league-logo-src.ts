@@ -41,12 +41,36 @@ export function resolveLeagueLogoSrc(
  * Up-to-2-letter initials for a league name, used when there is no logo or the logo fails to load.
  * Identifies the specific league, unlike a sport badge which is identical across every league in
  * that sport.
+ *
+ * Code-point aware on purpose: real league names very often carry emoji (e.g. "Gridiron Goonz 🏈",
+ * "La Raza 🇲🇽🏈"), and a naive `charAt(0)` on an emoji token returns a lone UTF-16 surrogate. A lone
+ * surrogate cannot be encoded in the UTF-8 SSR HTML stream — it serializes as U+FFFD (�) — while the
+ * client re-computes the raw surrogate, so the two never match and React throws a hydration error on
+ * every logo-less emoji-named league card. We therefore derive each initial from the first
+ * letter/number code point of a word and ignore emoji/symbol-only tokens, so the monogram reads as
+ * the league's words (never a broken glyph) and is byte-identical on server and client.
  */
 export function leagueInitials(name: string | null | undefined): string {
   const trimmed = (name ?? '').trim()
   if (!trimmed) return '?'
-  const parts = trimmed.split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '?'
-  if (parts.length === 1) return parts[0]!.charAt(0).toUpperCase() || '?'
-  return `${parts[0]!.charAt(0)}${parts[parts.length - 1]!.charAt(0)}`.toUpperCase() || '?'
+
+  // First letter/number of a token, iterating by code point (never code unit). Returns null for a
+  // token with no alphanumeric character (a pure emoji/symbol like "🏈" or "🇲🇽"), so it is skipped.
+  const firstAlnum = (token: string): string | null => {
+    for (const ch of token) {
+      if (/[\p{L}\p{N}]/u.test(ch)) return ch.toUpperCase()
+    }
+    return null
+  }
+
+  const initials = trimmed
+    .split(/\s+/)
+    .map(firstAlnum)
+    .filter((c): c is string => c !== null)
+
+  // All-emoji / all-symbol name: fall back to the first WHOLE code point (Array.from splits by code
+  // point, so this is a complete emoji, never a lone surrogate) rather than an unhelpful "?".
+  if (initials.length === 0) return Array.from(trimmed)[0] ?? '?'
+  if (initials.length === 1) return initials[0]!
+  return `${initials[0]}${initials[initials.length - 1]}`
 }

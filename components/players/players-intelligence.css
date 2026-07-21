@@ -1,0 +1,514 @@
+/**
+ * Player Intelligence Center — scoped styles.
+ *
+ * Scoped under `.af-players` rather than `:root` so it cannot collide with the app's
+ * global theme or with the sibling Nocturne scopes (`.nocturne-dash`, `.nocturne`,
+ * `.nocturne-rankings`). Custom properties inherit, so the nearest ancestor that
+ * sets them wins regardless of the user's app theme.
+ *
+ * Token values are copied from `components/dashboard/nocturne/nocturne-dashboard.css`
+ * so this page and the production dashboard render as one system. If those tokens
+ * change, change them here too — they are duplicated deliberately (each Nocturne
+ * scope is self-contained) rather than imported.
+ *
+ * Two things this scope must re-declare, because the app globals do not guarantee
+ * them inside a subtree:
+ *   1. `box-sizing: border-box` on the subtree.
+ *   2. The h1–h6 weight reset — app globals force headings to weight 800, and the
+ *      Nocturne visual language caps them at 600. Without this, every heading on
+ *      the page renders too heavy and the page stops matching the dashboard.
+ */
+
+.af-players {
+  /* ── Ground + accent (mirrors .nocturne-dash) ──────────────────────── */
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+  --color-accent: #9184d9;
+  --color-accent-2: #a7a1db;
+  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+
+  --color-neutral-100: #f3f5fe;
+  --color-neutral-200: #e4e7f5;
+  --color-neutral-300: #cfd3e5;
+  --color-neutral-400: #b2b6ca;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #75798c;
+  --color-neutral-700: #595d6c;
+  --color-neutral-800: #3f424d;
+  --color-neutral-900: #292b31;
+
+  --color-accent-100: #f5f4ff;
+  --color-accent-200: #e7e5fe;
+  --color-accent-300: #d2cefd;
+  --color-accent-400: #b5abfc;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #796cbf;
+  --color-accent-700: #5d5294;
+  --color-accent-800: #423a6a;
+  --color-accent-900: #2b2741;
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --font-nocturne: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+
+  /*
+   * Status colors. The Nocturne dashboard has no semantic tokens — it inlines these
+   * two hexes. They are promoted to named tokens here so status meaning lives in one
+   * place, using the same values the dashboard already ships.
+   */
+  --status-critical: #e5675f;
+  --status-warning: #d8a657;
+  --status-positive: #5fb98a;
+  --status-neutral: var(--color-neutral-500);
+
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-nocturne);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  min-height: 100%;
+}
+
+.af-players *,
+.af-players *::before,
+.af-players *::after {
+  box-sizing: border-box;
+}
+
+/* App globals force h1–h6 to weight 800; Nocturne caps at 600. */
+.af-players h1,
+.af-players h2,
+.af-players h3,
+.af-players h4,
+.af-players h5,
+.af-players h6 {
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* ── Layout ──────────────────────────────────────────────────────────── */
+
+.af-players .afp-shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 24px 20px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.af-players .afp-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.af-players .afp-title {
+  font-size: 26px;
+  margin-bottom: 6px;
+}
+
+.af-players .afp-subtitle {
+  font-size: 14px;
+  color: var(--color-neutral-500);
+  margin: 0;
+}
+
+.af-players .afp-kicker {
+  text-transform: uppercase;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-neutral-500);
+}
+
+/* ── Surfaces ────────────────────────────────────────────────────────── */
+
+.af-players .afp-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+}
+
+.af-players .afp-card-tight {
+  padding: 14px;
+}
+
+/* ── Controls ────────────────────────────────────────────────────────── */
+
+.af-players .afp-input {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 14px 0 40px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-bg) 55%, transparent);
+  border: 1px solid var(--color-neutral-800);
+  border-radius: var(--radius-md);
+  outline: none;
+}
+
+.af-players .afp-input::placeholder {
+  color: var(--color-neutral-600);
+}
+
+.af-players .afp-input:focus-visible,
+.af-players .afp-btn:focus-visible,
+.af-players .afp-tab:focus-visible,
+.af-players .afp-card-button:focus-visible {
+  outline: 2px solid var(--color-accent-400);
+  outline-offset: 2px;
+}
+
+.af-players .afp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-neutral-800);
+  background: color-mix(in srgb, var(--color-bg) 45%, transparent);
+  color: var(--color-neutral-300);
+  cursor: pointer;
+}
+
+.af-players .afp-btn:hover {
+  border-color: var(--color-accent-700);
+  color: var(--color-text);
+}
+
+.af-players .afp-btn-primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.af-players .afp-btn-primary:hover {
+  background: var(--color-accent-500);
+}
+
+.af-players .afp-tab {
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: none;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.af-players .afp-tab:hover {
+  color: var(--color-neutral-300);
+}
+
+.af-players .afp-tab[aria-selected='true'] {
+  background: var(--color-accent-900);
+  border-color: var(--color-accent-700);
+  color: var(--color-accent-300);
+}
+
+/* Disabled sports/tabs are shown, not hidden, so the absence is explained. */
+.af-players .afp-tab:disabled {
+  color: var(--color-neutral-700);
+  cursor: not-allowed;
+}
+
+.af-players .afp-tablist {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ── Tags ────────────────────────────────────────────────────────────── */
+
+.af-players .afp-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.af-players .afp-tag-accent {
+  background: var(--color-accent-900);
+  border-color: var(--color-accent-700);
+  color: var(--color-accent-300);
+}
+
+.af-players .afp-tag-neutral {
+  background: color-mix(in srgb, var(--color-neutral-900) 80%, transparent);
+  border-color: var(--color-neutral-800);
+  color: var(--color-neutral-400);
+}
+
+.af-players .afp-tag-critical {
+  background: color-mix(in srgb, var(--status-critical) 18%, transparent);
+  border-color: color-mix(in srgb, var(--status-critical) 45%, transparent);
+  color: var(--status-critical);
+}
+
+.af-players .afp-tag-warning {
+  background: color-mix(in srgb, var(--status-warning) 16%, transparent);
+  border-color: color-mix(in srgb, var(--status-warning) 42%, transparent);
+  color: var(--status-warning);
+}
+
+/* ── Player grid + card ──────────────────────────────────────────────── */
+
+.af-players .afp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.af-players .afp-card-button {
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background: var(--color-surface);
+  border: 1px solid var(--color-neutral-800);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.af-players .afp-card-button:hover {
+  border-color: var(--color-accent-700);
+}
+
+.af-players .afp-card-button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+}
+
+.af-players .afp-player-head {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.af-players .afp-player-name {
+  font-size: 15px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-players .afp-player-meta {
+  font-size: 12px;
+  color: var(--color-neutral-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Metric slots ────────────────────────────────────────────────────── */
+
+.af-players .afp-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.af-players .afp-metric {
+  background: color-mix(in srgb, var(--color-bg) 45%, transparent);
+  border: 1px solid var(--color-neutral-900);
+  border-radius: var(--radius-md);
+  padding: 9px 10px;
+  min-width: 0;
+}
+
+.af-players .afp-metric-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.af-players .afp-metric-label {
+  font-size: 10.5px;
+  color: var(--color-neutral-600);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * The unavailable state is deliberately quiet rather than alarming: it is normal,
+ * not an error. It must never look like a number — hence the em dash and the
+ * muted, italic treatment that reads as "absent" instead of "zero".
+ */
+.af-players .afp-metric-empty .afp-metric-value {
+  color: var(--color-neutral-700);
+  font-style: italic;
+  font-size: 14px;
+  font-family: var(--font-nocturne);
+  font-weight: 500;
+}
+
+.af-players .afp-trend-up { color: var(--status-positive); }
+.af-players .afp-trend-down { color: var(--status-critical); }
+.af-players .afp-trend-flat { color: var(--color-neutral-500); }
+
+/* ── Freshness + notices ─────────────────────────────────────────────── */
+
+.af-players .afp-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-neutral-500);
+}
+
+.af-players .afp-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.af-players .afp-dot-fresh { background: var(--status-positive); }
+.af-players .afp-dot-aging { background: var(--status-warning); }
+.af-players .afp-dot-stale { background: var(--status-critical); }
+.af-players .afp-dot-unknown { background: var(--color-neutral-600); }
+
+.af-players .afp-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--status-warning) 34%, transparent);
+  background: color-mix(in srgb, var(--status-warning) 9%, transparent);
+  font-size: 12.5px;
+  color: var(--color-neutral-300);
+}
+
+.af-players .afp-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--color-neutral-500);
+  font-size: 13.5px;
+}
+
+/* ── Detail panel ────────────────────────────────────────────────────── */
+
+.af-players .afp-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 16px;
+  align-items: start;
+}
+
+.af-players .afp-detail {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-players .afp-detail-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-neutral-900);
+  font-size: 13px;
+}
+
+.af-players .afp-detail-row:last-child { border-bottom: none; }
+.af-players .afp-detail-label { color: var(--color-neutral-500); }
+
+.af-players .afp-detail-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+/* ── Skeletons ───────────────────────────────────────────────────────── */
+
+.af-players .afp-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-neutral-900) 25%,
+    color-mix(in srgb, var(--color-neutral-800) 70%, transparent) 37%,
+    var(--color-neutral-900) 63%
+  );
+  background-size: 400% 100%;
+  animation: afp-shimmer 1.4s ease infinite;
+  border-radius: var(--radius-md);
+}
+
+@keyframes afp-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-players .afp-skeleton { animation: none; }
+}
+
+.af-players .afp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 1100px) {
+  .af-players .afp-layout { grid-template-columns: minmax(0, 1fr); }
+  .af-players .afp-detail { position: static; }
+}
+
+@media (max-width: 640px) {
+  .af-players .afp-shell { padding: 16px 14px 80px; gap: 20px; }
+  .af-players .afp-grid { grid-template-columns: 1fr; }
+  .af-players .afp-title { font-size: 22px; }
+  /* Search stays reachable while scrolling a long result list on a phone. */
+  .af-players .afp-search-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    background: var(--color-bg);
+    padding: 10px 0;
+  }
+}

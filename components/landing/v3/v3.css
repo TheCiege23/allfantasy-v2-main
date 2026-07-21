@@ -1,0 +1,839 @@
+/*
+ * AllFantasy V3 landing — scoped design system for the flagship marketing homepage.
+ *
+ * Every rule is namespaced under `.afv3` so these tokens never leak into the app's
+ * own theme (which uses a different `--bg` / `--surface-card` / `--color-primary`
+ * family). Dark-only by design.
+ *
+ * PERFORMANCE NOTE: the previous landing page (Nocturne) stacked `backdrop-filter`
+ * + layered radial gradients + `mask-image`, which made the page so expensive to
+ * composite that automated screenshots timed out on it. This system deliberately
+ * limits `backdrop-filter` to the sticky nav only and uses plain radial gradients
+ * with transparent stops instead of `mask-image`.
+ */
+
+.afv3 {
+  /* ── Ground ──────────────────────────────────────────────────────── */
+  --bg: #0d0917;
+  --bg-deep: #080510;
+  --surface: #150f24;
+  --surface-2: #1b1430;
+  --surface-3: #241a40;
+  --glass: rgba(139, 92, 246, 0.04);
+
+  /* ── Brand accents ───────────────────────────────────────────────── */
+  --purple: #8b5cf6;
+  --purple-bright: #a78bfa;
+  --purple-deep: #7c3aed;
+  --purple-dim: rgba(139, 92, 246, 0.14);
+  --purple-glow: rgba(139, 92, 246, 0.32);
+  --cyan: #06b6d4;
+  --cyan-bright: #22d3ee;
+  --cyan-dim: rgba(6, 182, 212, 0.14);
+
+  /* ── Semantic ────────────────────────────────────────────────────── */
+  --good: #22c55e;
+  --good-dim: rgba(34, 197, 94, 0.14);
+  --warn: #f59e0b;
+  --bad: #ef4444;
+  --bad-dim: rgba(239, 68, 68, 0.13);
+
+  /* ── Text ramp ───────────────────────────────────────────────────── */
+  --text: #f4f2fb;
+  --text-2: #c3bcd9;
+  --text-3: #8f87a8;
+  --text-4: #655d7d;
+
+  /* ── Lines ───────────────────────────────────────────────────────── */
+  --line: rgba(255, 255, 255, 0.07);
+  --line-2: rgba(255, 255, 255, 0.12);
+  --line-purple: rgba(139, 92, 246, 0.28);
+
+  /* ── Radii ───────────────────────────────────────────────────────── */
+  --r-sm: 8px;
+  --r-md: 12px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  /* ── Type ────────────────────────────────────────────────────────── */
+  --font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+  --mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  position: relative;
+  isolation: isolate;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.afv3 *,
+.afv3 *::before,
+.afv3 *::after { box-sizing: border-box; }
+
+/* The app's globals force h1–h6 to weight 800; V3 uses a tighter, lighter scale. */
+.afv3 h1, .afv3 h2, .afv3 h3, .afv3 h4, .afv3 h5, .afv3 h6 {
+  font-family: var(--font);
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  margin: 0;
+  color: var(--text);
+}
+.afv3 p { margin: 0; }
+.afv3 img { display: block; max-width: 100%; }
+.afv3 ::selection { background: rgba(139, 92, 246, 0.35); }
+.afv3 :focus { outline: none; }
+.afv3 :focus-visible { outline: 2px solid var(--purple); outline-offset: 2px; border-radius: 4px; }
+
+/* Numerals: tabular + tight, the "bold condensed" look of the dashboard stat cards. */
+.afv3 .num {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.035em;
+  font-weight: 700;
+}
+
+/* ── Layout ────────────────────────────────────────────────────────── */
+.afv3 .wrap {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 40px;
+}
+.afv3 .section { padding: 96px 0; }
+.afv3 .section-sm { padding: 64px 0; }
+
+/* ── Eyebrow / section heading ─────────────────────────────────────── */
+.afv3 .eyebrow {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--purple-bright);
+  margin-bottom: 14px;
+}
+.afv3 .section-title {
+  font-size: 40px;
+  line-height: 1.08;
+  margin-bottom: 14px;
+}
+.afv3 .section-sub {
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--text-3);
+  max-width: 60ch;
+}
+.afv3 .center { text-align: center; }
+.afv3 .center .section-sub { margin-left: auto; margin-right: auto; }
+
+/* ── Cards ─────────────────────────────────────────────────────────── */
+.afv3 .card {
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008)), var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 24px;
+}
+.afv3 .card-hover {
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.afv3 .card-hover:hover {
+  border-color: var(--line-purple);
+  transform: translateY(-2px);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--purple-dim);
+}
+
+/* ── Buttons ───────────────────────────────────────────────────────── */
+.afv3 .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
+  padding: 13px 22px;
+  border-radius: var(--r-md);
+  border: 1px solid transparent;
+  color: var(--text);
+  background: transparent;
+  white-space: nowrap;
+  transition: background-color 0.16s ease, border-color 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
+}
+.afv3 .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.afv3 .btn svg { display: block; flex: none; }
+
+.afv3 .btn-primary {
+  background: linear-gradient(180deg, var(--purple), var(--purple-deep));
+  color: #fff;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.34);
+}
+.afv3 .btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 28px rgba(124, 58, 237, 0.46);
+}
+.afv3 .btn-primary:active:not(:disabled) { transform: translateY(0); }
+
+.afv3 .btn-secondary { border-color: var(--line-2); background: rgba(255, 255, 255, 0.04); }
+.afv3 .btn-secondary:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); border-color: var(--line-purple); }
+
+.afv3 .btn-ghost { color: var(--text-2); padding: 10px 14px; }
+.afv3 .btn-ghost:hover:not(:disabled) { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+
+.afv3 .btn-block { width: 100%; }
+.afv3 .btn-sm { padding: 9px 16px; font-size: 13.5px; }
+
+/* ── Pills / badges ────────────────────────────────────────────────── */
+.afv3 .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1px solid var(--line-2);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.afv3 .pill-purple { border-color: var(--line-purple); background: var(--purple-dim); color: var(--purple-bright); }
+.afv3 .pill-cyan { border-color: rgba(6, 182, 212, 0.3); background: var(--cyan-dim); color: var(--cyan-bright); }
+.afv3 .pill-good { border-color: rgba(34, 197, 94, 0.3); background: var(--good-dim); color: var(--good); }
+.afv3 .pill-muted { color: var(--text-4); }
+
+/* ── Spinner ───────────────────────────────────────────────────────── */
+/* Lives here, not in styled-jsx: styled-jsx only scopes lowercase DOM elements,
+   so a `.spin` class on a React component (e.g. lucide's <Loader2 />) would
+   never match its scoped selector and the icon would sit motionless. */
+.afv3 .spin { animation: afv3-spin 0.9s linear infinite; }
+@keyframes afv3-spin { to { transform: rotate(360deg); } }
+
+/* ── Live dot ──────────────────────────────────────────────────────── */
+.afv3 .live-dot {
+  width: 7px; height: 7px; border-radius: 50%; flex: none;
+  background: var(--good);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+  animation: afv3-pulse 2s ease-in-out infinite;
+}
+@keyframes afv3-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* ── Ambient background glows (no mask-image — cheap to composite) ─── */
+.afv3 .glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(820px 460px at 78% -10%, rgba(139, 92, 246, 0.16), transparent 62%),
+    radial-gradient(680px 420px at 8% 12%, rgba(6, 182, 212, 0.07), transparent 60%);
+}
+
+/* ── Divider ───────────────────────────────────────────────────────── */
+.afv3 .rule {
+  height: 1px; border: 0; margin: 0;
+  background: linear-gradient(to right, transparent, var(--line-2) 15%, var(--line-2) 85%, transparent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   NAV
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .nav {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  border-bottom: 1px solid var(--line);
+  background: rgba(13, 9, 23, 0.82);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+.afv3 .nav-inner {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  height: 68px;
+}
+.afv3 .nav-links { display: flex; align-items: center; gap: 4px; flex: 1; }
+.afv3 .nav-link {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 8px 12px; border-radius: var(--r-sm);
+  font-size: 14.5px; font-weight: 500; color: var(--text-2);
+  text-decoration: none; background: none; border: 0; cursor: pointer;
+  font-family: var(--font);
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.afv3 .nav-link:hover { color: var(--text); background: rgba(255, 255, 255, 0.05); }
+.afv3 .nav-cta { display: flex; align-items: center; gap: 10px; }
+
+/* Dropdown menu */
+.afv3 .nav-item { position: relative; }
+.afv3 .nav-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  min-width: 250px;
+  padding: 8px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+  z-index: 70;
+}
+.afv3 .nav-menu a {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  text-decoration: none;
+  color: var(--text-2);
+  font-size: 14px;
+  transition: background-color 0.14s ease, color 0.14s ease;
+}
+.afv3 .nav-menu a:hover { background: var(--purple-dim); color: var(--text); }
+.afv3 .nav-menu .nav-menu-desc { display: block; font-size: 12px; color: var(--text-4); margin-top: 2px; }
+
+/* Mobile nav */
+.afv3 .nav-burger { display: none; }
+.afv3 .nav-mobile {
+  border-top: 1px solid var(--line);
+  padding: 14px 0 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.afv3 .nav-mobile a {
+  padding: 12px 4px;
+  text-decoration: none;
+  color: var(--text-2);
+  font-size: 16px;
+  font-weight: 500;
+  border-radius: var(--r-sm);
+}
+.afv3 .nav-mobile a:hover { color: var(--text); }
+/* `.nav-mobile a` is more specific than `.btn-primary`, so without this the
+   mobile signup button renders with muted body text instead of white on purple. */
+.afv3 .nav-mobile a.btn-primary { color: #fff; padding: 13px 22px; justify-content: center; }
+.afv3 .nav-mobile-group { font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--text-4); margin: 14px 0 4px; font-weight: 700; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   HERO
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 460px) minmax(0, 1fr);
+  gap: 56px;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  padding: 72px 0 88px;
+}
+.afv3 .hero-title {
+  font-size: 62px;
+  line-height: 1.02;
+  letter-spacing: -0.035em;
+  margin-bottom: 22px;
+}
+.afv3 .hero-title .accent {
+  background: linear-gradient(100deg, var(--purple-bright), var(--cyan-bright));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+.afv3 .hero-sub { font-size: 17.5px; line-height: 1.62; color: var(--text-3); margin-bottom: 26px; }
+.afv3 .hero-badges { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 28px; }
+.afv3 .hero-badge { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text-3); }
+.afv3 .hero-cta { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.afv3 .hero-fine { font-size: 13px; color: var(--text-4); }
+
+/* ── Dashboard mockup ──────────────────────────────────────────────── */
+.afv3 .mock {
+  position: relative;
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line-2);
+  background: linear-gradient(170deg, var(--surface-2), var(--bg-deep));
+  box-shadow: 0 40px 90px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(139, 92, 246, 0.08);
+  overflow: hidden;
+}
+.afv3 .mock-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.25);
+}
+.afv3 .mock-body { display: grid; grid-template-columns: 148px minmax(0, 1fr); }
+.afv3 .mock-side {
+  border-right: 1px solid var(--line);
+  padding: 12px 8px;
+  display: flex; flex-direction: column; gap: 1px;
+}
+.afv3 .mock-side-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: var(--r-sm);
+  font-size: 12px; color: var(--text-3); white-space: nowrap;
+}
+.afv3 .mock-side-item.is-active { background: var(--purple-dim); color: var(--purple-bright); font-weight: 600; }
+.afv3 .mock-main { padding: 14px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+
+.afv3 .mock-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 9px; }
+.afv3 .mock-stat {
+  padding: 11px 12px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+  min-width: 0;
+}
+.afv3 .mock-stat-label {
+  font-size: 9.5px; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--text-4); margin-bottom: 6px; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.afv3 .mock-stat-value { font-size: 23px; line-height: 1; }
+
+.afv3 .mock-panels { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+.afv3 .mock-panel {
+  padding: 11px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  min-width: 0;
+}
+.afv3 .mock-panel-title { font-size: 10.5px; color: var(--text-3); margin-bottom: 9px; font-weight: 600; }
+
+/* Floating satellite cards around the mockup */
+.afv3 .mock-float {
+  position: absolute;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line-purple);
+  background: linear-gradient(160deg, var(--surface-3), var(--surface));
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.66);
+  padding: 13px;
+  z-index: 3;
+  animation: afv3-float 7s ease-in-out infinite;
+}
+@keyframes afv3-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-9px); }
+}
+/* Float placement is deliberate: the two left-hand cards stack with a gap, and
+   the notification card sits ABOVE the mock so it overlaps only the chrome bar
+   rather than covering the fourth stat card. The phone occupies the right side
+   alone — putting Chimmy there too made the two collide and clipped both. */
+.afv3 .mock-float-chimmy { left: -40px; bottom: 96px; width: 214px; animation-delay: -1.4s; }
+.afv3 .mock-float-trade { left: -40px; bottom: -34px; width: 200px; animation-delay: -3.2s; }
+.afv3 .mock-float-notif { right: -24px; top: -46px; width: 206px; }
+
+.afv3 .chat-bubble {
+  padding: 8px 11px; border-radius: 11px; font-size: 11.5px; line-height: 1.45;
+}
+.afv3 .chat-user { background: rgba(255, 255, 255, 0.07); color: var(--text-2); border-bottom-right-radius: 3px; }
+.afv3 .chat-ai {
+  background: linear-gradient(160deg, var(--purple-deep), #5b21b6);
+  color: #f2ecff; border-bottom-left-radius: 3px;
+}
+
+.afv3 .grade-badge {
+  display: grid; place-items: center;
+  width: 46px; height: 46px; border-radius: var(--r-md);
+  background: var(--good-dim); border: 1px solid rgba(34, 197, 94, 0.4);
+  color: var(--good); font-size: 20px; font-weight: 800; letter-spacing: -0.04em;
+}
+
+/* Phone mockup.
+   Hidden below 1400px (see media queries): the `.wrap` is capped at 1240px, so
+   below roughly that width the phone's negative offset runs past the viewport
+   edge and gets clipped by the page's `overflow-x: clip`. */
+.afv3 .mock-phone {
+  position: absolute;
+  right: -80px;
+  top: 132px;
+  width: 168px;
+  border-radius: 26px;
+  border: 5px solid #241a40;
+  background: var(--bg-deep);
+  box-shadow: 0 36px 80px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  z-index: 4;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CHARTS (hand-rolled SVG — no chart lib dependency)
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .spark { display: block; width: 100%; height: auto; overflow: visible; }
+.afv3 .spark-line { fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.afv3 .bar { transition: opacity 0.2s ease; }
+
+/* Progress ring */
+.afv3 .ring-track { stroke: rgba(255, 255, 255, 0.09); fill: none; }
+.afv3 .ring-fill { fill: none; stroke-linecap: round; transform: rotate(-90deg); transform-origin: center; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   TRANSPARENCY BAND
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .trust-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: 48px;
+  align-items: center;
+}
+.afv3 .trust-flow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
+}
+.afv3 .trust-step { text-align: center; }
+.afv3 .trust-icon {
+  width: 52px; height: 52px; border-radius: 50%;
+  display: grid; place-items: center; margin: 0 auto 12px;
+  border: 1px solid var(--line-purple);
+  background: var(--purple-dim);
+  color: var(--purple-bright);
+}
+.afv3 .cannot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 24px; }
+.afv3 .cannot-item { display: flex; align-items: center; gap: 9px; font-size: 14px; color: var(--text-3); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   PLATFORM GRID + WIZARD
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .plat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+.afv3 .plat-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+  padding: 22px 14px 18px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.006)), var(--surface);
+  cursor: pointer;
+  font-family: var(--font);
+  color: var(--text);
+  transition: border-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+.afv3 .plat-card:hover:not(:disabled) { transform: translateY(-3px); border-color: var(--line-purple); }
+.afv3 .plat-card.is-selected {
+  border-color: var(--purple);
+  box-shadow: 0 0 0 1px var(--purple), 0 14px 36px rgba(139, 92, 246, 0.24);
+}
+.afv3 .plat-card.is-soon { cursor: default; opacity: 0.62; }
+.afv3 .plat-card.is-soon:hover { transform: none; }
+.afv3 .plat-logo {
+  width: 46px; height: 46px; border-radius: var(--r-md);
+  display: grid; place-items: center;
+  font-weight: 800; font-size: 17px; color: #fff;
+  flex: none;
+}
+.afv3 .plat-name { font-size: 15px; font-weight: 600; }
+.afv3 .plat-status { font-size: 11.5px; font-weight: 600; }
+.afv3 .plat-meta { font-size: 11px; color: var(--text-4); }
+
+/* Wizard */
+.afv3 .wiz {
+  border-radius: var(--r-xl);
+  border: 1px solid var(--line-2);
+  background: linear-gradient(170deg, var(--surface-2), var(--surface));
+  overflow: hidden;
+}
+.afv3 .wiz-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  border-bottom: 1px solid var(--line);
+}
+.afv3 .wiz-step {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 14px;
+  border-right: 1px solid var(--line);
+  min-width: 0;
+}
+.afv3 .wiz-step:last-child { border-right: 0; }
+.afv3 .wiz-step.is-done, .afv3 .wiz-step.is-active { background: rgba(139, 92, 246, 0.07); }
+.afv3 .wiz-num {
+  width: 26px; height: 26px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  font-size: 12px; font-weight: 700;
+  border: 1px solid var(--line-2); color: var(--text-4);
+}
+.afv3 .wiz-step.is-active .wiz-num { background: var(--purple); border-color: var(--purple); color: #fff; }
+.afv3 .wiz-step.is-done .wiz-num { background: var(--good-dim); border-color: rgba(34, 197, 94, 0.45); color: var(--good); }
+.afv3 .wiz-label { font-size: 12.5px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.afv3 .wiz-step.is-active .wiz-label { color: var(--text); }
+.afv3 .wiz-step:not(.is-active):not(.is-done) .wiz-label { color: var(--text-4); }
+.afv3 .wiz-body { padding: 30px 32px 32px; }
+
+.afv3 .wiz-instructions { display: flex; flex-direction: column; gap: 12px; margin: 20px 0 24px; }
+.afv3 .wiz-instruction {
+  display: flex; gap: 13px; align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.022);
+}
+.afv3 .wiz-instruction-num {
+  width: 22px; height: 22px; border-radius: 50%; flex: none;
+  display: grid; place-items: center;
+  background: var(--purple-dim); color: var(--purple-bright);
+  font-size: 11.5px; font-weight: 700; margin-top: 1px;
+}
+
+.afv3 .field {
+  min-height: 50px;
+  width: 100%;
+  padding: 13px 16px;
+  font: inherit;
+  font-size: 15px;
+  color: var(--text);
+  caret-color: var(--purple);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-md);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.afv3 .field::placeholder { color: var(--text-4); }
+.afv3 .field:hover { border-color: rgba(255, 255, 255, 0.2); }
+.afv3 .field:focus-visible { border-color: var(--purple); box-shadow: 0 0 0 3px var(--purple-dim); outline: none; }
+.afv3 .field:disabled { opacity: 0.55; cursor: not-allowed; }
+.afv3 .field-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.afv3 .field-row .field { flex: 1; min-width: 220px; }
+
+.afv3 .sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+/* Wizard result / league list */
+.afv3 .league-row {
+  display: flex; align-items: center; gap: 13px;
+  padding: 13px 15px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   FANTASY OS
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .os-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+.afv3 .os-card { display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: inherit; }
+.afv3 .os-icon {
+  width: 42px; height: 42px; border-radius: var(--r-md);
+  display: grid; place-items: center;
+  background: var(--purple-dim); color: var(--purple-bright);
+  border: 1px solid var(--line-purple);
+}
+.afv3 .os-name { font-size: 16px; font-weight: 600; }
+.afv3 .os-desc { font-size: 13.5px; line-height: 1.55; color: var(--text-3); }
+.afv3 .os-example {
+  font-size: 12px; color: var(--text-4); font-style: italic;
+  padding-top: 10px; border-top: 1px solid var(--line); margin-top: auto;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PRICING
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .price-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
+}
+.afv3 .price-card {
+  display: flex; flex-direction: column;
+  padding: 24px 20px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.afv3 .price-card.is-featured {
+  border-color: var(--purple);
+  background: linear-gradient(180deg, rgba(139, 92, 246, 0.14), var(--surface));
+  box-shadow: 0 20px 50px rgba(139, 92, 246, 0.18);
+}
+.afv3 .price-name {
+  font-size: 11.5px; letter-spacing: 0.13em; text-transform: uppercase;
+  color: var(--text-4); font-weight: 700; margin-bottom: 12px;
+}
+.afv3 .price-amount { font-size: 34px; line-height: 1; margin-bottom: 4px; }
+.afv3 .price-period { font-size: 13px; color: var(--text-4); margin-bottom: 20px; }
+.afv3 .price-features { display: flex; flex-direction: column; gap: 10px; margin-bottom: 22px; flex: 1; }
+.afv3 .price-feature { display: flex; gap: 9px; font-size: 13.5px; line-height: 1.45; color: var(--text-2); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   SPORTS
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .sport-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.afv3 .sport-card {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 20px 10px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  text-align: center;
+}
+.afv3 .sport-emoji { font-size: 26px; line-height: 1; }
+.afv3 .sport-name { font-size: 13px; font-weight: 600; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   FOOTER
+   ═══════════════════════════════════════════════════════════════════ */
+.afv3 .footer { border-top: 1px solid var(--line); background: var(--bg-deep); }
+.afv3 .footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(4, minmax(0, 1fr));
+  gap: 40px;
+  padding: 56px 0 40px;
+}
+.afv3 .footer-col-title {
+  font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--text-4); font-weight: 700; margin-bottom: 14px;
+}
+.afv3 .footer-links { display: flex; flex-direction: column; gap: 10px; }
+.afv3 .footer-links a {
+  font-size: 13.5px; color: var(--text-3); text-decoration: none;
+  transition: color 0.15s ease;
+}
+.afv3 .footer-links a:hover { color: var(--purple-bright); }
+.afv3 .footer-social { display: flex; gap: 10px; margin-top: 18px; }
+.afv3 .footer-social a {
+  width: 34px; height: 34px; border-radius: var(--r-sm);
+  display: grid; place-items: center;
+  border: 1px solid var(--line); color: var(--text-3);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.afv3 .footer-social a:hover { color: var(--purple-bright); border-color: var(--line-purple); }
+.afv3 .footer-bottom {
+  border-top: 1px solid var(--line);
+  padding: 22px 0 30px;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 20px; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--text-4);
+}
+.afv3 .trust-badges {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px; padding: 26px 0; border-top: 1px solid var(--line);
+}
+.afv3 .trust-badge { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-3); }
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE — desktop / tablet / mobile
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* The phone's negative right offset needs a wide viewport to sit outside the
+   capped 1240px wrap without being clipped. */
+@media (max-width: 1400px) {
+  .afv3 .mock-phone { display: none; }
+}
+
+/* Small desktop */
+@media (max-width: 1180px) {
+  .afv3 .hero-grid { grid-template-columns: 1fr; gap: 56px; padding-top: 56px; }
+  .afv3 .hero-title { font-size: 54px; }
+  /* Single-column hero => the mock spans the full width, so overhanging floats
+     would clip. Dock them into a row beneath it instead of insetting them over
+     the dashboard content. */
+  .afv3 .mock-float { position: static; width: auto; animation: none; }
+  .afv3 .mock-floats-docked {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .afv3 .price-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .afv3 .sport-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .afv3 .footer-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px; }
+}
+
+/* Tablet */
+@media (max-width: 900px) {
+  .afv3 .wrap { padding: 0 28px; }
+  .afv3 .section { padding: 72px 0; }
+  .afv3 .hero-title { font-size: 46px; }
+  .afv3 .section-title { font-size: 33px; }
+  .afv3 .nav-links { display: none; }
+  /* Burger sits last in the row even though it precedes .nav-cta in the DOM
+     (DOM order keeps it adjacent to the nav it toggles for screen readers). */
+  .afv3 .nav-burger { display: inline-flex; margin-left: auto; order: 3; }
+  .afv3 .nav-cta { order: 2; }
+  .afv3 .nav-inner { gap: 12px; }
+  .afv3 .plat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .afv3 .os-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .afv3 .trust-grid { grid-template-columns: 1fr; gap: 36px; }
+  .afv3 .trust-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+  .afv3 .price-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .afv3 .trust-badges { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Wizard steps collapse to a compact scroll strip */
+  .afv3 .wiz-steps { grid-template-columns: repeat(5, minmax(96px, 1fr)); overflow-x: auto; }
+  .afv3 .wiz-step { padding: 13px 10px; gap: 7px; }
+  .afv3 .wiz-label { display: none; }
+  .afv3 .wiz-body { padding: 24px 20px 26px; }
+}
+
+/* Mobile */
+@media (max-width: 620px) {
+  .afv3 .wrap { padding: 0 18px; }
+  /* Logo + Log In + Get Started + burger overflows a phone nav bar. Drop the
+     secondary "Log In" here — it stays reachable in the mobile menu below. */
+  .afv3 .nav-cta .btn-ghost { display: none; }
+  .afv3 .nav-inner { height: 60px; }
+  .afv3 .section { padding: 56px 0; }
+  .afv3 .section-sm { padding: 44px 0; }
+  .afv3 .hero-grid { padding: 40px 0 56px; gap: 40px; }
+  .afv3 .hero-title { font-size: 37px; letter-spacing: -0.03em; }
+  .afv3 .hero-sub { font-size: 16px; }
+  .afv3 .section-title { font-size: 27px; }
+  .afv3 .section-sub { font-size: 15.5px; }
+  /* Full-width tap targets */
+  .afv3 .hero-cta { flex-direction: column; align-items: stretch; }
+  .afv3 .hero-cta .btn { width: 100%; padding: 15px 22px; }
+  .afv3 .plat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .afv3 .plat-card { padding: 16px 10px 14px; }
+  .afv3 .os-grid { grid-template-columns: 1fr; }
+  .afv3 .price-grid { grid-template-columns: 1fr; }
+  .afv3 .sport-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .afv3 .trust-flow { grid-template-columns: 1fr; gap: 18px; }
+  .afv3 .trust-step { display: flex; align-items: flex-start; gap: 14px; text-align: left; }
+  .afv3 .trust-icon { margin: 0; flex: none; width: 44px; height: 44px; }
+  .afv3 .cannot-grid { grid-template-columns: 1fr; }
+  .afv3 .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; padding: 40px 0 30px; }
+  .afv3 .trust-badges { grid-template-columns: 1fr; gap: 12px; }
+  .afv3 .mock-body { grid-template-columns: 1fr; }
+  .afv3 .mock-side { display: none; }
+  .afv3 .mock-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .afv3 .mock-panels { grid-template-columns: 1fr; }
+  .afv3 .mock-floats-docked { grid-template-columns: 1fr; }
+  .afv3 .field-row .field { min-width: 0; flex-basis: 100%; }
+  .afv3 .field-row .btn { width: 100%; }
+  .afv3 .wiz-body { padding: 20px 16px 24px; }
+  .afv3 .footer-bottom { flex-direction: column; align-items: flex-start; gap: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .afv3 *,
+  .afv3 *::before,
+  .afv3 *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+  .afv3 .live-dot { animation: none; opacity: 1; }
+  .afv3 .mock-float { animation: none; }
+  .afv3 .card-hover:hover, .afv3 .plat-card:hover, .afv3 .btn-primary:hover { transform: none; }
+}

@@ -4,6 +4,7 @@ import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { trackLegacyToolUsage } from "@/lib/analytics-server"
+import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperIdentity"
 import {
   AI_CORE_PERSONALITY,
   getModeInstructions,
@@ -815,15 +816,18 @@ export const POST = withApiUsage({
     }
 
     const body = await request.json()
-    const { sleeper_username, force_refresh } = body
+    const { force_refresh } = body
     const draftInput: DraftWarRoomInput | undefined =
       body?.draft_input && typeof body.draft_input === "object"
         ? (body.draft_input as DraftWarRoomInput)
         : undefined
 
-    if (!sleeper_username) {
-      return NextResponse.json({ error: "Missing sleeper_username" }, { status: 400 })
-    }
+    const gate = await requireLegacySleeperIdentity(request, {
+      requestedUsername: String(body?.sleeper_username || "").trim() || null,
+      rateLimit: { action: "ai_run", maxRequests: 10, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeper_username = gate.identity.sleeperUsername
 
     const user = await prisma.legacyUser.findUnique({
       where: { sleeperUsername: String(sleeper_username).toLowerCase() },

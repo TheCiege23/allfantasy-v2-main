@@ -21,6 +21,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireAdmin } from "@/lib/adminAuth"
+import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { syncWorldCupFixtures, syncWorldCupLiveScores, syncWorldCupProviderGroupStandings } from "@/lib/world-cup/worldCupDataSyncService"
 import { recalculateWorldCupChallenge } from "@/lib/world-cup/worldCupScoringService"
 import { getWorldCupOperationsReadiness } from "@/lib/world-cup/worldCupOperationsReadiness"
@@ -299,6 +300,17 @@ export async function POST(request: Request) {
       result = await runRebuildGrounding()
       break
   }
+
+  // Single choke point for all five actions — every one writes World Cup fixture,
+  // score, standings or grounding data. Audited after dispatch so the recorded
+  // outcome reflects what actually happened, not just what was requested.
+  await logAdminAudit({
+    adminUserId: resolveAdminAuditActor(gate.user),
+    action: `admin_world_cup_${action.replace(/-/g, "_")}`,
+    targetType: "world_cup",
+    targetId: action,
+    details: { action, succeeded: result.ok },
+  })
 
   return NextResponse.json(result, { status: result.ok ? 200 : 500 })
 }

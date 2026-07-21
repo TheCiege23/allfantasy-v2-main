@@ -2,9 +2,9 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
-import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { computeAdaptiveRankings, type RankingView } from '@/lib/rankings-engine/adaptive-rankings'
 import { computeLeagueDemandIndex } from '@/lib/rankings-engine/league-demand-index'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { computeEnhancedRankings, type EnhancedView } from '@/lib/rankings-engine/enhanced-rankings'
 import type { LeagueRosterConfig } from '@/lib/vorp-engine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -36,33 +36,25 @@ RULES:
 - Return valid JSON: { "plan": [{ "timeframe": "Year 1", "action": "...", "type": "action|strategy|avoid" }] }`
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/enhanced", tool: "LegacyRankingsEnhanced" })(async (req: NextRequest) => {
-  const ip = getClientIp(req)
-  const rl = consumeRateLimit({
-    scope: 'legacy',
-    action: 'enhanced_rankings',
-    ip,
-    maxRequests: 8,
-    windowMs: 60_000,
-    includeIpInKey: true,
-  })
-  if (!rl.success) {
-    return NextResponse.json(
-      { error: 'Rate limit exceeded. Please wait before trying again.' },
-      { status: 429, headers: { 'Retry-After': String(rl.retryAfterSec) } }
-    )
-  }
+  // Rate limit now runs inside the identity gate below, keyed on the authenticated actor.
 
   try {
     const body = await req.json()
     const leagueId = String(body?.league_id || '').trim()
-    const username = String(body?.sleeper_username || '').trim()
     const view = String(body?.view || 'overall') as EnhancedView
     const goalInput = String(body?.goal || '').toLowerCase()
     const includePlan = body?.include_plan !== false
     const limit = Math.min(Math.max(Number(body?.limit) || 100, 10), 300)
 
-    if (!leagueId || !username) {
-      return NextResponse.json({ error: 'Missing league_id or sleeper_username' }, { status: 400 })
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: String(body?.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'enhanced_rankings', maxRequests: 8, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
+
+    if (!leagueId) {
+      return NextResponse.json({ error: 'Missing league_id' }, { status: 400 })
     }
     if (!VALID_VIEWS.includes(view)) {
       return NextResponse.json({ error: 'Invalid view. Use: this_year, dynasty_horizon, overall' }, { status: 400 })

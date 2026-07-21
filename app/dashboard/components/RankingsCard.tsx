@@ -87,7 +87,7 @@ export function RankingsCard({
   if (loading) {
     return (
       <div
-        className="h-64 animate-pulse rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-[#0a1228]/80 to-[#070a14]"
+        className="h-64 animate-pulse rounded-2xl border border-violet-500/15 bg-gradient-to-br from-[#0a1228]/80 to-[#070a14]"
         data-testid="dashboard-rankings-card-skeleton"
       />
     )
@@ -95,7 +95,7 @@ export function RankingsCard({
 
   if (!data?.imported || (!data.rank && data.xpTotal == null)) {
     return (
-      <div className="rounded-2xl border border-white/8 border-l-2 border-l-cyan-500 bg-[#0c0c1e] p-5">
+      <div className="rounded-2xl border border-white/8 border-l-2 border-l-violet-500 bg-[#0c0c1e] p-5">
         <div className="text-2xl">🏆</div>
         <p className="mt-3 text-sm font-semibold text-white">{t('dashboard.rankings.emptyTitle')}</p>
         <p className="mt-1 text-xs text-white/40">{t('dashboard.rankings.emptyBody')}</p>
@@ -103,14 +103,14 @@ export function RankingsCard({
           <button
             type="button"
             onClick={onImportNow}
-            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-cyan-300 transition-colors hover:text-cyan-200"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 transition-colors hover:text-violet-200"
           >
             {t('dashboard.rankings.importNow')} <ArrowRight className="h-4 w-4" />
           </button>
         ) : (
           <Link
             href="/import"
-            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-cyan-300 transition-colors hover:text-cyan-200"
+            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-violet-300 transition-colors hover:text-violet-200"
           >
             {t('dashboard.rankings.importNow')} <ArrowRight className="h-4 w-4" />
           </Link>
@@ -185,7 +185,7 @@ export function RankingsCard({
               <button
                 type="button"
                 onClick={onAskChimmy}
-                className="text-[11px] font-bold text-cyan-300 transition hover:text-cyan-200"
+                className="text-[11px] font-bold text-violet-300 transition hover:text-violet-200"
                 data-testid="dashboard-rankings-ask-chimmy-header"
               >
                 {t('dashboard.rankings.askChimmy')}

@@ -66,6 +66,28 @@ describe('leagueInitials', () => {
     expect(leagueInitials('')).toBe('?')
     expect(leagueInitials(null)).toBe('?')
   })
+
+  it('derives initials from the words, ignoring emoji tokens', () => {
+    // Real Sleeper league names routinely end in emoji. The monogram must read as the words.
+    expect(leagueInitials('Gridiron Goonz 🏈')).toBe('GG')
+    expect(leagueInitials('La Raza 🇲🇽🏈')).toBe('LR')
+    expect(leagueInitials('🏈 Sunday Funday')).toBe('SF')
+    expect(leagueInitials('Dynasty 🔥')).toBe('D')
+  })
+
+  it('never emits a lone UTF-16 surrogate (the SSR hydration-mismatch cause)', () => {
+    // A lone surrogate serializes as U+FFFD on the server but stays raw on the client → React
+    // hydration error. `charAt(0)` on an emoji used to produce exactly this.
+    const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
+    for (const name of ['Gridiron Goonz 🏈', 'La Raza 🇲🇽🏈', '🏈🔥', '🇲🇽', 'Team 💀 Skull']) {
+      expect(leagueInitials(name)).not.toMatch(loneSurrogate)
+    }
+  })
+
+  it('falls back to a whole emoji code point for all-emoji names', () => {
+    // No alphanumeric token at all — return a complete code point (renders cleanly), not '?'.
+    expect(leagueInitials('🏈🔥')).toBe('🏈')
+  })
 })
 
 describe('isNativePlatform', () => {
