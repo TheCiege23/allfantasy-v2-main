@@ -237,6 +237,33 @@ export interface RawProjectionRow {
   expiresAt: Date
 }
 
+/**
+ * One warehouse matchup fact row (dw_matchup_facts) with canonical team ids resolved — see
+ * ADR F2.10. Stored teamA/teamB are provider roster-slot ids; the PORT resolves them through
+ * the `league_teams (leagueId, externalId)` bridge (measured 100% in prod) so projection
+ * layers only ever see canonical `LeagueTeam.id` values. Unresolvable mappings are null —
+ * never guessed.
+ */
+export interface RawMatchupFactRow {
+  leagueId: string
+  sport: string
+  season: number | null
+  weekOrPeriod: number
+  /** Canonical LeagueTeam.id, or null when the bridge could not resolve the stored slot id. */
+  teamACanonicalId: string | null
+  teamBCanonicalId: string | null
+  scoreA: number
+  scoreB: number
+  /** Canonical LeagueTeam.id of the winner, or null (incomplete fixture OR unresolved mapping). */
+  winnerCanonicalId: string | null
+  /**
+   * False for the 0–0-with-null-winner fixture class (108/1,186 in prod — unplayed fixtures,
+   * not ties). A zero score in a COMPLETE matchup remains a real zero (ADR F2.10 policy 3/4).
+   */
+  isComplete: boolean
+  createdAt: Date
+}
+
 /** One warehouse per-game fact row (dw_player_game_facts) — see ADR F2.9. */
 export interface RawPlayerGameFactRow {
   /** Raw provider id — same id space as EnrichedPlayer.playerId (verified in the P0 release). */

@@ -15,6 +15,7 @@ import type {
   RawLeagueReputationRow,
   RawLeagueRow,
   RawMarketValueRow,
+  RawMatchupFactRow,
   RawNewsRow,
   RawPerformanceRow,
   RawPlayerGameFactRow,
@@ -673,6 +674,73 @@ export async function loadProjectionRows(
     fetchedAt: row.fetchedAt,
     expiresAt: row.expiresAt,
   }))
+}
+
+/**
+ * READ-ONLY warehouse matchup fact read for the F2.10 matchup enrichment seam (ADR F2.10).
+ *
+ * Two bounded find*-only reads per league — the whole league's matchup facts plus its
+ * (id, externalId) team bridge — joined in-process. Prisma cannot express the bridge join
+ * relationally (no schema relation), and the ADR's measured cost for the full shape is
+ * 0.613 ms at worst-case current scale, so this stays two indexed lookups, no raw SQL.
+ * Canonical ids only leave this function; unresolved mappings are null, never guessed.
+ */
+export async function loadMatchupFactRows(leagueId: string): Promise<RawMatchupFactRow[]> {
+  if (!leagueId) return []
+  // allSettled so a failure in one lookup cannot orphan the sibling's rejection (with
+  // Promise.all, the unconsumed sibling surfaces as an unhandled rejection); both settle,
+  // then exactly one clean error propagates.
+  const [matchupsResult, teamsResult] = await Promise.allSettled([
+    prisma.matchupFact.findMany({
+      where: { leagueId },
+      orderBy: [{ season: 'desc' }, { weekOrPeriod: 'asc' }],
+      select: {
+        leagueId: true,
+        sport: true,
+        season: true,
+        weekOrPeriod: true,
+        teamA: true,
+        teamB: true,
+        scoreA: true,
+        scoreB: true,
+        winnerTeamId: true,
+        createdAt: true,
+      },
+    }),
+    prisma.leagueTeam.findMany({
+      where: { leagueId },
+      select: { id: true, externalId: true },
+    }),
+  ])
+  if (matchupsResult.status === 'rejected') throw matchupsResult.reason
+  if (teamsResult.status === 'rejected') throw teamsResult.reason
+  const matchups = matchupsResult.value
+  const teams = teamsResult.value
+
+  const canonicalByExternalId = new Map<string, string>()
+  for (const team of teams) {
+    if (team.externalId) canonicalByExternalId.set(team.externalId, team.id)
+  }
+
+  return matchups.map((row) => {
+    // The 0–0-with-null-winner class is the stored representation of an UNPLAYED fixture
+    // (verified: all 108 such prod rows are future-season fixtures). A completed matchup can
+    // legitimately contain a zero score — completeness is judged on the trio, never one score.
+    const isComplete = !(row.scoreA === 0 && row.scoreB === 0 && row.winnerTeamId == null)
+    return {
+      leagueId: row.leagueId,
+      sport: row.sport,
+      season: row.season,
+      weekOrPeriod: row.weekOrPeriod,
+      teamACanonicalId: canonicalByExternalId.get(row.teamA) ?? null,
+      teamBCanonicalId: canonicalByExternalId.get(row.teamB) ?? null,
+      scoreA: row.scoreA,
+      scoreB: row.scoreB,
+      winnerCanonicalId: row.winnerTeamId != null ? canonicalByExternalId.get(row.winnerTeamId) ?? null : null,
+      isComplete,
+      createdAt: row.createdAt,
+    }
+  })
 }
 
 /**
