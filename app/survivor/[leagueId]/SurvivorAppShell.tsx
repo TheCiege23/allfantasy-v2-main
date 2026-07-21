@@ -8,7 +8,6 @@ import type { SurvivorUiPlayerState } from '@/lib/survivor/survivorUiTypes'
 import { SurvivorUiProvider, useSurvivorUi } from '@/lib/survivor/SurvivorUiContext'
 import { NotificationBell } from '@/app/survivor/components/NotificationBell'
 import { SurvivorStatusBadge, type SurvivorStatusBadgeVariant } from '@/app/survivor/components/SurvivorStatusBadge'
-import { SimulateLeagueButton } from '@/components/admin/SimulateLeagueButton'
 import { LeagueIntroVideoModal } from '@/components/league/LeagueIntroVideoModal'
 import { LeagueSettingsShell } from '@/components/league/LeagueSettingsShell'
 import { LeagueSettingsTab } from '@/components/league/LeagueSettingsTab'
@@ -418,7 +417,6 @@ export function SurvivorAppShell({
   return (
     <SurvivorUiProvider leagueId={leagueId}>
       <SurvivorAppShellInner leagueId={leagueId}>{children}</SurvivorAppShellInner>
-      <SimulateLeagueButton leagueId={leagueId} />
       <LeagueIntroVideoModal
         leagueId={leagueId}
         leagueType="survivor"

@@ -232,6 +232,14 @@ const filesToKeep = new Set([
   // Also the endpoint the Stripe checkout-link verification step depends on — it has been
   // recommended as the P0-A verification for days while silently 404ing in production.
   path.join('app', 'api', 'admin', 'monetization', 'checkout-link-mapping', 'route.ts').replace(/\\/g, '/'),
+  // Same "excluded but rendered" pattern as the four above: components/admin/UsageAnalyticsPanel.tsx
+  // is fetched live from app/leagues/[leagueId]/admin/model/page.tsx (not build-excluded), and
+  // components/admin/ai/{AdminAIOutcomeDashboard,AIRecommendationTable}.tsx call the AI metrics
+  // library directly. Route budget route-budget-count.mjs mirrors this Set too — keep all three in sync.
+  path.join('app', 'api', 'admin', 'usage', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'usage', 'summary', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'ai', 'metrics', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'ai', 'recommendations', 'route.ts').replace(/\\/g, '/'),
 ])
 
 function directoryExists(targetPath) {

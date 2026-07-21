@@ -93,6 +93,11 @@ const KEEP = new Set([
   // Fetched by the admin dashboard UI (app/admin/**, which is NOT excluded and does ship).
   'app/api/admin/visitor-analytics/route.ts','app/api/admin/api-health/route.ts',
   'app/api/admin/chimmy/health/route.ts','app/api/admin/monetization/checkout-link-mapping/route.ts',
+  // Same: fetched by components/admin/UsageAnalyticsPanel.tsx (live at
+  // app/leagues/[leagueId]/admin/model/page.tsx) and components/admin/ai/{AdminAIOutcomeDashboard,
+  // AIRecommendationTable}.tsx.
+  'app/api/admin/usage/route.ts','app/api/admin/usage/summary/route.ts',
+  'app/api/admin/ai/metrics/route.ts','app/api/admin/ai/recommendations/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts','app/api/ai/waivers/recommend/route.ts',
   // admin keeps (only relevant to the NEW set)
   ...(baseline ? [] : [

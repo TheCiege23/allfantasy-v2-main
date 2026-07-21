@@ -99,6 +99,11 @@ const FILES_KEPT = [
   // excluding these made the panel render against 404s).
   'app/api/admin/visitor-analytics/route.ts', 'app/api/admin/api-health/route.ts',
   'app/api/admin/chimmy/health/route.ts', 'app/api/admin/monetization/checkout-link-mapping/route.ts',
+  // Same pattern: fetched by components/admin/UsageAnalyticsPanel.tsx (live at
+  // app/leagues/[leagueId]/admin/model/page.tsx) and components/admin/ai/{AdminAIOutcomeDashboard,
+  // AIRecommendationTable}.tsx — see the "Admin endpoint contract" describe block below.
+  'app/api/admin/usage/route.ts', 'app/api/admin/usage/summary/route.ts',
+  'app/api/admin/ai/metrics/route.ts', 'app/api/admin/ai/recommendations/route.ts',
 ]
 
 function getProductionSignals(): number {
@@ -315,6 +320,89 @@ describe('Route budget — World Cup chat stays consolidated', () => {
   for (const route of OLD_FEATURE_ROUTES) {
     it(`old feature route is absent: ${route}`, () => {
       expect(exists(route), `${route} was re-created — use ?action= dispatch instead`).toBe(false)
+    })
+  }
+})
+
+// ── Admin endpoint contract — every referenced /api/admin|/api/ai route must ──
+// ── actually exist AND actually ship to production ────────────────────────────
+//
+// Drift-protection guard: a UI fetching a URL is not proof the URL works. Scans
+// app/admin and components/admin for literal /api/admin/* and /api/ai/*
+// references — whether inside fetch() or an href — and fails if the referenced
+// route either (a) has no route.ts on disk, or (b) exists but is excluded from
+// the production build and not in FILES_KEPT. Both failure modes render as
+// zeros/empty cards or dead links in prod without ever failing a build (#312).
+
+describe('Admin endpoint contract — referenced routes exist and ship', () => {
+  const CONTRACT_SCAN_DIRS = ['app/admin', 'components/admin']
+  const URL_PATTERN = /\/api\/(?:admin|ai)\/[A-Za-z0-9\-_/]*/g
+
+  function walkSourceFiles(dir: string): string[] {
+    const abs = join(root, dir)
+    if (!existsSync(abs)) return []
+    const result: string[] = []
+    const stack = [abs]
+    while (stack.length) {
+      const cur = stack.pop()!
+      for (const entry of readdirSync(cur, { withFileTypes: true })) {
+        const child = join(cur, entry.name)
+        if (entry.isDirectory()) { stack.push(child); continue }
+        if (/\.(ts|tsx)$/.test(entry.name)) result.push(child)
+      }
+    }
+    return result
+  }
+
+  function findReferencedUrls(): { url: string; file: string }[] {
+    const found: { url: string; file: string }[] = []
+    for (const dir of CONTRACT_SCAN_DIRS) {
+      for (const abs of walkSourceFiles(dir)) {
+        const rel = relative(root, abs).replace(/\\/g, '/')
+        const src = readFileSync(abs, 'utf8')
+        const matches = src.match(URL_PATTERN)
+        if (!matches) continue
+        for (const raw of matches) {
+          const url = raw.replace(/\/$/, '') // drop a trailing slash before an interpolation/param
+          found.push({ url, file: rel })
+        }
+      }
+    }
+    return found
+  }
+
+  function routeFileFor(url: string): string {
+    return `app${url}/route.ts`
+  }
+
+  function isExcludedFromBuild(routeFile: string): boolean {
+    const isUnderDisabledDir = EXCLUDED_DIRS.some(
+      (d) => routeFile === d || routeFile.startsWith(`${d}/`)
+    )
+    if (!isUnderDisabledDir) return false
+    return !FILES_KEPT.includes(routeFile)
+  }
+
+  const referenced = findReferencedUrls()
+  const uniqueByUrl = new Map<string, string>() // url -> first file that referenced it
+  for (const { url, file } of referenced) {
+    if (!uniqueByUrl.has(url)) uniqueByUrl.set(url, file)
+  }
+
+  it('scanned at least one /api/admin or /api/ai reference (guard against a broken walk)', () => {
+    expect(referenced.length, 'found zero references — app/admin or components/admin may have moved').toBeGreaterThan(0)
+  })
+
+  for (const [url, file] of uniqueByUrl) {
+    const routeFile = routeFileFor(url)
+    it(`${url} (referenced from ${file}) resolves to a route file that exists on disk`, () => {
+      expect(exists(routeFile), `${file} references ${url}, but ${routeFile} does not exist`).toBe(true)
+    })
+    it(`${url} is not excluded from the production build`, () => {
+      expect(
+        isExcludedFromBuild(routeFile),
+        `${file} references ${url} (${routeFile}), but it is excluded from the production build and not in FILES_KEPT — this 404s in prod exactly like #312`
+      ).toBe(false)
     })
   }
 })
