@@ -105,7 +105,7 @@ async function collectSleeperDraftFacts(args: {
     if (!args.force) {
       const existing = await prisma.draftFact.findFirst({
         where: { leagueId: args.internalLeagueId, season: seasonLeague.season },
-        select: { id: true },
+        select: { draftId: true },
       })
       if (existing) {
         seasonsSkippedAlreadyComplete += 1

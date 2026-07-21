@@ -188,7 +188,7 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
             season: seasonState.season,
             weekOrPeriod: SEASON_END_ROSTER_SNAPSHOT_PERIOD,
           },
-          select: { id: true },
+          select: { snapshotId: true },
         })
         if (existingSnapshot) {
           seasonsSkippedAlreadyComplete += 1
