@@ -19,6 +19,23 @@ let resolvedDistDir = process.env.AF_NEXT_DIST_DIR || (isVercelBuild || isRailwa
 let nextBuildDir = path.join(repoRoot, resolvedDistDir)
 const routeDirsToDisable = [
   path.join('app', 'e2e'),
+  /*
+   * Playwright-only runtime harnesses in the `pages/` router.
+   *
+   * These are test fixtures, but unlike `app/e2e` (excluded above) they were
+   * still shipping — they render as publicly reachable pages in production.
+   * Excluding them removes two public test surfaces AND frees two entries of
+   * Vercel route budget, which the deploy needs: the project sits at the hard
+   * 2048-route cap, and adding a single new route fails the deployment with
+   * `too_many_routes` at the process-and-upload-routes step (the build itself
+   * succeeds, so it does not look like a code error).
+   *
+   * Safe for CI: Playwright builds via `scripts/playwright-dev-server.cjs`,
+   * which never invokes this script, so `e2e/g39-*.spec.ts` and
+   * `e2e/g40-*.spec.ts` still find their pages.
+   */
+  path.join('pages', 'e2e-g39-nfl-redraft-trade-runtime.tsx'),
+  path.join('pages', 'e2e-g40-nfl-redraft-playoff-runtime.tsx'),
   path.join('app', 'tools', 'social-share-engine-harness'),
   path.join('app', 'tools', 'public-league-discovery-harness'),
   // Keep non-core diagnostic/dev surfaces out of production route budget.
@@ -237,7 +254,23 @@ function movePath(fromPath, toPath) {
 }
 
 function collectFilesUnderDir(rootPath) {
-  if (!directoryExists(rootPath)) return []
+  if (!directoryExists(rootPath)) {
+    /*
+     * Allow a single FILE entry, not just a directory.
+     *
+     * The `pages/` router has no per-route directory to exclude — a route IS a
+     * single file — so excluding one requires naming the file directly. Without
+     * this branch a file entry in `routeDirsToDisable` silently no-ops (the
+     * caller does `if (routeFiles.length === 0) continue`), which would look
+     * like a working exclusion while changing nothing.
+     */
+    try {
+      if (fs.statSync(rootPath).isFile()) return [rootPath]
+    } catch {
+      // Not present — fall through to the empty result below.
+    }
+    return []
+  }
   const discovered = []
   const stack = [rootPath]
 
