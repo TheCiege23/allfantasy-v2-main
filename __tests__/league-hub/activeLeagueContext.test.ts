@@ -10,25 +10,26 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-const { leagueFindUnique, rosterFindFirst, redraftMemberFindUnique, rosterCount, leagueTeamCount } =
+const { leagueFindUnique, rosterFindFirst, redraftMemberFindUnique, rosterCount, leagueTeamFindFirst } =
   vi.hoisted(() => ({
     leagueFindUnique: vi.fn(),
     rosterFindFirst: vi.fn(),
     redraftMemberFindUnique: vi.fn(),
     rosterCount: vi.fn(),
-    leagueTeamCount: vi.fn(),
+    leagueTeamFindFirst: vi.fn(),
   }))
 
 // `resolveActiveLeagueContext` delegates its access decision to the canonical predicate in
 // `lib/league-access.ts`, which reads membership through its own queries — hence the extra
-// models here. Each scenario below still declares membership once; it just has to be mirrored
-// into the query the canonical helper actually asks.
+// models here. The claim path is a `leagueTeam.findFirst` selecting the commissioner columns
+// (not a bare count). Each scenario below still declares membership once; it just has to be
+// mirrored into the query the canonical helper actually asks.
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     league: { findUnique: leagueFindUnique },
     roster: { findFirst: rosterFindFirst, count: rosterCount },
     redraftLeagueMember: { findUnique: redraftMemberFindUnique },
-    leagueTeam: { count: leagueTeamCount },
+    leagueTeam: { findFirst: leagueTeamFindFirst },
   },
 }))
 
@@ -57,7 +58,7 @@ describe('resolveActiveLeagueContext', () => {
     // so a scenario that forgets to fails closed rather than passing by accident.
     redraftMemberFindUnique.mockResolvedValue(null)
     rosterCount.mockResolvedValue(0)
-    leagueTeamCount.mockResolvedValue(0)
+    leagueTeamFindFirst.mockResolvedValue(null)
   })
 
   it('returns null when the league does not exist', async () => {
@@ -91,7 +92,9 @@ describe('resolveActiveLeagueContext', () => {
       })
     )
     rosterFindFirst.mockResolvedValue({ id: 'roster-9' })
-    leagueTeamCount.mockResolvedValue(1) // claim-only membership, per the canonical predicate
+    // Membership proof for the canonical predicate's claim path. The commissioner flag in the
+    // resolved context comes from activeLeagueContext's own `teams` relation above, not this row.
+    leagueTeamFindFirst.mockResolvedValue({ isCommissioner: false, isCoCommissioner: false })
     const { resolveActiveLeagueContext } = await import('@/lib/shared-services/league-hub/activeLeagueContext')
     const result = await resolveActiveLeagueContext({ leagueId: 'league-1', userId: 'member-1' })
     expect(result).not.toBeNull()
@@ -121,7 +124,7 @@ describe('resolveActiveLeagueContext', () => {
         settings: { commissionerVerification: { method: 'attestation' } },
       })
     )
-    leagueTeamCount.mockResolvedValue(1)
+    leagueTeamFindFirst.mockResolvedValue({ isCommissioner: false, isCoCommissioner: false })
     const { resolveActiveLeagueContext } = await import('@/lib/shared-services/league-hub/activeLeagueContext')
     const result = await resolveActiveLeagueContext({ leagueId: 'league-1', userId: 'member-1' })
     expect(result?.commissionerVerificationMethod).toBe('attestation')

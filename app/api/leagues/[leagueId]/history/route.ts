@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -48,17 +49,12 @@ export async function GET(
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  // Check membership: commissioner OR team member
-  const isMember =
-    league.userId === session.user.id ||
-    league.teams.some((t) => t.platformUserId === session.user!.id)
-  if (!isMember) {
-    // Also check roster membership
-    const roster = await prisma.roster.findFirst({
-      where: { leagueId, platformUserId: session.user.id },
-      select: { id: true },
-    })
-    if (!roster) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // Canonical membership predicate. This previously read the nullable `LeagueTeam.platformUserId`
+  // with a `Roster` fallback bolted on — which covered imported rosters but still 403'd claim-only
+  // managers and redraft members.
+  const access = await resolveLeagueAccess(leagueId, session.user.id)
+  if (!access?.isMember) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   // Fetch all LeagueSeason rows for this league (covers imported + AF-native)
