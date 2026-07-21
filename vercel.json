@@ -17,6 +17,10 @@
       "schedule": "20 6 * * *"
     },
     {
+      "path": "/api/cron/import-player-game-stats",
+      "schedule": "40 6 * * *"
+    },
+    {
       "path": "/api/cron/sync-player-images",
       "schedule": "10 5 * * *"
     },

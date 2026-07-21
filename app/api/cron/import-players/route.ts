@@ -13,6 +13,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { prisma } from "@/lib/prisma"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
 
 /**
@@ -53,12 +54,38 @@ async function handle(req: NextRequest) {
 
     const result = await runSportsDataImporter({ sports })
 
+    // Durable run record: admin production-health (?view=warehouse) reads teamCodeCounts from
+    // here to flag truncated_fallback growth — the failure mode that silently blocked NCAAF/
+    // NCAAB imports (full institution names overflowing the VarChar(32) team column).
+    await prisma.syncJobRun.create({
+      data: {
+        jobName: "import-players",
+        jobScope: result.sports.join(","),
+        trigger: "cron",
+        status: "completed",
+        rowsWritten: result.imported,
+        rowsSkipped: result.rowsSkippedByGuard,
+        completedAt: new Date(),
+        durationMs: result.durationMs,
+        metadata: {
+          teamCodeCounts: result.teamCodeCounts,
+          skippedSports: result.skippedSports,
+          staleFallbackApplied: result.staleFallbackApplied,
+        },
+      },
+    }).catch((telemetryError) => {
+      console.error("[cron/import-players] telemetry write failed:", telemetryError)
+    })
+
     return NextResponse.json({
       ok: true,
       dryRun: false,
       imported: result.imported,
       sports: result.sports,
       staleFallbackApplied: result.staleFallbackApplied,
+      skippedSports: result.skippedSports,
+      teamCodeCounts: result.teamCodeCounts,
+      rowsSkippedByGuard: result.rowsSkippedByGuard,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
     })
