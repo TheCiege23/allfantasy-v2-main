@@ -17,7 +17,12 @@ import { runLiveScoringForActiveSeasons } from '@/server/services/liveScoring/li
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  if (!requireCronAuth(request)) {
+  // `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`, and
+  // LEAGUE_CRON_SECRET is set in production — so a BARE call compares Vercel's
+  // `Authorization: Bearer $CRON_SECRET` against the wrong variable and 401s. This route is
+  // scheduled `*/2` and was doing exactly that: 60 invocations / 60 x 401 in a 2h production
+  // sample, never once running. Naming CRON_SECRET explicitly is the same fix as #289.
+  if (!requireCronAuth(request, 'CRON_SECRET')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

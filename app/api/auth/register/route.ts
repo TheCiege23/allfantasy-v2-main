@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
+import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup"
 import { getPlatformEvents, EVENT } from "@/lib/events"
 import { Prisma, VerificationMethod } from "@prisma/client"
 import bcrypt from "bcryptjs"
@@ -535,6 +536,19 @@ export async function POST(req: Request) {
     } else {
       user = await createAccountOnce(username)
     }
+
+    // Notify the owner of the new account. Hooked here, after createAccountOnce has
+    // fully returned, rather than inside the two `appUser.create` branches: the E2E
+    // branch deletes the row on a profile-create error, so emailing inside it could
+    // notify for an account that is then rolled back. This point is reached only on a
+    // committed create, so it fires exactly once per new account and never on login.
+    // Not awaited — fire-and-forget.
+    void notifyOwnerOfNewSignup({
+      email: user.email,
+      method: "email",
+      userId: user.id,
+      username: user.username,
+    })
 
     // Growth attribution is best-effort and should not block account creation.
     if (!isE2ERequest) {
