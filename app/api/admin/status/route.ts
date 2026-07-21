@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getAdminAccessState } from "@/lib/adminAuth"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getAdminProductionReadiness } from "@/lib/admin-dashboard/AdminProductionReadinessService"
+import { getDeploymentIdentity } from "@/lib/admin-dashboard/deploymentIdentity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -51,5 +52,7 @@ export async function GET() {
       username: state.user.username ?? null,
       emailMasked: maskAdminEmail(state.user.email),
     },
+    deployment: getDeploymentIdentity(),
+    generatedAt: new Date().toISOString(),
   })
 }
