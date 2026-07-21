@@ -8,6 +8,7 @@ import {
   getSportImportMatrix,
 } from "@/lib/admin-dashboard/SportImportMatrixService"
 import { getPlayerGameLogHealthDashboard } from "@/lib/sports-os/PlayerGameLogImportService"
+import { getSportsP0PipelineHealth } from "@/lib/admin-dashboard/SportsP0PipelineHealthService"
 
 export const dynamic = "force-dynamic"
 
@@ -20,9 +21,10 @@ export async function GET(request: NextRequest) {
   const gate = await requireAdminOrBearer(request)
   if (!gate.ok) return gate.res
 
-  const [rows, playerGameLogHealth] = await Promise.all([
+  const [rows, playerGameLogHealth, p0PipelineHealth] = await Promise.all([
     getAdminPerSportDataReliabilityRows(),
     getPlayerGameLogHealthDashboard(),
+    getSportsP0PipelineHealth(),
   ])
   return NextResponse.json({
     ok: true,
@@ -30,6 +32,7 @@ export async function GET(request: NextRequest) {
     importMatrix: getSportImportMatrix(rows),
     aiToolAvailability: getDashboardAiToolAvailability(rows),
     playerGameLogHealth,
+    p0PipelineHealth,
     controls: {
       endpoint: "/api/admin/sports/sync",
       methods: ["GET status", "POST sync"],
