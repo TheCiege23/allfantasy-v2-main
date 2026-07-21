@@ -14,6 +14,7 @@ import {
   getRosterSnapshotsForTeam,
 } from '@/lib/data-warehouse'
 import { prisma } from '@/lib/prisma'
+import { computeWarehouseDataState } from '@/lib/data-warehouse/warehouseDataState'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 export const dynamic = 'force-dynamic'
@@ -59,6 +60,11 @@ export async function GET(request: NextRequest) {
     const resolvedSeason = season ?? summary.season
     const resolvedSport = normalizeToSupportedSport(sportParam ?? summary.sport)
 
+    // Truthful availability, attached to every view: distinguishes "no historical events
+    // exist" from "player statistics were never imported" (PlayerGameStat sat at 0 rows in
+    // prod while this route served empty arrays the UI rendered as real empty history).
+    const dataState = await computeWarehouseDataState(resolvedSport, resolvedSeason)
+
     const matchupWhere = {
       leagueId,
       ...(resolvedSeason != null ? { season: resolvedSeason } : {}),
@@ -81,7 +87,7 @@ export async function GET(request: NextRequest) {
         take: limit,
       })
       return NextResponse.json(
-        { leagueId, view, summary, data: { matchups } },
+        { leagueId, view, summary, dataState, data: { matchups } },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
@@ -92,7 +98,7 @@ export async function GET(request: NextRequest) {
       }
       const standings = await getStandingsHistory(leagueId, resolvedSeason)
       return NextResponse.json(
-        { leagueId, view, summary, data: { standings } },
+        { leagueId, view, summary, dataState, data: { standings } },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
@@ -103,7 +109,7 @@ export async function GET(request: NextRequest) {
       }
       const snapshots = await getRosterSnapshotsForTeam(leagueId, teamId, resolvedSeason, fromWeek, toWeek)
       return NextResponse.json(
-        { leagueId, view, summary, data: { snapshots, teamId } },
+        { leagueId, view, summary, dataState, data: { snapshots, teamId } },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
@@ -111,7 +117,7 @@ export async function GET(request: NextRequest) {
     if (view === 'draft') {
       const draft = await getDraftHistoryForLeague(leagueId, resolvedSeason ?? undefined)
       return NextResponse.json(
-        { leagueId, view, summary, data: { draft } },
+        { leagueId, view, summary, dataState, data: { draft } },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
@@ -119,7 +125,7 @@ export async function GET(request: NextRequest) {
     if (view === 'transactions') {
       const transactions = await getTransactionHistoryForLeague(leagueId, undefined, limit)
       return NextResponse.json(
-        { leagueId, view, summary, data: { transactions } },
+        { leagueId, view, summary, dataState, data: { transactions } },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
@@ -135,7 +141,7 @@ export async function GET(request: NextRequest) {
         limit,
       })
       return NextResponse.json(
-        { leagueId, view, summary, data: { playerFacts, playerId, sport: resolvedSport } },
+        { leagueId, view, summary, dataState, data: { playerFacts, playerId, sport: resolvedSport } },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
@@ -184,6 +190,7 @@ export async function GET(request: NextRequest) {
           leagueId,
           view,
           summary,
+          dataState,
           data: { teamId, teamMatchups, teamStandings: teamStandingsRaw, snapshots },
         },
         { headers: { 'Cache-Control': 'no-store' } }
@@ -193,13 +200,13 @@ export async function GET(request: NextRequest) {
     if (view === 'ai') {
       const ai = await getLeagueWarehouseSummaryForAI(leagueId, resolvedSeason ?? undefined)
       return NextResponse.json(
-        { leagueId, view, summary, data: ai },
+        { leagueId, view, summary, dataState, data: ai },
         { headers: { 'Cache-Control': 'no-store' } }
       )
     }
 
     return NextResponse.json(
-      { leagueId, view: 'summary', summary, data: { summary } },
+      { leagueId, view: 'summary', summary, dataState, data: { summary } },
       { headers: { 'Cache-Control': 'no-store' } }
     )
   } catch (e) {

@@ -18,6 +18,9 @@ export interface GameStatsPipelineResult {
   weekOrRound: number
   playerFacts: number
   teamFacts: number
+  /** MISSING_SOURCE_DATA means the source stat tables were empty — surface it, don't fold it into a normal success. */
+  status: 'COMPLETED' | 'PARTIAL' | 'MISSING_SOURCE_DATA' | 'FAILED'
+  warnings: string[]
 }
 
 /**
@@ -29,8 +32,16 @@ export async function runGameStatsIngestionPipeline(
   weekOrRound: number
 ): Promise<GameStatsPipelineResult> {
   const sportNorm = normalizeSportForWarehouse(sport)
-  const { playerFacts, teamFacts } = await generateGameFactsFromExistingStats(sportNorm, season, weekOrRound)
-  return { sport: sportNorm, season, weekOrRound, playerFacts, teamFacts }
+  const result = await generateGameFactsFromExistingStats(sportNorm, season, weekOrRound)
+  return {
+    sport: sportNorm,
+    season,
+    weekOrRound,
+    playerFacts: result.playerFacts,
+    teamFacts: result.teamFacts,
+    status: result.status,
+    warnings: result.warnings,
+  }
 }
 
 export interface MatchupScoringPipelineResult {
