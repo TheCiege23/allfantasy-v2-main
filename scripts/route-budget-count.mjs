@@ -7,9 +7,16 @@
 //   node scripts/route-budget-count.mjs --baseline # pre-cleanup disable set
 import { readdirSync, existsSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import vercelBuildConfig from './vercel-next-build.cjs'
 
 const root = process.cwd()
 const baseline = process.argv.includes('--baseline')
+// CURRENT canonical lists — imported (not duplicated) from the single source of
+// truth that actually gates the production build. Only used for the default
+// (non-baseline, non---main) report; --baseline/--main intentionally freeze
+// historical snapshots below, since those describe past states this file no
+// longer reflects.
+const { routeDirsToDisable: CURRENT_DISABLE, filesToKeep: CURRENT_KEEP } = vercelBuildConfig
 
 function walk(dir) {
   if (!existsSync(dir)) return []
@@ -65,34 +72,7 @@ const DISABLE_HEADROOM = [
 ]
 const KEEP = new Set([
   'app/api/cron/waivers/route.ts',
-  // Sports-data ingestion crons, restored to the build 2026-07-19 (see
-  // scripts/vercel-next-build.cjs). This KEEP set is a hand-maintained mirror of that
-  // script's filesToKeep — they must be updated together or this proof under-reports.
-  'app/api/cron/import-players/route.ts',
-  'app/api/cron/import-injuries/route.ts',
-  'app/api/cron/import-news/route.ts',
-  'app/api/cron/import-scores/route.ts',
-  'app/api/cron/import-standings/route.ts',
-  'app/api/cron/import-schedules/route.ts',
-  'app/api/cron/import-depth-charts/route.ts',
-  'app/api/cron/import-projections/route.ts',
-  'app/api/cron/adp-refresh/route.ts',
-  'app/api/cron/recompute-allfantasy-adp/route.ts',
-  'app/api/cron/draft-pool-prewarm/route.ts',
-  'app/api/cron/fantasy-os-exec-sync/route.ts',
-  'app/api/cron/trade-weekly-recalibration/route.ts',
-  // scheduled in vercel.json — must be kept or they 404 (see vercel-next-build.cjs).
-  // Union of this branch's two and main's one; keeping only one side re-breaks the other.
-  'app/api/cron/draft-tick/route.ts',
-  'app/api/cron/live-score-tick/route.ts',
-  'app/api/cron/sync-player-images/route.ts',
-  'app/api/cron/legacy-import-drain/route.ts',
-  'app/api/cron/import-season-stats/route.ts',
-  'app/api/cron/import-player-game-stats/route.ts',
   'app/api/admin/automation/health/route.ts','app/api/admin/automation/waivers/run/route.ts',
-  // Fetched by the admin dashboard UI (app/admin/**, which is NOT excluded and does ship).
-  'app/api/admin/visitor-analytics/route.ts','app/api/admin/api-health/route.ts',
-  'app/api/admin/chimmy/health/route.ts','app/api/admin/monetization/checkout-link-mapping/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts','app/api/ai/waivers/recommend/route.ts',
   // admin keeps (only relevant to the NEW set)
   ...(baseline ? [] : [
@@ -101,19 +81,23 @@ const KEEP = new Set([
 ])
 
 const mainOnly = process.argv.includes('--main') // current main (pre-headroom): BASE + #100
+// --baseline and --main freeze historical snapshots (states that no longer exist
+// anywhere else); the default (neither flag) reports the ACTUAL current build
+// config, imported live from vercel-next-build.cjs rather than a hand-copied list.
 const DISABLE = baseline
   ? DISABLE_BASE
   : mainOnly
     ? [...DISABLE_BASE, ...DISABLE_NEW]
-    : [...DISABLE_BASE, ...DISABLE_NEW, ...DISABLE_HEADROOM]
+    : CURRENT_DISABLE
+const KEEP_SET = baseline || mainOnly ? KEEP : new Set(CURRENT_KEEP)
 const all = walk(join(root, 'app'))
 const disabled = new Set()
-for (const d of DISABLE) for (const f of walk(join(root, d))) if (!KEEP.has(f)) disabled.add(f)
+for (const d of DISABLE) for (const f of walk(join(root, d))) if (!KEEP_SET.has(f)) disabled.add(f)
 const production = all.filter((f) => !disabled.has(f))
 let crons = 0
 try { crons = JSON.parse(readFileSync('vercel.json', 'utf8')).crons?.length || 0 } catch {}
 
-console.log(`mode: ${baseline ? 'BASELINE (pre-cleanup)' : 'CURRENT (post-cleanup)'}`)
+console.log(`mode: ${baseline ? 'BASELINE (pre-cleanup)' : mainOnly ? 'MAIN (pre-headroom snapshot)' : 'CURRENT (live from vercel-next-build.cjs)'}`)
 console.log(`  total route+page files:       ${all.length}`)
 console.log(`  disabled (moved out of build): ${disabled.size}`)
 console.log(`  PRODUCTION deployed functions: ${production.length}`)

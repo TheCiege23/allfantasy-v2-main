@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { resolve, join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import vercelBuildConfig from '../scripts/vercel-next-build.cjs'
 
 const root = resolve(__dirname, '..')
 function read(rel: string): string {
@@ -30,76 +31,14 @@ function walkRouteFiles(dir: string): string[] {
   return result
 }
 
-const EXCLUDED_DIRS = [
-  'app/e2e', 'app/tools/social-share-engine-harness', 'app/tools/public-league-discovery-harness',
-  'app/admin', 'app/api/admin', 'app/api/cron', 'app/api/audio-metadata',
-  'app/ai-lab', 'app/lab', 'app/bracket-review', 'app/createor',
-  'app/api/dev', 'app/api/e2e', 'app/api/lab', 'app/api/simulation-lab',
-  'app/march-madness', 'app/wallet/deposit',
-  'app/zombie/[leagueId]', 'app/zombie/universe',
-  'app/survivor/[leagueId]', 'app/api/zombie', 'app/api/survivor',
-  'app/dev', 'app/api/internal', 'app/app/simulation-lab', 'app/app/zombie-universe',
-  'app/api/brackets/world-cup/[challengeId]/admin',
-  'app/api/auth/admin-debug', 'app/api/bracket/workers/health',
-  'app/api/ai/analytics/rollup', 'app/api/marketplace/seed',
-  'app/api/ai/providers', 'app/api/ai/tools',
-  // Route-budget cleanup (2026-06-22): internal diagnostics/metrics/meta with no
-  // production caller. Mirrors scripts/vercel-next-build.cjs routeDirsToDisable.
-  // (league-health removed 2026-07-06 — Dashboard Sprint 2's MyLeagueCard is now a
-  // real production caller; it must stay built. See vercel-next-build.cjs.)
-  'app/api/meta/logs', 'app/api/intelligence/snapshot', 'app/api/providers/status',
-  'app/api/chaos-detector', 'app/api/league-meta',
-  'app/api/platform/service-map', 'app/api/ai/decision-log', 'app/api/ai/validation',
-  'app/api/ai/memory/quality',
-  'app/api/health/fantasycalc', 'app/api/health/player-valuations', 'app/api/system/health',
-  // Route-headroom pass (2026-06-22): deferred-mode (big-brother/zombie/devy) leftover
-  // gameplay/admin routes with no live caller. Mirrors scripts/vercel-next-build.cjs.
-  'app/api/leagues/[leagueId]/big-brother/ballot', 'app/api/leagues/[leagueId]/big-brother/cycle',
-  'app/api/leagues/[leagueId]/big-brother/finalists', 'app/api/leagues/[leagueId]/big-brother/have-not',
-  'app/api/leagues/[leagueId]/big-brother/hoh', 'app/api/leagues/[leagueId]/big-brother/hoh-room',
-  'app/api/leagues/[leagueId]/big-brother/nominations', 'app/api/leagues/[leagueId]/big-brother/replacement',
-  'app/api/leagues/[leagueId]/big-brother/veto-challenge', 'app/api/leagues/[leagueId]/big-brother/veto-decision',
-  'app/api/leagues/[leagueId]/zombie/attach-universe', 'app/api/leagues/[leagueId]/zombie/can-trade',
-  'app/api/leagues/[leagueId]/zombie/config', 'app/api/leagues/[leagueId]/zombie/finalize',
-  'app/api/leagues/[leagueId]/zombie/horde-sit-outs',
-  'app/api/leagues/[leagueId]/devy/admin/automation', 'app/api/leagues/[leagueId]/devy/admin/force-promote',
-  'app/api/leagues/[leagueId]/devy/admin/recalc', 'app/api/leagues/[leagueId]/devy/admin/regenerate-devy-pool',
-  'app/api/leagues/[leagueId]/devy/admin/regenerate-rookie-pool', 'app/api/leagues/[leagueId]/devy/admin/reopen-window',
-  'app/api/leagues/[leagueId]/devy/admin/repair-duplicate-rights', 'app/api/leagues/[leagueId]/devy/admin/revoke-promotion',
-  'app/api/leagues/[leagueId]/devy/audit', 'app/api/leagues/[leagueId]/devy/outlook',
-  'app/api/leagues/[leagueId]/devy/scoring-presets',
-]
-
-const FILES_KEPT = [
-  'app/api/cron/_auth.ts', 'app/api/cron/waivers/route.ts',
-  // Sports-data ingestion crons, restored to the build by #284. This list is the THIRD
-  // hand-maintained copy of the build script's filesToKeep (the others being
-  // scripts/vercel-next-build.cjs and scripts/route-budget-count.mjs), and nothing
-  // asserts the three agree. Leaving these out made this guard subtract 13 routes that
-  // actually ship — under-reporting against GREEN_LIMIT, so the cap check would fire 13
-  // routes late in exactly the situation it exists to catch.
-  'app/api/cron/import-players/route.ts', 'app/api/cron/import-injuries/route.ts',
-  'app/api/cron/import-news/route.ts', 'app/api/cron/import-scores/route.ts',
-  'app/api/cron/import-standings/route.ts', 'app/api/cron/import-schedules/route.ts',
-  'app/api/cron/import-depth-charts/route.ts', 'app/api/cron/import-projections/route.ts',
-  'app/api/cron/adp-refresh/route.ts', 'app/api/cron/recompute-allfantasy-adp/route.ts',
-  'app/api/cron/draft-pool-prewarm/route.ts', 'app/api/cron/fantasy-os-exec-sync/route.ts',
-  'app/api/cron/trade-weekly-recalibration/route.ts',
-  // scheduled in vercel.json — must be kept or they 404 (see vercel-next-build.cjs).
-  // Union of this branch's two and main's one; keeping only one side re-breaks the other.
-  'app/api/cron/draft-tick/route.ts', 'app/api/cron/live-score-tick/route.ts',
-  'app/api/cron/sync-player-images/route.ts',
-  'app/api/cron/legacy-import-drain/route.ts', 'app/api/cron/import-season-stats/route.ts',
-  'app/api/cron/import-player-game-stats/route.ts',
-  'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
-  'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
-  // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.
-  'app/api/admin/sports/sync/route.ts', 'app/api/admin/fantasy-data/import/route.ts',
-  // Fetched by the admin dashboard UI itself (app/admin/** is NOT excluded and does ship, so
-  // excluding these made the panel render against 404s).
-  'app/api/admin/visitor-analytics/route.ts', 'app/api/admin/api-health/route.ts',
-  'app/api/admin/chimmy/health/route.ts', 'app/api/admin/monetization/checkout-link-mapping/route.ts',
-]
+// Imported (not hand-duplicated) from scripts/vercel-next-build.cjs — the file
+// that actually gates the production build. This list drifting out of sync with
+// the real build config (independently, in up to 4 places at once) is exactly
+// how the /api/admin/{visitor-analytics,api-health,chimmy/health,monetization/
+// checkout-link-mapping} 404 regression (#312) and the /api/ai/analytics/rollup
+// staleness both shipped unnoticed. Do not hand-copy entries here again.
+const EXCLUDED_DIRS = vercelBuildConfig.routeDirsToDisable
+const FILES_KEPT = vercelBuildConfig.filesToKeep
 
 function getProductionSignals(): number {
   const appDir = join(root, 'app')
@@ -136,37 +75,6 @@ function getProductionSignals(): number {
   return (sourceTotal - netExcluded) + crons
 }
 
-describe('Every scheduled cron survives the production build', () => {
-  // This has now gone wrong three separate times: the original 13 sports-data crons (#284),
-  // and two in-flight branches that each added a cron to vercel.json without adding it to
-  // filesToKeep. `app/api/cron` is excluded from the build wholesale, so a scheduled-but-not-kept
-  // cron is invoked on schedule and 404s every single time — silently, forever. Nothing asserted
-  // that vercel.json and the keep-list agreed, so each instance had to be found by hand.
-  it('every /api/cron/* path in vercel.json is in FILES_KEPT', () => {
-    const vercelJson = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')) as {
-      crons?: { path: string }[]
-    }
-    const scheduled = (vercelJson.crons ?? [])
-      .map((c) => c.path.split('?')[0]!)
-      .filter((p) => p.startsWith('/api/cron/'))
-
-    const kept = new Set(FILES_KEPT)
-    // Collect every offender, then assert the list is empty — asserting inside the loop would
-    // abort on the first miss and hide the rest.
-    const notKept = scheduled.filter((p) => !kept.has(`app${p}/route.ts`))
-
-    expect(notKept).toEqual([])
-    expect(scheduled.length).toBeGreaterThan(0) // floor: an empty cron list must not read as a pass
-  })
-
-  it('every kept cron route actually exists on disk', () => {
-    const missing = FILES_KEPT.filter(
-      (f) => f.startsWith('app/api/cron/') && !existsSync(join(root, f))
-    )
-    expect(missing).toEqual([])
-  })
-})
-
 describe('Route budget — deleted routes must stay gone', () => {
   it('app/api/ai/context/route.ts is removed from disk', () => {
     expect(exists('app/api/ai/context/route.ts')).toBe(false)
@@ -179,11 +87,19 @@ describe('Route budget — deleted routes must stay gone', () => {
       'app/dashboard/page.tsx',
       'app/dashboard/DashboardShell.tsx',
     ]
+    // Skipping a missing suspect used to be the whole loop body's escape hatch, so if
+    // both were ever renamed this asserted nothing and still passed. Track what was
+    // actually inspected and require it to be non-empty.
+    const inspected: string[] = []
+    const offenders: string[] = []
     for (const rel of suspects) {
       if (!exists(rel)) continue
-      const src = read(rel)
-      expect(src, `${rel} should not reference /api/ai/context`).not.toContain('/api/ai/context')
+      inspected.push(rel)
+      if (read(rel).includes('/api/ai/context')) offenders.push(rel)
     }
+    expect(inspected.length, `none of the suspect files exist any more (${suspects.join(', ')}) — this guard is checking nothing; re-point it`)
+      .toBeGreaterThan(0)
+    expect(offenders, `these still reference the deleted /api/ai/context route: ${offenders.join(', ')}`).toEqual([])
   })
 })
 
@@ -222,14 +138,40 @@ describe('Route budget — build-excluded routes have no active production fetch
   const SOURCE_DIRS = ['app', 'components', 'lib']
 
   // Prefixes excluded from production build — callers here never run in prod.
+  // NOTE: components/admin/ was removed from this list deliberately (2026-07-21).
+  // app/admin/** (the admin UI) is NOT build-excluded — only app/api/admin/** is,
+  // and only partially (see filesToKeep in vercel-next-build.cjs) — so its
+  // components DO run in production and must be scanned as real callers. Excluding
+  // components/admin/ here previously hid a real bug: ChimmyKPIReadout.tsx (under
+  // components/admin/) fetches /api/ai/analytics/rollup, which was excluded from
+  // the build — a 404 that this exact test category exists to catch, but couldn't,
+  // because its caller lived in a prefix this list told the scanner to skip.
   const EXCLUDED_SOURCE_PREFIXES = [
-    'app/admin/',
     'app/api/admin/',
-    'components/admin/',
   ]
 
-  function anyCallerOf(urlFragment: string, routePrefix: string): boolean {
+  /**
+   * Minimum production source files this scan must see before its verdict means
+   * anything. `app/` + `components/` + `lib/` are thousands of files; if a walk ever
+   * returns a handful, it broke rather than found a clean tree.
+   */
+  const MIN_SCANNED = 500
+
+  /*
+   * Returns whether any production source fetches `urlFragment`, and how many files
+   * it actually read to decide that.
+   *
+   * The count is not decoration. This helper previously returned a bare `false` —
+   * "no caller found", i.e. PASS — whenever the walk came up empty, so a renamed
+   * source dir or an unreadable file made all seven tests below pass while scanning
+   * nothing. A guard against shipping a caller to a build-excluded route must fail
+   * closed, so callers assert on `scanned` too. Read errors are surfaced for the same
+   * reason rather than swallowed: an unreadable file is an unchecked file.
+   */
+  function anyCallerOf(urlFragment: string, routePrefix: string): { found: boolean; scanned: number; unreadable: string[] } {
     const pattern = new RegExp(`fetch\\([^)]*${urlFragment.replace(/\//g, '\\/')}`)
+    let scanned = 0
+    const unreadable: string[] = []
     for (const dir of SOURCE_DIRS) {
       const abs = join(root, dir)
       if (!existsSync(abs)) continue
@@ -244,37 +186,56 @@ describe('Route budget — build-excluded routes have no active production fetch
           // Skip the route file itself and any excluded-from-production source.
           if (rel.startsWith(routePrefix)) continue
           if (EXCLUDED_SOURCE_PREFIXES.some((p) => rel.startsWith(p))) continue
-          try { if (pattern.test(readFileSync(child, 'utf8'))) return true } catch {}
+          let src: string
+          try { src = readFileSync(child, 'utf8') } catch { unreadable.push(rel); continue }
+          scanned += 1
+          if (pattern.test(src)) return { found: true, scanned, unreadable }
         }
       }
     }
-    return false
+    return { found: false, scanned, unreadable }
+  }
+
+  /** Asserts the verdict AND that the scan was real enough to have produced one. */
+  function expectNoProductionCaller(urlFragment: string, routePrefix: string) {
+    const { found, scanned, unreadable } = anyCallerOf(urlFragment, routePrefix)
+    expect(unreadable, `unreadable source files — these went unchecked: ${unreadable.join(', ')}`).toEqual([])
+    expect(scanned, `only scanned ${scanned} files (<${MIN_SCANNED}) — the walk is broken, so a clean result proves nothing`)
+      .toBeGreaterThan(MIN_SCANNED)
+    expect(found, `${urlFragment} is fetched from production source but its route is excluded from the production build — that call 404s in prod`).toBe(false)
   }
 
   it('/api/ai/providers is not fetched from production source', () => {
-    expect(anyCallerOf('/api/ai/providers', 'app/api/ai/providers/')).toBe(false)
+    expectNoProductionCaller('/api/ai/providers', 'app/api/ai/providers/')
   })
 
   it('/api/ai/tools is not fetched from production source', () => {
-    expect(anyCallerOf('/api/ai/tools', 'app/api/ai/tools/')).toBe(false)
+    expectNoProductionCaller('/api/ai/tools', 'app/api/ai/tools/')
   })
 
-  it('/api/ai/analytics/rollup is not fetched from production source', () => {
-    expect(anyCallerOf('/api/ai/analytics/rollup', 'app/api/ai/analytics/')).toBe(false)
-  })
+  // /api/ai/analytics/rollup is deliberately NOT asserted here (2026-07-21).
+  // This test category exists to catch a production caller of a build-excluded
+  // route — but this specific route was moved into filesToKeep (see
+  // scripts/vercel-next-build.cjs) precisely so ChimmyKPIReadout.tsx's existing
+  // call stops 404ing, rather than removing the call. "Has a production caller"
+  // is now the intended state, not a regression. The invariant that actually
+  // matters going forward — this route must stay in filesToKeep as long as
+  // anything calls it — is covered by the "Admin endpoint contract" describe
+  // block below, which asserts on the (caller, route) pair directly instead of
+  // assuming callers shouldn't exist.
 
   // Route-budget cleanup (2026-06-22): newly build-excluded internal diagnostics.
   it('/api/meta/logs is not fetched from production source', () => {
-    expect(anyCallerOf('/api/meta/logs', 'app/api/meta/logs/')).toBe(false)
+    expectNoProductionCaller('/api/meta/logs', 'app/api/meta/logs/')
   })
   it('/api/intelligence/snapshot is not fetched from production source', () => {
-    expect(anyCallerOf('/api/intelligence/snapshot', 'app/api/intelligence/snapshot/')).toBe(false)
+    expectNoProductionCaller('/api/intelligence/snapshot', 'app/api/intelligence/snapshot/')
   })
   it('/api/providers/status is not fetched from production source', () => {
-    expect(anyCallerOf('/api/providers/status', 'app/api/providers/status/')).toBe(false)
+    expectNoProductionCaller('/api/providers/status', 'app/api/providers/status/')
   })
   it('/api/platform/service-map is not fetched from production source', () => {
-    expect(anyCallerOf('/api/platform/service-map', 'app/api/platform/service-map/')).toBe(false)
+    expectNoProductionCaller('/api/platform/service-map', 'app/api/platform/service-map/')
   })
 })
 
@@ -317,4 +278,140 @@ describe('Route budget — World Cup chat stays consolidated', () => {
       expect(exists(route), `${route} was re-created — use ?action= dispatch instead`).toBe(false)
     })
   }
+})
+
+// ── Admin endpoint contract — every referenced /api/admin|/api/ai route must ──
+// ── actually exist AND actually ship to production ────────────────────────────
+//
+// This is the drift-protection guard requested after the #312 regression: a UI
+// fetching a URL is not proof the URL works. Scans the same surfaces the manual
+// audit did (app/admin, components/admin) for literal /api/admin/* and /api/ai/*
+// references — whether inside fetch() or an href — and fails if the referenced
+// route either (a) has no route.ts on disk, or (b) exists but is excluded from
+// the production build and not in filesToKeep. Both failure modes render as
+// zeros/empty cards or dead links in prod without ever failing a build.
+
+describe('Admin endpoint contract — referenced routes exist and ship', () => {
+  const CONTRACT_SCAN_DIRS = ['app/admin', 'components/admin']
+  const URL_PATTERN = /\/api\/(?:admin|ai)\/[A-Za-z0-9\-_/]*/g
+
+  // Known pre-existing gaps on main (2026-07-21): these components already
+  // referenced a route with no backing file before this PR touched anything —
+  // confirmed via `git show origin/main:<file>`, unmodified by this PR. Fixing
+  // the underlying components (build the missing route? rewire to the right
+  // one? remove the card?) is a separate, unrelated decision outside this PR's
+  // scope (admin/operator console cutover). Listed explicitly — not silently
+  // excluded — so removing an entry without actually fixing the route fails
+  // immediately via the loop below.
+  const KNOWN_PREEXISTING_GAPS = new Set([
+    '/api/admin/simulate-league', // components/admin/SimulateLeagueButton.tsx
+    '/api/admin/usage', // components/admin/UsageAnalyticsPanel.tsx
+    '/api/admin/usage/summary', // components/admin/UsageAnalyticsPanel.tsx
+    '/api/admin/ai/metrics', // components/admin/ai/AdminAIOutcomeDashboard.tsx — real endpoint is /api/admin/metrics
+    '/api/admin/ai/recommendations', // components/admin/ai/AIRecommendationTable.tsx
+  ])
+
+  // Strips text that can contain a /api/admin or /api/ai path fragment but is
+  // never actually requested at runtime: comments (JSDoc referencing the route
+  // file for its response shape) and type-only imports (importing a route
+  // file's exported type, not calling it). Without this, the scan below treats
+  // e.g. `// matching app/api/admin/x/route.ts` or
+  // `import type {...} from "@/app/api/admin/x/route"` as if they were a real
+  // reference to the URL `/api/admin/x/route` — a URL that never existed.
+  function stripNonRuntimeText(src: string): string {
+    return src
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/.*$/gm, '')
+      .replace(/import\s+type\s*\{[^}]*\}\s*from\s*["'][^"']*["']\s*;?/g, '')
+  }
+
+  function walkSourceFiles(dir: string): string[] {
+    const abs = join(root, dir)
+    if (!existsSync(abs)) return []
+    const result: string[] = []
+    const stack = [abs]
+    while (stack.length) {
+      const cur = stack.pop()!
+      for (const entry of readdirSync(cur, { withFileTypes: true })) {
+        const child = join(cur, entry.name)
+        if (entry.isDirectory()) { stack.push(child); continue }
+        if (/\.(ts|tsx)$/.test(entry.name)) result.push(child)
+      }
+    }
+    return result
+  }
+
+  function findReferencedUrls(): { url: string; file: string }[] {
+    const found: { url: string; file: string }[] = []
+    for (const dir of CONTRACT_SCAN_DIRS) {
+      for (const abs of walkSourceFiles(dir)) {
+        const rel = relative(root, abs).replace(/\\/g, '/')
+        const src = stripNonRuntimeText(readFileSync(abs, 'utf8'))
+        const matches = src.match(URL_PATTERN)
+        if (!matches) continue
+        for (const raw of matches) {
+          const url = raw.replace(/\/$/, '') // drop a trailing slash before an interpolation/param
+          found.push({ url, file: rel })
+        }
+      }
+    }
+    return found
+  }
+
+  function routeFileFor(url: string): string {
+    return `app${url}/route.ts`
+  }
+
+  function isExcludedFromBuild(routeFile: string): boolean {
+    const isUnderDisabledDir = (EXCLUDED_DIRS as string[]).some(
+      (d) => routeFile === d || routeFile.startsWith(`${d}/`)
+    )
+    if (!isUnderDisabledDir) return false
+    return !(FILES_KEPT as string[]).includes(routeFile)
+  }
+
+  const referenced = findReferencedUrls()
+  const uniqueByUrl = new Map<string, string>() // url -> first file that referenced it
+  for (const { url, file } of referenced) {
+    if (!uniqueByUrl.has(url)) uniqueByUrl.set(url, file)
+  }
+
+  it('scanned at least one /api/admin or /api/ai reference (guard against a broken walk)', () => {
+    expect(referenced.length, 'found zero references — app/admin or components/admin may have moved').toBeGreaterThan(0)
+  })
+
+  for (const [url, file] of uniqueByUrl) {
+    const routeFile = routeFileFor(url)
+    if (KNOWN_PREEXISTING_GAPS.has(url)) {
+      it.todo(`${url} (referenced from ${file}) — pre-existing gap, route file missing, tracked separately from this PR`)
+      continue
+    }
+    it(`${url} (referenced from ${file}) resolves to a route file that exists on disk`, () => {
+      expect(exists(routeFile), `${file} references ${url}, but ${routeFile} does not exist`).toBe(true)
+    })
+    it(`${url} is not excluded from the production build`, () => {
+      expect(
+        isExcludedFromBuild(routeFile),
+        `${file} references ${url} (${routeFile}), but it is excluded from the production build and not in filesToKeep — this 404s in prod exactly like #312`
+      ).toBe(false)
+    })
+  }
+
+  // Regression guard for a specifically-reported drift: the admin UI fetching
+  // /api/admin/ai/metrics when only /api/admin/metrics exists. Not a vacuous
+  // string-literal check — it reads the real scan result above, so it fails the
+  // moment anything under app/admin or components/admin references the wrong
+  // path again, and stays silent while nothing does.
+  it('does not regress the /api/admin/ai/metrics vs /api/admin/metrics naming drift', () => {
+    const regressed = referenced.find((c) => c.url === '/api/admin/ai/metrics')
+    // Already broken on main today (see KNOWN_PREEXISTING_GAPS) — dormant while
+    // listed there. Fires the moment it's removed from that list without the
+    // route actually existing, so this guard can't be silently defeated.
+    if (regressed && !KNOWN_PREEXISTING_GAPS.has('/api/admin/ai/metrics')) {
+      expect(
+        exists('app/api/admin/ai/metrics/route.ts'),
+        `${regressed.file} fetches /api/admin/ai/metrics, which has no route file — the real endpoint is /api/admin/metrics`
+      ).toBe(true)
+    }
+  })
 })

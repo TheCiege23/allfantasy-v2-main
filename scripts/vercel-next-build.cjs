@@ -59,9 +59,6 @@ const routeDirsToDisable = [
   path.join('app', 'api', 'auth', 'admin-debug'),
   // Internal recompute worker endpoint; no production UI callers and costs one route.
   path.join('app', 'api', 'bracket', 'workers', 'health'),
-  // Admin-only KPI rollup; consumed by components/admin/ChimmyKPIReadout which
-  // is not mounted in any production page route. Excluded to free Vercel route budget.
-  path.join('app', 'api', 'ai', 'analytics', 'rollup'),
   // Admin "Seed store" dev tool route. The Store UI exposes a Seed button, but
   // it is a developer-only seeding helper, not a production user action.
   path.join('app', 'api', 'marketplace', 'seed'),
@@ -232,6 +229,11 @@ const filesToKeep = new Set([
   // Also the endpoint the Stripe checkout-link verification step depends on — it has been
   // recommended as the P0-A verification for days while silently 404ing in production.
   path.join('app', 'api', 'admin', 'monetization', 'checkout-link-mapping', 'route.ts').replace(/\\/g, '/'),
+  // The Operator Command Center's Chimmy section mounts ChimmyKPIReadout, which fetches
+  // this route directly — it is no longer "not mounted in any production page route".
+  // Kept as an individual file rather than removing its routeDirsToDisable entry so the
+  // directory-level comment there stays an accurate historical record.
+  path.join('app', 'api', 'ai', 'analytics', 'rollup', 'route.ts').replace(/\\/g, '/'),
 ])
 
 function directoryExists(targetPath) {
@@ -759,4 +761,19 @@ async function run() {
   })
 }
 
-run()
+// Exported so scripts/route-budget-count.mjs and __tests__/route-budget.test.ts
+// can read the CANONICAL disable/keep lists instead of hand-duplicating them —
+// that duplication is exactly how the /api/admin/{visitor-analytics,api-health,
+// chimmy/health,monetization/checkout-link-mapping} 404 regression (#312) and the
+// /api/ai/analytics/rollup staleness shipped unnoticed. `require()`ing this file
+// (directly, or transitively via ESM/Vitest interop) never triggers a real build —
+// only direct CLI invocation (`node scripts/vercel-next-build.cjs`) does, via the
+// require.main guard below.
+module.exports = {
+  routeDirsToDisable: routeDirsToDisable.map((p) => p.replace(/\\/g, '/')),
+  filesToKeep: Array.from(filesToKeep),
+}
+
+if (require.main === module) {
+  run()
+}
