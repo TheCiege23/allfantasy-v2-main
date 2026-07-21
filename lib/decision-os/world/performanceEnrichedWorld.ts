@@ -24,7 +24,7 @@
  * See ADR_F2_9_PLAYER_PERFORMANCE_FACTS.md for the prod data census and design rationale.
  */
 
-import type { EnrichedCanonicalWorld, EnrichedPlayer } from './enrichedWorld'
+import type { EnrichedCanonicalWorld, EnrichedPlayer, EnrichedRosterFacts } from './enrichedWorld'
 import { resolveEnrichedCanonicalWorld } from './enrichedWorld'
 import type { RawPlayerGameFactRow } from './facts'
 import { loadPlayerGameFactRows } from './port'
@@ -60,9 +60,8 @@ export interface PerformanceEnrichedPlayer extends EnrichedPlayer {
   performanceContext: PerformanceContext
 }
 
-export interface PerformanceEnrichedRosterFacts {
-  rosterId: string
-  teamId: string
+/** All base roster facts carried through; only `players` is re-typed with the performance view. */
+export interface PerformanceEnrichedRosterFacts extends Omit<EnrichedRosterFacts, 'players'> {
   players: PerformanceEnrichedPlayer[]
 }
 
@@ -202,8 +201,7 @@ export function projectPerformanceEnrichedWorld(
   const weeksSeen = new Set<number>()
 
   const rosters = base.rosters.map((roster) => ({
-    rosterId: roster.rosterId,
-    teamId: roster.teamId,
+    ...roster,
     players: roster.players.map((player) => {
       const context = projectPerformanceContext(
         contextResult.rowsByPlayer.get(player.playerId) ?? [],
@@ -251,9 +249,8 @@ export async function resolvePerformanceEnrichedCanonicalWorld(
   const base = await resolveEnrichedCanonicalWorld(leagueId).catch(() => null)
   if (!base) return null
 
-  const { leagueFacts } = base
   const playerIds = base.rosters.flatMap((roster) => roster.players.map((player) => player.playerId))
-  const contextResult = await resolvePerformanceContext(leagueFacts.sport, playerIds, deps?.performance)
+  const contextResult = await resolvePerformanceContext(base.league.sport, playerIds, deps?.performance)
 
-  return projectPerformanceEnrichedWorld(base, contextResult, leagueFacts.season != null ? String(leagueFacts.season) : null)
+  return projectPerformanceEnrichedWorld(base, contextResult, String(base.league.season))
 }
