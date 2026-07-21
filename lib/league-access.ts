@@ -92,13 +92,27 @@ export async function resolveLeagueMembership(
     }
   }
 
-  const claimedCount = await prisma.leagueTeam.count({
+  // Claim path is checked AFTER roster deliberately: roster-only is the largest
+  // membership population, so keeping it ahead avoids a leagueTeam query on the hot
+  // path. `findFirst` (not `count`) so a claimed-team commissioner is reported as one —
+  // the team row carries the only commissioner signal a claim-only manager has, and
+  // hardcoding `false` here locked real commissioners out of commissioner-gated routes
+  // (broadcast/session, commentary/generate, media). Still keyed on `claimedByUserId`,
+  // never the nullable `platformUserId`.
+  const claimedTeam = await prisma.leagueTeam.findFirst({
     where: { leagueId, claimedByUserId: userId },
+    select: { isCommissioner: true, isCoCommissioner: true },
   })
-  if (claimedCount > 0) {
+  if (claimedTeam) {
     return {
       ok: true,
-      access: { ...base, isCommissioner: false, isMember: true, isOwner: false, via: 'claim' },
+      access: {
+        ...base,
+        isCommissioner: Boolean(claimedTeam.isCommissioner || claimedTeam.isCoCommissioner),
+        isMember: true,
+        isOwner: false,
+        via: 'claim',
+      },
     }
   }
 

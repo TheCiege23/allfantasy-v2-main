@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { normalizeBestBallSettings, getBestBallSportProfile, buildBestBallSettingsSummary } from '@/lib/bestball/rules'
 import type { LeagueSport } from '@prisma/client'
 
@@ -47,11 +48,12 @@ export async function GET(
   if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
   if (!league.bestBallMode) return NextResponse.json({ error: 'Not a Best Ball league' }, { status: 400 })
 
-  const membership = await prisma.redraftLeagueMember.findFirst({
-    where: { leagueId, userId },
-    select: { id: true },
-  })
-  if (!membership && !league.teams.some((team) => team.platformUserId === userId)) {
+  // Canonical membership predicate. This previously accepted only a RedraftLeagueMember row or
+  // the nullable `LeagueTeam.platformUserId`, so it 403'd the league owner, every Roster-backed
+  // member of an imported league, and claim-only managers. `league.teams` above is still selected,
+  // but for display only — never for access.
+  const access = await resolveLeagueAccess(leagueId, userId)
+  if (!access?.isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

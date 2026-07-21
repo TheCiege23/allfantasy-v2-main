@@ -24,7 +24,13 @@ const { prismaMock, store } = vi.hoisted(() => {
     leagues: new Map<string, { id: string; sport: string; userId: string | null }>(),
     redraftMembers: [] as { leagueId: string; userId: string; role: string }[],
     rosters: [] as { leagueId: string; platformUserId: string }[],
-    leagueTeams: [] as { leagueId: string; claimedByUserId: string | null; platformUserId: string | null }[],
+    leagueTeams: [] as {
+      leagueId: string
+      claimedByUserId: string | null
+      platformUserId: string | null
+      isCommissioner?: boolean
+      isCoCommissioner?: boolean
+    }[],
   }
 
   const prismaMock = {
@@ -43,11 +49,14 @@ const { prismaMock, store } = vi.hoisted(() => {
       ),
     },
     leagueTeam: {
-      count: vi.fn(async ({ where }: { where: { leagueId: string; claimedByUserId: string } }) =>
-        store.leagueTeams.filter(
+      findFirst: vi.fn(async ({ where }: { where: { leagueId: string; claimedByUserId: string } }) => {
+        const row = store.leagueTeams.find(
           (t) => t.leagueId === where.leagueId && t.claimedByUserId === where.claimedByUserId
-        ).length
-      ),
+        )
+        return row
+          ? { isCommissioner: row.isCommissioner ?? false, isCoCommissioner: row.isCoCommissioner ?? false }
+          : null
+      }),
     },
   }
 
@@ -122,6 +131,50 @@ describe('resolveLeagueMembership — every member path is admitted', () => {
   })
 })
 
+describe('claim-path commissioner status is read from the team row, not hardcoded', () => {
+  // Regression: the claim branch used `leagueTeam.count` and hardcoded `isCommissioner: false`,
+  // so a commissioner whose only membership signal is a claimed team was reported as a plain
+  // member and denied by commissioner-gated routes (broadcast/session, commentary/generate, media).
+  it('reports a claimed-team commissioner as a commissioner', async () => {
+    const CLAIM_COMMISH = 'user-claim-commish'
+    store.leagueTeams.push({
+      leagueId: LEAGUE,
+      claimedByUserId: CLAIM_COMMISH,
+      platformUserId: null,
+      isCommissioner: true,
+    })
+    const r = await resolveLeagueMembership(LEAGUE, CLAIM_COMMISH)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.access.via).toBe('claim')
+      expect(r.access.isCommissioner).toBe(true)
+    }
+  })
+
+  it('honors co-commissioner on a claimed team', async () => {
+    const CLAIM_CO = 'user-claim-co'
+    store.leagueTeams.push({
+      leagueId: LEAGUE,
+      claimedByUserId: CLAIM_CO,
+      platformUserId: null,
+      isCoCommissioner: true,
+    })
+    const r = await resolveLeagueMembership(LEAGUE, CLAIM_CO)
+    expect(r.ok && r.access.isCommissioner).toBe(true)
+  })
+
+  it('negative control — a claim-only member with no commissioner flag is NOT a commissioner', async () => {
+    // CLAIM (from beforeEach) has neither flag set. If this ever reports true, the fix has
+    // over-widened commissioner status to every claimed-team member.
+    const r = await resolveLeagueMembership(LEAGUE, CLAIM)
+    expect(r.ok).toBe(true)
+    if (r.ok) {
+      expect(r.access.via).toBe('claim')
+      expect(r.access.isCommissioner).toBe(false)
+    }
+  })
+})
+
 describe('resolveLeagueMembership — ordering: anonymous 401, missing 404, non-member 403', () => {
   it('returns 401 for an anonymous caller, without querying the league', async () => {
     const r = await resolveLeagueMembership(LEAGUE, null)
@@ -150,7 +203,7 @@ describe('LeagueTeam.platformUserId is NOT part of the gate', () => {
 
     // The gate must never query leagueTeam on that column — it is nullable and covers a different
     // population than rosters, which is what produced the 55.7% false-negative rate.
-    const claimQueries = prismaMock.leagueTeam.count.mock.calls.map((c) => JSON.stringify(c[0]))
+    const claimQueries = prismaMock.leagueTeam.findFirst.mock.calls.map((c) => JSON.stringify(c[0]))
     const offenders = claimQueries.filter((q) => q.includes('platformUserId'))
     expect(offenders).toEqual([])
   })
