@@ -295,7 +295,7 @@ export function AiProviderHealthPanel() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/admin/ai/provider-health?hours=${windowHours}`)
+      const res = await fetch(`/api/admin/ai/provider-health?hours=${windowHours}`, { cache: "no-store" })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = await res.json() as ProviderHealthResponse
       setData(json)

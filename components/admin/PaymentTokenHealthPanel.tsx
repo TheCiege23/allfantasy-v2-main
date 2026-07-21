@@ -91,7 +91,7 @@ export function PaymentTokenHealthPanel() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/admin/chimmy/health")
+      const res = await fetch("/api/admin/chimmy/health", { cache: "no-store" })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
       if (!data.accepted) {
