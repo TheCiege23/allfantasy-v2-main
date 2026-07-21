@@ -33,6 +33,7 @@ import {
   readPrimaryPlayerImage,
   writePrimaryPlayerImage,
 } from '@/lib/player-assets/playerImageStore'
+import { deriveCanonicalPlayerIdentity } from '@/lib/canonical/canonicalIdentity'
 
 export type HeadshotProvider =
   | 'clearsports'
@@ -310,7 +311,25 @@ async function resolveOnce(
   sport: string,
   csByName: Map<string, ClearSportsPlayerLite[]>,
 ): Promise<ResolveHeadshotResult> {
-  const playerId = input.playerId?.trim() || null
+  // Phase 2 cache key. The live callers (Roster/Waivers/Trades/Matchups via
+  // components/league/PlayerHeadshot.tsx) send name/team/position and sometimes a *Sleeper* id,
+  // but never a canonical `Player.id` — so before this the cache read below was always skipped
+  // and every headshot hit the provider chain. The backfilled `PlayerImage` rows are keyed by
+  // canonical `Player.id` (e.g. `nfl-aj-terrell-016b78ba`), which is the SAME deterministic id
+  // `deriveCanonicalPlayerIdentity` produces from (name, sport, position, team). Deriving it
+  // here — rather than threading an id client-side — is what actually reaches those rows,
+  // including the ~88% keyed by `rolling_insights` with no Sleeper id at all.
+  const playerId =
+    input.playerId?.trim() ||
+    (input.name?.trim()
+      ? deriveCanonicalPlayerIdentity({
+          name: input.name,
+          sport,
+          position: input.position,
+          team: input.team,
+          sleeperId: input.externalIds?.sleeperId ?? null,
+        }).id
+      : null)
 
   const cached = playerId
     ? await readPrimaryPlayerImage({ playerId, imageType: PLAYER_IMAGE_TYPE_HEADSHOT })

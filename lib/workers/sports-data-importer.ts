@@ -238,13 +238,17 @@ export async function runSportsDataImporter(options?: {
           apiChain.fetch({ sport, dataType: 'projections', query: { season: String(season) } }),
           PROVIDER_FETCH_TIMEOUT_MS,
           `${sport} projections`,
-          { data: null, fromCache: false, error: 'provider timeout' },
+          // `apiChain.fetch` returns `ApiResult`, not `ChainFetchResult`: it has no `fromCache`,
+          // and `source`/`latency` are required. Mirror the module's own empty-result shape
+          // (see the `chain.error && !chain.data` branch in api-chain.ts). Functionally inert —
+          // with `data: null` the projection map is empty, so `.source` is never read downstream.
+          { data: null, source: 'cache', latency: 0, cached: false, error: 'provider timeout' },
         ),
         withTimeout(
           apiChain.fetch({ sport, dataType: 'rankings', query: { season: String(season) } }),
           PROVIDER_FETCH_TIMEOUT_MS,
           `${sport} rankings`,
-          { data: null, fromCache: false, error: 'provider timeout' },
+          { data: null, source: 'cache', latency: 0, cached: false, error: 'provider timeout' },
         ),
       ])
 

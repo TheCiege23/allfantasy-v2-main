@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { runStartSitAiEngine } from '@/lib/ai-matchup-engine/runStartSitAiEngine'
 import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
@@ -30,15 +31,10 @@ async function leagueScoringHint(leagueId: string): Promise<string | null> {
   return parts.join(' · ')
 }
 
-function isMember(leagueId: string, userId: string) {
-  return prisma.league.findFirst({
-    where: {
-      id: leagueId,
-      OR: [{ userId }, { teams: { some: { platformUserId: userId } } }],
-    },
-    select: { id: true },
-  })
-}
+// Membership is decided by the canonical predicate (lib/league-access.ts). This previously
+// matched `teams.some({ platformUserId })` — a nullable column populated only by the native
+// open-slot claim path — with no roster/redraft/claim fallback, so every Roster-backed member
+// of an imported league was 403'd out of their own start/sit advice.
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -47,8 +43,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   }
 
   const { leagueId } = await params
-  const member = await isMember(leagueId, session.user.id)
-  if (!member) {
+  const access = await resolveLeagueAccess(leagueId, session.user.id)
+  if (!access?.isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

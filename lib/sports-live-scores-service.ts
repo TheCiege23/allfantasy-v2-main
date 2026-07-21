@@ -618,7 +618,12 @@ async function readCachedLiveScoreRows(options: {
   return prisma.sportsGame.findMany({
     where: {
       sport: options.sport,
-      source: { in: ['rolling_insights', 'espn_live'] },
+      // `api_sports` is written every 2 minutes by the import-scores cron and is both the
+      // freshest and most-complete source in production (335/335 rows carry score+status+start,
+      // newest 2026-07-21; vs rolling_insights 497/3010 with scores, newest 2026-05-19). It was
+      // omitted only because this filter (2026-04-14) predates the api_sports cron (2026-06-09)
+      // — an oversight, not a data-quality exclusion. `thesportsdb`/`e2e` stay out: null scores.
+      source: { in: ['rolling_insights', 'espn_live', 'api_sports'] },
       ...(team
         ? {
             OR: [

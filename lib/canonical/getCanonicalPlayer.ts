@@ -31,6 +31,37 @@ import {
 import { readPrimaryTeamImage, type StoredTeamImage } from '@/lib/sport-teams/teamImageStore'
 import { resolvePlayerHeadshot } from '@/lib/player-assets/resolvePlayerHeadshot'
 
+/**
+ * True when an error is Postgres/Prisma complaining that a table or column does not exist.
+ *
+ * The canonical read path queries the `sports_core_*` tables + the Phase-1 `Player` columns, which
+ * exist only after the canonical migration has been applied to the target database. The prod build
+ * does NOT run `migrate deploy` (build = `next build`, postinstall = `prisma generate`), so there is
+ * a window — however long the migration goes un-run — where this code is deployed but the objects do
+ * not exist. Every one of these helpers previously issued its first `prisma` query with no guard, so
+ * in that window they THREW. A caller with a local try/catch degraded to empty; a caller without one
+ * (legacy/waiver/analyze reads getCanonicalPlayerMapForSport in its outer try) returned a 500.
+ *
+ * The write path (playerImageStore/teamImageStore) already "never throws" for exactly this reason.
+ * This makes the read path match: a missing object degrades to the empty result, so the feature is
+ * inert until the tables exist rather than erroring. Any OTHER error still propagates.
+ *
+ * Prisma: P2021 (table does not exist), P2022 (column does not exist). Raw Postgres: 42P01 / 42703.
+ */
+export function isMissingDatabaseObjectError(err: unknown): boolean {
+  const e = err as { code?: unknown; meta?: { code?: unknown } } | null | undefined
+  const code = typeof e?.code === 'string' ? e.code : undefined
+  const pgCode = typeof e?.meta?.code === 'string' ? (e.meta.code as string) : undefined
+  return (
+    code === 'P2021' ||
+    code === 'P2022' ||
+    code === '42P01' ||
+    code === '42703' ||
+    pgCode === '42P01' ||
+    pgCode === '42703'
+  )
+}
+
 export interface CanonicalPlayerProjection {
   season: string
   week: number
@@ -369,6 +400,7 @@ export async function getCanonicalPlayersBySleeperIds(
   const ids = [...new Set(sleeperIds.filter((id) => typeof id === 'string' && id.trim()))]
   if (ids.length === 0) return out
 
+  try {
   for (const batch of chunk(ids, ID_CHUNK)) {
     const identities = await prisma.playerProviderIdentity.findMany({
       where: { provider: 'sleeper', providerPlayerId: { in: batch } },
@@ -428,6 +460,11 @@ export async function getCanonicalPlayersBySleeperIds(
       }
     }
   }
+  } catch (err) {
+    // Tables/columns not migrated yet -> degrade to empty (see isMissingDatabaseObjectError).
+    if (isMissingDatabaseObjectError(err)) return out
+    throw err
+  }
 
   if (opts.maxAgeMs !== undefined) await applyFreshnessOverlay(out, staleIds, stats)
 
@@ -463,20 +500,33 @@ export async function getCanonicalPlayerMapForSport(
   const stats = initStats(opts.stats)
   if (!sportKey) return out
 
-  const [identities, players] = await Promise.all([
-    prisma.playerProviderIdentity.findMany({
-      where: { provider: 'sleeper', sportKey },
-      select: { playerId: true, providerPlayerId: true },
-    }),
-    prisma.player.findMany({
-      where: opts.activeOnly ? { sport: sportKey, active: true } : { sport: sportKey },
-      select: {
-        id: true, name: true, sport: true, position: true,
-        team: true, active: true, imageUrl: true, injuryStatus: true,
-        fetchedAt: true, expiresAt: true,
-      },
-    }),
-  ])
+  // Inferred tuple type from the selects — no explicit annotation, so the narrowed select shape
+  // (not the full Player row) is preserved. Returns null on a missing table/column so the function
+  // degrades to the empty map. waiver/analyze reads this in its outer try with no local catch, so an
+  // unguarded throw here is a user-facing 500. Everything else re-throws.
+  const loaded = await (async () => {
+    try {
+      return await Promise.all([
+        prisma.playerProviderIdentity.findMany({
+          where: { provider: 'sleeper', sportKey },
+          select: { playerId: true, providerPlayerId: true },
+        }),
+        prisma.player.findMany({
+          where: opts.activeOnly ? { sport: sportKey, active: true } : { sport: sportKey },
+          select: {
+            id: true, name: true, sport: true, position: true,
+            team: true, active: true, imageUrl: true, injuryStatus: true,
+            fetchedAt: true, expiresAt: true,
+          },
+        }),
+      ])
+    } catch (err) {
+      if (isMissingDatabaseObjectError(err)) return null
+      throw err
+    }
+  })()
+  if (!loaded) return out
+  const [identities, players] = loaded
 
   const byId = new Map(players.map((p) => [p.id, p]))
 
