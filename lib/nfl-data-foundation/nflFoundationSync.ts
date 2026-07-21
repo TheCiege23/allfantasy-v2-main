@@ -244,6 +244,9 @@ export function summarizeNflSportsPlayerDuplicates(rows: SportsPlayerIdentityRow
   }
 }
 
+/** How many seasons back `syncNflFoundationSeasonStats` will walk when the requested one is empty. */
+const SEASON_FALLBACK_MAX_YEARS = 3
+
 export function rollingInsightsSeasonRange(season: number): string {
   return `${season}-${season + 1}`
 }
@@ -387,14 +390,22 @@ export async function syncNflFoundationSeasonStats(options: {
   const errors: string[] = []
   let rows = await fetchStats({ season })
   let fallbackSeasonUsed = false
+  // Walk back a bounded number of seasons until one returns rows. Rolling Insights 400s on a
+  // season that has not started (verified: `2026` -> HTTP 400 while `2025` -> 2,155 rows), so a
+  // scheduled caller asking for the current year would otherwise write nothing all offseason.
+  // Looping rather than a single step means a season that is empty for any other reason also
+  // self-heals without a code change. `season` is what gets written to the row, so whichever
+  // season actually supplied the data is the one labelled — 2025 totals are never stored as 2026.
   if (!rows.length) {
-    const previousSeason = String(Number(requestedSeason) - 1)
-    if (Number.isFinite(Number(previousSeason)) && Number(previousSeason) > 2000) {
-      const fallbackRows = await fetchStats({ season: previousSeason })
+    for (let back = 1; back <= SEASON_FALLBACK_MAX_YEARS; back += 1) {
+      const candidate = String(Number(requestedSeason) - back)
+      if (!Number.isFinite(Number(candidate)) || Number(candidate) <= 2000) break
+      const fallbackRows = await fetchStats({ season: candidate })
       if (fallbackRows.length) {
         rows = fallbackRows
-        season = previousSeason
+        season = candidate
         fallbackSeasonUsed = true
+        break
       }
     }
   }
