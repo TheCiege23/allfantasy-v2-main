@@ -5597,13 +5597,20 @@ function AFLegacyContent() {
                             setEspnLoading(true)
                             setEspnError('')
                             setEspnResult(null)
+                            gtagEvent('league_import_started', { platform: 'espn' })
                             try {
+                              // Mirror the Sleeper guest funnel: espn-import creates a guest
+                              // session + a queued job and returns a job_id; the shared poll
+                              // (keyed on `username` + importStatus) then drives worker/run and
+                              // lands on the same post-import dashboard. No signup required.
                               const res = await fetch('/api/legacy/espn-import', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
                                   league_id: espnLeagueId.replace(/\D/g, ''),
                                   team_name: espnTeamName,
+                                  website,
+                                  form_rendered_at: formRenderedAtRef.current ?? undefined,
                                 }),
                               })
                               const data = await res.json()
@@ -5612,70 +5619,20 @@ function AFLegacyContent() {
                                 if (data.availableTeams) setEspnAvailableTeams(data.availableTeams)
                                 return
                               }
-                              setEspnResult(data)
 
-                              const recordParts = (data.userTeam?.record || '0-0').split('-').map(Number)
-                              const wins = recordParts[0] || 0
-                              const losses = recordParts[1] || 0
-                              const ties = recordParts[2] || 0
-                              const totalGames = wins + losses + ties
-
+                              setJobId(data.job_id)
+                              setUsername(data.sleeper_username)
+                              setImportStatus('importing')
                               setProfile({
-                                sleeper_username: `espn_${data.league.leagueId}`,
-                                sleeper_user_id: `espn_${data.userTeam?.teamId || ''}`,
-                                display_name: data.userTeam?.name || espnTeamName,
+                                sleeper_username: data.sleeper_username,
+                                sleeper_user_id: data.user_id || '',
+                                display_name: data.display_name || espnTeamName,
                                 avatar: '',
-                                import_status: 'complete',
-                                import_progress: 100,
+                                import_status: 'importing',
+                                import_progress: 0,
                               })
-                              setStats({
-                                seasons_imported: 1,
-                                seasons: 1,
-                                leagues_played: 1,
-                                leagues: 1,
-                                wins,
-                                losses,
-                                ties,
-                                record: data.userTeam?.record || '0-0',
-                                win_percentage: totalGames > 0 ? Math.round((wins / totalGames) * 1000) / 10 : 0,
-                                championships: 0,
-                                playoffs: 0,
-                                playoff_percentage: 0,
-                                total_points_for: data.userTeam?.pointsFor || 0,
-                                total_points: data.userTeam?.pointsFor || 0,
-                              })
-                              setLeagues([{
-                                league_id: `espn_${data.league.leagueId}`,
-                                name: data.league.name,
-                                season: Number(data.league.season) || new Date().getFullYear(),
-                                type: 'redraft',
-                                scoring: data.league.scoringType || 'PPR',
-                                team_count: data.league.numTeams,
-                                record: data.userTeam?.record || `${wins}-${losses}`,
-                                wins,
-                                losses,
-                                points_for: data.userTeam?.pointsFor || 0,
-                                final_standing: null,
-                                playoff_seed: null,
-                                is_champion: false,
-                                champion_name: '',
-                                made_playoffs: false,
-                              }])
-                              setSeasonBreakdown([{
-                                season: String(data.league.season),
-                                leagues: 1,
-                                wins,
-                                losses,
-                                ties,
-                                championships: 0,
-                                playoffs: 0,
-                                points_for: data.userTeam?.pointsFor || 0,
-                              }])
-                              setAiReport(null)
-                              setRankingPreview(null)
-                              setImportStatus('complete')
 
-                              gtagEvent('league_import_completed', { platform: 'espn' })
+                              fetch('/api/legacy/worker/run', { method: 'GET', cache: 'no-store' }).catch(() => {})
                             } catch {
                               setEspnError('Network error — please try again')
                             } finally {
@@ -6245,8 +6202,9 @@ function AFLegacyContent() {
         {importStatus === 'importing' && leagues.length === 0 && (() => {
           // Progress comes from backend: 5% start, then 5-95% based on seasons processed, then 100% when done
           // Adjusted thresholds to match actual progress pattern
+          const isEspnImport = username.startsWith('espn:')
           const steps = [
-            { label: 'Connecting to Sleeper', threshold: 5 },
+            { label: isEspnImport ? 'Connecting to ESPN' : 'Connecting to Sleeper', threshold: 5 },
             { label: 'Loading leagues', threshold: 15 },
             { label: 'Calculating legacy stats', threshold: 40 },
             { label: 'Generating Chimmy insights', threshold: 70 },
