@@ -105,10 +105,6 @@
       "schedule": "0 6 * * 2"
     },
     {
-      "path": "/api/tournament/automation",
-      "schedule": "0 * * * *"
-    },
-    {
       "path": "/api/zombie/automation",
       "schedule": "0 * * * *"
     },

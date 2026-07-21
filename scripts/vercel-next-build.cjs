@@ -186,6 +186,27 @@ const routeDirsToDisable = [
   // skip the entire app/league/[leagueId] tree (the imported-league shell). Both
   // fantasy-media and wallet were cleared by such a search and were WRONG.
   // Use `git grep` (tracked files only) to prove a module has no callers.
+  //
+  // ── Tournament Mode — DORMANT, preserved off (2026-07-21) ──────────────────
+  // Verified directly against production (ep-curly-block-ad0dlt9o/neondb, read-only):
+  // zero rows, ever, in EVERY Tournament Mode table (tournament_shells,
+  // tournament_shell_leagues, tournament_shell_participants, tournament_shell_*
+  // — all 10 models). Zero real leagues, zero users, zero payment obligations (no
+  // payment fields exist on any of these models), zero imported/native-league
+  // dependency (zero TournamentLeague rows link to a real League), zero audit log
+  // or announcement activity. The hourly /api/tournament/automation cron (removed
+  // from vercel.json alongside this) has been a guaranteed no-op every single time
+  // it fired, since it only acts on shells with status NOT IN (setup, complete)
+  // and none exist. All 4 known UI entry points (SpecialtyLeagueHomeHero.tsx x2,
+  // CommissionerSettingsModal.tsx, LeagueHubCard.tsx, RenewLeagueBanner.tsx) are
+  // gated on this same real-row condition and were already unreachable before
+  // this change - not modified here, since they also serve survivor/zombie/
+  // big-brother and touching them risks those. Source, schema, and all
+  // migrations are untouched - this is a build-time route exclusion only. To
+  // reactivate: remove these two entries, restore the vercel.json cron entry
+  // (path: /api/tournament/automation, schedule: 0 * * * *).
+  path.join('app', 'tournament'),
+  path.join('app', 'api', 'tournament'),
 ]
 
 const movedFiles = []
