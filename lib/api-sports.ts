@@ -1441,6 +1441,16 @@ export async function syncAPISportsPlayerSeasonStatsToDb(
   return summary;
 }
 
+/**
+ * A standings row is syncable only if it carries the two fields the upsert dereferences without
+ * guarding: `team.name` (read outside the per-row try, so an undefined `team` crashed the whole
+ * loop) and `points` (read as `points.for`/`points.against` inside). API-Sports has returned rows
+ * missing either in production; those are skipped rather than crashing the sync.
+ */
+export function isSyncableStandingRow(s: APISportsStanding | null | undefined): boolean {
+  return Boolean(s?.team?.name && s?.points);
+}
+
 export async function syncAPISportsStandingsToDb(opts?: { season?: string; sport?: 'NFL' | 'NCAAF' }): Promise<number> {
   const currentSeason = opts?.season || getCurrentNFLSeasonForAPISports();
   const dbSport = resolveDbSport(opts?.sport)
@@ -1457,7 +1467,18 @@ export async function syncAPISportsStandingsToDb(opts?: { season?: string; sport
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 6 * 60 * 60 * 1000);
 
+  let skipped = 0;
   for (const s of standings) {
+    // The APISportsStanding type declares `team` and `points` as required, but production rows
+    // from API-Sports have arrived without them (partial free-plan data / provider hiccups).
+    // Two crashes resulted: `s.team.name` here is OUTSIDE the try below, so an undefined `team`
+    // threw uncaught and aborted the ENTIRE loop (every remaining standing lost); `s.points.for`
+    // inside threw per row (`Cannot read properties of undefined (reading 'for')`, ~100 in a
+    // single import-standings run). Skip malformed rows so one bad row can't abort the sync.
+    if (!isSyncableStandingRow(s)) {
+      skipped++;
+      continue;
+    }
     const teamAbbrev = teamNameToAbbrev(s.team.name) || s.team.name;
 
     try {
@@ -1508,7 +1529,10 @@ export async function syncAPISportsStandingsToDb(opts?: { season?: string; sport
     }
   }
 
-  console.log(`[API-Sports] Synced ${synced}/${standings.length} ${dbSport} standings`);
+  console.log(
+    `[API-Sports] Synced ${synced}/${standings.length} ${dbSport} standings` +
+      (skipped > 0 ? ` (${skipped} malformed rows skipped)` : ''),
+  );
   return synced;
 }
 

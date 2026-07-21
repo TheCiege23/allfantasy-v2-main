@@ -40,11 +40,42 @@ type WarehouseSummary = {
   teamGameFactCount: number
 }
 
+type WarehouseDataState = {
+  status: "AVAILABLE" | "PARTIAL" | "PENDING_IMPORT" | "UNAVAILABLE"
+  coverage?: {
+    sourcePlayerGameStats: number
+    generatedPlayerFacts: number
+    sourceWeeks: number
+    factWeeks: number
+    earliestSeason: number | null
+    latestSeason: number | null
+  }
+  warnings?: string[]
+}
+
 type WarehousePayload = {
   leagueId: string
   view: WarehouseView
   summary: WarehouseSummary
+  dataState?: WarehouseDataState
   data?: Record<string, unknown>
+}
+
+// Truthful empty states: an empty result set is only "no history" when statistics have
+// actually been imported — otherwise it's a missing import and must say so.
+const DATA_STATE_BANNERS: Record<Exclude<WarehouseDataState["status"], "AVAILABLE">, { tone: string; text: string }> = {
+  PENDING_IMPORT: {
+    tone: "border-amber-400/40 bg-amber-400/10 text-amber-200",
+    text: "Player game statistics have not been imported for this sport yet. Historical player data will appear after the next stats import completes — an empty view here does not mean your league has no history.",
+  },
+  UNAVAILABLE: {
+    tone: "border-amber-400/40 bg-amber-400/10 text-amber-200",
+    text: "Player statistics exist but warehouse history has not been generated from them yet. Historical views may be empty until processing completes.",
+  },
+  PARTIAL: {
+    tone: "border-sky-400/40 bg-sky-400/10 text-sky-200",
+    text: "Historical player data is partial — some weeks have not been processed yet, so totals may be incomplete.",
+  },
 }
 
 function toIntOrUndefined(value: string): number | undefined {
@@ -285,6 +316,15 @@ export default function WarehouseHistoryPanel({
 
       {loading && <p className="text-sm text-white/60">Loading historical data…</p>}
       {error && <p className="text-sm text-red-400">{error}</p>}
+
+      {!loading && !error && payload?.dataState && payload.dataState.status !== "AVAILABLE" && (
+        <div
+          className={`rounded-lg border p-3 text-sm ${DATA_STATE_BANNERS[payload.dataState.status].tone}`}
+          role="status"
+        >
+          {DATA_STATE_BANNERS[payload.dataState.status].text}
+        </div>
+      )}
 
       {!loading && !error && summary && (
         <div className="rounded-lg border border-white/10 p-3 text-sm text-white/80">

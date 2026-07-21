@@ -9,6 +9,7 @@
 import type { RedraftLineupPlayer } from '@/lib/redraft/lineupValidation'
 import type { DecisionProvenance } from '@/lib/decision-os/core/decision'
 import type { LineupWorld, LockState } from './world'
+import type { LineupWarehouseFacts } from './warehouseFacts'
 
 export interface LineupDCO {
   decision_type: 'manager.lineup.set'
@@ -25,6 +26,12 @@ export interface LineupDCO {
   data_completeness: number
   uncertainty: string[]
   simulation_available: boolean
+  /**
+   * F2.9/F2.10 warehouse grounding (ADR F2.10) — ENRICHMENT ONLY. Feeds memo/uncertainty/
+   * explainability; the deterministic rules never read it. Absent = not loaded (older callers),
+   * which is different from loaded-but-unavailable (a LineupWarehouseFacts with nulls).
+   */
+  warehouse?: LineupWarehouseFacts
 }
 
 export interface LineupDCOInput {
@@ -38,6 +45,8 @@ export interface LineupDCOInput {
   projectionConfidence?: number | null
   /** When provider/projection data was incomplete (e.g., live fetch failed). */
   scanIncomplete?: boolean
+  /** Optional F2.9/F2.10 warehouse grounding — see LineupDCO.warehouse. */
+  warehouse?: LineupWarehouseFacts
 }
 
 /** Pure, read-only DCO assembly with honest provenance + completeness. */
@@ -46,6 +55,8 @@ export function buildLineupDCO(input: LineupDCOInput): LineupDCO {
   if (input.world.lock_state.uncertainty) uncertainty.push(input.world.lock_state.uncertainty)
   if (input.scanIncomplete) uncertainty.push('Live lineup/projection data could not be fully verified.')
   if (input.projectionConfidence == null) uncertainty.push('Projection confidence unavailable.')
+  // Warehouse grounding gaps surface as uncertainty — never as fabricated history (P2).
+  if (input.warehouse) uncertainty.push(...input.warehouse.uncertainty)
 
   // Weakest required input drives completeness/provenance (honesty contract).
   const weakest: DecisionProvenance = input.scanIncomplete
@@ -66,5 +77,6 @@ export function buildLineupDCO(input: LineupDCOInput): LineupDCO {
     data_completeness,
     uncertainty,
     simulation_available: false, // Slice 1 placeholder (Art. XVII wired in a later slice)
+    ...(input.warehouse ? { warehouse: input.warehouse } : {}),
   }
 }

@@ -3,7 +3,13 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
-import { normalizePlayerName, normalizePosition, normalizeTeamAbbrev } from '@/lib/team-abbrev'
+import {
+  assertTeamCodeFits,
+  normalizePlayerName,
+  normalizePositionForSport,
+  normalizeTeamCode,
+  type TeamCodeNormalization,
+} from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
 
 const SPORTS_PLAYER_TTL_MS = 6 * 60 * 60 * 1000
@@ -66,10 +72,140 @@ function currentSeasonForSport(): number {
   return new Date().getFullYear()
 }
 
+// SportsPlayerRecord.id is @db.VarChar(128); fallback ids embed name+team, which for college
+// inputs can push past it. Overlong ids keep a deterministic 120-char prefix + 8-char suffix
+// derived from the full string so re-imports stay idempotent.
+const PLAYER_ID_MAX_LENGTH = 128
+
+function boundPlayerId(id: string): string {
+  if (id.length <= PLAYER_ID_MAX_LENGTH) return id
+  let hash = 0
+  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0
+  return `${id.slice(0, PLAYER_ID_MAX_LENGTH - 9)}:${hash.toString(36).padStart(8, '0').slice(0, 8)}`
+}
+
 function buildPlayerId(sport: string, rawId: string | null | undefined, name: string, team?: string | null): string {
-  if (rawId) return `${sport}:${rawId}`
+  if (rawId) return boundPlayerId(`${sport}:${rawId}`)
   const slug = normalizePlayerName(name).replace(/\s+/g, '-')
-  return `${sport}:${slug}:${team || 'FA'}`
+  return boundPlayerId(`${sport}:${slug}:${team || 'FA'}`)
+}
+
+/** Per-sport tally of how team codes were resolved — surfaced in the import report so
+ * `truncated_fallback` growth is visible instead of silent. */
+export type TeamCodeCounts = Record<TeamCodeNormalization, number>
+
+function emptyTeamCodeCounts(): TeamCodeCounts {
+  return { canonical: 0, provider_code: 0, mapped: 0, derived: 0, truncated_fallback: 0, missing: 0 }
+}
+
+interface TeamCodeContext {
+  sport: SupportedSport
+  teamCodeMap: ReadonlyMap<string, string>
+  counts: TeamCodeCounts
+}
+
+/** Resolve a raw provider team value to a ≤32-char code, tallying how it resolved. */
+function resolveTeamCode(ctx: TeamCodeContext, rawTeam: string | null | undefined): string {
+  const result = normalizeTeamCode({ sport: ctx.sport, rawTeam, teamCodeMap: ctx.teamCodeMap })
+  ctx.counts[result.normalization] += 1
+  return result.code ?? 'FA'
+}
+
+/**
+ * College seed pagination. The apiChain 'players' DB tier serves a fixed default of 200 rows
+ * (`readFromNormalizedTables` → `toPositiveInt(mergedQuery.limit, 200)`) — a pagination
+ * default, not a safety limit — which capped NCAAF/NCAAB pool growth at ~200/sport/run while
+ * their source tables hold tens of thousands. These sports get a supplementary CURSOR-PAGED
+ * read of SportsPlayer with a checkpoint carried in the import-players SyncJobRun metadata:
+ * each run continues where the last one stopped (no rescanning), bounded per run, and wraps
+ * to the start once the source is exhausted so later source changes are re-observed.
+ */
+const COLLEGE_PAGED_SPORTS = new Set<SupportedSport>(['NCAAF', 'NCAAB'] as SupportedSport[])
+export const DEFAULT_SEED_PAGE_SIZE = 2_500
+export const MAX_SEED_PAGE_SIZE = 25_000
+
+export interface PagedSeedTelemetry {
+  count: number
+  cursorStart: string | null
+  cursorEnd: string | null
+  exhausted: boolean
+}
+
+/** Latest per-sport seed cursors from the most recent import-players run record. */
+async function loadSeedCheckpoints(): Promise<Record<string, string>> {
+  const latest = await prisma.syncJobRun.findFirst({
+    where: { jobName: 'import-players' },
+    orderBy: { startedAt: 'desc' },
+    select: { metadata: true },
+  })
+  const meta = latest?.metadata
+  if (meta && typeof meta === 'object' && !Array.isArray(meta)) {
+    const cursors = (meta as Record<string, unknown>).seedCursors
+    if (cursors && typeof cursors === 'object' && !Array.isArray(cursors)) {
+      const out: Record<string, string> = {}
+      for (const [sport, cursor] of Object.entries(cursors as Record<string, unknown>)) {
+        if (typeof cursor === 'string' && cursor) out[sport] = cursor
+      }
+      return out
+    }
+  }
+  return {}
+}
+
+/** One bounded page of source players → seeds, resuming from `cursor`. */
+async function fetchPagedSourceSeeds(
+  sport: SupportedSport,
+  teamCtx: TeamCodeContext,
+  cursor: string | null,
+  pageSize: number
+): Promise<{ seeds: PlayerSeed[]; telemetry: PagedSeedTelemetry }> {
+  const rows = await prisma.sportsPlayer.findMany({
+    where: { sport },
+    orderBy: { id: 'asc' },
+    take: pageSize,
+    ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+    select: { id: true, externalId: true, name: true, team: true, position: true, status: true },
+  })
+
+  const seeds: PlayerSeed[] = []
+  for (const row of rows) {
+    const name = row.name?.trim()
+    if (!name) continue
+    seeds.push({
+      id: buildPlayerId(sport, row.externalId || null, name, row.team),
+      name,
+      team: resolveTeamCode(teamCtx, row.team),
+      position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
+      status: row.status,
+      source: 'cached',
+    })
+  }
+
+  const exhausted = rows.length < pageSize
+  return {
+    seeds,
+    telemetry: {
+      count: seeds.length,
+      cursorStart: cursor,
+      // Wrap on exhaustion so the next cycle re-observes the source from the top.
+      cursorEnd: exhausted ? null : rows[rows.length - 1]?.id ?? cursor,
+      exhausted,
+    },
+  }
+}
+
+/** Build the UPPERCASED SportsTeam.name → shortName map used as the provider-code tier. */
+async function loadTeamCodeMap(sport: SupportedSport): Promise<Map<string, string>> {
+  const teams = await prisma.sportsTeam.findMany({
+    where: { sport },
+    select: { name: true, shortName: true },
+  })
+  const map = new Map<string, string>()
+  for (const team of teams) {
+    const short = team.shortName?.trim()
+    if (team.name && short) map.set(team.name.trim().toUpperCase(), short)
+  }
+  return map
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -90,7 +226,7 @@ function asArrayRecords(value: unknown): Array<Record<string, unknown>> {
     : []
 }
 
-async function fetchProviderPlayerSeeds(sport: SupportedSport, season: number): Promise<PlayerSeed[]> {
+async function fetchProviderPlayerSeeds(sport: SupportedSport, season: number, teamCtx: TeamCodeContext): Promise<PlayerSeed[]> {
   const response = await apiChain.fetch({
     sport,
     dataType: 'players',
@@ -103,8 +239,8 @@ async function fetchProviderPlayerSeeds(sport: SupportedSport, season: number): 
     const name = String(row.name ?? row.playerName ?? row.player ?? '').trim()
     if (!name) continue
 
-    const team = normalizeTeamAbbrev(String(row.team ?? row.teamAbbrev ?? '')) ?? 'FA'
-    const position = normalizePosition(String(row.position ?? row.pos ?? '')) ?? 'FLEX'
+    const team = resolveTeamCode(teamCtx, String(row.team ?? row.teamAbbrev ?? ''))
+    const position = normalizePositionForSport(sport, String(row.position ?? row.pos ?? '')) ?? 'FLEX'
     const externalId = String(row.id ?? row.externalId ?? row.playerId ?? '').trim() || null
 
     seeds.push({
@@ -120,7 +256,7 @@ async function fetchProviderPlayerSeeds(sport: SupportedSport, season: number): 
   return seeds
 }
 
-async function loadIdentitySeeds(sport: SupportedSport): Promise<PlayerSeed[]> {
+async function loadIdentitySeeds(sport: SupportedSport, teamCtx: TeamCodeContext): Promise<PlayerSeed[]> {
   const rows = await prisma.playerIdentityMap.findMany({
     where: { sport },
     select: {
@@ -138,8 +274,8 @@ async function loadIdentitySeeds(sport: SupportedSport): Promise<PlayerSeed[]> {
     .map((row) => ({
       id: buildPlayerId(sport, row.sleeperId ?? row.clearSportsId ?? null, row.canonicalName, row.currentTeam),
       name: row.canonicalName,
-      team: normalizeTeamAbbrev(row.currentTeam) ?? 'FA',
-      position: normalizePosition(row.position) ?? 'FLEX',
+      team: resolveTeamCode(teamCtx, row.currentTeam),
+      position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
       status: row.status,
       source: 'manual',
     }))
@@ -170,12 +306,18 @@ function buildDynastyValueMap(rows: Array<Record<string, unknown>>): Map<string,
 
 export async function runSportsDataImporter(options?: {
   sports?: string[]
+  /** College source-page size per sport per run; clamped to MAX_SEED_PAGE_SIZE. */
+  seedPageSize?: number
 }): Promise<{
   imported: number
   sports: string[]
   staleFallbackApplied: boolean
   skippedSports: string[]
   durationMs: number
+  teamCodeCounts: Record<string, TeamCodeCounts>
+  rowsSkippedByGuard: number
+  pagedSeeds: Record<string, PagedSeedTelemetry>
+  seedCursors: Record<string, string>
 }> {
   const targetSports = (options?.sports?.length ? options.sports : SUPPORTED_SPORTS).map((sport) =>
     normalizeToSupportedSport(sport)
@@ -186,6 +328,18 @@ export async function runSportsDataImporter(options?: {
 
   const startedAt = Date.now()
   const skippedSports: string[] = []
+  const teamCodeCounts: Record<string, TeamCodeCounts> = {}
+  let rowsSkippedByGuard = 0
+
+  const seedPageSize = Math.min(
+    Math.max(1, Math.floor(options?.seedPageSize ?? DEFAULT_SEED_PAGE_SIZE)),
+    MAX_SEED_PAGE_SIZE
+  )
+  const seedCheckpoints = uniqueSports.some((sport) => COLLEGE_PAGED_SPORTS.has(sport))
+    ? await loadSeedCheckpoints()
+    : {}
+  const pagedSeeds: Record<string, PagedSeedTelemetry> = {}
+  const seedCursors: Record<string, string> = { ...seedCheckpoints }
 
   for (const sport of uniqueSports) {
     /**
@@ -205,10 +359,20 @@ export async function runSportsDataImporter(options?: {
     }
 
     const season = currentSeasonForSport()
+
+    // Name → shortName map first: it's the tier that keeps full college institution names out
+    // of the VarChar(32) team column (SportsTeam.shortName covers 100% of NCAAF/NCAAB in prod).
+    const teamCtx: TeamCodeContext = {
+      sport,
+      teamCodeMap: await loadTeamCodeMap(sport),
+      counts: emptyTeamCodeCounts(),
+    }
+    teamCodeCounts[sport] = teamCtx.counts
+
     const [identitySeeds, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
       await Promise.all([
-        loadIdentitySeeds(sport),
-        fetchProviderPlayerSeeds(sport, season),
+        loadIdentitySeeds(sport, teamCtx),
+        fetchProviderPlayerSeeds(sport, season, teamCtx),
         prisma.playerSeasonStats.findMany({
           where: { sport },
           orderBy: { fetchedAt: 'desc' },
@@ -255,8 +419,18 @@ export async function runSportsDataImporter(options?: {
     const projectionRows = asArrayRecords(projectionsResponse.data)
     const rankingRows = asArrayRecords(rankingsResponse.data)
 
+    // Supplementary paged source read for college sports (see COLLEGE_PAGED_SPORTS note).
+    let pagedSportSeeds: PlayerSeed[] = []
+    if (COLLEGE_PAGED_SPORTS.has(sport)) {
+      const page = await fetchPagedSourceSeeds(sport, teamCtx, seedCheckpoints[sport] ?? null, seedPageSize)
+      pagedSportSeeds = page.seeds
+      pagedSeeds[sport] = page.telemetry
+      if (page.telemetry.cursorEnd) seedCursors[sport] = page.telemetry.cursorEnd
+      else delete seedCursors[sport]
+    }
+
     const seedMap = new Map<string, PlayerSeed>()
-    for (const seed of [...identitySeeds, ...providerSeeds]) {
+    for (const seed of [...identitySeeds, ...providerSeeds, ...pagedSportSeeds]) {
       const key = normalizePlayerName(seed.name)
       if (!key) continue
       if (!seedMap.has(key) || seed.source !== 'manual') seedMap.set(key, seed)
@@ -268,8 +442,8 @@ export async function runSportsDataImporter(options?: {
         seedMap.set(key, {
           id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
           name: row.playerName,
-          team: normalizeTeamAbbrev(row.team) ?? 'FA',
-          position: normalizePosition(row.position) ?? 'FLEX',
+          team: resolveTeamCode(teamCtx, row.team),
+          position: normalizePositionForSport(sport, row.position) ?? 'FLEX',
           source: row.source,
         })
       }
@@ -281,7 +455,7 @@ export async function runSportsDataImporter(options?: {
         seedMap.set(key, {
           id: buildPlayerId(sport, row.playerId, row.playerName, row.team),
           name: row.playerName,
-          team: normalizeTeamAbbrev(row.team) ?? 'FA',
+          team: resolveTeamCode(teamCtx, row.team),
           position: 'FLEX',
           status: row.status,
           source: 'cached',
@@ -318,7 +492,7 @@ export async function runSportsDataImporter(options?: {
       newsMap.set(key, current)
     }
 
-    const rows = Array.from(seedMap.values()).map((seed) => {
+    const rows = Array.from(seedMap.values()).flatMap((seed) => {
       const key = normalizePlayerName(seed.name)
       const injury = injuryMap.get(key)
       const adp = adpMap.get(key)
@@ -331,22 +505,36 @@ export async function runSportsDataImporter(options?: {
         publishedAt: item.publishedAt.toISOString(),
       }))
 
-      return {
-        id: seed.id,
-        sport,
-        name: seed.name,
-        team: seed.team,
-        position: seed.position,
-        stats: asRecord(statMap.get(key)) ?? {},
-        projections,
-        adp: adp?.adp ?? null,
-        dynastyValue:
-          dynastyValueMap.get(key) ??
-          (typeof trendScore === 'number' ? Math.round(clamp(50 + trendScore, 0, 100)) : null),
-        injuryStatus: injury?.status ?? seed.status ?? null,
-        injuryNotes: injury?.notes ?? null,
-        news,
-        dataSource: projectionMap.has(key) ? projectionsResponse.source : seed.source,
+      // Schema-boundary guard: every VarChar-bounded field is enforced here so ONE bad row is
+      // skipped and reported instead of throwing inside the batch transaction and aborting the
+      // entire sport's import — which is exactly how NCAAF/NCAAB stayed at 5,226/100 rows while
+      // their source tables held 44,897/18,209.
+      try {
+        return [{
+          id: seed.id,
+          sport,
+          name: seed.name.slice(0, 128),
+          team: assertTeamCodeFits(seed.team) ?? 'FA',
+          position: (seed.position || 'FLEX').slice(0, 32),
+          stats: asRecord(statMap.get(key)) ?? {},
+          projections,
+          adp: adp?.adp ?? null,
+          dynastyValue:
+            dynastyValueMap.get(key) ??
+            (typeof trendScore === 'number' ? Math.round(clamp(50 + trendScore, 0, 100)) : null),
+          injuryStatus: injury?.status?.slice(0, 32) ?? seed.status?.slice(0, 32) ?? null,
+          injuryNotes: injury?.notes ?? null,
+          news,
+          dataSource: (projectionMap.has(key) ? projectionsResponse.source : seed.source).slice(0, 32),
+        }]
+      } catch (guardError) {
+        rowsSkippedByGuard += 1
+        console.error('[sports-data-importer] row skipped by schema guard', {
+          sport,
+          player: seed.name,
+          error: guardError instanceof Error ? guardError.message : String(guardError),
+        })
+        return []
       }
     })
 
@@ -407,5 +595,9 @@ export async function runSportsDataImporter(options?: {
     staleFallbackApplied,
     skippedSports,
     durationMs: Date.now() - startedAt,
+    teamCodeCounts,
+    rowsSkippedByGuard,
+    pagedSeeds,
+    seedCursors,
   }
 }

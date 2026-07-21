@@ -8,6 +8,7 @@ import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import { linkSocialAccountToAppUser } from "@/lib/auth/SocialAccountLinkingService";
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
@@ -269,6 +270,16 @@ const providers: NextAuthOptions["providers"] = [
             displayName,
             avatarUrl,
           },
+        });
+        // New Sleeper-auth account (create branch only; the `else` below is an
+        // update of an existing account, which must stay silent). The email is a
+        // synthetic non-inbox address — included but clearly labeled by method.
+        // Fire-and-forget.
+        void notifyOwnerOfNewSignup({
+          email: user.email,
+          method: "sleeper",
+          userId: user.id,
+          username: user.username,
         });
       } else {
         const needsUpdate =

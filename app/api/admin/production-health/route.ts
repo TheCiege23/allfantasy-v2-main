@@ -9,6 +9,7 @@ import {
   getSportHealth,
   getSystemHealth,
 } from "@/lib/production-health/ProductionHealthService"
+import { getSportsWarehouseHealth } from "@/lib/data-warehouse/warehouseDataState"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -18,7 +19,7 @@ export const dynamic = "force-dynamic"
  * Protected via `requireAdminOrBearer` (admin cookie, bearer token, or cron secret).
  *
  * Query params:
- *   ?view=system|crons|providers|cache|imports  (default: system)
+ *   ?view=system|crons|providers|cache|imports|warehouse  (default: system)
  *   ?sport=NFL                                   (returns a single sport's health)
  */
 export async function GET(request: Request) {
@@ -43,6 +44,10 @@ export async function GET(request: Request) {
         return NextResponse.json(await getCacheHealth())
       case "imports":
         return NextResponse.json(await getImportStatus())
+      // CRITICAL when PlayerGameStat/PlayerGameFact are empty — the silent state where
+      // best-ball treated missing stats as real zeros and warehouse history rendered blank.
+      case "warehouse":
+        return NextResponse.json(await getSportsWarehouseHealth())
       case "system":
       default:
         return NextResponse.json(await getSystemHealth())

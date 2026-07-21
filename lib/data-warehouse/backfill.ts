@@ -49,7 +49,9 @@ export interface BackfillResult {
   ok: boolean
   dryRun: boolean
   leaguesProcessed: number
-  gameStats?: { sport: string; season: number; week: number; playerFacts: number; teamFacts: number }[]
+  gameStats?: { sport: string; season: number; week: number; playerFacts: number; teamFacts: number; status?: string }[]
+  /** Weeks whose source stat tables were empty (MISSING_SOURCE_DATA) — actionable, not a success. */
+  gameStatsWarnings?: string[]
   standings?: { leagueId: string; season: number; standingCount: number }[]
   matchups?: { leagueId: string; season: number; week: number; matchupCount: number }[]
   rosterSnapshots?: { leagueId: string; weekOrPeriod: number; snapshotCount: number }[]
@@ -85,7 +87,8 @@ export async function runWarehouseBackfill(options: BackfillOptions): Promise<Ba
     byPipeline.get(pipeline)!.push(message)
   }
 
-  const gameStatsResults: BackfillResult['gameStats'] = []
+  const gameStatsResults: NonNullable<BackfillResult['gameStats']> = []
+  const gameStatsWarnings: string[] = []
   const standingsResults: BackfillResult['standings'] = []
   const matchupsResults: BackfillResult['matchups'] = []
   const rosterSnapshotsResults: BackfillResult['rosterSnapshots'] = []
@@ -222,9 +225,10 @@ export async function runWarehouseBackfill(options: BackfillOptions): Promise<Ba
       try {
         if (!dryRun) {
           const r = await runGameStatsIngestionPipeline(sportNorm, inputSeason, week)
-          gameStatsResults.push({ sport: r.sport, season: r.season, week: r.weekOrRound, playerFacts: r.playerFacts, teamFacts: r.teamFacts })
+          gameStatsResults.push({ sport: r.sport, season: r.season, week: r.weekOrRound, playerFacts: r.playerFacts, teamFacts: r.teamFacts, status: r.status })
+          gameStatsWarnings.push(...r.warnings)
         } else {
-          gameStatsResults.push({ sport: sportNorm, season: inputSeason, week, playerFacts: 0, teamFacts: 0 })
+          gameStatsResults.push({ sport: sportNorm, season: inputSeason, week, playerFacts: 0, teamFacts: 0, status: 'DRY_RUN' })
         }
       } catch (e) {
         const pseudoLeagueId = `gameStats:${sportNorm}:${inputSeason}`
@@ -248,6 +252,7 @@ export async function runWarehouseBackfill(options: BackfillOptions): Promise<Ba
     dryRun,
     leaguesProcessed: leagueIds.length,
     gameStats: runGameStats ? gameStatsResults : undefined,
+    gameStatsWarnings: runGameStats && gameStatsWarnings.length > 0 ? gameStatsWarnings : undefined,
     standings: runStandings ? standingsResults : undefined,
     matchups: runMatchups ? matchupsResults : undefined,
     rosterSnapshots: runRosterSnapshots ? rosterSnapshotsResults : undefined,

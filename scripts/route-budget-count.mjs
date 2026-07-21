@@ -86,7 +86,13 @@ const KEEP = new Set([
   'app/api/cron/draft-tick/route.ts',
   'app/api/cron/live-score-tick/route.ts',
   'app/api/cron/sync-player-images/route.ts',
+  'app/api/cron/legacy-import-drain/route.ts',
+  'app/api/cron/import-season-stats/route.ts',
+  'app/api/cron/import-player-game-stats/route.ts',
   'app/api/admin/automation/health/route.ts','app/api/admin/automation/waivers/run/route.ts',
+  // Fetched by the admin dashboard UI (app/admin/**, which is NOT excluded and does ship).
+  'app/api/admin/visitor-analytics/route.ts','app/api/admin/api-health/route.ts',
+  'app/api/admin/chimmy/health/route.ts','app/api/admin/monetization/checkout-link-mapping/route.ts',
   'app/api/ai/waivers/commissioner-insights/route.ts','app/api/ai/waivers/recommend/route.ts',
   // admin keeps (only relevant to the NEW set)
   ...(baseline ? [] : [
