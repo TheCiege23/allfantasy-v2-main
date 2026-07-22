@@ -7,7 +7,6 @@ import RosterLegacyReport from '@/app/components/RosterLegacyReport';
 import SyncedRosters from '@/app/components/SyncedRosters';
 import WaiverAI from '@/app/components/WaiverAI';
 import ChimmyChat from '@/app/components/ChimmyChat';
-import PersonalizedInsights from '@/app/components/PersonalizedInsights';
 import MockDraftSimulatorClient from '@/components/MockDraftSimulatorClient';
 import Link from 'next/link';
 import LegacyLeagueIdeaForm from '@/app/components/LegacyLeagueIdeaForm';
@@ -166,8 +165,6 @@ export default function LegacyOverview() {
                 win rate, playoff, and format-breakdown numbers once that scoring is available — never a placeholder.
               </p>
             </div>
-
-            <PersonalizedInsights />
 
             <RosterLegacyReport />
 

@@ -106,4 +106,15 @@ describe('/legacy page has no fabricated identity or career stats', () => {
     expect(src).toContain('Career record unavailable')
     expect(src).toContain('mockLeagues.filter')
   })
+
+  it('the hardcoded PersonalizedInsights fabrication is deleted and unmounted', () => {
+    expect(existsSync('app/components/PersonalizedInsights.tsx')).toBe(false)
+    expect(read('app/legacy/page.tsx')).not.toContain('PersonalizedInsights')
+  })
+
+  it('RosterLegacyReport never renders a raw API response body as the error', () => {
+    const src = read('app/components/RosterLegacyReport.tsx')
+    expect(src).not.toContain('await res.text()')
+    expect(src).toContain('Sign in to generate your Roster Legacy Report.')
+  })
 })
