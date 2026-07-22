@@ -8,7 +8,6 @@ import { TeamLogo } from '@/app/components/TeamLogo'
 import type { SlimPlayer } from '@/lib/hooks/useSleeperPlayers'
 import { useSleeperPlayers } from '@/lib/hooks/useSleeperPlayers'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
-import { placeholderBaselineProjection } from '@/components/weather/placeholderBaseline'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo, isNcaafPlayerPoolPending } from '@/lib/league/ncaaf-beta-guard'
@@ -335,16 +334,10 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       rows = rows.filter((p) => wlIds.has(p.id))
     }
     rows.sort((a, b) => {
-      const pa =
-        a.projectedPoints ??
-        a.fantasyPointsPerGame ??
-        riBySleeper[a.id]?.fantasyPointsPerGame ??
-        placeholderBaselineProjection(a.id)
-      const pb =
-        b.projectedPoints ??
-        b.fantasyPointsPerGame ??
-        riBySleeper[b.id]?.fantasyPointsPerGame ??
-        placeholderBaselineProjection(b.id)
+      // Sort key only — never rendered — so an absent real projection sorts as 0
+      // (bottom of a descending list) rather than fabricating a displayed value.
+      const pa = a.projectedPoints ?? a.fantasyPointsPerGame ?? riBySleeper[a.id]?.fantasyPointsPerGame ?? 0
+      const pb = b.projectedPoints ?? b.fantasyPointsPerGame ?? riBySleeper[b.id]?.fantasyPointsPerGame ?? 0
       return pb - pa
     })
     return rows.slice(0, 100)
@@ -684,13 +677,12 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             ) : (
               filtered.map((p) => {
                 const ri = riBySleeper[p.id]
-                const baseline = placeholderBaselineProjection(p.id)
                 const normalizedStats = parseRollingInsightsStatsJson(p.normalizedStats ?? null)
                 const projPts =
                   p.projectedPoints ??
                   p.fantasyPointsPerGame ??
                   ri?.fantasyPointsPerGame ??
-                  baseline
+                  null
                 const seasonFp =
                   ri?.fantasyPointsSeason ??
                   (ri?.fantasyPointsPerGame != null && ri?.gamesPlayed != null
@@ -766,7 +758,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                       </div>
                     </button>
                     <div className="w-14 shrink-0 text-right text-[11px] text-white/60">
-                      {projection ? (
+                      {projection && projPts != null ? (
                         <ProjectionDisplay
                           projection={projPts}
                           suffix=""

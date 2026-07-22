@@ -80,7 +80,9 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
             </span>
           ) : null}
         </div>
-        <div className="text-[10px] text-white/40">Proj {side.projectedPoints.toFixed(1)}</div>
+        <div className="text-[10px] text-white/40">
+          {side.hasRealProjection ? `Proj ${side.projectedPoints.toFixed(1)}` : 'Proj —'}
+        </div>
       </div>
     </div>
   )
