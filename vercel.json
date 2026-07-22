@@ -97,48 +97,8 @@
       "schedule": "0 9 * * 2"
     },
     {
-      "path": "/api/survivor/tribal",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/survivor/challenge",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/survivor/exile",
-      "schedule": "0 8 * * 2"
-    },
-    {
-      "path": "/api/survivor/automation",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/survivor/automation/week-start",
-      "schedule": "0 6 * * 2"
-    },
-    {
       "path": "/api/tournament/automation",
       "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/zombie/automation",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/big-brother/cron/automation",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/big-brother/cron/reminders",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/big-brother/cron/stat-correction",
-      "schedule": "0 */1 * * *"
-    },
-    {
-      "path": "/api/devy/automation",
-      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/idp/cap/expire-contracts",
