@@ -288,6 +288,34 @@ export function buildLeagueHomePulse({
     }
   }
 
+  // A team carrying an imported platformUserId (e.g. copied from Sleeper at import time) is not
+  // the same as a real AllFantasy user having claimed it — claimedByUserId is the only signal that
+  // reflects a real person behind a roster. When literally no team has been claimed, there is no
+  // behavioral signal to score at all, so say so honestly instead of computing a flattering default.
+  const hasAnyClaimedTeam = teams.some((team) => Boolean(team.claimedByUserId))
+  if (!hasAnyClaimedTeam) {
+    const pulse = emptyPulse(now, 'League Pulse', `/league/${league.id}/settings`)
+    return {
+      ...pulse,
+      id: `league-pulse-${league.id}-unclaimed`,
+      headline: 'League Pulse needs at least one claimed team before it can call this league’s health.',
+      why: 'No team in this league has been claimed by a real AllFantasy user yet, so a health score would not reflect real activity.',
+      nextAction: {
+        label: isCommissioner ? 'Invite managers to claim teams' : 'Claim your team',
+        href: `/league/${league.id}/settings`,
+        detail: 'Team ownership must be confirmed before Fantasy OS can summarize real league health.',
+      },
+      // LeaguePulseCard's insufficient-data panel renders THESE fields (not headline/why),
+      // so the on-screen copy must name the actual missing signal.
+      insufficientData: {
+        title: 'No claimed teams yet',
+        message:
+          'No team in this league has been claimed by a real AllFantasy user, so League Pulse will not call this league’s health.',
+        missing: ['At least one claimed team'],
+      },
+    }
+  }
+
   const expectedTeams = Math.max(league.teamCount ?? teams.length, teams.length)
   const orphanTeams = teams.filter((team) => team.isOrphan || (!team.claimedByUserId && !team.platformUserId))
   const scoredTeams = teams.filter((team) => typeof team.pointsFor === 'number')

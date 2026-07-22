@@ -13,6 +13,8 @@ export type MatchupPlayerSlot = {
   headshotUrl: string | null
   currentPoints: number
   projectedPoints: number
+  /** False when projectedPoints fell back to a flat per-position estimate (no real provider projection for this player/week). */
+  hasRealProjection: boolean
   injuryStatus: string | null
   newsBlurb: string | null
   weatherSummary: string | null

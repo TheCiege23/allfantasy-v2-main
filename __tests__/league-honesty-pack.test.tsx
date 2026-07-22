@@ -1,15 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ProjectionValue } from '@/components/league/ProjectionValue'
-import {
-  getSourceLabel,
-  hasLeaguePulseData,
-  resolveChecklistSignal,
-  resolveProjectionAvailability,
-} from '@/lib/league/dataHonesty'
+import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
+import { buildLeagueHomePulse } from '@/lib/decision-os/league-pulse'
+import { getSourceLabel, resolveProjectionAvailability } from '@/lib/league/dataHonesty'
 
-// Honesty Pack 1A: missing data renders as missing — never as a plausible fabricated number,
-// never as a green check, never under a "Live" label.
+// Honesty Pack: missing data renders as missing — never as a plausible fabricated number,
+// never as a green check, never under a "Live" label. Pulse sufficiency has exactly ONE
+// owner (buildLeagueHomePulse); the card renders the engine's explicit unavailable state.
 
 describe('ProjectionValue', () => {
   it('does not fabricate a missing projection', () => {
@@ -57,27 +55,75 @@ describe('resolveProjectionAvailability', () => {
   })
 })
 
-describe('hasLeaguePulseData', () => {
-  it('does not show League Pulse without real data', () => {
-    expect(
-      hasLeaguePulseData({ activityCount: 0, transactionCount: 0, signalCount: 0, lastActivityAt: null })
-    ).toBe(false)
-    expect(hasLeaguePulseData({})).toBe(false)
+describe('buildLeagueHomePulse sufficiency (the single contract)', () => {
+  const now = new Date('2026-01-01T00:00:00.000Z')
+  const team = (overrides: Record<string, unknown> = {}) => ({
+    id: 'team-1',
+    platformUserId: 'sleeper-1',
+    claimedByUserId: null,
+    ...overrides,
   })
 
-  it('renders when a real signal exists', () => {
-    expect(hasLeaguePulseData({ activityCount: 1 })).toBe(true)
-    expect(hasLeaguePulseData({ managerDnaPresent: true })).toBe(true)
-    expect(hasLeaguePulseData({ lastActivityAt: '2026-07-21T00:00:00Z' })).toBe(true)
+  it('returns an insufficient-data pulse when no team has been claimed by a real user', () => {
+    const result = buildLeagueHomePulse({
+      league: { id: 'league-1', teamCount: 10, lifecycleState: 'in_season' },
+      teams: Array.from({ length: 10 }, (_, i) => team({ id: `team-${i}`, platformUserId: `sleeper-${i}` })),
+      now,
+    })
+    expect(result.status).toBe('insufficient-data')
+    expect(result.metrics.some((m) => m.label === 'Health')).toBe(false)
+    expect(result.insufficientData?.title).toBe('No claimed teams yet')
+  })
+
+  it('does not mistake an imported platformUserId for a real claim', () => {
+    const result = buildLeagueHomePulse({
+      league: { id: 'league-2', teamCount: 2, lifecycleState: 'in_season' },
+      teams: [team({ id: 'a', platformUserId: 'sleeper-a' }), team({ id: 'b', platformUserId: 'sleeper-b' })],
+      now,
+    })
+    expect(result.status).toBe('insufficient-data')
+  })
+
+  it('still computes a normal score once at least one team is genuinely claimed', () => {
+    const result = buildLeagueHomePulse({
+      league: { id: 'league-3', teamCount: 2, lifecycleState: 'in_season' },
+      teams: [
+        team({ id: 'a', platformUserId: 'sleeper-a', claimedByUserId: 'user-a' }),
+        team({ id: 'b', platformUserId: 'sleeper-b', claimedByUserId: 'user-b' }),
+      ],
+      now,
+    })
+    expect(result.status).not.toBe('insufficient-data')
+    expect(result.metrics.some((m) => m.label === 'Health')).toBe(true)
   })
 })
 
-describe('resolveChecklistSignal', () => {
-  it('never defaults to complete; unknown is not green', () => {
-    expect(resolveChecklistSignal('Standings up to date', undefined).state).toBe('unknown')
-    expect(resolveChecklistSignal('Standings up to date', null).state).toBe('unknown')
-    expect(resolveChecklistSignal('Waivers reviewed', false).state).toBe('incomplete')
-    expect(resolveChecklistSignal('Waivers reviewed', true).state).toBe('complete')
+describe('LeaguePulseCard presents the engine decision (layers cannot disagree)', () => {
+  const now = new Date('2026-01-01T00:00:00.000Z')
+
+  it('renders the honest unavailable panel for an insufficient-data pulse, without a health claim', () => {
+    const pulse = buildLeagueHomePulse({
+      league: { id: 'league-x', teamCount: 4, lifecycleState: 'in_season' },
+      teams: [{ id: 't1', platformUserId: 'sleeper-1', claimedByUserId: null }],
+      now,
+    })
+    render(<LeaguePulseCard pulse={pulse} variant="league" compact />)
+    expect(screen.getByText('No claimed teams yet')).toBeInTheDocument()
+    expect(screen.queryByText('Healthy')).not.toBeInTheDocument()
+  })
+
+  it('renders a status label for a scoreable league', () => {
+    const pulse = buildLeagueHomePulse({
+      league: { id: 'league-y', teamCount: 2, lifecycleState: 'in_season' },
+      teams: [
+        { id: 'a', platformUserId: 'sleeper-a', claimedByUserId: 'user-a' },
+        { id: 'b', platformUserId: 'sleeper-b', claimedByUserId: 'user-b' },
+      ],
+      now,
+    })
+    render(<LeaguePulseCard pulse={pulse} variant="league" compact />)
+    expect(screen.getByText(pulse.statusLabel)).toBeInTheDocument()
+    expect(screen.queryByText('No claimed teams yet')).not.toBeInTheDocument()
   })
 })
 

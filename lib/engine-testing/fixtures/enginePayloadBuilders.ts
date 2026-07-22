@@ -23,6 +23,7 @@ function slot(
     headshotUrl: null,
     currentPoints: 0,
     projectedPoints: 10,
+    hasRealProjection: true,
     injuryStatus: null,
     newsBlurb: null,
     weatherSummary: null,

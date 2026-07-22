@@ -50,42 +50,9 @@ export function resolveProjectionAvailability(input: {
   }
 }
 
-/**
- * League Pulse may render ONLY when a real qualifying signal exists. The card previously
- * scored ~88% "Healthy" for any filled imported league purely from team-slot fill — a
- * fabricated read on a league we knew nothing about.
- */
-export function hasLeaguePulseData(input: {
-  activityCount?: number | null
-  transactionCount?: number | null
-  signalCount?: number | null
-  managerDnaPresent?: boolean
-  lastActivityAt?: string | null
-}): boolean {
-  return Boolean(
-    (input.activityCount ?? 0) > 0 ||
-      (input.transactionCount ?? 0) > 0 ||
-      (input.signalCount ?? 0) > 0 ||
-      input.managerDnaPresent ||
-      input.lastActivityAt
-  )
-}
-
-export type ChecklistSignal = {
-  id: string
-  label: string
-  state: 'complete' | 'incomplete' | 'unknown'
-  explanation?: string
-}
-
-/** A checklist item may claim completion ONLY from a real boolean. Null/undefined = unknown. */
-export function resolveChecklistSignal(label: string, value: boolean | null | undefined): ChecklistSignal {
-  return {
-    id: label.toLowerCase().replace(/\s+/g, '-'),
-    label,
-    state: value === true ? 'complete' : value === false ? 'incomplete' : 'unknown',
-  }
-}
+// League Pulse sufficiency intentionally lives in ONE place: buildLeagueHomePulse
+// (lib/decision-os/league-pulse.ts) returns an explicit insufficient-data pulse; the UI
+// renders that state instead of running a second predicate that could disagree.
 
 export type DataFreshness = 'live' | 'recent' | 'stale' | 'unavailable' | 'mixed'
 

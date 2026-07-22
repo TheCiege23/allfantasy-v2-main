@@ -13,6 +13,7 @@ import { LeagueForecastSection } from "@/components/simulation/LeagueForecastSec
 import { DynastyProjectionPanel } from "@/components/dynasty/DynastyProjectionPanel"
 import WarehouseHistoryPanel from "@/components/app/tabs/WarehouseHistoryPanel"
 import { useLegacyTab } from "@/hooks/useLegacyTab"
+import { getSourceLabel } from "@/lib/league/dataHonesty"
 import { postMarketRefresh } from "@/lib/api/legacy"
 import { trackDiscoveryLeagueView } from "@/lib/discovery-analytics/client"
 import type {
@@ -388,7 +389,7 @@ export default function LeagueHomeShellPage() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {/* League Snapshot */}
                 <Card title="League Snapshot" accent>
-                  <InlineNote text="Combined league data — sections below populate as real data is wired." />
+                  <InlineNote text={`${getSourceLabel({ freshness: "mixed" })} — sections below populate as real data is wired.`} />
                   <div className="mt-3 space-y-1 text-sm text-white/80">
                     <div>League: {leagueSummary?.name || "Unknown"}</div>
                     <div>Members: {leagueSummary?._count?.members ?? 0}</div>

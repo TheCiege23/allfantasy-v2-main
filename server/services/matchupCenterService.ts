@@ -59,14 +59,19 @@ function positionProjectionFallback(position: string): number {
   return 10
 }
 
-function resolveProjectedPoints(pts: number, statLine: unknown, position: string): number {
+function resolveProjectedPoints(
+  pts: number,
+  statLine: unknown,
+  position: string,
+): { points: number; isReal: boolean } {
   const fromLine = projectionFromStatLine(statLine)
-  if (fromLine != null) return Math.max(pts, fromLine)
-  return Math.max(pts, positionProjectionFallback(position))
+  if (fromLine != null) return { points: Math.max(pts, fromLine), isReal: true }
+  return { points: Math.max(pts, positionProjectionFallback(position)), isReal: false }
 }
 
-function slotAiInsight(pts: number, proj: number, injury: string | null): string | null {
+function slotAiInsight(pts: number, proj: number, injury: string | null, hasRealProjection: boolean): string | null {
   if (injury && /out|doubtful|ir\b|nfi\b|pup\b/i.test(injury)) return 'Injury flag — verify active status before lock.'
+  if (!hasRealProjection) return null
   if (proj - pts >= 8) return 'Ceiling game — still room to spike vs current score.'
   if (pts > proj + 5) return 'Outperforming projection — momentum is on your side.'
   return null
@@ -286,13 +291,14 @@ export async function buildMatchupCenterPayload(params: {
       opponent,
       headshotUrl: headshot,
       currentPoints: pts,
-      projectedPoints: proj,
+      projectedPoints: proj.points,
+      hasRealProjection: proj.isReal,
       injuryStatus,
       newsBlurb,
       weatherSummary,
       gameStatus: inferGameStatus(pts, weekStatus),
       gameLabel: pts > 0 ? 'Scoring' : 'Scheduled',
-      aiInsight: slotAiInsight(pts, proj, injuryStatus),
+      aiInsight: slotAiInsight(pts, proj.points, injuryStatus, proj.isReal),
     })
   }
 
