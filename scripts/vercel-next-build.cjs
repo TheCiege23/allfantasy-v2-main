@@ -153,6 +153,12 @@ const routeDirsToDisable = [
   path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'audit'),
   path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'outlook'),
   path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'scoring-presets'),
+  // Tournament Mode preserved off for beta.
+  // Production verification on 2026-07-21 found no Tournament Mode data,
+  // active competitions, league links, or payment obligations.
+  // Re-enable only through an intentional product and route-budget decision.
+  path.join('app', 'tournament'),
+  path.join('app', 'api', 'tournament'),
 ]
 
 const movedFiles = []
