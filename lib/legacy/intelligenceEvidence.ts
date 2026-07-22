@@ -47,6 +47,9 @@ export function buildTradeValuationEvidence(input: {
   foundValuesAdjusted?: boolean
 }): TradeValuationEvidence {
   const foundProvenance: ValueProvenance = input.foundValuesAdjusted ? 'derived' : 'observed'
+  // Defensive dedupe: asset lists are client-supplied, and a repeated name must not count
+  // twice toward coverage (which would overstate confidence for a malformed payload).
+  const seen = new Set<string>()
   const players: TradePlayerValuation[] = [
     ...input.sideAPlayers.map((p) => ({
       name: p.name,
@@ -60,7 +63,12 @@ export function buildTradeValuationEvidence(input: {
       value: p.value,
       provenance: (p.found ? foundProvenance : 'fallback') as ValueProvenance,
     })),
-  ]
+  ].filter((p) => {
+    const key = `${p.side}:${p.name.trim().toLowerCase()}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 
   const marketBackedCount = players.filter((p) => p.provenance !== 'fallback').length
   const fallbackCount = players.length - marketBackedCount

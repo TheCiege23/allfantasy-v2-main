@@ -61,6 +61,29 @@ describe('buildTradeValuationEvidence — trade analyze honesty', () => {
     expect(result.coveragePercent).toBeNull()
   })
 
+  it('duplicate player names cannot inflate coverage (client-supplied assets)', () => {
+    const result = buildTradeValuationEvidence({
+      sideAPlayers: [
+        { name: 'Repeat Guy', value: 5000, found: true },
+        { name: 'repeat guy', value: 5000, found: true },
+        { name: 'Repeat Guy ', value: 5000, found: true },
+      ],
+      sideBPlayers: [{ name: 'Unknown', value: 200, found: false }],
+    })
+    expect(result.players.filter((p) => p.side === 'A')).toHaveLength(1)
+    expect(result.marketBackedCount).toBe(1)
+    expect(result.coveragePercent).toBe(50)
+    expect(result.evidence.confidence).toBe('low')
+  })
+
+  it('the same name on BOTH sides is legitimate and kept (side-scoped dedupe)', () => {
+    const result = buildTradeValuationEvidence({
+      sideAPlayers: [{ name: 'Pivot Player', value: 4000, found: true }],
+      sideBPlayers: [{ name: 'Pivot Player', value: 4000, found: true }],
+    })
+    expect(result.players).toHaveLength(2)
+  })
+
   it('one unknown among many known players yields medium, not high, confidence', () => {
     const known = Array.from({ length: 5 }, (_, i) => ({ name: `K${i}`, value: 3000, found: true }))
     const result = buildTradeValuationEvidence({
