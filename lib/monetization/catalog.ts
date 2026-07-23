@@ -1,4 +1,4 @@
-import { getIncludedPremiumCreditsForSubscription } from "@/lib/tokens/subscription-policy"
+import { getIncludedPremiumCreditsForSubscription } from "@/lib/tokens/subscription-token-policy-config"
 
 export type MonetizationSubscriptionSku =
   | "af_pro_monthly"

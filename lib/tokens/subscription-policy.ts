@@ -8,84 +8,14 @@ import {
   getTokenSpendRuleMatrixEntry,
   type TokenPricingTier,
 } from "@/lib/tokens/pricing-matrix"
+import {
+  SUBSCRIPTION_TOKEN_POLICY_CONFIG,
+  getIncludedPremiumCreditsForSubscription,
+  type SubscriptionTokenPlanPolicy,
+} from "@/lib/tokens/subscription-token-policy-config"
 
-type SubscriptionTokenPlanPolicy = {
-  /**
-   * Monthly AI tokens deposited automatically each monthly billing cycle.
-   *
-   * Granted via `TokenSpendService.grantMonthlySubscriptionCredits`, called
-   * from the `invoice.payment_succeeded` Stripe webhook handler for both
-   * `subscription_create` (first month) and `subscription_cycle` (renewals).
-   * Idempotency key: `subscription_credit:{invoiceId}` — safe against Stripe retries.
-   *
-   * This value is also surfaced in the Token Center pricing UI so subscribers
-   * can see how many credits are included with each plan tier.
-   */
-  monthlyIncludedPremiumCredits: number
-  /**
-   * AI tokens deposited automatically on yearly subscription invoices.
-   * Kept separate from monthly credits so annual buyers receive the advertised
-   * launch allowance rather than one month of credits.
-   */
-  yearlyIncludedPremiumCredits: number
-  discountedTokenSpendPct: number
-  supportsUnlimitedLowTierInFuture: boolean
-}
-
-type SubscriptionTokenPolicyConfig = {
-  model: "mixed_access"
-  version: "v1_discounted_tokens"
-  plans: Record<SubscriptionPlanId, SubscriptionTokenPlanPolicy>
-}
-
-export const SUBSCRIPTION_TOKEN_POLICY_CONFIG: SubscriptionTokenPolicyConfig = {
-  model: "mixed_access",
-  version: "v1_discounted_tokens",
-  plans: {
-    pro: {
-      monthlyIncludedPremiumCredits: 250,
-      yearlyIncludedPremiumCredits: 3500,
-      discountedTokenSpendPct: 20,
-      supportsUnlimitedLowTierInFuture: true,
-    },
-    commissioner: {
-      monthlyIncludedPremiumCredits: 100,
-      yearlyIncludedPremiumCredits: 1500,
-      discountedTokenSpendPct: 20,
-      supportsUnlimitedLowTierInFuture: true,
-    },
-    war_room: {
-      monthlyIncludedPremiumCredits: 300,
-      yearlyIncludedPremiumCredits: 3500,
-      discountedTokenSpendPct: 25,
-      supportsUnlimitedLowTierInFuture: true,
-    },
-    supreme: {
-      monthlyIncludedPremiumCredits: 1000,
-      yearlyIncludedPremiumCredits: 15000,
-      discountedTokenSpendPct: 45,
-      supportsUnlimitedLowTierInFuture: true,
-    },
-    // Enterprise workspace tier — highest allowances (matches/exceeds Supreme).
-    enterprise: {
-      monthlyIncludedPremiumCredits: 1000,
-      yearlyIncludedPremiumCredits: 15000,
-      discountedTokenSpendPct: 45,
-      supportsUnlimitedLowTierInFuture: true,
-    },
-  },
-}
-
-export function getIncludedPremiumCreditsForSubscription(input: {
-  planId: SubscriptionPlanId
-  interval: "month" | "year"
-}): number {
-  const policy = SUBSCRIPTION_TOKEN_POLICY_CONFIG.plans[input.planId]
-  if (!policy) return 0
-  return input.interval === "year"
-    ? policy.yearlyIncludedPremiumCredits
-    : policy.monthlyIncludedPremiumCredits
-}
+export { SUBSCRIPTION_TOKEN_POLICY_CONFIG, getIncludedPremiumCreditsForSubscription }
+export type { SubscriptionTokenPlanPolicy, SubscriptionTokenPolicyConfig } from "@/lib/tokens/subscription-token-policy-config"
 
 export type TokenChargeMode = "tokens_only" | "subscriber_discounted_tokens"
 
