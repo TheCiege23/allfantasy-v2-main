@@ -925,11 +925,19 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Admin/dev bypass accounts (excluded above)", bypassUserIds.size, "Entitlements granted without a real subscription — never counted as subscribers"),
       metric("Stripe webhook events", stripeEvents),
       metric("Completed bracket entry and donation payments (all time)", bracketPaymentsCompleted, "BracketPayment rows — token purchases are not recorded here"),
-      // ── Revenue (Issue 1/2) — BracketPayment holds bracket entries and donations only. Its
-      // paymentType domain is bracket_lab_pass / donation / first_bracket_fee / unlimited_unlock;
-      // token purchases live in TokenLedger and never appear here, so no bracket-vs-token split can
-      // be derived from this table. Subscription revenue is reported as unavailable below rather
-      // than fabricated from this data.
+      // ── Revenue (Issue 1/2) — repo-wide, bracketPayment.create() has exactly one call site
+      // (app/api/bracket/stripe/checkout/route.ts), which enforces paymentType in
+      // ["first_bracket_fee", "unlimited_unlock"] — never "token". lib/entitlements-db.ts separately
+      // queries BracketPayment for paymentType "bracket_lab_pass"/"donation" (to grant
+      // hasBracketLabPass/isSupporter flags), implying those values were real at some point, but no
+      // current write path in this repo can produce them — likely historical rows from a retired
+      // code path, or a live gap in that (separate, out-of-scope-here) entitlements query. Either
+      // way: no code path writes a literal "token" paymentType, so no bracket-vs-token split can be
+      // derived from this table, and token purchases (TokenLedger) never appear here. "Bracket
+      // entries and donations" describes what these payments represent to the product/compliance
+      // model (this app frames bracket fees as voluntary support rather than wagering — see
+      // app/donate's copy), not a literal enumeration of paymentType's value set. Subscription
+      // revenue is reported as unavailable below rather than fabricated from this data.
       completedRevenueCents === null
         ? notTracked("Bracket entries and donations — payment volume (all time)", "No completed bracket/donation payments recorded")
         : metric("Bracket entries and donations — payment volume (all time)", `$${(completedRevenueCents / 100).toFixed(2)}`, "BracketPayment only — not subscription revenue, and contains no token purchases"),
