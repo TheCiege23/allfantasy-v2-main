@@ -230,6 +230,15 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'admin', 'visitor-analytics', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'api-health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'chimmy', 'health', 'route.ts').replace(/\\/g, '/'),
+  // Same class again, but reached from a LEAGUE page rather than app/admin/**:
+  // components/admin/UsageAnalyticsPanel is mounted by app/leagues/[leagueId]/admin/model/page.tsx,
+  // which is not excluded and does ship. The `components/admin/` prefix is assumed non-production
+  // by the route-budget guard, which is why this one was missed. usage + usage/summary back it.
+  path.join('app', 'api', 'admin', 'usage', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'usage', 'summary', 'route.ts').replace(/\\/g, '/'),
+  // usage/log is not an admin surface at all — app/hooks/useAnalytics.ts and
+  // lib/telemetry/client.ts POST to it from ordinary end-user sessions.
+  path.join('app', 'api', 'admin', 'usage', 'log', 'route.ts').replace(/\\/g, '/'),
   // Also the endpoint the Stripe checkout-link verification step depends on — it has been
   // recommended as the P0-A verification for days while silently 404ing in production.
   path.join('app', 'api', 'admin', 'monetization', 'checkout-link-mapping', 'route.ts').replace(/\\/g, '/'),

@@ -100,6 +100,11 @@ const FILES_KEPT = [
   // excluding these made the panel render against 404s).
   'app/api/admin/visitor-analytics/route.ts', 'app/api/admin/api-health/route.ts',
   'app/api/admin/chimmy/health/route.ts', 'app/api/admin/monetization/checkout-link-mapping/route.ts',
+  // Fetched by components/admin/UsageAnalyticsPanel, which app/leagues/[leagueId]/admin/model/page.tsx
+  // mounts — a LEAGUE page, not app/admin/**, so EXCLUDED_SOURCE_PREFIXES' "components/admin/ never
+  // runs in prod" assumption does not hold for it. usage/log is plain end-user client telemetry.
+  'app/api/admin/usage/route.ts', 'app/api/admin/usage/summary/route.ts',
+  'app/api/admin/usage/log/route.ts',
 ]
 
 function getProductionSignals(): number {
