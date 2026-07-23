@@ -582,7 +582,11 @@ export default function MonetizationPurchaseSurface({
               <div className="mb-4 flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2.5 text-xs">
                 <Check className="h-4 w-4 shrink-0 text-emerald-400" />
                 <span className="font-black text-emerald-300">{appliedCouponCode}</span>
-                <span className="text-white/60">applied — {appliedCouponPct}% discount will be deducted at Stripe checkout</span>
+                {/* Billing Truth: the discount only exists if this promo code is live in Stripe —
+                    the final price is whatever Stripe checkout shows, so say that. */}
+                <span className="text-white/60">
+                  {appliedCouponPct}% off when the code is accepted at Stripe checkout — the final price is shown there before you pay
+                </span>
               </div>
             ) : null}
             <div className="grid gap-5 md:grid-cols-2">

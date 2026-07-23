@@ -552,8 +552,10 @@ export default function TokensPage() {
                       )}
                     </div>
                     {appliedCouponCode && (
+                      // Billing Truth: the struck-through/discounted pair is an expectation, not
+                      // a guarantee — the code must be accepted by Stripe at checkout.
                       <p className="mt-1 text-[10px] font-bold text-emerald-400">
-                        {appliedCouponPct}% off with {appliedCouponCode}
+                        {appliedCouponPct}% off with {appliedCouponCode} — final price confirmed at Stripe checkout
                       </p>
                     )}
                     <button

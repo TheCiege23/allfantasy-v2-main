@@ -24,17 +24,21 @@ function DonateSuccessContent() {
     refetchEntitlement()
     refetchTokens()
   }, [searchParams, refetchEntitlement, refetchTokens])
+  // Billing Truth: this page cannot verify payment (it renders from a redirect param, and the
+  // lab entitlement has no client-queryable endpoint). It therefore claims only what it knows:
+  // checkout finished and Stripe is confirming. "Payment confirmed" / "unlocked" copy was
+  // fabricated — anyone loading this URL saw it with no purchase at all.
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-white">
       <div className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
         <div className="rounded-3xl border border-white/10 bg-white/5 p-8">
-          <div className="text-xs text-white/60">Payment confirmed</div>
+          <div className="text-xs text-white/60">Checkout complete</div>
           <h1 className="mt-3 text-2xl font-semibold">
-            {mode === "lab" ? "Bracket Lab Pass unlocked" : "Thank you for supporting"}
+            {mode === "lab" ? "Your Bracket Lab Pass is being activated" : "Thank you for supporting"}
           </h1>
           <p className="mt-2 text-white/70">
             {mode === "lab"
-              ? "You can now access the Lab dashboard for this tournament."
+              ? "Access unlocks as soon as Stripe confirms your payment — usually under a minute. If the Lab doesn't open, refresh this page."
               : "Your support helps fund performance, data costs, and new features."}
           </p>
 

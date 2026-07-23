@@ -19,6 +19,7 @@ import {
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
 import { dispatchPostPurchaseSyncEvent } from '@/lib/state-consistency/post-purchase-sync-events'
 import { dispatchStateRefreshEvent } from '@/lib/state-consistency/state-events'
+import { resolvePostPurchasePhase } from '@/lib/subscription/billingTruth'
 
 /** Query param keys that indicate success (subscription or token purchase). */
 const SUCCESS_PARAMS = ['checkout', 'success', 'tokens', 'purchased'] as const
@@ -274,8 +275,13 @@ export function usePostPurchaseSync(options: UsePostPurchaseSyncOptions = {}): U
           tokens: Boolean(response?.syncEvidence?.tokens),
         }
 
-        if (syncStatus === 'synced' || syncStatus === 'no_session') {
-          if (response) {
+        // Billing Truth: only evidence may render the green success state — a server-verified
+        // session ('synced') or webhook rows found for this user. A bare ?success=1 with
+        // nothing verifiable ('no_session', no evidence) previously showed "Purchase complete";
+        // it now falls through to the honest 'pending' state below, and access still appears
+        // via the entitlement refetch once the webhook lands.
+        if (resolvePostPurchasePhase({ syncStatus, evidence }) === 'success') {
+          if (response && syncStatus === 'synced') {
             trackMetaEventsFromResponse(response)
           }
           const successCopy = evidence.tokens && !evidence.subscription

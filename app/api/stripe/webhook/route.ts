@@ -18,6 +18,7 @@ import {
   updateSubscriptionFromStripeEvent,
 } from "@/lib/subscription/webhookHandlers"
 import { persistLeagueEntryFeeFromStripeSession } from "@/lib/league-finance/leagueFinanceService"
+import { resolveCheckoutBillingPeriod, verifyChargedAmount } from "@/lib/subscription/billingTruth"
 import { buildSubscriptionPurchaseMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
 import { redeemCouponFromWebhook } from "@/lib/promotions/sponsorCoupon"
@@ -112,16 +113,6 @@ class NonRetryableWebhookError extends Error {
   }
 }
 
-function addBillingInterval(base: Date, interval: "month" | "year"): Date {
-  const next = new Date(base)
-  if (interval === "year") {
-    next.setUTCFullYear(next.getUTCFullYear() + 1)
-  } else {
-    next.setUTCMonth(next.getUTCMonth() + 1)
-  }
-  return next
-}
-
 async function persistSubscriptionEntitlementFromCheckout(
   session: Stripe.Checkout.Session,
   context: { userId: string; sku: MonetizationSku } | null
@@ -136,9 +127,54 @@ async function persistSubscriptionEntitlementFromCheckout(
   if (!plans || !subscriptions) return
 
   const now = new Date()
-  const currentPeriodEnd = addBillingInterval(now, item.interval)
   const stripeSubscriptionId =
     typeof session.subscription === "string" ? session.subscription : null
+
+  // Billing Truth: prefer Stripe's REAL billing period (observed) over the local
+  // now+interval estimate (derived). The estimate drifts from the true renewal date the
+  // moment Stripe prorates, trials, or anchors billing — and it was silently presented to
+  // users as the renewal date. The derived fallback self-corrects at the first
+  // invoice.payment_succeeded, and its provenance is recorded either way.
+  let stripeSubscriptionForPeriod: {
+    current_period_start?: number | null
+    current_period_end?: number | null
+  } | null = null
+  if (stripeSubscriptionId) {
+    try {
+      const stripe = getStripeClient()
+      stripeSubscriptionForPeriod = (await stripe.subscriptions.retrieve(
+        stripeSubscriptionId,
+      )) as unknown as { current_period_start?: number | null; current_period_end?: number | null }
+    } catch (err) {
+      console.error(
+        "[stripe/webhook] could not retrieve subscription for real billing period; using derived estimate:",
+        err instanceof Error ? err.message : err,
+      )
+    }
+  }
+  const period = resolveCheckoutBillingPeriod({
+    stripeSubscription: stripeSubscriptionForPeriod,
+    now,
+    interval: item.interval,
+  })
+  const currentPeriodEnd = period.currentPeriodEnd
+
+  // Billing Truth: verify the amount actually paid against the catalog price shown to the
+  // user. Checkout runs through dashboard-configured Payment Links, which can drift from the
+  // displayed catalog amount — the entitlement is still granted (the user paid what Stripe
+  // charged; the config drift is ours), but the mismatch is recorded loudly instead of
+  // silently granting as if the displayed price was charged.
+  const amountCheck = verifyChargedAmount({
+    expectedAmountUsd: item.amountUsd,
+    amountSubtotalCents: session.amount_subtotal,
+    amountTotalCents: session.amount_total,
+    discountCents: session.total_details?.amount_discount,
+  })
+  if (amountCheck.matchesCatalog === false) {
+    console.error(
+      `[stripe/webhook] AMOUNT MISMATCH for sku=${item.sku}: catalog shows ${amountCheck.expectedAmountCents}c but session subtotal was ${amountCheck.subtotalCents}c (paid ${amountCheck.paidAmountCents}c, discount ${amountCheck.discountCents}c) — the Payment Link price has drifted from the displayed catalog price.`,
+    )
+  }
 
   const plan = await plans.upsert({
     where: { code: item.planFamily },
@@ -177,7 +213,7 @@ async function persistSubscriptionEntitlementFromCheckout(
     stripeCustomerId:
       typeof session.customer === "string" ? session.customer : null,
     stripeCheckoutSessionId: session.id,
-    currentPeriodStart: now,
+    currentPeriodStart: period.currentPeriodStart,
     currentPeriodEnd,
     gracePeriodEnd: null,
     canceledAt: null,
@@ -185,6 +221,14 @@ async function persistSubscriptionEntitlementFromCheckout(
     metadata: {
       purchaseType: "subscription",
       stripeSessionMode: session.mode ?? "subscription",
+      // Billing Truth provenance: whether the stored period is Stripe's real billing period
+      // (observed) or a local estimate (derived), and whether the charged subtotal matched
+      // the catalog price the user was shown.
+      periodSource: period.periodSource,
+      amountMatchesCatalog: amountCheck.matchesCatalog,
+      expectedAmountCents: amountCheck.expectedAmountCents,
+      paidAmountCents: amountCheck.paidAmountCents,
+      discountCents: amountCheck.discountCents,
     },
   }
 

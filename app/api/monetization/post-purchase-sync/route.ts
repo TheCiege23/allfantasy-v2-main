@@ -48,7 +48,20 @@ export async function GET(req: Request) {
                 select: { id: true, sku: true },
               })
               .catch(() => null)
-          : Promise.resolve(null),
+          : // Billing Truth: Payment-Link returns often carry no session id. Instead of
+            // reporting nothing (which the client used to paper over with a fake success),
+            // look for RECENT webhook evidence for this user so a verified purchase can still
+            // be confirmed honestly.
+            (prisma as any).userSubscription
+              .findFirst({
+                where: {
+                  userId,
+                  source: "stripe",
+                  updatedAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+                },
+                select: { id: true, sku: true },
+              })
+              .catch(() => null),
         sessionId
           ? (prisma as any).tokenLedger
               .findFirst({
@@ -61,7 +74,17 @@ export async function GET(req: Request) {
                 select: { id: true },
               })
               .catch(() => null)
-          : Promise.resolve(null),
+          : (prisma as any).tokenLedger
+              .findFirst({
+                where: {
+                  userId,
+                  sourceType: "stripe_checkout",
+                  entryType: "purchase",
+                  createdAt: { gte: new Date(Date.now() - 15 * 60 * 1000) },
+                },
+                select: { id: true },
+              })
+              .catch(() => null),
       ])
 
     await syncUserProfileFromSubscriptions(userId).catch(() => null)
@@ -77,7 +100,9 @@ export async function GET(req: Request) {
         ? "Purchase processed. Access state refreshed."
         : syncStatus === "pending"
           ? "Purchase is still finalizing. Retry shortly."
-          : "No checkout session id provided. Refreshed current state."
+          : subscriptionHit || tokenLedgerHit
+            ? "Purchase verified from recent billing activity. Access state refreshed."
+            : "We couldn't verify this checkout yet. Your access will appear once payment is confirmed."
 
     const subscriptionItem =
       subscriptionHit?.sku

@@ -71,7 +71,9 @@ export async function POST(req: Request) {
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
-      success_url: `${APP_URL}/donate/success?mode=${body.mode}`,
+      // {CHECKOUT_SESSION_ID} is substituted by Stripe — gives the success page a verifiable
+      // session reference instead of an unverifiable bare mode param.
+      success_url: `${APP_URL}/donate/success?mode=${body.mode}&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${APP_URL}/donate?mode=${body.mode}`,
       line_items: [
         {
