@@ -94,7 +94,7 @@ export function MatchupStartSitModal({
             </p>
             <p>
               <span className="font-semibold text-white/55">Win prob influence: </span>
-              {result.winProbabilityInfluence}
+              {result.winProbabilityInfluence || '—'}
             </p>
             <div className="grid grid-cols-2 gap-2 text-[11px]">
               <div className="rounded-lg border border-white/[0.06] p-2">
