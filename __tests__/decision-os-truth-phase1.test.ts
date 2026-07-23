@@ -1,6 +1,10 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbability'
+import {
+  computeMatchupWinProbability,
+  formatWinProbabilityPercents,
+  winProbabilitySortDistance,
+} from '@/lib/matchup-center/winProbability'
 import { buildMatchupInsightsBlock } from '@/lib/matchup-center/matchupAiInsights'
 import { buildManagerDnaViewModel } from '@/lib/decision-os/manager-dna'
 import { buildMinimalValidMatchupCenterPayload } from '@/lib/engine-testing/fixtures/enginePayloadBuilders'
@@ -30,6 +34,45 @@ describe('computeMatchupWinProbability', () => {
 
   it('refuses when totals are zero or negative (no evidence)', () => {
     expect(computeMatchupWinProbability(side(0), side(0))).toBeNull()
+    expect(computeMatchupWinProbability(side(-5), side(60))).toBeNull()
+    expect(computeMatchupWinProbability(side(60), side(-5))).toBeNull()
+  })
+
+  it('refuses malformed totals (NaN / Infinity) on either side', () => {
+    expect(computeMatchupWinProbability(side(Number.NaN), side(60))).toBeNull()
+    expect(computeMatchupWinProbability(side(60), side(Number.NaN))).toBeNull()
+    expect(computeMatchupWinProbability(side(Number.POSITIVE_INFINITY), side(60))).toBeNull()
+    expect(computeMatchupWinProbability(side(60), side(Number.POSITIVE_INFINITY))).toBeNull()
+  })
+
+  it('a true 50/50 is possible only from real evidence', () => {
+    expect(computeMatchupWinProbability(side(80), side(80))).toBe(0.5)
+    expect(computeMatchupWinProbability(side(80, true), side(80, true))).toBeNull()
+  })
+})
+
+describe('win-probability rendering unit (0-1 in, integer percents out)', () => {
+  it('renders honest percentages on the correct scale', () => {
+    expect(formatWinProbabilityPercents(0.5)).toEqual({ leftPct: 50, rightPct: 50 })
+    expect(formatWinProbabilityPercents(0.12)).toEqual({ leftPct: 12, rightPct: 88 })
+    expect(formatWinProbabilityPercents(0.88)).toEqual({ leftPct: 88, rightPct: 12 })
+  })
+
+  it('null never becomes 50/50', () => {
+    expect(formatWinProbabilityPercents(null)).toBeNull()
+    expect(formatWinProbabilityPercents(Number.NaN)).toBeNull()
+  })
+
+  it('sorting uses the same unit as rendering, unknowns last', () => {
+    expect(winProbabilitySortDistance(0.5)).toBe(0)
+    expect(winProbabilitySortDistance(0.12)).toBe(38)
+    expect(winProbabilitySortDistance(0.88)).toBe(38)
+    expect(winProbabilitySortDistance(null)).toBe(999)
+    // Closer contest sorts first; unknown sorts after every real probability.
+    const order = [0.88, null, 0.55, 0.12].sort(
+      (a, b) => winProbabilitySortDistance(a) - winProbabilitySortDistance(b)
+    )
+    expect(order).toEqual([0.55, 0.88, 0.12, null])
   })
 })
 
@@ -74,10 +117,12 @@ describe('source-level fabrication locks', () => {
     )
   })
 
-  it('PortfolioAnalytics never renders a fabricated 50% probability', () => {
+  it('PortfolioAnalytics never renders a fabricated 50% probability and shares the render/sort unit helpers', () => {
     const src = read('app/dashboard/universal/components/PortfolioAnalytics.tsx')
     expect(src).not.toContain('?? 50')
     expect(src).toContain('Win probability unavailable')
+    expect(src).toContain('formatWinProbabilityPercents')
+    expect(src).toContain('winProbabilitySortDistance')
   })
 
   it('MatchupHeaderCard shows an honest unavailable state instead of nothing', () => {

@@ -105,6 +105,8 @@ function BarChart({ data, orientation }: { data: CountBucket[]; orientation: 'ho
   )
 }
 
+import { formatWinProbabilityPercents, winProbabilitySortDistance } from '@/lib/matchup-center/winProbability'
+
 type MatchupSide = { teamName: string; totalPoints: number; projectedTotal: number }
 type MatchupPayload = {
   leagueId: string
@@ -154,8 +156,8 @@ export function PortfolioAnalytics({ leagues }: { leagues: BoardLeague[] }) {
       // "Best" = closest real contest — smallest |winProbabilityLeft - 50|, live matchups first.
       live.sort((a, b) => {
         if (a.payload.matchupStatus !== b.payload.matchupStatus) return a.payload.matchupStatus === 'live' ? -1 : 1
-        const distA = a.payload.winProbabilityLeft != null ? Math.abs(a.payload.winProbabilityLeft * 100 - 50) : 999
-        const distB = b.payload.winProbabilityLeft != null ? Math.abs(b.payload.winProbabilityLeft * 100 - 50) : 999
+        const distA = winProbabilitySortDistance(a.payload.winProbabilityLeft)
+        const distB = winProbabilitySortDistance(b.payload.winProbabilityLeft)
         return distA - distB
       })
       const top = live[0]
@@ -215,18 +217,21 @@ export function PortfolioAnalytics({ leagues }: { leagues: BoardLeague[] }) {
                 </p>
               ) : best ? (
                 <Link href={`/league/${encodeURIComponent(best.navId)}?tab=matchups`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                  {best.payload.winProbabilityLeft != null ? (
-                    <>
-                      <div className={styles.wpRow}>
-                        <span>{Math.round(best.payload.winProbabilityLeft * 100)}%</span>
-                        <span>{100 - Math.round(best.payload.winProbabilityLeft * 100)}%</span>
-                      </div>
-                      <div className={styles.wpBar}>
-                        <span className={styles.wpWin} style={{ width: `${best.payload.winProbabilityLeft * 100}%` }} />
-                        <span className={styles.wpLose} style={{ width: `${100 - best.payload.winProbabilityLeft * 100}%` }} />
-                      </div>
-                    </>
-                  ) : (
+                  {(() => {
+                    const pcts = formatWinProbabilityPercents(best.payload.winProbabilityLeft)
+                    return pcts ? (
+                      <>
+                        <div className={styles.wpRow}>
+                          <span>{pcts.leftPct}%</span>
+                          <span>{pcts.rightPct}%</span>
+                        </div>
+                        <div className={styles.wpBar}>
+                          <span className={styles.wpWin} style={{ width: `${pcts.leftPct}%` }} />
+                          <span className={styles.wpLose} style={{ width: `${pcts.rightPct}%` }} />
+                        </div>
+                      </>
+                    ) : null
+                  })() ?? (
                     <p className={styles.sub} style={{ marginTop: 8 }}>
                       Win probability unavailable — real projections are missing for some starters.
                     </p>
