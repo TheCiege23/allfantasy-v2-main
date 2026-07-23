@@ -197,6 +197,42 @@ describe('Invariant 2 — coverage never claims more than the adapter produced',
     expect(result.coverage.scoringSettings.state).toBe('missing')
   })
 
+  it('Fleaflicker leagueSettings drops to partial when the provider omits roster size', async () => {
+    const withoutRosterSize = await FleaflickerAdapter.normalize(fleaflickerPayload())
+    expect(withoutRosterSize.league.rosterSize).toBeNull()
+    expect(withoutRosterSize.coverage.leagueSettings.state).toBe('partial')
+
+    const withRosterSize = await FleaflickerAdapter.normalize(
+      fleaflickerPayload({ rosterRequirements: { rosterSize: 26 } }),
+    )
+    expect(withRosterSize.coverage.leagueSettings.state).toBe('full')
+  })
+
+  it('Fleaflicker standings are partial for multi-division leagues, where rank is derived', async () => {
+    const single = await FleaflickerAdapter.normalize(fleaflickerPayload())
+    expect(single.coverage.currentStandings.state).toBe('full')
+
+    const multi = fleaflickerPayload()
+    multi.standings.divisions.push({
+      id: 2,
+      name: 'West',
+      teams: [
+        {
+          id: 13,
+          name: 'Team Three',
+          recordOverall: { wins: 9, losses: 4, ties: 0 },
+          pointsFor: { value: 1600 },
+          owners: [{ id: 93, displayName: 'Manager Three' }],
+        },
+      ],
+    })
+
+    const result = await FleaflickerAdapter.normalize(multi)
+    // Rank is a positional index across divisions, so it is derived, not reported.
+    expect(result.coverage.currentStandings.state).toBe('partial')
+    expect(String(result.coverage.currentStandings.note)).toContain('rank')
+  })
+
   it('generalizes: a full/partial playoff bucket requires real playoff evidence', async () => {
     const cases = [
       await FleaflickerAdapter.normalize(fleaflickerPayload()),

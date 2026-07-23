@@ -136,7 +136,17 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
       player_map,
       league_branding: { avatar_url: lg.logoUrl ?? null, name: lg.name },
       coverage: {
-        leagueSettings: { state: 'full' },
+        // Import Certification Phase A: `full` is no longer unconditional. With the
+        // fabricated `?? 40` removed, a league whose response omits `rosterRequirements`
+        // genuinely has no roster size, and Fleaflicker never exposes scoring — so the
+        // settings we hold are incomplete and must say so.
+        leagueSettings:
+          rosterSize != null
+            ? { state: 'full' }
+            : {
+                state: 'partial',
+                note: 'Fleaflicker did not report a roster size for this league.',
+              },
         currentRosters: normalizedRosters.some((x) => x.player_ids.length > 0) ? { state: 'full' } : { state: 'partial', note: 'Roster players depend on FetchLeagueRosters' },
         historicalRosterSnapshots: { state: 'missing' },
         scoringSettings: {
@@ -150,7 +160,24 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
           state: 'missing',
           note: 'Fleaflicker’s public endpoints do not expose playoff structure or playoff-team count.',
         },
-        currentStandings: { state: 'full' },
+        // Import Certification Phase A: downgraded from `full`. `rank` here is a
+        // POSITIONAL index (`i + 1`) over teams flattened across divisions, not a
+        // provider-reported standing. For a single-division league that ordering is
+        // Fleaflicker's own and is right; across multiple divisions it interleaves them,
+        // so the overall rank is derived rather than sourced. The win/loss and points
+        // figures ARE real, which is why this is `partial` and not `missing`.
+        //
+        // The rank values themselves are deliberately left as-is: inventing a tiebreak
+        // rule to "correct" them would be another fabrication, and
+        // `NormalizedStandingsEntry.rank` is non-optional (see the Phase B note on the
+        // shared ESPN/Yahoo/MFL rank fallback).
+        currentStandings: {
+          state: standings.divisions.length > 1 ? 'partial' : 'full',
+          note:
+            standings.divisions.length > 1
+              ? 'Records and points are provider-reported, but overall rank is derived from division ordering, not reported by Fleaflicker.'
+              : null,
+        },
         currentSchedule: { state: 'missing' },
         draftHistory: { state: 'missing' },
         tradeHistory: { state: 'missing' },

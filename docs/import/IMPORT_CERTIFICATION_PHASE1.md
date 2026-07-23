@@ -26,6 +26,22 @@ which is not the same as a provider becoming more capable.
 | Backfill stamps `pending` for providers with no backfill service | ✅ Fixed — records `unsupported` |
 | Backfill `pending` can persist forever after a lost dispatch | ✅ Mitigated — `durable: false` + staleness deadline → `stale` |
 
+Three further items were found by the post-PR adversarial self-review and fixed in the same
+PR, all the same class and all inside files already being touched:
+
+| Self-review finding | Outcome |
+|---|---|
+| Fleaflicker `coverage.leagueSettings` claimed `full` even with `rosterSize` now null | ✅ `partial` when the provider omits roster size |
+| Fleaflicker `coverage.currentStandings` claimed `full`, but `rank` is a positional index across divisions, not a provider standing | ✅ `partial` + note for multi-division leagues; rank values left as-is, since inventing a tiebreak would be another fabrication |
+| `ImportProviderSelector` still appended "(coming soon)" to every unavailable provider, contradicting the corrected panel copy | ✅ Suffix now derives from `unavailableReason` |
+
+**Known and accepted, not fixed here:** `GET /api/mfl/leagues` is authenticated, read-only,
+and writes nothing — but it resolves the `MFLConnection` row from the `mfl_session` cookie
+rather than from the authenticated user, so the row is not bound to the AF account. Phase A
+stops any *new* `mfl_session` cookie from being minted (the route that issued it is
+disabled), so this surface decays as existing cookies expire. Proper user linkage requires
+the `MFLConnection` schema change tracked in Phase D.
+
 **Explicitly deferred to later phases** (unchanged by this PR):
 
 - **Decision OS ingestion wiring** — Phase B. Still no production caller.

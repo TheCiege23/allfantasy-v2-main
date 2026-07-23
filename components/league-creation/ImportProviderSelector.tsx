@@ -38,7 +38,19 @@ export function ImportProviderSelector({
               disabled={!opt.available}
             >
               {opt.label}
-              {!opt.available && ' (coming soon)'}
+              {/*
+                Import Certification Phase A: "(coming soon)" was shown for every
+                unavailable provider, which is wrong for Fantrax — its pipeline exists
+                and works, it just has no upload step in this wizard. The suffix now
+                reflects the actual reason (see `unavailableReason` in
+                provider-ui-config), so the dropdown and the panel below it agree.
+              */}
+              {!opt.available &&
+                (opt.unavailableReason === 'manual-upload-required'
+                  ? ' (manual upload)'
+                  : opt.unavailableReason === 'credential-entry-missing'
+                    ? ' (unavailable)'
+                    : ' (limited)')}
             </SelectItem>
           ))}
         </SelectContent>
