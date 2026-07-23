@@ -16,6 +16,12 @@ export function BillingSettingsSection() {
   const snap = ents.snapshot
   const hasAnySub = ents.hasAnyPaid
   const status = snap?.status ?? "none"
+  // A fetch error must never be conflated with a verified free plan -- the hook's own catch path
+  // leaves hasAnyPaid/snapshot at their last-known (false/null, on a first-load failure) value
+  // rather than proving "free," so this checks ents.error explicitly instead of trusting those
+  // fields alone. Matches the same pattern already applied to SettingsChrome.tsx and
+  // AccountSettingsSection.tsx -- this file was the one surface that pattern didn't reach.
+  const verificationFailed = Boolean(ents.error)
 
   return (
     <section className="space-y-4" data-testid="settings-billing-section">
@@ -25,7 +31,11 @@ export function BillingSettingsSection() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="mb-1 text-xs uppercase tracking-wider" style={{ color: "var(--muted2)" }}>{t("settings.billing.currentPlan")}</p>
-            {hasAnySub ? (
+            {verificationFailed ? (
+              <p className="text-sm font-semibold text-red-300" data-testid="settings-billing-unverified">
+                Unable to verify
+              </p>
+            ) : hasAnySub ? (
               <div className="flex flex-wrap items-center gap-2">
                 {ents.hasSupreme && (
                   <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-bold text-purple-300">
@@ -56,16 +66,22 @@ export function BillingSettingsSection() {
           <span
             className={[
               "rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-              status === "active"
-                ? "border-green-500/30 bg-green-500/10 text-green-300"
-                : status === "grace"
-                  ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
-                  : status === "past_due"
-                    ? "border-red-500/30 bg-red-500/10 text-red-300"
-                    : "border-white/[0.1] bg-white/[0.03] text-white/40",
+              verificationFailed
+                ? "border-red-500/30 bg-red-500/10 text-red-300"
+                : status === "active"
+                  ? "border-green-500/30 bg-green-500/10 text-green-300"
+                  : status === "grace"
+                    ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                    : status === "past_due"
+                      ? "border-red-500/30 bg-red-500/10 text-red-300"
+                      : "border-white/[0.1] bg-white/[0.03] text-white/40",
             ].join(" ")}
           >
-            {status === "none" ? t("settings.billing.statusFree") : status.replace(/_/g, " ")}
+            {verificationFailed
+              ? "Unable to verify"
+              : status === "none"
+                ? t("settings.billing.statusFree")
+                : status.replace(/_/g, " ")}
           </span>
         </div>
 
@@ -126,7 +142,7 @@ export function BillingSettingsSection() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {hasAnySub && !ents.isAdminBypassAccount ? (
+        {hasAnySub && !ents.isAdminBypassAccount && !verificationFailed ? (
           <a
             href="/api/subscription/billing-portal"
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-semibold transition hover:opacity-90"

@@ -60,38 +60,17 @@ export async function GET(req: Request) {
     const tokenBalanceResolver = new TokenBalanceResolver()
     const tokenSpendService = new TokenSpendService()
 
+    // Both resolvers are allowed to reject here -- a real backend/DB failure must fail the whole
+    // request (caught by the outer try/catch below, returning a genuine 500), the same contract
+    // /api/tokens/balance and /api/subscription/entitlements already use. Swallowing either
+    // failure into a fabricated { plans: [], status: "none" } / { balance: 0 } response would be
+    // indistinguishable from a real verified free/zero-balance account -- exactly what this PR
+    // exists to eliminate. Token-rule previews below are a different case: each is independently
+    // optional, so a single bad rule code degrading to a per-item error is the correct behavior,
+    // not a whole-request failure.
     const [entitlementResult, tokenBalance] = await Promise.all([
-      entitlementResolver
-        .resolveForUser(userId, featureId ?? undefined, session?.user?.email)
-        .catch((error) => {
-        console.error(
-          "[monetization/context GET] entitlement fallback",
-          error instanceof Error ? error.message : error
-        )
-        return {
-          entitlement: {
-            plans: [],
-            status: "none" as const,
-            currentPeriodEnd: null,
-            gracePeriodEnd: null,
-          },
-          hasAccess: false,
-          message: "Upgrade to access this feature.",
-        }
-      }),
-      tokenBalanceResolver.resolveForUser(userId, session?.user?.email).catch((error) => {
-        console.error(
-          "[monetization/context GET] token balance fallback",
-          error instanceof Error ? error.message : error
-        )
-        return {
-          balance: 0,
-          lifetimePurchased: 0,
-          lifetimeSpent: 0,
-          lifetimeRefunded: 0,
-          updatedAt: "",
-        }
-      }),
+      entitlementResolver.resolveForUser(userId, featureId ?? undefined, session?.user?.email),
+      tokenBalanceResolver.resolveForUser(userId, session?.user?.email),
     ])
 
     const rulePreviews = await Promise.all(

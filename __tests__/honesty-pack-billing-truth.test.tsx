@@ -7,6 +7,7 @@ import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
 import { getMonetizationCatalogItemBySku } from '@/lib/monetization/catalog'
 import { SUBSCRIPTION_TOKEN_POLICY_CONFIG } from '@/lib/tokens/subscription-policy'
 import { AccountSettingsSection } from '@/app/settings/components/sections/AccountSettingsSection'
+import { BillingSettingsSection } from '@/app/settings/components/sections/BillingSettingsSection'
 import { toast } from 'sonner'
 
 const root = resolve(__dirname, '..')
@@ -155,6 +156,93 @@ describe('Billing Truth — Account tab shows a real plan, not a hardcoded Free'
   })
 })
 
+describe('Billing Truth — Billing tab shows a real plan, not a hardcoded Free', () => {
+  beforeEach(() => {
+    fetchMock.mockReset()
+  })
+
+  function mockTokenBalanceSuccess() {
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        balance: 0,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+        isAdminBypassAccount: false,
+        lifetimePurchased: 0,
+        lifetimeSpent: 0,
+        lifetimeRefunded: 0,
+      }),
+    })
+  }
+
+  // Regression test for a review-caught bug: BillingSettingsSection (the actual Billing tab, one of
+  // this PR's own 5 headline "fixed" surfaces) never checked `ents.error` before deriving `hasAnySub`
+  // and the plan/status display -- a genuine entitlements fetch failure rendered "Free" and a "FREE"
+  // status pill, identical to a verified free account, with the real error appearing only as a small
+  // line far below. This must render "Unable to verify" instead, the same fix already applied to
+  // SettingsChrome.tsx and AccountSettingsSection.tsx.
+  it('renders "Unable to verify" (not "Free") when the entitlements fetch fails', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/subscription/entitlements')) {
+        return Promise.resolve({ ok: false, status: 500, json: async () => ({ error: 'boom' }) })
+      }
+      if (url.includes('/api/tokens/balance')) return mockTokenBalanceSuccess()
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+    })
+
+    render(<BillingSettingsSection />)
+
+    // Both the plan-text spot and the status pill share the same verificationFailed flag, so
+    // "Unable to verify" must appear twice -- neither may fall back to "AF Free" / "Free".
+    const errorSurfaces = await screen.findAllByText('Unable to verify')
+    expect(errorSurfaces.length).toBe(2)
+    expect(screen.queryByText('AF Free')).toBeNull()
+    expect(screen.queryByText('Free')).toBeNull()
+  })
+
+  it('renders the real plan and status once entitlements load successfully', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/subscription/entitlements')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            entitlement: { plans: ['supreme'], status: 'active', currentPeriodEnd: null, gracePeriodEnd: null },
+            isAdminBypassAccount: false,
+          }),
+        })
+      }
+      if (url.includes('/api/tokens/balance')) return mockTokenBalanceSuccess()
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+    })
+
+    render(<BillingSettingsSection />)
+
+    await screen.findByText('AF Supreme')
+    expect(screen.queryByText('Unable to verify')).toBeNull()
+  })
+
+  it('renders a genuine free account as Free, not conflated with an error state', async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url.includes('/api/subscription/entitlements')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            entitlement: { plans: [], status: 'none', currentPeriodEnd: null, gracePeriodEnd: null },
+            isAdminBypassAccount: false,
+          }),
+        })
+      }
+      if (url.includes('/api/tokens/balance')) return mockTokenBalanceSuccess()
+      return Promise.resolve({ ok: false, status: 404, json: async () => ({}) })
+    })
+
+    render(<BillingSettingsSection />)
+
+    await screen.findByText('AF Free')
+    expect(screen.queryByText('Unable to verify')).toBeNull()
+  })
+})
+
 describe('Billing Truth — checkout success is never claimed without real verification', () => {
   beforeEach(() => {
     fetchMock.mockReset()
@@ -229,6 +317,86 @@ describe('Billing Truth — no upgrade nag for already-entitled users', () => {
     const src = read('app/components/ImproveTradeModal.tsx')
     expect(src).toContain('alreadyHasPro')
     expect(src).toContain('moreCount >= MAX_MORE_CLICKS && !alreadyHasPro')
+  })
+})
+
+describe('Billing Truth — /api/monetization/context never fabricates a safe response on backend failure', () => {
+  // Regression test for a review-caught bug: the route swallowed a real EntitlementResolver /
+  // TokenBalanceResolver failure into a fabricated { plans: [], status: 'none' } / { balance: 0 }
+  // 200 response -- indistinguishable from a real, verified free/zero-balance account. useMonetizationContext
+  // already correctly treats a non-2xx response as unavailable (setError + setData(null)); the route
+  // just needed to stop hiding the failure behind a 200.
+  it('returns a real error status (not a fake 200) when the entitlement resolver fails', async () => {
+    vi.resetModules()
+    vi.doMock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'user-1', email: 'u@example.com' } }) }))
+    vi.doMock('@/lib/auth', () => ({ authOptions: {} }))
+    vi.doMock('@/lib/subscription/EntitlementResolver', () => ({
+      EntitlementResolver: class {
+        resolveForUser() {
+          return Promise.reject(new Error('db unreachable'))
+        }
+      },
+    }))
+    vi.doMock('@/lib/tokens/TokenBalanceResolver', () => ({
+      TokenBalanceResolver: class {
+        resolveForUser() {
+          return Promise.resolve({ balance: 42, lifetimePurchased: 0, lifetimeSpent: 0, lifetimeRefunded: 0, updatedAt: '' })
+        }
+      },
+    }))
+
+    const { GET } = await import('@/app/api/monetization/context/route')
+    const req = new Request('http://localhost/api/monetization/context')
+    const res = await GET(req)
+    const json = await res.json()
+
+    expect(res.status).toBeGreaterThanOrEqual(500)
+    expect(json.entitlement).toBeUndefined()
+    expect(json.tokenBalance).toBeUndefined()
+
+    vi.doUnmock('next-auth')
+    vi.doUnmock('@/lib/auth')
+    vi.doUnmock('@/lib/subscription/EntitlementResolver')
+    vi.doUnmock('@/lib/tokens/TokenBalanceResolver')
+    vi.resetModules()
+  })
+
+  it('returns a real error status (not a fake 200) when the token balance resolver fails', async () => {
+    vi.resetModules()
+    vi.doMock('next-auth', () => ({ getServerSession: vi.fn().mockResolvedValue({ user: { id: 'user-1', email: 'u@example.com' } }) }))
+    vi.doMock('@/lib/auth', () => ({ authOptions: {} }))
+    vi.doMock('@/lib/subscription/EntitlementResolver', () => ({
+      EntitlementResolver: class {
+        resolveForUser() {
+          return Promise.resolve({
+            entitlement: { plans: [], status: 'none', currentPeriodEnd: null, gracePeriodEnd: null },
+            hasAccess: false,
+            message: 'Upgrade to access this feature.',
+          })
+        }
+      },
+    }))
+    vi.doMock('@/lib/tokens/TokenBalanceResolver', () => ({
+      TokenBalanceResolver: class {
+        resolveForUser() {
+          return Promise.reject(new Error('db unreachable'))
+        }
+      },
+    }))
+
+    const { GET } = await import('@/app/api/monetization/context/route')
+    const req = new Request('http://localhost/api/monetization/context')
+    const res = await GET(req)
+    const json = await res.json()
+
+    expect(res.status).toBeGreaterThanOrEqual(500)
+    expect(json.tokenBalance).toBeUndefined()
+
+    vi.doUnmock('next-auth')
+    vi.doUnmock('@/lib/auth')
+    vi.doUnmock('@/lib/subscription/EntitlementResolver')
+    vi.doUnmock('@/lib/tokens/TokenBalanceResolver')
+    vi.resetModules()
   })
 })
 
