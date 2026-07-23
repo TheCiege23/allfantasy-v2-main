@@ -397,9 +397,17 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/chat", tool: "LegacyCh
 
         if (userContext) {
           systemPrompt += formatContextForSystemPrompt(userContext)
+        } else {
+          systemPrompt +=
+            '\n\nNOTE: No imported league context is available for this user yet. Say so when asked about their leagues — do NOT invent leagues, records, or roster details.'
         }
       } catch (err) {
         console.warn('Failed to build user context for chat:', err)
+        // Honesty: the model must know personalization failed, or it will answer as if it can
+        // see the user's leagues. Silent omission here produced confidently generic answers
+        // presented as personalized ones.
+        systemPrompt +=
+          '\n\nNOTE: The user\'s imported league context could not be loaded for this conversation. Tell them their league data is temporarily unavailable if they ask about their own leagues, and do NOT invent league details.'
       }
     }
 

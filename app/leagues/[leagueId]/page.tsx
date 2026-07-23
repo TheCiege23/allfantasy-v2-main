@@ -388,7 +388,7 @@ export default function LeagueHomeShellPage() {
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {/* League Snapshot */}
                 <Card title="League Snapshot" accent>
-                  <InlineNote text="Live from bracket league and standings APIs." />
+                  <InlineNote text="Combined league data — sections below populate as real data is wired." />
                   <div className="mt-3 space-y-1 text-sm text-white/80">
                     <div>League: {leagueSummary?.name || "Unknown"}</div>
                     <div>Members: {leagueSummary?._count?.members ?? 0}</div>

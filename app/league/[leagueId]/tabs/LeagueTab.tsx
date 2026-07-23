@@ -21,6 +21,7 @@ import type { LeagueActivityItem, LeagueActivityLine } from '@/components/league
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
 import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
 import { buildLeagueHomePulse } from '@/lib/decision-os/league-pulse'
+import { hasLeaguePulseData } from '@/lib/league/dataHonesty'
 import ManagerDnaCard from '@/components/decision-os/ManagerDnaCard'
 import DecisionRecommendationsCard from '@/components/decision-os/DecisionRecommendationsCard'
 import UserOsCard from '@/components/decision-os/UserOsCard'
@@ -623,14 +624,20 @@ export function LeagueTab({
       cancelled = true
     }
   }, [league.id])
+  // Honesty Pack 1A: League Pulse renders ONLY when a real qualifying signal exists.
+  // buildLeagueHomePulse scores from team-slot fill alone, so an imported league we know
+  // nothing about used to read ~88% "Healthy". Manager-intelligence presence is the real
+  // Decision OS signal available at this level; without it, no pulse is fabricated.
   const leaguePulse = useMemo(
     () =>
-      buildLeagueHomePulse({
-        league,
-        teams,
-        isCommissioner: Boolean(isCommissioner),
-        managerDna: managerIntelligence?.managerDna ?? null,
-      }),
+      hasLeaguePulseData({ managerDnaPresent: Boolean(managerIntelligence?.managerDna) })
+        ? buildLeagueHomePulse({
+            league,
+            teams,
+            isCommissioner: Boolean(isCommissioner),
+            managerDna: managerIntelligence?.managerDna ?? null,
+          })
+        : null,
     [isCommissioner, league, teams, managerIntelligence]
   )
   const managerDna = useMemo(
@@ -722,7 +729,13 @@ export function LeagueTab({
           />
         </>
       ) : null}
-      <LeaguePulseCard pulse={leaguePulse} variant="league" compact />
+      {leaguePulse ? (
+        <LeaguePulseCard pulse={leaguePulse} variant="league" compact />
+      ) : (
+        <p className="rounded-2xl border border-white/[0.07] bg-black/20 px-4 py-3 text-xs text-white/55">
+          No league activity available yet — the pulse appears once real activity is recorded.
+        </p>
+      )}
       <section className="grid gap-4 xl:grid-cols-2" aria-label="Manager guidance">
         <ManagerDnaCard profile={managerDna} variant="league" compact />
         <DecisionRecommendationsCard model={recommendations} variant="league" compact />

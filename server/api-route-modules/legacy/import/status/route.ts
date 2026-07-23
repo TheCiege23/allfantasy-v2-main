@@ -2,6 +2,10 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity';
+import {
+  importDisplayStateToStatus,
+  resolveLegacyImportDisplayState,
+} from '@/lib/legacy/dataStatus';
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/import/status", tool: "LegacyImportStatus" })(async (request: NextRequest) => {
   const jobId = request.nextUrl.searchParams?.get('job_id');
@@ -60,14 +64,44 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/import/status", tool: "
     return NextResponse.json({ error: 'Job not found' }, { status: 404 });
   }
 
+  // Honest display state: the DB only knows queued/running/completed/failed, but a run where
+  // some seasons failed used to render as a clean "completed". The completeness columns
+  // (totalSeasons/seasonsCompleted, written by the importer) let us derive partial/stale here.
+  const displayState = resolveLegacyImportDisplayState({
+    status: job.status,
+    completedAt: job.completedAt,
+    lastSyncedAt: job.completedAt,
+    errorMessage: job.error,
+    importedSeasonCount: job.seasonsCompleted,
+    expectedSeasonCount: job.totalSeasons,
+  });
+  const status = importDisplayStateToStatus(displayState, {
+    lastSyncedAt: job.completedAt,
+    importedSeasonCount: job.seasonsCompleted,
+    expectedSeasonCount: job.totalSeasons,
+    errorMessage: job.error,
+  });
+
+  // NOTE: honesty impression analytics deliberately do NOT fire here — this route is polled
+  // every 3s during an import and re-hit on every page load afterwards, so a server-side event
+  // would duplicate hundreds of times per user. The client (app/af-legacy) beacons the
+  // impression exactly once per job via sendProductAnalyticsBeacon.
   return NextResponse.json({
     job_id: job.id,
     status: job.status,
     progress: job.progress,
     error: job.error,
-    message: (job as any).message ?? null,
+    // `message` was read off a column that does not exist ((job as any).message) — it was
+    // always null. Now carries the honest user-facing status message.
+    message: status.message,
     started_at: job.startedAt,
     completed_at: job.completedAt,
+    display_state: displayState,
+    seasons_completed: job.seasonsCompleted,
+    total_seasons: job.totalSeasons,
+    total_leagues_saved: job.totalLeaguesSaved,
+    seasons_summary: job.seasonsSummary,
+    meta: { status },
   });
 })
 

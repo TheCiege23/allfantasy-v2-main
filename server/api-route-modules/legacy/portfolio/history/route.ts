@@ -11,6 +11,7 @@ import {
   SleeperTransaction,
 } from '@/lib/sleeper-client';
 import { getCanonicalPlayerMapForSport } from '@/lib/canonical/getCanonicalPlayer';
+import type { LegacyDataStatus } from '@/lib/legacy/dataStatus';
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -150,8 +151,9 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
     }
 
     const userTrades = await fetchUserTrades(leagueId, sleeperUser.userId);
-    
+
     let cumulative = 0;
+    let failedTradeCount = 0;
     const points: PortfolioPoint[] = [];
 
     for (const trade of userTrades) {
@@ -189,13 +191,14 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
         });
       } catch (err) {
         console.error(`Error processing trade ${trade.transactionId}:`, err);
+        failedTradeCount += 1;
       }
     }
 
     const totalDelta = cumulative;
     const averageDelta = points.length > 0 ? totalDelta / points.length : 0;
-    
-    const bestTrade = points.length > 0 
+
+    const bestTrade = points.length > 0
       ? points.reduce((best, p) => p.deltaValue > best.deltaValue ? p : best, points[0])
       : null;
     const worstTrade = points.length > 0
@@ -205,7 +208,12 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
     const avgVolatility = points.length > 0
       ? points.filter(p => p.volatility === 'High').length / points.length
       : 0;
-    const volatilityProfile = avgVolatility > 0.5 ? 'Aggressive' : avgVolatility > 0.25 ? 'Balanced' : 'Conservative';
+    // An empty portfolio has NO volatility profile — labeling zero trades "Conservative" was a
+    // fabricated inference. Empty string keeps the field's type for existing clients.
+    const volatilityProfile =
+      points.length === 0
+        ? ''
+        : avgVolatility > 0.5 ? 'Aggressive' : avgVolatility > 0.25 ? 'Balanced' : 'Conservative';
 
     const response: PortfolioHistoryResponse = {
       points,
@@ -216,7 +224,37 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/portfolio/history", too
       volatilityProfile
     };
 
-    return NextResponse.json(response);
+    const status: LegacyDataStatus =
+      points.length === 0
+        ? {
+            state: 'unavailable',
+            confidence: 'high',
+            source: 'sleeper',
+            lastUpdatedAt: null,
+            reasonCode: 'NO_TRADES_IMPORTED',
+            message: 'No completed trades were found in your imported Sleeper history for this league.',
+            retryable: true,
+          }
+        : failedTradeCount > 0
+          ? {
+              state: 'partial',
+              confidence: 'medium',
+              source: 'derived',
+              lastUpdatedAt: new Date().toISOString(),
+              reasonCode: 'SOME_TRADES_UNPRICEABLE',
+              message: `${failedTradeCount} trade(s) could not be valued and are not included.`,
+              retryable: true,
+            }
+          : {
+              state: 'available',
+              confidence: 'high',
+              source: 'derived',
+              lastUpdatedAt: new Date().toISOString(),
+              message: 'Trade portfolio computed from your imported Sleeper history.',
+              retryable: false,
+            };
+
+    return NextResponse.json({ ...response, meta: { status } });
   } catch (error: any) {
     console.error('Portfolio history error:', error);
     return NextResponse.json({ error: error.message || 'Failed to compute portfolio history' }, { status: 500 });

@@ -12,7 +12,6 @@ import EngagementEventTracker from '@/components/engagement/EngagementEventTrack
 import { DEFAULT_SPORT, SUPPORTED_SPORTS, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
-import { placeholderBaselineProjection } from '@/components/weather/placeholderBaseline'
 
 type WaiverType = 'FAAB' | 'ROLLING' | 'PRIORITY'
 type LeagueFormat = 'redraft' | 'dynasty' | 'keeper'

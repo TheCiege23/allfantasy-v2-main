@@ -372,25 +372,29 @@ export function NflRedraftLeagueHomeDashboard({
         <div className="rounded-3xl border border-white/[0.08] bg-white/[0.035] p-4">
           <div className="flex items-center gap-2">
             {isCommissioner ? <ShieldCheck className="h-5 w-5 text-violet-200" aria-hidden /> : <ClipboardList className="h-5 w-5 text-violet-200" aria-hidden />}
-            <h3 className="text-base font-black text-white">{isCommissioner ? 'Basic issue checklist' : 'Upcoming events'}</h3>
+            <h3 className="text-base font-black text-white">{isCommissioner ? 'Suggested checklist' : 'Suggested reminders'}</h3>
           </div>
+          {/* Honesty Pack 1A: these items previously rendered with green CheckCircle2 icons,
+              implying each was verified complete when nothing was checked. No real backing
+              signal exists for them at this level, so they render as neutral SUGGESTIONS —
+              no completion state is claimed. Wire real signals before restoring any check. */}
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             {(hasActiveRedraftSeason
               ? [
-                  isCommissioner ? 'Standings up to date' : 'Lineup set for this week',
-                  isCommissioner ? 'Waivers reviewed' : 'Waivers checked',
-                  'League rules reviewed',
-                  isCommissioner ? 'League chat announcement posted' : 'League chat open',
+                  isCommissioner ? 'Review standings' : 'Set your lineup for this week',
+                  isCommissioner ? 'Review pending waivers' : 'Check the waiver wire',
+                  'Review league rules',
+                  isCommissioner ? 'Post a league chat announcement' : 'Open league chat',
                 ]
               : [
-                  isCommissioner ? 'Draft setup reviewed' : 'Draft date checked',
-                  isCommissioner ? 'Managers invited' : 'Roster tab ready',
-                  'League rules reviewed',
-                  isCommissioner ? 'League chat announcement posted' : 'League chat open',
+                  isCommissioner ? 'Review draft setup' : 'Check the draft date',
+                  isCommissioner ? 'Invite remaining managers' : 'Review your roster tab',
+                  'Review league rules',
+                  isCommissioner ? 'Post a league chat announcement' : 'Open league chat',
                 ]
             ).map((item) => (
               <div key={item} className="flex items-center gap-2 rounded-2xl border border-white/[0.07] bg-black/20 px-3 py-2 text-xs text-white/65">
-                <CheckCircle2 className="h-4 w-4 text-cyan-300" aria-hidden />
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/30" aria-hidden />
                 {item}
               </div>
             ))}

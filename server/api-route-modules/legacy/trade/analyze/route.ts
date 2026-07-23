@@ -15,6 +15,7 @@ import { buildHistoricalTradeContext, getDataInfo } from '@/lib/historical-value
 import { autoLogDecision } from '@/lib/decision-log'
 import { computeNewsValueAdjustments, applyNewsAdjustmentsToValueMap, formatNewsAdjustmentsForPrompt, type PlayerNewsData, type NewsValueAdjustment } from '@/lib/news-value-adjustment'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
+import { buildTradeValuationEvidence, type TradeValuationEvidence } from '@/lib/legacy/intelligenceEvidence'
 import { getCachedDNA, formatDNAForPrompt } from '@/lib/manager-dna'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueUsers } from '@/lib/sleeper-client'
 import { lookupByNames, buildPlayerContextForAI, enrichWithValuation, type UnifiedPlayer } from '@/lib/unified-player-service'
@@ -2549,6 +2550,26 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     const hitRate = await getHistoricalHitRate(canonicalA, 'trade', leagueId || undefined).catch(() => null)
 
+    // Honesty (Task 2): classify every valuation that entered the balance math. Players the
+    // FantasyCalc lookup missed carry the flat ~200 fallback — that must reach the response as
+    // 'fallback', in missingInputs, and as lowered confidence, never as a market observation.
+    let valuationEvidence: TradeValuationEvidence | null = null
+    if (tradeBalance) {
+      valuationEvidence = buildTradeValuationEvidence({
+        sideAPlayers: tradeBalance.breakdown.sideA.players,
+        sideBPlayers: tradeBalance.breakdown.sideB.players,
+        unknownPlayers: tradeBalance.unknownPlayers,
+        foundValuesAdjusted: getScarcityMultiplier(numTeams) !== 1.0,
+      })
+    }
+
+    // playerCoverage previously used the fantasyCalcMap SIZE as a proxy — the map can contain
+    // uninvolved players, overstating coverage. When the balance breakdown exists, use the real
+    // found-vs-involved ratio so fallback-heavy trades honestly lower confidence.
+    const honestPlayerCoverage = valuationEvidence && valuationEvidence.players.length > 0
+      ? valuationEvidence.marketBackedCount / valuationEvidence.players.length
+      : involvedNames.length > 0 ? (fantasyCalcMap?.size || 0) / involvedNames.length : 1
+
     const crResult = computeConfidenceRisk({
       category: 'trade',
       userId: canonicalA || undefined,
@@ -2557,7 +2578,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       dataCompleteness: {
         hasHistoricalData: !!historicalContext,
         dataPointCount: fantasyCalcMap?.size || 0,
-        playerCoverage: involvedNames.length > 0 ? (fantasyCalcMap?.size || 0) / involvedNames.length : 1,
+        playerCoverage: honestPlayerCoverage,
         isCommonScenario: true,
       },
       tradeContext: {
@@ -2953,6 +2974,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         explanation: crResult.explanation,
       },
       ...(analyticsEnhanced ? { analytics: analyticsEnhanced } : {}),
+      ...(valuationEvidence ? { valuationEvidence } : {}),
       intelligenceAudit: providerAudit,
       ...(engineAnalysis ? { engineAnalysis, engineRequest: engineReqSaved } : {}),
       ...(offseasonContext ? { offseasonContext } : {}),
