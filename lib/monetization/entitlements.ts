@@ -1,3 +1,4 @@
+import { PAID_TIER_TOP_UPGRADE_CTA } from '@/lib/brand/display-names'
 import type { SubscriptionPlanFamily } from '@/lib/monetization/catalog'
 import type { SubscriptionFeatureId } from '@/lib/subscription/types'
 
@@ -273,7 +274,7 @@ export const ENTITLEMENTS = {
     description: 'Multi-year dynasty value projections with confidence scoring.',
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF Legacy',
+    upgradeLabel: PAID_TIER_TOP_UPGRADE_CTA,
     highlightParam: 'dynasty_projections',
   },
   war_room_devy_rankings: {
@@ -282,7 +283,7 @@ export const ENTITLEMENTS = {
     description: 'AI-generated college player rankings with campus scoring and pro projection scores.',
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF Legacy',
+    upgradeLabel: PAID_TIER_TOP_UPGRADE_CTA,
   },
   war_room_draft_strategy: {
     key: 'war_room_draft_strategy',
@@ -290,7 +291,7 @@ export const ENTITLEMENTS = {
     description: 'Real-time draft board advice with tier-break alerts and positional scarcity callouts.',
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF Legacy',
+    upgradeLabel: PAID_TIER_TOP_UPGRADE_CTA,
     highlightParam: 'draft_strategy',
   },
   war_room_pipeline_analysis: {
@@ -299,7 +300,7 @@ export const ENTITLEMENTS = {
     description: "AI assessment of your dynasty roster's campus/taxi/active pipeline health.",
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF Legacy',
+    upgradeLabel: PAID_TIER_TOP_UPGRADE_CTA,
   },
 } as const satisfies Record<string, EntitlementDef>
 

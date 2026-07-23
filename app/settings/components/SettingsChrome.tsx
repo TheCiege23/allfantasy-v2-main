@@ -1,5 +1,6 @@
 'use client'
 
+import { PAID_TIER_TOP_DISPLAY_NAME } from '@/lib/brand/display-names'
 import type { ComponentType, ReactNode } from 'react'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -118,7 +119,7 @@ function SidebarProfileCard({
           : ent.hasPro
             ? 'AF Pro'
             : ent.hasWarRoom
-              ? 'AF Legacy'
+              ? PAID_TIER_TOP_DISPLAY_NAME
               : 'Free'
   const planText = planLabel ?? derivedPlanText ?? '...'
 

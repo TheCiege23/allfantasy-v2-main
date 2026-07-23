@@ -1,3 +1,5 @@
+import { PAID_TIER_TOP_DISPLAY_NAME } from "@/lib/brand/display-names"
+
 export type PlanFamilyKey =
   | "af_pro"
   | "af_commissioner"
@@ -13,7 +15,7 @@ export const PLAN_FAMILY_SHORT_TAGLINE: Record<PlanFamilyKey, string> = {
   af_war_room:
     "Draft room plus dynasty & long-term planning for deep, year-round fantasy managers.",
   af_supreme:
-    "Pro + Commissioner + AF Legacy in one tier, plus maximum token discounts and platform priority.",
+    `Pro + Commissioner + ${PAID_TIER_TOP_DISPLAY_NAME} in one tier, plus maximum token discounts and platform priority.`,
 }
 
 /** Bullets for pricing cards (short lines for narrow columns). */
@@ -34,7 +36,7 @@ export const PLAN_FAMILY_INCLUDES: Record<PlanFamilyKey, readonly string[]> = {
     "3,000 monthly tokens or 36,000 yearly tokens included",
   ],
   af_supreme: [
-    "AF Pro + Commissioner + AF Legacy in one plan",
+    `AF Pro + Commissioner + ${PAID_TIER_TOP_DISPLAY_NAME} in one plan`,
     "1,500 monthly tokens or 18,000 yearly tokens included",
     "Best for commissioners and power users who live in the product",
   ],

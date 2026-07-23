@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { PAID_TIER_TOP_DISPLAY_NAME } from '@/lib/brand/display-names'
 import type { EntitlementsState } from '@/hooks/useEntitlements'
 import type { UseAccessTierResult } from '@/hooks/useAccessTier'
 
@@ -132,7 +133,7 @@ export function useViewAsRole({
 function resolvePlanLabel(e: EntitlementsState, tier: PlanTier, overridden: boolean): string {
   if (overridden) return tier === 'free' ? 'Free' : tier === 'token' ? 'Pro + Tokens' : 'Pro'
   if (e.hasSupreme) return 'AF Supreme'
-  if (e.hasWarRoom) return 'AF Legacy'
+  if (e.hasWarRoom) return PAID_TIER_TOP_DISPLAY_NAME
   if (e.hasCommissioner) return 'AF Commissioner'
   if (e.hasPro) return 'AF Pro'
   return 'Free'

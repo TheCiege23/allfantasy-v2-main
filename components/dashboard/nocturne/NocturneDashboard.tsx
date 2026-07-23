@@ -26,6 +26,7 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
+import { PAID_TIER_TOP_DISPLAY_NAME } from '@/lib/brand/display-names'
 import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
@@ -1263,7 +1264,7 @@ function parseToday(data: unknown): TodayShape | null {
 
 function resolvePlanChip(e: ReturnType<typeof useEntitlements>): string {
   if (e.hasSupreme) return 'AF Supreme'
-  if (e.hasWarRoom) return 'AF Legacy'
+  if (e.hasWarRoom) return PAID_TIER_TOP_DISPLAY_NAME
   if (e.hasCommissioner) return 'AF Commissioner'
   if (e.hasPro) return 'AF Pro'
   return 'Free'

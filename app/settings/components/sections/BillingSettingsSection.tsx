@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { PAID_TIER_TOP_DISPLAY_NAME } from "@/lib/brand/display-names"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
@@ -44,7 +45,7 @@ export function BillingSettingsSection() {
                 )}
                 {!ents.hasSupreme && ents.hasWarRoom && (
                   <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-300">
-                    AF Legacy
+                    {PAID_TIER_TOP_DISPLAY_NAME}
                   </span>
                 )}
               </div>
