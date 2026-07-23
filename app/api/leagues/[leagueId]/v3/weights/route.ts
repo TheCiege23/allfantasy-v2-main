@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 import { defaultWeights, saveWeightsSnapshot, listWeightsSnapshots } from "@/lib/rankings-engine/v3-weights"
 import { withApiUsage } from "@/lib/telemetry/usage"
+import { requireAdmin } from "@/lib/adminAuth"
 
 export const GET = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/v3/weights",
   tool: "V3Weights"
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
+  const gate = await requireAdmin()
+  if (!gate.ok) return gate.res
+
   const { leagueId } = ctx.params
   const url = new URL(req.url)
   const season = url.searchParams?.get("season") ?? undefined
@@ -18,6 +22,9 @@ export const POST = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/v3/weights",
   tool: "V3Weights"
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
+  const gate = await requireAdmin()
+  if (!gate.ok) return gate.res
+
   const { leagueId } = ctx.params
   const body = await req.json().catch(() => ({}))
 

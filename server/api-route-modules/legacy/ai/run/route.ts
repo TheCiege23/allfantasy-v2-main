@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { rateLimit } from "@/lib/rate-limit"
 import { trackLegacyToolUsage } from "@/lib/analytics-server"
 import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperIdentity"
+import { createDerivedFieldTracker, buildRunEvidence } from "@/lib/legacy/intelligenceEvidence"
 import {
   AI_CORE_PERSONALITY,
   getModeInstructions,
@@ -504,6 +505,9 @@ type NormalizedLegacyResponse = {
   next_season_advice: string
   share_text: string
   citations: LegacyCitation[]
+  /** Fields synthesized from snapshot formulas because the model omitted them — derived, not
+   * observed (Task 2 honesty). */
+  derived_fields: string[]
 }
 
 function toStringArray(value: unknown, max = 8): string[] {
@@ -625,8 +629,16 @@ function normalizeLegacyResponse(
       : snapshot.win_percentage >= 50
         ? "Competitive Manager"
         : "Rebuild Candidate"
-  const rating = toBoundedNumber(aiResponse.rating, 0, 100, Math.round(snapshot.win_percentage || 50))
-  const offseasonPower = toBoundedNumber(
+
+  // Honesty (Task 2): every field the model omits is filled by a FORMULA over the snapshot —
+  // a derived value, not an observation. The tracker records exactly which fields that
+  // happened to, so the response can label them and evidence can lower confidence.
+  const tracker = createDerivedFieldTracker()
+  const breakdown = aiResponse.power_index_breakdown as Record<string, unknown> | undefined
+
+  const rating = tracker.bounded("rating", aiResponse.rating, 0, 100, Math.round(snapshot.win_percentage || 50))
+  const offseasonPower = tracker.bounded(
+    "offseason_power_index",
     aiResponse.offseason_power_index,
     0,
     100,
@@ -635,82 +647,73 @@ function normalizeLegacyResponse(
 
   return {
     rating,
-    title:
-      typeof aiResponse.title === "string" && aiResponse.title.trim()
-        ? aiResponse.title
-        : fallbackTitle,
-    archetype:
-      typeof aiResponse.archetype === "string" && aiResponse.archetype.trim()
-        ? aiResponse.archetype
-        : "Balanced",
-    consistency_score: toBoundedNumber(
+    title: tracker.text("title", aiResponse.title, fallbackTitle),
+    archetype: tracker.text("archetype", aiResponse.archetype, "Balanced"),
+    consistency_score: tracker.bounded(
+      "consistency_score",
       aiResponse.consistency_score,
       0,
       100,
       Math.max(15, 100 - Math.round((snapshot.consistency_variance || 0) * 8)),
     ),
-    window_status:
-      typeof aiResponse.window_status === "string" && aiResponse.window_status.trim()
-        ? aiResponse.window_status
-        : "DIRECTION_NEEDED",
-    window_status_emoji:
-      typeof aiResponse.window_status_emoji === "string" && aiResponse.window_status_emoji.trim()
-        ? aiResponse.window_status_emoji
-        : "[direction-needed]",
-    window_status_label:
-      typeof aiResponse.window_status_label === "string" && aiResponse.window_status_label.trim()
-        ? aiResponse.window_status_label
-        : "Direction Needed",
-    offseason_label:
-      typeof aiResponse.offseason_label === "string" && aiResponse.offseason_label.trim()
-        ? aiResponse.offseason_label
-        : "Most Fragile Contender",
+    window_status: tracker.text("window_status", aiResponse.window_status, "DIRECTION_NEEDED"),
+    window_status_emoji: tracker.text("window_status_emoji", aiResponse.window_status_emoji, "[direction-needed]"),
+    window_status_label: tracker.text("window_status_label", aiResponse.window_status_label, "Direction Needed"),
+    offseason_label: tracker.text("offseason_label", aiResponse.offseason_label, "Most Fragile Contender"),
     offseason_power_index: offseasonPower,
     power_index_breakdown: {
-      roster_value: toBoundedNumber(
-        (aiResponse.power_index_breakdown as Record<string, unknown> | undefined)?.roster_value,
+      roster_value: tracker.bounded(
+        "power_index_breakdown.roster_value",
+        breakdown?.roster_value,
         0,
         100,
         Math.round(offseasonPower * 0.4),
       ),
-      positional_scarcity: toBoundedNumber(
-        (aiResponse.power_index_breakdown as Record<string, unknown> | undefined)?.positional_scarcity,
+      positional_scarcity: tracker.bounded(
+        "power_index_breakdown.positional_scarcity",
+        breakdown?.positional_scarcity,
         0,
         100,
         Math.round(offseasonPower * 0.25),
       ),
-      age_curve: toBoundedNumber(
-        (aiResponse.power_index_breakdown as Record<string, unknown> | undefined)?.age_curve,
+      age_curve: tracker.bounded(
+        "power_index_breakdown.age_curve",
+        breakdown?.age_curve,
         0,
         100,
         Math.round(offseasonPower * 0.2),
       ),
-      pick_capital: toBoundedNumber(
-        (aiResponse.power_index_breakdown as Record<string, unknown> | undefined)?.pick_capital,
+      pick_capital: tracker.bounded(
+        "power_index_breakdown.pick_capital",
+        breakdown?.pick_capital,
         0,
         100,
         Math.round(offseasonPower * 0.15),
       ),
     },
-    legacy_summary:
-      typeof aiResponse.legacy_summary === "string" && aiResponse.legacy_summary.trim()
-        ? aiResponse.legacy_summary
-        : `Standard-league profile: ${snapshot.win_percentage}% win rate across ${snapshot.total_standard_leagues} leagues with ${snapshot.championships} title(s).`,
+    legacy_summary: tracker.text(
+      "legacy_summary",
+      aiResponse.legacy_summary,
+      `Standard-league profile: ${snapshot.win_percentage}% win rate across ${snapshot.total_standard_leagues} leagues with ${snapshot.championships} title(s).`,
+    ),
     insights: {
       strengths: toStringArray(insights?.strengths),
       weaknesses: toStringArray(insights?.weaknesses),
       hall_of_fame_moments: toStringArray(insights?.hall_of_fame_moments),
       improvement_tips: toStringArray(insights?.improvement_tips),
     },
-    next_season_advice:
-      typeof aiResponse.next_season_advice === "string" && aiResponse.next_season_advice.trim()
-        ? aiResponse.next_season_advice
-        : "Focus on one clear lane this offseason: consolidate for contention or convert aging value into future assets.",
-    share_text:
-      typeof aiResponse.share_text === "string" && aiResponse.share_text.trim()
-        ? aiResponse.share_text
-        : `${snapshot.username}: ${rating}/100 legacy grade in standard leagues.`,
+    next_season_advice: tracker.text(
+      "next_season_advice",
+      aiResponse.next_season_advice,
+      "Focus on one clear lane this offseason: consolidate for contention or convert aging value into future assets.",
+    ),
+    share_text: tracker.text(
+      "share_text",
+      aiResponse.share_text,
+      `${snapshot.username}: ${rating}/100 legacy grade in standard leagues.`,
+    ),
     citations: normalizeCitations(aiResponse.citations, audit),
+    derived_fields: tracker.fields(),
   }
 }
 function createRequestId(): string {
@@ -1112,7 +1115,9 @@ Generate a comprehensive rating and analysis.`
         next_season_advice: normalized.next_season_advice,
         share_text: normalized.share_text,
         citations: normalized.citations,
+        derived_fields: normalized.derived_fields,
       },
+      evidence: buildRunEvidence({ audit: enrichmentAudit, derivedFields: normalized.derived_fields }),
       audit: enrichmentAudit,
       request_id: requestId,
       screen_response: screenResponse,

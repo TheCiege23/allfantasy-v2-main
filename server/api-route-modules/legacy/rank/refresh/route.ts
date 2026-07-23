@@ -4,6 +4,9 @@ import { prisma } from "@/lib/prisma";
 import { computeLegacyRankPreview } from "@/lib/ranking/computeLegacyRank";
 import { trackLegacyToolUsage } from "@/lib/analytics-server";
 import { requireLegacySleeperIdentity } from "@/lib/legacy/requireLegacySleeperIdentity";
+import { buildIntelligenceEvidence, type LegacyDataStatus } from "@/lib/legacy/dataStatus";
+import { recordProductEvent } from "@/lib/analytics";
+import { LEGACY_HONESTY } from "@/lib/analytics/eventNames";
 
 function safeNum(v: unknown, fallback = 0): number {
   const n = Number(v);
@@ -172,12 +175,45 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rank/refresh", tool: "
   // Track tool usage
   trackLegacyToolUsage('rank_refresh', legacyUser.id)
 
+  // Honesty envelope: the rank preview is DERIVED from imported history, and a manager with
+  // one thin season gets a numerically confident preview — the evidence block says how much
+  // history actually backs it. Rosterless leagues mean career stats coalesced from nothing.
+  const rosterlessLeagues = (leagues as any[]).length - myRosters.length;
+  const evidence = buildIntelligenceEvidence({
+    importedSeasonCount: seasonsPlayed,
+    matchupCount: league_history.reduce((s, lg) => s + safeNum(lg.wins, 0) + safeNum(lg.losses, 0) + safeNum(lg.ties, 0), 0),
+    tradeCount: null,
+    rosterCount: myRosters.length,
+    basedOn: ['Imported Sleeper league history', 'league settings'],
+  });
+  if (evidence.confidence === 'low') {
+    recordProductEvent(LEGACY_HONESTY.INTELLIGENCE_LOW_CONFIDENCE_SHOWN, {
+      path: '/api/legacy/rank/refresh',
+      meta: { surface: 'rank_preview', platform: 'sleeper', seasonsPlayed, rosterCount: myRosters.length },
+    });
+  }
+
   return NextResponse.json({
     ok: true,
     ranking_preview: preview,
     // Preserved from the old hand-rolled limiter: app/af-legacy reads this to render the
     // remaining-refreshes counter, so dropping it would blank that UI rather than error.
     rate_limit: gate.rateLimit ?? null,
+    meta: {
+      status: {
+        state: rosterlessLeagues > 0 ? 'partial' : 'available',
+        confidence: evidence.confidence,
+        source: 'derived',
+        lastUpdatedAt: new Date().toISOString(),
+        reasonCode: rosterlessLeagues > 0 ? 'ROSTERS_MISSING_FOR_SOME_LEAGUES' : undefined,
+        message:
+          rosterlessLeagues > 0
+            ? `Your roster could not be found in ${rosterlessLeagues} imported league(s); those seasons are not counted.`
+            : 'Ranking preview computed from your imported Sleeper history.',
+        retryable: false,
+      } satisfies LegacyDataStatus,
+      evidence,
+    },
   });
 })
 
