@@ -1,3 +1,5 @@
+import { getIncludedPremiumCreditsForSubscription } from "@/lib/tokens/subscription-policy"
+
 export type MonetizationSubscriptionSku =
   | "af_pro_monthly"
   | "af_pro_yearly"
@@ -14,6 +16,18 @@ export type MonetizationTokenPackSku =
   | "af_tokens_25"
 
 export type MonetizationSku = MonetizationSubscriptionSku | MonetizationTokenPackSku
+
+/**
+ * Included token amounts for subscription SKUs are computed from subscription-policy.ts —
+ * the same config the invoice.payment_succeeded webhook reads to actually grant credits
+ * (TokenSpendService.grantMonthlySubscriptionCredits) — rather than hardcoded here a second
+ * time. This is a structural fix: two independently hand-maintained copies of "how many
+ * tokens does this plan include" is exactly how af_pro/commissioner/war_room drifted out of
+ * sync with what's actually granted (by as much as 10x) while only af_supreme was patched.
+ */
+function subscriptionTokenAmount(planId: "pro" | "commissioner" | "war_room" | "supreme", interval: "month" | "year"): number {
+  return getIncludedPremiumCreditsForSubscription({ planId, interval })
+}
 
 // NOTE: internal plan family "af_war_room" is retained as the stable key; the
 // customer-facing name for this tier is "Legacy" (top all-access). Never surface
@@ -46,7 +60,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     amountUsd: 9.99,
     currency: "usd",
     interval: "month",
-    tokenAmount: 250,
+    tokenAmount: subscriptionTokenAmount("pro", "month"),
     planFamily: "af_pro",
     stripePriceEnvVar: "STRIPE_PRICE_AF_PRO_MONTHLY",
   },
@@ -58,7 +72,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     amountUsd: 99.99,
     currency: "usd",
     interval: "year",
-    tokenAmount: 3000,
+    tokenAmount: subscriptionTokenAmount("pro", "year"),
     planFamily: "af_pro",
     stripePriceEnvVar: "STRIPE_PRICE_AF_PRO_YEARLY",
   },
@@ -70,7 +84,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     amountUsd: 14.99,
     currency: "usd",
     interval: "month",
-    tokenAmount: 500,
+    tokenAmount: subscriptionTokenAmount("commissioner", "month"),
     planFamily: "af_commissioner",
     stripePriceEnvVar: "STRIPE_PRICE_AF_COMMISSIONER_MONTHLY",
   },
@@ -82,7 +96,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     amountUsd: 149.99,
     currency: "usd",
     interval: "year",
-    tokenAmount: 6000,
+    tokenAmount: subscriptionTokenAmount("commissioner", "year"),
     planFamily: "af_commissioner",
     stripePriceEnvVar: "STRIPE_PRICE_AF_COMMISSIONER_YEARLY",
   },
@@ -90,11 +104,14 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_war_room_monthly",
     type: "subscription",
     title: "AF Legacy Monthly",
-    description: "Everything in Supreme plus the live draft room, dynasty tools, and priority access.",
+    // Not "Everything in Supreme plus..." — Legacy is a separate draft/dynasty-focused track,
+    // not a superset of Supreme (expandPlansWithBundle treats Supreme as the top bundle that
+    // inherits Legacy, Commissioner, and Pro, not the other way around).
+    description: "Live draft room, dynasty tools, and priority access for year-round fantasy managers.",
     amountUsd: 29.99,
     currency: "usd",
     interval: "month",
-    tokenAmount: 3000,
+    tokenAmount: subscriptionTokenAmount("war_room", "month"),
     planFamily: "af_war_room",
     stripePriceEnvVar: "STRIPE_PRICE_AF_WAR_ROOM_MONTHLY",
   },
@@ -102,11 +119,11 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_war_room_yearly",
     type: "subscription",
     title: "AF Legacy Yearly",
-    description: "Everything in Supreme plus the live draft room, dynasty tools, and priority access.",
+    description: "Live draft room, dynasty tools, and priority access for year-round fantasy managers.",
     amountUsd: 299.99,
     currency: "usd",
     interval: "year",
-    tokenAmount: 36000,
+    tokenAmount: subscriptionTokenAmount("war_room", "year"),
     planFamily: "af_war_room",
     stripePriceEnvVar: "STRIPE_PRICE_AF_WAR_ROOM_YEARLY",
   },
@@ -119,11 +136,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     amountUsd: 19.99,
     currency: "usd",
     interval: "month",
-    // Must match lib/tokens/subscription-policy.ts's supreme.monthlyIncludedPremiumCredits — that
-    // policy value is what the invoice.payment_succeeded webhook actually grants (TokenSpendService
-    // .grantMonthlySubscriptionCredits). This field was previously 1500, overpromising vs. the 1000
-    // actually credited.
-    tokenAmount: 1000,
+    tokenAmount: subscriptionTokenAmount("supreme", "month"),
     planFamily: "af_supreme",
     stripePriceEnvVar: "STRIPE_PRICE_AF_SUPREME_MONTHLY",
   },
@@ -136,9 +149,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     amountUsd: 199.99,
     currency: "usd",
     interval: "year",
-    // Must match subscription-policy.ts's supreme.yearlyIncludedPremiumCredits (15000). Previously
-    // 18000, overpromising vs. what invoice.payment_succeeded actually grants.
-    tokenAmount: 15000,
+    tokenAmount: subscriptionTokenAmount("supreme", "year"),
     planFamily: "af_supreme",
     stripePriceEnvVar: "STRIPE_PRICE_AF_SUPREME_YEARLY",
   },

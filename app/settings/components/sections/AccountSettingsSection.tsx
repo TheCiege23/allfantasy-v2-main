@@ -4,6 +4,7 @@ import { useState } from "react"
 import { signOut } from "next-auth/react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
+import { getDisplayPlanNameForPlans } from "@/lib/subscription/feature-access"
 
 export function AccountSettingsSection({
   accountCreatedAt,
@@ -33,15 +34,7 @@ export function AccountSettingsSection({
   // proving "free," so this checks ents.error explicitly instead of trusting those booleans alone.
   const derivedPlanDisplay = ents.error
     ? "Unable to verify"
-    : ents.hasSupreme
-      ? "AF Supreme"
-      : ents.hasCommissioner
-        ? "AF Commissioner"
-        : ents.hasPro
-          ? "AF Pro"
-          : ents.hasWarRoom
-            ? "AF Legacy"
-            : t("settings.account.planFree")
+    : getDisplayPlanNameForPlans(ents.snapshot?.plans) ?? t("settings.account.planFree")
   const planDisplay = planLabel?.trim() || (ents.loading ? "..." : derivedPlanDisplay)
 
   const deletionMailto = `mailto:support@allfantasy.ai?subject=${encodeURIComponent(

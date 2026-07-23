@@ -4,6 +4,15 @@ import Link from "next/link"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
 import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget"
+import { getDisplayPlanName, resolveHighestPlanId } from "@/lib/subscription/feature-access"
+import type { SubscriptionPlanId } from "@/lib/subscription/types"
+
+const PLAN_BADGE_CLASS: Partial<Record<SubscriptionPlanId, string>> = {
+  supreme: "border-purple-400/30 bg-purple-500/10 text-purple-300",
+  commissioner: "border-violet-400/30 bg-violet-500/10 text-violet-300",
+  pro: "border-sky-400/30 bg-sky-500/10 text-sky-300",
+  war_room: "border-amber-400/30 bg-amber-500/10 text-amber-300",
+}
 
 export function BillingSettingsSection() {
   const { t, tInterpolate } = useLanguage()
@@ -16,6 +25,7 @@ export function BillingSettingsSection() {
   const snap = ents.snapshot
   const hasAnySub = ents.hasAnyPaid
   const status = snap?.status ?? "none"
+  const highestPlan = resolveHighestPlanId(snap?.plans)
 
   return (
     <section className="space-y-4" data-testid="settings-billing-section">
@@ -25,28 +35,13 @@ export function BillingSettingsSection() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="mb-1 text-xs uppercase tracking-wider" style={{ color: "var(--muted2)" }}>{t("settings.billing.currentPlan")}</p>
-            {hasAnySub ? (
+            {ents.error ? (
+              <p className="text-sm font-semibold text-red-300">Unable to verify</p>
+            ) : hasAnySub && highestPlan ? (
               <div className="flex flex-wrap items-center gap-2">
-                {ents.hasSupreme && (
-                  <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-bold text-purple-300">
-                    AF Supreme
-                  </span>
-                )}
-                {!ents.hasSupreme && ents.hasCommissioner && (
-                  <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-0.5 text-xs font-bold text-violet-300">
-                    AF Commissioner
-                  </span>
-                )}
-                {!ents.hasSupreme && ents.hasPro && (
-                  <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2.5 py-0.5 text-xs font-bold text-sky-300">
-                    AF Pro
-                  </span>
-                )}
-                {!ents.hasSupreme && ents.hasWarRoom && (
-                  <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-300">
-                    AF Legacy
-                  </span>
-                )}
+                <span className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${PLAN_BADGE_CLASS[highestPlan] ?? PLAN_BADGE_CLASS.pro}`}>
+                  {getDisplayPlanName(highestPlan)}
+                </span>
               </div>
             ) : (
               <p className="text-sm font-semibold text-white">{t("settings.billing.afFree")}</p>

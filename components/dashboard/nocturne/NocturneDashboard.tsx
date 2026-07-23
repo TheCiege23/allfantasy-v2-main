@@ -38,6 +38,7 @@ import {
 import { useAccessTier } from '@/hooks/useAccessTier'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useEntitlements } from '@/hooks/useEntitlements'
+import { getDisplayPlanNameForPlans } from '@/lib/subscription/feature-access'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useOptionalThemeMode } from '@/components/theme/ThemeProvider'
 import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
@@ -1262,11 +1263,7 @@ function parseToday(data: unknown): TodayShape | null {
 }
 
 function resolvePlanChip(e: ReturnType<typeof useEntitlements>): string {
-  if (e.hasSupreme) return 'AF Supreme'
-  if (e.hasWarRoom) return 'AF Legacy'
-  if (e.hasCommissioner) return 'AF Commissioner'
-  if (e.hasPro) return 'AF Pro'
-  return 'Free'
+  return getDisplayPlanNameForPlans(e.snapshot?.plans) ?? 'Free'
 }
 
 function gradePct(grade: string | null): number {

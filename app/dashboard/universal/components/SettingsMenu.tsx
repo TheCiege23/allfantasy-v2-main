@@ -20,17 +20,13 @@ import { useSettingsProfile } from '@/hooks/useSettingsProfile'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useOptionalThemeMode } from '@/components/theme/ThemeProvider'
-import { getDisplayPlanName } from '@/lib/subscription/feature-access'
+import { getDisplayPlanNameForPlans } from '@/lib/subscription/feature-access'
 import styles from './universal-dashboard.module.css'
 
 export function SettingsMenu({ onClose }: { onClose: () => void }) {
   const { profile } = useSettingsProfile()
   const { balance, loading: tokensLoading, error: tokensError, isAdminBypassAccount: tokensBypass } = useTokenBalance()
   const {
-    hasSupreme,
-    hasCommissioner,
-    hasPro,
-    hasWarRoom,
     snapshot,
     hasAnyPaid,
     loading: entsLoading,
@@ -48,21 +44,11 @@ export function SettingsMenu({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener('keydown', onKey)
   }, [onClose])
 
-  // Priority order matches every other plan badge in the app (supreme inherits every lower tier) —
-  // snapshot.plans[0] isn't guaranteed to be the highest tier, so it can't be used directly here.
   const planName = entsLoading
     ? '...'
     : entsError
       ? 'Unable to verify'
-      : hasSupreme
-        ? getDisplayPlanName('supreme')
-        : hasCommissioner
-          ? getDisplayPlanName('commissioner')
-          : hasPro
-            ? getDisplayPlanName('pro')
-            : hasWarRoom
-              ? getDisplayPlanName('war_room')
-              : 'AllFantasy Free'
+      : getDisplayPlanNameForPlans(snapshot?.plans) ?? 'AllFantasy Free'
   const renewsAt = snapshot?.currentPeriodEnd
     ? new Date(snapshot.currentPeriodEnd).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
     : null

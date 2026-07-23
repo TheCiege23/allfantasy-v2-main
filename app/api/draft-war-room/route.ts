@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     if (!proDraftAi.hasAccess && !warRoomStrategy.hasAccess) {
       return NextResponse.json(
         {
-          error: 'AF War Room access required. Upgrade to AF Pro or AF War Room to use Draft War Room.',
+          error: 'AF Legacy access required. Upgrade to AF Pro or AF Legacy to use Draft War Room.',
           locked: true,
         },
         { status: 403 },

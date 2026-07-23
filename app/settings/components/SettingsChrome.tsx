@@ -22,6 +22,7 @@ import {
 } from 'lucide-react'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useEntitlements } from '@/hooks/useEntitlements'
+import { getDisplayPlanNameForPlans } from '@/lib/subscription/feature-access'
 import { AVATAR_PRESET_EMOJI } from '@/lib/avatar'
 import type { SettingsProfile } from './sections/settings-types'
 import '../nocturne-settings.css'
@@ -111,15 +112,7 @@ function SidebarProfileCard({
     ? null
     : ent.error
       ? 'Unable to verify'
-      : ent.hasSupreme
-        ? 'AF Supreme'
-        : ent.hasCommissioner
-          ? 'AF Commissioner'
-          : ent.hasPro
-            ? 'AF Pro'
-            : ent.hasWarRoom
-              ? 'AF Legacy'
-              : 'Free'
+      : getDisplayPlanNameForPlans(ent.snapshot?.plans) ?? 'Free'
   const planText = planLabel ?? derivedPlanText ?? '...'
 
   const name = profile?.displayName || profile?.username || 'Your profile'

@@ -8,6 +8,7 @@ import { ChevronRight, LogOut, Plus, PlusCircle, Settings, User } from 'lucide-r
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
+import { resolvePlanChip } from './resolvePlanChip'
 import { LeagueListPanel } from './LeagueListPanel'
 import type { RightControlPanelLayoutProps, UserLeague } from '../types'
 
@@ -21,18 +22,6 @@ function profileInitials(name: string): string {
     return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
   }
   return base.slice(0, 2).toUpperCase() || '?'
-}
-
-function resolvePlanChip(ents: ReturnType<typeof useEntitlements>): {
-  label: string
-  dotClass: string
-} | null {
-  if (ents.loading) return null
-  if (ents.hasSupreme) return { label: 'AF Supreme', dotClass: 'bg-purple-400' }
-  if (ents.hasCommissioner) return { label: 'AF Commissioner', dotClass: 'bg-amber-400' }
-  if (ents.hasWarRoom) return { label: 'AF Legacy', dotClass: 'bg-blue-400' }
-  if (ents.hasPro) return { label: 'AF Pro', dotClass: 'bg-cyan-400' }
-  return { label: 'Free', dotClass: 'bg-white/30' }
 }
 
 export function RightControlPanel({

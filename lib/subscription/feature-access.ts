@@ -32,7 +32,7 @@ const SUBSCRIPTION_FEATURE_ID_SET = new Set<SubscriptionFeatureId>(
 
 const ENTITLEMENT_CATALOG_ID_SET = new Set<string>(Object.keys(ENTITLEMENTS))
 
-function planFamilyToSubscriptionPlanId(
+export function planFamilyToSubscriptionPlanId(
   family: SubscriptionPlanFamily
 ): SubscriptionPlanId | null {
   switch (family) {
@@ -83,6 +83,35 @@ export function getDisplayPlanName(planId: SubscriptionPlanId): string {
     case "enterprise":
       return "AF Enterprise"
   }
+}
+
+/**
+ * The one shared "which paid tier wins" resolver. Supreme inherits every lower tier, so it must
+ * win even when a user's `plans` array also contains commissioner/pro/war_room. Before this,
+ * at least 7 call sites hand-copied this same supreme > commissioner > pro > war_room priority
+ * chain with their own hardcoded display strings — every one of them correct today, but each a
+ * silent opportunity for the display name to drift from getDisplayPlanName the next time a tier
+ * is renamed. Returns null when the user has no recognized paid plan (caller decides the
+ * free/loading/error copy, since that varies by surface).
+ */
+export function resolveHighestPlanId(
+  plans: readonly string[] | null | undefined
+): SubscriptionPlanId | null {
+  if (!plans || plans.length === 0) return null
+  const set = new Set(plans)
+  if (set.has("supreme")) return "supreme"
+  if (set.has("commissioner")) return "commissioner"
+  if (set.has("pro")) return "pro"
+  if (set.has("war_room")) return "war_room"
+  return null
+}
+
+/** `resolveHighestPlanId` + `getDisplayPlanName` in one call. Null when no recognized paid plan. */
+export function getDisplayPlanNameForPlans(
+  plans: readonly string[] | null | undefined
+): string | null {
+  const highest = resolveHighestPlanId(plans)
+  return highest ? getDisplayPlanName(highest) : null
 }
 
 const PLAN_TO_MONTHLY_SKU: Partial<Record<SubscriptionPlanId, MonetizationSubscriptionSku>> = {

@@ -4,7 +4,9 @@ import {
   buildFeatureUpgradePath,
   getDisplayPlanName,
   getRequiredPlanForFeature,
+  planFamilyToSubscriptionPlanId,
 } from "@/lib/subscription/feature-access"
+import type { SubscriptionPlanFamily } from "@/lib/monetization/catalog"
 import type { SubscriptionFeatureId } from "@/lib/subscription/types"
 
 export type { SubscriptionFeatureId } from "@/lib/subscription/types"
@@ -16,11 +18,10 @@ const PLAN_UPGRADE_URLS: Record<string, string> = {
   supreme: "/pricing",
 }
 
-const PLAN_DISPLAY: Record<string, string> = {
-  af_pro: "AF Pro",
-  af_commissioner: "AF Commissioner",
-  af_war_room: "AF Legacy",
-  af_supreme: "AF Supreme",
+/** `ent.requiredPlan` entries are the prefixed SubscriptionPlanFamily form (e.g. "af_commissioner"). */
+function displayNameForPlanFamily(family: string): string {
+  const planId = planFamilyToSubscriptionPlanId(family as SubscriptionPlanFamily)
+  return planId ? getDisplayPlanName(planId) : family
 }
 
 export type GateDef = {
@@ -57,9 +58,9 @@ export function getGateDef(featureId: SubscriptionFeatureId): GateDef {
     const ent = cat as EntitlementDef
     const rawNames = ent.requiredPlan
       .filter((p) => p !== "af_supreme")
-      .map((p) => PLAN_DISPLAY[p] ?? p)
+      .map((p) => displayNameForPlanFamily(p))
     const requiredPlanDisplay =
-      rawNames.length > 0 ? rawNames : [PLAN_DISPLAY.af_supreme]
+      rawNames.length > 0 ? rawNames : [displayNameForPlanFamily("af_supreme")]
     const highlightFromCatalog = ent.highlightParam
     return {
       featureId,

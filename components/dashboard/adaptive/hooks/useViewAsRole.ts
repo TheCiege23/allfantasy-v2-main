@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import type { EntitlementsState } from '@/hooks/useEntitlements'
 import type { UseAccessTierResult } from '@/hooks/useAccessTier'
+import { getDisplayPlanNameForPlans } from '@/lib/subscription/feature-access'
 
 /**
  * The dashboard's effective role: plan tier × commissioner status.
@@ -131,9 +132,5 @@ export function useViewAsRole({
  */
 function resolvePlanLabel(e: EntitlementsState, tier: PlanTier, overridden: boolean): string {
   if (overridden) return tier === 'free' ? 'Free' : tier === 'token' ? 'Pro + Tokens' : 'Pro'
-  if (e.hasSupreme) return 'AF Supreme'
-  if (e.hasWarRoom) return 'AF Legacy'
-  if (e.hasCommissioner) return 'AF Commissioner'
-  if (e.hasPro) return 'AF Pro'
-  return 'Free'
+  return getDisplayPlanNameForPlans(e.snapshot?.plans) ?? 'Free'
 }
