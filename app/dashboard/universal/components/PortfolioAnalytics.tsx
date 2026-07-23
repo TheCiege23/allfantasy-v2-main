@@ -154,8 +154,8 @@ export function PortfolioAnalytics({ leagues }: { leagues: BoardLeague[] }) {
       // "Best" = closest real contest — smallest |winProbabilityLeft - 50|, live matchups first.
       live.sort((a, b) => {
         if (a.payload.matchupStatus !== b.payload.matchupStatus) return a.payload.matchupStatus === 'live' ? -1 : 1
-        const distA = a.payload.winProbabilityLeft != null ? Math.abs(a.payload.winProbabilityLeft - 50) : 999
-        const distB = b.payload.winProbabilityLeft != null ? Math.abs(b.payload.winProbabilityLeft - 50) : 999
+        const distA = a.payload.winProbabilityLeft != null ? Math.abs(a.payload.winProbabilityLeft * 100 - 50) : 999
+        const distB = b.payload.winProbabilityLeft != null ? Math.abs(b.payload.winProbabilityLeft * 100 - 50) : 999
         return distA - distB
       })
       const top = live[0]
@@ -215,14 +215,22 @@ export function PortfolioAnalytics({ leagues }: { leagues: BoardLeague[] }) {
                 </p>
               ) : best ? (
                 <Link href={`/league/${encodeURIComponent(best.navId)}?tab=matchups`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                  <div className={styles.wpRow}>
-                    <span>{Math.round(best.payload.winProbabilityLeft ?? 50)}%</span>
-                    <span>{100 - Math.round(best.payload.winProbabilityLeft ?? 50)}%</span>
-                  </div>
-                  <div className={styles.wpBar}>
-                    <span className={styles.wpWin} style={{ width: `${best.payload.winProbabilityLeft ?? 50}%` }} />
-                    <span className={styles.wpLose} style={{ width: `${100 - (best.payload.winProbabilityLeft ?? 50)}%` }} />
-                  </div>
+                  {best.payload.winProbabilityLeft != null ? (
+                    <>
+                      <div className={styles.wpRow}>
+                        <span>{Math.round(best.payload.winProbabilityLeft * 100)}%</span>
+                        <span>{100 - Math.round(best.payload.winProbabilityLeft * 100)}%</span>
+                      </div>
+                      <div className={styles.wpBar}>
+                        <span className={styles.wpWin} style={{ width: `${best.payload.winProbabilityLeft * 100}%` }} />
+                        <span className={styles.wpLose} style={{ width: `${100 - best.payload.winProbabilityLeft * 100}%` }} />
+                      </div>
+                    </>
+                  ) : (
+                    <p className={styles.sub} style={{ marginTop: 8 }}>
+                      Win probability unavailable — real projections are missing for some starters.
+                    </p>
+                  )}
                   <div className={styles.wpTeams}>
                     <span>
                       {best.payload.left.teamName} · {best.payload.left.totalPoints.toFixed(1)} pts

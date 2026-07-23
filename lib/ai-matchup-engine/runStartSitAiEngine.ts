@@ -236,8 +236,9 @@ export async function runStartSitAiEngine(params: {
         ifNeedFloor: 'If you need floor, favor the steadier projection and role.',
         ifNeedUpside: 'If you need upside, favor the higher ceiling environment if health is clear.',
       },
+      // No invented default: absent model output stays absent (empty renders nothing).
       winProbabilityInfluence:
-        typeof ds.winProbabilityInfluence === 'string' ? ds.winProbabilityInfluence : 'Marginal swing in tight weeks.',
+        typeof ds.winProbabilityInfluence === 'string' ? ds.winProbabilityInfluence : '',
       dataNotes: 'OpenAI synthesis unavailable — showing structured DeepSeek output only.',
       providers: { openai: 'error', deepseek: 'ok', grok: grokRes.status === 'ok' ? 'ok' : grokRes.status === 'skipped' ? 'skipped' : 'error' },
     }

@@ -37,6 +37,9 @@ function floorCeilingCopy(left: MatchupSidePayload, right: MatchupSidePayload, s
   const base = outdoor
     ? 'Outdoor sports: wind and game script can collapse ceilings for pass-catchers; secure floor with volume roles.'
     : 'Indoor / court sports: pace and minutes drive floor; watch back-to-backs and rest reports.'
+  // Ahead/behind claims come from projected totals — off-limits when either total includes
+  // the flat per-position fallback (the gap would be part-fabricated).
+  if (left.projectedTotalIncludesFallback || right.projectedTotalIncludesFallback) return base
   if (Math.abs(gap) < 2) return `${base} Projections are tight — prioritize safe floors if protecting a slim lead.`
   if (gap > 0) return `${base} You're ahead on paper — balance safe floors with one ceiling chase if you need insurance.`
   return `${base} You're trailing on paper — consider one volatile upside spot if the rest of the lineup is stable.`
@@ -50,11 +53,13 @@ export function buildMatchupInsightsBlock(params: {
   const { left, right, sport } = params
   const gap = left.projectedTotal - right.projectedTotal
   const matchupEdge =
-    Math.abs(gap) < 0.5
-      ? 'Projections are tight — one big game could swing this matchup.'
-      : gap > 0
-        ? `${left.teamName} projects ahead by ~${gap.toFixed(1)} — lean on floor plays to protect the lead.`
-        : `${right.teamName} projects ahead by ~${Math.abs(gap).toFixed(1)} — chase ceiling if you need points.`
+    left.projectedTotalIncludesFallback || right.projectedTotalIncludesFallback
+      ? 'Projected edge unavailable — real projections are missing for some starters, so no lead is claimed either way.'
+      : Math.abs(gap) < 0.5
+        ? 'Projections are tight — one big game could swing this matchup.'
+        : gap > 0
+          ? `${left.teamName} projects ahead by ~${gap.toFixed(1)} — lean on floor plays to protect the lead.`
+          : `${right.teamName} projects ahead by ~${Math.abs(gap).toFixed(1)} — chase ceiling if you need points.`
 
   const startSit = `Start/sit is advisory only — use ${sport} lineup locks and official injury designations as the source of truth.`
 

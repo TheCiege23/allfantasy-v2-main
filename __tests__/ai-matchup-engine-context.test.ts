@@ -18,6 +18,7 @@ const minimalPayload = (): MatchupCenterPayload => ({
     winPct: 0.66,
     totalPoints: 90,
     projectedTotal: 102,
+    projectedTotalIncludesFallback: false,
     remainingStarters: 3,
     starters: [
       {
@@ -29,6 +30,7 @@ const minimalPayload = (): MatchupCenterPayload => ({
         headshotUrl: null,
         currentPoints: 22,
         projectedPoints: 28,
+        hasRealProjection: true,
         injuryStatus: null,
         newsBlurb: 'x'.repeat(300),
         weatherSummary: null,
@@ -46,6 +48,7 @@ const minimalPayload = (): MatchupCenterPayload => ({
     winPct: 0.33,
     totalPoints: 88,
     projectedTotal: 99,
+    projectedTotalIncludesFallback: false,
     remainingStarters: 4,
     starters: [],
   },

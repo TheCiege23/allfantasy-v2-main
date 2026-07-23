@@ -74,7 +74,11 @@ export function MatchupHeaderCard({
             />
           </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="border-t border-white/[0.06] px-4 py-2 text-[9px] text-white/40">
+          Win probability unavailable — real projections are missing for some starters.
+        </div>
+      )}
     </div>
   )
 }

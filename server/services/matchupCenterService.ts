@@ -11,6 +11,7 @@ import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { MatchupCenterPayload, MatchupGameStatus, MatchupPlayerSlot, MatchupSidePayload } from '@/lib/matchup-center/types'
 import { buildMatchupInsightsBlock } from '@/lib/matchup-center/matchupAiInsights'
+import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbability'
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
 
@@ -187,6 +188,7 @@ export async function buildMatchupCenterPayload(params: {
       winPct: 0,
       totalPoints: 0,
       projectedTotal: 0,
+      projectedTotalIncludesFallback: false,
       starters: [],
       remainingStarters: 0,
     }
@@ -198,6 +200,7 @@ export async function buildMatchupCenterPayload(params: {
       winPct: 0,
       totalPoints: 0,
       projectedTotal: 0,
+      projectedTotalIncludesFallback: false,
       starters: [],
       remainingStarters: 0,
     }
@@ -320,6 +323,7 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stLeft?.wins ?? 0, stLeft?.losses ?? 0, stLeft?.ties ?? 0),
     totalPoints: tw?.totalPoints ?? leftSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: leftSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    projectedTotalIncludesFallback: leftSlots.some((s) => !s.hasRealProjection),
     starters: leftSlots,
     remainingStarters: leftSlots.filter((s) => s.gameStatus !== 'final').length,
   }
@@ -336,6 +340,7 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stRight?.wins ?? 0, stRight?.losses ?? 0, stRight?.ties ?? 0),
     totalPoints: oppResult?.totalPoints ?? rightSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: rightSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    projectedTotalIncludesFallback: rightSlots.some((s) => !s.hasRealProjection),
     starters: rightSlots,
     remainingStarters: rightSlots.filter((s) => s.gameStatus !== 'final').length,
   }
@@ -347,9 +352,7 @@ export async function buildMatchupCenterPayload(params: {
         ? 'live'
         : 'upcoming'
 
-  const totalProj = left.projectedTotal + right.projectedTotal
-  const winProb =
-    totalProj > 0 ? Math.max(0.05, Math.min(0.95, left.projectedTotal / totalProj)) : null
+  const winProb = computeMatchupWinProbability(left, right)
 
   return applyMatchupCommandCenterMeta({
     leagueId: params.leagueId,

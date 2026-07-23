@@ -25,6 +25,10 @@ export type MatchupPlayerSlot = {
 }
 
 export type MatchupSidePayload = {
+  /** True when projectedTotal sums at least one slot whose projection is the flat per-position
+   * fallback (hasRealProjection=false) — such totals must not drive win probability or
+   * projected-edge claims. */
+  projectedTotalIncludesFallback: boolean
   rosterId: string
   teamName: string
   avatarUrl: string | null
