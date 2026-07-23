@@ -14,6 +14,7 @@ import type { ImportedTradeLedgerPayload } from '@/lib/trade-intel/importedTrade
 import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard'
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
@@ -779,6 +780,9 @@ export function PendingTradeCard(props: {
 
 export function TradesTab({ league, teams }: TradesTabProps) {
   const sport = normalizeToSupportedSport(league.sport) ?? 'NFL'
+  // Non-null only for imported (SHADOW) leagues, where a trade built here never reaches the
+  // partner on their own platform. Drives every "Propose"→"Build a shadow trade" relabel.
+  const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
   /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
@@ -1146,7 +1150,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
               className="rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#ffd7e5] hover:bg-[#ff3d81]/20"
               data-testid="trades-tab-propose-trade-header"
             >
-              Propose a Trade
+              {tradeShadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
             </button>
           </div>
         ) : null}
@@ -1574,6 +1578,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           onClose={() => setProposeOpen(false)}
           leagueId={league.id}
           teams={teams}
+          platform={league.platform}
           onSubmitted={() => {
             setProposeOpen(false)
             void load()

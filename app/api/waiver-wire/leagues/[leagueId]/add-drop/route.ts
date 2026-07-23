@@ -9,6 +9,7 @@ import { assertLeagueActionGate } from "@/server/services/leagueActionGate"
 import { assertRosterTransactionsAllowed } from "@/lib/roster-legality/rosterTransactionGates"
 import { logAction } from "@/server/services/auditService"
 import { invalidateIntelligence } from "@/lib/dashboard/intelligence-events"
+import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
 
 export const dynamic = "force-dynamic"
 
@@ -69,7 +70,10 @@ export async function POST(req: NextRequest, { params }: { params: { leagueId: s
     }).catch(() => {})
     invalidateIntelligence({ leagueId, reason: "waiver_add_drop" })
 
-    return NextResponse.json(result)
+    // On an imported (SHADOW) league this move changed the AllFantasy twin only — the real
+    // roster on ESPN/Yahoo/Sleeper is untouched until the manager makes the move there.
+    const writeAuthority = await resolveWriteAuthorityEnvelope(leagueId, "waiver_add_drop")
+    return NextResponse.json({ ...result, writeAuthority })
   } catch (e) {
     const message = e instanceof Error ? e.message : "Add/drop failed"
     const code = mapAddDropErrorCode(message, { hasDrop: Boolean(dropPlayerId) })

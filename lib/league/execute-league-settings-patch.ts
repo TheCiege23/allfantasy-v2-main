@@ -11,6 +11,7 @@ import {
   buildLeagueUpdateFromBody,
 } from '@/lib/league/commissioner-league-patch'
 import { requireCommissionerRole } from '@/lib/league/permissions'
+import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isValidIanaTimeZone } from '@/lib/timezone'
 import { syncDraftSessionFromLeagueSettings } from '@/lib/league/league-settings-draft-sync'
 import { syncCommissionerDerivedLeagueState } from '@/lib/league/commissioner-settings-derived-sync'
@@ -481,6 +482,9 @@ export async function executeLeagueSettingsPatch(
   return NextResponse.json({
     success: true,
     updatedFields: [...new Set(updatedFieldNames)],
+    // Commissioner edits on an imported league rewrite AllFantasy's twin only. The source
+    // league's real settings on ESPN/Yahoo/Sleeper are unchanged, and the response says so.
+    writeAuthority: buildWriteAuthorityEnvelope('settings', league.platform),
     settings: lsOut
       ? {
           ...lsOut,
