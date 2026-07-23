@@ -59,6 +59,14 @@
       }
     },
     {
+      "name": "next-dev-admin-review",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:\\Users\\Guap_\\AppData\\Local\\Temp\\claude\\F--allfantasy-v2-main\\221dbb5c-da0e-4894-a0c3-f67b7fb6a892\\scratchpad\\start-admin-review-dev.cjs"
+      ],
+      "port": 4123
+    },
+    {
       "name": "prisma-studio",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["prisma", "studio"],

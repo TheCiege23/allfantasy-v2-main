@@ -48,7 +48,8 @@
     ".next/types/**/*.ts",
     ".next-dev-local/types/**/*.ts",
     ".next-playwright-3101/types/**/*.ts",
-    ".next-myteam-3100/types/**/*.ts"
+    ".next-myteam-3100/types/**/*.ts",
+    ".next-admin-review-4123/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

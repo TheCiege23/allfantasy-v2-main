@@ -34,6 +34,7 @@ const PROVIDER_TONE: Record<AdminProviderHealthStatus, OperatorTone> = {
   missing_env: "critical",
   configured_failing: "critical",
   disabled: "unknown",
+  unknown: "unknown",
 }
 
 function subTone(status: string): OperatorTone {
@@ -281,8 +282,14 @@ export async function SportsDataSection() {
         <Stat label="Mapping problems" value={identity.providerMappingProblems} tone={identity.providerMappingProblems > 0 ? "warn" : "healthy"} />
         <Stat
           label="Reconciliation"
-          value={metrics.providerTeamReconciliation.totalProblems}
-          tone={metrics.providerTeamReconciliation.totalProblems > 0 ? "warn" : "healthy"}
+          value={metrics.providerTeamReconciliation.unavailable ? "Unavailable" : metrics.providerTeamReconciliation.totalProblems}
+          tone={
+            metrics.providerTeamReconciliation.unavailable
+              ? "unknown"
+              : metrics.providerTeamReconciliation.totalProblems > 0
+                ? "warn"
+                : "healthy"
+          }
         />
       </div>
 
@@ -426,8 +433,8 @@ export async function AutomationSection() {
         </TableScroll>
       </Panel>
 
-      <Link href="/api/admin/automation" className="text-xs font-bold text-violet-300 hover:text-violet-200">
-        Automation API →
+      <Link href="/api/admin/automation/health" className="text-xs font-bold text-violet-300 hover:text-violet-200">
+        Automation health API →
       </Link>
     </div>
   )

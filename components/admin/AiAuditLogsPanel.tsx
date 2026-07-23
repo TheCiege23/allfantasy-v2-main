@@ -114,6 +114,7 @@ export function AiAuditLogsPanel() {
 
       const res = await fetch(`/api/admin/ai/audit-logs?${params.toString()}`, {
         signal: abortRef.current.signal,
+        cache: "no-store",
       })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const json = (await res.json()) as AuditResponse

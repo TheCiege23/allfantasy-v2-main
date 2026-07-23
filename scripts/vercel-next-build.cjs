@@ -59,9 +59,6 @@ const routeDirsToDisable = [
   path.join('app', 'api', 'auth', 'admin-debug'),
   // Internal recompute worker endpoint; no production UI callers and costs one route.
   path.join('app', 'api', 'bracket', 'workers', 'health'),
-  // Admin-only KPI rollup; consumed by components/admin/ChimmyKPIReadout which
-  // is not mounted in any production page route. Excluded to free Vercel route budget.
-  path.join('app', 'api', 'ai', 'analytics', 'rollup'),
   // Admin "Seed store" dev tool route. The Store UI exposes a Seed button, but
   // it is a developer-only seeding helper, not a production user action.
   path.join('app', 'api', 'marketplace', 'seed'),
@@ -153,6 +150,42 @@ const routeDirsToDisable = [
   path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'audit'),
   path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'outlook'),
   path.join('app', 'api', 'leagues', '[leagueId]', 'devy', 'scoring-presets'),
+  // ── Route-headroom pass, 2026-07-21 ───────────────────────────────────────
+  // Deployment was BLOCKED at the hard ceiling (2049/2048, `too_many_routes`).
+  // Verify the real number with `node scripts/vercel-route-budget.mjs` — pages
+  // cost TWO entries each (the page + its `.rsc` payload), which is why the old
+  // route-budget-count.mjs under-reported by ~277.
+  //
+  // Only modules PROVEN isolated from imported-league functionality, Decision OS,
+  // Legacy, Chimmy Intelligence, Commissioner OS and Manager OS are listed here.
+  // Deliberately NOT excluded, with evidence:
+  //   c2c        — a league VARIANT, not a module: `VALID_VARIANTS = ['dynasty',
+  //                'devy','c2c','keeper']` in app/api/commissioner/leagues/
+  //                [leagueId]/rookie-draft-order, plus an af-legacy C2C preview
+  //                that combines imported Sleeper + Fantrax leagues.
+  //   idp/keeper/guillotine/bestball/devy/survivor — fantasy FORMATS. Imported
+  //                external leagues using those formats must keep working even
+  //                when AF-native creation is off.
+  //   brackets/bracket/tournament/mock-draft — live: post-auth redirect targets,
+  //                Chimmy tool-routing destinations, world-cup reminder emails
+  //                and 6 active crons.
+  //   api/shared — not a game mode; backs useQuickAI/useActivityFeed/
+  //                useMediaUpload/useWalletSummary.
+  //
+  //   fantasy-media - REJECTED. components/media-generation/MediaGenerationPanel.tsx:144
+  //                builds share URLs as `${origin}/fantasy-media/${result.id}`, and that
+  //                panel is mounted on the live /media page (app/media/page.tsx:249).
+  //                Excluding it 404s every share link users have already generated.
+  //   wallet     - REJECTED. `/wallet` is a live nav item in
+  //                components/navigation/AppShellNav.tsx:39, SharedRightRail.tsx:80 and
+  //                shell/MobileNavigationDrawer.tsx:50. Only /wallet/deposit is retired.
+  //
+  // WARNING for whoever extends this list: ripgrep over this repo silently returns
+  // INCOMPLETE results - ~40 `.next-*` build dirs exhaust its time budget, and
+  // `[leagueId]` path segments are glob character classes, so brace/bracket globs
+  // skip the entire app/league/[leagueId] tree (the imported-league shell). Both
+  // fantasy-media and wallet were cleared by such a search and were WRONG.
+  // Use `git grep` (tracked files only) to prove a module has no callers.
 ]
 
 const movedFiles = []
@@ -161,6 +194,43 @@ let buildFailure = null // { step, message, stack, exitCode, signal }
 const filesToKeep = new Set([
   path.join('app', 'api', 'cron', '_auth.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'waivers', 'route.ts').replace(/\\/g, '/'),
+  // ── Sports-data ingestion crons — MUST ship (regression fix 2026-07-19) ──────
+  // `app/api/cron` is disabled wholesale above under the comment "keep non-core
+  // diagnostic/dev surfaces out of production route budget". That was never true of these
+  // 13: they are the live sports-data ingestion pipeline, every one has a real `vercel.json`
+  // schedule, and excluding them meant Vercel invoked each on schedule and got a 404 every
+  // time. Measured in production before this fix: `import-players` fired 4x/24h (correct for
+  // `0 */6 * * *`) and 404'd 4/4; `import-scores` 720x/24h, all 404. `SportsPlayer.fetchedAt`
+  // stopped advancing as a direct result.
+  //
+  // Only `waivers` had been rescued (2026-05-09), one symptom at a time, which is why it was
+  // the sole cron returning 200. Deliberately NOT re-included: the survivor / zombie /
+  // big-brother / devy crons, whose features are unshipped — those should lose their
+  // `vercel.json` entries rather than consume route budget.
+  path.join('app', 'api', 'cron', 'import-players', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-injuries', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-news', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-scores', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-standings', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-schedules', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-depth-charts', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-projections', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'adp-refresh', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'recompute-allfantasy-adp', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'draft-pool-prewarm', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'fantasy-os-exec-sync', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'trade-weekly-recalibration', 'route.ts').replace(/\\/g, '/'),
+  // All three are scheduled in vercel.json, and `app/api/cron` is excluded wholesale above, so
+  // every one of them needs a keep-line or Vercel invokes it on schedule and 404s every time —
+  // draft-tick at 1/min is 1440 failed calls a day. Same class as the regression #284 fixed.
+  //
+  // UNION, not either-or: this branch added the first two and main added the third
+  // independently. Keeping only one side silently re-breaks the other's cron.
+  path.join('app', 'api', 'cron', 'draft-tick', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'live-score-tick', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'sync-player-images', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'legacy-import-drain', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'import-season-stats', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),
@@ -182,6 +252,23 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'admin', 'fantasy-data', 'status', 'route.ts').replace(/\\/g, '/'),
   // Duplicate-manager fraud-hardening verification tool — used from /admin/duplicate-manager-verify.
   path.join('app', 'api', 'admin', 'duplicate-manager-verify', 'route.ts').replace(/\\/g, '/'),
+  // The `app/api/admin` exclusion above is justified as "verified to have zero production
+  // (non-admin) fetch callers". That is true of most of the tree, but NOT of these four: the
+  // admin dashboard UI (app/admin/**, which is NOT excluded and does ship) fetches all of them.
+  // Excluded but rendered = the panel loads and every one of these returns 404, so the cards fall
+  // back to zeros/empty. Verified against production: these returned 404 while kept siblings
+  // (status, ai/audit-logs) correctly returned 401.
+  path.join('app', 'api', 'admin', 'visitor-analytics', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'api-health', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'admin', 'chimmy', 'health', 'route.ts').replace(/\\/g, '/'),
+  // Also the endpoint the Stripe checkout-link verification step depends on — it has been
+  // recommended as the P0-A verification for days while silently 404ing in production.
+  path.join('app', 'api', 'admin', 'monetization', 'checkout-link-mapping', 'route.ts').replace(/\\/g, '/'),
+  // The Operator Command Center's Chimmy section mounts ChimmyKPIReadout, which fetches
+  // this route directly — it is no longer "not mounted in any production page route".
+  // Kept as an individual file rather than removing its routeDirsToDisable entry so the
+  // directory-level comment there stays an accurate historical record.
+  path.join('app', 'api', 'ai', 'analytics', 'rollup', 'route.ts').replace(/\\/g, '/'),
 ])
 
 function directoryExists(targetPath) {
@@ -709,4 +796,19 @@ async function run() {
   })
 }
 
-run()
+// Exported so scripts/route-budget-count.mjs and __tests__/route-budget.test.ts
+// can read the CANONICAL disable/keep lists instead of hand-duplicating them —
+// that duplication is exactly how the /api/admin/{visitor-analytics,api-health,
+// chimmy/health,monetization/checkout-link-mapping} 404 regression (#312) and the
+// /api/ai/analytics/rollup staleness shipped unnoticed. `require()`ing this file
+// (directly, or transitively via ESM/Vitest interop) never triggers a real build —
+// only direct CLI invocation (`node scripts/vercel-next-build.cjs`) does, via the
+// require.main guard below.
+module.exports = {
+  routeDirsToDisable: routeDirsToDisable.map((p) => p.replace(/\\/g, '/')),
+  filesToKeep: Array.from(filesToKeep),
+}
+
+if (require.main === module) {
+  run()
+}

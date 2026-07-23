@@ -130,9 +130,21 @@ export function buildOperatorAttentionQueue(data: AdminCommandCenterMetrics): Op
   }
 
   // Failed sync jobs (24h).
-  const failedSync = readMetric(data.integrity, "Failed sync jobs 24h")
-  const failedSyncCount = typeof failedSync?.value === "number" ? failedSync.value : 0
-  if (failedSyncCount > 0) {
+  const failedSyncMetric = readMetric(data.integrity, "Failed sync jobs 24h")
+  const failedSyncTracked = typeof failedSyncMetric?.value === "number"
+  const failedSyncCount = failedSyncTracked ? (failedSyncMetric!.value as number) : 0
+  if (!failedSyncTracked) {
+    items.push({
+      id: "sync-failures-unknown",
+      severity: "medium",
+      category: "Automation",
+      title: "Sync-failure status unknown — query failed",
+      affected: "Sports / data sync jobs",
+      evidence: "The syncJobRun failure-count query did not return a value; this is not evidence of zero failures.",
+      suggestedResponse: "Re-check the syncJobRun query and database connectivity.",
+      section: "automation",
+    })
+  } else if (failedSyncCount > 0) {
     items.push({
       id: "sync-failures",
       severity: failedSyncCount >= 5 ? "high" : "medium",
@@ -142,6 +154,20 @@ export function buildOperatorAttentionQueue(data: AdminCommandCenterMetrics): Op
       evidence: `syncJobRun rows with status failed/error in the last 24h: ${failedSyncCount}.`,
       suggestedResponse: "Inspect the failing sync jobs and their provider dependencies.",
       section: "automation",
+    })
+  }
+
+  // Provider/team reconciliation query failure — surfaced distinctly from "0 problems".
+  if (data.providerTeamReconciliation.unavailable) {
+    items.push({
+      id: "provider-reconciliation-unknown",
+      severity: "medium",
+      category: "Sports data",
+      title: "Provider/team reconciliation status unknown — query failed",
+      affected: "Provider ↔ canonical team mapping",
+      evidence: "The reconciliation summary query threw; the real problem count is unknown, not zero.",
+      suggestedResponse: "Re-check the reconciliation query and its data dependencies.",
+      section: "sports-data",
     })
   }
 
@@ -231,7 +257,8 @@ export function buildOperatorHealthRow(
     (r) => r.status === "missing" && r.severity === "critical",
   ).length
   const cronGaps = data.productionReadiness.crons.filter((c) => c.status !== "configured").length
-  const failedSync = numFromMetric(data.integrity, "Failed sync jobs 24h") ?? 0
+  const failedSyncRaw = numFromMetric(data.integrity, "Failed sync jobs 24h")
+  const failedSync = failedSyncRaw ?? 0
 
   // Composite platform health as an honest word, not a fabricated percentage.
   let platformValue = "Operational"
@@ -242,7 +269,7 @@ export function buildOperatorHealthRow(
   } else if (criticalEnvMissing > 0 || opts.attentionCritical > 0) {
     platformValue = "Degraded"
     platformTone = "critical"
-  } else if (providerGaps > 0 || cronGaps > 0 || failedSync > 0 || opts.attentionHigh > 0) {
+  } else if (providerGaps > 0 || cronGaps > 0 || failedSyncRaw === null || failedSync > 0 || opts.attentionHigh > 0) {
     platformValue = "Degraded"
     platformTone = "warn"
   }
@@ -284,10 +311,10 @@ export function buildOperatorHealthRow(
     },
     {
       label: "Sync failures 24h",
-      value: failedSync.toLocaleString(),
-      tone: failedSync >= 5 ? "critical" : failedSync > 0 ? "warn" : "healthy",
-      note: "syncJobRun failed/error rows",
-      tracked: true,
+      value: failedSyncRaw === null ? "Unknown" : failedSync.toLocaleString(),
+      tone: failedSyncRaw === null ? "unknown" : failedSync >= 5 ? "critical" : failedSync > 0 ? "warn" : "healthy",
+      note: failedSyncRaw === null ? "Query failed — not a confirmed zero" : "syncJobRun failed/error rows",
+      tracked: failedSyncRaw !== null,
     },
     {
       label: "Cron readiness",
@@ -346,7 +373,8 @@ export function buildOperatorServiceHealth(data: AdminCommandCenterMetrics): Ope
     data.sportsIdentityHealth.summary.identityProblems +
     data.sportsIdentityHealth.summary.imageProblems +
     data.sportsIdentityHealth.summary.providerMappingProblems
-  const failedSync = numFromMetric(data.integrity, "Failed sync jobs 24h") ?? 0
+  const failedSyncRaw = numFromMetric(data.integrity, "Failed sync jobs 24h")
+  const failedSync = failedSyncRaw ?? 0
 
   return [
     {
@@ -363,9 +391,9 @@ export function buildOperatorServiceHealth(data: AdminCommandCenterMetrics): Ope
     },
     {
       name: "Automation / cron",
-      status: cronGaps === 0 && failedSync === 0 ? "Operational" : "Degraded",
-      tone: cronGaps === 0 && failedSync === 0 ? "healthy" : "warn",
-      detail: `${cronGaps} cron gap(s) · ${failedSync} failed sync 24h`,
+      status: failedSyncRaw === null ? "Unknown" : cronGaps === 0 && failedSync === 0 ? "Operational" : "Degraded",
+      tone: failedSyncRaw === null ? "unknown" : cronGaps === 0 && failedSync === 0 ? "healthy" : "warn",
+      detail: failedSyncRaw === null ? `${cronGaps} cron gap(s) · sync status unknown` : `${cronGaps} cron gap(s) · ${failedSync} failed sync 24h`,
     },
     {
       name: "Sports data quality",

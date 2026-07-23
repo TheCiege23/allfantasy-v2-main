@@ -1,5 +1,4 @@
 import Link from "next/link"
-import { RefreshCw } from "lucide-react"
 import { getOperatorOverviewData } from "@/lib/admin-dashboard/operatorData"
 import {
   buildOperatorAttentionQueue,
@@ -8,6 +7,7 @@ import {
   summarizeAttention,
 } from "@/lib/admin-dashboard/operatorAttention"
 import type { AdminProviderHealthStatus } from "@/lib/admin-dashboard/AdminProviderHealthService"
+import { getDeploymentIdentity } from "@/lib/admin-dashboard/deploymentIdentity"
 import { OPERATOR_BASE_PATH } from "@/lib/admin-dashboard/operatorNav"
 import {
   Panel,
@@ -19,6 +19,7 @@ import {
   type OperatorTone,
 } from "@/components/admin/operator/primitives"
 import { AttentionQueueList } from "@/components/admin/operator/AttentionQueueList"
+import { RefreshButton } from "@/components/admin/operator/RefreshButton"
 
 export const dynamic = "force-dynamic"
 
@@ -30,6 +31,7 @@ const PROVIDER_TONE: Record<AdminProviderHealthStatus, OperatorTone> = {
   missing_env: "critical",
   configured_failing: "critical",
   disabled: "unknown",
+  unknown: "unknown",
 }
 
 function providerLabel(status: AdminProviderHealthStatus): string {
@@ -85,6 +87,7 @@ export default async function OperatorOverviewPage() {
   }
 
   const { metrics, activeLeagues } = data
+  const deployment = getDeploymentIdentity()
   const attention = buildOperatorAttentionQueue(metrics)
   const { total, bySeverity } = summarizeAttention(attention)
   const health = buildOperatorHealthRow(metrics, {
@@ -110,17 +113,41 @@ export default async function OperatorOverviewPage() {
         action={
           <div className="flex items-center gap-2">
             <DataFreshnessBadge generatedAt={metrics.generatedAt} />
-            <Link
-              href={OPERATOR_BASE_PATH}
-              title="Refresh"
-              className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-xs font-bold text-slate-300 hover:bg-white/[0.06]"
-            >
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-              Refresh
-            </Link>
+            <RefreshButton />
           </div>
         }
       />
+
+      {/* Deployment identity — makes it unmistakable which build/environment/DB this is. */}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2 text-xs">
+        <StatusPill tone={deployment.environment === "production" ? "critical" : deployment.environment === "staging" ? "warn" : "unknown"}>
+          {deployment.environmentLabel}
+        </StatusPill>
+        <span className="text-slate-500">v{deployment.version}</span>
+        <span className="text-slate-600">·</span>
+        <span title={deployment.commitSha ?? "No commit SHA in this environment"} className="font-mono text-slate-400">
+          {deployment.commitShaShort ?? "no-sha"}
+        </span>
+        {deployment.branch ? (
+          <>
+            <span className="text-slate-600">·</span>
+            <span className="text-slate-400">{deployment.branch}</span>
+          </>
+        ) : null}
+        {deployment.deploymentUrl ? (
+          <>
+            <span className="text-slate-600">·</span>
+            <span className="truncate text-slate-500">{deployment.deploymentUrl}</span>
+          </>
+        ) : null}
+        <span className="text-slate-600">·</span>
+        <span title="One-way fingerprint of the DB connection host — not the host itself" className="font-mono text-slate-500">
+          db:{deployment.databaseHostFingerprint ?? "unknown"}
+        </span>
+        <span className="ml-auto text-slate-600">
+          process started {new Date(deployment.processStartedAt).toLocaleString("en-US", { timeZone: "America/New_York", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} ET
+        </span>
+      </div>
 
       {/* Health row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">

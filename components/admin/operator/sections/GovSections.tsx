@@ -19,6 +19,7 @@ import {
   getEnabledSports,
 } from "@/lib/feature-toggle/PlatformConfigResolver"
 import type { EnvReadinessRow } from "@/lib/admin-dashboard/AdminProductionReadinessService"
+import { getDeploymentIdentity } from "@/lib/admin-dashboard/deploymentIdentity"
 import {
   Panel,
   Stat,
@@ -268,6 +269,7 @@ function envRowTone(row: EnvReadinessRow): OperatorTone {
 export async function SystemSettingsSection() {
   const { metrics } = await getOperatorOverviewData()
   const env = getOperatorEnvironment()
+  const deployment = getDeploymentIdentity()
   const readiness = metrics.productionReadiness
 
   return (
@@ -276,6 +278,34 @@ export async function SystemSettingsSection() {
         Read-only configuration state. Editable, validated, versioned, audited settings are planned. Values below are
         real environment/readiness signals.
       </PartialDataWarning>
+
+      <Panel eyebrow="Deployment" title="What the browser is talking to">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <Stat label="Version" value={deployment.version} />
+          <Stat label="Commit" value={deployment.commitShaShort ?? "no-sha"} />
+          <Stat label="Branch" value={deployment.branch ?? "unknown"} />
+          <Stat label="Deployment URL" value={deployment.deploymentUrl ?? "unknown"} />
+          <Stat
+            label="DB fingerprint"
+            value={deployment.databaseHostFingerprint ?? "unknown"}
+            tone="unknown"
+          />
+          <Stat
+            label="Process started"
+            value={new Date(deployment.processStartedAt).toLocaleString("en-US", {
+              timeZone: "America/New_York",
+              month: "short",
+              day: "numeric",
+              hour: "numeric",
+              minute: "2-digit",
+            })}
+          />
+        </div>
+        <p className="mt-3 text-[11px] text-slate-500">
+          Full commit SHA: <span className="font-mono text-slate-400">{deployment.commitSha ?? "not set in this environment"}</span>.
+          DB fingerprint is a one-way hash of the connection host — never the host, credentials, or database name.
+        </p>
+      </Panel>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label="Environment" value={env.label} tone={env.isProduction ? "critical" : "info"} />

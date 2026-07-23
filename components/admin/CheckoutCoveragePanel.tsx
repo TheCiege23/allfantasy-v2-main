@@ -84,7 +84,7 @@ export function CheckoutCoveragePanel() {
     setLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/admin/monetization/checkout-link-mapping")
+      const res = await fetch("/api/admin/monetization/checkout-link-mapping", { cache: "no-store" })
       const body = await res.json().catch(() => ({}))
       if (res.status === 401 || res.status === 403) {
         setError("Admin account required to view checkout coverage")

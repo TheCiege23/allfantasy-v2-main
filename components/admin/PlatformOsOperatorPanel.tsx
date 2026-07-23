@@ -58,7 +58,7 @@ export function PlatformOsOperatorPanel() {
     setError(null)
     try {
       const params = new URLSearchParams({ leagueIds: trimmedInput })
-      const res = await fetch(`/api/decision-os/platform-os?${params.toString()}`)
+      const res = await fetch(`/api/decision-os/platform-os?${params.toString()}`, { cache: "no-store" })
       const body = await res.json().catch(() => null)
       if (!res.ok) {
         throw new Error(body?.error ?? `HTTP ${res.status}`)

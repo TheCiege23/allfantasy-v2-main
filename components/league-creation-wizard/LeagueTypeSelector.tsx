@@ -25,7 +25,6 @@ const LEAGUE_TYPE_TOOLTIPS: Partial<Record<LeagueTypeId, string>> = {
   c2c: 'Campus to Canton: college + pro assets in one league with live college scoring; supports football and basketball ecosystems.',
   guillotine: 'Lowest scorer each week is eliminated. Roster released to waivers. Last team standing wins.',
   survivor: 'Tribes compete weekly. Losing tribe votes someone out. Idols, exile island, merge, jury — full Survivor experience.',
-  tournament: 'Multi-league tournament. Conferences, advancement rounds, redrafts, and a championship bracket. 60-240 players.',
   zombie: 'Infection mechanics, whisperer role, serums & weapons. Eliminated teams can spread the virus.',
   salary_cap: 'Salary cap and contracts.',
 }
@@ -33,7 +32,6 @@ const LEAGUE_TYPE_TOOLTIPS: Partial<Record<LeagueTypeId, string>> = {
 const LEAGUE_TYPE_BADGES: Partial<Record<LeagueTypeId, 'POPULAR' | 'NEW' | 'FLAGSHIP'>> = {
   redraft: 'POPULAR',
   survivor: 'FLAGSHIP',
-  tournament: 'FLAGSHIP',
   guillotine: 'NEW',
   zombie: 'NEW',
   salary_cap: 'NEW',

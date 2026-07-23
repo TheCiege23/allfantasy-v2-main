@@ -110,13 +110,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       introVideoUrl: '/league-type-survivor-intro.mp4',
       introPosterUrl: '/league-type-survivor.png',
     },
-    {
-      id: 'tournament',
-      title: 'Tournament',
-      subtitle: 'Multi-league elimination event',
-      introVideoUrl: '/league-type-tournament-intro.mp4',
-      introPosterUrl: '/league-type-tournament.png',
-    },
+    // Tournament Mode retired from active creation (2026-07-23). Removing the
+    // catalog entry takes it out of every creation selector; the server also
+    // refuses the concept (lib/league-creation/retiredConcepts.ts). Existing
+    // tournaments keep working — this list only drives NEW league creation.
     {
       id: 'big_brother',
       title: 'Big Brother',
