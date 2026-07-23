@@ -35,6 +35,7 @@ import {
 } from "@/lib/sports-os/ProviderTeamReconciliationService"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { isSubscriptionEntitlementBypassUserId } from "@/lib/dev-admin/access"
+import { resolveSubscriptionStatus } from "@/lib/subscription/SubscriptionStatusResolver"
 
 type MetricValue = number | string
 
@@ -153,37 +154,101 @@ const ACTIVE_SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due"]
 
 export type SubscriptionBucket = "active_paid" | "trialing" | "grace_period" | "past_due" | "canceled" | "expired"
 
-/**
- * Non-blended subscription status classification. Each status maps to exactly one bucket so
- * "Active paid" never silently includes trialing or past_due accounts.
- *  - active_paid: status === 'active' only.
- *  - trialing: status === 'trialing'.
- *  - grace_period: status === 'past_due' with an unexpired gracePeriodEnd (schema-backed, not a
- *    guess from status text alone).
- *  - past_due: status === 'past_due' with no active grace window.
- *  - canceled: canceledAt is set — a genuine, timestamped cancellation event, independent of
- *    whatever the current `status` string says.
- *  - expired: terminal/never-activated Stripe states (failed/incomplete/unpaid), or a row that
- *    lapsed (expiresAt in the past) without ever being explicitly canceled.
- */
-export function classifySubscriptionBucket(row: {
+export type SubscriptionRowForBucketing = {
   status: string
+  currentPeriodEnd: Date | null
   gracePeriodEnd: Date | null
   canceledAt: Date | null
   expiresAt: Date | null
-}): SubscriptionBucket {
-  const status = row.status.toLowerCase()
-  const now = Date.now()
-  if (row.canceledAt) return "canceled"
-  if (status === "active") return "active_paid"
-  if (status === "trialing") return "trialing"
-  if (status === "past_due") {
-    return row.gracePeriodEnd && row.gracePeriodEnd.getTime() > now ? "grace_period" : "past_due"
+}
+
+/**
+ * Bucket for a SINGLE subscription row.
+ *
+ * The live-vs-ended decision is delegated to resolveSubscriptionStatus() — the same resolver
+ * EntitlementResolver uses to decide what a user may actually access — so an admin count can never
+ * disagree with what the product grants. This bucketing only adds the two distinctions the
+ * entitlement lifecycle deliberately does not make:
+ *  - trialing is split back out of "active" (entitlement-wise a trial is active; commercially it
+ *    is not paying), and
+ *  - among ended rows, an explicitly timestamped cancellation is separated from a silent lapse.
+ *
+ * Note this means a Stripe cancel-at-period-end row (canceledAt set, period not yet over) counts as
+ * active_paid, not canceled — the user is still paid up and still entitled. That matches
+ * resolveSubscriptionStatus, which returns "active" for a canceled row whose expiry is in the future.
+ */
+export function classifySubscriptionBucket(
+  row: SubscriptionRowForBucketing,
+  now: Date = new Date()
+): SubscriptionBucket {
+  const raw = String(row.status ?? "").trim().toLowerCase()
+  const lifecycle = resolveSubscriptionStatus(
+    {
+      status: row.status,
+      currentPeriodEnd: row.currentPeriodEnd,
+      gracePeriodEnd: row.gracePeriodEnd,
+      expiresAt: row.expiresAt,
+    },
+    now
+  )
+
+  if (lifecycle === "active") {
+    return raw === "trialing" || raw === "trial" ? "trialing" : "active_paid"
   }
-  if (["failed", "incomplete", "unpaid"].includes(status)) return "expired"
-  if (["canceled", "cancelled"].includes(status)) return "canceled"
-  if (row.expiresAt && row.expiresAt.getTime() <= now) return "expired"
+  if (lifecycle === "grace") return "grace_period"
+  if (lifecycle === "past_due") return "past_due"
+  // lifecycle is "expired" or "none": the relationship has ended. canceledAt is a real, timestamped
+  // cancellation event; anything else lapsed without one.
+  if (row.canceledAt || raw === "canceled" || raw === "cancelled") return "canceled"
   return "expired"
+}
+
+/**
+ * Precedence used to reduce a user's several subscription rows to the ONE bucket describing their
+ * current commercial state. Lower index wins, so any live relationship outranks any ended one — a
+ * user who resubscribed is counted only as active_paid, never also as canceled from the old row.
+ * Ties are broken by the caller's row order (see the DB-side orderBy in getAdminCommandCenterMetrics:
+ * currentPeriodEnd desc, then createdAt desc), so the newest row wins within a bucket.
+ * canceled outranks expired because canceledAt is an explicit event while expiry is inferred.
+ */
+const SUBSCRIPTION_BUCKET_PRECEDENCE: SubscriptionBucket[] = [
+  "active_paid",
+  "trialing",
+  "grace_period",
+  "past_due",
+  "canceled",
+  "expired",
+]
+
+/** Buckets representing an ongoing paid-tier relationship (healthy or troubled) — i.e. "not free". */
+const NON_FREE_BUCKETS: ReadonlySet<SubscriptionBucket> = new Set<SubscriptionBucket>([
+  "active_paid",
+  "trialing",
+  "grace_period",
+  "past_due",
+])
+
+/**
+ * Reduce many subscription rows to exactly one current-state bucket per user, so every displayed
+ * subscriber bucket is mutually exclusive and no user is counted twice across buckets.
+ * Rows must already be ordered newest-first for the tie-break to be meaningful.
+ */
+export function selectCurrentSubscriptionBucketByUser<T extends SubscriptionRowForBucketing & { userId: string }>(
+  rows: T[],
+  now: Date = new Date()
+): Map<string, SubscriptionBucket> {
+  const current = new Map<string, SubscriptionBucket>()
+  for (const row of rows) {
+    const bucket = classifySubscriptionBucket(row, now)
+    const existing = current.get(row.userId)
+    if (
+      existing === undefined ||
+      SUBSCRIPTION_BUCKET_PRECEDENCE.indexOf(bucket) < SUBSCRIPTION_BUCKET_PRECEDENCE.indexOf(existing)
+    ) {
+      current.set(row.userId, bucket)
+    }
+  }
+  return current
 }
 
 function metric(label: string, value: MetricValue, note?: string): AdminMetric {
@@ -444,7 +509,6 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     subscriptionRows,
     bracketPaymentsCompleted,
     bracketPaymentRevenue,
-    bracketOnlyRevenue,
     failedOrCanceledBracketPayments,
     stripeEvents,
     tokenGranted,
@@ -468,8 +532,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     inviteLinks,
     inviteEvents,
     platformChatMessages,
-    tokenSalesPayments,
-    tokenSalesRevenue,
+    tokenPurchaseEntries,
     activeWorldCupPools,
     usersSearch,
     recentUsers,
@@ -522,32 +585,26 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     prisma.appUser.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
     prisma.appUser.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
     countAdminUsers(),
+    // Ordered newest-first DB-side so selectCurrentSubscriptionBucketByUser()'s tie-break picks a
+    // user's most recent row. Only the columns needed for current-state classification and billing
+    // cycle are selected; the per-row join to AppUser.email that used to live here was removed —
+    // bypass accounts are resolved once, per user, after this fan-out (see bypassUserIds below).
     prisma.userSubscription.findMany({
       select: {
         userId: true,
         status: true,
         sku: true,
+        currentPeriodEnd: true,
         gracePeriodEnd: true,
         canceledAt: true,
         expiresAt: true,
         plan: { select: { code: true } },
-        user: { select: { email: true } },
       },
+      orderBy: [{ currentPeriodEnd: "desc" }, { createdAt: "desc" }],
     }),
     prisma.bracketPayment.count({ where: { status: { in: ["completed", "paid", "succeeded"] } } }),
     prisma.bracketPayment.aggregate({
       where: { status: { in: ["completed", "paid", "succeeded"] } },
-      _sum: { amountCents: true },
-    }),
-    // Bracket-entry-only revenue (excludes token-pack purchases, which are shown separately as
-    // "Token sales revenue") — see Issue 1 of the admin BI truth-correction pass. Neither this nor
-    // the combined figure above is subscription revenue; see the dedicated "Subscription revenue"
-    // entry below for why that can't be computed from this schema today.
-    prisma.bracketPayment.aggregate({
-      where: {
-        status: { in: ["completed", "paid", "succeeded"] },
-        NOT: { paymentType: { contains: "token", mode: "insensitive" } },
-      },
       _sum: { amountCents: true },
     }),
     // BracketPayment has no refund-specific field (no refundedAt/refundAmountCents), so only
@@ -600,19 +657,10 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     prisma.inviteLink.count(),
     prisma.inviteLinkEvent.count(),
     prisma.platformChatMessage.count(),
-    prisma.bracketPayment.count({
-      where: {
-        status: { in: ["completed", "paid", "succeeded"] },
-        paymentType: { contains: "token", mode: "insensitive" },
-      },
-    }),
-    prisma.bracketPayment.aggregate({
-      where: {
-        status: { in: ["completed", "paid", "succeeded"] },
-        paymentType: { contains: "token", mode: "insensitive" },
-      },
-      _sum: { amountCents: true },
-    }),
+    // Token purchases are recorded in TokenLedger (entryType 'purchase'), NEVER in BracketPayment.
+    // This is a real count of purchase entries from that source; the dollar value of those purchases
+    // is deliberately NOT inferred here — see the "Token sales revenue" entry below.
+    prisma.tokenLedger.count({ where: { entryType: "purchase" } }).catch(() => null),
     getMostActiveWorldCupPools(),
     getUserSearchRows(searchQuery),
     getRecentUsers(),
@@ -759,45 +807,53 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
   // user can still have a leftover real row (e.g. from testing checkout before joining staff).
   // Reusing the actual bypass predicate — not reimplementing it — keeps this in lockstep with what
   // EntitlementResolver really grants. See Issue 3 of the admin BI truth-correction pass.
+  //
+  // The predicate needs an email, but joining AppUser on every subscription ROW re-fetched the same
+  // email once per row. Emails are now fetched once per distinct subscriber instead — same inputs,
+  // same result, bounded by the number of subscribers rather than the number of rows.
+  const subscriberUserIds = Array.from(new Set(subscriptionRows.map((sub) => sub.userId)))
+  const subscriberEmails = new Map<string, string | null>()
+  if (subscriberUserIds.length > 0) {
+    const emailRows = await prisma.appUser
+      .findMany({ where: { id: { in: subscriberUserIds } }, select: { id: true, email: true } })
+      .catch(() => [] as { id: string; email: string | null }[])
+    for (const row of emailRows) subscriberEmails.set(row.id, row.email)
+  }
+
   const bypassUserIds = new Set<string>()
   const realSubscriptionRows = subscriptionRows.filter((sub) => {
-    const isBypass = isSubscriptionEntitlementBypassUserId(sub.userId, sub.user.email)
+    const isBypass = isSubscriptionEntitlementBypassUserId(sub.userId, subscriberEmails.get(sub.userId) ?? null)
     if (isBypass) bypassUserIds.add(sub.userId)
     return !isBypass
   })
 
-  const bucketUserIds: Record<SubscriptionBucket, Set<string>> = {
-    active_paid: new Set(),
-    trialing: new Set(),
-    grace_period: new Set(),
-    past_due: new Set(),
-    canceled: new Set(),
-    expired: new Set(),
+  // One current-state bucket per user (see selectCurrentSubscriptionBucketByUser): a user who
+  // resubscribed counts only as active_paid, never also as canceled from the superseded row.
+  const currentBucketByUser = selectCurrentSubscriptionBucketByUser(realSubscriptionRows)
+  const bucketUserCounts: Record<SubscriptionBucket, number> = {
+    active_paid: 0,
+    trialing: 0,
+    grace_period: 0,
+    past_due: 0,
+    canceled: 0,
+    expired: 0,
   }
-  for (const sub of realSubscriptionRows) {
-    bucketUserIds[classifySubscriptionBucket(sub)].add(sub.userId)
+  const nonFreeUserIds = new Set<string>()
+  for (const [userId, bucket] of currentBucketByUser) {
+    bucketUserCounts[bucket] += 1
+    if (NON_FREE_BUCKETS.has(bucket)) nonFreeUserIds.add(userId)
   }
-  const activePaidUserCount = bucketUserIds.active_paid.size
-  const trialingUserCount = bucketUserIds.trialing.size
-  const gracePeriodUserCount = bucketUserIds.grace_period.size
-  const pastDueUserCount = bucketUserIds.past_due.size
-  const canceledUserCount = bucketUserIds.canceled.size
-  const expiredUserCount = bucketUserIds.expired.size
-  // "Not free" = any outstanding paid-tier relationship, healthy or troubled. Canceled/expired
-  // users have reverted to free and are intentionally excluded from this set.
-  const nonFreeUserIds = new Set<string>([
-    ...bucketUserIds.active_paid,
-    ...bucketUserIds.trialing,
-    ...bucketUserIds.grace_period,
-    ...bucketUserIds.past_due,
-  ])
+  const activePaidUserCount = bucketUserCounts.active_paid
+  const trialingUserCount = bucketUserCounts.trialing
+  const gracePeriodUserCount = bucketUserCounts.grace_period
+  const pastDueUserCount = bucketUserCounts.past_due
+  const canceledUserCount = bucketUserCounts.canceled
+  const expiredUserCount = bucketUserCounts.expired
 
   const completedRevenueCents = bracketPaymentRevenue._sum.amountCents ?? null
-  const bracketOnlyRevenueCents = bracketOnlyRevenue._sum.amountCents ?? null
   const inviteAccepts = worldCupInviteUseSummary._sum.useCount ?? 0
   const inviteAcceptancePct =
     worldCupInvites > 0 ? `${Math.round((inviteAccepts / worldCupInvites) * 100)}%` : "0%"
-  const tokenSalesRevenueCents = tokenSalesRevenue._sum.amountCents ?? 0
   const providerGapCount = providerHealth.filter((row) => row.status === "missing_env" || row.status === "scaffold_only" || row.status === "not_production_ready").length
   const providerConfiguredCount = providerHealth.filter((row) => row.configured).length
   const sportImportMatrix = getSportImportMatrix(sportDataReliability)
@@ -819,14 +875,14 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       activeSessionsNow === null
         ? notTracked("Active sessions now", "Session count query failed")
         : metric("Active sessions now", activeSessionsNow),
-      metric("Active paid subscribers", activePaidUserCount, "Unique users, status=active only — excludes trialing/past-due/grace-period"),
+      metric("Active paid subscribers", activePaidUserCount, "Unique users by current state — excludes trialing/past-due/grace-period"),
       metric("Pools last 7h", wcPools7h, "WC pools created last 7h"),
       metric("Brackets last 7h", wcEntries7h, "WC entries created last 7h"),
       metric("Pools today", worldCupPoolsToday, "UTC day"),
       metric("Brackets today", worldCupEntriesToday, "UTC day"),
-      metric("Bracket & token payments last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Rolling 7h · not subscription revenue"),
-      metric("Bracket & token payments today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "UTC day · not subscription revenue"),
-      metric("Bracket & token payments 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Not subscription revenue"),
+      metric("Bracket entries and donations — payments last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Rolling 7h · not subscription revenue"),
+      metric("Bracket entries and donations — payments today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "UTC day · not subscription revenue"),
+      metric("Bracket entries and donations — payments 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Not subscription revenue"),
       metric("Invite acceptance", inviteAcceptancePct, `${inviteAccepts} accepted / ${worldCupInvites} sent`),
       notTracked("AI cost yesterday", "No unified AI cost ledger is tracked yet"),
       metric("API health", `${providerConfiguredCount}/${providerHealth.length} configured`, `${providerGapCount} gaps`),
@@ -844,8 +900,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       activeSessionsNow === null
         ? notTracked("Active sessions now", "Session count query failed")
         : metric("Active sessions now", activeSessionsNow, "Sessions where expires > now()"),
-      metric("Free users", Math.max(0, totalAccounts - nonFreeUserIds.size), "Total accounts minus active/trialing/grace-period/past-due users"),
-      metric("Active paid users", activePaidUserCount, "Unique users, status=active only"),
+      metric("Free users", Math.max(0, totalAccounts - nonFreeUserIds.size), "Total accounts minus users whose CURRENT state is active/trialing/grace-period/past-due"),
+      metric("Active paid users", activePaidUserCount, "Current state per user — paying now; excludes trialing"),
       metric("Admin users", adminUsers, "Derived from ADMIN_EMAILS allowlist"),
     ],
     subscriptions: [
@@ -856,33 +912,38 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Monthly subscriptions", cycleCounts.monthly, "Derived from plan code/SKU text"),
       metric("Annual subscriptions", cycleCounts.annual, "Derived from plan code/SKU text"),
       metric("Unknown billing cycle", cycleCounts.unknown),
-      // ── Non-blended subscriber status (Issue 3) — each user counted in exactly one bucket below.
-      // Unit is unique users, not raw subscription rows; a user with disparate-status rows across
-      // multiple historical subscriptions could in principle land in more than one bucket, which is
-      // a disclosed limitation, not double-counting within any single bucket.
-      metric("Active paid subscribers", activePaidUserCount, "Unique users, status=active only"),
-      metric("Trialing subscribers", trialingUserCount, "Unique users, status=trialing — not counted as paid"),
-      metric("Grace-period subscribers", gracePeriodUserCount, "past_due with gracePeriodEnd still in the future"),
-      metric("Past-due subscribers", pastDueUserCount, "past_due with no active grace window"),
-      metric("Canceled subscribers", canceledUserCount, "canceledAt is set"),
-      metric("Expired subscribers", expiredUserCount, "failed/incomplete/unpaid, or lapsed without explicit cancellation"),
+      // ── Current-state subscriber status (Issue 3) — buckets are MUTUALLY EXCLUSIVE: every user is
+      // reduced to a single current bucket by selectCurrentSubscriptionBucketByUser(), so these
+      // counts sum to the number of distinct non-bypass subscribers and never double-count a user
+      // whose history spans several rows.
+      metric("Active paid subscribers", activePaidUserCount, "Current state per user — paying now; excludes trialing"),
+      metric("Trialing subscribers", trialingUserCount, "Current state per user — on trial, not counted as paid"),
+      metric("Grace-period subscribers", gracePeriodUserCount, "Current state per user — lapsed but inside the grace window"),
+      metric("Past-due subscribers", pastDueUserCount, "Current state per user — payment overdue, no active grace window"),
+      metric("Canceled subscribers", canceledUserCount, "Current state per user — ended with an explicit cancellation; excludes users who later resubscribed"),
+      metric("Expired subscribers", expiredUserCount, "Current state per user — lapsed without an explicit cancellation"),
       metric("Admin/dev bypass accounts (excluded above)", bypassUserIds.size, "Entitlements granted without a real subscription — never counted as subscribers"),
       metric("Stripe webhook events", stripeEvents),
-      metric("Completed bracket & token payments (all time)", bracketPaymentsCompleted),
-      // ── Revenue (Issue 1) — renamed from "Total revenue": this is BracketPayment only (World Cup
-      // entries + token packs), never subscription income. Subscription revenue is reported as
-      // unavailable below rather than fabricated from this data.
+      metric("Completed bracket entry and donation payments (all time)", bracketPaymentsCompleted, "BracketPayment rows — token purchases are not recorded here"),
+      // ── Revenue (Issue 1/2) — BracketPayment holds bracket entries and donations only. Its
+      // paymentType domain is bracket_lab_pass / donation / first_bracket_fee / unlimited_unlock;
+      // token purchases live in TokenLedger and never appear here, so no bracket-vs-token split can
+      // be derived from this table. Subscription revenue is reported as unavailable below rather
+      // than fabricated from this data.
       completedRevenueCents === null
-        ? notTracked("Bracket & token payment volume (all time)", "No completed bracket payments recorded")
-        : metric("Bracket & token payment volume (all time)", `$${(completedRevenueCents / 100).toFixed(2)}`, "World Cup entries + token packs — not subscription revenue"),
-      bracketOnlyRevenueCents === null
-        ? notTracked("Bracket entry revenue (all time)", "No completed bracket-entry payments recorded")
-        : metric("Bracket entry revenue (all time)", `$${(bracketOnlyRevenueCents / 100).toFixed(2)}`, "Excludes token-pack purchases"),
-      metric("Token sales revenue", `$${(tokenSalesRevenueCents / 100).toFixed(2)}`, `${tokenSalesPayments} completed token payment rows`),
-      metric("Bracket & token payments last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Rolling 7-hour window · not subscription revenue"),
-      metric("Bracket & token payments today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "UTC day · not subscription revenue"),
-      metric("Bracket & token payments 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Not subscription revenue"),
-      metric("Failed/canceled bracket & token payments (all time)", failedOrCanceledBracketPayments),
+        ? notTracked("Bracket entries and donations — payment volume (all time)", "No completed bracket/donation payments recorded")
+        : metric("Bracket entries and donations — payment volume (all time)", `$${(completedRevenueCents / 100).toFixed(2)}`, "BracketPayment only — not subscription revenue, and contains no token purchases"),
+      tokenPurchaseEntries === null
+        ? notTracked("Token purchase entries (all time)", "TokenLedger query failed — do not read as zero token sales")
+        : metric("Token purchase entries (all time)", tokenPurchaseEntries, "Count of TokenLedger entryType='purchase' rows — a count, not a dollar amount"),
+      notTracked(
+        "Token sales revenue",
+        "Unavailable — TokenLedger records tokenDelta and a tokenPackageSku, never the amount charged. Pricing it would require joining TokenPackage.priceUsdCents, the CURRENT mutable catalog price, which would retroactively restate historical purchases at today's prices. No charged-amount record exists for token purchases in this schema today."
+      ),
+      metric("Bracket entries and donations — payments last 7h", `$${((revenue7h._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Rolling 7-hour window · not subscription revenue"),
+      metric("Bracket entries and donations — payments today", `$${((revenueToday._sum.amountCents ?? 0) / 100).toFixed(2)}`, "UTC day · not subscription revenue"),
+      metric("Bracket entries and donations — payments 7 days", `$${((revenue7Days._sum.amountCents ?? 0) / 100).toFixed(2)}`, "Not subscription revenue"),
+      metric("Failed/canceled bracket entry and donation payments (all time)", failedOrCanceledBracketPayments, "BracketPayment rows only"),
       notTracked(
         "Subscription revenue",
         "Unavailable — SubscriptionPlan has no reliable price column (price lives in a metadata blob shared across SKUs) and StripeWebhookEvent only counts events, it does not store charged amounts. No verified Stripe subscription-invoice or payment-amount record exists in this schema today."
