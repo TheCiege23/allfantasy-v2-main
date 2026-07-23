@@ -21,7 +21,8 @@ import { getStarterSlotLabels } from '@/lib/league/rosterSlots'
 import { IDPTeamDashboard } from '@/app/idp/components/IDPTeamDashboard'
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
-import { placeholderBaselineProjection } from '@/components/weather/placeholderBaseline'
+import { ProjectionValue } from '@/components/league/ProjectionValue'
+import { resolveProjectionAvailability } from '@/lib/league/dataHonesty'
 import type { ExpandedStarterSlot } from '@/lib/league/lineup-expand-template'
 import { evaluateLineupLock } from '@/lib/league/lineup-lock'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
@@ -364,7 +365,8 @@ function PlayerDetailSheet({
 }) {
   const resolved = resolveDisplayPlayer(playerId, players)
   const pos = resolved.position || '-'
-  const projection = resolved.projectedPoints ?? placeholderBaselineProjection(playerId)
+  // Honest projection: no fabricated baseline — missing renders as missing (Honesty Pack 1A).
+  const projection = resolved.projectedPoints ?? null
   const statusText = displayPlayerStatusText(resolved)
   const statusTextClass = displayPlayerStatusTextClass(statusText)
   const statusDotClass = displayPlayerStatusDotClass(statusText)
@@ -464,7 +466,7 @@ function PlayerDetailSheet({
           <div className="flex flex-col items-center gap-0.5 bg-surface px-3 py-3">
             <span className="text-[10px] font-bold uppercase tracking-wide text-muted">Proj</span>
             <span className="text-[18px] font-bold text-primary">
-              {projection > 0 ? projection.toFixed(1) : '-'}
+              {projection != null ? projection.toFixed(1) : '—'}
             </span>
             {showCrest ? (
               <span className="text-[9px] text-muted">via AF</span>
@@ -636,7 +638,9 @@ function LineupReplacementPickerSheet({
               {filtered.map((c) => {
                 const selected = selectedId === c.id
                 const p = players[c.id]
-                const baseline = placeholderBaselineProjection(c.id)
+                const candidateProjection = resolveProjectionAvailability({
+                  providerProjection: (players[c.id] as { projectedPoints?: number | null } | undefined)?.projectedPoints ?? null,
+                })
                 const injuryRaw =
                   (p as Record<string, unknown> | undefined)?.injury_status ??
                   (p as Record<string, unknown> | undefined)?.status ??
@@ -704,7 +708,7 @@ function LineupReplacementPickerSheet({
                         ) : null}
                       </div>
                       <div className="mt-1.5 grid grid-cols-3 gap-2 text-[10px] text-secondary">
-                        <span>Proj: {baseline > 0 ? baseline.toFixed(1) : '-'}</span>
+                        <span>Proj: <ProjectionValue projection={candidateProjection} className="" /></span>
                         <span>Pts: -</span>
                         <span>Status: {status}</span>
                       </div>
@@ -818,7 +822,8 @@ function RosterRow({
   const showTeam = resolved.team && resolved.team !== 'FA'
   const leftBadge = slotLabel ?? pos
   const badgeClass = slotLabel ? slotBadgeClass(slotLabel) : positionBadgeClass(pos)
-  const baseline = resolved.projectedPoints ?? placeholderBaselineProjection(playerId)
+  // Honest projection: no fabricated baseline — missing renders as missing (Honesty Pack 1A).
+  const baseline = resolved.projectedPoints ?? null
   const statusText = displayPlayerStatusText(resolved)
   const statusDotClass = displayPlayerStatusDotClass(statusText)
   const crestSport = sport
@@ -895,6 +900,12 @@ function RosterRow({
       </div>
       <div className="flex shrink-0 items-center gap-2 text-right text-xs text-muted">
         <span className="flex w-[4.5rem] items-center justify-end gap-0.5">
+          {baseline == null ? (
+            <ProjectionValue
+              projection={{ state: 'unavailable', value: null, source: null, reason: 'provider_missing' }}
+              className="text-xs text-white/35"
+            />
+          ) : null}
           <ProjectionDisplay
             projection={baseline}
             suffix=""

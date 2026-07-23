@@ -53,6 +53,10 @@ import AIFeaturesPanel from "@/components/AIFeaturesPanel"
 import PlayoffBracketPreview from "@/components/PlayoffBracketPreview"
 import DataFreshnessBanner from "@/components/DataFreshnessBanner"
 import ConfidenceFreshnessLabel from "@/components/ConfidenceFreshnessLabel"
+import { LegacyDataNotice } from "@/components/legacy/LegacyDataNotice"
+import { mapLegacyAuthError, type LegacyDataStatus } from "@/lib/legacy/dataStatus"
+import { sendProductAnalyticsBeacon } from "@/lib/analytics/client"
+import { LEGACY_HONESTY } from "@/lib/analytics/eventNames"
 import ActionHandoffButtons, { parseAIHandoffs } from "@/components/ActionHandoffButtons"
 import RankChangeDrivers from "@/components/RankChangeDrivers"
 import OverviewLanes from "@/app/af-legacy/components/OverviewLanes"
@@ -898,6 +902,10 @@ function AFLegacyContent() {
   const [error, setError] = useState('')
   const [importStatus, setImportStatus] = useState<'idle' | 'importing' | 'complete'>('idle')
   const [importProgress, setImportProgress] = useState(0)
+  // Honest data-state banner (partial import, stale refresh, poll failures, auth/link errors).
+  const [importNotice, setImportNotice] = useState<LegacyDataStatus | null>(null)
+  // One impression beacon per distinct notice (state+reason), never per status poll.
+  const firedNoticeBeacons = useRef<Set<string>>(new Set())
   const [jobId, setJobId] = useState<string | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
   const [stats, setStats] = useState<ProfileStats | null>(null)
@@ -2846,7 +2854,22 @@ function AFLegacyContent() {
       const data = await res.json()
       
       if (!res.ok) {
-        // If import fails, just load cached profile
+        // A failed refresh used to render the cached profile as a silent success. Still show
+        // the cached data (it is real), but SAY it is previously imported data and why.
+        if (res.status === 401 || res.status === 403 || res.status === 409) {
+          const code = typeof (data as any)?.code === 'string' ? (data as any).code : undefined
+          setImportNotice(mapLegacyAuthError(res.status, code))
+        } else {
+          setImportNotice({
+            state: 'stale',
+            confidence: 'medium',
+            source: 'sleeper',
+            lastUpdatedAt: null,
+            reasonCode: 'REFRESH_FAILED_SHOWING_CACHED',
+            message: 'We could not refresh from Sleeper just now — showing your previously imported data.',
+            retryable: true,
+          })
+        }
         await loadProfile(clean)
         setLoading(false)
         return
@@ -2873,7 +2896,16 @@ function AFLegacyContent() {
         }
       }
     } catch (e) {
-      // Fallback to cached profile on error
+      // Fallback to cached profile on error — with an honest stale notice, not silence.
+      setImportNotice({
+        state: 'stale',
+        confidence: 'medium',
+        source: 'sleeper',
+        lastUpdatedAt: null,
+        reasonCode: 'REFRESH_FAILED_SHOWING_CACHED',
+        message: 'We could not refresh from Sleeper just now — showing your previously imported data.',
+        retryable: true,
+      })
       await loadProfile(clean)
     } finally {
       setLoading(false)
@@ -2911,6 +2943,31 @@ function AFLegacyContent() {
     }
   }, [importStatus, username, pendingShareLeague])
 
+  // Honesty impression analytics: exactly one beacon per distinct notice shown. Payloads are
+  // state/reason codes only — no usernames, league names, or provider data.
+  useEffect(() => {
+    if (!importNotice) return
+    const key = `${importNotice.state}:${importNotice.reasonCode ?? ''}`
+    if (firedNoticeBeacons.current.has(key)) return
+    firedNoticeBeacons.current.add(key)
+
+    const eventByState: Record<string, string | undefined> = {
+      auth_required: LEGACY_HONESTY.AUTH_REQUIRED_SHOWN,
+      link_required: LEGACY_HONESTY.LINK_REQUIRED_SHOWN,
+      partial: LEGACY_HONESTY.IMPORT_PARTIAL_SHOWN,
+      failed: LEGACY_HONESTY.IMPORT_FAILED_SHOWN,
+      stale: LEGACY_HONESTY.DATA_STALE_SHOWN,
+    }
+    const event = eventByState[importNotice.state]
+    if (event) {
+      sendProductAnalyticsBeacon(event, {
+        surface: 'af_legacy',
+        platform: 'sleeper',
+        reasonCode: importNotice.reasonCode ?? null,
+      })
+    }
+  }, [importNotice])
+
   // countdown tick
   useEffect(() => {
     const anyActive = rankCooldownMs > 0 || aiCoachCooldownMs > 0 || shareCooldownMs > 0
@@ -2929,6 +2986,7 @@ function AFLegacyContent() {
     if (!username || importStatus !== 'importing') return
 
     let stop = false
+    let consecutivePollFailures = 0
 
     const pollStatus = async () => {
       if (stop) return
@@ -2938,31 +2996,66 @@ function AFLegacyContent() {
           `/api/legacy/import/status?sleeper_username=${encodeURIComponent(username)}`,
           { cache: 'no-store' }
         )
+
+        // Auth/link failures will not heal by polling — say what happened and stop.
+        if (res.status === 401 || res.status === 403 || res.status === 409) {
+          const body = await res.json().catch(() => ({} as Record<string, unknown>))
+          const code = typeof (body as any)?.code === 'string' ? (body as any).code : undefined
+          setImportNotice(mapLegacyAuthError(res.status, code))
+          setImportStatus('idle')
+          return
+        }
+
         const data = await res.json()
         const nextJob = data.job ?? data
+        consecutivePollFailures = 0
+        setImportNotice((prev) => (prev?.reasonCode === 'STATUS_POLL_FAILING' ? null : prev))
 
         if (!stop && nextJob?.status) {
           setImportProgress(nextJob.progress || 0)
 
           if (nextJob.status === 'completed') {
             setImportStatus('complete');
+            // Honesty: "completed" with failed seasons is PARTIAL — the status route derives
+            // this from the job's completeness columns; surface it instead of a clean success.
+            if (nextJob.display_state === 'partial' && nextJob.meta?.status) {
+              setImportNotice(nextJob.meta.status as LegacyDataStatus)
+            }
             loadProfile(username);
             gtagEvent('league_import_completed', { platform: 'sleeper' })
-            
+
             const tutorialSeen = localStorage.getItem('af-legacy-tutorial-seen')
             if (!tutorialSeen) {
               setTimeout(() => setShowTutorial(true), 500)
             }
             return
           } else if (nextJob.status === 'failed') {
-            setError(nextJob.error || 'Import failed')
+            // The server's meta.status carries user-safe copy; raw job.error may hold
+            // provider internals.
+            setError(nextJob.meta?.status?.message || nextJob.message || 'Import failed')
+            if (nextJob.meta?.status) setImportNotice(nextJob.meta.status as LegacyDataStatus)
             setImportStatus('idle')
             return
           } else if (nextJob.status === 'queued' || nextJob.status === 'running') {
             fetch('/api/legacy/worker/run', { method: 'GET', cache: 'no-store' }).catch(() => {})
           }
         }
-      } catch {}
+      } catch {
+        // A dead status endpoint used to poll silently forever, stuck at "importing". After
+        // three straight failures, tell the user — and keep trying.
+        consecutivePollFailures += 1
+        if (consecutivePollFailures >= 3) {
+          setImportNotice({
+            state: 'failed',
+            confidence: 'unknown',
+            source: 'allfantasy',
+            lastUpdatedAt: null,
+            reasonCode: 'STATUS_POLL_FAILING',
+            message: 'We are having trouble checking your import status. The import may still be running.',
+            retryable: true,
+          })
+        }
+      }
 
       setTimeout(pollStatus, 3000)
     }
@@ -5782,6 +5875,11 @@ function AFLegacyContent() {
                     )}
 
                     {error && platform === 'sleeper' && <p className="mt-4 text-red-400 text-center text-sm">{error}</p>}
+                    {importNotice && platform === 'sleeper' && importStatus === 'idle' && (
+                      <div className="mt-4">
+                        <LegacyDataNotice status={importNotice} compact />
+                      </div>
+                    )}
                     {yahooError && platform === 'yahoo' && <p className="mt-4 text-red-400 text-center text-sm">{yahooError}</p>}
                     {mflError && platform === 'mfl' && <p className="mt-4 text-red-400 text-center text-sm">{mflError}</p>}
                     {fantraxError && platform === 'fantrax' && <p className="mt-4 text-red-400 text-center text-sm">{fantraxError}</p>}
@@ -6453,10 +6551,14 @@ function AFLegacyContent() {
 
         {(importStatus === 'complete' || leagues.length > 0) &&
           (() => {
-            const seasonsVal = String(stats?.seasons_imported ?? stats?.seasons ?? seasonBreakdown?.length ?? 0)
-            const leaguesVal = String(stats?.leagues_played ?? stats?.leagues ?? leagues?.length ?? 0)
-            const playoffsVal = String(stats?.playoffs ?? 0)
-            const playoffPct = (stats as any)?.playoff_percentage ?? 0
+            // Honesty: "0" is only shown when a real zero was measured. When stats are simply
+            // absent (import incomplete, profile failed to load) render "—" instead.
+            const seasonsRaw = stats?.seasons_imported ?? stats?.seasons ?? (seasonBreakdown?.length || null)
+            const leaguesRaw = stats?.leagues_played ?? stats?.leagues ?? (leagues?.length || null)
+            const seasonsVal = seasonsRaw == null ? '—' : String(seasonsRaw)
+            const leaguesVal = leaguesRaw == null ? '—' : String(leaguesRaw)
+            const playoffsVal = stats?.playoffs == null ? '—' : String(stats.playoffs)
+            const playoffPct = (stats as any)?.playoff_percentage ?? null
 
             const gradeVal =
               (profile as any)?.ai_rating ??
@@ -6476,6 +6578,27 @@ function AFLegacyContent() {
 
             return (
               <>
+                {importNotice && (
+                  <div className="mb-4">
+                    <LegacyDataNotice
+                      status={importNotice}
+                      onRetry={
+                        importNotice.retryable && username
+                          ? () => {
+                              if (loading || importStatus === 'importing') return
+                              sendProductAnalyticsBeacon(LEGACY_HONESTY.RETRY_CLICKED, {
+                                surface: 'af_legacy',
+                                platform: 'sleeper',
+                                reasonCode: importNotice.reasonCode ?? null,
+                              })
+                              setImportNotice(null)
+                              triggerFreshImport(username)
+                            }
+                          : undefined
+                      }
+                    />
+                  </div>
+                )}
                 <div className="mb-6">
                   <div className="relative rounded-3xl bg-gradient-to-br from-slate-900/80 to-slate-950/80 border border-cyan-500/20 backdrop-blur-xl shadow-[0_20px_60px_rgba(0,0,0,0.4)] overflow-hidden">
                     {/* Gradient accent line at top */}
@@ -7704,10 +7827,10 @@ function AFLegacyContent() {
                           <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
                             <ToolStatCard label="Seasons" value={String(seasonsVal)} icon="📅" accent="cyan" />
                             <ToolStatCard label="Leagues" value={String(leaguesVal)} icon="🏆" accent="purple" />
-                            <ToolStatCard label="Win Rate" value={`${stats.win_percentage ?? 0}%`} icon="📈" accent="emerald" />
-                            <ToolStatCard label="Championships" value={String(stats.championships ?? 0)} icon="🥇" accent="amber" />
-                            <ToolStatCard label="Playoffs" value={`${playoffsVal} (${playoffPct}%)`} icon="🎯" accent="cyan" />
-                            <ToolStatCard label="Total Points" value={(stats.total_points_for ?? stats.total_points ?? 0).toLocaleString()} icon="⚡" accent="purple" />
+                            <ToolStatCard label="Win Rate" value={stats.win_percentage == null ? '—' : `${stats.win_percentage}%`} icon="📈" accent="emerald" />
+                            <ToolStatCard label="Championships" value={stats.championships == null ? '—' : String(stats.championships)} icon="🥇" accent="amber" />
+                            <ToolStatCard label="Playoffs" value={playoffPct == null ? String(playoffsVal) : `${playoffsVal} (${playoffPct}%)`} icon="🎯" accent="cyan" />
+                            <ToolStatCard label="Total Points" value={(stats.total_points_for ?? stats.total_points)?.toLocaleString() ?? '—'} icon="⚡" accent="purple" />
                           </div>
                           
                           {specialtyStats && specialtyStats.total_leagues > 0 && (

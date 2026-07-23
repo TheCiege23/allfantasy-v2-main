@@ -8,7 +8,8 @@ import { TeamLogo } from '@/app/components/TeamLogo'
 import type { SlimPlayer } from '@/lib/hooks/useSleeperPlayers'
 import { useSleeperPlayers } from '@/lib/hooks/useSleeperPlayers'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
-import { placeholderBaselineProjection } from '@/components/weather/placeholderBaseline'
+import { ProjectionValue } from '@/components/league/ProjectionValue'
+import { resolveProjectionAvailability } from '@/lib/league/dataHonesty'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo, isNcaafPlayerPoolPending } from '@/lib/league/ncaaf-beta-guard'
@@ -335,16 +336,21 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       rows = rows.filter((p) => wlIds.has(p.id))
     }
     rows.sort((a, b) => {
+      // Honest sort: only REAL metrics rank; players with no sourced value sort last
+      // instead of being ranked by a fabricated baseline (Honesty Pack 1A).
       const pa =
         a.projectedPoints ??
         a.fantasyPointsPerGame ??
         riBySleeper[a.id]?.fantasyPointsPerGame ??
-        placeholderBaselineProjection(a.id)
+        null
       const pb =
         b.projectedPoints ??
         b.fantasyPointsPerGame ??
         riBySleeper[b.id]?.fantasyPointsPerGame ??
-        placeholderBaselineProjection(b.id)
+        null
+      if (pa == null && pb == null) return 0
+      if (pa == null) return 1
+      if (pb == null) return -1
       return pb - pa
     })
     return rows.slice(0, 100)
@@ -684,13 +690,13 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             ) : (
               filtered.map((p) => {
                 const ri = riBySleeper[p.id]
-                const baseline = placeholderBaselineProjection(p.id)
                 const normalizedStats = parseRollingInsightsStatsJson(p.normalizedStats ?? null)
+                // Honest projection: real tiers only — no fabricated baseline (Honesty Pack 1A).
                 const projPts =
                   p.projectedPoints ??
                   p.fantasyPointsPerGame ??
                   ri?.fantasyPointsPerGame ??
-                  baseline
+                  null
                 const seasonFp =
                   ri?.fantasyPointsSeason ??
                   (ri?.fantasyPointsPerGame != null && ri?.gamesPlayed != null
@@ -766,6 +772,12 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                       </div>
                     </button>
                     <div className="w-14 shrink-0 text-right text-[11px] text-white/60">
+                      {projection && projPts == null ? (
+                        <ProjectionValue
+                          projection={{ state: 'unavailable', value: null, source: null, reason: 'provider_missing' }}
+                          className="text-[11px] text-white/35"
+                        />
+                      ) : null}
                       {projection ? (
                         <ProjectionDisplay
                           projection={projPts}
