@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { PAID_TIER_TOP_DISPLAY_NAME } from '@/lib/brand/display-names'
 import { useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
 import Link from 'next/link'
@@ -30,7 +31,7 @@ function resolvePlanChip(ents: ReturnType<typeof useEntitlements>): {
   if (ents.loading) return null
   if (ents.hasSupreme) return { label: 'AF Supreme', dotClass: 'bg-purple-400' }
   if (ents.hasCommissioner) return { label: 'AF Commissioner', dotClass: 'bg-amber-400' }
-  if (ents.hasWarRoom) return { label: 'AF Legacy', dotClass: 'bg-blue-400' }
+  if (ents.hasWarRoom) return { label: PAID_TIER_TOP_DISPLAY_NAME, dotClass: 'bg-blue-400' }
   if (ents.hasPro) return { label: 'AF Pro', dotClass: 'bg-cyan-400' }
   return { label: 'Free', dotClass: 'bg-white/30' }
 }

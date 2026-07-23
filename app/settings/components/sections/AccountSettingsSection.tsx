@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { PAID_TIER_TOP_DISPLAY_NAME } from "@/lib/brand/display-names"
 import { signOut } from "next-auth/react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
 import { useEntitlements } from "@/hooks/useEntitlements"
@@ -40,7 +41,7 @@ export function AccountSettingsSection({
         : ents.hasPro
           ? "AF Pro"
           : ents.hasWarRoom
-            ? "AF Legacy"
+            ? PAID_TIER_TOP_DISPLAY_NAME
             : t("settings.account.planFree")
   const planDisplay = planLabel?.trim() || (ents.loading ? "..." : derivedPlanDisplay)
 

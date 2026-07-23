@@ -1,3 +1,8 @@
+import {
+  PAID_TIER_TOP_MONTHLY_TITLE,
+  PAID_TIER_TOP_YEARLY_TITLE,
+} from "@/lib/brand/display-names"
+
 export type MonetizationSubscriptionSku =
   | "af_pro_monthly"
   | "af_pro_yearly"
@@ -89,7 +94,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
   {
     sku: "af_war_room_monthly",
     type: "subscription",
-    title: "AF Legacy Monthly",
+    title: PAID_TIER_TOP_MONTHLY_TITLE,
     description: "Everything in Supreme plus the live draft room, dynasty tools, and priority access.",
     amountUsd: 29.99,
     currency: "usd",
@@ -101,7 +106,7 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
   {
     sku: "af_war_room_yearly",
     type: "subscription",
-    title: "AF Legacy Yearly",
+    title: PAID_TIER_TOP_YEARLY_TITLE,
     description: "Everything in Supreme plus the live draft room, dynasty tools, and priority access.",
     amountUsd: 299.99,
     currency: "usd",

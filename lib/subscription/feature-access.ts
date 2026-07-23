@@ -1,3 +1,4 @@
+import { PAID_TIER_TOP_DISPLAY_NAME } from "@/lib/brand/display-names"
 import type {
   EntitlementStatus,
   SubscriptionFeatureId,
@@ -77,7 +78,7 @@ export function getDisplayPlanName(planId: SubscriptionPlanId): string {
     case "commissioner":
       return "AF Commissioner"
     case "war_room":
-      return "AF Legacy"
+      return PAID_TIER_TOP_DISPLAY_NAME
     case "supreme":
       return "AF Supreme"
     case "enterprise":
