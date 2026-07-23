@@ -55,9 +55,38 @@ function postReq(url: string, body: unknown) {
   })
 }
 
+function malformedPostReq(url: string) {
+  return new Request(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{ this is not valid json",
+  })
+}
+
+/**
+ * A POST request whose `json()` is spied on, so a test can prove the body was
+ * never parsed. `req.json().catch(() => ({}))` would swallow a malformed body
+ * and still surface the auth failure, so a malformed-body test alone cannot
+ * detect the gate being moved after parsing - this can.
+ */
+function spiedPostReq(url: string, body: unknown) {
+  const req = new Request(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  })
+  const jsonSpy = vi.fn(async () => body)
+  Object.defineProperty(req, "json", { value: jsonSpy })
+  return { req, jsonSpy }
+}
+
 const UNAUTHORIZED = { ok: false as const, res: Response.json({ error: "Unauthorized" }, { status: 401 }) }
 const FORBIDDEN = { ok: false as const, res: Response.json({ error: "Forbidden" }, { status: 403 }) }
 const ADMIN_OK = { ok: true as const, user: { id: "admin-1", role: "admin" } }
+// A league commissioner who is not a site admin resolves to the same forbidden
+// gate result - see model-admin-authorization-policy.test.ts, which proves that
+// against the real lib/adminAuth rather than this mock.
+const COMMISSIONER_NOT_ADMIN = FORBIDDEN
 
 describe("v3 weights route authorization", () => {
   beforeEach(() => {
@@ -86,6 +115,18 @@ describe("v3 weights route authorization", () => {
 
     it("returns 403 for authenticated non-admin callers and never reads snapshots", async () => {
       mocks.requireAdmin.mockResolvedValueOnce(FORBIDDEN)
+      const { GET } = await import("@/app/api/leagues/[leagueId]/v3/weights/route")
+
+      const res = await GET(getReq("http://localhost/api/leagues/league-1/v3/weights"), {
+        params: { leagueId: "league-1" },
+      })
+
+      expect(res.status).toBe(403)
+      expect(mocks.listWeightsSnapshots).not.toHaveBeenCalled()
+    })
+
+    it("returns 403 for a league commissioner who is not a site admin", async () => {
+      mocks.requireAdmin.mockResolvedValueOnce(COMMISSIONER_NOT_ADMIN)
       const { GET } = await import("@/app/api/leagues/[leagueId]/v3/weights/route")
 
       const res = await GET(getReq("http://localhost/api/leagues/league-1/v3/weights"), {
@@ -136,6 +177,56 @@ describe("v3 weights route authorization", () => {
       })
 
       expect(res.status).toBe(403)
+      expect(mocks.saveWeightsSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("returns 403 for a league commissioner who is not a site admin", async () => {
+      mocks.requireAdmin.mockResolvedValueOnce(COMMISSIONER_NOT_ADMIN)
+      const { POST } = await import("@/app/api/leagues/[leagueId]/v3/weights/route")
+
+      const res = await POST(postReq("http://localhost/api/leagues/league-1/v3/weights", validBody), {
+        params: { leagueId: "league-1" },
+      })
+
+      expect(res.status).toBe(403)
+      expect(mocks.saveWeightsSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("returns 401 for a malformed body from an unauthenticated caller", async () => {
+      mocks.requireAdmin.mockResolvedValueOnce(UNAUTHORIZED)
+      const { POST } = await import("@/app/api/leagues/[leagueId]/v3/weights/route")
+
+      const res = await POST(malformedPostReq("http://localhost/api/leagues/league-1/v3/weights"), {
+        params: { leagueId: "league-1" },
+      })
+
+      // Authorization runs before body parsing, so a bad body cannot turn the
+      // auth failure into a 400/500 or otherwise bypass the gate.
+      expect(res.status).toBe(401)
+      expect(mocks.saveWeightsSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("returns 403 for a malformed body from a non-admin caller", async () => {
+      mocks.requireAdmin.mockResolvedValueOnce(FORBIDDEN)
+      const { POST } = await import("@/app/api/leagues/[leagueId]/v3/weights/route")
+
+      const res = await POST(malformedPostReq("http://localhost/api/leagues/league-1/v3/weights"), {
+        params: { leagueId: "league-1" },
+      })
+
+      expect(res.status).toBe(403)
+      expect(mocks.saveWeightsSnapshot).not.toHaveBeenCalled()
+    })
+
+    it("never parses the request body when authorization fails", async () => {
+      mocks.requireAdmin.mockResolvedValueOnce(UNAUTHORIZED)
+      const { POST } = await import("@/app/api/leagues/[leagueId]/v3/weights/route")
+      const { req, jsonSpy } = spiedPostReq("http://localhost/api/leagues/league-1/v3/weights", validBody)
+
+      const res = await POST(req, { params: { leagueId: "league-1" } })
+
+      expect(res.status).toBe(401)
+      expect(jsonSpy).not.toHaveBeenCalled()
       expect(mocks.saveWeightsSnapshot).not.toHaveBeenCalled()
     })
 

@@ -54,6 +54,24 @@ describe("league model-admin page authorization", () => {
     expect(screen.queryByTestId("usage-analytics-panel-stub")).not.toBeInTheDocument()
   })
 
+  it("denies a league commissioner who is not a site admin", async () => {
+    // Commissioner status confers no admin access - the canonical gate reports
+    // forbidden. See model-admin-authorization-policy.test.ts, which proves this
+    // against the real lib/adminAuth rather than this mock.
+    mocks.getAdminAccessState.mockResolvedValueOnce({
+      status: "forbidden",
+      source: "app_session",
+      user: { id: "commish-1", email: "commissioner@example.com", username: "leaguecommish" },
+    })
+    const { default: ModelAdminPage } = await import("@/app/leagues/[leagueId]/admin/model/page")
+
+    render(await ModelAdminPage({ params: { leagueId: "league-1" } }))
+
+    expect(screen.getByText(/access denied/i)).toBeInTheDocument()
+    expect(screen.queryByTestId("v3-weights-panel-stub")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("usage-analytics-panel-stub")).not.toBeInTheDocument()
+  })
+
   it("renders both model admin panels for admins", async () => {
     mocks.getAdminAccessState.mockResolvedValueOnce({
       status: "admin",
