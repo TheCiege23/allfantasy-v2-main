@@ -12,6 +12,7 @@ import {
   getFlaggedLeagues,
 } from "@/lib/admin-dashboard/AdminLeagueManagementService"
 import type { AdminProviderHealthStatus } from "@/lib/admin-dashboard/AdminProviderHealthService"
+import { getFantasyImportActivity } from "@/lib/admin-dashboard/AdminImportActivityService"
 import {
   Panel,
   Stat,
@@ -337,38 +338,93 @@ export async function SportsDataSection() {
 export async function ImportsSection() {
   const { metrics } = await getOperatorOverviewData()
   const failedSync = metrics.integrity.find((m) => m.label === "Failed sync jobs 24h")
-  const importProviders = metrics.providerHealth.filter((p) => p.importedRows != null || p.lastSyncAt != null)
+  const dataProviders = metrics.providerHealth.filter((p) => p.importedRows != null || p.lastSyncAt != null)
+  const fantasyImports = await getFantasyImportActivity(30)
 
   return (
     <div className="flex flex-col gap-4">
       <PartialDataWarning>
-        Per-job import inspector (queue → authenticating → fetching → normalizing → mapping identities → writing →
-        validating), safe idempotent retry, and checkpoint resume are planned. Provider-level import health and failed
-        sync jobs are shown from real data below.
+        Per-run import inspector (queue → authenticating → fetching → normalizing → mapping identities → writing →
+        validating), safe idempotent retry, and checkpoint resume are planned. Fantasy league import counts below
+        are real (ImportRun), scoped to the last {fantasyImports.windowDays} days.
       </PartialDataWarning>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Stat
-          label="Failed sync jobs 24h"
-          value={failedSync ? String(failedSync.value) : "—"}
-          tone={failedSync && Number(failedSync.value) > 0 ? "warn" : "healthy"}
-        />
-        <Stat label="Import providers tracked" value={importProviders.length} />
-        <Stat label="Sports covered" value={metrics.sportDataReliability.length} />
-      </div>
+      <Panel eyebrow="Fantasy league imports" title="Sleeper / ESPN / Yahoo / Fantrax / MFL / Fleaflicker">
+        {fantasyImports.unavailable ? (
+          <p className="text-sm text-rose-300/80">{fantasyImports.unavailableReason}</p>
+        ) : (
+          <>
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Stat label="Attempts" value={fantasyImports.totals.attempts} />
+              <Stat label="Successes" value={fantasyImports.totals.successes} tone="healthy" />
+              <Stat
+                label="Failures"
+                value={fantasyImports.totals.failures}
+                tone={fantasyImports.totals.failures > 0 ? "warn" : "healthy"}
+              />
+              <Stat label="Unique importing users" value={fantasyImports.totals.uniqueImportingUsers} />
+            </div>
+            <TableScroll minWidth={880}>
+              <thead>
+                <tr>
+                  <Th>Provider</Th>
+                  <Th>Attempts</Th>
+                  <Th>Success rate</Th>
+                  <Th>Avg completion</Th>
+                  <Th>Imported leagues</Th>
+                  <Th>Recent failure</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {fantasyImports.byProvider.map((p) => (
+                  <tr key={p.provider}>
+                    <Td className="font-semibold text-white">
+                      {p.label}
+                      {!p.availableToUsers ? (
+                        <span className="ml-2 text-[10px] font-normal uppercase tracking-wide text-slate-500">
+                          not available to users yet
+                        </span>
+                      ) : null}
+                    </Td>
+                    <Td>{p.attempts}</Td>
+                    <Td>{p.successRatePct == null ? "—" : `${p.successRatePct}%`}</Td>
+                    <Td>{p.avgCompletionMs == null ? "—" : `${Math.round(p.avgCompletionMs / 1000)}s`}</Td>
+                    <Td>{p.importedLeagues}</Td>
+                    <Td className="max-w-[240px] truncate text-rose-300/80">{p.recentFailureReason ?? "—"}</Td>
+                  </tr>
+                ))}
+              </tbody>
+            </TableScroll>
+          </>
+        )}
+      </Panel>
 
-      <Panel title="Provider import health">
+      <Panel eyebrow="Sports-data ingestion — not league imports" title="Provider sync health">
+        <p className="mb-3 text-xs text-slate-500">
+          Rolling Insights, API-Sports, TheSportsDB, and Sleeper/ESPN&rsquo;s public data feeds — schedules,
+          projections, injuries, scores, and player data. This is data-ingestion health, not whether a
+          user&rsquo;s Sleeper/ESPN/Yahoo league import succeeded (see Fantasy league imports above).
+        </p>
+        <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <Stat
+            label="Failed sync jobs 24h"
+            value={failedSync ? String(failedSync.value) : "—"}
+            tone={failedSync && Number(failedSync.value) > 0 ? "warn" : "healthy"}
+          />
+          <Stat label="Data providers tracked" value={dataProviders.length} />
+          <Stat label="Sports covered" value={metrics.sportDataReliability.length} />
+        </div>
         <TableScroll minWidth={760}>
           <thead>
             <tr>
               <Th>Provider</Th>
-              <Th>Imported rows</Th>
+              <Th>Cached rows</Th>
               <Th>Last sync</Th>
               <Th>Last error</Th>
             </tr>
           </thead>
           <tbody>
-            {importProviders.map((p) => (
+            {dataProviders.map((p) => (
               <tr key={p.id}>
                 <Td className="font-semibold text-white">{p.name}</Td>
                 <Td>{p.importedRows ?? "—"}</Td>
