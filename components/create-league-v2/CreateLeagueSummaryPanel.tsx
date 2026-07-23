@@ -58,7 +58,7 @@ export function CreateLeagueSummaryPanel({
           <dd className="max-w-[58%] text-right font-medium text-white/90">{presetLabel ?? '—'}</dd>
         </div>
         <div className="flex justify-between gap-3 border-b border-white/[0.06] pb-2">
-          <dt className="text-white/45">{lt === 'tournament' ? 'Pool' : 'Teams'}</dt>
+          <dt className="text-white/45">Teams</dt>
           <dd className="text-right font-medium text-white/90">{state.teamCount}</dd>
         </div>
         <div className="flex justify-between gap-3 border-b border-white/[0.06] pb-2">

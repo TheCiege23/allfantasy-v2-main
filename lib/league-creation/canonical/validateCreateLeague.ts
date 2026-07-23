@@ -16,6 +16,7 @@ import {
 } from '@/lib/draft-types/draftTypeRegistry'
 import { isAllowedIdpDraftType, normalizeToSupportedSport, supportsIdpLeagueSport } from '@/lib/sport-scope'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
+import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import type { SupportedSport } from '@/lib/create-league-v2/state'
 import type { ValidationIssue } from '@/lib/league-creation/canonical/types'
 import {
@@ -130,6 +131,20 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
       error: 'Unknown league concept',
       status: 400,
       errors: [{ path: 'concept', message: 'Invalid or unsupported concept' }],
+    }
+  }
+
+  // Retired concepts may no longer be created. Checked against the NORMALISED
+  // format id, so casing ("TOURNAMENT"), surrounding whitespace and alias
+  // spellings are all covered — `normalizeConceptToFormat` folds them first.
+  // Reads and imports of existing leagues are deliberately unaffected.
+  const retired = checkRetiredConcept(normalized.formatId)
+  if (retired) {
+    return {
+      ok: false,
+      error: retired.message,
+      status: 400,
+      errors: [{ path: 'concept', message: retired.message, code: retired.code }],
     }
   }
 
