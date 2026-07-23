@@ -133,6 +133,24 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
     }
   }
 
+  // Tournament Mode: new-league creation retired for beta (route/cron preserved off,
+  // see scripts/vercel-next-build.cjs). Existing Tournament data is untouched -- this
+  // only blocks creating new ones. Re-enable only through an intentional product decision.
+  if (normalized.formatId === 'tournament') {
+    return {
+      ok: false,
+      error: 'Tournament league creation is currently unavailable',
+      status: 400,
+      errors: [
+        {
+          path: 'concept',
+          message: 'Tournament league creation is currently unavailable',
+          code: 'TOURNAMENT_CREATION_DISABLED',
+        },
+      ],
+    }
+  }
+
   const formatId = normalized.formatId
   const idpRequested = normalized.aliasTags.includes('idp')
   const rawDraftType = String(data.draftType ?? '').trim().toLowerCase()
