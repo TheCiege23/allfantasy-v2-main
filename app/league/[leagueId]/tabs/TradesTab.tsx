@@ -12,6 +12,7 @@ import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
 import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard'
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { shadowDisclosure } from '@/lib/league/write-authority'
 import { ProposeTradeModal } from './ProposeTradeModal'
 import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
@@ -64,6 +65,9 @@ function positionAccent(pos: string): { border: string; label: string } {
 
 export function TradesTab({ league, teams }: TradesTabProps) {
   const sport = normalizeToSupportedSport(league.sport) ?? 'NFL'
+  // Non-null only for imported (SHADOW) leagues, where a trade built here never reaches the
+  // partner on their own platform. Drives every "Propose"→"Build a shadow trade" relabel.
+  const tradeShadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
   const [panelMode, setPanelMode] = useState<PanelMode>('trade')
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
@@ -228,7 +232,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             className="rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-cyan-100 hover:bg-cyan-500/20"
             data-testid="trades-tab-propose-trade-header"
           >
-            Propose a Trade
+            {tradeShadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
           </button>
         </div>
       ) : null}
@@ -314,7 +318,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                       className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-400 transition hover:text-cyan-300"
                       data-testid="trades-tab-propose-trade"
                     >
-                      Propose a trade
+                      {tradeShadowNotice ? 'Build a shadow trade' : 'Propose a trade'}
                     </button>
                   ) : (
                     <Link
@@ -479,6 +483,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           onClose={() => setProposeOpen(false)}
           leagueId={league.id}
           teams={teams}
+          platform={league.platform}
           onSubmitted={() => void load()}
         />
       ) : null}

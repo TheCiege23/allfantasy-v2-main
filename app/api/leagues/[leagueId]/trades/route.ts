@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { createAfLeagueTrade, listAfLeagueTrades } from '@/lib/league-trade-engine/tradeService'
+import { resolveWriteAuthorityEnvelope } from '@/lib/league/write-authority-server'
 import type { TradeAssetInput } from '@/lib/league-trade-engine/types'
 import { prisma } from '@/lib/prisma'
 import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
@@ -30,8 +31,13 @@ export async function GET(
   const gate = await assertLeagueMember(leagueId, userId)
   if (!gate.ok) return NextResponse.json({ error: 'Forbidden' }, { status: gate.status })
 
-  const trades = await listAfLeagueTrades(leagueId, { take: 100 })
-  return NextResponse.json({ trades })
+  const [trades, writeAuthority] = await Promise.all([
+    listAfLeagueTrades(leagueId, { take: 100 }),
+    resolveWriteAuthorityEnvelope(leagueId, 'trade'),
+  ])
+  // Emitted on the list read too, so the Trades tab can label the whole surface as shadow
+  // before the user opens the builder — not only after they submit.
+  return NextResponse.json({ trades, writeAuthority })
 }
 
 export async function POST(
@@ -112,7 +118,10 @@ export async function POST(
       expiresInHours: body.expiresInHours,
       metadata: body.metadata,
     })
-    return NextResponse.json({ ok: true, tradeId: id, governance, ...(sportsDataDecision ? { sportsDataDecision } : {}) })
+    // An imported league's trade lives only in AllFantasy — the counterparty on ESPN/Yahoo/Sleeper
+    // will never see it. The envelope carries the copy that says so.
+    const writeAuthority = await resolveWriteAuthorityEnvelope(leagueId, 'trade')
+    return NextResponse.json({ ok: true, tradeId: id, governance, writeAuthority, ...(sportsDataDecision ? { sportsDataDecision } : {}) })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     return NextResponse.json({ error: msg }, { status: 400 })

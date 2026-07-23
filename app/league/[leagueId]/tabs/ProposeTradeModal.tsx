@@ -2,6 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import { toast } from 'sonner'
+import {
+  saveActionLabel,
+  shadowDisclosure,
+  sourcePlatformLabel,
+  writeAuthorityCopy,
+} from '@/lib/league/write-authority'
 import { AppModal } from '@/components/ui/AppModal'
 import type { LeagueTeamSlot } from '@/app/dashboard/types'
 import type { TradeableRoster, TradeableRosterPlayer } from '@/app/api/leagues/[leagueId]/trades/rosters/route'
@@ -12,6 +19,12 @@ export type ProposeTradeModalProps = {
   leagueId: string
   teams: LeagueTeamSlot[]
   onSubmitted: () => void
+  /**
+   * `League.platform`. Drives Write Authority: on an imported (SHADOW) league this builder
+   * creates a proposal that exists only in AllFantasy — the trade partner, who plays on
+   * ESPN/Yahoo/Sleeper, will never receive it. Omitted/native leagues send a real offer.
+   */
+  platform?: string | null
 }
 
 /**
@@ -20,9 +33,20 @@ export type ProposeTradeModalProps = {
  * (`POST /api/leagues/[leagueId]/trades`) — the same engine verified end-to-end (create, accept,
  * commissioner review, roster sync) — not the Sleeper-deeplink / simulation-only trade finder.
  */
-export function ProposeTradeModal({ open, onClose, leagueId, teams, onSubmitted }: ProposeTradeModalProps) {
+export function ProposeTradeModal({
+  open,
+  onClose,
+  leagueId,
+  teams,
+  onSubmitted,
+  platform,
+}: ProposeTradeModalProps) {
   const { data: session } = useSession()
   const myUserId = session?.user?.id ?? null
+  const tradeCopy = useMemo(() => writeAuthorityCopy('trade', platform), [platform])
+  const submitLabel = useMemo(() => saveActionLabel('trade', platform), [platform])
+  const shadowNotice = useMemo(() => shadowDisclosure(platform), [platform])
+  const sourceLabel = useMemo(() => sourcePlatformLabel(platform), [platform])
 
   const [rosters, setRosters] = useState<TradeableRoster[] | null>(null)
   const [loading, setLoading] = useState(false)
@@ -114,11 +138,19 @@ export function ProposeTradeModal({ open, onClose, leagueId, teams, onSubmitted 
           assets,
         }),
       })
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string
+        writeAuthority?: { copy?: { title?: string; detail?: string } }
+      }
       if (!res.ok) {
         setError(data.error ?? 'Failed to submit trade.')
         return
       }
+      // Server envelope is authoritative; the local builder is the fallback. On a SHADOW league
+      // this says "Shadow trade created — send this offer in ESPN to make it real", never
+      // "Trade offer sent", which would imply the partner was notified on their platform.
+      const created = data.writeAuthority?.copy ?? tradeCopy
+      toast.success(created.title ?? tradeCopy.title, { description: created.detail || undefined })
       onSubmitted()
       onClose()
     } catch {
@@ -129,8 +161,27 @@ export function ProposeTradeModal({ open, onClose, leagueId, teams, onSubmitted 
   }
 
   return (
-    <AppModal open={open} onClose={onClose} title="Propose a Trade" size="lg">
+    <AppModal
+      open={open}
+      onClose={onClose}
+      title={shadowNotice ? 'Build a Shadow Trade' : 'Propose a Trade'}
+      size="lg"
+    >
       <div className="space-y-4 text-[13px] text-white/80">
+        {/*
+          Shown before any selection is made. A manager building a trade for an imported league
+          needs to know up front that the offer stops at AllFantasy — discovering it in the
+          success toast is too late to be honest about it.
+        */}
+        {shadowNotice ? (
+          <p
+            data-testid="shadow-league-trade-notice"
+            className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[11px] text-sky-100/90"
+          >
+            This proposal stays inside AllFantasy — {sourceLabel ?? 'your host platform'} is not notified.
+            Use it as a plan, then send the offer in {sourceLabel ?? 'your host platform'}.
+          </p>
+        ) : null}
         {loading ? (
           <p className="text-white/50">Loading rosters…</p>
         ) : (
@@ -215,7 +266,7 @@ export function ProposeTradeModal({ open, onClose, leagueId, teams, onSubmitted 
                 className="rounded-lg bg-cyan-500/85 px-3 py-2 text-[12px] font-semibold text-black disabled:opacity-50"
                 data-testid="propose-trade-submit"
               >
-                {submitting ? 'Sending…' : 'Send Trade Offer'}
+                {submitting ? 'Saving…' : submitLabel}
               </button>
             </div>
           </>

@@ -149,9 +149,13 @@ const SURVIVOR_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'survivor_advanced', label: '⚙️ Advanced Rules' },
 ]
 
-function statusLabel(s: AutosaveStatus): string | null {
+/**
+ * `savedLabel` lets a Shadow League replace the plain "Saved" with "Shadow rules updated", so a
+ * commissioner is never told a change landed anywhere but AllFantasy. Defaults to "Saved".
+ */
+function statusLabel(s: AutosaveStatus, savedLabel?: string): string | null {
   if (s === 'saving') return 'Saving…'
-  if (s === 'saved') return 'Saved'
+  if (s === 'saved') return savedLabel ?? 'Saved'
   if (s === 'error') return 'Save failed'
   return null
 }
@@ -180,6 +184,7 @@ export function SettingsNav({
   activeTab,
   onSelect,
   saveStatus,
+  savedLabel,
   showSurvivorTabs,
   showZombieTabs,
   showIdpTabs,
@@ -190,6 +195,8 @@ export function SettingsNav({
   activeTab: SettingsNavTabId
   onSelect: (id: SettingsNavTabId) => void
   saveStatus: AutosaveStatus
+  /** Overrides the "Saved" hint — Shadow Leagues pass "Shadow rules updated". */
+  savedLabel?: string
   showSurvivorTabs?: boolean
   showZombieTabs?: boolean
   showIdpTabs?: boolean
@@ -197,7 +204,7 @@ export function SettingsNav({
   showC2cTabs?: boolean
   className?: string
 }) {
-  const hint = statusLabel(saveStatus)
+  const hint = statusLabel(saveStatus, savedLabel)
   const items = [
     ...BASE_NAV,
     ...(showSurvivorTabs ? SURVIVOR_NAV : []),

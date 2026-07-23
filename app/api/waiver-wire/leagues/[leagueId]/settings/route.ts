@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { getEffectiveLeagueWaiverSettings, upsertLeagueWaiverSettings } from "@/lib/waiver-wire"
+import { buildWriteAuthorityEnvelope } from "@/lib/league/write-authority"
 
 export async function GET(
   _req: NextRequest,
@@ -14,7 +15,7 @@ export async function GET(
 
   const leagueId = params.leagueId
   const [league, rosterAsMember] = await Promise.all([
-    (prisma as any).league.findFirst({ where: { id: leagueId }, select: { id: true, sport: true, leagueVariant: true, userId: true } }),
+    (prisma as any).league.findFirst({ where: { id: leagueId }, select: { id: true, sport: true, leagueVariant: true, userId: true, platform: true } }),
     (prisma as any).roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { id: true } }),
   ])
   const hasAccess = league && (league.userId === userId || rosterAsMember)
@@ -27,6 +28,9 @@ export async function GET(
     ...settings,
     sport: (league as { sport?: string })?.sport ?? null,
     formatType: formatType ?? undefined,
+    // Loaded with the rest of the waiver shell so the page can disclose SHADOW status before a
+    // manager files a claim, not only in the toast afterwards.
+    writeAuthority: buildWriteAuthorityEnvelope('waiver_claim', (league as { platform?: string })?.platform ?? null),
   })
 }
 

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeftRight, ClipboardList, Settings, X, ExternalLink, Activity } from 'lucide-react'
 import { toast } from 'sonner'
+import { shadowDisclosure, writeAuthorityCopy } from '@/lib/league/write-authority'
 import { SubscriptionGateBadge } from '@/components/subscription/SubscriptionGateBadge'
 import { SubscriptionGateModal } from '@/components/subscription/SubscriptionGateModal'
 import { useEntitlement } from '@/hooks/useEntitlement'
@@ -1034,6 +1035,10 @@ export function TeamTab({
   const resolvedSport = sport ?? league.sport
   const { players: sleeperPlayers, loading: sleeperPlayersLoading } = useSleeperPlayers(resolvedSport)
   const isSleeper = league.platform === 'sleeper'
+  // Write Authority for this league. SHADOW (any imported league) means a saved lineup lands in
+  // AllFantasy's twin and never reaches the source platform — the copy below says exactly that.
+  const lineupWriteCopy = useMemo(() => writeAuthorityCopy('lineup', league.platform), [league.platform])
+  const shadowNotice = useMemo(() => shadowDisclosure(league.platform), [league.platform])
   const [week, setWeek] = useState(1)
   const [weekMenuOpen, setWeekMenuOpen] = useState(false)
   const [dbRosterMeta, setDbRosterMeta] = useState<{
@@ -1463,12 +1468,20 @@ const maxWeekMenu = useMemo(() => {
             roster,
           }),
         })
-        await res.json().catch(() => ({}))
+        const saveData = (await res.json().catch(() => ({}))) as {
+          writeAuthority?: { copy?: { title?: string; detail?: string } }
+        }
         if (!res.ok) {
           toast.error('Lineup was not saved. Your previous lineup is still active.')
           return false
         }
-        toast.success('Lineup saved')
+        // Prefer the server's envelope (authoritative), falling back to the same pure copy
+        // builder client-side. On a SHADOW league this reads "Shadow lineup saved — saved in
+        // AllFantasy only", never a bare "Lineup saved" that implies ESPN/Yahoo was updated.
+        const savedCopy = saveData.writeAuthority?.copy ?? lineupWriteCopy
+        toast.success(savedCopy.title ?? lineupWriteCopy.title, {
+          description: savedCopy.detail || undefined,
+        })
         setLineupLists(next)
         await load()
         setLegalityBump((n) => n + 1)
@@ -1482,7 +1495,7 @@ const maxWeekMenu = useMemo(() => {
         setSavingLineup(false)
       }
     },
-    [dbRosterMeta, lineupEditable, players, league.id, week, load],
+    [dbRosterMeta, lineupEditable, players, league.id, week, load, lineupWriteCopy],
   )
 
   const replacementContextsByPlayer = useMemo(() => {
@@ -1807,6 +1820,20 @@ const maxWeekMenu = useMemo(() => {
       {!isSleeper && weekLock?.locked ? (
         <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90">
           {weekLock.reason ?? 'Lineup is locked for this week.'}
+        </p>
+      ) : null}
+
+      {/*
+        Shadow disclosure sits with the roster itself, not only in the post-save toast — a manager
+        should know where a change lands BEFORE making it. Rendered for every imported league,
+        including the Sleeper live-mirror view (where editing is additionally unavailable).
+      */}
+      {shadowNotice ? (
+        <p
+          data-testid="shadow-league-lineup-notice"
+          className="rounded-lg border border-sky-500/25 bg-sky-500/10 px-3 py-2 text-[11px] text-sky-100/90"
+        >
+          {shadowNotice}
         </p>
       ) : null}
 

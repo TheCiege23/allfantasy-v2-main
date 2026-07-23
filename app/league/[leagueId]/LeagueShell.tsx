@@ -121,6 +121,7 @@ import { ZombieHome } from '@/components/zombie/ZombieHome'
 import type { C2CConfigClient } from '@/lib/c2c/c2cUiLabels'
 import { c2cScoreModeChip, c2cSportPairShort } from '@/lib/c2c/c2cUiLabels'
 import { RenewLeagueBanner } from '@/components/league/RenewLeagueBanner'
+import { ShadowLeagueBanner } from '@/components/league/ShadowLeagueBanner'
 import { PostCreateSetupGuideBanner } from '@/components/league/PostCreateSetupGuideBanner'
 import { LeagueConceptIntroGate } from '@/components/league/LeagueConceptIntroGate'
 import { useMyLeaguesRailCollapse } from '@/hooks/useMyLeaguesRailCollapse'
@@ -1350,6 +1351,14 @@ export function LeagueShell({
                 <LeagueStoryCard leagueId={league.id} sport={String(league.sport)} />
               </div>
             )}
+
+            {/*
+              Shadow League marker — states the operating mode once, above every tab, for any
+              imported league. Renders nothing for native AF leagues.
+            */}
+            <div className="px-4 pt-3 empty:hidden">
+              <ShadowLeagueBanner platform={league.platform} />
+            </div>
 
             {/* Renew League banner - shown to commissioner when season ends */}
             <RenewLeagueBanner

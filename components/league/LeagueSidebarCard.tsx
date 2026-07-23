@@ -8,6 +8,7 @@ import { buildLeagueFormatLabel, buildStatusConfig } from '@/lib/leagues/leagueF
 import type { UserLeague } from '@/app/dashboard/types'
 import { getLeagueListDestinationHref } from '@/lib/dashboard/league-list-destination'
 import { importedPlatformLabel } from '@/lib/dashboard/platform-label'
+import { isShadowLeague, shadowDisclosure } from '@/lib/league/write-authority'
 
 export type LeagueSidebarCardProps = {
   league: UserLeague
@@ -67,6 +68,8 @@ export function LeagueSidebarCard({
   const status = buildStatusConfig(league.status)
   const sportLabel = (league.sport || 'NFL').toString().toUpperCase()
   const platformLabel = getPlatformLabel(league.platform)
+  const isShadow = isShadowLeague(league.platform)
+  const shadowTitle = shadowDisclosure(league.platform)
   const destinationHref = getLeagueListDestinationHref(league)
   const tournamentHubNav = destinationHref.startsWith('/tournament/')
   const inlineSelectActive = Boolean(inlineDashboardSelect && onSelect && !tournamentHubNav)
@@ -234,9 +237,20 @@ export function LeagueSidebarCard({
                   ARC
                 </span>
               )}
-              {league.importedAt && !league.lifecycleState && (
-                <span className="shrink-0 rounded border border-sky-500/25 bg-sky-500/10 px-1 py-0.5 text-[8px] font-medium text-sky-400/70" title="Imported league">
-                  IMP
+              {/*
+                Replaces the previous `importedAt && !lifecycleState` "IMP" badge, which could
+                never render: `/api/league/list` does not select `importedAt` (so the first
+                operand was always undefined) AND `lifecycleState` is non-nullable with a
+                default of `in_season` (so the second was always false). `platform` is always
+                present on this payload, and Write Authority derives from it alone.
+              */}
+              {isShadow && (
+                <span
+                  className="shrink-0 rounded border border-sky-500/35 bg-sky-500/15 px-1 py-0.5 text-[8px] font-bold text-sky-300"
+                  title={shadowTitle ?? 'Shadow league — changes stay inside AllFantasy'}
+                  data-testid="league-card-shadow-badge"
+                >
+                  SHADOW
                 </span>
               )}
             </div>

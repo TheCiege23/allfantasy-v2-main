@@ -16,6 +16,7 @@ import {
   buildPersistedRosterDataFromRosterState,
   weekFromLeagueSettingsForLineup,
 } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
+import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
 import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
 
@@ -94,11 +95,15 @@ export async function POST(req: NextRequest) {
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
-    select: { id: true, userId: true, leagueVariant: true, sport: true, settings: true },
+    // `platform` drives Write Authority — an imported (SHADOW) league persists this lineup to
+    // AllFantasy only, and the response must say so rather than returning a bare `ok: true`
+    // the client renders as "Lineup saved".
+    select: { id: true, userId: true, leagueVariant: true, sport: true, settings: true, platform: true },
   })
   if (!league) {
     return NextResponse.json({ error: 'League not found' }, { status: 404 })
   }
+  const writeAuthority = buildWriteAuthorityEnvelope('lineup', league.platform)
 
   const editingWeekRaw = (body as Record<string, unknown>)?.week
   const editingWeek =
@@ -279,6 +284,11 @@ export async function POST(req: NextRequest) {
     }),
   )
 
-  return NextResponse.json({ ok: true, rosterId: targetRosterId, ...(sportsDataDecision ? { sportsDataDecision } : {}) })
+  return NextResponse.json({
+    ok: true,
+    rosterId: targetRosterId,
+    writeAuthority,
+    ...(sportsDataDecision ? { sportsDataDecision } : {}),
+  })
 }
 

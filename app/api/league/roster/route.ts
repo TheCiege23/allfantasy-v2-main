@@ -11,6 +11,7 @@ import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupL
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { getRedraftDefaultContract } from '@/lib/league-concepts/redraftDefaults'
 import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { buildWriteAuthorityEnvelope } from '@/lib/league/write-authority'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -311,6 +312,9 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       },
       canEditLineup: !lockCtx.locked,
       lineupLockHelp: lockCtx.reason,
+      // Lets the client label the save control ("Save shadow lineup") before the user commits,
+      // rather than only correcting the story in the success toast afterwards.
+      writeAuthority: buildWriteAuthorityEnvelope('lineup', league.platform),
     })
   }
 
@@ -491,6 +495,11 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
     canEditLineup: false,
     lineupLockHelp:
       'Lineups for Sleeper leagues are managed in the Sleeper app. This view is read-only in AllFantasy.',
+    // Sleeper is a SHADOW league like any other import, but this particular view is a LIVE MIRROR
+    // of Sleeper's own roster rather than the AF twin, so shadow lineup editing is not offered
+    // here. See `docs/league/SHADOW_LEAGUES.md` — closing that gap is follow-up work, not a
+    // write-back feature.
+    writeAuthority: buildWriteAuthorityEnvelope('lineup', league.platform),
   })
 }
 

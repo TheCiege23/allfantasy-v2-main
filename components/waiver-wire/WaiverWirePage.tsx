@@ -17,6 +17,7 @@ import {
   WAIVER_EMPTY_HISTORY_TITLE,
 } from "@/lib/waiver-wire/WaiverWireViewService"
 import { getWaiverAIChatUrl, buildWaiverSummaryForAI } from "@/lib/waiver-wire/WaiverToAIContextBridge"
+import type { WriteAuthorityEnvelope } from "@/lib/league/write-authority"
 import { waiverPositionMatches } from "@/lib/waiver-wire/SportWaiverResolver"
 import {
   getDefaultWaiverFilterState,
@@ -211,6 +212,13 @@ export default function WaiverWirePage({
   const { formatInTimezone } = useUserTimezone()
   const { enabled: aiAssistantEnabled, loading: aiAvailabilityLoading } = useAIAssistantAvailability()
   const [settings, setSettings] = useState<WaiverSettings | null>(null)
+  /**
+   * Write Authority envelope from `/settings`. Null until loaded, or for leagues where the
+   * route predates this field. `shadow: true` ⇒ claims stay inside AllFantasy.
+   */
+  const [writeAuthority, setWriteAuthority] = useState<WriteAuthorityEnvelope | null>(null)
+  const isShadow = writeAuthority?.shadow === true
+  const shadowSource = writeAuthority?.sourceLabel ?? "your host platform"
   const [players, setPlayers] = useState<Player[]>([])
   const [claims, setClaims] = useState<Claim[]>([])
   const [history, setHistory] = useState<{ claims: Claim[]; transactions: Transaction[] }>({ claims: [], transactions: [] })
@@ -317,6 +325,11 @@ export default function WaiverWirePage({
       setNextRunAt(typeof nr === "string" ? nr : nr instanceof Date ? nr.toISOString() : nr != null ? String(nr) : null)
       if (!settingsRes.ok) setSettings(null)
       else setSettings(settingsData)
+      // Write Authority rides along with waiver settings. Non-null `shadow` means every claim on
+      // this surface is a recommendation held in AllFantasy, not a claim filed with the host.
+      setWriteAuthority(
+        settingsRes.ok && settingsData?.writeAuthority ? settingsData.writeAuthority : null,
+      )
       if (!claimsRes.ok) setClaims([])
       else setClaims(Array.isArray(claimsData.claims) ? claimsData.claims : [])
       if (!playersRes.ok) setPlayers([])
@@ -416,6 +429,13 @@ export default function WaiverWirePage({
         if (typeof json?.fcfsProcessWarning === "string" && json.fcfsProcessWarning.trim()) {
           toast.warning(`Claim saved; processing warning: ${json.fcfsProcessWarning}`)
         }
+        // On a SHADOW league this reads "Waiver recommendation saved — submit it in Yahoo before
+        // your league's waiver deadline", so the manager knows the claim was NOT filed with the
+        // host. Native leagues keep the plain "Claim submitted".
+        const claimCopy = json?.writeAuthority?.copy as { title?: string; detail?: string } | undefined
+        toast.success(claimCopy?.title ?? "Claim submitted", {
+          description: claimCopy?.detail || undefined,
+        })
         setDrawerOpen(false)
         setDrawerPlayer(null)
         setImmediateMode(false)
@@ -473,7 +493,15 @@ export default function WaiverWirePage({
           setDrawerOpen(false)
           setDrawerPlayer(null)
           setImmediateMode(false)
-          toast.success(dropPlayerId ? `Added ${player.name} and dropped a player.` : `Added ${player.name}.`)
+          // Shadow add/drop moved the AllFantasy twin only — say so instead of implying the
+          // player is now on the manager's real roster.
+          const moveCopy = json?.writeAuthority?.copy as { title?: string; detail?: string } | undefined
+          const moveTitle = dropPlayerId
+            ? `Added ${player.name} and dropped a player.`
+            : `Added ${player.name}.`
+          toast.success(moveTitle, {
+            description: moveCopy?.detail || undefined,
+          })
           await refreshAfterMutation()
           invalidateIntelligence({ leagueId, reason: "waiver_add_drop" })
           return
@@ -1457,11 +1485,22 @@ export default function WaiverWirePage({
             </div>
           )}
         </dl>
-        <p className="mt-2 text-xs text-white/55">
-          Roster and positional limits are enforced by your host league. If your roster is full or a player is
-          ineligible for a slot, you may be required to choose a drop here or finalize moves directly on the host
-          platform after claims process.
-        </p>
+        {/*
+          Previously this said moves "may" need finalizing on the host — a hedge that let a
+          shadow claim read as though it had been filed. For an imported league it never reaches
+          the host, so state that outright; native leagues keep the original limits note.
+        */}
+        {isShadow ? (
+          <p data-testid="shadow-league-waiver-notice" className="mt-2 text-xs text-sky-200/80">
+            Claims here are recommendations held inside AllFantasy — nothing is submitted to{" "}
+            {shadowSource}. Enter the move there before your league&apos;s waiver deadline for it to count.
+          </p>
+        ) : (
+          <p className="mt-2 text-xs text-white/55">
+            Roster and positional limits are enforced by your league settings. If your roster is full or a
+            player is ineligible for a slot, you may be required to choose a drop before the claim can process.
+          </p>
+        )}
         <div className="mt-3 pt-3 border-t border-white/10">
           <Link
             href={waiverAiHelpHref}

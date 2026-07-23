@@ -117,7 +117,7 @@ export function CommissionerSettingsModal({
   const [c2cMode, setC2cMode] = useState(false)
   const [c2cConfig, setC2cConfig] = useState<C2CConfigClient | null>(null)
 
-  const { status, save, debouncedSave } = useAutosave(leagueId)
+  const { status, save, debouncedSave, savedLabel } = useAutosave(leagueId)
   const { hasCommissioner } = useEntitlements()
 
   useEffect(() => {
@@ -314,6 +314,7 @@ export function CommissionerSettingsModal({
           activeTab={activeTab}
           onSelect={setActiveTab}
           saveStatus={status}
+          savedLabel={savedLabel}
           showSurvivorTabs={survivorMode}
           showZombieTabs={zombieMode}
           showIdpTabs={idpLeague}

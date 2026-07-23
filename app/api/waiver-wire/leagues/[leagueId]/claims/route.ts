@@ -14,6 +14,7 @@ import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
 import { logAction } from '@/server/services/auditService'
 import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTransactionGates'
 import { getLeagueRole } from "@/lib/league/permissions"
+import { resolveWriteAuthorityEnvelope } from "@/lib/league/write-authority-server"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
 import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
 import { CertifiedWaiverIntegrationService } from '@/lib/fantasy-os/sports-runtime/waiverIntegration'
@@ -241,9 +242,14 @@ export async function POST(
       }
     }
 
+    // SHADOW leagues: this claim is a recommendation held in AllFantasy. Nothing was entered
+    // on the source platform, and even FCFS "immediate processing" above only moved the twin.
+    const writeAuthority = await resolveWriteAuthorityEnvelope(leagueId, "waiver_claim")
+
     return NextResponse.json({
       claim,
       fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !fcfsProcessWarning,
+      writeAuthority,
       ...(fcfsProcessWarning ? { fcfsProcessWarning } : {}),
       ...(sportsDataDecision ? { sportsDataDecision } : {}),
     })
