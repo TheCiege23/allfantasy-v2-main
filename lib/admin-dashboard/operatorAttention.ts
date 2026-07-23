@@ -289,10 +289,18 @@ export function buildOperatorHealthRow(
       tracked: true,
     },
     {
-      label: "Active users",
+      // Was mislabeled "Active users" while showing the lifetime signup count. Renamed to what it
+      // actually measures. A time-boxed activity metric (active today / 7d / 30d) is intentionally
+      // NOT shown here: PlatformAnalyticsService's DAU/MAU implementation was investigated and found
+      // production-unsafe (unbounded findMany + in-memory dedup over AnalyticsEvent, which mirrors
+      // every page view sitewide) — wiring it as-is could time out or OOM this page on a large table.
+      label: "Total accounts",
       value: totalAccounts != null ? totalAccounts.toLocaleString() : "Unknown",
       tone: "info",
-      note: activeSessions != null ? `${activeSessions.toLocaleString()} active sessions now` : undefined,
+      note:
+        activeSessions != null
+          ? `Lifetime signups, not activity · ${activeSessions.toLocaleString()} sessions active right now`
+          : "Lifetime signups — not an activity metric",
       tracked: totalAccounts != null,
     },
     {
