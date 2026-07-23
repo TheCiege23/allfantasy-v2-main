@@ -7,6 +7,7 @@ import { DEFAULT_TOURNAMENT_SETTINGS } from '@/lib/tournament-mode/constants'
 import { TOURNAMENT_PARTICIPANT_POOL_SIZES_EXTENDED } from '@/lib/tournament-mode/pool-sizes'
 import type { TournamentSettings } from '@/lib/tournament-mode/types'
 import { isSupportedSport } from '@/lib/sport-scope'
+import { RetiredConceptError } from '@/lib/league-creation/retiredConcepts'
 import { z } from 'zod'
 
 /**
@@ -127,6 +128,11 @@ export async function POST(req: Request) {
       conferenceNames: result.conferenceNames,
     })
   } catch (err) {
+    // Tournament Mode is retired from active creation — surface the stable
+    // reason code as a 400 rather than letting it fall through to a generic 500.
+    if (err instanceof RetiredConceptError) {
+      return NextResponse.json({ error: err.message, code: err.code }, { status: err.status })
+    }
     console.error('[tournament/create] Error:', err)
     return NextResponse.json(
       { error: 'Failed to create tournament' },

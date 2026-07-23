@@ -253,12 +253,23 @@ export async function runLegacyImportStep(
     leagues = await getUserLeagues(sleeperUserId, sport, String(currentSeason));
   } catch (e: any) {
     console.error(`Error fetching leagues for season ${currentSeason}:`, e.message);
-    // Move to next season on error
+    // Move to next season on error — but RECORD the failed season instead of silently dropping
+    // it. totalSeasons grows while seasonsCompleted doesn't, which is exactly what lets the
+    // status route derive an honest "partial" instead of reporting a clean "completed".
     const nextSeason = currentSeason - 1;
     const progress = calculateProgress(nextSeason);
+    const summary = Array.isArray(job.seasonsSummary) ? (job.seasonsSummary as unknown[]) : [];
     await prisma.legacyImportJob.update({
       where: { id: jobId },
-      data: { currentSeason: nextSeason, progress },
+      data: {
+        currentSeason: nextSeason,
+        progress,
+        totalSeasons: { increment: 1 },
+        seasonsSummary: [
+          ...summary,
+          { season: currentSeason, ok: false, reason: 'SEASON_FETCH_FAILED' },
+        ] as object[],
+      },
     });
     return { done: false, progress };
   }
@@ -291,11 +302,38 @@ export async function runLegacyImportStep(
     return { done: false, progress };
   }
 
-  // Reset empty years counter and import leagues
+  // Reset empty years counter and import leagues. Per-league failures are COUNTED, not
+  // swallowed — a season where some leagues failed must be distinguishable from a full one.
+  let leaguesSaved = 0;
+  let leagueFailures = 0;
   await runWithConcurrency(leagues, 3, async (league) => {
-    await importLeague(userId, sleeperUserId, league, currentSeason!);
+    try {
+      await importLeague(userId, sleeperUserId, league, currentSeason!);
+      leaguesSaved += 1;
+    } catch (e: any) {
+      leagueFailures += 1;
+      console.error(`Error importing league ${league.league_id} (season ${currentSeason}):`, e?.message);
+    }
     return true;
   });
+
+  const priorSummary = Array.isArray(job.seasonsSummary) ? (job.seasonsSummary as unknown[]) : [];
+  const seasonCompleteness = {
+    totalSeasons: { increment: 1 },
+    seasonsCompleted: { increment: leagueFailures === 0 ? 1 : 0 },
+    totalLeaguesSaved: { increment: leaguesSaved },
+    currentSeasonLeagues: leagues.length,
+    seasonsSummary: [
+      ...priorSummary,
+      {
+        season: currentSeason,
+        ok: leagueFailures === 0,
+        leagues: leagues.length,
+        saved: leaguesSaved,
+        ...(leagueFailures > 0 ? { failed: leagueFailures, reason: 'LEAGUE_IMPORT_FAILED' } : {}),
+      },
+    ] as object[],
+  };
 
   // Move to next season
   const nextSeason = currentSeason - 1;
@@ -310,6 +348,7 @@ export async function runLegacyImportStep(
         completedAt: new Date(),
         currentSeason: nextSeason,
         emptyYears: 0,
+        ...seasonCompleteness,
       },
     });
     await refreshAfRankAfterLegacyImportComplete(userId);
@@ -318,7 +357,7 @@ export async function runLegacyImportStep(
 
   await prisma.legacyImportJob.update({
     where: { id: jobId },
-    data: { currentSeason: nextSeason, emptyYears: 0, progress },
+    data: { currentSeason: nextSeason, emptyYears: 0, progress, ...seasonCompleteness },
   });
 
   return { done: false, progress };

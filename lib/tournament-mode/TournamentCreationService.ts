@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
 import { buildLeagueInviteUrl } from '@/lib/viral-loop'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { RetiredConceptError, checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import {
   DEFAULT_TOURNAMENT_SETTINGS,
   TOURNAMENT_LEAGUE_VARIANT,
@@ -123,6 +124,15 @@ export async function createTournament(input: CreateTournamentInput): Promise<{
   inviteDistribution: InviteDistributionItem[]
   conferenceNames: [string, string]
 }> {
+  // Tournament Mode is retired from active creation (2026-07-23). This is the
+  // deepest boundary — throwing here closes every caller at once, including any
+  // future one, rather than relying on each route to remember the policy.
+  // Existing tournaments are untouched: this function only ever creates.
+  const retired = checkRetiredConcept('tournament')
+  if (retired) {
+    throw new RetiredConceptError(retired.code, retired.message)
+  }
+
   const sport = normalizeToSupportedSport(input.sport)
   const merged = {
     ...DEFAULT_TOURNAMENT_SETTINGS,

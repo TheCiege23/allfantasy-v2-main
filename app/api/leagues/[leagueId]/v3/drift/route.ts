@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server"
 import { getDriftSeries, recordDriftMetrics } from "@/lib/rankings-engine/drift-metrics"
 import { withApiUsage } from "@/lib/telemetry/usage"
+import { requireAdmin } from "@/lib/adminAuth"
 
 export const GET = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/v3/drift",
   tool: "DriftMetrics"
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
+  const gate = await requireAdmin()
+  if (!gate.ok) return gate.res
+
   const { leagueId } = ctx.params
   const url = new URL(req.url)
   const days = Number(url.searchParams?.get("days") ?? 60)
@@ -18,6 +22,9 @@ export const POST = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/v3/drift",
   tool: "DriftMetrics"
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
+  const gate = await requireAdmin()
+  if (!gate.ok) return gate.res
+
   const { leagueId } = ctx.params
   const body = await req.json().catch(() => ({}))
 

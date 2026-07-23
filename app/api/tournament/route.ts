@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { buildConferencesAndLeagues, createTournamentShell, type TournamentConfig } from '@/lib/tournament/setupEngine'
+import { RetiredConceptError } from '@/lib/league-creation/retiredConcepts'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -149,6 +150,10 @@ export async function POST(req: NextRequest) {
     const shell = await prisma.tournamentShell.findUnique({ where: { id } })
     return NextResponse.json({ shell })
   } catch (e) {
+    // Retired-concept rejections carry a stable machine-readable code.
+    if (e instanceof RetiredConceptError) {
+      return NextResponse.json({ error: e.message, code: e.code }, { status: e.status })
+    }
     const msg = e instanceof Error ? e.message : 'Create failed'
     return NextResponse.json({ error: msg }, { status: 400 })
   }
