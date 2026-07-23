@@ -5,7 +5,12 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Info } from 'lucide-react';
 import Link from 'next/link';
-import { getImportProviderLabel, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config';
+import {
+  getImportProviderLabel,
+  getImportProviderUnavailableDetail,
+  getImportProviderUnavailableReason,
+  isImportProviderAvailable,
+} from '@/lib/league-import/provider-ui-config';
 import type { ImportProvider } from '@/lib/league-import/types';
 
 export interface ImportSourceInputPanelProps {
@@ -45,7 +50,12 @@ const PROVIDER_INPUT_CONFIG: Record<
   mfl: {
     label: 'MFL League ID',
     placeholder: 'e.g. 12345, 2026:12345, or a full MFL league URL',
-    help: 'Save your MFL API key in League Sync first, then paste your MFL league ID, season-prefixed ID, or full league URL.',
+    // Import Certification Phase A: previously "Save your MFL API key in League Sync
+    // first" — no screen in the app saves an MFL API key, so that instruction pointed at
+    // a workflow that does not exist. MFL is `available: false`, so this branch is not
+    // reachable today; the copy is corrected so it cannot become a false promise the
+    // moment MFL is switched on.
+    help: 'Requires a saved MFL API key. There is no screen to save one yet, so MFL import is currently unavailable.',
   },
 };
 
@@ -66,12 +76,29 @@ export function ImportSourceInputPanel({
   };
 
   if (!available) {
+    // Import Certification Phase A: this used to say "coming soon" for every unavailable
+    // provider, which is inaccurate for at least one of them — Fantrax import works, just
+    // from a different entry point. Show the real, provider-specific limitation instead.
+    const reason = getImportProviderUnavailableReason(provider);
+    const detail = getImportProviderUnavailableDetail(provider);
+    const heading =
+      reason === 'manual-upload-required'
+        ? `${getImportProviderLabel(provider)} import needs a manual upload`
+        : reason === 'credential-entry-missing'
+          ? `Import from ${getImportProviderLabel(provider)} is temporarily unavailable`
+          : `Import from ${getImportProviderLabel(provider)} is limited`;
+
     return (
       <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-3 flex items-start gap-2">
         <Info className="h-5 w-5 shrink-0 text-amber-400 mt-0.5" />
         <div className="text-sm text-white/90">
-          <p className="font-medium text-amber-200">Import from {getImportProviderLabel(provider)} is coming soon</p>
-          <p className="mt-1 text-white/60">We&apos;re working on it. Use one of the available providers for now, or build a new league manually.</p>
+          <p className="font-medium text-amber-200">{heading}</p>
+          <p className="mt-1 text-white/60">
+            {detail ?? 'This provider is not available from this screen yet.'}
+          </p>
+          <p className="mt-1 text-white/60">
+            Use one of the available providers for now, or build a new league manually.
+          </p>
         </div>
       </div>
     );

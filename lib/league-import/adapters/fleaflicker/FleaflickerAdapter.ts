@@ -39,7 +39,11 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
     }
 
     const leagueSize = typeof lg.size === 'number' ? lg.size : teamsFlat.length
-    const rosterSize = lg.rosterRequirements?.rosterSize ?? 40
+    // Import Certification Phase A: `rosterSize` is source-provided or unknown — never
+    // a magic constant. The previous `?? 40` invented a roster size for every league
+    // whose `FetchLeagueStandings` response omitted `rosterRequirements`, which then
+    // flowed into `League.rosterSize` indistinguishable from a real value.
+    const rosterSize = lg.rosterRequirements?.rosterSize ?? null
 
     const sportNorm = normalizeToSupportedSport(sport === 'NFL' ? 'NFL' : sport)
 
@@ -95,12 +99,22 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         season,
         leagueSize,
         rosterSize,
-        scoring: lg.description ?? 'imported',
+        // Import Certification Phase A: Fleaflicker's `FetchLeagueStandings` payload
+        // exposes NO scoring format and NO scoring rules (see `fleaflicker/types.ts`).
+        // This field previously carried `lg.description` — the league's free-text
+        // description — into `League.scoring`, which is a different field entirely.
+        // Unknown scoring is `null`; `coverage.scoringSettings` reports it as missing.
+        scoring: null,
         isDynasty,
         league_type: isDynasty ? 'dynasty' : 'redraft',
         waiver_type: mapWaiverType(lg.waiverType),
         faab_budget: lg.defaultWaiverBudget ?? undefined,
-        playoff_team_count: Math.max(2, Math.floor(leagueSize / 2)),
+        // Import Certification Phase A: Fleaflicker exposes no playoff-team count.
+        // `playoff_team_count` is deliberately omitted (undefined) rather than
+        // derived as `leagueSize / 2`, which was an invention with no source
+        // evidence. Downstream (`LeaguePlayoffBootstrapService`,
+        // `canonicalImportNormalizer`) already fills a documented default when the
+        // field is absent — a labelled default is honest, a fabricated import is not.
         settings: {
           fleaflicker: { leagueId: lg.id, season },
         },
@@ -125,8 +139,17 @@ export const FleaflickerAdapter: ILeagueImportAdapter<FleaflickerImportPayload> 
         leagueSettings: { state: 'full' },
         currentRosters: normalizedRosters.some((x) => x.player_ids.length > 0) ? { state: 'full' } : { state: 'partial', note: 'Roster players depend on FetchLeagueRosters' },
         historicalRosterSnapshots: { state: 'missing' },
-        scoringSettings: { state: 'missing', note: 'Fleaflicker scoring rules not mapped in v1' },
-        playoffSettings: { state: 'partial' },
+        scoringSettings: {
+          state: 'missing',
+          note: 'Fleaflicker’s public standings/rosters endpoints do not expose scoring format or rules.',
+        },
+        // Import Certification Phase A: was `partial`, which implied some real
+        // playoff data had been imported. Nothing had — the only playoff value
+        // produced was a fabricated team count, now removed.
+        playoffSettings: {
+          state: 'missing',
+          note: 'Fleaflicker’s public endpoints do not expose playoff structure or playoff-team count.',
+        },
         currentStandings: { state: 'full' },
         currentSchedule: { state: 'missing' },
         draftHistory: { state: 'missing' },

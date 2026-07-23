@@ -1,72 +1,61 @@
-import { withApiUsage } from "@/lib/telemetry/usage"
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/prisma'
-import { cookies } from 'next/headers'
+/**
+ * MyFantasyLeague connection endpoint — DISABLED by Import Certification Phase A.
+ *
+ * Why this route is gated rather than "fixed in place":
+ *
+ * 1. It was completely unauthenticated. There was no session check of any kind, so any
+ *    anonymous caller could POST a username/password, cause this server to authenticate
+ *    against MFL, and write a row to `MFLConnection`.
+ * 2. It wrote the wrong credential to the wrong table. It stored MFL's `MFL_USER_ID`
+ *    login token as `MFLConnection.mflCookie`, in plaintext. The league importer does
+ *    not read that table at all — it reads an ENCRYPTED `LeagueAuth.apiKey` row via
+ *    `getDecryptedAuth(userId, 'mfl')` (`lib/league-sync-core.ts`). So even a fully
+ *    successful login here could never enable an MFL import.
+ * 3. `MFLConnection` has no user linkage. It is keyed on `mflUsername` alone
+ *    (`prisma/schema.prisma` → `model MFLConnection`), with no `userId`/`appUserId`
+ *    column, so a write cannot be safely scoped to the authenticated account. Adding
+ *    that linkage is a schema change, deliberately out of scope for this PR.
+ *
+ * The secure path already exists: `POST /api/league/auth` accepts
+ * `{ platform: 'mfl', apiKey }`, requires a session, encrypts the value, and writes the
+ * exact `LeagueAuth` row the importer reads. What is missing is a UI that calls it with
+ * an MFL API key. Until that exists, MFL stays `available: false` in
+ * `lib/league-import/provider-ui-config.ts` and this endpoint accepts nothing.
+ *
+ * DATA PRESERVATION: no `MFLConnection` rows are read, written, or deleted here, and the
+ * model is untouched. Existing rows remain exactly as they were for a future migration.
+ */
 
-export const POST = withApiUsage({ endpoint: "/api/auth/mfl", tool: "AuthMfl" })(async (req: NextRequest) => {
-  try {
-    const { username, password, year } = await req.json()
-    
-    if (!username || !password) {
-      return NextResponse.json({ error: 'Username and password are required' }, { status: 400 })
-    }
+import { withApiUsage } from '@/lib/telemetry/usage'
+import { NextResponse } from 'next/server'
+import { requireVerifiedUser } from '@/lib/auth-guard'
 
-    const apiYear = year || new Date().getFullYear()
-    
-    const loginUrl = `https://api.myfantasyleague.com/${apiYear}/login`
-    const loginRes = await fetch(loginUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: `USERNAME=${encodeURIComponent(username)}&PASSWORD=${encodeURIComponent(password)}&JSON=1`
-    })
+/**
+ * Stable machine-readable code so the client can distinguish "temporarily unavailable"
+ * from "your credentials were wrong" — the latter must never be implied again, because
+ * no credential is evaluated at all.
+ */
+export const MFL_CONNECTION_DISABLED_CODE = 'mfl_connection_unavailable'
 
-    const loginData = await loginRes.json()
-    
-    if (loginData.error || !loginData.status?.MFL_USER_ID) {
-      return NextResponse.json({ 
-        error: loginData.error?.message || 'Invalid credentials' 
-      }, { status: 401 })
-    }
+export const MFL_CONNECTION_DISABLED_MESSAGE =
+  'Connecting an MFL account is temporarily unavailable. MFL imports require an API key, ' +
+  'and signing in with an MFL username and password is not supported.'
 
-    const mflCookie = loginData.status.MFL_USER_ID
-    const mflUserId = username
-
-    const sessionId = crypto.randomUUID()
-    
-    await prisma.mFLConnection.upsert({
-      where: { mflUsername: mflUserId },
-      update: {
-        mflCookie,
-        year: apiYear,
-        updatedAt: new Date()
-      },
-      create: {
-        sessionId,
-        mflUsername: mflUserId,
-        mflCookie,
-        year: apiYear
-      }
-    })
-
-    const cookieStore = await cookies()
-    cookieStore.set('mfl_session', sessionId, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 30
-    })
-
-    return NextResponse.json({
-      success: true,
-      username: mflUserId,
-      year: apiYear
-    })
-
-  } catch (error: any) {
-    console.error('MFL auth error:', error)
-    return NextResponse.json(
-      { error: error.message || 'Authentication failed' },
-      { status: 500 }
-    )
+export const POST = withApiUsage({ endpoint: '/api/auth/mfl', tool: 'AuthMfl' })(async () => {
+  // Authenticate FIRST and return before touching the request body, so an anonymous
+  // caller can neither reach the disabled-path response nor have any credential they
+  // sent read, forwarded, logged, or stored.
+  const auth = await requireVerifiedUser()
+  if (!auth.ok) {
+    return auth.response
   }
+
+  return NextResponse.json(
+    {
+      error: MFL_CONNECTION_DISABLED_MESSAGE,
+      code: MFL_CONNECTION_DISABLED_CODE,
+      connected: false,
+    },
+    { status: 503 },
+  )
 })

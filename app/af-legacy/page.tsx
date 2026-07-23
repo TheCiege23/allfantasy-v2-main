@@ -848,7 +848,8 @@ function AFLegacyContent() {
   const [fantraxLoading, setFantraxLoading] = useState(false)
   const [showSleeperHelp, setShowSleeperHelp] = useState(false)
   const [showYahooHelp, setShowYahooHelp] = useState(false)
-  const [showMflHelp, setShowMflHelp] = useState(false)
+  // Import Certification Phase A: `showMflHelp` removed with the MFL connect form and its
+  // help modal (see the MFL section below).
   const [username, setUsernameState] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -889,7 +890,8 @@ function AFLegacyContent() {
   // MFL state
   const [mflConnected, setMflConnected] = useState(false)
   const [mflUsername, setMflUsername] = useState('')
-  const [mflPassword, setMflPassword] = useState('')
+  // Import Certification Phase A: `mflPassword` state removed with the connect form —
+  // the app no longer collects an MFL password anywhere.
   const [mflLeagues, setMflLeagues] = useState<any[]>([])
   const [mflLoading, setMflLoading] = useState(false)
   const [mflError, setMflError] = useState('')
@@ -1666,33 +1668,12 @@ function AFLegacyContent() {
     window.location.href = '/api/auth/yahoo'
   }
 
-  const connectMfl = async () => {
-    if (!mflUsername.trim() || !mflPassword.trim()) {
-      setMflError('Username and password are required')
-      return
-    }
-    setMflLoading(true)
-    setMflError('')
-    try {
-      const res = await fetch('/api/auth/mfl', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: mflUsername, password: mflPassword })
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setMflError(data.error || 'Login failed')
-        return
-      }
-      setMflConnected(true)
-      setMflPassword('')
-      fetchMflLeagues()
-    } catch {
-      setMflError('Network error')
-    } finally {
-      setMflLoading(false)
-    }
-  }
+  // Import Certification Phase A: `connectMfl` was removed along with the MFL
+  // username/password form. It POSTed a plaintext MFL password to `/api/auth/mfl`, an
+  // unauthenticated route that wrote `MFLConnection.mflCookie` — a table the league
+  // importer never reads (it reads an encrypted `LeagueAuth.apiKey` row instead), so the
+  // flow could never result in an import. The route now requires a session and returns
+  // 503 without accepting credentials; see `app/api/auth/mfl/route.ts`.
 
   const fetchMflLeagues = async () => {
     gtagEvent('league_import_started', { platform: 'mfl' })
@@ -5082,52 +5063,15 @@ function AFLegacyContent() {
 
                     {platform === 'mfl' && (
                       <div className="space-y-4">
-                        {showMflHelp && (
-                          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm" onClick={() => setShowMflHelp(false)}>
-                            <div className="relative w-full max-w-lg rounded-3xl bg-gradient-to-br from-slate-900 to-slate-950 border border-amber-500/30 shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
-                              <div className="h-1.5 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-400" />
-                              <div className="p-6">
-                                <div className="flex items-center justify-between mb-4">
-                                  <h3 className="text-xl font-bold text-white">Connecting Your MFL Account</h3>
-                                  <button onClick={() => setShowMflHelp(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/60 hover:text-white transition">
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </div>
-
-                                <ul className="space-y-3 text-sm text-white/80 mb-5">
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">1</span>
-                                    <span>Enter your <strong className="text-amber-300">MFL username and password</strong> — the same credentials you use to log in at <a href="https://www.myfantasyleague.com" target="_blank" rel="noopener noreferrer" className="text-amber-400 underline underline-offset-2 hover:text-amber-300">myfantasyleague.com</a></span>
-                                  </li>
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">2</span>
-                                    <span>We authenticate directly via <strong className="text-amber-300">MFL's official API</strong> to find your leagues. Your credentials are never stored.</span>
-                                  </li>
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">3</span>
-                                    <span>Once connected, select a <strong className="text-amber-300">year range</strong> to review what MFL exposes. Full multi-year historical import is still in progress.</span>
-                                  </li>
-                                  <li className="flex gap-3">
-                                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-amber-500/20 text-amber-300 flex items-center justify-center text-xs font-bold">4</span>
-                                    <span>MFL is important for dynasty players, but full records, trades, and transaction import is <strong className="text-amber-300">not live yet</strong>.</span>
-                                  </li>
-                                </ul>
-
-                                <div className="rounded-xl bg-black/30 border border-white/10 p-3 mb-4">
-                                  <p className="text-xs text-white/50 mb-1 uppercase tracking-wide font-medium">Security note</p>
-                                  <p className="text-sm text-white/70">Your MFL credentials are used only during authentication and are never stored. We only read league data — nothing is ever modified.</p>
-                                </div>
-
-                                <div className="flex justify-end">
-                                  <button onClick={() => setShowMflHelp(false)} className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-medium text-sm hover:from-amber-400 hover:to-orange-400 transition">
-                                    Got it
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
+                        {/*
+                          Import Certification Phase A: the "Connecting Your MFL Account"
+                          help modal was removed with the connect form that opened it. It
+                          instructed users to enter an MFL username and password, and stated
+                          "Your credentials are never stored" — which was not accurate: the
+                          old route persisted the resulting MFL login token to
+                          `MFLConnection.mflCookie` in plaintext. Both the instruction and
+                          the security claim are obsolete now that the flow is disabled.
+                        */}
                         {mflConnected ? (
                           <>
                             <div className="p-4 rounded-xl bg-green-500/10 border border-green-400/30">
@@ -5255,54 +5199,28 @@ function AFLegacyContent() {
                             )}
                           </>
                         ) : (
-                          <>
-                            <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-400/30">
-                              <p className="text-sm text-white/80">
-                                Connect your MyFantasyLeague account to import your dynasty leagues. We use secure authentication via MFL's official API.
-                              </p>
-                              <button
-                                type="button"
-                                onClick={() => setShowMflHelp(true)}
-                                className="flex items-center gap-1 text-[11px] text-amber-400 hover:text-amber-300 transition mt-2"
-                              >
-                                <HelpCircle className="w-3 h-3" />
-                                How does this work?
-                              </button>
-                            </div>
-                            
-                            <div className="space-y-3">
-                              <div>
-                                <label className="text-[11px] uppercase tracking-wide text-white/50">MFL Username</label>
-                                <input
-                                  type="text"
-                                  value={mflUsername}
-                                  onChange={(e) => setMflUsername(e.target.value)}
-                                  placeholder="Your MFL username"
-                                  className="w-full mt-1 px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/20 transition"
-                                />
-                              </div>
-                              <div>
-                                <label className="text-[11px] uppercase tracking-wide text-white/50">MFL Password</label>
-                                <input
-                                  type="password"
-                                  value={mflPassword}
-                                  onChange={(e) => setMflPassword(e.target.value)}
-                                  placeholder="Your MFL password"
-                                  className="w-full mt-1 px-4 py-3 rounded-2xl bg-black/30 border border-white/10 text-white placeholder-white/25 focus:outline-none focus:border-amber-400/60 focus:ring-2 focus:ring-amber-400/20 transition"
-                                />
-                              </div>
-                            </div>
-                            
-                            <button
-                              onClick={connectMfl}
-                              disabled={mflLoading || !mflUsername.trim() || !mflPassword.trim()}
-                              className="w-full py-3 rounded-2xl font-bold text-white transition disabled:opacity-50
-                                bg-gradient-to-r from-amber-500/80 to-orange-500/80 hover:from-amber-400/90 hover:to-orange-400/90
-                                shadow-[0_12px_35px_rgba(0,0,0,0.35)]"
-                            >
-                              {mflLoading ? 'Connecting...' : 'Connect MFL Account'}
-                            </button>
-                          </>
+                          /*
+                            Import Certification Phase A: the MFL username/password form
+                            was removed. It posted a real MFL password to an
+                            unauthenticated endpoint that stored a token the league
+                            importer never reads, so no submission could ever produce an
+                            import. Asking for a password that cannot work is the failure
+                            mode being corrected — the form is replaced with the honest
+                            state rather than left collecting credentials.
+                          */
+                          <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-400/30">
+                            <p className="text-sm font-semibold text-amber-200">
+                              MyFantasyLeague import is temporarily unavailable
+                            </p>
+                            <p className="mt-2 text-sm text-white/80">
+                              MFL imports require an MFL API key. There is no screen to save one yet, and
+                              connecting with an MFL username and password is not supported — so we&apos;ve
+                              turned this off rather than ask for credentials we can&apos;t use.
+                            </p>
+                            <p className="mt-2 text-sm text-white/60">
+                              Sleeper, ESPN, and Yahoo imports are available in the meantime.
+                            </p>
+                          </div>
                         )}
                       </div>
                     )}

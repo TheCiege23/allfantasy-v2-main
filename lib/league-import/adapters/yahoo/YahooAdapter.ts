@@ -168,7 +168,16 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
         // Dashboard. Yahoo exposes a real `is_finished` boolean directly
         // (`YahooImportLeague.isFinished`), already fetched but never surfaced.
         status: raw.league.isFinished ? 'complete' : 'in_season',
-        playoff_team_count: raw.settings?.usesPlayoff ? undefined : 0,
+        // Import Certification Phase A: the Yahoo fetch layer parses `uses_playoff`
+        // and `playoff_start_week`, but never `num_playoff_teams`
+        // (`YahooLeagueFetchService.ts` → `YahooImportSettings`), so the playoff-team
+        // count is genuinely unknown for any league that HAS playoffs.
+        //
+        // The previous expression (`usesPlayoff ? undefined : 0`) was falsy-tested, so
+        // `usesPlayoff: null` — Yahoo simply not reporting the setting — silently became
+        // a hard `0`, which then OVERRODE the documented playoff default downstream.
+        // Only an explicit `false` is real evidence that there are no playoff teams.
+        playoff_team_count: raw.settings?.usesPlayoff === false ? 0 : undefined,
         regular_season_length: regularSeasonLength,
         schedule_unit: raw.league.sport === 'NFL' ? 'week' : 'period',
         matchup_frequency: raw.settings?.scoringType ?? 'head',
@@ -213,13 +222,34 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
               ? null
               : 'Yahoo scoring settings were only partially available from league metadata.',
         },
-        playoffSettings: {
-          state: raw.settings ? 'full' : 'partial',
-          note:
-            raw.settings?.usesPlayoff != null
-              ? null
-              : 'Yahoo playoff settings were only partially available from league metadata.',
-        },
+        // Import Certification Phase A: this bucket previously reported `full` whenever
+        // ANY settings object existed, while `playoff_team_count` was never populated
+        // for a league with playoffs — the one place in the import layer where a
+        // coverage bucket claimed more than the adapter actually produced.
+        //
+        // Honest states now:
+        //   - no settings at all            → missing
+        //   - playoffs explicitly disabled  → full (nothing further to know)
+        //   - playoffs on/unknown           → partial (start week known, team count is not)
+        playoffSettings: (() => {
+          if (!raw.settings) {
+            return {
+              state: 'missing' as const,
+              note: 'No Yahoo league settings were available for this league preview.',
+            }
+          }
+          if (raw.settings.usesPlayoff === false) {
+            return {
+              state: 'full' as const,
+              note: 'Yahoo reports this league does not use playoffs.',
+            }
+          }
+          return {
+            state: 'partial' as const,
+            note:
+              'Yahoo playoff start week was imported, but Yahoo’s playoff-team count is not read by the import and remains unknown.',
+          }
+        })(),
         currentStandings: {
           state: standings.length > 0 ? 'full' : 'missing',
           count: standings.length,

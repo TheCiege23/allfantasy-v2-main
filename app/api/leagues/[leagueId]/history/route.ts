@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
+import { resolveHistoricalBackfillState } from '@/lib/league-import/historicalBackfillState'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,10 +110,22 @@ export async function GET(
     sport: league.sport,
     seasons: unique,
     historicalBackfill: {
+      // Import Certification Phase A: `status` is now DERIVED, not echoed. A backfill
+      // dispatched in-process can be lost when the serverless instance is reclaimed, in
+      // which case the stored value stays 'pending' forever. `resolveHistoricalBackfillState`
+      // reports that as 'stale' once its deadline passes, and reports 'unsupported' for
+      // providers that never had a backfill service — so this endpoint can no longer claim
+      // work is in progress without evidence that it is.
       status:
-        (settings.historicalBackfillStatus as string | undefined) ??
-        (unique.length > 1 ? 'complete' : 'unknown'),
+        (settings.historicalBackfillStatus as string | undefined) != null
+          ? resolveHistoricalBackfillState(settings, new Date())
+          : unique.length > 1
+            ? 'complete'
+            : 'unknown',
+      /** False = best-effort in-process dispatch, not durably queued. */
+      durable: (settings.historicalBackfillDurable as boolean | undefined) ?? false,
       startedAt: (settings.historicalBackfillStartedAt as string | undefined) ?? null,
+      staleAfter: (settings.historicalBackfillStaleAfter as string | undefined) ?? null,
       completedAt: (settings.historicalBackfillCompletedAt as string | undefined) ?? null,
       error: (settings.historicalBackfillError as string | undefined) ?? null,
     },

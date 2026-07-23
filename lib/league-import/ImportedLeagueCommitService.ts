@@ -4,6 +4,11 @@ import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import {
+  buildHistoricalBackfillDispatchStamp,
+  buildHistoricalBackfillFailureStamp,
+  providerSupportsHistoricalBackfill,
+} from '@/lib/league-import/historicalBackfillState'
 import type {
   CanonicalImportBundle,
   ImportProvider,
@@ -514,7 +519,20 @@ export async function persistImportedLeagueFromNormalization(
   // Layered import, tier 2 (async): commit returns immediately; the
   // multi-year history backfill runs in the background. The History tab
   // polls /api/leagues/{id}/history and surfaces each year as it lands.
-  const historicalBackfill: unknown = { status: 'pending', startedAt: new Date().toISOString() }
+  //
+  // Import Certification Phase A: the stamp below is no longer an unconditional
+  // 'pending'. A provider with no backfill service (fleaflicker) is recorded as
+  // 'unsupported' so it never claims work that was never started, and a supported
+  // provider records `durable: false` plus a staleness deadline so a dispatch lost to
+  // a reclaimed serverless instance resolves to 'stale' instead of pending forever.
+  const backfillStamp = buildHistoricalBackfillDispatchStamp({ provider, now: new Date() })
+  const backfillSupported = providerSupportsHistoricalBackfill(provider)
+  const historicalBackfill: unknown = {
+    status: backfillStamp.historicalBackfillStatus,
+    durable: backfillStamp.historicalBackfillDurable,
+    startedAt: backfillStamp.historicalBackfillStartedAt,
+    staleAfter: backfillStamp.historicalBackfillStaleAfter,
+  }
   try {
     const current = (await prisma.league.findUnique({
       where: { id: league.id },
@@ -525,15 +543,56 @@ export async function persistImportedLeagueFromNormalization(
       data: {
         settings: {
           ...(current ?? {}),
-          historicalBackfillStatus: 'pending',
-          historicalBackfillStartedAt: new Date().toISOString(),
+          ...backfillStamp,
         } as Prisma.InputJsonValue,
       },
     })
   } catch {
     /* non-fatal settings stamp */
   }
-  void runHistoricalBackfill({ provider, leagueId: league.id, userId, normalized })
+
+  // Only dispatch when a backfill service actually exists. Previously this ran for every
+  // provider and silently resolved to `null` for fleaflicker, which then flipped the
+  // league to 'complete' — reporting a finished multi-season backfill that never ran.
+  if (backfillSupported) {
+    dispatchHistoricalBackfill()
+  }
+
+  function dispatchHistoricalBackfill(): void {
+    let dispatched: Promise<unknown>
+    try {
+      // A synchronous throw here (e.g. a failed dynamic import) previously produced an
+      // unhandled rejection and left the league stamped 'pending' with no error recorded.
+      dispatched = runHistoricalBackfill({ provider, leagueId: league.id, userId, normalized })
+    } catch (err) {
+      void stampBackfillDispatchFailure(err)
+      return
+    }
+    void trackHistoricalBackfill(dispatched)
+  }
+
+  async function stampBackfillDispatchFailure(err: unknown): Promise<void> {
+    try {
+      const current = (await prisma.league.findUnique({
+        where: { id: league.id },
+        select: { settings: true },
+      }))?.settings as Record<string, unknown> | null
+      await prisma.league.update({
+        where: { id: league.id },
+        data: {
+          settings: {
+            ...(current ?? {}),
+            ...buildHistoricalBackfillFailureStamp({ error: err }),
+          } as Prisma.InputJsonValue,
+        },
+      })
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  function trackHistoricalBackfill(dispatched: Promise<unknown>): Promise<unknown> {
+    return dispatched
     .then(async (result) => {
       try {
         const current = (await prisma.league.findUnique({
@@ -547,6 +606,9 @@ export async function persistImportedLeagueFromNormalization(
               ...(current ?? {}),
               historicalBackfillStatus: 'complete',
               historicalBackfillCompletedAt: new Date().toISOString(),
+              // Clear the staleness deadline so a completed backfill can never be
+              // re-derived as 'stale' once the window elapses.
+              historicalBackfillStaleAfter: null,
             } as Prisma.InputJsonValue,
           },
         })
@@ -567,8 +629,7 @@ export async function persistImportedLeagueFromNormalization(
           data: {
             settings: {
               ...(current ?? {}),
-              historicalBackfillStatus: 'failed',
-              historicalBackfillError: err instanceof Error ? err.message : 'unknown',
+              ...buildHistoricalBackfillFailureStamp({ error: err }),
             } as Prisma.InputJsonValue,
           },
         })
@@ -576,6 +637,7 @@ export async function persistImportedLeagueFromNormalization(
         /* non-fatal */
       }
     })
+  }
 
   try {
     await calculateAndSaveRank(userId)
