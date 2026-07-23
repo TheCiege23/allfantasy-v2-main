@@ -55,7 +55,7 @@ export function TodaysMissionStrip({
     {
       key: 'war-room',
       icon: <Swords className="h-4 w-4" />,
-      title: 'Open AF Legacy',
+      title: 'Open AF War Room',
       reason: warRoomDecisions > 0 ? `${warRoomDecisions} decisions ready for review` : 'NFL draft intelligence is active',
       urgency: 'active' as const,
       badge: warRoomDecisions > 0 ? String(warRoomDecisions) : undefined,

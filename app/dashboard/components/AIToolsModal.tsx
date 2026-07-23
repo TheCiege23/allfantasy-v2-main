@@ -184,7 +184,7 @@ export function AIToolsModal({ toolId, open, onClose, leagues, toolTitle }: AITo
                 href="/war-room"
                 className="inline-flex items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[13px] font-semibold text-amber-100 hover:bg-amber-500/20"
               >
-                AF Legacy details
+                AF War Room details
               </Link>
             ) : null}
             {toolId === 'matchupPrep' ? (
@@ -262,7 +262,7 @@ function buildAskPrompt(
     case 'injury':
       return `Injury impact ${sportBit}: summarize the most important injuries for fantasy lineups and waivers this week.`
     case 'warRoom':
-      return `Draft prep and multi-year roster planning (AF Legacy): what should I prioritize ${sportBit} in ${leagueLabel}?`
+      return `Draft prep and multi-year roster planning (AF War Room): what should I prioritize ${sportBit} in ${leagueLabel}?`
     case 'matchupPrep':
       return `Matchup prep for ${leagueLabel} ${sportBit}: use only my synced league rosters, projections, and opponent data — projected edge, win chance, start/sit pivots, and risks before lineup lock.`
     case 'longTermCoach':

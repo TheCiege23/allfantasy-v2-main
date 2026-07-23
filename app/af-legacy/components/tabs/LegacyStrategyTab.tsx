@@ -44,16 +44,16 @@ export default function LegacyStrategyTab({
         className="mb-4"
       >
         <div className="mb-4 rounded-xl border border-violet-400/25 bg-violet-500/10 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-violet-200/90">AF Legacy module</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-violet-200/90">AF War Room module</p>
           <p className="mt-1 text-sm text-white/75">
-            Unlock future game planning, 3-5 year strategy plans, and roster construction workflows in AF Legacy.
+            Unlock future game planning, 3-5 year strategy plans, and roster construction workflows in AF War Room.
           </p>
           <a
             href="/war-room"
             className="mt-2 inline-flex rounded-lg border border-violet-300/35 bg-violet-500/20 px-2.5 py-1 text-xs text-violet-100 hover:bg-violet-500/30"
             data-testid="legacy-war-room-open-link"
           >
-            Open AF Legacy
+            Open AF War Room
           </a>
         </div>
       </FeatureGate>

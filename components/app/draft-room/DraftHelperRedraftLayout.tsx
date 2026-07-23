@@ -182,7 +182,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                 testIdPrefix="draft-prep-monetization"
               />
               <InContextMonetizationCard
-                title="AF Legacy strategy build access"
+                title="AF War Room strategy build access"
                 featureId="draft_strategy_build"
                 tokenRuleCodes={['ai_draft_helper_session_recommendation']}
                 testIdPrefix="draft-helper-monetization"
@@ -373,7 +373,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
                   Your ranked copilot recommendation loads when it is your pick — it follows the live board and your roster needs.
                 </p>
                 <p className="text-[11px] text-white/42">
-                  Between picks, open AF Legacy for redraft lookahead; it tracks scarcity and positional runs as picks land.
+                  Between picks, open AF War Room for redraft lookahead; it tracks scarcity and positional runs as picks land.
                 </p>
               </div>
             )}
@@ -385,7 +385,7 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
             variant="redraft_snake"
             persistenceKey="af:draft:redraft:sec:warboard"
             defaultOpen={false}
-            title="AF Legacy (live board)"
+            title="AF War Room (live board)"
             collapsedSubtitle={warSubtitle}
             testId="draft-helper-accordion-war-board"
           >
@@ -536,8 +536,8 @@ export function DraftHelperRedraftLayout(props: DraftHelperPanelProps) {
               variant="redraft_snake"
               persistenceKey="af:draft:redraft:sec:warbuild"
               defaultOpen={false}
-              title="Full AF Legacy (build)"
-              collapsedSubtitle="Session strategy build & narrative — expand for full AF Legacy"
+              title="Full AF War Room (build)"
+              collapsedSubtitle="Session strategy build & narrative — expand for full AF War Room"
               testId="draft-helper-accordion-war-build"
             >
               <div className="space-y-3" data-testid="draft-war-room-panel">

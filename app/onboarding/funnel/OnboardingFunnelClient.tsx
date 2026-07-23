@@ -55,7 +55,7 @@ const AI_FEATURE_CARDS = [
   },
   {
     icon: Target,
-    title: "AF Legacy Draft",
+    title: "AF War Room Draft",
     description: "Mock drafts and AI pick suggestions in real time.",
     href: "/mock-draft",
   },

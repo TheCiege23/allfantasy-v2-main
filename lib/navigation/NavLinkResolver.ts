@@ -13,7 +13,7 @@ export const PRIMARY_NAV_ITEMS: NavLinkItem[] = [
   { href: "/dashboard", label: "Home" },
   { href: "/commissioner-hub", label: "Commissioner Hub" },
   { href: "/manager-hub", label: "Manager Hub" },
-  { href: "/war-room", label: "AF Legacy" },
+  { href: "/war-room", label: "AF War Room" },
   { href: "/discover/leagues", label: "Leagues" },
   { href: "/ai/tools", label: "Intelligence Hub" },
   { href: "/af-rankings", label: "Rankings" },
@@ -26,7 +26,7 @@ export const PRIMARY_NAV_ITEMS: NavLinkItem[] = [
 /** Product switcher items (compact product links in header). */
 export const PRODUCT_NAV_ITEMS: NavLinkItem[] = [
   { href: "/dashboard", label: "Home" },
-  { href: "/war-room", label: "AF Legacy" },
+  { href: "/war-room", label: "AF War Room" },
   { href: "/ai/tools", label: "Intelligence Hub" },
 ]
 

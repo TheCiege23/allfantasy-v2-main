@@ -339,7 +339,7 @@ export function WarRoomPanel({
                       <>
                         <p className="text-[11px] text-white/55">
                           {draftCopilotEmptyMessage ??
-                            'Live Chimmy recommendations and alternates run in the draft room. Open the room to sync the full copilot, or use the AF Legacy engine below with demo or connected board data.'}
+                            'Live Chimmy recommendations and alternates run in the draft room. Open the room to sync the full copilot, or use the AF War Room engine below with demo or connected board data.'}
                         </p>
                         {companionDraft?.draftRoomHref ? (
                           <Link
@@ -390,7 +390,7 @@ export function WarRoomPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">AF Legacy AI</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">AF War Room AI</p>
           <p className="text-[11px] text-white/45">
             Live pick engine · tiers · scarcity · stacks · contingencies · take vs wait
             {useDemoBoard && !brainInput?.available?.length ? (

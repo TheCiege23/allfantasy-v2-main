@@ -610,7 +610,7 @@ export default function LeagueHomeShellPage() {
             )}
 
             {activeTab === "Draft" && (
-              <Card title="Draft AI Panel (AF Legacy Draft)">
+              <Card title="Draft AI Panel (AF War Room Draft)">
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <label className="text-xs text-white/70">Round</label>
                   <input

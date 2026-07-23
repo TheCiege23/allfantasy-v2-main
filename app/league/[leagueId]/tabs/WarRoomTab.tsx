@@ -141,7 +141,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
       },
       {
         title: 'Mock draft simulator',
-        description: 'Practice drafts with AI helpers and AF Legacy context.',
+        description: 'Practice drafts with AI helpers and AF War Room context.',
         href: '/mock-draft-simulator',
         icon: Wrench,
       },
@@ -194,7 +194,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
         title: 'Future-year planning',
         description: 'Multi-season roster and pick planning.',
         href: '/war-room',
-        cta: 'View AF Legacy hub',
+        cta: 'View AF War Room hub',
       },
       {
         featureId: 'multi_year_strategy',
@@ -247,7 +247,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
               <Telescope className="h-4 w-4 text-violet-200" strokeWidth={2} />
             </span>
             <div>
-              <h1 className="text-lg font-bold tracking-tight text-white md:text-xl">AF Legacy</h1>
+              <h1 className="text-lg font-bold tracking-tight text-white md:text-xl">AF War Room</h1>
               <p className="text-[12px] text-white/45">
                 Strategy, draft prep, and meta — scoped for{' '}
                 <span className="text-white/65">{league.name}</span> · {sportU}

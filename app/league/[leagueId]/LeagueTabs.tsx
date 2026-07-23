@@ -54,7 +54,7 @@ const BASKETBALL_LIKE_TABS: TabDef[] = [
   { id: 'trades', label: 'Trade Center' },
   { id: 'scores', label: 'Scores' },
   { id: 'finance', label: 'Finance' },
-  { id: 'war_room', label: 'AF Legacy' },
+  { id: 'war_room', label: 'AF War Room' },
   { id: 'ai_coaching', label: 'Manager Intelligence' },
   { id: 'history', label: 'History' },
 ]
@@ -70,7 +70,7 @@ const SOCCER_TABS: TabDef[] = [
   { id: 'transfers', label: 'Transfers' },
   { id: 'table', label: 'Table' },
   { id: 'finance', label: 'Finance' },
-  { id: 'war_room', label: 'AF Legacy' },
+  { id: 'war_room', label: 'AF War Room' },
   { id: 'ai_coaching', label: 'Manager Intelligence' },
   { id: 'history', label: 'History' },
 ]
@@ -84,7 +84,7 @@ const PGA_TABS: TabDef[] = [
   { id: 'waivers', label: 'Waivers' },
   { id: 'schedule', label: 'Schedule' },
   { id: 'finance', label: 'Finance' },
-  { id: 'war_room', label: 'AF Legacy' },
+  { id: 'war_room', label: 'AF War Room' },
   { id: 'ai_coaching', label: 'Manager Intelligence' },
   { id: 'history', label: 'History' },
 ]

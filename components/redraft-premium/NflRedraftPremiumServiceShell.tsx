@@ -34,7 +34,7 @@ type ShellState =
 
 const SERVICE_FALLBACK_LABELS: Record<NflRedraftPremiumServiceId, string> = {
   basic_runtime_facts: 'Basic Runtime Facts',
-  war_room: 'AF Legacy',
+  war_room: 'AF War Room',
   commissioner_digest: 'AF Commissioner Digest',
   manager_brief: 'AF Manager Brief',
   matchup_prep: 'Matchup Prep',

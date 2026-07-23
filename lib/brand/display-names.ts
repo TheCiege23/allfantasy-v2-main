@@ -32,9 +32,8 @@ export const PAID_TIER_TOP_DISPLAY_NAME = 'AF Legacy'
 /**
  * Strategy and intelligence workspace (the tool family behind `/war-room`).
  * Internal identifier stays `war_room`.
- * Phase 2 target value: 'AF War Room'.
  */
-export const WAR_ROOM_TOOL_DISPLAY_NAME = 'AF Legacy'
+export const WAR_ROOM_TOOL_DISPLAY_NAME = 'AF War Room'
 
 /**
  * Historical identity product served at `/af-legacy`. Keeps its name in Phase 2 —

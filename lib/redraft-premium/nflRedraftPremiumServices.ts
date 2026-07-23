@@ -141,7 +141,7 @@ export const NFL_REDRAFT_PREMIUM_SERVICE_DEFINITIONS: Record<NflRedraftPremiumSe
   },
   war_room: {
     serviceId: 'war_room',
-    serviceName: 'AF Legacy Service',
+    serviceName: 'AF War Room Service',
     defaultTier: 'AF_WAR_ROOM',
     packetTypes: [
       'projection',

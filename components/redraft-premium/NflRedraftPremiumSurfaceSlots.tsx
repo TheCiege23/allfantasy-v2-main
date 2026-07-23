@@ -33,11 +33,11 @@ export const NFL_REDRAFT_PREMIUM_SURFACE_SERVICES: Record<
   team_page: [
     { serviceType: 'manager_brief', title: 'AF Manager Brief' },
     { serviceType: 'basic_runtime_facts', title: 'Basic Runtime Facts' },
-    { serviceType: 'war_room', title: 'AF Legacy' },
+    { serviceType: 'war_room', title: 'AF War Room' },
   ],
   matchup_page: [
     { serviceType: 'matchup_prep', title: 'Matchup Prep' },
-    { serviceType: 'war_room', title: 'AF Legacy' },
+    { serviceType: 'war_room', title: 'AF War Room' },
   ],
   waiver_area: [{ serviceType: 'waiver_report', title: 'Waiver Report' }],
   trade_center: [

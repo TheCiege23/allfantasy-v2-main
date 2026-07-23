@@ -117,9 +117,9 @@ export function resolveToolLaunches(
       if (ctx.leagueId) {
         launches.push({
           id: 'draft_assistant',
-          label: 'AF Legacy AI',
+          label: 'AF War Room AI',
           href: `/app/league/${encodeURIComponent(ctx.leagueId)}?tab=war_room`,
-          description: 'Tier board, queue, compare, outlook — AF Legacy AI panel.',
+          description: 'Tier board, queue, compare, outlook — AF War Room AI panel.',
         })
       }
       break

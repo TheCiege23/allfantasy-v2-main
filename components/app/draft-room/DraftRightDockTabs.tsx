@@ -41,7 +41,7 @@ export interface DraftRightDockTabsProps {
 const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
   { id: 'roster', label: 'Roster' },
-  { id: 'war_room', label: 'AF Legacy' },
+  { id: 'war_room', label: 'AF War Room' },
   { id: 'chat', label: 'Chat' },
 ]
 

@@ -158,10 +158,10 @@ export default function GlobalTopNav({
                   href="/war-room"
                   className="hidden items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold transition hover:opacity-90 sm:inline-flex"
                   style={{ background: "var(--accent-cyan-strong)", color: "var(--on-accent-bg)" }}
-                  aria-label="Open AF Legacy"
+                  aria-label="Open AF War Room"
                 >
                   <Swords className="h-3.5 w-3.5" />
-                  AF Legacy
+                  AF War Room
                 </Link>
                 {utilitySpecs.map((spec) => renderUtility(spec))}
               </>

@@ -156,7 +156,7 @@ export const translationsEsParity: Record<string, string> = {
   "dashboard.shortcut.warRoom.desc": "Prep de draft y plan largo",
   "dashboard.shortcut.warRoom.faq":
     "Nivel premium para preparar el draft, planificar partidos futuros y construir el roster a varios años. Pide a Chimmy una hoja de ruta.",
-  "dashboard.shortcut.warRoom.label": "AF Legacy",
+  "dashboard.shortcut.warRoom.label": "AF War Room",
   "dashboard.shortcut.matchupPrep.desc": "Ritmo del partido y ventajas",
   "dashboard.shortcut.longTermCoach.label": "Coach a largo plazo",
   "dashboard.shortcut.longTermCoach.desc": "Plan dynasty/devy 2–5 años",
@@ -201,9 +201,9 @@ export const translationsEsParity: Record<string, string> = {
   "dashboard.today.matchupPrepDecisionMany": "🎯 {{n}} decisiones de prep de enfrentamiento para revisar",
   "dashboard.today.matchupDataLeaguesOne": "🎯 Datos de enfrentamiento en 1 liga",
   "dashboard.today.matchupDataLeaguesMany": "🎯 Datos de enfrentamiento en {{n}} ligas",
-  "dashboard.today.warRoomActionOne": "🛡 1 prioridad AF Legacy",
-  "dashboard.today.warRoomActionMany": "🛡 {{n}} prioridades AF Legacy",
-  "dashboard.today.warRoomOpen": "🛡 AF Legacy",
+  "dashboard.today.warRoomActionOne": "🛡 1 prioridad AF War Room",
+  "dashboard.today.warRoomActionMany": "🛡 {{n}} prioridades AF War Room",
+  "dashboard.today.warRoomOpen": "🛡 AF War Room",
   "dashboard.waiverModal.injuryPulseTitle": "Pulso de lesiones",
   "dashboard.waiverModal.injuryPulseHint":
     "De los deportes de tus ligas — mismos datos que waivers y marcadores. Verifica con fuentes oficiales antes del FAAB.",

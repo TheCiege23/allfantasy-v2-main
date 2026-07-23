@@ -104,7 +104,7 @@ describe('redraft production smoke blockers', () => {
   })
 
   it('War Room is visible inside the draft room dock and popup', () => {
-    expect(draftRightDock).toContain("id: 'war_room', label: 'AF Legacy'")
+    expect(draftRightDock).toContain("id: 'war_room', label: 'AF War Room'")
     expect(draftRightDock).toContain('warRoomBody?: ReactNode')
     expect(draftRoomClient).toContain('warRoomBody=')
     expect(draftRoomClient).toContain('<DraftTeamPanel {...draftTeamPanelProps} />')
