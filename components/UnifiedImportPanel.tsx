@@ -8,6 +8,8 @@ interface UnifiedImportPanelProps {
   onImport: (provider: ImportProvider, sourceInput: string) => Promise<void>;
   loadingProvider?: ImportProvider | null;
   disabledProviders?: ImportProvider[];
+  /** Prefill the source input for one or more providers (e.g. from a ?leagueId= query param). */
+  initialInputs?: Partial<Record<ImportProvider, string>>;
 }
 
 export function UnifiedImportPanel({
