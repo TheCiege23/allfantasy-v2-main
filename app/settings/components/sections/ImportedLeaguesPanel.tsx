@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { RefreshCw, ExternalLink, Search } from "lucide-react"
+import { SourceActionLink } from "@/components/league-links/SourceActionLink"
 
 /**
  * The real per-league list for the "League Imports" tab.
@@ -339,6 +340,15 @@ export function ImportedLeaguesPanel() {
                   >
                     <ExternalLink className="h-3.5 w-3.5" /> Open
                   </Link>
+                  <SourceActionLink
+                    platform={l.platform}
+                    sourceLeagueId={l.platformLeagueId}
+                    leagueName={l.name}
+                    season={l.season}
+                    action="open"
+                    className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium"
+                    style={{ borderColor: "var(--border)", color: "var(--muted2)" }}
+                  />
                   {canResync(l) ? (
                     <button
                       type="button"

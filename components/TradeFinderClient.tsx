@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import PartnerMatchView from '@/components/PartnerMatchView';
 import { isWeatherSensitiveSport } from '@/lib/weather/outdoorSportMetadata';
+import { resolveSourceLink } from '@/lib/league-links/sourceLinkResolver';
 
 type League = { id: string; name: string; sport: string; season: number; platformLeagueId: string; platform: string; isDynasty: boolean };
 
@@ -171,17 +172,23 @@ export default function TradeFinderClient({ initialLeagues, sleeperUserId }: { i
   const handlePropose = (trade: any) => {
     if (!selectedLeague) return toast.error('League not selected');
 
-    const deepLink = `https://sleeper.app/leagues/${selectedLeague.platformLeagueId}/trade`;
+    // Centralized, allowlisted source-platform link (no ad-hoc URL building); opens safely in a new tab.
+    const link = resolveSourceLink({
+      platform: selectedLeague.platform,
+      sourceLeagueId: selectedLeague.platformLeagueId,
+      leagueName: selectedLeague.name,
+      season: selectedLeague.season,
+      action: 'trade',
+    });
+    if (!link) return toast.info('This league is managed on its original platform.');
+    const openSource = () => window.open(link.href, '_blank', 'noopener,noreferrer');
 
-    toast.success(`Opening Sleeper Trade Center\n\nSuggested partner: ${trade.partner}\nYou give: ${trade.youGive}\nYou get: ${trade.youGet}`, {
+    toast.success(`Opening ${link.providerLabel}\n\nSuggested partner: ${trade.partner}\nYou give: ${trade.youGive}\nYou get: ${trade.youGet}`, {
       duration: 6000,
-      action: {
-        label: 'Open Sleeper',
-        onClick: () => window.open(deepLink, '_blank'),
-      },
+      action: { label: link.label, onClick: openSource },
     });
 
-    window.open(deepLink, '_blank');
+    openSource();
   };
 
   const simulateAccept = (trade: any, index: number) => {

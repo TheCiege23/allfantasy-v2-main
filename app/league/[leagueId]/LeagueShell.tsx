@@ -6,6 +6,7 @@ import { fetchRedraftSeason, type RedraftSeasonClient } from '@/lib/redraft/clie
 import { shouldApplyIncomingView } from '@/lib/league/leagueTabSync'
 import { LeagueLiveStrip } from '@/components/sports/LeagueLiveStrip'
 import { LeagueStoryCard } from '@/components/sports/LeagueStoryCard'
+import { SourceActionLink } from '@/components/league-links/SourceActionLink'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -1620,16 +1621,14 @@ export function LeagueShell({
               Leaving works through your host platform or your commissioner. AllFantasy will add self-serve leave where
               the platform API allows it.
             </p>
-            {league.platform === 'sleeper' && league.platformLeagueId ? (
-              <a
-                href={`https://sleeper.com/leagues/${encodeURIComponent(league.platformLeagueId)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-4 inline-flex text-[13px] font-semibold text-cyan-400 hover:text-cyan-300"
-              >
-                Open league in Sleeper {'->'}
-              </a>
-            ) : null}
+            <SourceActionLink
+              platform={league.platform}
+              sourceLeagueId={league.platformLeagueId}
+              leagueName={league.name}
+              season={league.season}
+              action="open"
+              className="mt-4 inline-flex items-center gap-1 text-[13px] font-semibold text-cyan-400 hover:text-cyan-300"
+            />
             <button
               type="button"
               onClick={() => setLeaveLeagueHintOpen(false)}
@@ -2322,6 +2321,14 @@ function LeagueHeader({
             </span>
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <SourceActionLink
+              platform={league.platform}
+              sourceLeagueId={league.sleeperLeagueId}
+              leagueName={league.name}
+              season={league.season}
+              action="open"
+              className="inline-flex min-h-6 items-center gap-1 rounded-full border border-cyan-300/25 bg-cyan-500/5 px-2 text-[10px] font-semibold text-cyan-200/90 hover:bg-cyan-500/15"
+            />
             <span
               className={cn(
                 'inline-flex min-h-6 items-center rounded-full border px-2 text-[9px] font-black uppercase tracking-[0.14em]',
