@@ -93,8 +93,8 @@ No credentials (Sleeper is keyless). Migration is additive `CREATE TABLE IF NOT 
 | `checkpoints` (JSON) | per-scope resumable checkpoints (`{ scope: token }`) |
 | `completedScopes` / `incompleteScopes` (JSON) | last-run scope outcome (resume targets) |
 | `lastAttemptedSyncAt` | advances every run (drives the due-check; prevents hammering) |
-| `lastSuccessfulSyncAt` | **certified freshness — advances only on a fully completed run** |
-| `sourceDataTimestamp` | provider as-of time |
+| `lastSuccessfulSyncAt` | **certified freshness = AllFantasy's successful-collection time; advances only on a fully completed run (this is AF execution time)** |
+| `sourceDataTimestamp` | **RESERVED for a genuine provider-reported source timestamp — left null until one is reliably available (Sleeper exposes no dependable per-league data mtime). Never AF execution time.** |
 | `syncStatus` / `seasonState` / `lastRunAccounting` | observability |
 | `consecutiveFailures` / `lastError` / `lastRunId` | failure tracking + SyncJobRun link |
 
@@ -127,17 +127,37 @@ deliberately deferred to keep provider load bounded and this batch focused.
 
 Synchronization **updates existing rows**, never creates a league, and preserves `League.id`.
 
+**Synchronized in this PR** — league state/settings; teams and rosters; lineup sections; standings and
+matchup-derived TeamPerformance; traded-pick ownership:
+
 | Scope | Canonical writes | Idempotency key |
 |---|---|---|
 | `league_state` | `League` scalar fields + merged `settings` (AF-managed keys preserved) + current `LeagueSeason` | `League.id`; `LeagueSeason [leagueId, season]` |
-| `teams_rosters` | `LeagueTeam`, `Roster` (starters/bench/reserve/taxi via `lineup_sections`), `TeamPerformance` | `[leagueId, externalId]`, roster `platformUserId`, `[teamId, season, week]` |
-| `traded_picks` | `future_draft_picks` | `[leagueId, pickSeason, round, originalRosterId]` |
+| `teams_rosters` | `LeagueTeam`, `Roster` (starters/bench/reserve/taxi via `lineup_sections`), standings + matchup-derived `TeamPerformance` | `[leagueId, externalId]`, roster `platformUserId`, `[teamId, season, week]` |
+| `traded_picks` | `future_draft_picks` (traded-pick ownership) | `[leagueId, pickSeason, round, originalRosterId]` |
 
-Preserved on every sync: **`League.id`**, **`LeagueTeam.claimedByUserId`** (never nulled), raw Sleeper
-manager ids (`platformUserId`), and canonical `lineup_sections`. Scopes with no canonical destination
-table (e.g. transactions) are **not** synced — no fabrication. Immutable historical scopes (completed
-drafts, prior-season snapshots) are owned by the existing `SleeperHistorical*` backfill services and
-are checkpoint-skipped by the runner.
+**NOT yet synchronized** — explicitly out of scope for this PR; classified as the next Sleeper
+event-coverage / cadence batch:
+
+- transaction events;
+- waiver events;
+- trade-event history;
+- current draft events / draft state beyond the existing one-time import + `SleeperHistorical*` backfill;
+- event-triggered / live-game refreshes.
+
+This PR is **season-cadence** synchronization (≈30 min in season), **NOT** "whenever an event occurs"
+synchronization. Scopes with no canonical destination table (e.g. transactions) are deliberately not
+synced here — no fabrication. Immutable historical scopes (completed drafts, prior-season snapshots) are
+owned by the existing `SleeperHistorical*` backfill services and are checkpoint-skipped by the runner.
+
+**Identity + reconciliation contract (verified by tests):**
+
+- `LeagueTeam.platformUserId` preserves the **raw Sleeper manager id**.
+- `Roster.platformUserId` may be the **resolved AllFantasy AppUser id** (when the manager is linked to an
+  AF account); the raw Sleeper manager id always remains in `Roster.playerData.source_manager_id`.
+- `LeagueTeam.claimedByUserId` survives synchronization (never nulled).
+- Authoritative-removal reconciliation (gated on `coverage.currentRosters.state === 'full'`) **cannot
+  remove a claimed team or its roster** — a vanished claimed team is marked orphaned, never deleted.
 
 ---
 
@@ -146,9 +166,12 @@ are checkpoint-skipped by the runner.
 - A **second sync or manual refresh resolves the existing canonical `League`** (by
   `platform, platformLeagueId, season`), keeps the same `League.id`, and never creates a duplicate.
 - The `/api/leagues/import/resync` route (existing, `requireVerifiedUser`, caller-scoped) is **fixed**:
-  for Sleeper it now drives the durable collector over the payload already fetched (no second provider
-  call), so a re-sync actually refreshes canonical rows instead of no-op'ing on the completed-run
-  short-circuit.
+  for Sleeper it now drives the SAME durable collector as cron via `manualRefreshConnectedSleeperLeague`
+  — leased lock, `LeagueSyncState` checkpoints, `SyncJobRun` telemetry, failure accounting, and certified
+  freshness (`League.lastSyncedAt` advances only on a completed run) — over the payload already fetched
+  (no second provider call). It preserves `League.id` + all mirrors + claims, and returns the refresh
+  outcome honestly (completed / partial / failed) instead of silently swallowing a failed refresh.
+  Previously it no-op'd entirely on the completed-run ImportRun short-circuit.
 - `manualRefreshConnectedSleeperLeague` / `getConnectedLeagueSyncState` are gated by
   `resolveLeagueAccess` (owner **or** a claimed team) — another user can neither refresh nor inspect a
   connection's sync state.
@@ -167,23 +190,35 @@ are checkpoint-skipped by the runner.
    throws before persistence runs; an empty roster set is a no-op; removal reconciliation is gated on a
    **complete authoritative** response (`coverage.currentRosters.state === 'full'`), and claimed teams
    are preserved (marked orphan, never deleted).
+8. **Runner-level retries are real** — the per-run normalized payload is memoized while in-flight or
+   resolved, but a rejected fetch releases the memo so a retry performs a genuinely new bounded provider
+   attempt; successful scopes still share one fetch, and provider load stays bounded by `maxRetries`.
 
 ---
 
 ## 8. Tests
 
-- **Unit** (`__tests__/fantasy-os/sleeper-sync-collector.test.ts`, 12) — enumeration include/exclude,
+- **Unit** (`__tests__/fantasy-os/sleeper-sync-collector.test.ts`) — enumeration include/exclude,
   read-only provider access, manual-refresh authorization, lock adapter, fetcher determinism, runner
-  integration (completed / immutable-skip / lock).
-- **Persisted integration** (`__tests__/fantasy-os/sleeper-sync-integration.test.ts`, 12) — against an
-  **isolated test DB** (`ep-muddy-leaf`) with a hard production-refusal guard (`ep-curly-block`):
-  durable identity, reimport same id / no duplicate, idempotency, roster starters/bench update,
-  removal reconciliation gating, empty-response protection, claim + raw-id survival, checkpoint resume,
-  freshness gating, overlap lock, per-league isolation, dashboard read-model + Chimmy propagation,
-  new-season linkage.
+  integration (completed / immutable-skip / lock), the **fail-closed isolated-DB guard** (missing /
+  malformed / production / unknown host / wrong db name / no opt-in all refused, no credential leakage),
+  and the **memoized-loader retry contract** (one transient failure + success ⇒ exactly two loader
+  calls; a normal multi-scope run ⇒ exactly one).
+- **Resync delegation** (`__tests__/fantasy-os/sleeper-sync-resync.test.ts`) — the authenticated resync
+  utility drives the durable collector, performs no second provider fetch, and surfaces a failed refresh
+  honestly.
+- **Persisted integration** (`__tests__/fantasy-os/sleeper-sync-integration.test.ts`) — OPT-IN
+  (`ALLOW_SLEEPER_SYNC_INTEGRATION_WRITES=true`) against the isolated test DB (`ep-muddy-leaf` / `neondb`),
+  behind a **fail-closed** guard that refuses any non-allowlisted database identity before any write
+  (F1): durable identity, reimport same id / no duplicate, idempotency, roster starters/bench update,
+  removal reconciliation gating, empty/failed-response protection, claim + raw-id survival with a
+  **genuinely linked** Sleeper manager, checkpoint resume, freshness gating, overlap lock, per-league
+  isolation, dashboard read-model + Chimmy propagation, new-season linkage, and the durable
+  manual-refresh path (single fetch; `LeagueSyncState` + `SyncJobRun` written; freshness only on
+  completion; lock-out; unauthorized-denied).
 
 All controlled provider fixtures are deterministic (`__tests__/fantasy-os/fixtures/`); no live Sleeper
-calls in tests. **Never writes to production.**
+calls in tests. Persisted writes are **opt-in** and **never touch production**.
 
 ---
 

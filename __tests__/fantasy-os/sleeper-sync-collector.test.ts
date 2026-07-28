@@ -33,6 +33,8 @@ import { createSleeperScopeFetcher } from '@/lib/fantasy-os/sync/collector/sleep
 import { manualRefreshConnectedSleeperLeague, getConnectedLeagueSyncState } from '@/lib/fantasy-os/sync/collector/manualRefresh'
 import { runSync, reconcileAccounting, type SyncStore, type SyncLock, type RunResult, type ScopeFetchResult } from '@/lib/fantasy-os/sync/runner'
 import { fetchSleeperLeagueForImport } from '@/lib/league-import/sleeper/SleeperLeagueFetchService'
+import { createMemoizedNormalizedLoader } from '@/lib/fantasy-os/sync/collector/syncConnectedSleeperLeague'
+import { assertIsolatedTestDatabase } from './fixtures/isolatedDbGuard'
 import { makeSleeperNormalized } from './fixtures/sleeperNormalizedFixture'
 
 beforeEach(() => {
@@ -240,5 +242,73 @@ describe('runner integration via collector fetcher', () => {
       lock, store: new MemStore(), clock, rng, sleep: noSleep, fetchScope,
     })
     expect(res.status).toBe('locked')
+  })
+})
+
+// ── #F1 — fail-closed isolated-DB guard ─────────────────────────────────────────
+describe('fail-closed isolated-DB guard', () => {
+  const APPROVED = 'postgresql://u:pw@ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech:5432/neondb'
+
+  it('accepts ONLY the approved isolated identity WITH explicit opt-in', () => {
+    const id = assertIsolatedTestDatabase(APPROVED, 'true')
+    expect(id.host).toContain('ep-muddy-leaf')
+    expect(id.database).toBe('neondb')
+  })
+  it('refuses a missing URL', () => {
+    expect(() => assertIsolatedTestDatabase(undefined, 'true')).toThrow(/missing/i)
+    expect(() => assertIsolatedTestDatabase('', 'true')).toThrow(/missing/i)
+  })
+  it('refuses a malformed URL', () => {
+    expect(() => assertIsolatedTestDatabase('::: not a url', 'true')).toThrow(/malformed|unparseable/i)
+  })
+  it('refuses the known PRODUCTION host', () => {
+    const prod = 'postgresql://u:pw@ep-curly-block-ad0dlt9o-pooler.c-2.us-east-1.aws.neon.tech:5432/neondb'
+    expect(() => assertIsolatedTestDatabase(prod, 'true')).toThrow(/production/i)
+  })
+  it('refuses an arbitrary unknown host (never silently skips)', () => {
+    expect(() => assertIsolatedTestDatabase('postgresql://u:pw@db.example.com:5432/neondb', 'true')).toThrow(/not the approved/i)
+  })
+  it('refuses the approved host with the wrong database name', () => {
+    expect(() => assertIsolatedTestDatabase(APPROVED.replace('/neondb', '/otherdb'), 'true')).toThrow(/not the approved name/i)
+  })
+  it('refuses without the explicit opt-in flag', () => {
+    expect(() => assertIsolatedTestDatabase(APPROVED, undefined)).toThrow(/opt in/i)
+    expect(() => assertIsolatedTestDatabase(APPROVED, 'false')).toThrow(/opt in/i)
+  })
+  it('never leaks credentials in a refusal message', () => {
+    // Synthetic, obviously-fake credentials — NOT a real secret (fake user "test_user", fake password
+    // "dummy", and a host that is not the real production endpoint). Proves the message is host-only.
+    const withFakeCreds = 'postgresql://test_user:dummy@ep-curly-block-x-pooler.neon.tech:5432/neondb'
+    let msg = ''
+    try { assertIsolatedTestDatabase(withFakeCreds, 'true') } catch (e) { msg = String((e as Error).message) }
+    expect(msg).toMatch(/production/i)
+    expect(msg).not.toContain('dummy') // password stripped
+    expect(msg).not.toContain('test_user') // username stripped
+  })
+})
+
+// ── #F3 — memoized loader makes runner retries real ─────────────────────────────
+describe('createMemoizedNormalizedLoader', () => {
+  it('a normal successful multi-scope run calls the loader EXACTLY ONCE', async () => {
+    let calls = 0
+    const load = createMemoizedNormalizedLoader(async () => { calls++; return makeSleeperNormalized() })
+    const a = await load(); const b = await load(); const c = await load()
+    expect(calls).toBe(1)
+    expect(a).toBe(b)
+    expect(b).toBe(c)
+  })
+  it('one transient failure followed by success results in EXACTLY TWO loader calls', async () => {
+    let calls = 0
+    const load = createMemoizedNormalizedLoader(async () => {
+      calls += 1
+      if (calls === 1) throw new Error('transient provider error')
+      return makeSleeperNormalized()
+    })
+    await expect(load()).rejects.toThrow('transient') // rejection releases the memo slot
+    const ok = await load() // retry performs a genuinely new attempt
+    expect(calls).toBe(2)
+    expect(ok).toBeTruthy()
+    await load() // later scopes reuse the resolved payload — no third call
+    expect(calls).toBe(2)
   })
 })

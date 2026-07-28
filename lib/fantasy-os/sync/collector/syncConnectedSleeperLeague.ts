@@ -36,12 +36,28 @@ async function fetchNormalizedFromSleeper(externalLeagueId: string): Promise<Nor
   return result.normalized
 }
 
-/** Memoize the fetch PROMISE so all scopes share ONE provider burst per run. */
-function memoizeNormalized(fn: () => Promise<NormalizedImportResult>): () => Promise<NormalizedImportResult> {
-  let p: Promise<NormalizedImportResult> | null = null
+/**
+ * Memoize the fetch PROMISE so all scopes of a run share ONE provider burst — but ONLY while it is
+ * in-flight or resolved. On rejection the slot is released so the runner's next retry performs a
+ * genuinely NEW bounded provider attempt (transient failures can recover), while a resolved payload
+ * stays shared so successful scopes never refetch. Provider load stays bounded by the runner's
+ * `maxRetries`. The runner processes scopes sequentially, so there is no intra-run race on the slot.
+ */
+export function createMemoizedNormalizedLoader(
+  fn: () => Promise<NormalizedImportResult>,
+): () => Promise<NormalizedImportResult> {
+  let memo: Promise<NormalizedImportResult> | null = null
   return () => {
-    if (!p) p = fn()
-    return p
+    if (!memo) {
+      const p = fn()
+      memo = p
+      // Fire-and-forget: release the slot on rejection. Does not change the returned promise, so the
+      // caller still observes the original rejection and rethrows it up to the runner.
+      p.then(undefined, () => {
+        if (memo === p) memo = null
+      })
+    }
+    return memo
   }
 }
 
@@ -106,7 +122,7 @@ export async function syncConnectedSleeperLeague(
     return { ...base, executed: false, reason: 'not due for this season cadence' }
   }
 
-  const loadNormalized = memoizeNormalized(() =>
+  const loadNormalized = createMemoizedNormalizedLoader(() =>
     (deps.fetchNormalized ?? fetchNormalizedFromSleeper)(connection.externalLeagueId),
   )
   const store = createPrismaSleeperSyncStore({

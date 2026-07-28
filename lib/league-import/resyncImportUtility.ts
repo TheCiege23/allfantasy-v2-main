@@ -14,7 +14,15 @@ export async function resyncImportedLeague(input: {
   provider: ImportProvider
   sourceId: string
 }): Promise<
-  | { ok: true; leagueId: string; runId: string; warningCount: number; reviewRequired: boolean }
+  | {
+      ok: true
+      leagueId: string
+      runId: string
+      warningCount: number
+      reviewRequired: boolean
+      /** Honest outcome of the durable read-model refresh (Sleeper only); null for other providers. */
+      refresh: { status: string; advancedFreshness: boolean; executed: boolean } | { error: string } | null
+    }
   | { ok: false; error: string }
 > {
   const result = await runImportedLeagueNormalizationPipeline({
@@ -38,19 +46,26 @@ export async function resyncImportedLeague(input: {
 
     // Launch Batch 2 — durable read-model refresh. `persistImportWithCanonicalAudit` short-circuits an
     // already-`completed` ImportRun (its idempotency key has no payload hash), so on a re-sync it returns
-    // the existing league WITHOUT re-persisting. For Sleeper we therefore drive the SAME idempotent
-    // collector the scheduled cron uses over the payload we already fetched (no second provider call), so
-    // a manual re-sync actually refreshes League/LeagueTeam/Roster instead of silently no-op'ing.
+    // the existing league WITHOUT re-persisting. For Sleeper we therefore drive the SAME durable collector
+    // the scheduled cron uses — the distributed lock, LeagueSyncState checkpoints, SyncJobRun telemetry,
+    // failure accounting, and certified freshness (League.lastSyncedAt advances only on completion) — over
+    // the payload we already fetched (NO second Sleeper call). It keeps the same League.id, refreshes every
+    // mirror, and preserves claims. The outcome is surfaced honestly, never a silently-swallowed failure.
+    let refresh: { status: string; advancedFreshness: boolean; executed: boolean } | { error: string } | null = null
     if (input.provider === 'sleeper' && persisted.league.id) {
-      try {
-        const { applySleeperScopeToLeague } = await import('@/lib/fantasy-os/sync/collector')
-        const { SLEEPER_SYNC_SCOPES } = await import('@/lib/fantasy-os/sync/collector')
-        for (const scope of SLEEPER_SYNC_SCOPES) {
-          await applySleeperScopeToLeague({ leagueId: persisted.league.id, scope, normalized: result.normalized })
-        }
-      } catch {
-        // Non-fatal: the audit row is already committed; the scheduled cron will retry the refresh.
-      }
+      const { manualRefreshConnectedSleeperLeague } = await import('@/lib/fantasy-os/sync/collector')
+      const out = await manualRefreshConnectedSleeperLeague({
+        userId: input.userId,
+        leagueId: persisted.league.id,
+        fetchNormalized: async () => result.normalized, // reuse the payload already fetched above
+      })
+      refresh = out.ok
+        ? {
+            status: out.sync.status ?? out.sync.reason ?? 'unknown',
+            advancedFreshness: Boolean(out.sync.advancedFreshness),
+            executed: Boolean(out.sync.executed),
+          }
+        : { error: out.error }
     }
 
     return {
@@ -59,6 +74,7 @@ export async function resyncImportedLeague(input: {
       runId,
       warningCount: canonical.warnings.length,
       reviewRequired: canonical.reviewRequired,
+      refresh,
     }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }

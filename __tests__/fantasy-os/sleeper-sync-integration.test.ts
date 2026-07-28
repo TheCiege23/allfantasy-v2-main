@@ -20,6 +20,7 @@ import { buildImportedLeagueSettings } from '@/lib/league-import/ImportedLeagueC
 import { applySleeperScopeToLeague } from '@/lib/fantasy-os/sync/collector/applySleeperLeagueSync'
 import { syncConnectedSleeperLeague } from '@/lib/fantasy-os/sync/collector/syncConnectedSleeperLeague'
 import { runDueSleeperLeagues } from '@/lib/fantasy-os/sync/collector/runDueSleeperLeagues'
+import { manualRefreshConnectedSleeperLeague } from '@/lib/fantasy-os/sync/collector/manualRefresh'
 import { createPrismaSleeperSyncStore } from '@/lib/fantasy-os/sync/collector/prismaSyncStore'
 import { createSleeperScopeFetcher } from '@/lib/fantasy-os/sync/collector/sleeperScopeFetcher'
 import { createAutomationSyncLock } from '@/lib/fantasy-os/sync/collector/automationSyncLock'
@@ -29,22 +30,15 @@ import { runSync } from '@/lib/fantasy-os/sync/runner'
 import { acquireAutomationLock, releaseAutomationLock } from '@/lib/automation/locks'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { makeSleeperNormalized } from './fixtures/sleeperNormalizedFixture'
+import { assertIsolatedTestDatabase, OPT_IN_ENV } from './fixtures/isolatedDbGuard'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 
-// ── Production refusal guard ────────────────────────────────────────────────────
-function dbHost(): string {
-  const raw = process.env.DATABASE_URL ?? ''
-  try {
-    return new URL(raw.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return ''
-  }
-}
-const HOST = dbHost()
-if (HOST.includes('ep-curly-block')) {
-  throw new Error('[sleeper-sync integration] REFUSING to run against the PRODUCTION database (ep-curly-block).')
-}
-const RUN_DB = HOST.includes('ep-muddy-leaf') // the isolated, non-production test project
+// ── Fail-closed isolated-DB gate ────────────────────────────────────────────────
+// Persisted writes are OPT-IN (ALLOW_SLEEPER_SYNC_INTEGRATION_WRITES=true). When opted in, the guard
+// in beforeAll hard-REFUSES anything but the approved isolated test database — missing / malformed /
+// unknown / production identities all throw (never silently skip), before any Prisma write. When not
+// opted in, the whole suite is skipped (a deliberate non-opt-in, not an "unknown database" skip).
+const OPTED_IN = process.env[OPT_IN_ENV] === 'true'
 
 const NOW = new Date('2025-11-15T18:00:00Z') // in-season (30-min cadence)
 const clock = { now: () => NOW }
@@ -55,6 +49,7 @@ const STAMP = Date.now().toString(36)
 let USER_ID = ''
 const createdLeagueIds: string[] = []
 const createdRunKeys: string[] = []
+const createdUserIds: string[] = []
 
 function lid(n: string): string {
   return `itest-${STAMP}-${n}`
@@ -92,8 +87,26 @@ function loader(n: NormalizedImportResult): (id: string) => Promise<NormalizedIm
   return async () => n
 }
 
+/**
+ * Create a genuinely LINKED Sleeper manager: an AppUser whose username is `sleeper_<managerId>`, which is
+ * exactly what `resolveImportedManagerUserIds` resolves. The bootstrap then claims that manager's team
+ * (`claimedByUserId`) and stores the RESOLVED AllFantasy id on `Roster.platformUserId`, while the raw
+ * Sleeper manager id stays on `LeagueTeam.platformUserId` and in `Roster.playerData.source_manager_id`.
+ */
+async function createLinkedManager(managerId: string): Promise<string> {
+  const user = await prisma.appUser.create({
+    data: { email: `itest+${STAMP}-${managerId}@sleeper-sync.test`, username: `sleeper_${managerId}` },
+  })
+  createdUserIds.push(user.id)
+  return user.id
+}
+
 beforeAll(async () => {
-  if (!RUN_DB) return
+  if (!OPTED_IN) return
+  // FAIL-CLOSED: before any Prisma write, refuse anything but the approved isolated test database.
+  // Throws on missing / malformed / unknown / production identities (never silently proceeds), and
+  // never surfaces credentials.
+  assertIsolatedTestDatabase(process.env.DATABASE_URL, process.env[OPT_IN_ENV])
   // Additive, idempotent migration — safe no-op if already applied.
   await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "league_sync_state" (
     "id" TEXT NOT NULL, "runKey" VARCHAR(191) NOT NULL, "provider" VARCHAR(32) NOT NULL,
@@ -111,17 +124,18 @@ beforeAll(async () => {
     data: { email: `itest+${STAMP}@sleeper-sync.test`, username: `itest_${STAMP}` },
   })
   USER_ID = user.id
+  createdUserIds.push(user.id)
 }, 60_000)
 
 afterAll(async () => {
-  if (!RUN_DB || !USER_ID) return
+  if (!OPTED_IN || !USER_ID) return
   await prisma.leagueSyncState.deleteMany({ where: { runKey: { in: createdRunKeys } } }).catch(() => {})
   await prisma.syncJobRun.deleteMany({ where: { jobScope: { in: createdRunKeys } } }).catch(() => {})
   for (const id of createdLeagueIds) await prisma.league.delete({ where: { id } }).catch(() => {})
-  await prisma.appUser.delete({ where: { id: USER_ID } }).catch(() => {})
+  for (const id of createdUserIds) await prisma.appUser.delete({ where: { id } }).catch(() => {})
 })
 
-describe.skipIf(!RUN_DB)('durable Sleeper sync — persisted integration', () => {
+describe.skipIf(!OPTED_IN)('durable Sleeper sync — persisted integration', () => {
   it('#1 first sync persists durable source + sync identity and advances freshness', async () => {
     const n = makeSleeperNormalized({ leagueId: lid('a') })
     const leagueId = await seed(n)
@@ -363,5 +377,106 @@ describe.skipIf(!RUN_DB)('durable Sleeper sync — persisted integration', () =>
     expect(priorLeague?.season).toBe(2024)
     expect(await prisma.roster.count({ where: { leagueId: priorLeagueId } })).toBe(priorRostersBefore)
     expect(priorLeagueId).not.toBe(renewedLeagueId) // distinct rows per season
+  })
+
+  it('#F2 manual refresh drives the durable path: single fetch, same id, LeagueSyncState + SyncJobRun written', async () => {
+    const n = makeSleeperNormalized({ leagueId: lid('r1') })
+    const leagueId = await seed(n)
+    const c = conn(lid('r1'))
+    let fetches = 0
+    const out = await manualRefreshConnectedSleeperLeague({
+      userId: USER_ID,
+      leagueId,
+      now: NOW,
+      fetchNormalized: async () => { fetches += 1; return n },
+    })
+    expect(out.ok).toBe(true)
+    if (out.ok) expect(out.sync.status).toBe('completed')
+    expect(fetches).toBe(1) // ONE provider burst shared across all scopes (no second fetch)
+
+    const rows = await prisma.league.findMany({ where: { platform: 'sleeper', platformLeagueId: lid('r1'), season: 2025 }, select: { id: true, lastSyncedAt: true } })
+    expect(rows).toHaveLength(1) // same id, no duplicate
+    expect(rows[0].id).toBe(leagueId)
+    expect(rows[0].lastSyncedAt).toBeTruthy() // freshness advances on completion
+
+    const state = await prisma.leagueSyncState.findUnique({ where: { runKey: c.runKey } })
+    expect(state?.syncStatus).toBe('completed')
+    expect(state?.lastSuccessfulSyncAt).toBeTruthy()
+    const jobs = await prisma.syncJobRun.count({ where: { jobScope: c.runKey, jobName: 'fantasy-os-sleeper-sync' } })
+    expect(jobs).toBeGreaterThanOrEqual(1) // telemetry written
+  })
+
+  it('#F2 a failed manual refresh erases nothing and does not advance freshness', async () => {
+    const n = makeSleeperNormalized({ leagueId: lid('r2') })
+    const leagueId = await seed(n)
+    const c = conn(lid('r2'))
+    const before = await prisma.roster.count({ where: { leagueId } })
+    const out = await manualRefreshConnectedSleeperLeague({
+      userId: USER_ID,
+      leagueId,
+      now: NOW,
+      fetchNormalized: async () => { throw new Error('provider down') },
+    })
+    expect(out.ok).toBe(true)
+    if (out.ok) expect(out.sync.status).toBe('failed')
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { lastSyncedAt: true } })
+    expect(league?.lastSyncedAt).toBeNull()
+    const state = await prisma.leagueSyncState.findUnique({ where: { runKey: c.runKey } })
+    expect(state?.lastSuccessfulSyncAt).toBeNull()
+    expect(await prisma.roster.count({ where: { leagueId } })).toBe(before)
+  })
+
+  it('#F2 manual refresh is locked out when the connection lock is held', async () => {
+    const n = makeSleeperNormalized({ leagueId: lid('r3') })
+    const leagueId = await seed(n)
+    const c = conn(lid('r3'))
+    const held = await acquireAutomationLock(c.runKey, { owner: 'other-exec', ttlMs: 60_000 })
+    expect(held.ok).toBe(true)
+    try {
+      const out = await manualRefreshConnectedSleeperLeague({ userId: USER_ID, leagueId, now: NOW, fetchNormalized: async () => n })
+      expect(out.ok).toBe(true)
+      if (out.ok) expect(out.sync.status).toBe('locked')
+    } finally {
+      await releaseAutomationLock(c.runKey, 'other-exec')
+    }
+  })
+
+  it('#F2/#16 manual refresh + inspection deny a user without access to the connection', async () => {
+    const n = makeSleeperNormalized({ leagueId: lid('r4') })
+    const leagueId = await seed(n)
+    const outsider = await prisma.appUser.create({ data: { email: `itest+${STAMP}-out@sleeper-sync.test`, username: `itest_out_${STAMP}` } })
+    createdUserIds.push(outsider.id)
+    const refused = await manualRefreshConnectedSleeperLeague({ userId: outsider.id, leagueId, now: NOW, fetchNormalized: async () => n })
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) expect(refused.status).toBe(403)
+  })
+
+  it('#F5 linked manager: raw id on LeagueTeam, resolved id on Roster, raw id in playerData; claim + roster survive removal', async () => {
+    const afUserId = await createLinkedManager('mgrX')
+    const n = makeSleeperNormalized({ leagueId: lid('lk'), rosters: [
+      { teamId: '1', managerId: 'mgrX', players: ['p1', 'p2'], starters: ['p1'] },
+      { teamId: '2', managerId: 'u2', players: ['p5'], starters: ['p5'] },
+    ] })
+    const leagueId = await seed(n)
+
+    const team = await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: '1' }, select: { platformUserId: true, claimedByUserId: true } })
+    expect(team?.platformUserId).toBe('mgrX') // raw Sleeper manager id on LeagueTeam
+    expect(team?.claimedByUserId).toBe(afUserId) // genuinely linked → claimed
+
+    const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: afUserId }, select: { platformUserId: true, playerData: true } })
+    expect(roster?.platformUserId).toBe(afUserId) // resolved AllFantasy id on Roster
+    const pd = roster?.playerData as Record<string, unknown>
+    expect(pd.source_manager_id).toBe('mgrX') // raw Sleeper manager id preserved in playerData
+
+    // Authoritative removal (team 1 vanished, coverage full) must NOT delete a claimed team or its roster.
+    const full = makeSleeperNormalized({ leagueId: lid('lk'), rostersCoverage: 'full', rosters: [
+      { teamId: '2', managerId: 'u2', players: ['p5'], starters: ['p5'] },
+    ] })
+    const r = await applySleeperScopeToLeague({ leagueId, scope: 'teams_rosters', normalized: full })
+    expect(r.removed).toBe(0)
+    const stillThere = await prisma.leagueTeam.findFirst({ where: { leagueId, externalId: '1' }, select: { claimedByUserId: true, isOrphan: true } })
+    expect(stillThere?.claimedByUserId).toBe(afUserId) // claim survives
+    expect(stillThere?.isOrphan).toBe(true) // disclosed as orphaned, not deleted
+    expect(await prisma.roster.findFirst({ where: { leagueId, platformUserId: afUserId } })).not.toBeNull() // roster preserved
   })
 })

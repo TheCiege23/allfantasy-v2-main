@@ -278,18 +278,35 @@ async function applyTeamsRosters(
       where: { leagueId, externalId: { notIn: Array.from(liveTeamIds) } },
       select: { id: true, externalId: true, platformUserId: true, claimedByUserId: true, isOrphan: true },
     })
+    // Index the league's rosters by their canonical source team id (stable across the raw→resolved
+    // platformUserId change) so a removed team's roster is found even when Roster.platformUserId holds
+    // a RESOLVED AllFantasy id rather than the raw Sleeper manager id.
+    const leagueRosters = await prisma.roster.findMany({
+      where: { leagueId },
+      select: { id: true, platformUserId: true, playerData: true },
+    })
+    const rosterIdBySourceTeam = new Map<string, string>()
+    for (const r of leagueRosters) {
+      const st = String(asRecord(r.playerData).source_team_id ?? '')
+      if (st) rosterIdBySourceTeam.set(st, r.id)
+    }
     for (const t of staleTeams) {
       if (t.claimedByUserId) {
+        // A claimed team (and its roster) is NEVER deleted by reconciliation — the user's claim + data
+        // survive. If it truly vanished upstream, mark it orphaned so the surface can disclose that.
         if (!t.isOrphan) {
           await prisma.leagueTeam.update({ where: { id: t.id }, data: { isOrphan: true } })
-          out.notes.push(`teams_rosters: claimed team ${t.externalId} vanished upstream — marked orphan (preserved)`)
+          out.notes.push(`teams_rosters: claimed team ${t.externalId} vanished upstream — marked orphan (preserved, not deleted)`)
         }
         continue
       }
-      // Unclaimed + absent from a complete response → reconcile away (team + its roster).
-      await prisma.roster.deleteMany({
-        where: { leagueId, platformUserId: t.platformUserId ?? '__none__' },
-      }).catch(() => undefined)
+      // Unclaimed + absent from a complete authoritative response → reconcile away (team + its roster).
+      const rosterId = rosterIdBySourceTeam.get(t.externalId)
+      if (rosterId) {
+        await prisma.roster.delete({ where: { id: rosterId } }).catch(() => undefined)
+      } else if (t.platformUserId) {
+        await prisma.roster.deleteMany({ where: { leagueId, platformUserId: t.platformUserId } }).catch(() => undefined)
+      }
       await prisma.leagueTeam.delete({ where: { id: t.id } }).catch(() => undefined)
       out.removed += 1
     }

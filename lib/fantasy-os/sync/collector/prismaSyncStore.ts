@@ -103,9 +103,13 @@ export function createPrismaSleeperSyncStore(deps: {
     },
 
     async setLastSuccessfulSyncAt(_runKey: string, iso: string): Promise<void> {
+      // `iso` is AllFantasy's successful-collection time — recorded ONLY as `lastSuccessfulSyncAt`.
+      // `sourceDataTimestamp` is reserved for a genuine provider-reported source time and is left
+      // null until one is reliably available (Sleeper exposes no dependable per-league data mtime),
+      // so AF execution time is never misfiled under a provider-source name.
       await prisma.leagueSyncState.update({
         where: { runKey: connection.runKey },
-        data: { lastSuccessfulSyncAt: new Date(iso), sourceDataTimestamp: new Date(iso) },
+        data: { lastSuccessfulSyncAt: new Date(iso) },
       }).catch(() => undefined)
       // Stamp every mirror row's freshness (dashboard reads League.lastSyncedAt/syncStatus).
       await prisma.league.updateMany({

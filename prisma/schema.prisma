@@ -5839,9 +5839,11 @@ model LeagueSyncState {
   lastRunAccounting    Json?
   /// When the last run was attempted (advances every run, success or not).
   lastAttemptedSyncAt  DateTime?
-  /// Certified freshness — advances ONLY when all required mutable scopes complete.
+  /// Certified freshness — AllFantasy's successful-collection time; advances ONLY when all required
+  /// mutable scopes complete. (This is AF execution time, NOT a provider-reported timestamp.)
   lastSuccessfulSyncAt DateTime?
-  /// Provider-reported source-data timestamp where available (e.g. Sleeper last activity).
+  /// RESERVED for a genuine provider-reported source-data timestamp. Left null until one is reliably
+  /// available — Sleeper exposes no dependable per-league data mtime. Never store AF execution time here.
   sourceDataTimestamp  DateTime?
   /// Consecutive failed/partial runs since the last completed run (drives backoff/alerting).
   consecutiveFailures  Int       @default(0)
