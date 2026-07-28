@@ -53,6 +53,8 @@ import { FloatingCommunications } from '@/app/dashboard/components/FloatingCommu
 import { LineupIssuesModal, type LineupCheckPayload } from '@/app/dashboard/components/LineupIssuesModal'
 import { WaiverRecommendationsModal } from '@/app/dashboard/components/WaiverRecommendationsModal'
 import { PendingTradesModal } from '@/app/dashboard/components/PendingTradesModal'
+import { buildOutstandingIssues } from '@/lib/dashboard/outstanding-issues'
+import { OutstandingIssuesCard } from '@/components/dashboard/OutstandingIssuesCard'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { scopeBySelectedLeague } from '@/lib/dashboard/scope-by-selected-league'
 import type { LeftChatInitialTab } from '@/app/dashboard/types'
@@ -520,62 +522,21 @@ export default function NocturneDashboard({
   }, [todayFull, dashLeagueFilter])
 
   // ── Top outstanding issues ───────────────────────────────────────────────────
-  // Built ONLY from rows that already exist in the today-actions bundle: each lineup
-  // action carries its own message/severity/urgency, and pending trades carry a league.
-  // Nothing is synthesised — if the payload has no rows, the section reports empty.
+  // Built ONLY from rows the today-actions bundle already carries (each lineup action + each pending-trade
+  // league), via the pure buildOutstandingIssues helper. Each row keeps its canonical leagueId + the
+  // route's SERVER-RESOLVED source action (actionLinks) so the alert can lead to the secure loop; nothing
+  // is synthesised and no URL is reconstructed here.
   const outstandingIssues = useMemo(() => {
     const nameOf = (id: string) => leagues.find((l) => l.id === id)?.name ?? 'League'
     const inScope = (id: string) => dashLeagueFilter === 'all' || id === dashLeagueFilter
-    const sevRank: Record<string, number> = { critical: 0, warning: 1, info: 2 }
-    const urgRank: Record<string, number> = { urgent: 0, soon: 1, normal: 2, low: 3 }
-
-    const rows: Array<{ key: string; label: string; league: string; severity: string; sev: number; urg: number; count: number }> = []
-
-    // Lineup actions are per-slot, so one underlying problem ("Missing N starter slots")
-    // arrives as N identical messages. Collapse identical (league, message) pairs into a
-    // single row with a count — otherwise a Top 10 list is just the same line ten times.
-    const actions = ((todayFull?.lineup as { actions?: Array<Record<string, unknown>> } | undefined)?.actions) ?? []
-    const grouped = new Map<string, { label: string; league: string; severity: string; sev: number; urg: number; count: number }>()
-    for (const a of actions) {
-      const leagueId = str(a.leagueId)
-      if (!leagueId || !inScope(leagueId)) continue
-      const message = str(a.message)
-      if (!message) continue
-      const severity = str(a.severity) ?? 'info'
-      const sev = sevRank[severity] ?? 2
-      const urg = urgRank[str(a.urgency) ?? 'normal'] ?? 2
-      const key = `lineup:${leagueId}:${message}`
-      const hit = grouped.get(key)
-      if (hit) {
-        hit.count += 1
-        // Keep the most severe / most urgent variant of a collapsed group.
-        hit.sev = Math.min(hit.sev, sev)
-        hit.urg = Math.min(hit.urg, urg)
-        if (sev < (sevRank[hit.severity] ?? 2)) hit.severity = severity
-      } else {
-        grouped.set(key, { label: message, league: nameOf(leagueId), severity, sev, urg, count: 1 })
-      }
-    }
-    for (const [key, v] of grouped) rows.push({ key, ...v })
-
-    const tradeLeagues = ((todayFull?.trades as { trades?: Array<Record<string, unknown>> } | undefined)?.trades) ?? []
-    for (const tl of tradeLeagues) {
-      const leagueId = str(tl.leagueId)
-      if (!leagueId || !inScope(leagueId)) continue
-      const count = Array.isArray(tl.trades) ? tl.trades.length : 0
-      if (count === 0) continue
-      rows.push({
-        key: `trade:${leagueId}`,
-        label: `${count} trade offer${count > 1 ? 's' : ''} waiting on your response`,
-        league: str(tl.leagueName) ?? nameOf(leagueId),
-        severity: 'warning',
-        sev: 1,
-        urg: 0,
-        count: 1,
-      })
-    }
-
-    return rows.sort((a, b) => a.sev - b.sev || a.urg - b.urg).slice(0, 10)
+    const lineup = todayFull?.lineup as LineupCheckPayload | undefined
+    const trades = todayFull?.trades as TradesDashboardResponse | undefined
+    return buildOutstandingIssues({
+      lineupActions: lineup?.actions ?? [],
+      tradeLeagues: trades?.trades ?? [],
+      leagueName: nameOf,
+      inScope,
+    })
   }, [todayFull, leagues, dashLeagueFilter])
 
   // ── Current vs Historical ────────────────────────────────────────────────────
@@ -804,27 +765,11 @@ export default function NocturneDashboard({
 
         {/* ═══ TOP OUTSTANDING ISSUES ═══ */}
         {context === 'global' && outstandingIssues.length > 0 && (
-          <div>
-            <div className="dash-kicker" style={{ marginBottom: 12 }}>
-              Top {outstandingIssues.length} outstanding issue{outstandingIssues.length > 1 ? 's' : ''} — {dashFilterLeagueName ?? 'all leagues'}
-            </div>
-            <div className="afcard" style={{ padding: 6 }}>
-              {outstandingIssues.map((iss) => (
-                <div key={iss.key} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 10px', borderRadius: 'var(--radius-md)' }}>
-                  <span
-                    aria-hidden
-                    style={{
-                      width: 8, height: 8, borderRadius: '50%', flex: 'none',
-                      background: iss.severity === 'critical' ? '#e5675f' : iss.severity === 'warning' ? '#d8a657' : 'var(--color-accent-500)',
-                    }}
-                  />
-                  <span style={{ fontSize: 13, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{iss.label}</span>
-                  {iss.count > 1 && <span className="tag tag-neutral" style={{ flex: 'none' }}>×{iss.count}</span>}
-                  <span style={{ fontSize: 11.5, color: 'var(--color-neutral-600)', flex: 'none', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{iss.league}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+          <OutstandingIssuesCard
+            issues={outstandingIssues}
+            scopeLabel={dashFilterLeagueName ?? 'all leagues'}
+            onOpen={(kind) => setOpenModal(kind)}
+          />
         )}
 
         {dashFilterLeagueName && (

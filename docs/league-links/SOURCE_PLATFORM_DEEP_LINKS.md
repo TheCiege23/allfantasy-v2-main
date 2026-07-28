@@ -76,9 +76,15 @@ exist on `League` and are already surfaced by `/api/league/list`
   `https://sleeper.app/leagues/{id}/trade` `window.open` (wrong host: `sleeper.app` is the API) with the
   allowlisted resolver (`action:'trade'`, all providers, safe new-tab open).
 
-## Decision OS action loop (live `RecommendationTimeline`)
-The live Decision OS card feed (`app/dashboard/components/warroom/RecommendationTimeline.tsx`, fed by
-`GET /api/dashboard/today-actions` → `runTodayActions` → `computeLineupActionsForUser`) now renders, per
+## Decision OS action loop (`RecommendationTimeline`)
+> **Live-path note (2026-07-28):** `RecommendationTimeline` is rendered only by `DashboardOverview` →
+> `DashboardShell`, which the production `/dashboard` **no longer renders** (it was replaced by
+> `NocturneDashboard` at the Nocturne cut-over). So this specific card is currently **not on the live
+> path** — but the route enrichment it introduced (`enrichLineupActionsWithLinks` on
+> `body.lineup.actions`) **is** live: the live "Top outstanding issues" alert list (below) consumes it.
+
+The Decision OS card feed (`app/dashboard/components/warroom/RecommendationTimeline.tsx`, fed by
+`GET /api/dashboard/today-actions` → `runTodayActions` → `computeLineupActionsForUser`) renders, per
 actionable imported card: an **internal** AllFantasy analysis action, a **secure external** source-platform
 action, freshness, and (once per card) the read-only disclosure. The external link is resolved
 **server-side in the route** from the canonical `League` row via `enrichLineupActionsWithLinks`
@@ -103,9 +109,12 @@ follow-ups.
 
 ## Prop-fed dashboard modals — Pending Trades / Waivers / Lineup issues
 The three summary modals (`app/dashboard/components/{PendingTradesModal,WaiverRecommendationsModal,LineupIssuesModal}.tsx`)
-are **prop-fed from one route**: `DashboardOverview` fetches `GET /api/dashboard/today-actions` once and
-passes `body.trades` / `body.waivers` / `body.lineup` straight in. So the **route** enriches them
-server-side (alongside the timeline); no modal fetches its own data or calls a provider on render.
+are **prop-fed from one route**. On the **live** dashboard, `NocturneDashboard` fetches
+`GET /api/dashboard/today-actions` once, stores the raw response as `todayFull`, and passes
+`todayFull.trades` / `todayFull.waivers` / `todayFull.lineup` straight into the modals (no re-mapping, so
+the route's `actionLinks` survive). The legacy `DashboardOverview` wires the same modals identically but is
+no longer on the live path. Either way the **route** enriches server-side; no modal fetches its own data or
+calls a provider on render.
 
 Per league the route attaches an `actionLinks` bundle (`DecisionOsActionLinks`): the **internal** AF
 analysis link (pro-gating unchanged — the existing `ProLeagueLink`), the **secure external** source action
@@ -124,6 +133,36 @@ in the route from the canonical `League` row (one `findMany` per surface, keyed 
 never a cached/client/prop URL (the items carry none), never a provider fetch. A homepage-fallback provider
 always shows the honest *Go to {provider}* label even if a caller passes a specific-page label.
 Native/unknown/missing leagues fail safe: internal action only, no external, no disclosure.
+
+## Live dashboard (Nocturne) — agenda + warnings
+The production `/dashboard` renders `components/dashboard/nocturne/NocturneDashboard.tsx` (the Nocturne
+cut-over). Its agenda/warning surfaces and how each relates to the secure loop:
+
+| Live surface | What it is | Secure action loop |
+|---|---|---|
+| **Today's priorities** | compact launcher rows (lineup / waiver / trade) | opens the wired modals (internal + external + disclosure) — the loop completes in the modal |
+| **Top outstanding issues** | per-league alert list (lineup + pending-trade rows) | **wired here** — see below |
+| **CTA banners** | visitor / free-plan / verify-email / geo-restricted | **no source action** (account / billing / compliance / system — never an imported-league page) |
+| **Hero KPIs**, **StatChips** | aggregate counts ("Need attention", "Leagues") | not per-league — no source action |
+
+**Top outstanding issues** (`components/dashboard/OutstandingIssuesCard.tsx`; rows built by
+`lib/dashboard/outstanding-issues.ts`): each row is an **internal** AllFantasy launcher — clicking it opens
+the same wired modal its normalized `kind` maps to (`lineup` → LineupIssuesModal, `trade` →
+PendingTradesModal), so the internal nav keeps its existing pro-gating — **plus** a compact **secure
+external** source action for imported + resolvable leagues, and the read-only disclosure **once** under the
+card. The external link is **not** resolved here: each row reuses the `actionLinks.external` the route
+already resolved server-side from the canonical League row (off `todayFull.lineup.actions[]` /
+`todayFull.trades.trades[]`). The row keeps its own canonical `leagueId`, so links stay league-scoped; a
+homepage fallback stays honest ("Go to {provider}"); native / unknown / link-less leagues get the internal
+launcher only.
+
+### Not on the live path (legacy `DashboardShell` → `DashboardOverview`)
+`DashboardShell` is not rendered by any live route (the production `/dashboard` renders `NocturneDashboard`),
+so these are **dead code** on production and were **not** wired this batch: `PlatformPulseCard`,
+`ActionCenter`, `TodayTimeline`, `DashboardHero`, and `RecommendationTimeline`. Reviving any of them behind
+the live dashboard is a separate decision; if revived, `PlatformPulseCard` items already carry a canonical
+`leagueId` (except the aggregate `waiver_pickups` / `pending_trades` counts) and could reuse
+`resolveSourceLinksForLeagueIds` server-side.
 
 ## Follow-up gaps (explicitly not wired here)
 These surfaces carry only the internal `leagueId` (+ a platform *label*), not the source
