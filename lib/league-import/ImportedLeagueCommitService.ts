@@ -206,7 +206,9 @@ function resolveImportedLeagueVariant(normalized: NormalizedImportResult): strin
   return normalized.league.isDynasty ? 'DYNASTY_IDP' : 'IDP'
 }
 
-function buildImportedLeagueSettings(normalized: NormalizedImportResult): Record<string, unknown> {
+/** Exported for the durable read-model sync (Launch Batch 2) so a scheduled refresh writes the
+ *  IDENTICAL `League.settings` shape the initial import does — no drift between import and sync. */
+export function buildImportedLeagueSettings(normalized: NormalizedImportResult): Record<string, unknown> {
   const sportType = resolveImportedLeagueSport(normalized)
   const leagueVariant = resolveImportedLeagueVariant(normalized)
   return {

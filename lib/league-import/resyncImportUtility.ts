@@ -35,6 +35,24 @@ export async function resyncImportedLeague(input: {
       canonical,
       allowUpdateExisting: true,
     })
+
+    // Launch Batch 2 — durable read-model refresh. `persistImportWithCanonicalAudit` short-circuits an
+    // already-`completed` ImportRun (its idempotency key has no payload hash), so on a re-sync it returns
+    // the existing league WITHOUT re-persisting. For Sleeper we therefore drive the SAME idempotent
+    // collector the scheduled cron uses over the payload we already fetched (no second provider call), so
+    // a manual re-sync actually refreshes League/LeagueTeam/Roster instead of silently no-op'ing.
+    if (input.provider === 'sleeper' && persisted.league.id) {
+      try {
+        const { applySleeperScopeToLeague } = await import('@/lib/fantasy-os/sync/collector')
+        const { SLEEPER_SYNC_SCOPES } = await import('@/lib/fantasy-os/sync/collector')
+        for (const scope of SLEEPER_SYNC_SCOPES) {
+          await applySleeperScopeToLeague({ leagueId: persisted.league.id, scope, normalized: result.normalized })
+        }
+      } catch {
+        // Non-fatal: the audit row is already committed; the scheduled cron will retry the refresh.
+      }
+    }
+
     return {
       ok: true,
       leagueId: persisted.league.id,
