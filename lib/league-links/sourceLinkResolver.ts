@@ -33,8 +33,9 @@ export type SourceActionType =
 export type SourceDestinationType = 'action' | 'roster' | 'league' | 'homepage'
 
 export interface SourceLinkContext {
-  /** League.platform (imported providers only; native/unknown → no source link). */
-  platform: string | null | undefined
+  /** League.platform (imported providers only; native/unknown → no source link). Optional so a
+   *  pre-resolved `link` can be rendered without re-supplying context. */
+  platform?: string | null
   /** The source (provider) league id — League.platformLeagueId. */
   sourceLeagueId?: string | null
   /** League.name — used only for the human label (never for the URL). */

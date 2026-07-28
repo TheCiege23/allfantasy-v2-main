@@ -19,11 +19,16 @@ export interface SourceActionLinkProps extends SourceLinkContext {
   link?: SourceLink | null
   /** Hide the trailing external-link (↗) icon. */
   hideIcon?: boolean
+  /** Optional display-label override — a surface-specific CTA (e.g. "Set Lineup in HailShiva"). Ignored
+   *  on a homepage fallback, where the honest "Go to {provider}" label always wins. The resolver still
+   *  owns the href + security; this changes only the visible text. */
+  label?: string
 }
 
-export function SourceActionLink({ className, style, link, hideIcon, ...ctx }: SourceActionLinkProps) {
+export function SourceActionLink({ className, style, link, hideIcon, label, ...ctx }: SourceActionLinkProps) {
   const resolved = link ?? resolveSourceLink(ctx)
   if (!resolved) return null
+  const displayLabel = resolved.isFallback ? resolved.label : label ?? resolved.label
   return (
     <a
       href={resolved.href}
@@ -35,7 +40,7 @@ export function SourceActionLink({ className, style, link, hideIcon, ...ctx }: S
       title={
         resolved.isFallback
           ? `${resolved.label} — a direct league link wasn't available, opening the platform home`
-          : resolved.label
+          : displayLabel
       }
       className={
         className ??
@@ -43,7 +48,7 @@ export function SourceActionLink({ className, style, link, hideIcon, ...ctx }: S
       }
       style={style}
     >
-      <span className="truncate">{resolved.label}</span>
+      <span className="truncate">{displayLabel}</span>
       {hideIcon ? null : <ExternalLink className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
     </a>
   )

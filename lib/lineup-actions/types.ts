@@ -1,4 +1,5 @@
 import type { LeagueSport } from '@prisma/client'
+import type { SourceLink } from '@/lib/league-links/sourceLinkResolver'
 
 /** How the dashboard should phrase the primary number (label must match). */
 export type LineupActionDisplayMode = 'unresolved_slots' | 'leagues' | 'lineups'
@@ -50,6 +51,25 @@ export type LineupActionItem = {
   sourceModule: LineupActionSourceModule
   message: string
   severity: 'critical' | 'warning' | 'info'
+  /**
+   * Decision OS deep-link actions, resolved SERVER-SIDE from the canonical League row (never from
+   * anything this item carries — the item holds no navigation URL). Optional for back-compat.
+   */
+  actionLinks?: DecisionOsActionLinks
+}
+
+/** Internal AllFantasy analysis + external source-platform action for a Decision OS card. */
+export type DecisionOsActionLinks = {
+  /** True if this signal warrants an external "complete on the source platform" action (else info-only). */
+  actionable: boolean
+  /** True if the league is imported (non-native) → surface the read-only disclosure. */
+  imported: boolean
+  /** League data freshness (League.lastSyncedAt ISO) when available. */
+  dataAsOf: string | null
+  /** Internal AllFantasy analysis link (available for native + imported leagues). */
+  internal: { href: string; label: string } | null
+  /** External source-platform link — pre-resolved + validated server-side; `label` is the display CTA. */
+  external: { link: SourceLink; label: string } | null
 }
 
 export type LineupCheckLeagueBlock = {

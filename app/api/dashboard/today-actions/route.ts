@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { runTodayActions } from '@/lib/today-actions-engine'
+import { enrichLineupActionsWithLinks } from '@/lib/league-links/enrichDecisionOsActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,9 @@ export async function GET() {
 
   try {
     const body = await runTodayActions(userId)
+    // Decision OS deep links — resolved SERVER-SIDE from the canonical League row (never a cached/provider
+    // URL, never a URL carried by the item). DB-first: no provider fetch on this response path.
+    body.lineup.actions = await enrichLineupActionsWithLinks(body.lineup.actions)
     return NextResponse.json(body)
   } catch (err) {
     console.error('[today-actions] runTodayActions failed', err)

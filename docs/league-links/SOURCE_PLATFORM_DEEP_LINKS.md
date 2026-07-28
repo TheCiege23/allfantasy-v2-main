@@ -76,16 +76,41 @@ exist on `League` and are already surfaced by `/api/league/list`
   `https://sleeper.app/leagues/{id}/trade` `window.open` (wrong host: `sleeper.app` is the API) with the
   allowlisted resolver (`action:'trade'`, all providers, safe new-tab open).
 
+## Decision OS action loop (live `RecommendationTimeline`)
+The live Decision OS card feed (`app/dashboard/components/warroom/RecommendationTimeline.tsx`, fed by
+`GET /api/dashboard/today-actions` → `runTodayActions` → `computeLineupActionsForUser`) now renders, per
+actionable imported card: an **internal** AllFantasy analysis action, a **secure external** source-platform
+action, freshness, and (once per card) the read-only disclosure. The external link is resolved
+**server-side in the route** from the canonical `League` row via `enrichLineupActionsWithLinks`
+(`lib/league-links/enrichDecisionOsActions.ts`) — never from a URL carried by the item, a cached payload,
+or the client (items hold no navigation URL). DB-first: no provider fetch on the response path.
+
+Signal → action (chosen from the normalized `reasonType`, never display text —
+`lib/league-links/decisionOsActionMap.ts`):
+
+| reasonType | actionable | internal (AF) | external (source) |
+|---|---|---|---|
+| empty/injured/questionable/doubtful/illegal/native_starter_gap/ai_start_sit | yes | Review Lineup in AF | Set Lineup in {League} |
+| ai_waiver | yes | Analyze Waivers in AF | Manage Waivers in {League} |
+| injury_impact | yes | Review Recommendation in AF | Manage Roster in {League} |
+| war_room | yes | Open War Room in AF | Set Lineup in {League} |
+| matchup_prep | no (info) | Review Matchup in AF | — |
+| weather_risk, fetch_error | no (info) | — | — |
+
+Manager scope is preserved (this timeline is built only for the user's own teams). A native league shows
+the internal AF action but no external one. Commissioner recommendations are a **separate** surface — see
+follow-ups.
+
 ## Follow-up gaps (explicitly not wired here)
 These surfaces carry only the internal `leagueId` (+ a platform *label*), not the source
 `platformLeagueId` — wiring them needs the resolved link threaded into their payloads (via the server
 helper), a cross-cutting change kept out of this focused PR:
-- **Decision OS** alerts/recommendation cards (`lib/decision-os/*`, `RecommendationTimeline`) — the
-  propagation mechanism (`resolveSourceLinkForLeague`) ships + is tested; the live card render is the
-  follow-up.
-- **Today's Agenda** (`ActionCenter` / `lib/today-actions-engine`), **Injury & lineup warnings**
-  (`LineupIssuesModal`), **Waiver recommendations** (`WaiverRecommendationsModal`), **Chimmy structured
-  action cards** (`ChimmyActionRecommendationCard`), **PendingTradesModal**.
+- **Decision OS commissioner cards** (`CommissionerHealthCard`, internal Commissioner-Hub links) + the
+  **per-league lineup blocks** (`LineupIssuesModal`, `lineup.leagues[].actions`) — the timeline's flat
+  `lineup.actions` is wired; these adjacent Decision-OS surfaces are the remaining follow-up.
+- **Today's Agenda** (`ActionCenter` / `lib/today-actions-engine`), **Waiver recommendations**
+  (`WaiverRecommendationsModal`), **Pending Trades** (`PendingTradesModal`), **Chimmy structured action
+  cards** (`ChimmyActionRecommendationCard`).
 - **Dashboard league card** (`LeagueHubCard`) — the whole card is a `<button>`, so a nested `<a>` needs a
   small layout change to host the external link outside the button.
 - **Player Search** (`PlayerSearchDropdown`) — no `/players` page and no per-result league scope; not
