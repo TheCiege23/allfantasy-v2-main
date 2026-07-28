@@ -210,16 +210,21 @@ describe('ChimmyTrustPanel', () => {
     expect(links).toHaveTextContent('FantasyPros')
   })
 
-  it('renders source links as anchor tags with correct href', () => {
+  it('renders an internal source link as an anchor; external sources are text-only (security policy)', () => {
     make({
       confidencePct: 72,
       confidenceBlock: HIGH_BLOCK,
-      sourceLinks: [{ label: 'Rotowire', href: 'https://rotowire.com' }],
+      sourceLinks: [
+        { label: 'League Home', href: '/league/L1' }, // internal → clickable
+        { label: 'Rotowire', href: 'https://rotowire.com' }, // external → text-only
+      ],
     })
     fireEvent.click(screen.getByTestId('chimmy-trust-panel-expand'))
-    const anchor = screen.getByText('Rotowire').closest('a')
-    expect(anchor).toHaveAttribute('href', 'https://rotowire.com')
+    const anchor = screen.getByText('League Home').closest('a')
+    expect(anchor).toHaveAttribute('href', '/league/L1')
     expect(anchor).toHaveAttribute('rel', 'noopener noreferrer')
+    // an external attribution URL is never clickable (only server-produced internal routes are)
+    expect(screen.getByText('Rotowire').closest('a')).toBeNull()
   })
 
   it('does not show source links section when none provided', () => {

@@ -1093,6 +1093,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
         },
         recommendedTool: 'none',
         schemaVersion: CHIMMY_SCHEMA_VERSION,
+        intent: initialIntent,
         dataSources: [],
         responseStructure: {
           shortAnswer: 'I can help with fantasy sports questions only.',
@@ -1120,6 +1121,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           grok: 'skipped',
         },
         schemaVersion: CHIMMY_SCHEMA_VERSION,
+        intent: initialIntent,
         dataSources: [DETERMINISTIC_SOURCE],
         responseStructure: {
           shortAnswer: deterministicAnswer,
@@ -1152,6 +1154,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             grok: 'skipped',
           },
           schemaVersion: CHIMMY_SCHEMA_VERSION,
+        intent: initialIntent,
         dataSources: ['league_sports_grounding_packet'],
           grounding: {
             sport: packet.sport,
@@ -2067,6 +2070,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
     const meta = {
       schemaVersion: CHIMMY_SCHEMA_VERSION,
+      intent: pecrIntent,
       assistant: 'Chimmy',
       conversationId,
       mode: selectedAssistantMode,

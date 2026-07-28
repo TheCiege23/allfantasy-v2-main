@@ -39,6 +39,7 @@ describe("sendChimmyMessage", () => {
     expect(payload.confirmTokenSpend).toBe(false)
     expect(result).toEqual({
       ok: true,
+      content: "Agent response.",
       response: "Agent response.",
       meta: undefined,
     })
@@ -69,6 +70,8 @@ describe("sendChimmyMessage", () => {
     expect(global.fetch).not.toHaveBeenCalled()
     expect(result).toEqual({
       ok: true,
+      content:
+        "This is a premium feature. Upgrade to AF Pro or AF Supreme to unlock full trade analysis, waiver recommendations, draft assistance, and more.",
       response:
         "This is a premium feature. Upgrade to AF Pro or AF Supreme to unlock full trade analysis, waiver recommendations, draft assistance, and more.",
       meta: {
@@ -129,6 +132,7 @@ describe("sendChimmyMessage", () => {
     expect(onChunk).toHaveBeenNthCalledWith(2, "Hold tight.")
     expect(result).toEqual({
       ok: true,
+      content: "Hold tight.",
       response: "Hold tight.",
       meta: undefined,
     })

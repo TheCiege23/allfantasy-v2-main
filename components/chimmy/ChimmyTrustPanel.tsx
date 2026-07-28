@@ -8,6 +8,7 @@
 import React from 'react'
 import type { ChimmyConfidenceBlock } from '@/lib/chimmy-chat/response-contract'
 import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
+import { isRenderableChimmyContentHref } from '@/lib/chimmy-chat/safeChimmyLinks'
 
 export type ChimmyTrustPanelProps = {
   confidencePct?: number | null
@@ -291,19 +292,36 @@ export default function ChimmyTrustPanel({
                   { className: 'w-full text-[10px] text-white/35 uppercase tracking-wider' },
                   'Sources',
                 ),
+                // Security: a source-link is only clickable if its href is an internal AllFantasy route
+                // (all server-produced attributions are, e.g. /league/{id}). Any external / arbitrary /
+                // protocol-relative / malformed href — from a tampered, cached, or malformed payload — is
+                // rendered as plain TEXT (name only), never a live external anchor. Real anchors keep
+                // rel="noopener noreferrer".
                 ...(sourceLinks ?? []).map((link, i) =>
-                  React.createElement(
-                    'a',
-                    {
-                      key: i,
-                      href: link.href,
-                      target: '_blank',
-                      rel: 'noopener noreferrer',
-                      className:
-                        'rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-300/80 hover:text-cyan-200 transition',
-                    },
-                    link.label,
-                  ),
+                  isRenderableChimmyContentHref(link.href)
+                    ? React.createElement(
+                        'a',
+                        {
+                          key: i,
+                          href: link.href,
+                          target: '_blank',
+                          rel: 'noopener noreferrer',
+                          'data-testid': 'chimmy-source-link',
+                          className:
+                            'rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] text-cyan-300/80 hover:text-cyan-200 transition',
+                        },
+                        link.label,
+                      )
+                    : React.createElement(
+                        'span',
+                        {
+                          key: i,
+                          'data-testid': 'chimmy-source-text',
+                          className:
+                            'rounded-full border border-white/15 bg-white/5 px-2 py-0.5 text-[10px] text-white/50',
+                        },
+                        link.label,
+                      ),
                 ),
               )
             : null,

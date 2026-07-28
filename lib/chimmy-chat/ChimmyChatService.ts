@@ -32,6 +32,9 @@ type SendChimmyMessageInput = {
 
 type SendChimmyMessageResult = {
   ok: boolean
+  /** Public envelope field: the assistant answer text. Mirrors `response` (kept for back-compat). BOTH the
+   *  Anthropic and PECR pipelines normalize to this same `{ content, meta }` client shape. */
+  content: string
   response: string
   meta?: ChimmyMessageMeta
   error?: string
@@ -228,6 +231,7 @@ export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<
       if (!preview.canSpend) {
         return {
           ok: true,
+          content: CHIMMY_PREMIUM_FEATURE_MESSAGE,
           response: CHIMMY_PREMIUM_FEATURE_MESSAGE,
           meta: {
             variant: "premium_gate",
@@ -241,6 +245,7 @@ export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<
       if (!confirmed) {
         return {
           ok: false,
+          content: "Token spend cancelled.",
           response: "Token spend cancelled.",
           error: "Token spend cancelled by user.",
         }
@@ -442,6 +447,7 @@ export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<
   if (!res.ok && !upgradeRequired) {
     return {
       ok: false,
+      content: response || fallbackResponse,
       response: response || fallbackResponse,
       error: error || CHIMMY_GENERIC_ERROR_MESSAGE,
       meta,
@@ -450,6 +456,7 @@ export async function sendChimmyMessage(input: SendChimmyMessageInput): Promise<
 
   return {
     ok: true,
+    content: response || fallbackResponse,
     response: response || fallbackResponse,
     meta,
     sessionId: typeof data?.sessionId === "string" ? data.sessionId : undefined,
