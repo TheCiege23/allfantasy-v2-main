@@ -8,6 +8,7 @@ import { isSupportedSport } from '@/lib/sport-scope';
 import { isNoChargeChimmyIntent } from '@/lib/ai/chimmyIntentRouter';
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm';
 import { sendChimmyMessage } from '@/lib/chimmy-chat/ChimmyChatService';
+import { isRenderableChimmyContentHref } from '@/lib/chimmy-chat/safeChimmyLinks';
 import {
   CHIMMY_DEFAULT_UPGRADE_PATH,
   CHIMMY_GENERIC_ERROR_MESSAGE,
@@ -60,15 +61,22 @@ function renderContentWithLinks(content: string) {
     if (match.index > lastIndex) {
       nodes.push(<span key={`text-${lastIndex}`}>{content.slice(lastIndex, match.index)}</span>);
     }
-    nodes.push(
-      <a
-        key={`link-${match.index}`}
-        href={match[2]}
-        className="underline text-cyan-300 hover:text-cyan-200"
-      >
-        {match[1]}
-      </a>
-    );
+    // Security: only internal app routes from model content render as live links; an external/arbitrary
+    // URL in the model's own output is untrusted (prompt-injection / open-redirect) → render the label as
+    // plain text, never a clickable external link.
+    if (isRenderableChimmyContentHref(match[2])) {
+      nodes.push(
+        <a
+          key={`link-${match.index}`}
+          href={match[2]}
+          className="underline text-cyan-300 hover:text-cyan-200"
+        >
+          {match[1]}
+        </a>
+      );
+    } else {
+      nodes.push(<span key={`x-${match.index}`}>{match[1]}</span>);
+    }
     lastIndex = match.index + match[0].length;
   }
 

@@ -4,6 +4,7 @@ import React from 'react'
 import { Volume2, Square, Loader2, ThumbsUp, ThumbsDown } from 'lucide-react'
 import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 import { SuggestedActionRenderer } from '@/lib/chimmy-chat/SuggestedActionRenderer'
+import { isRenderableChimmyContentHref } from '@/lib/chimmy-chat/safeChimmyLinks'
 import {
   buildChimmyCollapsedSummary,
   isLongChimmyResponse,
@@ -49,18 +50,22 @@ function renderContentWithLinks(text: string) {
       nodes.push(<span key={`t-${lastIndex}`}>{text.slice(lastIndex, match.index)}</span>)
     }
     const href = match[2]
-    const isInternal = href.startsWith("/") && !href.startsWith("//")
-    nodes.push(
-      <a
-        key={`l-${match.index}`}
-        href={href}
-        className="underline text-cyan-300 hover:text-cyan-200"
-        target={isInternal ? undefined : "_blank"}
-        rel={isInternal ? undefined : "noopener noreferrer"}
-      >
-        {match[1]}
-      </a>
-    )
+    // Security: only internal app routes from model content render as live links. An external/arbitrary
+    // URL in the model's own output is untrusted (prompt-injection / open-redirect) → show the label as
+    // plain text, never a clickable external link. Real external actions come from server-resolved cards.
+    if (isRenderableChimmyContentHref(href)) {
+      nodes.push(
+        <a
+          key={`l-${match.index}`}
+          href={href}
+          className="underline text-cyan-300 hover:text-cyan-200"
+        >
+          {match[1]}
+        </a>
+      )
+    } else {
+      nodes.push(<span key={`x-${match.index}`}>{match[1]}</span>)
+    }
     lastIndex = match.index + match[0].length
   }
   if (lastIndex < text.length) nodes.push(<span key="t-end">{text.slice(lastIndex)}</span>)
