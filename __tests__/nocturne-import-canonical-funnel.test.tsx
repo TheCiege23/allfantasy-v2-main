@@ -85,6 +85,29 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     expect(pushMock).not.toHaveBeenCalled()
   })
 
+  it('shows all six intended platforms on the landing page', () => {
+    render(<NocturneImport variant="full" />)
+    for (const id of ['sleeper', 'espn', 'yahoo', 'mfl', 'fantrax', 'fleaflicker'] as const) {
+      expect(screen.getByTestId(`nocturne-plat-chip-${id}`)).toBeInTheDocument()
+    }
+  })
+
+  it('Fleaflicker is visible but blocked (Coming soon) and cannot navigate', () => {
+    render(<NocturneImport variant="full" />)
+    const chip = screen.getByTestId('nocturne-plat-chip-fleaflicker')
+    expect(chip).toBeInTheDocument()
+    expect(chip).toHaveTextContent(/fleaflicker/i)
+    fireEvent.click(chip)
+    expect(chip).toHaveTextContent(/coming soon/i)
+    fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
+      target: { value: '12345' },
+    })
+    const submit = screen.getByTestId('nocturne-import-full-submit')
+    expect(submit).toBeDisabled()
+    fireEvent.click(submit)
+    expect(pushMock).not.toHaveBeenCalled()
+  })
+
   it('the username survives the /import prefill contract (page → client → flow)', () => {
     const pageSrc = readFileSync(resolve(root, 'app/import/page.tsx'), 'utf8')
     const flowSrc = readFileSync(

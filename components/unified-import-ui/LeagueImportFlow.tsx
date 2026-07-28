@@ -33,6 +33,7 @@ const IMPORT_TABS: ReadonlyArray<{
   { id: 'yahoo', label: 'Yahoo' },
   { id: 'fantrax', label: 'Fantrax' },
   { id: 'mfl', label: 'MFL' },
+  { id: 'fleaflicker', label: 'Fleaflicker' },
 ]
 
 export type { LegacyPlatformTab }
@@ -576,6 +577,15 @@ export function LeagueImportFlow({
                     </div>
                   ) : null}
                 </div>
+              ) : null}
+              {!isImportProviderAvailable(activeImportProvider) ? (
+                <p
+                  className="rounded-xl border border-amber-500/25 bg-amber-500/[0.06] px-3 py-2 text-[13px] text-amber-100"
+                  data-testid="import-provider-coming-soon"
+                >
+                  {getImportProviderLabel(activeImportProvider)} import is coming
+                  soon — it isn&apos;t available to connect yet.
+                </p>
               ) : null}
               <UnifiedImportPanel
                 providers={panelProviders}

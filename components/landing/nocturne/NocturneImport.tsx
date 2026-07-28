@@ -26,7 +26,7 @@ import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-confi
 import { trackLandingCtaClick } from '@/lib/landing-analytics'
 import { NOCTURNE_COPY as C } from './copy'
 
-type PlatformId = 'sleeper' | 'espn' | 'yahoo' | 'mfl' | 'fantrax'
+type PlatformId = 'sleeper' | 'espn' | 'yahoo' | 'mfl' | 'fantrax' | 'fleaflicker'
 
 type PlatformMeta = {
   id: PlatformId
@@ -44,6 +44,7 @@ const PLATFORMS: readonly PlatformMeta[] = [
   { id: 'yahoo', label: 'Yahoo', initial: 'Y', color: '#3a1d55', inputKind: 'league ID', placeholder: 'e.g. 428931' },
   { id: 'mfl', label: 'MFL', initial: 'M', color: '#143a2e', inputKind: 'league ID', placeholder: 'e.g. 60184' },
   { id: 'fantrax', label: 'Fantrax', initial: 'F', color: '#5a3a14', inputKind: 'league ID', placeholder: 'e.g. abc123xy' },
+  { id: 'fleaflicker', label: 'Fleaflicker', initial: 'FL', color: '#14324a', inputKind: 'league ID', placeholder: 'e.g. 12345' },
 ] as const
 
 /**
