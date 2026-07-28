@@ -101,16 +101,38 @@ Manager scope is preserved (this timeline is built only for the user's own teams
 the internal AF action but no external one. Commissioner recommendations are a **separate** surface — see
 follow-ups.
 
+## Prop-fed dashboard modals — Pending Trades / Waivers / Lineup issues
+The three summary modals (`app/dashboard/components/{PendingTradesModal,WaiverRecommendationsModal,LineupIssuesModal}.tsx`)
+are **prop-fed from one route**: `DashboardOverview` fetches `GET /api/dashboard/today-actions` once and
+passes `body.trades` / `body.waivers` / `body.lineup` straight in. So the **route** enriches them
+server-side (alongside the timeline); no modal fetches its own data or calls a provider on render.
+
+Per league the route attaches an `actionLinks` bundle (`DecisionOsActionLinks`): the **internal** AF
+analysis link (pro-gating unchanged — the existing `ProLeagueLink`), the **secure external** source action
+(ungated), and an `imported` flag. Each modal renders internal + external per league/trade and shows the
+read-only disclosure **once** in its footer (only when some imported league resolved an external action).
+
+| Surface | enricher | internal (AF) | external (source) |
+|---|---|---|---|
+| **Pending Trades** (`body.trades.trades[]`) | `buildLeagueActionBundles(action:'trade')` | Analyze Trade in AF | Review Trade in {League} |
+| **Waiver Recommendations** (`body.waivers.recommendations[]`) | `buildLeagueActionBundles(action:'waiver')` | Analyze Waivers in AF | Manage Waivers in {League} |
+| **Lineup issues** (`body.lineup.leagues[]`) | `enrichLineupBlocksWithLinks` | Review Lineup in AF | derived from issue types → Set Lineup / Manage Roster in {League} |
+
+For lineup blocks the external action is derived from the block's **issue types** (`lineupBlockActionConfig`
+— first actionable issue wins, from the normalized type, never display text). External links are resolved
+in the route from the canonical `League` row (one `findMany` per surface, keyed by internal `leagueId`) —
+never a cached/client/prop URL (the items carry none), never a provider fetch. A homepage-fallback provider
+always shows the honest *Go to {provider}* label even if a caller passes a specific-page label.
+Native/unknown/missing leagues fail safe: internal action only, no external, no disclosure.
+
 ## Follow-up gaps (explicitly not wired here)
 These surfaces carry only the internal `leagueId` (+ a platform *label*), not the source
 `platformLeagueId` — wiring them needs the resolved link threaded into their payloads (via the server
-helper), a cross-cutting change kept out of this focused PR:
-- **Decision OS commissioner cards** (`CommissionerHealthCard`, internal Commissioner-Hub links) + the
-  **per-league lineup blocks** (`LineupIssuesModal`, `lineup.leagues[].actions`) — the timeline's flat
-  `lineup.actions` is wired; these adjacent Decision-OS surfaces are the remaining follow-up.
-- **Today's Agenda** (`ActionCenter` / `lib/today-actions-engine`), **Waiver recommendations**
-  (`WaiverRecommendationsModal`), **Pending Trades** (`PendingTradesModal`), **Chimmy structured action
-  cards** (`ChimmyActionRecommendationCard`).
+helper / route enrichment), a cross-cutting change kept out of this focused PR:
+- **Decision OS commissioner cards** (`CommissionerHealthCard`, internal Commissioner-Hub links) — a
+  separate, commissioner-scoped surface from the manager surfaces wired here.
+- **Today's Agenda** (`ActionCenter` / `lib/today-actions-engine`) + the dashboard warning banners, and
+  **Chimmy structured action cards** (`ChimmyActionRecommendationCard`).
 - **Dashboard league card** (`LeagueHubCard`) — the whole card is a `<button>`, so a nested `<a>` needs a
   small layout change to host the external link outside the button.
 - **Player Search** (`PlayerSearchDropdown`) — no `/players` page and no per-result league scope; not

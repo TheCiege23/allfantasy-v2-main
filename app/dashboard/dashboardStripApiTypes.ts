@@ -1,4 +1,5 @@
 /** Shared types for GET /api/dashboard/waivers and /trades — safe for client import. */
+import type { DecisionOsActionLinks } from '@/lib/lineup-actions/types'
 
 export type WaiverPickup = {
   playerId: string
@@ -26,6 +27,8 @@ export type WaiverLeagueRec = {
   chimmyAdvice: string
   /** UTC ISO for next estimated rolling waiver process when DB `League.timezone` + `waiverProcessTime` resolve; else null. */
   waiverDeadline: string | null
+  /** Server-resolved internal AF + secure external source-platform action for this league (imported-league deep links). */
+  actionLinks?: DecisionOsActionLinks
 }
 
 /** DB-first injury rows (importers / Rolling Insights chain); optional context for waiver UI. */
@@ -68,6 +71,8 @@ export type PendingTradeLeague = {
   leagueAvatar: string | null
   sport: string
   trades: PendingTrade[]
+  /** Server-resolved internal AF + secure external source-platform action for this league (imported-league deep links). */
+  actionLinks?: DecisionOsActionLinks
 }
 
 export type TradesDashboardResponse = {

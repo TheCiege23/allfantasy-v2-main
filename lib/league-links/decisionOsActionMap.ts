@@ -60,3 +60,16 @@ export function internalActionHref(leagueId: string, tab: string | null): string
   const base = `/league/${encodeURIComponent(leagueId)}`
   return tab ? `${base}?tab=${encodeURIComponent(tab)}` : base
 }
+
+/**
+ * Per-league lineup BLOCK action, derived from the block's issue types (behavior from the normalized
+ * type, never display text): the first ACTIONABLE issue's config wins; a wholly informational block keeps
+ * the internal "Review Lineup in AF" affordance with no external CTA.
+ */
+export function lineupBlockActionConfig(issueTypes: string[]): DecisionActionConfig {
+  for (const t of issueTypes) {
+    const cfg = decisionActionConfig(t as LineupActionReasonType)
+    if (cfg.actionable) return cfg
+  }
+  return { actionable: false, action: null, internalLabel: 'Review Lineup in AF', internalTab: 'team', externalLabel: (n) => `Go to ${n}` }
+}

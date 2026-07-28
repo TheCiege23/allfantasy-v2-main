@@ -89,6 +89,8 @@ export type LineupCheckLeagueBlock = {
   /** Structured actions for this league (subset of global `actions`). */
   actions?: LineupActionItem[]
   scanIncomplete?: boolean
+  /** Server-resolved internal AF + secure external source-platform action for this league (imported-league deep links). */
+  actionLinks?: DecisionOsActionLinks
 }
 
 export type LineupActionSummaryPayload = {

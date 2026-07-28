@@ -3,6 +3,7 @@
 import { X } from 'lucide-react'
 import type { WaiverDashboardResponse } from '@/app/dashboard/dashboardStripApiTypes'
 import { ProLeagueLink } from '@/components/dashboard/ProLeagueLink'
+import { SourceActionLink, ReadOnlyLeagueNote } from '@/components/league-links/SourceActionLink'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 
 type Props = {
@@ -178,13 +179,22 @@ export function WaiverRecommendationsModal({ isOpen, onClose, data, loading, has
                     >
                       → Ask Chimmy for full waiver analysis
                     </button>
-                    <ProLeagueLink
-                      leagueId={lg.leagueId}
-                      leagueName={lg.leagueName}
-                      label="Open league →"
-                      hasProAccess={hasProAccess}
-                      href={`/league/${lg.leagueId}?tab=players`}
-                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ProLeagueLink
+                        leagueId={lg.leagueId}
+                        leagueName={lg.leagueName}
+                        label={lg.actionLinks?.internal?.label ?? 'Analyze Waivers in AF'}
+                        hasProAccess={hasProAccess}
+                        href={lg.actionLinks?.internal?.href ?? `/league/${lg.leagueId}?tab=players`}
+                      />
+                      {lg.actionLinks?.external ? (
+                        <SourceActionLink
+                          link={lg.actionLinks.external.link}
+                          label={lg.actionLinks.external.label}
+                          className="inline-flex items-center gap-1 rounded-lg border border-white/[0.12] bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-white/75 transition hover:bg-white/[0.08]"
+                        />
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -195,6 +205,9 @@ export function WaiverRecommendationsModal({ isOpen, onClose, data, loading, has
         </div>
 
         <div className="border-t border-white/[0.06] px-5 py-4">
+          {recs.some((l) => l.actionLinks?.imported && l.actionLinks?.external) ? (
+            <ReadOnlyLeagueNote className="mb-3 text-[11px] leading-snug text-white/45" />
+          ) : null}
           <button
             type="button"
             onClick={onClose}

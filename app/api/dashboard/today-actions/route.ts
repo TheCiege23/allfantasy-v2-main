@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { runTodayActions } from '@/lib/today-actions-engine'
-import { enrichLineupActionsWithLinks } from '@/lib/league-links/enrichDecisionOsActions'
+import {
+  enrichLineupActionsWithLinks,
+  enrichLineupBlocksWithLinks,
+  buildLeagueActionBundles,
+} from '@/lib/league-links/enrichDecisionOsActions'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,9 +19,20 @@ export async function GET() {
 
   try {
     const body = await runTodayActions(userId)
-    // Decision OS deep links — resolved SERVER-SIDE from the canonical League row (never a cached/provider
-    // URL, never a URL carried by the item). DB-first: no provider fetch on this response path.
+    // Imported-league source-platform deep links — resolved SERVER-SIDE from the canonical League row
+    // (never a cached/provider URL, never a URL carried by the item). DB-first: no provider fetch here.
     body.lineup.actions = await enrichLineupActionsWithLinks(body.lineup.actions)
+    body.lineup.leagues = await enrichLineupBlocksWithLinks(body.lineup.leagues)
+    const tradeBundles = await buildLeagueActionBundles(
+      body.trades.trades.map((t) => ({ leagueId: t.leagueId, leagueName: t.leagueName })),
+      { action: 'trade', internalLabel: 'Analyze Trade in AF', internalTab: 'trades', externalLabel: (n) => `Review Trade in ${n}` },
+    )
+    for (const t of body.trades.trades) t.actionLinks = tradeBundles.get(t.leagueId)
+    const waiverBundles = await buildLeagueActionBundles(
+      body.waivers.recommendations.map((r) => ({ leagueId: r.leagueId, leagueName: r.leagueName })),
+      { action: 'waiver', internalLabel: 'Analyze Waivers in AF', internalTab: 'players', externalLabel: (n) => `Manage Waivers in ${n}` },
+    )
+    for (const r of body.waivers.recommendations) r.actionLinks = waiverBundles.get(r.leagueId)
     return NextResponse.json(body)
   } catch (err) {
     console.error('[today-actions] runTodayActions failed', err)

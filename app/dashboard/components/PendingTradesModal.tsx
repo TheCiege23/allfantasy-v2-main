@@ -3,6 +3,7 @@
 import { X } from 'lucide-react'
 import type { PendingTradeLeague, TradesDashboardResponse } from '@/app/dashboard/dashboardStripApiTypes'
 import { ProLeagueLink } from '@/components/dashboard/ProLeagueLink'
+import { SourceActionLink, ReadOnlyLeagueNote } from '@/components/league-links/SourceActionLink'
 
 function formatRelativeDate(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
@@ -156,13 +157,22 @@ export function PendingTradesModal({ isOpen, onClose, data, loading, hasProAcces
                           >
                             Ask Chimmy for full analysis →
                           </button>
-                          <ProLeagueLink
-                            leagueId={lg.leagueId}
-                            leagueName={lg.leagueName}
-                            label="Open league"
-                            hasProAccess={hasProAccess}
-                            href={`/league/${lg.leagueId}?tab=trades`}
-                          />
+                          <div className="flex flex-wrap items-center gap-2">
+                            <ProLeagueLink
+                              leagueId={lg.leagueId}
+                              leagueName={lg.leagueName}
+                              label={lg.actionLinks?.internal?.label ?? 'Analyze Trade in AF'}
+                              hasProAccess={hasProAccess}
+                              href={lg.actionLinks?.internal?.href ?? `/league/${lg.leagueId}?tab=trades`}
+                            />
+                            {lg.actionLinks?.external ? (
+                              <SourceActionLink
+                                link={lg.actionLinks.external.link}
+                                label={lg.actionLinks.external.label}
+                                className="inline-flex items-center gap-1 rounded-lg border border-white/[0.12] bg-white/[0.04] px-2.5 py-1 text-[11px] font-semibold text-white/75 transition hover:bg-white/[0.08]"
+                              />
+                            ) : null}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -174,6 +184,9 @@ export function PendingTradesModal({ isOpen, onClose, data, loading, hasProAcces
         </div>
 
         <div className="border-t border-white/[0.06] px-5 py-4">
+          {leagues.some((l) => l.actionLinks?.imported && l.actionLinks?.external) ? (
+            <ReadOnlyLeagueNote className="mb-3 text-[11px] leading-snug text-white/45" />
+          ) : null}
           <button
             type="button"
             onClick={onClose}
