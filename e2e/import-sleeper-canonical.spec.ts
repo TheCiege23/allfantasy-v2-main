@@ -103,13 +103,26 @@ test.describe('Canonical Sleeper import — real /import route', () => {
       await route.fulfill({ status: 500, body: 'legacy path must not be used' })
     })
 
-    await gotoWithRetry(page, '/import?e2eAuth=1')
+    // Authenticate via the dev-only bypass (DEV_AUTH_BYPASS_ENABLED) so the real
+    // session-gated /import route renders. Never used in production; no real
+    // credentials involved.
+    const csrf = (await page.request.get('/api/auth/csrf').then((r) => r.json())) as {
+      csrfToken?: string
+    }
+    await page.request.post('/api/auth/callback/dev-bypass?json=true', {
+      form: { csrfToken: csrf.csrfToken ?? '', callbackUrl: '/import', json: 'true' },
+    })
 
-    // Sleeper is the default tab.
+    // Land on /import with the Sleeper username prefilled via the SAME query
+    // contract the landing funnel uses (provider + username) — this also proves
+    // the landing → signup-intent → /import handoff arrives ready to discover.
+    await gotoWithRetry(page, '/import?provider=sleeper&username=commish_user')
+
+    // Sleeper tab selected + username prefilled into the discovery input.
     await expect(page.getByTestId('import-tab-sleeper')).toBeVisible()
+    await expect(page.getByTestId('import-discovery-account')).toHaveValue('commish_user')
 
-    // 1) Discover leagues from the Sleeper account identifier.
-    await page.getByTestId('import-discovery-account').fill('commish_user')
+    // 1) Discover leagues from the prefilled Sleeper account identifier.
     await page.getByTestId('import-discovery-find').click()
 
     // 2) The discovered league appears; select it to preview.

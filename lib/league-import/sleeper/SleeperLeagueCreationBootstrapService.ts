@@ -94,6 +94,13 @@ export async function bootstrapLeagueFromNormalizedImport(
           ? 'co_commissioner'
           : 'member'
 
+    // C3: when the source manager resolves to a linked AllFantasy account, claim
+    // their LeagueTeam so owner-independent surfaces (Chimmy's
+    // resolveLeagueIdentity) can find the user's own team. The raw
+    // source_manager_id is preserved on `platformUserId` (below) and in roster
+    // metadata; unresolved/orphan managers are never claimed.
+    const resolvedClaim = managerUserIds.get(r.source_manager_id) ?? null
+
     await prisma.leagueTeam.upsert({
       where: {
         leagueId_externalId: { leagueId, externalId: r.source_team_id },
@@ -113,6 +120,7 @@ export async function bootstrapLeagueFromNormalizedImport(
         role: importedRole,
         isOrphan,
         platformUserId: r.source_manager_id || null,
+        claimedByUserId: resolvedClaim,
         isCommissioner: Boolean(r.is_commissioner),
         isCoCommissioner: Boolean(r.is_co_commissioner),
       },
@@ -129,6 +137,9 @@ export async function bootstrapLeagueFromNormalizedImport(
         role: importedRole,
         isOrphan,
         platformUserId: r.source_manager_id || null,
+        // Idempotent reimport: only (re)set the claim when the manager resolves;
+        // never overwrite an existing claim with null.
+        ...(resolvedClaim ? { claimedByUserId: resolvedClaim } : {}),
         isCommissioner: Boolean(r.is_commissioner),
         isCoCommissioner: Boolean(r.is_co_commissioner),
       },
@@ -138,11 +149,33 @@ export async function bootstrapLeagueFromNormalizedImport(
     const isSourceCommissioner = Boolean(
       r.is_commissioner,
     )
+    // C3: canonical `lineup_sections` consumed by `getNormalizedLineupSections`
+    // (Chimmy's RosterContextProvider + autocoach/war-rooms/decision-os/
+    // commissioner-hub). Without it, imported rosters read as empty starters/bench.
+    const lineupStarters = r.starter_ids ?? []
+    const lineupIr = r.reserve_ids ?? []
+    const lineupTaxi = r.taxi_ids ?? []
+    const lineupClaimedIds = new Set<string>([
+      ...lineupStarters,
+      ...lineupIr,
+      ...lineupTaxi,
+    ])
+    const lineupBench = (r.player_ids ?? []).filter(
+      (id) => !lineupClaimedIds.has(id),
+    )
+
     const playerData = {
       players: r.player_ids,
       starters: r.starter_ids,
       reserve: r.reserve_ids ?? [],
       taxi: r.taxi_ids ?? [],
+      lineup_sections: {
+        starters: lineupStarters,
+        bench: lineupBench,
+        ir: lineupIr,
+        taxi: lineupTaxi,
+        devy: [] as string[],
+      },
       source_provider: normalized.source.source_provider,
       source_league_id: normalized.source.source_league_id,
       source_team_id: r.source_team_id,

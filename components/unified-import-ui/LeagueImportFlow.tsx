@@ -17,7 +17,11 @@ import {
   fetchImportPreview,
   submitImportCreation,
 } from '@/lib/league-import/LeagueCreationImportSubmissionService'
-import { getImportProviderLabel, supportsImportProviderDiscovery } from '@/lib/league-import/provider-ui-config'
+import {
+  getImportProviderLabel,
+  isImportProviderAvailable,
+  supportsImportProviderDiscovery,
+} from '@/lib/league-import/provider-ui-config'
 import type { ImportProvider } from '@/lib/league-import/types'
 
 const IMPORT_TABS: ReadonlyArray<{
@@ -61,6 +65,16 @@ type ProviderLeagueDiscoveryItem = {
 
 function tabToImportProvider(tab: LegacyPlatformTab): ImportProvider {
   return tab
+}
+
+/**
+ * Provider availability is the single authoritative product/UX-readiness signal
+ * from `provider-ui-config` — never hardcoded. Disabled providers (fantrax/mfl/
+ * fleaflicker today) must render their honest "blocked" state so the panel can't
+ * claim "verified" for a provider whose import isn't usable end-to-end.
+ */
+function providerStatus(provider: ImportProvider): 'verified' | 'blocked' {
+  return isImportProviderAvailable(provider) ? 'verified' : 'blocked'
 }
 
 export function LeagueImportFlow({
@@ -121,27 +135,27 @@ export function LeagueImportFlow({
     () =>
       ({
         sleeper: {
-          status: 'verified' as const,
+          status: providerStatus('sleeper'),
           detail: t('import.provider.sleeper.detail'),
         },
         espn: {
-          status: 'verified' as const,
+          status: providerStatus('espn'),
           detail: t('import.provider.espn.detail'),
         },
         yahoo: {
-          status: 'verified' as const,
+          status: providerStatus('yahoo'),
           detail: t('import.provider.yahoo.detail'),
         },
         fantrax: {
-          status: 'verified' as const,
+          status: providerStatus('fantrax'),
           detail: t('import.provider.fantrax.detail'),
         },
         mfl: {
-          status: 'verified' as const,
+          status: providerStatus('mfl'),
           detail: t('import.provider.mfl.detail'),
         },
         fleaflicker: {
-          status: 'verified' as const,
+          status: providerStatus('fleaflicker'),
           detail: t('import.provider.fleaflicker.detail'),
         },
       }) satisfies Record<
@@ -641,7 +655,13 @@ export function LeagueImportFlow({
                     <span className="text-sm font-semibold capitalize text-white">
                       {provider}
                     </span>
-                    <span className="rounded-full bg-emerald-400/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-200">
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                        support.status === 'verified'
+                          ? 'bg-emerald-400/20 text-emerald-200'
+                          : 'bg-amber-400/20 text-amber-200'
+                      }`}
+                    >
                       {support.status === 'verified'
                         ? t('import.status.enabled')
                         : t('import.status.blocked')}

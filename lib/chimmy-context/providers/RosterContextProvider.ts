@@ -140,13 +140,22 @@ export class RosterContextProvider
         }
       }
 
+      // C3: imported `LeagueTeam.platformUserId` keeps the RAW source manager id,
+      // while `Roster.platformUserId` may be resolved to the AllFantasy user id.
+      // Tolerate both so a claimed importer grounds on their real roster instead
+      // of an empty one.
+      const rosterPlatformKeys = Array.from(
+        new Set(
+          [identity.platformUserId, request.userId].filter(
+            (v): v is string => typeof v === 'string' && v.length > 0,
+          ),
+        ),
+      )
       const roster = await prisma.roster
-        .findUnique({
+        .findFirst({
           where: {
-            leagueId_platformUserId: {
-              leagueId: identity.leagueId,
-              platformUserId: identity.platformUserId,
-            },
+            leagueId: identity.leagueId,
+            platformUserId: { in: rosterPlatformKeys },
           },
           select: { id: true, playerData: true },
         })
