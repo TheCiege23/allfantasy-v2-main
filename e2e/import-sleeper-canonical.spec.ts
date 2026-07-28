@@ -133,11 +133,20 @@ test.describe('Canonical Sleeper import — real /import route', () => {
     await expect(page.getByTestId('import-commit')).toBeVisible({ timeout: 15_000 })
     await page.getByTestId('import-commit').click()
 
-    // 4) Success screen links to the canonical league (never /af-legacy).
+    // 4) Completion: the connected league is available as a read-only view…
     const openCanonical = page.locator(`a[href="/league/${CANONICAL_LEAGUE_ID}"]`)
     await expect(openCanonical).toBeVisible({ timeout: 15_000 })
 
-    // The flagship import must not have used the legacy career-history pipeline.
+    // …and the PRIMARY completion action sends the user to the FREE dashboard
+    // (not /af-legacy, not a "newly created AF league").
+    await expect(page.locator('a[href="/af-legacy"]')).toHaveCount(0)
+    await page.getByTestId('import-go-dashboard').click()
+    // Assert the DESTINATION (client nav commit) — not full dashboard render,
+    // which can exceed the timeout on a cold dev compile.
+    await page.waitForURL('**/dashboard**', { timeout: 25_000, waitUntil: 'commit' })
+    expect(new URL(page.url()).pathname).toBe('/dashboard')
+
+    // The flagship import must never have used the legacy career-history pipeline.
     expect(legacyImportHit).toBe(false)
   })
 })

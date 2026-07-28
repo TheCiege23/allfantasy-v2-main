@@ -293,9 +293,9 @@ export function LegacyImportResults({
                 </div>
                 <Link
                   href={`/league/${encodeURIComponent(leagueSuccess.leagueId)}`}
-                  className="warroom-pressable inline-flex rounded-xl bg-cyan-500 px-4 py-2 text-[13px] font-black text-black hover:bg-cyan-400"
+                  className="warroom-pressable inline-flex rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-[13px] font-black text-white hover:bg-white/10"
                 >
-                  Open league →
+                  Open your connected league →
                 </Link>
               </div>
             </div>
@@ -310,9 +310,10 @@ export function LegacyImportResults({
           <button
             type="button"
             onClick={() => goDashboard()}
+            data-testid="import-go-dashboard"
             className="warroom-pressable rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-3 text-sm font-black text-white shadow-[0_10px_40px_-15px_rgba(34,211,238,0.75)]"
           >
-            Go to dashboard
+            Go to my dashboard
           </button>
           <Link
             href="/af-rankings"

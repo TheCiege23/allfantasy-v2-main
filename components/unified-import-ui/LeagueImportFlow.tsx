@@ -344,7 +344,11 @@ export function LeagueImportFlow({
             setLeagueSuccess(null)
             setPreviewInfo(null)
           }}
-          onCompleteRedirect={onCompleteRedirect}
+          // Primary completion sends the user to the FREE unified dashboard.
+          // No selected-league preselect contract exists on /dashboard yet, so we
+          // route there plainly; auto-selecting the imported league is deferred to
+          // the dashboard selected-league-context batch.
+          onCompleteRedirect={onCompleteRedirect ?? '/dashboard'}
         />
       )}
 
@@ -363,12 +367,13 @@ export function LeagueImportFlow({
           </div>
           <h1 className="relative text-center text-4xl font-bold text-transparent sm:text-5xl">
             <span className="bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text">
-              Import your league
+              Connect your league
             </span>
           </h1>
           <p className="relative mt-3 text-center text-white/55">
-            Bring your Sleeper, ESPN, Yahoo, Fantrax, or MFL league into
-            AllFantasy with a preview-first flow.
+            Connect your Sleeper, ESPN, Yahoo, Fantrax, or MFL league to
+            AllFantasy — a read-only view we analyze but never change on the
+            source platform.
           </p>
           <p className="relative mt-2 text-center text-[13px] text-white/40">
             Connect provider credentials in{' '}
@@ -390,7 +395,7 @@ export function LeagueImportFlow({
             </h2>
             <p className="mt-1 text-sm text-white/60">
               Preview league settings, rosters, draft structure, and scoring
-              before you commit the import.
+              before you connect it — AllFantasy never changes your source league.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">

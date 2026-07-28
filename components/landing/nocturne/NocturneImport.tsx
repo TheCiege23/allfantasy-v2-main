@@ -22,6 +22,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowRight, Lock } from 'lucide-react'
 import { signupUrlWithIntent } from '@/lib/auth/auth-intent-resolver'
+import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { trackLandingCtaClick } from '@/lib/landing-analytics'
 import { NOCTURNE_COPY as C } from './copy'
 
@@ -66,6 +67,9 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
 
   // Always defined: platformId is a valid PlatformId and PLATFORMS is non-empty.
   const platform = PLATFORMS.find((p) => p.id === platformId) ?? PLATFORMS[0]!
+  // Availability comes from the SAME authoritative provider-ui-config the
+  // canonical import UI uses — never hardcoded here.
+  const platformAvailable = isImportProviderAvailable(platform.id)
   const submitLabel = variant === 'mini' ? C.importFlow.submitMini : C.importFlow.submitFull
 
   function selectPlatform(id: PlatformId) {
@@ -77,6 +81,9 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
     e.preventDefault()
     const clean = value.trim()
     if (!clean) return
+    // A provider that isn't available end-to-end must NOT create a signup/import
+    // intent — no dead-end into a blocked import flow.
+    if (!isImportProviderAvailable(platform.id)) return
 
     // Preserve the entered username/leagueId through signup intent → canonical
     // /import. Unauthenticated landing visitors create an account first; there
@@ -103,7 +110,9 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
           onChange={(e) => selectPlatform(e.target.value as PlatformId)}
         >
           {PLATFORMS.map((p) => (
-            <option key={p.id} value={p.id}>{p.label}</option>
+            <option key={p.id} value={p.id}>
+              {isImportProviderAvailable(p.id) ? p.label : `${p.label} — Coming soon`}
+            </option>
           ))}
         </select>
         <input
@@ -123,12 +132,12 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
           type="submit"
           className="btn btn-primary"
           style={{ minHeight: 46, padding: '0 20px', fontSize: 14, flex: 'none' }}
-          disabled={!value.trim()}
+          disabled={!value.trim() || !platformAvailable}
           data-testid="nocturne-import-mini-submit"
         >
           {submitLabel}
         </button>
-        <TrustLine platform={platform} compact />
+        <TrustLine platform={platform} available={platformAvailable} compact />
       </form>
     )
   }
@@ -139,6 +148,7 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
       <div className="n-plat-chips">
         {PLATFORMS.map((p) => {
           const selected = p.id === platformId
+          const soon = !isImportProviderAvailable(p.id)
           return (
             <button
               key={p.id}
@@ -146,9 +156,11 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
               className={`n-plat-chip${selected ? ' is-selected' : ''}`}
               aria-pressed={selected}
               onClick={() => selectPlatform(p.id)}
+              data-testid={`nocturne-plat-chip-${p.id}`}
             >
               <span className="n-plat-sq" style={{ background: p.color }}>{p.initial}</span>
               {p.label}
+              {soon ? <span className="n-plat-soon"> · Coming soon</span> : null}
             </button>
           )
         })}
@@ -172,20 +184,28 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
           type="submit"
           className="btn btn-primary"
           style={{ minHeight: 48, padding: '0 24px', fontSize: 15, flex: 'none' }}
-          disabled={!value.trim()}
+          disabled={!value.trim() || !platformAvailable}
           data-testid="nocturne-import-full-submit"
         >
           {submitLabel} <ArrowRight size={16} style={{ marginLeft: 2 }} />
         </button>
       </div>
-      <TrustLine platform={platform} />
+      <TrustLine platform={platform} available={platformAvailable} />
     </form>
   )
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function TrustLine({ platform, compact = false }: { platform: PlatformMeta; compact?: boolean }) {
+function TrustLine({
+  platform,
+  available,
+  compact = false,
+}: {
+  platform: PlatformMeta
+  available: boolean
+  compact?: boolean
+}) {
   const base: React.CSSProperties = {
     fontSize: 12.5,
     margin: compact ? '4px 0 0' : '12px 0 0',
@@ -194,10 +214,13 @@ function TrustLine({ platform, compact = false }: { platform: PlatformMeta; comp
     gap: 6,
     color: 'var(--color-neutral-600)',
   }
+  const text = available
+    ? C.importFlow.trustNote.replace('{label}', platform.label)
+    : `${platform.label} isn't available yet — coming soon.`
   return (
     <p className="n-import-status" style={base}>
       <Lock size={13} style={{ flex: 'none' }} />
-      {C.importFlow.trustNote.replace('{label}', platform.label)}
+      {text}
     </p>
   )
 }

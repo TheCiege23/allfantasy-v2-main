@@ -6,6 +6,7 @@ import {
   NocturneImport,
   buildImportIntentPath,
 } from '@/components/landing/nocturne/NocturneImport'
+import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 
 const pushMock = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: pushMock }) }))
@@ -60,6 +61,28 @@ describe('NocturneImport — canonical landing funnel (no legacy guest import)',
     fireEvent.click(screen.getByTestId('nocturne-import-mini-submit'))
     const dest = pushMock.mock.calls[0]![0] as string
     expect(nextParam(dest)).toBe('/import?provider=sleeper&username=gridiron_gary')
+  })
+
+  it('availability comes from the authoritative provider-ui-config (Sleeper live; fantrax/mfl not)', () => {
+    expect(isImportProviderAvailable('sleeper')).toBe(true)
+    expect(isImportProviderAvailable('fantrax')).toBe(false)
+    expect(isImportProviderAvailable('mfl')).toBe(false)
+  })
+
+  it('an unavailable provider is visibly marked "Coming soon" and cannot create an import intent', () => {
+    render(<NocturneImport variant="full" />)
+    // Select the unavailable provider (fantrax).
+    fireEvent.click(screen.getByTestId('nocturne-plat-chip-fantrax'))
+    // Visibly identified as coming soon…
+    expect(screen.getByTestId('nocturne-plat-chip-fantrax')).toHaveTextContent(/coming soon/i)
+    // …and it cannot navigate/create a signup-import intent.
+    fireEvent.change(screen.getByTestId('nocturne-import-full-input'), {
+      target: { value: '1234567' },
+    })
+    const submit = screen.getByTestId('nocturne-import-full-submit')
+    expect(submit).toBeDisabled()
+    fireEvent.click(submit)
+    expect(pushMock).not.toHaveBeenCalled()
   })
 
   it('the username survives the /import prefill contract (page → client → flow)', () => {
