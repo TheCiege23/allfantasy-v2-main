@@ -149,6 +149,10 @@
       "schedule": "*/1 * * * *"
     },
     {
+      "path": "/api/cron/sleeper-refresh-drain",
+      "schedule": "*/1 * * * *"
+    },
+    {
       "path": "/api/brackets/world-cup/cron/sync?job=teams&provider=apifootball",
       "schedule": "0 8 * * *"
     },

@@ -4,10 +4,12 @@
  * Resolves the season-aware cadence, decides whether the connection is due (never hammering the
  * provider), then drives `runSync` with the Prisma store + AutomationLock + memoized Sleeper fetcher.
  * The normalized-payload loader is injectable (`fetchNormalized`) so tests drive deterministic
- * controlled fixtures without touching the live Sleeper API; production defaults to the canonical
- * `runImportedLeagueNormalizationPipeline` (a single live provider burst per run).
+ * controlled fixtures without touching the live Sleeper API; production defaults to the bounded
+ * CURRENT-STATE loader (`fetchCurrentStateNormalizedFromSleeper`) — one small provider burst per run
+ * that never traverses dynasty history or downloads the full player map (B6). The runner acquires the
+ * distributed lock BEFORE this loader is ever invoked, so no provider fetch happens outside the lock.
  */
-import { runImportedLeagueNormalizationPipeline } from '@/lib/league-import/ImportedLeagueNormalizationPipeline'
+import { fetchCurrentStateNormalizedFromSleeper } from './sleeperCurrentStateLoader'
 import type { NormalizedImportResult } from '@/lib/league-import/types'
 import { prisma } from '@/lib/prisma'
 import { resolveCadence } from '@/lib/fantasy-os/sync/season'
@@ -28,13 +30,6 @@ import { SLEEPER_SYNC_SCOPES, type SleeperSyncConnection } from './types'
 const realClock: Clock = { now: () => new Date() }
 const realRng: Rng = { next: () => Math.random() }
 const realSleep: Sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-
-/** Live provider load: fetch + normalize the current Sleeper league (read-only, keyless). Throws on hard failure. */
-async function fetchNormalizedFromSleeper(externalLeagueId: string): Promise<NormalizedImportResult> {
-  const result = await runImportedLeagueNormalizationPipeline({ provider: 'sleeper', sourceId: externalLeagueId })
-  if (!result.success) throw new Error(`sleeper normalize failed: ${result.error}`)
-  return result.normalized
-}
 
 /**
  * Memoize the fetch PROMISE so all scopes of a run share ONE provider burst — but ONLY while it is
@@ -123,7 +118,7 @@ export async function syncConnectedSleeperLeague(
   }
 
   const loadNormalized = createMemoizedNormalizedLoader(() =>
-    (deps.fetchNormalized ?? fetchNormalizedFromSleeper)(connection.externalLeagueId),
+    (deps.fetchNormalized ?? fetchCurrentStateNormalizedFromSleeper)(connection.externalLeagueId),
   )
   const store = createPrismaSleeperSyncStore({
     connection,

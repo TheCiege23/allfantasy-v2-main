@@ -65,6 +65,8 @@ const DISABLE_HEADROOM = [
 ]
 const KEEP = new Set([
   'app/api/cron/waivers/route.ts',
+  // Manual Sleeper current-state refresh drain worker (Launch Batch 2 · B6) — every-minute cron.
+  'app/api/cron/sleeper-refresh-drain/route.ts',
   // Sports-data ingestion crons, restored to the build 2026-07-19 (see
   // scripts/vercel-next-build.cjs). This KEEP set is a hand-maintained mirror of that
   // script's filesToKeep — they must be updated together or this proof under-reports.

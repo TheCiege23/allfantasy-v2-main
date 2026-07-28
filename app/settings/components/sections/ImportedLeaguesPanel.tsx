@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { RefreshCw, ExternalLink, Search } from "lucide-react"
 
@@ -9,13 +9,23 @@ import { RefreshCw, ExternalLink, Search } from "lucide-react"
  *
  * Source: GET /api/league/list (getDashboardLeagueListForUser) — merges native +
  * imported + Sleeper + legacy leagues into one normalized array. Only the two
- * genuinely-backed row actions are offered: Open (link) and Resync
- * (POST /api/leagues/import/resync — imported leagues only). There is no
- * member-level archive/disconnect endpoint, so those reference actions are
- * intentionally omitted. See memory `settings-panels-data-backing`.
+ * genuinely-backed row actions are offered: Open (link) and Resync.
+ *
+ * Resync is DB-first + background (Launch Batch 2 · B6): POST /api/leagues/import/resync ENQUEUES a
+ * durable job and returns immediately (202); this panel then POLLS
+ * GET /api/leagues/import/resync/status and exits "Refreshing" on every terminal outcome. The previous
+ * DB snapshot stays visible throughout, the request never hangs, and navigating away never cancels the
+ * job (it is a durable DB row a worker drains out-of-band). See memory `settings-panels-data-backing`.
  */
 
 const IMPORT_PLATFORMS = new Set(["sleeper", "espn", "yahoo", "mfl", "fleaflicker", "fantrax"])
+
+const POLL_INTERVAL_MS = 3000
+// Stop the visible spinner after this long. The job is durable and keeps running server-side; the row
+// simply shows "Refreshing in the background" so it is never stuck on a spinner forever.
+const MAX_POLL_MS = 90_000
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 type LeagueRow = {
   id: string
@@ -34,6 +44,13 @@ type LeagueRow = {
   hasUnifiedRecord?: boolean | null
 }
 
+type RefreshPhase = "refreshing" | "updated" | "no_change" | "failed" | "rate_limited" | "background"
+type RefreshState = {
+  phase: RefreshPhase
+  lastChecked?: string | null
+  lastSuccessfullyUpdated?: string | null
+}
+
 function platformLabel(p?: string): string {
   const map: Record<string, string> = {
     sleeper: "Sleeper", espn: "ESPN", yahoo: "Yahoo", mfl: "MFL",
@@ -42,13 +59,20 @@ function platformLabel(p?: string): string {
   return map[(p ?? "").toLowerCase()] ?? (p ? p[0]!.toUpperCase() + p.slice(1) : "—")
 }
 
+/**
+ * Base freshness pill from the SERVER's stored syncStatus. It never claims "Syncing…" at rest — an
+ * imported-but-never-refreshed league is `pending`, and nothing is actually syncing then (that was the
+ * B6 "stuck on Syncing" symptom). Live refresh progress is shown by the row caption, not this pill.
+ */
 function syncPill(status?: string | null): { label: string; color: string; bg: string } {
   const s = (status ?? "").toLowerCase()
-  if (s === "syncing" || s === "pending" || s === "importing")
-    return { label: "Syncing…", color: "var(--accent-cyan-strong)", bg: "color-mix(in srgb, var(--accent-cyan) 16%, transparent)" }
   if (s === "error" || s === "failed")
     return { label: "Sync error", color: "var(--accent-red-strong)", bg: "color-mix(in srgb, var(--accent-red-strong) 14%, transparent)" }
-  return { label: "Active", color: "#7ee081", bg: "color-mix(in srgb, #7ee081 15%, transparent)" }
+  if (s === "partial")
+    return { label: "Partial", color: "var(--accent-amber-strong, #e0b877)", bg: "color-mix(in srgb, #e0b877 15%, transparent)" }
+  if (s === "synced" || s === "active")
+    return { label: "Active", color: "#7ee081", bg: "color-mix(in srgb, #7ee081 15%, transparent)" }
+  return { label: "Ready", color: "var(--muted)", bg: "color-mix(in srgb, var(--muted) 15%, transparent)" }
 }
 
 function relTime(iso?: string | null): string {
@@ -63,14 +87,42 @@ function relTime(iso?: string | null): string {
   return `${Math.round(hrs / 24)}d ago`
 }
 
+/** Honest terminal caption for the refresh action. Never says "Queued" for a failed/timed-out refresh. */
+function refreshCaption(rs: RefreshState | undefined): { text: string; color: string } | null {
+  if (!rs) return null
+  switch (rs.phase) {
+    case "refreshing":
+      return { text: "Refreshing in the background…", color: "var(--accent-cyan-strong)" }
+    case "updated":
+      return { text: `Updated${rs.lastSuccessfullyUpdated ? ` · ${relTime(rs.lastSuccessfullyUpdated)}` : ""}`, color: "#7ee081" }
+    case "no_change":
+      return { text: "Checked — no new information", color: "var(--muted)" }
+    case "failed":
+      return { text: "Refresh failed — your previous data is still available", color: "var(--accent-red-strong)" }
+    case "rate_limited":
+      return { text: "Too many refreshes in progress — try again shortly", color: "var(--accent-amber-strong, #e0b877)" }
+    case "background":
+      return { text: "Refreshing in the background — check back shortly", color: "var(--accent-cyan-strong)" }
+    default:
+      return null
+  }
+}
+
 export function ImportedLeaguesPanel() {
   const [leagues, setLeagues] = useState<LeagueRow[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState("")
   const [platform, setPlatform] = useState("all")
-  const [resyncing, setResyncing] = useState<Record<string, "busy" | "done" | "error">>({})
+  const [refresh, setRefresh] = useState<Record<string, RefreshState>>({})
+
+  // Leagues currently being polled — the single source of truth for the double-click guard. A ref (not
+  // state) so it is read synchronously inside the async click handler without a stale closure.
+  const activePolls = useRef<Set<string>>(new Set())
+  const unmountedRef = useRef(false)
 
   useEffect(() => {
+    unmountedRef.current = false
+    const polls = activePolls.current // stable Set identity for the component's life; safe in cleanup
     let cancelled = false
     void (async () => {
       const data = await fetch("/api/league/list", { cache: "no-store" })
@@ -83,6 +135,10 @@ export function ImportedLeaguesPanel() {
     })()
     return () => {
       cancelled = true
+      // Stop all polling on unmount. The durable jobs keep running server-side; navigating away never
+      // cancels them.
+      unmountedRef.current = true
+      polls.clear()
     }
   }, [])
 
@@ -101,25 +157,98 @@ export function ImportedLeaguesPanel() {
     })
   }, [leagues, query, platform])
 
+  async function pollStatus(l: LeagueRow, deadline: number) {
+    const key = l.id
+    while (!unmountedRef.current && activePolls.current.has(key) && Date.now() < deadline) {
+      await sleep(POLL_INTERVAL_MS)
+      if (unmountedRef.current || !activePolls.current.has(key)) return
+      let data: { ok?: boolean; phase?: string; lastChecked?: string | null; lastSuccessfullyUpdated?: string | null } | null = null
+      try {
+        const res = await fetch(
+          `/api/leagues/import/resync?provider=${encodeURIComponent(l.platform ?? "")}&sourceId=${encodeURIComponent(l.platformLeagueId ?? "")}`,
+          { cache: "no-store" },
+        )
+        data = res.ok ? await res.json() : null
+      } catch {
+        data = null
+      }
+      if (unmountedRef.current || !activePolls.current.has(key)) return
+      if (!data?.ok) continue // transient status error — keep polling
+      const base = { lastChecked: data.lastChecked ?? null, lastSuccessfullyUpdated: data.lastSuccessfullyUpdated ?? null }
+      if (data.phase === "refreshing") {
+        setRefresh((r) => ({ ...r, [key]: { phase: "refreshing", ...base } }))
+        continue
+      }
+      // Terminal — exit the spinner honestly.
+      const phase: RefreshPhase =
+        data.phase === "updated" ? "updated" : data.phase === "failed" ? "failed" : "no_change"
+      activePolls.current.delete(key)
+      setRefresh((r) => ({ ...r, [key]: { phase, ...base } }))
+      return
+    }
+    // Deadline reached while still refreshing — the job is durable and keeps running; drop the spinner.
+    if (!unmountedRef.current && activePolls.current.has(key)) {
+      activePolls.current.delete(key)
+      setRefresh((r) => ({ ...r, [key]: { ...r[key], phase: "background" } }))
+    }
+  }
+
   async function resync(l: LeagueRow) {
     if (!l.platformLeagueId || !l.platform) return
-    setResyncing((r) => ({ ...r, [l.id]: "busy" }))
+    const key = l.id
+    // Double-click guard: one in-flight refresh per league (the server also dedupes by idempotency key).
+    if (activePolls.current.has(key) || refresh[key]?.phase === "refreshing") return
+    activePolls.current.add(key)
+    setRefresh((r) => ({ ...r, [key]: { phase: "refreshing" } }))
+
+    let res: Response
     try {
-      const res = await fetch("/api/leagues/import/resync", {
+      res = await fetch("/api/leagues/import/resync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ provider: l.platform, sourceId: l.platformLeagueId }),
       })
-      setResyncing((r) => ({ ...r, [l.id]: res.ok ? "done" : "error" }))
     } catch {
-      setResyncing((r) => ({ ...r, [l.id]: "error" }))
+      activePolls.current.delete(key)
+      setRefresh((r) => ({ ...r, [key]: { phase: "failed" } }))
+      return
     }
+
+    if (res.status === 429) {
+      activePolls.current.delete(key)
+      setRefresh((r) => ({ ...r, [key]: { phase: "rate_limited" } }))
+      return
+    }
+
+    let body: { status?: string; lastSuccessfullyUpdated?: string | null } | null = null
+    try {
+      body = await res.json()
+    } catch {
+      body = null
+    }
+
+    if (!res.ok) {
+      activePolls.current.delete(key)
+      setRefresh((r) => ({ ...r, [key]: { phase: "failed" } }))
+      return
+    }
+
+    // Already fresh — a successful refresh happened moments ago, so no new job was queued.
+    if (body?.status === "up_to_date") {
+      activePolls.current.delete(key)
+      setRefresh((r) => ({ ...r, [key]: { phase: "no_change", lastSuccessfullyUpdated: body?.lastSuccessfullyUpdated ?? null } }))
+      return
+    }
+
+    // queued | already_running → the durable worker will process it; poll the DB-backed status.
+    setRefresh((r) => ({ ...r, [key]: { phase: "refreshing", lastSuccessfullyUpdated: body?.lastSuccessfullyUpdated ?? null } }))
+    void pollStatus(l, Date.now() + MAX_POLL_MS)
   }
 
-  // Only leagues with a live native backing are resyncable. Historical career-board
-  // snapshots (from /api/league/list) carry a platformLeagueId but no navigation/unified
-  // record — resyncing those would re-import and materialize a native league from what the
-  // user sees as read-only history, so they're excluded.
+  // Only leagues with a live native backing are resyncable. Historical career-board snapshots (from
+  // /api/league/list) carry a platformLeagueId but no navigation/unified record — resyncing those would
+  // re-import and materialize a native league from what the user sees as read-only history, so they're
+  // excluded.
   const canResync = (l: LeagueRow) =>
     Boolean(l.platformLeagueId) &&
     IMPORT_PLATFORMS.has((l.platform ?? "").toLowerCase()) &&
@@ -168,7 +297,12 @@ export function ImportedLeaguesPanel() {
               .filter(Boolean)
               .join(" · ")
             const openHref = l.navigationLeagueId ? `/league/${l.navigationLeagueId}` : "/dashboard"
-            const rs = resyncing[l.id]
+            const rs = refresh[l.id]
+            const busy = rs?.phase === "refreshing"
+            const caption = refreshCaption(rs)
+            // Show last successfully-updated and last-checked separately when they differ.
+            const lastUpdated = rs?.lastSuccessfullyUpdated ?? l.lastSyncedAt ?? null
+            const lastChecked = rs?.lastChecked ?? null
             return (
               <li
                 key={l.id}
@@ -184,12 +318,18 @@ export function ImportedLeaguesPanel() {
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium" style={{ color: "var(--text)" }}>{l.name ?? "Untitled league"}</div>
                   <div className="truncate text-[11.5px]" style={{ color: "var(--muted)" }}>{meta}</div>
+                  {caption ? (
+                    <div className="mt-0.5 truncate text-[11px] font-medium" style={{ color: caption.color }}>{caption.text}</div>
+                  ) : null}
                 </div>
                 <span className="shrink-0 rounded-full px-2.5 py-1 text-[10.5px] font-bold" style={{ background: pill.bg, color: pill.color }}>
                   {pill.label}
                 </span>
-                {l.lastSyncedAt ? (
-                  <span className="shrink-0 text-[10.5px]" style={{ color: "var(--muted)" }}>{relTime(l.lastSyncedAt)}</span>
+                {lastUpdated ? (
+                  <span className="shrink-0 text-[10.5px]" style={{ color: "var(--muted)" }}>
+                    Updated {relTime(lastUpdated)}
+                    {lastChecked && lastChecked !== lastUpdated ? ` · checked ${relTime(lastChecked)}` : ""}
+                  </span>
                 ) : null}
                 <div className="flex shrink-0 gap-1.5">
                   <Link
@@ -203,12 +343,12 @@ export function ImportedLeaguesPanel() {
                     <button
                       type="button"
                       onClick={() => void resync(l)}
-                      disabled={rs === "busy"}
-                      className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium disabled:opacity-50"
-                      style={{ borderColor: "var(--border)", color: rs === "error" ? "var(--accent-red-strong)" : "var(--muted2)" }}
+                      disabled={busy}
+                      className="inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-[11.5px] font-medium disabled:opacity-60"
+                      style={{ borderColor: "var(--border)", color: rs?.phase === "failed" ? "var(--accent-red-strong)" : "var(--muted2)" }}
                     >
-                      <RefreshCw className={`h-3.5 w-3.5 ${rs === "busy" ? "animate-spin" : ""}`} />
-                      {rs === "busy" ? "Resyncing…" : rs === "done" ? "Queued" : rs === "error" ? "Failed" : "Resync"}
+                      <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />
+                      {busy ? "Refreshing…" : "Resync"}
                     </button>
                   ) : null}
                 </div>

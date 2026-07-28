@@ -1,14 +1,28 @@
 /**
- * POST /api/leagues/import/resync
- * Re-run normalization + merge for an already-imported external league (commissioner / owner).
+ * /api/leagues/import/resync
+ *
+ * DB-first background refresh (Launch Batch 2 · B6):
+ *   POST — enqueue a durable `AutomationJob` and return 202 immediately (Sleeper); NO provider fetch on
+ *          the request. A durable cron worker drains it out-of-band. Non-Sleeper providers keep the
+ *          existing inline re-normalize behavior.
+ *   GET  — DB-backed status the UI polls (`?provider=sleeper&sourceId=<externalLeagueId>`). Reads the
+ *          latest AutomationJob + LeagueSyncState, so it is correct even after the browser navigated away.
+ *
+ * Status is a GET on THIS route file (not a child `/status` route) to respect the repo's Vercel route
+ * budget — one route.ts, two methods.
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { resolveProvider } from '@/lib/league-import/ImportProviderResolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { resyncImportedLeague } from '@/lib/league-import/resyncImportUtility'
+import { prisma } from '@/lib/prisma'
+import { resolveSleeperConnectionForSource } from '@/lib/fantasy-os/sync/collector'
+import { enqueueSleeperRefreshJob } from '@/lib/fantasy-os/sync/refreshJob/enqueueSleeperRefreshJob'
+import { SLEEPER_REFRESH_JOB_TYPE, sleeperRefreshIdempotencyPrefix } from '@/lib/fantasy-os/sync/refreshJob/constants'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
   const auth = await requireVerifiedUser()
@@ -25,59 +39,91 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Import from ${provider} is not available.` }, { status: 400 })
   }
 
-  const out = await resyncImportedLeague({
-    userId: auth.userId,
-    provider,
-    sourceId,
-  })
-  if (!out.ok) {
-    // Normalization / audit failed (e.g. league not found, normalization error) — a client-side issue.
-    return NextResponse.json({ ok: false, error: out.error }, { status: 400 })
+  // Sleeper → DB-first durable job: enqueue and return 202 immediately (no provider fetch on this
+  // request). Duplicate clicks collapse to one job; the worker acquires the lock before any fetch.
+  if (provider === 'sleeper') {
+    const out = await enqueueSleeperRefreshJob({ userId: auth.userId, externalLeagueId: sourceId })
+    if (!out.ok) {
+      return NextResponse.json({ ok: false, error: out.error }, { status: out.httpStatus })
+    }
+    return NextResponse.json(
+      {
+        ok: true,
+        jobId: out.jobId,
+        leagueId: out.leagueId,
+        status: out.status, // 'queued' | 'already_running' | 'up_to_date'
+        lastSuccessfullyUpdated: out.lastSuccessfullyUpdated,
+      },
+      { status: 202 },
+    )
   }
 
-  // Sanitized diagnostics only — never a provider payload, credentials, lock token, or raw error detail.
-  const base = {
+  // Non-Sleeper providers have no durable read-model collector — preserve the existing inline behavior.
+  const out = await resyncImportedLeague({ userId: auth.userId, provider, sourceId })
+  if (!out.ok) {
+    return NextResponse.json({ ok: false, error: out.error }, { status: 400 })
+  }
+  return NextResponse.json({
+    ok: true,
     leagueId: out.leagueId,
     runId: out.runId,
     warningCount: out.warningCount,
     reviewRequired: out.reviewRequired,
-  }
-  const refresh = out.refresh
+  })
+}
 
-  // Non-Sleeper providers have no durable read-model refresh step — preserve existing success behavior.
-  if (refresh === null) {
-    return NextResponse.json({ ok: true, ...base })
-  }
+export async function GET(req: NextRequest) {
+  const auth = await requireVerifiedUser()
+  if (!auth.ok) return auth.response
 
-  // A pre-run authorization / not-found / invalid-connection failure keeps its appropriate 4xx meaning.
-  if (refresh.kind === 'auth') {
-    return NextResponse.json(
-      { ok: false, ...base, refresh: { status: 'not_authorized' }, error: refresh.error },
-      { status: refresh.httpStatus },
-    )
+  const url = new URL(req.url)
+  const provider = resolveProvider(url.searchParams.get('provider') ?? '')
+  const sourceId = (url.searchParams.get('sourceId') ?? '').trim()
+  if (provider !== 'sleeper' || !sourceId) {
+    return NextResponse.json({ error: 'provider=sleeper and sourceId are required' }, { status: 400 })
   }
 
-  // Sleeper durable-refresh outcome → honest HTTP status. A non-completed refresh is NEVER reported as success.
-  const refreshResult = { status: refresh.status, advancedFreshness: refresh.advancedFreshness, executed: refresh.executed }
+  const resolved = await resolveSleeperConnectionForSource(auth.userId, sourceId)
+  if (!resolved.ok) {
+    return NextResponse.json({ error: resolved.error }, { status: resolved.status })
+  }
+  const runKey = resolved.connection.runKey
 
-  if (refresh.status === 'completed' && refresh.advancedFreshness === true && refresh.executed === true) {
-    return NextResponse.json({ ok: true, ...base, refresh: refreshResult })
-  }
-  if (refresh.status === 'locked') {
-    return NextResponse.json(
-      { ok: false, ...base, refresh: refreshResult, error: 'This league is already being refreshed. Try again shortly.' },
-      { status: 409 },
-    )
-  }
-  if (refresh.status === 'partial' || refresh.status === 'failed') {
-    return NextResponse.json(
-      { ok: false, ...base, refresh: refreshResult, error: 'The existing league data was preserved, but the refresh did not complete. Please try again shortly.' },
-      { status: 503 },
-    )
-  }
-  // Unknown or non-executed durable outcome — fail closed rather than reporting success.
-  return NextResponse.json(
-    { ok: false, ...base, refresh: refreshResult, error: 'The refresh did not complete. The existing league data was preserved.' },
-    { status: 503 },
-  )
+  const [job, state] = await Promise.all([
+    prisma.automationJob.findFirst({
+      where: {
+        jobType: SLEEPER_REFRESH_JOB_TYPE,
+        idempotencyKey: { startsWith: sleeperRefreshIdempotencyPrefix(runKey) },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: { status: true, metadata: true },
+    }),
+    prisma.leagueSyncState.findUnique({
+      where: { runKey },
+      select: { syncStatus: true, lastAttemptedSyncAt: true, lastSuccessfulSyncAt: true },
+    }),
+  ])
+
+  const jobStatus = job?.status ?? 'idle'
+  const inFlight = jobStatus === 'pending' || jobStatus === 'running'
+  const jobMeta = (job?.metadata ?? {}) as Record<string, unknown>
+  const changed = jobMeta.changed === true
+
+  // Derive a UI phase from the DURABLE state (the DB is the truth, not the request that triggered it):
+  // `refreshing` while a job is in flight; on completion distinguish a real update from a no-op check; a
+  // failed/partial durable run reads as `failed` with the previous snapshot preserved (the runner never
+  // advances freshness or erases data on failure).
+  let phase: 'refreshing' | 'updated' | 'no_change' | 'failed' | 'idle'
+  if (inFlight) phase = 'refreshing'
+  else if (jobStatus === 'completed') phase = changed ? 'updated' : 'no_change'
+  else if (jobStatus === 'failed' || state?.syncStatus === 'failed' || state?.syncStatus === 'partial') phase = 'failed'
+  else phase = 'idle'
+
+  return NextResponse.json({
+    ok: true,
+    phase,
+    jobStatus,
+    lastChecked: state?.lastAttemptedSyncAt?.toISOString() ?? null,
+    lastSuccessfullyUpdated: state?.lastSuccessfulSyncAt?.toISOString() ?? null,
+  })
 }

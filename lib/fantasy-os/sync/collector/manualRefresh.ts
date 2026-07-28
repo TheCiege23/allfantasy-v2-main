@@ -65,6 +65,54 @@ export async function manualRefreshConnectedSleeperLeague(input: {
   return { ok: true, leagueId: input.leagueId, sync }
 }
 
+/**
+ * Resolve the accessible canonical Sleeper connection for a caller from the EXTERNAL Sleeper league id
+ * (the resync entry point holds the Sleeper league id, not the AF `League.id`). Finds the canonical
+ * mirror rows for that external league, verifies the caller can access one, and builds the connection /
+ * run key — with NO provider fetch (the fetch happens inside the locked run). One external Sleeper
+ * league id maps to exactly one season, so every mirror row shares one run key.
+ */
+export async function resolveSleeperConnectionForSource(
+  userId: string | null | undefined,
+  externalLeagueId: string,
+): Promise<
+  | { ok: true; connection: SleeperSyncConnection; leagueId: string }
+  | { ok: false; status: 400 | 403 | 404; error: string }
+> {
+  if (!userId) return { ok: false, status: 403, error: 'Authentication required' }
+  const cleanId = externalLeagueId.trim()
+  if (!cleanId) return { ok: false, status: 400, error: 'Missing league id' }
+
+  const mirrors = await prisma.league.findMany({
+    where: { platform: 'sleeper', platformLeagueId: cleanId },
+    select: { id: true, season: true, sport: true },
+    orderBy: { season: 'desc' },
+  })
+  if (mirrors.length === 0) {
+    return { ok: false, status: 404, error: 'This league is not connected. Import it first.' }
+  }
+  // Verify the caller can access at least one mirror row (owner or a claimed team) before doing anything.
+  let accessibleLeagueId: string | null = null
+  for (const m of mirrors) {
+    if (await resolveLeagueAccess(m.id, userId)) {
+      accessibleLeagueId = m.id
+      break
+    }
+  }
+  if (!accessibleLeagueId) {
+    return { ok: false, status: 403, error: 'You do not have access to this league' }
+  }
+  const chosen = mirrors.find((m) => m.id === accessibleLeagueId)!
+  const connection: SleeperSyncConnection = {
+    runKey: buildRunKey('sleeper', cleanId, chosen.season),
+    provider: 'sleeper',
+    externalLeagueId: cleanId,
+    season: chosen.season,
+    sport: String(chosen.sport),
+  }
+  return { ok: true, connection, leagueId: accessibleLeagueId }
+}
+
 export type SyncStateInspection =
   | {
       ok: true

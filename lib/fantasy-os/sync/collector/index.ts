@@ -14,10 +14,12 @@ export {
 } from './enumerate'
 export {
   manualRefreshConnectedSleeperLeague,
+  resolveSleeperConnectionForSource,
   getConnectedLeagueSyncState,
   type ManualRefreshResult,
   type SyncStateInspection,
 } from './manualRefresh'
+export { fetchCurrentStateNormalizedFromSleeper } from './sleeperCurrentStateLoader'
 export { applySleeperScopeToLeague, type ApplyLeagueSyncOptions } from './applySleeperLeagueSync'
 export { createPrismaSleeperSyncStore, type PrismaSleeperSyncStore } from './prismaSyncStore'
 export { createSleeperScopeFetcher } from './sleeperScopeFetcher'

@@ -19,7 +19,7 @@ const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  * swallowed) and returns null so the caller keeps whatever partial data it has. When
  * `ctx` is omitted the call still retries — it just doesn't record a warning.
  */
-async function fetchSleeperJson<T>(
+export async function fetchSleeperJson<T>(
   url: string,
   ctx?: { warnings: string[]; label: string },
 ): Promise<T | null> {
@@ -58,7 +58,7 @@ async function fetchSleeperJson<T>(
   return null
 }
 
-const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: ingestion service endpoint
+export const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: ingestion service endpoint
 
 interface SleeperDraftSummaryRaw {
   draft_id: string

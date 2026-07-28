@@ -1,8 +1,9 @@
+// @vitest-environment node
 /**
- * #G1 — ROUTE-level tests for POST /api/leagues/import/resync. Proves the durable Sleeper refresh
- * outcome is mapped to an honest HTTP status (never a non-completed refresh reported as success),
- * the refresh result is included (not dropped), no second provider fetch is triggered by the route,
- * non-Sleeper behavior is unchanged, and the response leaks no payload/credentials/lock token.
+ * B6 (DB-first) — ROUTE tests for /api/leagues/import/resync.
+ *   POST (Sleeper) enqueues a durable job and returns 202 WITHOUT any inline durable refresh / provider
+ *   fetch; a quota rejection surfaces its 429; non-Sleeper providers keep the inline path.
+ *   GET returns a sanitized, DB-backed status phase derived from the AutomationJob + LeagueSyncState.
  * Fully mocked at the module boundary — no DB, no live provider.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest'
@@ -13,21 +14,29 @@ const h = vi.hoisted(() => ({
   resolveProvider: vi.fn(),
   isImportProviderAvailable: vi.fn(),
   resyncImportedLeague: vi.fn(),
+  enqueue: vi.fn(),
+  resolveConn: vi.fn(),
+  jobFindFirst: vi.fn(),
+  lssFindUnique: vi.fn(),
 }))
 
 vi.mock('@/lib/auth-guard', () => ({ requireVerifiedUser: h.requireVerifiedUser }))
 vi.mock('@/lib/league-import/ImportProviderResolver', () => ({ resolveProvider: h.resolveProvider }))
 vi.mock('@/lib/league-import/provider-ui-config', () => ({ isImportProviderAvailable: h.isImportProviderAvailable }))
 vi.mock('@/lib/league-import/resyncImportUtility', () => ({ resyncImportedLeague: h.resyncImportedLeague }))
+vi.mock('@/lib/fantasy-os/sync/refreshJob/enqueueSleeperRefreshJob', () => ({ enqueueSleeperRefreshJob: h.enqueue }))
+vi.mock('@/lib/fantasy-os/sync/collector', () => ({ resolveSleeperConnectionForSource: h.resolveConn }))
+vi.mock('@/lib/prisma', () => ({
+  prisma: { automationJob: { findFirst: h.jobFindFirst }, leagueSyncState: { findUnique: h.lssFindUnique } },
+}))
 
-import { POST } from '@/app/api/leagues/import/resync/route'
+import { POST, GET } from '@/app/api/leagues/import/resync/route'
 
-const BASE = { leagueId: 'L1', runId: 'R1', warningCount: 0, reviewRequired: false }
-
-async function call(body: unknown): Promise<{ status: number; json: any }> {
-  const req = { json: async () => body } as unknown as NextRequest
-  const res = await POST(req)
-  return { status: res.status, json: await res.json() }
+function postReq(body: unknown): NextRequest {
+  return { json: async () => body } as unknown as NextRequest
+}
+function getReq(qs: string): NextRequest {
+  return { url: `http://x/api/leagues/import/resync?${qs}` } as unknown as NextRequest
 }
 
 beforeEach(() => {
@@ -37,85 +46,85 @@ beforeEach(() => {
   h.isImportProviderAvailable.mockReturnValue(true)
 })
 
-describe('POST /api/leagues/import/resync — honest durable refresh outcome', () => {
-  it('completed Sleeper refresh → 200 ok:true, includes the refresh result, one invocation', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: { kind: 'sync', status: 'completed', advancedFreshness: true, executed: true } })
-    const { status, json } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(status).toBe(200)
-    expect(json.ok).toBe(true)
-    expect(json.refresh).toMatchObject({ status: 'completed', advancedFreshness: true, executed: true })
-    expect(h.resyncImportedLeague).toHaveBeenCalledTimes(1) // route triggers no second provider fetch
+describe('POST /api/leagues/import/resync — Sleeper enqueues (202), no inline fetch', () => {
+  it('queued → 202 with a sanitized job status, and NO inline durable refresh', async () => {
+    h.enqueue.mockResolvedValue({ ok: true, status: 'queued', jobId: 'job1', leagueId: 'L1', lastSuccessfullyUpdated: null })
+    const res = await POST(postReq({ provider: 'sleeper', sourceId: '131353' }))
+    expect(res.status).toBe(202)
+    const json = await res.json()
+    expect(json).toMatchObject({ ok: true, status: 'queued', jobId: 'job1', leagueId: 'L1' })
+    expect(h.resyncImportedLeague).not.toHaveBeenCalled()
+    expect(JSON.stringify(json)).not.toMatch(/token|password|normalized|playerData|fos-sync/i)
   })
 
-  it('failed Sleeper refresh → 503 ok:false, data preserved, refresh included', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: { kind: 'sync', status: 'failed', advancedFreshness: false, executed: true } })
-    const { status, json } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(status).toBe(503)
-    expect(json.ok).toBe(false)
-    expect(json.refresh.status).toBe('failed')
-    expect(String(json.error)).toMatch(/preserved/i)
+  it('quota exceeded → 429', async () => {
+    h.enqueue.mockResolvedValue({ ok: false, httpStatus: 429, error: 'Too many refreshes in progress.' })
+    const res = await POST(postReq({ provider: 'sleeper', sourceId: '131353' }))
+    expect(res.status).toBe(429)
+    expect((await res.json()).ok).toBe(false)
   })
 
-  it('partial Sleeper refresh → 503 ok:false', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: { kind: 'sync', status: 'partial', advancedFreshness: false, executed: true } })
-    const { status, json } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(status).toBe(503)
-    expect(json.ok).toBe(false)
-    expect(json.refresh.status).toBe('partial')
+  it('access failure keeps its 4xx (403)', async () => {
+    h.enqueue.mockResolvedValue({ ok: false, httpStatus: 403, error: 'no access' })
+    const res = await POST(postReq({ provider: 'sleeper', sourceId: '131353' }))
+    expect(res.status).toBe(403)
   })
 
-  it('locked Sleeper refresh → 409 ok:false with a retry message', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: { kind: 'sync', status: 'locked', advancedFreshness: false, executed: false } })
-    const { status, json } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(status).toBe(409)
-    expect(json.ok).toBe(false)
-    expect(String(json.error)).toMatch(/already being refreshed/i)
-  })
-
-  it('completed-but-not-advanced / unknown durable outcome → fails closed 503 ok:false', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: { kind: 'sync', status: 'completed', advancedFreshness: false, executed: true } })
-    const { status, json } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(status).toBe(503)
-    expect(json.ok).toBe(false)
-  })
-
-  it('pre-run authorization failure keeps its 4xx (403 ok:false)', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: { kind: 'auth', httpStatus: 403, error: 'You do not have access to this league' } })
-    const { status, json } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(status).toBe(403)
-    expect(json.ok).toBe(false)
-  })
-
-  it('non-Sleeper provider (refresh null) → 200 ok:true, behavior unchanged', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: null })
-    const { status, json } = await call({ provider: 'espn', sourceId: '999' })
-    expect(status).toBe(200)
-    expect(json.ok).toBe(true)
-  })
-
-  it('resync utility failure → 400 ok:false', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: false, error: 'League not found. Please check your League ID.' })
-    const { status, json } = await call({ provider: 'sleeper', sourceId: 'bad' })
-    expect(status).toBe(400)
-    expect(json.ok).toBe(false)
+  it('non-Sleeper provider keeps the inline path (200), never enqueues', async () => {
+    h.resyncImportedLeague.mockResolvedValue({ ok: true, leagueId: 'L2', runId: 'R', warningCount: 0, reviewRequired: false, refresh: null })
+    const res = await POST(postReq({ provider: 'espn', sourceId: '999' }))
+    expect(res.status).toBe(200)
+    expect(h.enqueue).not.toHaveBeenCalled()
   })
 
   it('missing provider/sourceId → 400', async () => {
-    const { status } = await call({ provider: '', sourceId: '' })
-    expect(status).toBe(400)
-    expect(h.resyncImportedLeague).not.toHaveBeenCalled()
+    const res = await POST(postReq({ provider: '', sourceId: '' }))
+    expect(res.status).toBe(400)
+    expect(h.enqueue).not.toHaveBeenCalled()
   })
 
   it('unauthenticated → the auth response (401)', async () => {
     const { NextResponse } = await import('next/server')
     h.requireVerifiedUser.mockResolvedValue({ ok: false, response: NextResponse.json({ error: 'unauth' }, { status: 401 }) })
-    const { status } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(status).toBe(401)
+    const res = await POST(postReq({ provider: 'sleeper', sourceId: '131353' }))
+    expect(res.status).toBe(401)
+  })
+})
+
+describe('GET /api/leagues/import/resync — DB-backed status phase', () => {
+  beforeEach(() => {
+    h.resolveConn.mockResolvedValue({ ok: true, connection: { runKey: 'sleeper:131353:2026' }, leagueId: 'L1' })
   })
 
-  it('response never contains provider payload / credentials / lock token', async () => {
-    h.resyncImportedLeague.mockResolvedValue({ ok: true, ...BASE, refresh: { kind: 'sync', status: 'completed', advancedFreshness: true, executed: true } })
-    const { json } = await call({ provider: 'sleeper', sourceId: '111' })
-    expect(JSON.stringify(json)).not.toMatch(/token|password|normalized|playerData|source_manager_id|fos-sync/i)
+  it('in-flight job → refreshing', async () => {
+    h.jobFindFirst.mockResolvedValue({ status: 'running', metadata: {} })
+    h.lssFindUnique.mockResolvedValue({ syncStatus: 'pending', lastAttemptedSyncAt: null, lastSuccessfulSyncAt: null })
+    const res = await GET(getReq('provider=sleeper&sourceId=131353'))
+    expect(res.status).toBe(200)
+    expect((await res.json()).phase).toBe('refreshing')
+  })
+
+  it('completed + changed → updated', async () => {
+    const now = new Date()
+    h.jobFindFirst.mockResolvedValue({ status: 'completed', metadata: { changed: true } })
+    h.lssFindUnique.mockResolvedValue({ syncStatus: 'synced', lastAttemptedSyncAt: now, lastSuccessfulSyncAt: now })
+    expect((await (await GET(getReq('provider=sleeper&sourceId=131353'))).json()).phase).toBe('updated')
+  })
+
+  it('completed + unchanged → no_change', async () => {
+    const now = new Date()
+    h.jobFindFirst.mockResolvedValue({ status: 'completed', metadata: { changed: false } })
+    h.lssFindUnique.mockResolvedValue({ syncStatus: 'synced', lastAttemptedSyncAt: now, lastSuccessfulSyncAt: now })
+    expect((await (await GET(getReq('provider=sleeper&sourceId=131353'))).json()).phase).toBe('no_change')
+  })
+
+  it('failed durable run → failed (previous data preserved)', async () => {
+    h.jobFindFirst.mockResolvedValue({ status: 'failed', metadata: {} })
+    h.lssFindUnique.mockResolvedValue({ syncStatus: 'partial', lastAttemptedSyncAt: new Date(), lastSuccessfulSyncAt: new Date(Date.now() - 100_000) })
+    expect((await (await GET(getReq('provider=sleeper&sourceId=131353'))).json()).phase).toBe('failed')
+  })
+
+  it('missing params → 400', async () => {
+    expect((await GET(getReq('provider=sleeper'))).status).toBe(400)
   })
 })

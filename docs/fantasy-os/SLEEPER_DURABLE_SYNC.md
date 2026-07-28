@@ -222,8 +222,133 @@ calls in tests. Persisted writes are **opt-in** and **never touch production**.
 
 ---
 
+## 9. Launch Batch 2 · B6 — DB-first current-state refresh (this PR)
+
+**Incident.** A single production manual resync of a deep-dynasty league stayed on "Syncing…" for 7+
+minutes and produced no durable artifacts. Root cause: `resyncImportedLeague` front-loaded the **full
+initial-import normalization** (`runImportedLeagueNormalizationPipeline`) — which walks the
+`previous_league_id` history chain, fetches every historical week, and downloads the ~5MB NFL player
+map — **before** the distributed lock was acquired, so it exceeded the serverless execution limit
+before the durable collector ever started. Two defects: (a) heavy fetch **outside** the lock, and (b)
+routine refresh doing **initial-import-scale** work.
+
+### 9.1 Initial import vs current-state refresh
+
+| | Initial import (first-ever connection) | Current-state refresh (repeat / scheduled) |
+|---|---|---|
+| Loader | `fetchSleeperLeagueForImport` (**unchanged** — full/historical) | **`fetchSleeperCurrentStateForImport`** (bounded) |
+| History chain (`previous_league_id`) | walked | **never** |
+| Drafts / per-week transactions / all-week matchups | fetched | **never** |
+| Full NFL player map (`/players/nfl`) | fetched | **never** (durable scopes persist player IDs, not names) |
+| Current matchups | all weeks | **bounded** current-week window only (≤3 weeks, in-season; **0** in offseason) |
+| League.id | created | **preserved** — refresh never creates a league |
+
+A repeat import of an already-imported league shows its **saved** data immediately and queues an
+**incremental** current-state refresh; it never re-runs the full historical pipeline. The current-state
+payload is the SAME `SleeperImportPayload` → SAME normalizer → SAME persistence (`applySleeperScopeToLeague`)
+as §5 — with the historical sections empty. `coverage.currentRosters.state` is still `full` from a
+complete rosters fetch, so removal reconciliation (§5) remains correct.
+
+### 9.2 Exact current scopes fetched (bounded request accounting)
+
+`GET /league/{id}` · `/users` · `/rosters` · `/traded_picks` · `/state/nfl` (to gate the window) ·
+`/matchups/{w}` for a bounded recent window. **Excluded:** the history chain, `/drafts`, `/transactions/*`,
+`/players/nfl`. Worst-case ≈ **4 core GETs + 1 state + ≤3 matchup weeks** — a small, bounded burst that
+completes in seconds. Every run still writes one `SyncJobRun` with full accounting.
+
+### 9.3 Lock BEFORE any provider fetch
+
+Both manual and scheduled refresh go through `syncConnectedSleeperLeague`, whose default loader is now
+`fetchCurrentStateNormalizedFromSleeper`. The loader is invoked **lazily inside `runSync`**, which
+acquires the `AutomationLock` **first** — so no provider fetch happens outside the lock, and a second
+overlapping request is rejected as `locked` before it starts a second fetch. Manual and scheduled sync
+share one loader, one normalized shape, one lock, one checkpoint/persistence path, one telemetry sink.
+
+### 9.4 DB-first background job (no synchronous request work; survives serverless termination)
+
+Manual resync no longer runs the refresh on the browser request:
+
+```
+POST /api/leagues/import/resync  (Sleeper)
+  └─ enqueueSleeperRefreshJob → AutomationJob (jobType 'sleeper.currentStateRefresh',
+       idempotencyKey 'sleeper-refresh:<runKey>:<bucket>')  ── NO provider fetch ──▶ HTTP 202
+        { status: queued | already_running | up_to_date, jobId, leagueId, lastSuccessfullyUpdated }
+
+Vercel cron (*/1) ─▶ /api/cron/sleeper-refresh-drain  (requireCronAuth)
+  └─ drain pending jobs → runAutomationJob(handler)
+       handler: syncConnectedSleeperLeague(force)  ── lock → current-state loader → persist
+                → LeagueSyncState + SyncJobRun → terminal
+       outcome mapping: completed → done · locked/partial/failed → RetryableAutomationError (retry)
+                        bad payload → FatalAutomationError
+
+GET /api/leagues/import/resync?provider=sleeper&sourceId=…   (UI polls)
+  └─ reads latest AutomationJob + LeagueSyncState → phase { refreshing | updated | no_change | failed | idle }
+```
+
+**Reused infrastructure — no second job system, no Redis, no schema migration:** the existing
+`AutomationJob` + `runAutomationJob` engine (idempotency-keyed, lifecycle, retry, "safe on Vercel
+serverless"), `AutomationLock`, `LeagueSyncState` / `SyncJobRun` (from §3), the bounded current-state
+loader, and the proven every-minute `legacy-import-drain` cron pattern. The drain is keep-listed in
+`scripts/vercel-next-build.cjs` (`app/api/cron` is excluded wholesale).
+
+**Durability.** The job is a durable DB row: it survives browser navigation, refresh, client disconnect,
+and serverless termination — a crashed run leaves it pending/running and the next drain pass re-runs it,
+guarded by the per-league lock. Nothing is fire-and-forget.
+
+**Quota.** A per-user in-flight cap + a per-league cooldown keyed on the **last successful** sync
+(`lastSuccessfulSyncAt`) — so a failed job never consumes the allowance.
+
+### 9.5 UI (stale-while-refresh, honest terminals)
+
+`ImportedLeaguesPanel` enqueues, then polls the DB-backed status. The **previous DB snapshot stays
+visible** throughout; navigation is safe (the job is durable); double-clicks dedupe to one request
+(disabled button + idempotency key). It exits "Refreshing" on **every** terminal outcome with honest
+labels — **Updated** / **Checked — no new information** / **Refresh failed — your previous data is still
+available** / **Too many refreshes in progress** / (past the poll deadline) **Refreshing in the
+background** — and never reports "Queued" for a failure or timeout. Last-checked and last-successfully-
+updated are shown separately.
+
+### 9.6 Downstream intelligence & event coverage (unchanged deferrals)
+
+DB-first by design: the worker refreshes the canonical read model + freshness; the dashboard, League
+pages, Decision OS, Chimmy, Rankings and valuation read **saved DB state**, so they reflect the refresh
+on their next read — this PR triggers **no** new downstream recalculation (Import-to-Intelligence stays
+out of scope). Event coverage (transactions / waivers / trade-event history / live-game refreshes) remains
+deferred exactly as in §5.
+
+### 9.7 Activation boundary
+
+The new drain cron processes **ONLY** user-enqueued manual-refresh jobs. The automatic all-leagues
+portfolio sweep (`/api/cron/fantasy-os-exec-sync`) remains **disabled** behind `FANTASY_OS_EXEC_SYNC_LIVE`
+— this PR does not enable it. Read-only against Sleeper; no schema, env, or production-data change.
+
+---
+
+## 10. Tests (this PR)
+
+- **Bounded current-state fetch** (`sleeper-current-state-fetch.test.ts`) — a deep-dynasty league is
+  refreshed with **no** history-chain / drafts / transactions / player-map calls (bounded count); the
+  in-season matchup window is bounded; and the **initial import fetch is unchanged** (still full/historical).
+- **Enqueue** (`sleeper-refresh-enqueue.test.ts`) — returns fast with **no** provider fetch; creates one
+  pending `AutomationJob`; duplicate clicks reuse one job; per-user quota → 429; cooldown → up-to-date.
+- **Worker + runner** (`sleeper-refresh-worker.test.ts`) — lock acquired **before** any fetch; a failed
+  run never advances freshness; a locked executor performs zero fetches; honest outcome mapping
+  (completed / locked→retry / partial→retry / bad-payload→fatal); scheduled + manual call the SAME
+  collector entry.
+- **Route** (`sleeper-sync-resync-route.test.ts`) — Sleeper POST → **202** with no inline refresh;
+  quota → 429; non-Sleeper keeps the inline path; GET status phase mapping.
+- **UI** (`imported-leagues-panel.test.tsx`) — enqueue → poll → exits "Refreshing" on success / durable
+  failure / 429 / network error / background-deadline; snapshot stays visible; double-click → one request.
+- **Route budget** (`route-budget.test.ts`) — the new drain cron is keep-listed and scheduled; GREEN.
+
+Idempotency, League.id preservation, and failure-preservation continue to be covered by the #345
+collector + isolated-DB integration suites (§8).
+
+---
+
 ## Scope confirmation
 
 No external-platform writes · no AF-native league operation · no `RedraftSeason` added for imported
-analysis · no admin work · no Stripe work · no other provider activated · PR #339 untouched · read-only
-against Sleeper.
+analysis · no admin work · no Stripe work · no other provider activated · **automatic sync
+(`FANTASY_OS_EXEC_SYNC_LIVE`) not enabled** · **no schema/env/production-data change** · **no
+Import-to-Intelligence recalculation** · PR #339 untouched · read-only against Sleeper.

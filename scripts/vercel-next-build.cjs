@@ -197,6 +197,11 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'cron', 'live-score-tick', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'sync-player-images', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'legacy-import-drain', 'route.ts').replace(/\\/g, '/'),
+  // Manual Sleeper current-state refresh drain worker (Launch Batch 2 · B6). Scheduled every minute in
+  // vercel.json; `app/api/cron` is excluded wholesale above, so it MUST be kept or Vercel invokes it on
+  // schedule and 404s every time. Processes ONLY user-enqueued refresh AutomationJobs — it is NOT the
+  // automatic all-leagues sweep (`fantasy-os-exec-sync`, gated behind FANTASY_OS_EXEC_SYNC_LIVE).
+  path.join('app', 'api', 'cron', 'sleeper-refresh-drain', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-season-stats', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-player-game-stats', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-nfl-team-defense', 'route.ts').replace(/\\/g, '/'),
