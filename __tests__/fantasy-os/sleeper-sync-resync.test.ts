@@ -45,13 +45,20 @@ describe('resyncImportedLeague routes Sleeper through the durable collector', ()
     await expect(arg.fetchNormalized('111')).resolves.toBe(NORMALIZED)
     expect(h.pipeline).toHaveBeenCalledTimes(1)
 
-    if (res.ok) expect(res.refresh).toMatchObject({ status: 'completed', advancedFreshness: true, executed: true })
+    if (res.ok) expect(res.refresh).toMatchObject({ kind: 'sync', status: 'completed', advancedFreshness: true, executed: true })
   })
 
-  it('surfaces a failed durable refresh honestly (never silently swallowed)', async () => {
-    h.manualRefresh.mockResolvedValue({ ok: false, status: 400, error: 'boom' })
+  it('surfaces a durable-run status honestly (kind:sync, never swallowed)', async () => {
+    h.manualRefresh.mockResolvedValue({ ok: true, leagueId: 'L1', sync: { status: 'failed', advancedFreshness: false, executed: true } })
     const res = await resyncImportedLeague({ userId: 'U1', provider: 'sleeper', sourceId: '111' })
     expect(res.ok).toBe(true)
-    if (res.ok) expect(res.refresh).toEqual({ error: 'boom' })
+    if (res.ok) expect(res.refresh).toMatchObject({ kind: 'sync', status: 'failed', advancedFreshness: false })
+  })
+
+  it('surfaces a pre-run authorization failure as kind:auth with its HTTP status', async () => {
+    h.manualRefresh.mockResolvedValue({ ok: false, status: 403, error: 'no access' })
+    const res = await resyncImportedLeague({ userId: 'U1', provider: 'sleeper', sourceId: '111' })
+    expect(res.ok).toBe(true)
+    if (res.ok) expect(res.refresh).toMatchObject({ kind: 'auth', httpStatus: 403, error: 'no access' })
   })
 })

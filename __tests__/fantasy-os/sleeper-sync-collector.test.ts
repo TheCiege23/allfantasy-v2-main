@@ -245,14 +245,38 @@ describe('runner integration via collector fetcher', () => {
   })
 })
 
-// ── #F1 — fail-closed isolated-DB guard ─────────────────────────────────────────
-describe('fail-closed isolated-DB guard', () => {
-  const APPROVED = 'postgresql://u:pw@ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech:5432/neondb'
+// ── #F1 / #G2 — fail-closed EXACT-host isolated-DB guard ─────────────────────────
+describe('fail-closed isolated-DB guard (exact host allowlist)', () => {
+  const POOLER = 'postgresql://u:pw@ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech/neondb'
+  const DIRECT = 'postgresql://u:pw@ep-muddy-leaf-adigvvph.c-2.us-east-1.aws.neon.tech/neondb'
+  const PROD = 'postgresql://u:pw@ep-curly-block-ad0dlt9o-pooler.c-2.us-east-1.aws.neon.tech/neondb'
 
-  it('accepts ONLY the approved isolated identity WITH explicit opt-in', () => {
-    const id = assertIsolatedTestDatabase(APPROVED, 'true')
-    expect(id.host).toContain('ep-muddy-leaf')
-    expect(id.database).toBe('neondb')
+  it('accepts EXACTLY the approved pooler + direct hostnames WITH opt-in', () => {
+    expect(assertIsolatedTestDatabase(POOLER, 'true').host).toBe('ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech')
+    expect(assertIsolatedTestDatabase(DIRECT, 'true').host).toBe('ep-muddy-leaf-adigvvph.c-2.us-east-1.aws.neon.tech')
+  })
+  it('refuses the exact approved host WITHOUT the opt-in flag', () => {
+    expect(() => assertIsolatedTestDatabase(POOLER, undefined)).toThrow(/opt in/i)
+    expect(() => assertIsolatedTestDatabase(POOLER, 'false')).toThrow(/opt in/i)
+  })
+  it('refuses a host that merely CONTAINS the approved name (suffix + prefix attacks)', () => {
+    expect(() => assertIsolatedTestDatabase('postgresql://u:pw@ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech.attacker.com/neondb', 'true')).toThrow(/EXACT approved/i)
+    expect(() => assertIsolatedTestDatabase('postgresql://u:pw@evil-ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech/neondb', 'true')).toThrow(/EXACT approved/i)
+  })
+  it('refuses ep-muddy-leaf.example.com', () => {
+    expect(() => assertIsolatedTestDatabase('postgresql://u:pw@ep-muddy-leaf.example.com/neondb', 'true')).toThrow(/EXACT approved/i)
+  })
+  it('refuses a valid-looking but DIFFERENT Neon endpoint', () => {
+    expect(() => assertIsolatedTestDatabase('postgresql://u:pw@ep-shiny-water-abcd1234-pooler.c-2.us-east-1.aws.neon.tech/neondb', 'true')).toThrow(/EXACT approved/i)
+  })
+  it('refuses a non-postgres scheme even on the approved host', () => {
+    expect(() => assertIsolatedTestDatabase('mysql://u:pw@ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech/neondb', 'true')).toThrow(/scheme/i)
+  })
+  it('refuses the exact approved host with the WRONG database name', () => {
+    expect(() => assertIsolatedTestDatabase(POOLER.replace('/neondb', '/otherdb'), 'true')).toThrow(/not the approved name/i)
+  })
+  it('refuses the known PRODUCTION endpoint (exact)', () => {
+    expect(() => assertIsolatedTestDatabase(PROD, 'true')).toThrow(/production/i)
   })
   it('refuses a missing URL', () => {
     expect(() => assertIsolatedTestDatabase(undefined, 'true')).toThrow(/missing/i)
@@ -261,29 +285,17 @@ describe('fail-closed isolated-DB guard', () => {
   it('refuses a malformed URL', () => {
     expect(() => assertIsolatedTestDatabase('::: not a url', 'true')).toThrow(/malformed|unparseable/i)
   })
-  it('refuses the known PRODUCTION host', () => {
-    const prod = 'postgresql://u:pw@ep-curly-block-ad0dlt9o-pooler.c-2.us-east-1.aws.neon.tech:5432/neondb'
-    expect(() => assertIsolatedTestDatabase(prod, 'true')).toThrow(/production/i)
-  })
-  it('refuses an arbitrary unknown host (never silently skips)', () => {
-    expect(() => assertIsolatedTestDatabase('postgresql://u:pw@db.example.com:5432/neondb', 'true')).toThrow(/not the approved/i)
-  })
-  it('refuses the approved host with the wrong database name', () => {
-    expect(() => assertIsolatedTestDatabase(APPROVED.replace('/neondb', '/otherdb'), 'true')).toThrow(/not the approved name/i)
-  })
-  it('refuses without the explicit opt-in flag', () => {
-    expect(() => assertIsolatedTestDatabase(APPROVED, undefined)).toThrow(/opt in/i)
-    expect(() => assertIsolatedTestDatabase(APPROVED, 'false')).toThrow(/opt in/i)
-  })
-  it('never leaks credentials in a refusal message', () => {
-    // Synthetic, obviously-fake credentials — NOT a real secret (fake user "test_user", fake password
-    // "dummy", and a host that is not the real production endpoint). Proves the message is host-only.
-    const withFakeCreds = 'postgresql://test_user:dummy@ep-curly-block-x-pooler.neon.tech:5432/neondb'
+  it('never leaks credentials or query params in a refusal message', () => {
+    // Synthetic, obviously-fake credentials (fake user "test_user", fake password "dummy"). Uses the
+    // real prod hostname (a hostname is not a secret) to hit the production branch, plus query params.
+    const withFakeCreds = 'postgresql://test_user:dummy@ep-curly-block-ad0dlt9o-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&token=xyz'
     let msg = ''
     try { assertIsolatedTestDatabase(withFakeCreds, 'true') } catch (e) { msg = String((e as Error).message) }
     expect(msg).toMatch(/production/i)
     expect(msg).not.toContain('dummy') // password stripped
     expect(msg).not.toContain('test_user') // username stripped
+    expect(msg).not.toContain('token=xyz') // query stripped
+    expect(msg).not.toContain('sslmode') // query stripped
   })
 })
 

@@ -9,6 +9,17 @@ import { buildCanonicalImportBundle } from '@/lib/league-import/canonicalImportN
 import { persistImportWithCanonicalAudit } from '@/lib/league-import/importPersistenceService'
 import type { ImportProvider } from '@/lib/league-import/types'
 
+/**
+ * Honest, sanitized outcome of the durable Sleeper read-model refresh — no provider payload,
+ * credentials, or lock token. `kind:'sync'` carries the durable run outcome; `kind:'auth'` carries a
+ * pre-run authorization / not-found / invalid-connection failure with its HTTP status; null = a
+ * non-Sleeper provider (no durable refresh step).
+ */
+export type SleeperResyncRefresh =
+  | { kind: 'sync'; status: string; advancedFreshness: boolean; executed: boolean }
+  | { kind: 'auth'; httpStatus: 400 | 403 | 404; error: string }
+  | null
+
 export async function resyncImportedLeague(input: {
   userId: string
   provider: ImportProvider
@@ -20,8 +31,8 @@ export async function resyncImportedLeague(input: {
       runId: string
       warningCount: number
       reviewRequired: boolean
-      /** Honest outcome of the durable read-model refresh (Sleeper only); null for other providers. */
-      refresh: { status: string; advancedFreshness: boolean; executed: boolean } | { error: string } | null
+      /** Honest, sanitized outcome of the durable read-model refresh (Sleeper only); null for others. */
+      refresh: SleeperResyncRefresh
     }
   | { ok: false; error: string }
 > {
@@ -51,7 +62,7 @@ export async function resyncImportedLeague(input: {
     // failure accounting, and certified freshness (League.lastSyncedAt advances only on completion) — over
     // the payload we already fetched (NO second Sleeper call). It keeps the same League.id, refreshes every
     // mirror, and preserves claims. The outcome is surfaced honestly, never a silently-swallowed failure.
-    let refresh: { status: string; advancedFreshness: boolean; executed: boolean } | { error: string } | null = null
+    let refresh: SleeperResyncRefresh = null
     if (input.provider === 'sleeper' && persisted.league.id) {
       const { manualRefreshConnectedSleeperLeague } = await import('@/lib/fantasy-os/sync/collector')
       const out = await manualRefreshConnectedSleeperLeague({
@@ -61,11 +72,12 @@ export async function resyncImportedLeague(input: {
       })
       refresh = out.ok
         ? {
+            kind: 'sync',
             status: out.sync.status ?? out.sync.reason ?? 'unknown',
             advancedFreshness: Boolean(out.sync.advancedFreshness),
             executed: Boolean(out.sync.executed),
           }
-        : { error: out.error }
+        : { kind: 'auth', httpStatus: out.status, error: out.error }
     }
 
     return {

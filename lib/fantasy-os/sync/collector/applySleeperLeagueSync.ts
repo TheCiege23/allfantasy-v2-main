@@ -12,8 +12,10 @@
  *     (`coverage.currentRosters.state === 'full'` and a non-empty roster set),
  *   - empty/failed-response protection so a provider hiccup NEVER erases valid stored data.
  *
- * Read-only against Sleeper. Preserves `League.id`, `LeagueTeam.claimedByUserId`, raw Sleeper manager
- * ids (`Roster.platformUserId`/`LeagueTeam.platformUserId`), and canonical `lineup_sections`.
+ * Read-only against Sleeper. Preserves `League.id`, `LeagueTeam.claimedByUserId`, and canonical
+ * `lineup_sections`. Identity contract: `LeagueTeam.platformUserId` retains the RAW Sleeper manager id,
+ * while `Roster.platformUserId` may hold the RESOLVED AllFantasy AppUser id (when the manager is linked
+ * to an AF account) — the raw Sleeper manager id always remains in `Roster.playerData.source_manager_id`.
  */
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
