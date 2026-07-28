@@ -18,6 +18,7 @@ import {
   normalizeChimmyAssistantMode,
 } from "@/lib/chimmy-chat/assistant-mode"
 import { confirmTokenSpend } from "@/lib/tokens/client-confirm"
+import { isSupportedChimmySchemaVersion, normalizeMissingInformation } from "@/lib/chimmy-chat/responseEnvelope"
 import { prepareImageForChimmyUpload } from "@/lib/chimmy-chat/prepareImageForChimmyUpload"
 
 type SendChimmyMessageInput = {
@@ -64,6 +65,12 @@ function fileToDataUrl(file: File): Promise<string> {
 function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
   if (!rawMeta || typeof rawMeta !== "object" || Array.isArray(rawMeta)) return undefined
   const meta = rawMeta as Record<string, unknown>
+  // Envelope version gate: a meta that declares an UNSUPPORTED schemaVersion is not renderable here — drop
+  // it so the caller falls back to text-only. Absent version = legacy meta (render best-effort). The
+  // version (like every meta field) is server-authored; the client only uses it to decide renderability.
+  if (meta.schemaVersion !== undefined && !isSupportedChimmySchemaVersion(meta.schemaVersion)) {
+    return undefined
+  }
   const responseStructureRaw =
     meta.responseStructure && typeof meta.responseStructure === "object" && !Array.isArray(meta.responseStructure)
       ? (meta.responseStructure as Record<string, unknown>)
@@ -148,6 +155,10 @@ function toMeta(rawMeta: unknown): ChimmyMessageMeta | undefined {
       : undefined
 
   return {
+    schemaVersion: typeof meta.schemaVersion === "string" ? meta.schemaVersion : undefined,
+    intent: typeof meta.intent === "string" ? meta.intent : undefined,
+    missingInformation: normalizeMissingInformation(meta.missingInformation),
+    fallbackState: typeof meta.fallbackState === "string" ? meta.fallbackState : undefined,
     mode: modeRaw ? normalizeChimmyAssistantMode(modeRaw) : undefined,
     answerContract,
     confidencePct: typeof meta.confidencePct === "number" ? meta.confidencePct : undefined,

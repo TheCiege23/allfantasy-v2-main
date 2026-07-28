@@ -9,6 +9,8 @@ import { isNoChargeChimmyIntent } from '@/lib/ai/chimmyIntentRouter';
 import { confirmTokenSpend } from '@/lib/tokens/client-confirm';
 import { sendChimmyMessage } from '@/lib/chimmy-chat/ChimmyChatService';
 import { isRenderableChimmyContentHref } from '@/lib/chimmy-chat/safeChimmyLinks';
+import { ChimmyStructuredContent } from '@/components/chimmy/ChimmyStructuredContent';
+import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types';
 import {
   CHIMMY_DEFAULT_UPGRADE_PATH,
   CHIMMY_GENERIC_ERROR_MESSAGE,
@@ -40,6 +42,12 @@ type ChatMessage = {
   content: string;
   image?: string | null;
   upgradePath?: string | null;
+  /**
+   * Server-authored structured response envelope (validated client-side via `toMeta`/schemaVersion). Only
+   * set on a FINALIZED assistant message — streaming placeholders carry none, so metadata never attaches
+   * before final validation, and text-only/legacy messages simply leave it undefined.
+   */
+  meta?: ChimmyMessageMeta | null;
   /** Unix ms — for timestamps & threaded grouping */
   createdAt: number;
 };
@@ -524,6 +532,8 @@ export default function ChimmyChat({
         role: 'assistant',
         content: reply,
         upgradePath: result.upgradeRequired ? result.upgradePath ?? CHIMMY_DEFAULT_UPGRADE_PATH : null,
+        // Server-validated meta (already schema-checked in toMeta); only on the finalized message.
+        meta: result.meta ?? null,
         createdAt: assistantCreatedAt,
       };
 
@@ -743,7 +753,11 @@ export default function ChimmyChat({
                     widePanel ? 'w-full max-w-full' : 'max-w-[85%]'
                   } ${embedded ? 'p-3 text-[13px]' : 'p-5'}`}
                 >
-                  {renderContentWithLinks(msg.content)}
+                  {msg.meta ? (
+                    <ChimmyStructuredContent content={msg.content} meta={msg.meta} />
+                  ) : (
+                    renderContentWithLinks(msg.content)
+                  )}
                   <div className="mt-3 flex items-center gap-2 border-t border-white/10 pt-3">
                     <button
                       type="button"

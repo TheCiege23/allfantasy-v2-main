@@ -87,6 +87,13 @@ export type ChimmyResponseStructure = {
 }
 
 export type ChimmyMessageMeta = {
+  /**
+   * Structured-response envelope version. Stamped SERVER-SIDE (never by the model). Clients validate it and
+   * fail safe to text-only on an unsupported value. Absent = legacy meta (render best-effort).
+   */
+  schemaVersion?: string
+  /** Normalized intent when already classified server-side. Never authoritative from the LLM. */
+  intent?: string
   mode?: ChimmyAssistantMode
   answerContract?: ChimmyAnswerContract
   confidencePct?: number
@@ -109,6 +116,13 @@ export type ChimmyMessageMeta = {
   variant?: "premium_gate" | "error"
   ctaLabel?: string
   ctaHref?: string
+  /**
+   * Deterministic "what's missing to fully answer" list (server-supplied). Distinct from a verified empty
+   * result — this is honest disclosure of omitted evidence, never fabricated to fill the contract.
+   */
+  missingInformation?: string[]
+  /** Server fallback state when the answer degraded (e.g. "text_only", "provider_outage", "premium_gate"). */
+  fallbackState?: string
 }
 
 export type ChimmyThreadMessage = {

@@ -70,6 +70,7 @@ import {
 } from '@/lib/chimmy-chat/assistant-mode'
 import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
 import { buildChimmyAnswerContract } from '@/lib/chimmy-chat/response-contract'
+import { CHIMMY_SCHEMA_VERSION } from '@/lib/chimmy-chat/responseEnvelope'
 import { persistChimmyAIAnalyticsEvent } from '@/lib/chimmy-chat/analytics-events'
 import { checkChimmyHallucination } from '@/lib/chimmy-chat/hallucination-guard'
 import { tryDeterministicAnswer, DETERMINISTIC_SOURCE } from '@/lib/ai/deterministic'
@@ -1091,6 +1092,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           grok: 'skipped',
         },
         recommendedTool: 'none',
+        schemaVersion: CHIMMY_SCHEMA_VERSION,
         dataSources: [],
         responseStructure: {
           shortAnswer: 'I can help with fantasy sports questions only.',
@@ -1117,6 +1119,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
           deepseek: 'skipped',
           grok: 'skipped',
         },
+        schemaVersion: CHIMMY_SCHEMA_VERSION,
         dataSources: [DETERMINISTIC_SOURCE],
         responseStructure: {
           shortAnswer: deterministicAnswer,
@@ -1148,7 +1151,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
             deepseek: 'skipped',
             grok: 'skipped',
           },
-          dataSources: ['league_sports_grounding_packet'],
+          schemaVersion: CHIMMY_SCHEMA_VERSION,
+        dataSources: ['league_sports_grounding_packet'],
           grounding: {
             sport: packet.sport,
             season: packet.season,
@@ -2062,6 +2066,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const chimmyFeatureFlags = getChimmyFeatureFlags()
 
     const meta = {
+      schemaVersion: CHIMMY_SCHEMA_VERSION,
       assistant: 'Chimmy',
       conversationId,
       mode: selectedAssistantMode,

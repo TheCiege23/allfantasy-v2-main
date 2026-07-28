@@ -27,6 +27,7 @@ import {
   resolveChimmyUpgradePath,
 } from '@/lib/chimmy-chat/response-copy'
 import { buildChimmyResponseStructure } from '@/lib/chimmy-chat/presentation'
+import { stampChimmyMeta } from '@/lib/chimmy-chat/responseEnvelope'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
 import { checkDailyCap, incrementDailyCap } from '@/lib/ai/dailyCaps'
@@ -215,10 +216,11 @@ function buildAnthropicSuccessPayload(
     response: body.result,
     result: body.result,
     sessionId,
-    meta: {
+    meta: stampChimmyMeta({
+      intent: typeof body.intent === 'string' ? body.intent : undefined,
       responseStructure: buildChimmyResponseStructure(body.result),
       recommendedTool,
-    },
+    }),
     upgradeRequired,
     upgradePath: upgradeRequired
       ? resolveChimmyUpgradePath(body.upgradePath ?? CHIMMY_DEFAULT_UPGRADE_PATH)

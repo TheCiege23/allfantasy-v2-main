@@ -3,7 +3,6 @@
 import React from 'react'
 import { Volume2, Square, Loader2, ThumbsUp, ThumbsDown } from 'lucide-react'
 import type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
-import { SuggestedActionRenderer } from '@/lib/chimmy-chat/SuggestedActionRenderer'
 import { isRenderableChimmyContentHref } from '@/lib/chimmy-chat/safeChimmyLinks'
 import {
   buildChimmyCollapsedSummary,
@@ -11,8 +10,7 @@ import {
 } from '@/lib/chimmy-chat/presentation'
 import { buildSmartFollowUpChips, type ChimmyFollowUpChip } from '@/lib/chimmy-chat/smart-followups'
 import ChimmyResponseStructure from './ChimmyResponseStructure'
-import { ChimmyOrchestrationPanel } from './ChimmyOrchestrationPanel'
-import ChimmyTrustPanel from './ChimmyTrustPanel'
+import { ChimmyResponseMeta } from './ChimmyResponseMeta'
 
 export type { ChimmyMessageMeta } from '@/lib/chimmy-chat/types'
 
@@ -206,19 +204,8 @@ export default function ChimmyMessageBubble({
           </div>
         )}
 
-        {!isUser && meta && showTrustPanel && (
-          <ChimmyTrustPanel
-            confidencePct={meta.confidencePct}
-            confidenceBlock={meta.answerContract?.confidence}
-            dataSources={meta.dataSources}
-            syncFreshness={meta.syncFreshness}
-            sourceLinks={meta.sourceLinks}
-          />
-        )}
-        {!isUser && <SuggestedActionRenderer content={content} />}
-
-        {!isUser && meta?.orchestration && (
-          <ChimmyOrchestrationPanel orchestration={meta.orchestration} />
+        {!isUser && (
+          <ChimmyResponseMeta content={content} meta={meta} mode="full" showTrustPanel={showTrustPanel} />
         )}
 
         {!isUser && isLastAssistantMessage && onFeedbackSubmit && messageId && (
