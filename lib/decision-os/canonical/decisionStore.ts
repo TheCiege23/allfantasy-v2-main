@@ -18,7 +18,7 @@
  */
 import type { CanonicalDecision, CanonicalDecisionRevision } from './contract'
 import { canonicalShadowEnabled } from './shadowFlag'
-import { computeRevisionHash, toDecisionRevision } from './identity'
+import { computeRevisionContentHash, isNewerGeneration, toDecisionRevision } from './identity'
 import { validateCanonicalDecision } from './validate'
 
 /** Persistence mode. Phase 3A only accepts 'shadow'; 'live' is reserved for a later, separately-gated phase. */
@@ -26,14 +26,28 @@ export type DecisionPersistMode = 'shadow' | 'live'
 
 export type SupersedeLink = { oldDecisionId: string; byDecisionId: string }
 
-export type PersistBatchCounts = { created: number; updated: number; superseded: number; revised: number }
+export type PersistBatchCounts = {
+  /** New current-state rows. */
+  created: number
+  /** Current-state rows advanced to a strictly NEWER generation (see `isNewerGeneration`). */
+  updated: number
+  /** Writes whose generation was NOT newer than current state — current state left unchanged (stale/retry). */
+  staleSkipped: number
+  /** Prior decisions marked superseded. */
+  superseded: number
+  /** New immutable revision occurrences appended (one per (decisionId, runId)). */
+  revised: number
+  /** Same-run writes whose content differed from the stored occurrence — first occurrence preserved, no overwrite. */
+  revisionConflicts: number
+}
 
-/** Injected persistence port. The Prisma impl runs `persistBatch` in ONE transaction (atomic) using a race-safe
- *  native upsert keyed on the unique `decisionId`, so retries + duplicates + concurrent writers converge
- *  (idempotent) instead of inserting twice — and appends an immutable revision per run/content for audit. */
+/** Injected persistence port. The Prisma impl runs `persistBatch` in ONE transaction (atomic) and is safe under
+ *  concurrent callers: current state is written under an authoritative ordering rule (an older run can never
+ *  regress a newer current decision) and an immutable revision is appended per (decisionId, runId) for audit. */
 export interface CanonicalDecisionStore {
-  /** Atomically upsert-by-decisionId + append revision + apply supersession. Counts only. No provider/token/
-   *  freshness work. Must be safe under concurrent callers (one logical row per decisionId). */
+  /** Atomically apply ordering-gated current-state writes + append revisions + supersession. Counts only.
+   *  No provider/token/freshness work. Safe under concurrent callers (one logical row per decisionId; one
+   *  immutable revision per (decisionId, runId)). */
   persistBatch(input: {
     decisions: CanonicalDecision[]
     supersede: SupersedeLink[]
@@ -41,7 +55,7 @@ export interface CanonicalDecisionStore {
   }): Promise<PersistBatchCounts>
   /** Read-back for verification/tests only — NOT a UI/consumer read path. */
   get(decisionId: string): Promise<CanonicalDecision | null>
-  /** Immutable revision history for a decision (newest-relevant order), for audit/verification. */
+  /** Immutable revision history for a decision in deterministic order, for audit/verification. */
   getRevisions(decisionId: string): Promise<CanonicalDecisionRevision[]>
 }
 
@@ -52,9 +66,13 @@ export type ShadowPersistResult = {
   persisted: number
   created: number
   updated: number
+  /** Writes not applied to current state because their generation was not newer (stale/retry). */
+  staleSkipped: number
   superseded: number
   /** New immutable revision rows appended (audit history). */
   revised: number
+  /** Same-run writes with content differing from the stored occurrence (first preserved). */
+  revisionConflicts: number
   rejected: Array<{ decisionId?: string; errors: string[] }>
   skippedReason?: 'shadow_disabled' | 'not_shadow_mode'
 }
@@ -66,8 +84,10 @@ const INERT = (mode: DecisionPersistMode, attempted: number, reason: ShadowPersi
   persisted: 0,
   created: 0,
   updated: 0,
+  staleSkipped: 0,
   superseded: 0,
   revised: 0,
+  revisionConflicts: 0,
   rejected: [],
   skippedReason: reason,
 })
@@ -103,13 +123,19 @@ export async function shadowPersistDecisions(args: {
       rejected.push({ decisionId: (candidate as { decisionId?: string })?.decisionId, errors: res.errors })
       continue
     }
+    // Occurrence identity is (decisionId, runId): shadow persistence requires a run to record an immutable
+    // per-run revision. Reject a null-runId decision rather than record an unlabeled occurrence.
+    if (res.decision.runId == null) {
+      rejected.push({ decisionId: res.decision.decisionId, errors: ['runId is required for shadow persistence (per-run occurrence identity)'] })
+      continue
+    }
     byId.set(res.decision.decisionId, res.decision) // dedup within batch (last wins)
     if (res.decision.supersedes) supersede.push({ oldDecisionId: res.decision.supersedes, byDecisionId: res.decision.decisionId })
   }
 
   const decisions = [...byId.values()]
   if (decisions.length === 0) {
-    return { mode: 'shadow', enabled: true, attempted, persisted: 0, created: 0, updated: 0, superseded: 0, revised: 0, rejected }
+    return { mode: 'shadow', enabled: true, attempted, persisted: 0, created: 0, updated: 0, staleSkipped: 0, superseded: 0, revised: 0, revisionConflicts: 0, rejected }
   }
 
   const counts = await args.store.persistBatch({ decisions, supersede, now })
@@ -120,37 +146,53 @@ export async function shadowPersistDecisions(args: {
     persisted: counts.created + counts.updated,
     created: counts.created,
     updated: counts.updated,
+    staleSkipped: counts.staleSkipped,
     superseded: counts.superseded,
     revised: counts.revised,
+    revisionConflicts: counts.revisionConflicts,
     rejected,
   }
 }
 
 /**
- * In-memory store for tests. Mirrors the Prisma store's contract: upsert by decisionId (idempotent, retry-safe),
- * atomic batch semantics, append-only revisions (idempotent on decisionId+revisionHash), and supersession. No I/O.
+ * In-memory store for tests. Mirrors the Prisma store's contract exactly: ordering-gated current state (an older
+ * generation never regresses a newer current row), immutable revisions with occurrence identity (decisionId,
+ * runId) + content-hash conflict detection, and supersession. No I/O.
  */
 export class InMemoryCanonicalDecisionStore implements CanonicalDecisionStore {
   readonly rows = new Map<string, CanonicalDecision>()
-  /** decisionId → ordered immutable revisions (append order). */
+  /** decisionId → ordered immutable revisions (append order; at most one per runId). */
   readonly revisions = new Map<string, CanonicalDecisionRevision[]>()
 
   async persistBatch(input: { decisions: CanonicalDecision[]; supersede: SupersedeLink[]; now: Date }): Promise<PersistBatchCounts> {
     let created = 0
     let updated = 0
+    let staleSkipped = 0
     let superseded = 0
     let revised = 0
+    let revisionConflicts = 0
     for (const d of input.decisions) {
-      if (this.rows.has(d.decisionId)) updated += 1
-      else created += 1
-      this.rows.set(d.decisionId, { ...d })
-      // Append-only revision, idempotent on (decisionId, revisionHash).
-      const hash = computeRevisionHash(d)
+      // ── current state: ordering-gated (never regress a newer generation) ──
+      const existingRow = this.rows.get(d.decisionId)
+      if (!existingRow) {
+        this.rows.set(d.decisionId, { ...d })
+        created += 1
+      } else if (isNewerGeneration(d, existingRow)) {
+        this.rows.set(d.decisionId, { ...d })
+        updated += 1
+      } else {
+        staleSkipped += 1 // older/equal generation → current state unchanged
+      }
+      // ── revision: occurrence identity (decisionId, runId); content-hash detects same-run conflicts ──
+      const contentHash = computeRevisionContentHash(d)
       const list = this.revisions.get(d.decisionId) ?? []
-      if (!list.some((r) => r.revisionHash === hash)) {
+      const existingRev = list.find((r) => r.runId === d.runId)
+      if (!existingRev) {
         list.push({ ...toDecisionRevision(d), createdAt: input.now.toISOString() })
         this.revisions.set(d.decisionId, list)
         revised += 1
+      } else if (existingRev.contentHash !== contentHash) {
+        revisionConflicts += 1 // same run, different content → preserve first occurrence, never overwrite
       }
     }
     for (const link of input.supersede) {
@@ -160,7 +202,7 @@ export class InMemoryCanonicalDecisionStore implements CanonicalDecisionStore {
         superseded += 1
       }
     }
-    return { created, updated, superseded, revised }
+    return { created, updated, staleSkipped, superseded, revised, revisionConflicts }
   }
 
   async get(decisionId: string): Promise<CanonicalDecision | null> {

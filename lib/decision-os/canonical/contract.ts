@@ -210,19 +210,25 @@ export type CanonicalDecisionInput = Omit<
   Partial<Pick<CanonicalDecision, 'evidence' | 'players' | 'status' | 'extensions' | 'subjectKey' | 'sourceExecutionPolicy'>>
 
 /**
- * An immutable point-in-time snapshot of a decision's CONTENT for one run, appended to `canonical_decision_revisions`
- * (Phase 3A). The `canonical_decisions` row holds current state (idempotent upsert-by-decisionId); revisions
- * preserve prior generated content + full run linkage so a re-run never silently overwrites history. Identity of a
- * revision is `(decisionId, revisionHash)` where `revisionHash` covers the run + content, so retrying the same run
- * with the same content is idempotent while a different run (or materially changed content) appends a new row.
+ * An immutable point-in-time snapshot of a decision's CONTENT for ONE run, appended to
+ * `canonical_decision_revisions` (Phase 3A). The `canonical_decisions` row holds current state; revisions preserve
+ * prior generated content + run linkage so a re-run never silently overwrites history.
+ *
+ * OCCURRENCE IDENTITY is `(decisionId, runId)` — a logical decision has AT MOST ONE immutable revision per run
+ * (DB-enforced unique). Retrying the same run is idempotent; a different run appends a new revision. `runId` is
+ * therefore REQUIRED (shadow persistence rejects a null-runId decision). `contentHash` is a NON-identity integrity
+ * field (order-normalized over content, timestamps excluded) used ONLY to DETECT when the same run produced
+ * materially different content — a conflict handled deterministically (first occurrence preserved), never a second
+ * row and never an overwrite.
  */
 export type CanonicalDecisionRevision = {
   decisionId: string
-  revisionHash: string
-  runId: string | null
+  runId: string
+  contentHash: string
   producer: string
   producerVersion: string
   status: DecisionStatus
+  supersedesDecisionId: string | null
   headline: string
   explanation: string
   recommendedAction: string | null

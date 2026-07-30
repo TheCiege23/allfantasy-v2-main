@@ -1,9 +1,11 @@
 -- Decision OS Phase 3A — canonical decision record + immutable revision history (shadow-only persistence sink).
 -- Purely ADDITIVE: creates TWO new tables (current-state `canonical_decisions` + append-only
 -- `canonical_decision_revisions`) with their indexes + one FK BETWEEN the two new tables. No ALTER/DROP on any
--- pre-existing table. Generated offline via 'prisma migrate diff' (datamodel-to-datamodel, no DB connection).
--- NOT applied to production by any build/deploy step; apply via the documented repo convention (direct SQL +
--- 'migrate resolve --applied') to an isolated/dev DB only. See docs/decision-os/PHASE2_MIGRATION_RUNBOOK.md.
+-- pre-existing table. The revision table's OCCURRENCE IDENTITY is UNIQUE(decision_id, run_id) — at most one
+-- immutable revision per run; `content_hash` is a non-identity integrity field. Generated offline via
+-- 'prisma migrate diff' (datamodel-to-datamodel, no DB connection). NOT applied to production by any build/deploy
+-- step; apply via the documented repo convention (direct SQL + 'migrate resolve --applied') to an isolated/dev DB
+-- only. See docs/decision-os/PHASE2_MIGRATION_RUNBOOK.md.
 
 -- CreateTable
 CREATE TABLE "canonical_decisions" (
@@ -61,11 +63,12 @@ CREATE TABLE "canonical_decisions" (
 CREATE TABLE "canonical_decision_revisions" (
     "id" TEXT NOT NULL,
     "decision_id" VARCHAR(191) NOT NULL,
-    "revision_hash" VARCHAR(64) NOT NULL,
-    "run_id" TEXT,
+    "run_id" VARCHAR(191) NOT NULL,
+    "content_hash" VARCHAR(64) NOT NULL,
     "producer" VARCHAR(64) NOT NULL,
     "producer_version" VARCHAR(32) NOT NULL,
     "status" VARCHAR(16) NOT NULL,
+    "supersedes_decision_id" VARCHAR(191),
     "headline" VARCHAR(300) NOT NULL,
     "explanation" TEXT NOT NULL,
     "recommended_action" TEXT,
@@ -125,7 +128,7 @@ CREATE INDEX "canonical_decision_revisions_decision_id_created_at_idx" ON "canon
 CREATE INDEX "canonical_decision_revisions_run_id_idx" ON "canonical_decision_revisions"("run_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "canonical_decision_revisions_decision_id_revision_hash_key" ON "canonical_decision_revisions"("decision_id", "revision_hash");
+CREATE UNIQUE INDEX "canonical_decision_revisions_decision_id_run_id_key" ON "canonical_decision_revisions"("decision_id", "run_id");
 
 -- AddForeignKey
 ALTER TABLE "canonical_decision_revisions" ADD CONSTRAINT "canonical_decision_revisions_decision_id_fkey" FOREIGN KEY ("decision_id") REFERENCES "canonical_decisions"("decision_id") ON DELETE CASCADE ON UPDATE CASCADE;

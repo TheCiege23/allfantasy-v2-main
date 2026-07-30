@@ -81,30 +81,53 @@ decision that sets `supersedes: <oldDecisionId>` causes the store to mark the pr
 (status-gated, idempotent). `conflictGroupKey` groups mutually-exclusive/duplicate decisions (e.g. the same waiver
 target across leagues) for a future dedup/portfolio layer — it is populated but **not** acted on in Phase 3A.
 
-## Audit history + run linkage (current-state + immutable revisions)
+## Audit history + run linkage (current-state + immutable per-run occurrences)
 
-`canonical_decisions` holds **current state** — one idempotent-upserted row per `decisionId`. Because a re-run
-overwrites that row, current state alone cannot preserve prior generated content or full run linkage, so the store
-ALSO appends an immutable revision to `canonical_decision_revisions` on every persist:
+`canonical_decisions` holds **current state** — one row per `decisionId`. The store ALSO appends an immutable
+revision to `canonical_decision_revisions` on every persist, so a re-run never silently overwrites prior generated
+content or run linkage:
 
-- A revision's identity is `(decisionId, revisionHash)`, where `revisionHash = sha256(runId + all content fields)`.
-- Retrying the SAME run with the SAME content is idempotent — the hash matches, so no duplicate revision is added.
-- A LATER run (or materially changed content) yields a different hash → a new revision row, so the prior run's
-  generated content, confidence, priority, producer version, source snapshot, and status remain recoverable.
+- **OCCURRENCE IDENTITY is `(decisionId, runId)`** — DB-enforced unique. A logical decision has AT MOST ONE
+  immutable revision per run. `runId` is therefore REQUIRED: shadow persistence rejects a null-runId decision
+  (an occurrence needs a run to be labelled by). A later, different run appends a new revision.
+- **`contentHash` is a NON-identity integrity field** — `sha256` over the MATERIAL content (status, text,
+  evidence [order-normalized], scoring, source, freshness, supersession), with `runId`, `decisionId`, and all
+  timestamps EXCLUDED. It is used ONLY to DETECT a same-run write whose content differs from the stored occurrence.
+- **Same-run replay is handled deterministically**: an identical retry is a no-op; a same-run write with changed
+  prose / re-stamped `generatedAt` / reordered evidence never creates a second row and never overwrites the first —
+  a genuine content difference is surfaced as a typed conflict (`revisionConflicts`), the FIRST occurrence
+  preserved. This holds under concurrency (the unique constraint + immutable upsert guarantee it).
 
-This is the minimal "current-state + immutable revisions" model (not full event-sourcing). It gives: retry
-idempotency within a run; separate traceability of a later run; audit of previous generated content; deterministic
-current-state selection (the `canonical_decisions` row); recoverable supersession + producer-version + source-
-snapshot lineage; and no duplication from retries. Read by nothing live in Phase 3A.
+This is the minimal "current-state + immutable per-run occurrences" model (not full event-sourcing). It gives:
+same-run retry idempotency; separate traceability of each run; audit of previous generated content; deterministic
+current-state selection (below); recoverable supersession + producer-version + source-snapshot lineage; and no
+duplication. `runId` is a deliberate **soft link** (no FK): a canonical decision may be produced by brains other
+than the three-brain `DecisionIntelligenceRun` pipeline, so `runId` is not guaranteed to reference a
+`decision_intelligence_runs` row. Revisions cascade with their parent decision (for data-subject deletion); the
+store exposes NO update/delete, so within its lifecycle revisions are strictly append-only + immutable. `getRevisions`
+returns them in deterministic `(createdAt, id)` order. Read by nothing live in Phase 3A.
 
-## Concurrency + idempotency
+## Concurrency + deterministic current-state ordering
 
-`persistBatch` runs in ONE interactive transaction (atomic batch) and is safe for concurrent writers: current
-state is written with a native atomic upsert on the unique `decisionId` (INSERT … ON CONFLICT DO UPDATE — no
-find-then-insert TOCTOU), revisions are idempotent on their unique key, and the whole batch is wrapped in a BOUNDED
-retry that re-runs ONLY on a unique-constraint (P2002) or write-conflict/deadlock (P2034) — every other error
-surfaces immediately (no blanket error swallowing). Two concurrent writers of the same logical decision converge on
-exactly one row; a mid-batch failure rolls the whole batch back.
+`persistBatch` runs in ONE interactive transaction (atomic batch), safe for concurrent writers, with an
+authoritative ordering rule so current state is DETERMINISTIC rather than last-writer-wins:
+
+- **Current-state write is ordering-gated + atomic.** The existing row is locked with `SELECT … FOR UPDATE`; it is
+  updated ONLY when the incoming generation is strictly newer per `isNewerGeneration` — primary key `generatedAt`,
+  deterministic tie-break `runId`. The first insert races through the unique `decisionId`; a concurrent insert
+  raises P2002 and the bounded retry re-evaluates under the lock. Consequences: an older / delayed / retried run
+  can NEVER regress a newer current decision; concurrent different-run writers converge on the same winner
+  regardless of commit order; equal `generatedAt` breaks by `runId`; and a stale write cannot undo a supersession
+  (the older generation fails the gate, so `status = superseded` stands).
+- **Revision write is race-safe + immutable** on unique `(decisionId, runId)` (upsert with a no-op update → never
+  overwrites; content mismatch surfaced as a conflict, first occurrence preserved).
+- **Bounded retry** re-runs the whole atomic batch ONLY on P2002 (unique) or P2034 (write conflict / deadlock);
+  every other error surfaces immediately (no blanket error swallowing). A mid-batch failure rolls the batch back.
+
+**Trust boundary.** `generatedAt` and `runId` are producer-supplied; the ordering is deterministic given those
+inputs. A later phase with an authoritative monotonic run sequence should replace `generatedAt` as the primary
+ordering key. Current state and revisions are DECOUPLED: an older run that does not become current is still recorded
+as its own immutable revision (full audit), it simply does not advance the current-state row.
 
 ## Shadow-mode boundary (`decisionStore.ts`, `shadowFlag.ts`, `prismaDecisionStore.ts`)
 
@@ -175,9 +198,10 @@ Consumption (dashboard Decision Queue, Chimmy, portfolio, entitlement gating, no
 ## Database
 
 Additive models `CanonicalDecision` → `canonical_decisions` (current state) and `CanonicalDecisionRevision` →
-`canonical_decision_revisions` (immutable audit history, FK → `canonical_decisions.decision_id` ON DELETE
-CASCADE). Migration `20260729130000_canonical_decisions`, checksum
-`837e199d7aabcc4a70f6dca807bd6a4c74b0c6a4629d844932f6ac145b96cb26`. (The original folder was `20260730130000_…`,
+`canonical_decision_revisions` (immutable audit history; occurrence identity UNIQUE `(decision_id, run_id)` with a
+non-null `run_id`; `content_hash` is a non-identity integrity field; FK → `canonical_decisions.decision_id` ON
+DELETE CASCADE). Migration `20260729130000_canonical_decisions`, checksum
+`a8df22c2fd1a68211dd938fbb44427d071ddc63fbc63e725279a3530f4e73bb8`. (The original folder was `20260730130000_…`,
 a **future date** relative to the 2026-07-29 creation date; it was renamed to a valid same-day timestamp that
 sorts after the latest merged migration `20260729120000_intelligence_run_provider_exec_marker`.) The tables are
 separate from `decision_intelligence_runs` (AI *run* state, not individual decisions). Indexed for future queries

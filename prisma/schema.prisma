@@ -621,37 +621,42 @@ model CanonicalDecision {
 }
 
 /// Immutable, append-only audit history for a canonical decision (Phase 3A). The `canonical_decisions` row holds
-/// CURRENT state (idempotent upsert-by-decisionId); each run/content combination appends one revision here so a
-/// re-run never silently overwrites prior generated content or run linkage. Identity is (decisionId,
-/// revisionHash); retrying the same run+content is idempotent, while a different run or materially changed content
-/// appends a new row. DORMANT in Phase 3A — written only via the flag-gated shadow boundary; read by nothing live.
+/// CURRENT state; each RUN appends exactly one revision here so a re-run never silently overwrites prior generated
+/// content or run linkage. OCCURRENCE IDENTITY is (decisionId, runId) — DB-enforced unique, at most one revision
+/// per run. `contentHash` is a NON-identity integrity field (order-normalized content, timestamps excluded) used
+/// only to detect a same-run write with materially different content (first occurrence preserved, never
+/// overwritten). `runId` is required (the shadow boundary rejects null-runId decisions). It is a deliberate SOFT
+/// link (no FK) to a producing run — a canonical decision can be produced by brains other than the three-brain
+/// DecisionIntelligenceRun pipeline, so runId is not guaranteed to reference a decision_intelligence_runs row.
+/// DORMANT in Phase 3A — written only via the flag-gated shadow boundary; read by nothing live.
 model CanonicalDecisionRevision {
-  id                String    @id @default(cuid())
-  decisionId        String    @map("decision_id") @db.VarChar(191)
-  revisionHash      String    @map("revision_hash") @db.VarChar(64)
-  runId             String?   @map("run_id")
-  producer          String    @db.VarChar(64)
-  producerVersion   String    @map("producer_version") @db.VarChar(32)
-  status            String    @db.VarChar(16)
-  headline          String    @db.VarChar(300)
-  explanation       String    @db.Text
-  recommendedAction String?   @map("recommended_action") @db.Text
-  evidence          Json?
-  confidencePct     Int?      @map("confidence_pct")
-  priorityScore     Int?      @map("priority_score")
-  severity          String    @db.VarChar(16)
-  urgency           String    @db.VarChar(16)
-  source            Json?
-  dataAsOf          DateTime? @map("data_as_of")
-  generatedAt       DateTime  @map("generated_at")
-  staleAt           DateTime? @map("stale_at")
-  freshness         String    @db.VarChar(16)
-  extensions        Json?
-  createdAt         DateTime  @default(now()) @map("created_at")
+  id                   String    @id @default(cuid())
+  decisionId           String    @map("decision_id") @db.VarChar(191)
+  runId                String    @map("run_id") @db.VarChar(191)
+  contentHash          String    @map("content_hash") @db.VarChar(64)
+  producer             String    @db.VarChar(64)
+  producerVersion      String    @map("producer_version") @db.VarChar(32)
+  status               String    @db.VarChar(16)
+  supersedesDecisionId String?   @map("supersedes_decision_id") @db.VarChar(191)
+  headline             String    @db.VarChar(300)
+  explanation          String    @db.Text
+  recommendedAction    String?   @map("recommended_action") @db.Text
+  evidence             Json?
+  confidencePct        Int?      @map("confidence_pct")
+  priorityScore        Int?      @map("priority_score")
+  severity             String    @db.VarChar(16)
+  urgency              String    @db.VarChar(16)
+  source               Json?
+  dataAsOf             DateTime? @map("data_as_of")
+  generatedAt          DateTime  @map("generated_at")
+  staleAt              DateTime? @map("stale_at")
+  freshness            String    @db.VarChar(16)
+  extensions           Json?
+  createdAt            DateTime  @default(now()) @map("created_at")
 
   decision CanonicalDecision @relation(fields: [decisionId], references: [decisionId], onDelete: Cascade)
 
-  @@unique([decisionId, revisionHash])
+  @@unique([decisionId, runId])
   @@index([decisionId, createdAt])
   @@index([runId])
   @@map("canonical_decision_revisions")

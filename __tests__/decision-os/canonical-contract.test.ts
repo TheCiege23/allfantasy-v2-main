@@ -17,7 +17,8 @@ import {
   canonicalShadowEnabled,
   CANONICAL_SHADOW_FLAG,
   computePriorityScore,
-  computeRevisionHash,
+  computeRevisionContentHash,
+  isNewerGeneration,
   isExternalSourcePlatform,
   DECISION_CATEGORIES,
   type CanonicalDecision,
@@ -266,15 +267,19 @@ describe('shadow persistence — logic (enabled, in-memory)', () => {
     expect(saved?.freshness).toBe(d.freshness)
   })
 
-  it('is idempotent on retry (same batch twice → created then updated, one row)', async () => {
+  it('is idempotent on retry (same run twice → created then stale-skipped, one row, one revision)', async () => {
     const store = new InMemoryCanonicalDecisionStore()
     const batch = [buildCanonicalDecision(baseInput())]
     const first = await shadowPersistDecisions({ decisions: batch, mode: 'shadow', store, env: enabledEnv() })
     const second = await shadowPersistDecisions({ decisions: batch, mode: 'shadow', store, env: enabledEnv() })
     expect(first.created).toBe(1)
+    expect(first.revised).toBe(1)
     expect(second.created).toBe(0)
-    expect(second.updated).toBe(1)
+    expect(second.updated).toBe(0) // same generation is NOT newer → current state not touched
+    expect(second.staleSkipped).toBe(1)
+    expect(second.revised).toBe(0) // same (decisionId, runId) occurrence already recorded
     expect(store.rows.size).toBe(1)
+    expect((await store.getRevisions(batch[0]!.decisionId)).length).toBe(1)
   })
 
   it('suppresses duplicates within one batch', async () => {
@@ -425,35 +430,138 @@ describe('bounded JSON + oversized input', () => {
   })
 })
 
-// ── H2: revision hash (audit history identity) ────────────────────────────────────────────────────────────────
-describe('revision hash', () => {
-  it('same content + run → same revision hash (idempotent retry)', () => {
-    const d = buildCanonicalDecision(baseInput())
-    expect(computeRevisionHash(d)).toBe(computeRevisionHash(buildCanonicalDecision(baseInput())))
+// ── I1: revision CONTENT hash (integrity, NOT identity) ───────────────────────────────────────────────────────
+describe('revision content hash (integrity, not identity)', () => {
+  it('same content → same content hash (idempotent)', () => {
+    expect(computeRevisionContentHash(buildCanonicalDecision(baseInput()))).toBe(computeRevisionContentHash(buildCanonicalDecision(baseInput())))
   })
-  it('different CONTENT → different revision hash (new revision appended)', () => {
-    const a = buildCanonicalDecision(baseInput())
-    const b = buildCanonicalDecision(baseInput({ explanation: 'materially different' }))
-    expect(computeRevisionHash(a)).not.toBe(computeRevisionHash(b))
+  it('different content → different content hash', () => {
+    expect(computeRevisionContentHash(buildCanonicalDecision(baseInput()))).not.toBe(computeRevisionContentHash(buildCanonicalDecision(baseInput({ explanation: 'materially different' }))))
   })
-  it('different RUN, same content → different revision hash (run is traced)', () => {
+  it('content hash EXCLUDES runId (occurrence identity is (decisionId, runId), not the hash)', () => {
     const a = buildCanonicalDecision(baseInput({ runId: 'run-1' }))
     const b = buildCanonicalDecision(baseInput({ runId: 'run-2' }))
-    expect(a.fingerprint).toBe(b.fingerprint) // same logical decision…
-    expect(computeRevisionHash(a)).not.toBe(computeRevisionHash(b)) // …distinct revision per run
+    expect(computeRevisionContentHash(a)).toBe(computeRevisionContentHash(b))
   })
-  it('in-memory store keeps append-only revision history across runs', async () => {
+  it('content hash EXCLUDES timestamps (a re-stamped generatedAt is not a content change)', () => {
+    const a = buildCanonicalDecision(baseInput({ generatedAt: '2026-07-29T12:00:00.000Z' }))
+    const b = buildCanonicalDecision(baseInput({ generatedAt: '2026-07-29T18:30:00.000Z' }))
+    expect(computeRevisionContentHash(a)).toBe(computeRevisionContentHash(b))
+  })
+  it('content hash is INSENSITIVE to evidence ordering', () => {
+    const e1 = { id: 'e1', kind: 'matchup', label: 'A' }
+    const e2 = { id: 'e2', kind: 'injury', label: 'B' }
+    const a = buildCanonicalDecision(baseInput({ evidence: [e1, e2] }))
+    const b = buildCanonicalDecision(baseInput({ evidence: [e2, e1] }))
+    expect(computeRevisionContentHash(a)).toBe(computeRevisionContentHash(b))
+  })
+})
+
+// ── I1: same-run occurrence identity (decisionId, runId) — in-memory ──────────────────────────────────────────
+describe('same-run occurrence identity', () => {
+  const env = () => ({ [CANONICAL_SHADOW_FLAG]: 'true' }) as unknown as NodeJS.ProcessEnv
+
+  it('null runId is rejected by the shadow boundary (occurrence identity requires a run)', async () => {
     const store = new InMemoryCanonicalDecisionStore()
-    const env = { [CANONICAL_SHADOW_FLAG]: 'true' } as unknown as NodeJS.ProcessEnv
+    const d = buildCanonicalDecision(baseInput({ runId: null }))
+    const r = await shadowPersistDecisions({ decisions: [d], mode: 'shadow', store, env: env() })
+    expect(r.created).toBe(0)
+    expect(r.rejected.length).toBe(1)
+    expect(r.rejected[0]!.errors[0]).toMatch(/runId is required/)
+    expect(store.rows.size).toBe(0)
+  })
+
+  it('same run + changed prose → NO second revision (first preserved) + typed conflict', async () => {
+    const store = new InMemoryCanonicalDecisionStore()
+    const first = buildCanonicalDecision(baseInput({ runId: 'run-X', explanation: 'first-gen' }))
+    const changed = buildCanonicalDecision(baseInput({ runId: 'run-X', explanation: 'DIFFERENT prose' }))
+    await shadowPersistDecisions({ decisions: [first], mode: 'shadow', store, env: env() })
+    const r = await shadowPersistDecisions({ decisions: [changed], mode: 'shadow', store, env: env() })
+    expect(r.revised).toBe(0)
+    expect(r.revisionConflicts).toBe(1)
+    const revs = await store.getRevisions(first.decisionId)
+    expect(revs.length).toBe(1)
+    expect(revs[0]!.explanation).toBe('first-gen') // first occurrence preserved, never overwritten
+  })
+
+  it('same run + changed generatedAt → one revision, NO conflict', async () => {
+    const store = new InMemoryCanonicalDecisionStore()
+    const a = buildCanonicalDecision(baseInput({ runId: 'run-Y', generatedAt: '2026-07-29T12:00:00.000Z' }))
+    const b = buildCanonicalDecision(baseInput({ runId: 'run-Y', generatedAt: '2026-07-29T20:00:00.000Z' }))
+    await shadowPersistDecisions({ decisions: [a], mode: 'shadow', store, env: env() })
+    const r = await shadowPersistDecisions({ decisions: [b], mode: 'shadow', store, env: env() })
+    expect(r.revisionConflicts).toBe(0)
+    expect((await store.getRevisions(a.decisionId)).length).toBe(1)
+  })
+
+  it('same run + reordered evidence → one revision, NO conflict', async () => {
+    const store = new InMemoryCanonicalDecisionStore()
+    const e1 = { id: 'e1', kind: 'matchup', label: 'A' }
+    const e2 = { id: 'e2', kind: 'injury', label: 'B' }
+    const a = buildCanonicalDecision(baseInput({ runId: 'run-Z', evidence: [e1, e2] }))
+    const b = buildCanonicalDecision(baseInput({ runId: 'run-Z', evidence: [e2, e1] }))
+    await shadowPersistDecisions({ decisions: [a], mode: 'shadow', store, env: env() })
+    const r = await shadowPersistDecisions({ decisions: [b], mode: 'shadow', store, env: env() })
+    expect(r.revisionConflicts).toBe(0)
+    expect((await store.getRevisions(a.decisionId)).length).toBe(1)
+  })
+
+  it('different run → a second revision occurrence; prior remains recoverable', async () => {
+    const store = new InMemoryCanonicalDecisionStore()
     const run1 = buildCanonicalDecision(baseInput({ runId: 'run-1', explanation: 'first' }))
-    await shadowPersistDecisions({ decisions: [run1], mode: 'shadow', store, env })
-    await shadowPersistDecisions({ decisions: [run1], mode: 'shadow', store, env }) // retry same → no new revision
-    const run2 = buildCanonicalDecision(baseInput({ runId: 'run-2', explanation: 'updated' }))
-    const r2 = await shadowPersistDecisions({ decisions: [run2], mode: 'shadow', store, env })
-    expect(r2.updated).toBe(1) // current-state overwritten
+    const run2 = buildCanonicalDecision(baseInput({ runId: 'run-2', explanation: 'second' }))
+    await shadowPersistDecisions({ decisions: [run1], mode: 'shadow', store, env: env() })
+    const r2 = await shadowPersistDecisions({ decisions: [run2], mode: 'shadow', store, env: env() })
+    expect(r2.revised).toBe(1)
     const revs = await store.getRevisions(run1.decisionId)
-    expect(revs.length).toBe(2) // BOTH runs preserved (history not overwritten)
-    expect(revs.map((r) => r.explanation)).toEqual(['first', 'updated'])
     expect(revs.map((r) => r.runId)).toEqual(['run-1', 'run-2'])
+    expect(revs.map((r) => r.explanation)).toEqual(['first', 'second'])
+  })
+})
+
+// ── I2: deterministic current-state ordering — in-memory ──────────────────────────────────────────────────────
+describe('deterministic current-state ordering', () => {
+  const env = () => ({ [CANONICAL_SHADOW_FLAG]: 'true' }) as unknown as NodeJS.ProcessEnv
+  const newer = { generatedAt: '2026-07-29T13:00:00.000Z', runId: 'run-new' }
+  const older = { generatedAt: '2026-07-29T12:00:00.000Z', runId: 'run-old' }
+
+  it('isNewerGeneration: generatedAt primary, runId tie-break', () => {
+    expect(isNewerGeneration(newer, older)).toBe(true)
+    expect(isNewerGeneration(older, newer)).toBe(false)
+    expect(isNewerGeneration({ generatedAt: 'T', runId: 'b' }, { generatedAt: 'T', runId: 'a' })).toBe(true) // tie-break
+    expect(isNewerGeneration({ generatedAt: 'T', runId: 'a' }, { generatedAt: 'T', runId: 'a' })).toBe(false) // equal
+  })
+
+  it('an OLDER run cannot overwrite a NEWER current decision (both arrival orders converge)', async () => {
+    const mkNew = () => buildCanonicalDecision(baseInput({ runId: 'run-new', generatedAt: newer.generatedAt, explanation: 'NEW' }))
+    const mkOld = () => buildCanonicalDecision(baseInput({ runId: 'run-old', generatedAt: older.generatedAt, explanation: 'OLD' }))
+
+    // order 1: old then new → ends NEW
+    const s1 = new InMemoryCanonicalDecisionStore()
+    await shadowPersistDecisions({ decisions: [mkOld()], mode: 'shadow', store: s1, env: env() })
+    await shadowPersistDecisions({ decisions: [mkNew()], mode: 'shadow', store: s1, env: env() })
+    // order 2: new then old → still NEW (older cannot regress)
+    const s2 = new InMemoryCanonicalDecisionStore()
+    await shadowPersistDecisions({ decisions: [mkNew()], mode: 'shadow', store: s2, env: env() })
+    const rOld = await shadowPersistDecisions({ decisions: [mkOld()], mode: 'shadow', store: s2, env: env() })
+
+    expect((await s1.get(mkNew().decisionId))!.explanation).toBe('NEW')
+    expect((await s2.get(mkNew().decisionId))!.explanation).toBe('NEW')
+    expect(rOld.staleSkipped).toBe(1) // older write did not regress current state
+    // …but the older run's occurrence is still recorded for audit
+    expect((await s2.getRevisions(mkNew().decisionId)).map((r) => r.runId).sort()).toEqual(['run-new', 'run-old'])
+  })
+
+  it('a stale write after supersession does NOT revert status', async () => {
+    const store = new InMemoryCanonicalDecisionStore()
+    const oldD = buildCanonicalDecision(baseInput({ runId: 'run-old', period: 'week:sup-old' }))
+    await shadowPersistDecisions({ decisions: [oldD], mode: 'shadow', store, env: env() })
+    const newD = buildCanonicalDecision(baseInput({ runId: 'run-new', period: 'week:sup-new', supersedes: oldD.decisionId }))
+    await shadowPersistDecisions({ decisions: [newD], mode: 'shadow', store, env: env() })
+    expect((await store.get(oldD.decisionId))!.status).toBe('superseded')
+    // stale retry of the old decision (same run, same generation) must not un-supersede it
+    const r = await shadowPersistDecisions({ decisions: [buildCanonicalDecision(baseInput({ runId: 'run-old', period: 'week:sup-old' }))], mode: 'shadow', store, env: env() })
+    expect(r.staleSkipped).toBe(1)
+    expect((await store.get(oldD.decisionId))!.status).toBe('superseded')
   })
 })

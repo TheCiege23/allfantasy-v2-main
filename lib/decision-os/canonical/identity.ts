@@ -52,45 +52,70 @@ export function decisionIdFromFingerprint(fingerprint: string): string {
   return `dcn:${fingerprint}`
 }
 
+/** Stable JSON for an array whose element order is not semantically meaningful (evidence). Sorted by a stable key
+ *  so a mere REORDER does not change the content hash (→ not a spurious same-run conflict). */
+function stableEvidence(evidence: CanonicalDecision['evidence']): string {
+  const norm = (evidence ?? [])
+    .map((e) => JSON.stringify({ id: e.id, kind: e.kind, label: e.label, sourceType: e.sourceType ?? null, sourceId: e.sourceId ?? null, url: e.url ?? null, trust: e.trust ?? null }))
+    .sort()
+  return JSON.stringify(norm)
+}
+
 /**
- * Content+run fingerprint for a decision REVISION. Covers the producing run and the mutable content (status,
- * text, evidence, scoring, source, freshness) — so retrying the SAME run with the SAME content is idempotent
- * (same hash → one revision row), while a different run OR materially changed content appends a new revision.
- * `runId` is included so a later no-op re-run by a different run is still traced as its own revision.
+ * CONTENT integrity hash for a decision revision — NOT the occurrence identity (that is `(decisionId, runId)`).
+ * Covers only the MATERIAL generated content (status, text, evidence [order-normalized], scoring, source,
+ * freshness, supersession). It deliberately EXCLUDES `runId`, `decisionId`, and all timestamps
+ * (`generatedAt`/`dataAsOf`/`staleAt`) + producer metadata, so a same-run retry that only re-stamps a timestamp or
+ * reorders evidence is treated as an idempotent no-op, while genuinely different content is detected as a conflict.
  */
-export function computeRevisionHash(d: CanonicalDecision): string {
+export function computeRevisionContentHash(d: CanonicalDecision): string {
   const parts = [
-    `did=${d.decisionId}`,
-    `run=${d.runId ?? ''}`,
-    `prod=${d.producer}@${d.producerVersion}`,
     `st=${d.status}`,
+    `sup=${d.supersedes ?? ''}`,
     `hl=${d.headline}`,
     `ex=${d.explanation}`,
     `ra=${d.recommendedAction ?? ''}`,
-    `ev=${JSON.stringify(d.evidence ?? [])}`,
+    `ev=${stableEvidence(d.evidence)}`,
     `cf=${d.confidencePct ?? ''}`,
     `pr=${d.priorityScore ?? ''}`,
     `sv=${d.severity}`,
     `ur=${d.urgency}`,
+    `ei=${d.expectedImpact ?? ''}`,
     `src=${JSON.stringify(d.source ?? null)}`,
-    `da=${d.dataAsOf ?? ''}`,
-    `ga=${d.generatedAt}`,
-    `sa=${d.staleAt ?? ''}`,
     `fr=${d.freshness}`,
     `xt=${JSON.stringify(d.extensions ?? null)}`,
   ]
   return createHash('sha256').update(parts.join('\n')).digest('hex')
 }
 
-/** Extract the immutable content snapshot recorded as a revision for a decision. */
+/**
+ * Authoritative ordering for CURRENT STATE: is `incoming` a newer generation than `existing`? Primary key is
+ * `generatedAt` (ISO, lexicographically comparable); ties break on `runId` (stable, deterministic). An older run
+ * is never newer, so current state cannot be regressed by a stale/delayed write, and concurrent different-run
+ * writes converge on the same winner regardless of arrival/commit order. Trust boundary: `generatedAt`/`runId` are
+ * producer-supplied — a later phase with an authoritative monotonic run sequence should replace `generatedAt` as
+ * the primary key; the tuple guarantees deterministic convergence given the inputs.
+ */
+export function isNewerGeneration(
+  incoming: { generatedAt: string; runId: string | null },
+  existing: { generatedAt: string; runId: string | null },
+): boolean {
+  if (incoming.generatedAt !== existing.generatedAt) return incoming.generatedAt > existing.generatedAt
+  return (incoming.runId ?? '') > (existing.runId ?? '')
+}
+
+/** Extract the immutable content snapshot recorded as a revision. Requires a non-null runId (occurrence identity);
+ *  the shadow boundary rejects null-runId decisions before persistence. */
 export function toDecisionRevision(d: CanonicalDecision): CanonicalDecisionRevision {
+  if (d.runId == null) throw new Error('canonical revision requires a non-null runId (occurrence identity)')
   return {
     decisionId: d.decisionId,
-    revisionHash: computeRevisionHash(d),
     runId: d.runId,
+    contentHash: computeRevisionContentHash(d),
     producer: d.producer,
     producerVersion: d.producerVersion,
     status: d.status,
+    supersedesDecisionId: d.supersedes,
     headline: d.headline,
     explanation: d.explanation,
     recommendedAction: d.recommendedAction,

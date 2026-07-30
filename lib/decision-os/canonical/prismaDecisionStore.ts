@@ -2,21 +2,21 @@
  * Prisma-backed canonical decision store (Phase 3A). SERVER-ONLY. Implements `CanonicalDecisionStore` against the
  * additive `canonical_decisions` (current state) + `canonical_decision_revisions` (immutable audit history) tables.
  *
- * `persistBatch` runs in ONE interactive transaction (atomic batch) and is RACE-SAFE for concurrent writers:
- *   - current state is written with a native atomic upsert keyed on the unique `decisionId` (INSERT … ON CONFLICT
- *     DO UPDATE), so two concurrent writers converge on ONE row instead of one throwing a duplicate;
- *   - each run/content appends an immutable revision, idempotent on the unique (decisionId, revisionHash);
- *   - the whole batch is wrapped in a BOUNDED retry that re-runs ONLY on a unique-constraint (P2002) or
- *     write-conflict/deadlock (P2034) — every other error is rethrown immediately, and the last error is rethrown
- *     after the attempts are exhausted (no blanket error swallowing).
- * It does NO validation (the boundary already validated), NO provider call, NO token work, and NO freshness
- * minting — a pure persistence sink. It is never invoked unless `shadowPersistDecisions` (flag + shadow-mode
- * gated) calls it, so deploying this code writes nothing on its own. Injectable Prisma client for isolated-DB
- * integration tests (never production here).
- *
- * NOTE on counts: `created`/`updated`/`revised` are derived from a pre-read for observability. Under genuine
- * concurrency the split may be approximate (two racers may both report `created`), but the persisted STATE is
- * always exactly one row per decisionId and one revision per (decisionId, revisionHash).
+ * `persistBatch` runs in ONE interactive transaction (atomic batch) and is RACE-SAFE + ORDER-DETERMINISTIC:
+ *   - CURRENT STATE is written under an authoritative ordering rule: the existing row is locked with
+ *     `SELECT … FOR UPDATE`, and it is updated ONLY when the incoming generation is strictly newer
+ *     (`isNewerGeneration`: generatedAt, then runId tie-break). An older/stale/retried run can NEVER regress a
+ *     newer current decision, and concurrent different-run writers converge on the same winner regardless of commit
+ *     order. The first insert races through ON CONFLICT via the bounded retry below.
+ *   - AUDIT HISTORY appends an immutable revision with OCCURRENCE IDENTITY `(decisionId, runId)` — at most one per
+ *     run (DB-enforced unique). `content_hash` detects a same-run write with materially different content: the
+ *     first occurrence is PRESERVED (never overwritten, never a second row) and the conflict is counted.
+ *   - The whole batch is wrapped in a BOUNDED retry that re-runs ONLY on a unique-constraint (P2002) or
+ *     write-conflict/deadlock (P2034); every other error surfaces immediately (no blanket error swallowing).
+ * It does NO validation (the boundary already validated + required a non-null runId), NO provider call, NO token
+ * work, and NO freshness minting. It is never invoked unless `shadowPersistDecisions` (flag + shadow-mode gated)
+ * calls it, so deploying this code writes nothing on its own. Injectable Prisma client for isolated-DB integration
+ * tests (never production here).
  */
 import 'server-only'
 import { Prisma } from '@prisma/client'
@@ -29,7 +29,7 @@ import type {
   DecisionSourceRef,
 } from './contract'
 import type { CanonicalDecisionStore, PersistBatchCounts, SupersedeLink } from './decisionStore'
-import { computeRevisionHash } from './identity'
+import { computeRevisionContentHash, isNewerGeneration } from './identity'
 
 type PrismaLike = typeof defaultPrisma
 const asJson = (v: unknown): Prisma.InputJsonValue => v as unknown as Prisma.InputJsonValue
@@ -45,8 +45,8 @@ function isRetryableWriteError(e: unknown): boolean {
 }
 
 /** Bounded retry around an atomic transaction — converts a concurrent unique/serialization loss into a converging
- *  retry (the second attempt sees the row and updates). Rethrows non-retryable errors at once and the last error
- *  after exhausting attempts. */
+ *  retry (the second attempt sees the row under FOR UPDATE and re-evaluates). Rethrows non-retryable errors at once
+ *  and the last error after exhausting attempts. */
 async function withWriteRetry<T>(fn: () => Promise<T>): Promise<T> {
   let lastErr: unknown
   for (let attempt = 1; attempt <= MAX_WRITE_ATTEMPTS; attempt++) {
@@ -160,13 +160,13 @@ function toWrite(d: CanonicalDecision) {
   }
 }
 
-/** Canonical decision → immutable revision write payload (content snapshot only). */
+/** Canonical decision → immutable revision content columns (identity: decisionId/runId/contentHash set by caller). */
 function toRevisionWrite(d: CanonicalDecision) {
   return {
-    runId: d.runId,
     producer: d.producer,
     producerVersion: d.producerVersion,
     status: d.status,
+    supersedesDecisionId: d.supersedes,
     headline: d.headline,
     explanation: d.explanation,
     recommendedAction: d.recommendedAction,
@@ -187,11 +187,12 @@ function toRevisionWrite(d: CanonicalDecision) {
 function mapRevisionRow(row: NonNullable<Awaited<ReturnType<PrismaLike['canonicalDecisionRevision']['findUnique']>>>): CanonicalDecisionRevision {
   return {
     decisionId: row.decisionId,
-    revisionHash: row.revisionHash,
     runId: row.runId,
+    contentHash: row.contentHash,
     producer: row.producer,
     producerVersion: row.producerVersion,
     status: row.status as CanonicalDecisionRevision['status'],
+    supersedesDecisionId: row.supersedesDecisionId,
     headline: row.headline,
     explanation: row.explanation,
     recommendedAction: row.recommendedAction,
@@ -218,33 +219,53 @@ export class PrismaCanonicalDecisionStore implements CanonicalDecisionStore {
       this.db.$transaction(async (tx) => {
         let created = 0
         let updated = 0
+        let staleSkipped = 0
         let superseded = 0
         let revised = 0
+        let revisionConflicts = 0
         for (const d of input.decisions) {
+          const runId = d.runId as string // boundary guarantees non-null (occurrence identity)
           const write = toWrite(d)
-          // Pre-read for the created/updated count only — the write below is atomic regardless.
-          const before = await tx.canonicalDecision.findUnique({ where: { decisionId: d.decisionId }, select: { id: true } })
-          // Race-safe native upsert: INSERT … ON CONFLICT (decision_id) DO UPDATE. No TOCTOU window.
-          await tx.canonicalDecision.upsert({
-            where: { decisionId: d.decisionId },
-            create: { decisionId: d.decisionId, ...write },
-            update: write,
-          })
-          if (before) updated += 1
-          else created += 1
 
-          // Append-only revision, idempotent on the unique (decisionId, revisionHash).
-          const revisionHash = computeRevisionHash(d)
-          const existingRev = await tx.canonicalDecisionRevision.findUnique({
-            where: { decisionId_revisionHash: { decisionId: d.decisionId, revisionHash } },
-            select: { id: true },
+          // ── current state: lock the row, then apply only if the incoming generation is strictly newer ──
+          const locked = await tx.$queryRaw<Array<{ generated_at: Date; run_id: string | null }>>(
+            Prisma.sql`SELECT generated_at, run_id FROM canonical_decisions WHERE decision_id = ${d.decisionId} FOR UPDATE`,
+          )
+          if (locked.length === 0) {
+            // No row yet — insert. A concurrent insert raises P2002 → the whole tx retries and takes the branch below.
+            await tx.canonicalDecision.create({ data: { decisionId: d.decisionId, ...write } })
+            created += 1
+          } else {
+            const existing = { generatedAt: locked[0]!.generated_at.toISOString(), runId: locked[0]!.run_id }
+            if (isNewerGeneration({ generatedAt: d.generatedAt, runId: d.runId }, existing)) {
+              await tx.canonicalDecision.update({ where: { decisionId: d.decisionId }, data: write })
+              updated += 1
+            } else {
+              staleSkipped += 1 // older/equal generation → do not regress current state
+            }
+          }
+
+          // ── revision: occurrence identity (decisionId, runId); content_hash detects same-run conflicts ──
+          const contentHash = computeRevisionContentHash(d)
+          const beforeRev = await tx.canonicalDecisionRevision.findUnique({
+            where: { decisionId_runId: { decisionId: d.decisionId, runId } },
+            select: { contentHash: true },
           })
           await tx.canonicalDecisionRevision.upsert({
-            where: { decisionId_revisionHash: { decisionId: d.decisionId, revisionHash } },
-            create: { decisionId: d.decisionId, revisionHash, ...toRevisionWrite(d) },
-            update: {}, // immutable — conflict is a no-op (retry-safe)
+            where: { decisionId_runId: { decisionId: d.decisionId, runId } },
+            create: { decisionId: d.decisionId, runId, contentHash, ...toRevisionWrite(d) },
+            update: {}, // immutable — a same-run conflict never overwrites the first occurrence
           })
-          if (!existingRev) revised += 1
+          if (!beforeRev) {
+            const after = await tx.canonicalDecisionRevision.findUnique({
+              where: { decisionId_runId: { decisionId: d.decisionId, runId } },
+              select: { contentHash: true },
+            })
+            if (after && after.contentHash === contentHash) revised += 1
+            else revisionConflicts += 1 // a concurrent same-run writer's content won the occurrence
+          } else if (beforeRev.contentHash !== contentHash) {
+            revisionConflicts += 1 // same run, different content → first occurrence preserved
+          }
         }
         for (const link of input.supersede) {
           const res = await tx.canonicalDecision.updateMany({
@@ -253,7 +274,7 @@ export class PrismaCanonicalDecisionStore implements CanonicalDecisionStore {
           })
           superseded += res.count
         }
-        return { created, updated, superseded, revised }
+        return { created, updated, staleSkipped, superseded, revised, revisionConflicts }
       }),
     )
   }
@@ -266,7 +287,7 @@ export class PrismaCanonicalDecisionStore implements CanonicalDecisionStore {
   async getRevisions(decisionId: string): Promise<CanonicalDecisionRevision[]> {
     const rows = await this.db.canonicalDecisionRevision.findMany({
       where: { decisionId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }], // deterministic audit order
     })
     return rows.map(mapRevisionRow)
   }
