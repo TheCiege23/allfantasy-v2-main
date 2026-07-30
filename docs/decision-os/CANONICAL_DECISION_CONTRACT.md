@@ -208,10 +208,11 @@ separate from `decision_intelligence_runs` (AI *run* state, not individual decis
 by user/league/sport/season/category/severity/status/run/conflict-group/connected-franchise/freshness. Migration
 is purely additive (2 CREATE TABLE + indexes + 1 FK between the two new tables; no ALTER/DROP on any existing
 table), generated offline via `prisma migrate diff` (datamodel-to-datamodel). Applied + verified only on a freshly
-created disposable Neon database (44→46 cols on `canonical_decisions`, 22 on `canonical_decision_revisions`, all
-indexes + FK) that was deleted afterward — the earlier sandbox was NOT reused because its history still holds the
-old filename. **NOT applied to production** — that is a later manual release gate (never `prisma migrate deploy`;
-use the repo's direct-SQL + `migrate resolve --applied` convention, see `PHASE2_MIGRATION_RUNBOOK.md`).
+created disposable Neon database (both tables + all indexes + the `(decision_id, run_id)` occurrence unique + FK,
+and the full store integration suite ran green against it) that was deleted afterward — a NEW disposable database
+was created each pass rather than reusing a prior sandbox whose history holds an older filename. **NOT applied to
+production** — that is a later manual release gate (never `prisma migrate deploy`; use the repo's direct-SQL +
+`migrate resolve --applied` convention, see `PHASE2_MIGRATION_RUNBOOK.md`).
 
 ## What Phase 3A deliberately does NOT activate
 
