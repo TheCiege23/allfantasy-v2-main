@@ -1,8 +1,9 @@
--- Decision OS Phase 3A — canonical decision record (shadow-only persistence sink).
--- Purely ADDITIVE: creates ONE new table + its indexes. No ALTER/DROP on any existing table.
--- Generated offline via 'prisma migrate diff' (datamodel-to-datamodel, no DB connection). NOT applied to
--- production by any build/deploy step. Apply via the documented repo convention (direct SQL + migrate
--- resolve --applied) to an isolated/dev DB only. See docs/decision-os/PHASE2_MIGRATION_RUNBOOK.md.
+-- Decision OS Phase 3A — canonical decision record + immutable revision history (shadow-only persistence sink).
+-- Purely ADDITIVE: creates TWO new tables (current-state `canonical_decisions` + append-only
+-- `canonical_decision_revisions`) with their indexes + one FK BETWEEN the two new tables. No ALTER/DROP on any
+-- pre-existing table. Generated offline via 'prisma migrate diff' (datamodel-to-datamodel, no DB connection).
+-- NOT applied to production by any build/deploy step; apply via the documented repo convention (direct SQL +
+-- 'migrate resolve --applied') to an isolated/dev DB only. See docs/decision-os/PHASE2_MIGRATION_RUNBOOK.md.
 
 -- CreateTable
 CREATE TABLE "canonical_decisions" (
@@ -19,6 +20,7 @@ CREATE TABLE "canonical_decisions" (
     "period" VARCHAR(32),
     "category" VARCHAR(48) NOT NULL,
     "subtype" VARCHAR(48),
+    "subject_key" VARCHAR(191),
     "scope" VARCHAR(16) NOT NULL,
     "audience" VARCHAR(16) NOT NULL,
     "headline" VARCHAR(300) NOT NULL,
@@ -33,6 +35,7 @@ CREATE TABLE "canonical_decisions" (
     "players" JSONB,
     "team_ref" TEXT,
     "source" JSONB,
+    "source_execution_policy" VARCHAR(32) NOT NULL DEFAULT 'external_read_only',
     "source_read_only" BOOLEAN NOT NULL DEFAULT true,
     "data_as_of" TIMESTAMP(3),
     "generated_at" TIMESTAMP(3) NOT NULL,
@@ -52,6 +55,34 @@ CREATE TABLE "canonical_decisions" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "canonical_decisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "canonical_decision_revisions" (
+    "id" TEXT NOT NULL,
+    "decision_id" VARCHAR(191) NOT NULL,
+    "revision_hash" VARCHAR(64) NOT NULL,
+    "run_id" TEXT,
+    "producer" VARCHAR(64) NOT NULL,
+    "producer_version" VARCHAR(32) NOT NULL,
+    "status" VARCHAR(16) NOT NULL,
+    "headline" VARCHAR(300) NOT NULL,
+    "explanation" TEXT NOT NULL,
+    "recommended_action" TEXT,
+    "evidence" JSONB,
+    "confidence_pct" INTEGER,
+    "priority_score" INTEGER,
+    "severity" VARCHAR(16) NOT NULL,
+    "urgency" VARCHAR(16) NOT NULL,
+    "source" JSONB,
+    "data_as_of" TIMESTAMP(3),
+    "generated_at" TIMESTAMP(3) NOT NULL,
+    "stale_at" TIMESTAMP(3),
+    "freshness" VARCHAR(16) NOT NULL,
+    "extensions" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "canonical_decision_revisions_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -86,3 +117,15 @@ CREATE INDEX "canonical_decisions_generated_at_idx" ON "canonical_decisions"("ge
 
 -- CreateIndex
 CREATE INDEX "canonical_decisions_stale_at_idx" ON "canonical_decisions"("stale_at");
+
+-- CreateIndex
+CREATE INDEX "canonical_decision_revisions_decision_id_created_at_idx" ON "canonical_decision_revisions"("decision_id", "created_at");
+
+-- CreateIndex
+CREATE INDEX "canonical_decision_revisions_run_id_idx" ON "canonical_decision_revisions"("run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "canonical_decision_revisions_decision_id_revision_hash_key" ON "canonical_decision_revisions"("decision_id", "revision_hash");
+
+-- AddForeignKey
+ALTER TABLE "canonical_decision_revisions" ADD CONSTRAINT "canonical_decision_revisions_decision_id_fkey" FOREIGN KEY ("decision_id") REFERENCES "canonical_decisions"("decision_id") ON DELETE CASCADE ON UPDATE CASCADE;

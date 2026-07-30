@@ -571,6 +571,7 @@ model CanonicalDecision {
   period               String?   @db.VarChar(32)
   category             String    @db.VarChar(48)
   subtype              String?   @db.VarChar(48)
+  subjectKey           String?   @map("subject_key") @db.VarChar(191)
   scope                String    @db.VarChar(16)
   audience             String    @db.VarChar(16)
   headline             String    @db.VarChar(300)
@@ -585,6 +586,7 @@ model CanonicalDecision {
   players              Json?
   teamRef              String?   @map("team_ref")
   source               Json?
+  sourceExecutionPolicy String   @default("external_read_only") @map("source_execution_policy") @db.VarChar(32)
   sourceReadOnly       Boolean   @default(true) @map("source_read_only")
   dataAsOf             DateTime? @map("data_as_of")
   generatedAt          DateTime  @map("generated_at")
@@ -603,6 +605,8 @@ model CanonicalDecision {
   createdAt            DateTime  @default(now()) @map("created_at")
   updatedAt            DateTime  @updatedAt @map("updated_at")
 
+  revisions            CanonicalDecisionRevision[]
+
   @@index([userId, category])
   @@index([leagueId, category])
   @@index([sport, season])
@@ -614,6 +618,43 @@ model CanonicalDecision {
   @@index([generatedAt])
   @@index([staleAt])
   @@map("canonical_decisions")
+}
+
+/// Immutable, append-only audit history for a canonical decision (Phase 3A). The `canonical_decisions` row holds
+/// CURRENT state (idempotent upsert-by-decisionId); each run/content combination appends one revision here so a
+/// re-run never silently overwrites prior generated content or run linkage. Identity is (decisionId,
+/// revisionHash); retrying the same run+content is idempotent, while a different run or materially changed content
+/// appends a new row. DORMANT in Phase 3A — written only via the flag-gated shadow boundary; read by nothing live.
+model CanonicalDecisionRevision {
+  id                String    @id @default(cuid())
+  decisionId        String    @map("decision_id") @db.VarChar(191)
+  revisionHash      String    @map("revision_hash") @db.VarChar(64)
+  runId             String?   @map("run_id")
+  producer          String    @db.VarChar(64)
+  producerVersion   String    @map("producer_version") @db.VarChar(32)
+  status            String    @db.VarChar(16)
+  headline          String    @db.VarChar(300)
+  explanation       String    @db.Text
+  recommendedAction String?   @map("recommended_action") @db.Text
+  evidence          Json?
+  confidencePct     Int?      @map("confidence_pct")
+  priorityScore     Int?      @map("priority_score")
+  severity          String    @db.VarChar(16)
+  urgency           String    @db.VarChar(16)
+  source            Json?
+  dataAsOf          DateTime? @map("data_as_of")
+  generatedAt       DateTime  @map("generated_at")
+  staleAt           DateTime? @map("stale_at")
+  freshness         String    @db.VarChar(16)
+  extensions        Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+
+  decision CanonicalDecision @relation(fields: [decisionId], references: [decisionId], onDelete: Cascade)
+
+  @@unique([decisionId, revisionHash])
+  @@index([decisionId, createdAt])
+  @@index([runId])
+  @@map("canonical_decision_revisions")
 }
 
 /// Unified sync/ingestion job telemetry for DB-first observability.

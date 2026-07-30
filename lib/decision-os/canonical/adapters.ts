@@ -86,6 +86,10 @@ export type CommissionerSignalInput = {
   evidence?: DecisionEvidenceRef[]
   confidencePct?: number | null
   urgency?: DecisionUrgency
+  /** Stable id of the subject this signal is about (e.g. the roster/manager). REQUIRED when a league can have
+   *  multiple signals of the same `type` (two inactive managers, two incomplete rosters) — else they collapse to
+   *  one decision. Must be stable across runs (never a per-run id). */
+  subjectKey?: string | null
 }
 
 export function adaptCommissionerSignal(input: CommissionerSignalInput, ctx: AdapterContext): CanonicalDecision {
@@ -99,6 +103,7 @@ export function adaptCommissionerSignal(input: CommissionerSignalInput, ctx: Ada
     period: ctx.period,
     category: input.type,
     subtype: null,
+    subjectKey: input.subjectKey ?? null,
     scope: 'commissioner',
     audience: 'commissioner',
     headline: input.title,
@@ -143,6 +148,8 @@ export type ManagerRecommendationInput = {
   teamRef?: string | null
   evidence?: DecisionEvidenceRef[]
   audience?: DecisionAudience
+  /** Stable subject id when category+players+teamRef don't uniquely identify the recommendation. */
+  subjectKey?: string | null
 }
 
 export function adaptManagerRecommendation(input: ManagerRecommendationInput, ctx: AdapterContext): CanonicalDecision {
@@ -157,6 +164,7 @@ export function adaptManagerRecommendation(input: ManagerRecommendationInput, ct
     period: ctx.period,
     category: input.category,
     subtype: null,
+    subjectKey: input.subjectKey ?? null,
     scope,
     audience: input.audience ?? 'manager',
     headline: input.title,
@@ -199,6 +207,8 @@ export type LineupStartSitInput = {
   confidencePct?: number | null
   severity?: DecisionSeverity
   evidence?: DecisionEvidenceRef[]
+  /** Stable subject id (e.g. the roster slot) when needed to distinguish same-category lineup calls. */
+  subjectKey?: string | null
 }
 
 export function adaptLineupStartSit(input: LineupStartSitInput, ctx: AdapterContext): CanonicalDecision {
@@ -213,6 +223,7 @@ export function adaptLineupStartSit(input: LineupStartSitInput, ctx: AdapterCont
     period: ctx.period,
     category: input.category,
     subtype: null,
+    subjectKey: input.subjectKey ?? null,
     scope: pickScope({ players: input.players, teamRef: input.teamRef, leagueId: ctx.leagueId, userId: ctx.userId }),
     audience: 'manager',
     headline: input.title,
@@ -254,6 +265,8 @@ export type WaiverTargetInput = {
   confidencePct?: number | null
   severity?: DecisionSeverity
   evidence?: DecisionEvidenceRef[]
+  /** Optional explicit subject id; when absent the player identity already discriminates waiver targets. */
+  subjectKey?: string | null
 }
 
 export function adaptWaiverTarget(input: WaiverTargetInput, ctx: AdapterContext): CanonicalDecision {
@@ -268,6 +281,7 @@ export function adaptWaiverTarget(input: WaiverTargetInput, ctx: AdapterContext)
     period: ctx.period,
     category: 'waiver_target',
     subtype: null,
+    subjectKey: input.subjectKey ?? null,
     scope: 'player',
     audience: 'manager',
     headline: input.title,
@@ -312,6 +326,9 @@ export type TradeReviewInput = {
   severity?: DecisionSeverity
   expectedImpact?: string | null
   evidence?: DecisionEvidenceRef[]
+  /** Stable id of the SPECIFIC trade proposal (e.g. the platform transaction id). REQUIRED to keep two distinct
+   *  proposals apart when they involve the same players (counteroffers / variants) — else they collapse. */
+  subjectKey?: string | null
 }
 
 export function adaptTradeReview(input: TradeReviewInput, ctx: AdapterContext): CanonicalDecision {
@@ -325,6 +342,7 @@ export function adaptTradeReview(input: TradeReviewInput, ctx: AdapterContext): 
     period: ctx.period,
     category: input.category,
     subtype: null,
+    subjectKey: input.subjectKey ?? null,
     scope: pickScope({ players: input.players, teamRef: input.teamRef, leagueId: ctx.leagueId, userId: ctx.userId }),
     audience: 'manager',
     headline: input.title,

@@ -88,6 +88,25 @@ export type DecisionPlayerRef = {
   teamAbbr?: string | null
 }
 
+/**
+ * Whether — and against what — a decision could ever be executed. Phase 3A NEVER executes anything (persistence
+ * only); this is a forward-compat CLASSIFICATION so the universal contract stays accurate rather than declaring
+ * every decision permanently external/read-only.
+ *  - `external_read_only`  : concerns an imported platform (Sleeper/ESPN/Yahoo/Fantrax/MFL/Fleaflicker). AF may
+ *                            analyze + deep-link but NEVER writes to it. `sourceReadOnly` is always true.
+ *  - `advisory_only`       : pure advice with no execution target, regardless of source. `sourceReadOnly` true.
+ *  - `native_actionable_dormant` : native AllFantasy source that a LATER phase MAY execute internally (never an
+ *                            imported platform). Dormant + non-executable in Phase 3A. `sourceReadOnly` false.
+ * INVARIANT (enforced in validate.ts): an external `sourcePlatform` can NEVER be `native_actionable_dormant`.
+ */
+export type DecisionExecutionPolicy = 'external_read_only' | 'advisory_only' | 'native_actionable_dormant'
+
+/** External (imported) platforms AF must never write to. `allfantasy`/null are native and may be actionable later. */
+export const EXTERNAL_SOURCE_PLATFORMS = ['sleeper', 'espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker'] as const
+export function isExternalSourcePlatform(p: string | null | undefined): boolean {
+  return p != null && (EXTERNAL_SOURCE_PLATFORMS as readonly string[]).includes(p)
+}
+
 export type CanonicalDecision = {
   contractVersion: string
   /** Stable, deterministic id (`dcn:` + fingerprint). Same canonical inputs → same id → idempotent persistence. */
@@ -111,6 +130,12 @@ export type CanonicalDecision = {
   subtype: string | null
   scope: DecisionScope
   audience: DecisionAudience
+  /** Stable, DETERMINISTIC discriminator for the specific subject/action this decision concerns, when
+   *  category+scope+players+teamRef do NOT already uniquely identify it — e.g. which manager an `inactive_manager`
+   *  signal is about, which trade proposal a `trade_review` evaluates, which matchup a `matchup_opportunity`
+   *  concerns. Part of the identity fingerprint. MUST be stable across re-runs for the same logical subject
+   *  (a roster/proposal/matchup id — NEVER a per-run/random id), or idempotency breaks. Null when unneeded. */
+  subjectKey: string | null
 
   // ── content ─────────────────────────────────────────────────────────────────────────────────────────────
   headline: string
@@ -133,9 +158,13 @@ export type CanonicalDecision = {
 
   // ── source + read-only guarantee ────────────────────────────────────────────────────────────────────────
   source: DecisionSourceRef | null
-  /** ALWAYS true. AF may analyze + deep-link to imported platforms but NEVER writes roster/lineup/waiver/trade/
-   *  draft/commissioner/settings changes to them. Enforced as a literal in the type + schema. */
-  sourceReadOnly: true
+  /** Execution/source classification (see `DecisionExecutionPolicy`). Producers/adapters set this; adapters that
+   *  wrap imported analysis always leave it `external_read_only`. Phase 3A NEVER executes on any policy. */
+  sourceExecutionPolicy: DecisionExecutionPolicy
+  /** True whenever AF must never write to the decision's SOURCE (external_read_only + advisory_only). DERIVED from
+   *  `sourceExecutionPolicy` by `buildCanonicalDecision` — producers cannot set it directly. Only a native
+   *  (`native_actionable_dormant`) decision may be false, and even then Phase 3A executes nothing. */
+  sourceReadOnly: boolean
 
   // ── timestamps + freshness ──────────────────────────────────────────────────────────────────────────────
   /** As-of time of the underlying data (ISO). */
@@ -169,11 +198,44 @@ export type CanonicalDecision = {
 }
 
 /** Fields a producer supplies; the rest (contractVersion, decisionId, fingerprint, sourceReadOnly, defaults) are
- *  stamped by `buildCanonicalDecision`. Keeps producers from inventing ids/version or forging the read-only flag.
- *  `evidence`/`players`/`status`/`extensions` are OMITTED from the base and re-added as optional (defaulted in the
- *  builder) — omitting from the base is required, since intersecting a required field with an optional one does
- *  NOT relax it. */
+ *  stamped by `buildCanonicalDecision`. Keeps producers from inventing ids/version or forging the read-only flag
+ *  (`sourceReadOnly` is DERIVED from `sourceExecutionPolicy`, never supplied). The soft fields are OMITTED from
+ *  the base and re-added as optional (defaulted in the builder) — omitting from the base is required, since
+ *  intersecting a required field with an optional one does NOT relax it. */
 export type CanonicalDecisionInput = Omit<
   CanonicalDecision,
-  'contractVersion' | 'decisionId' | 'fingerprint' | 'sourceReadOnly' | 'evidence' | 'players' | 'status' | 'extensions'
-> & Partial<Pick<CanonicalDecision, 'evidence' | 'players' | 'status' | 'extensions'>>
+  | 'contractVersion' | 'decisionId' | 'fingerprint' | 'sourceReadOnly'
+  | 'evidence' | 'players' | 'status' | 'extensions' | 'subjectKey' | 'sourceExecutionPolicy'
+> &
+  Partial<Pick<CanonicalDecision, 'evidence' | 'players' | 'status' | 'extensions' | 'subjectKey' | 'sourceExecutionPolicy'>>
+
+/**
+ * An immutable point-in-time snapshot of a decision's CONTENT for one run, appended to `canonical_decision_revisions`
+ * (Phase 3A). The `canonical_decisions` row holds current state (idempotent upsert-by-decisionId); revisions
+ * preserve prior generated content + full run linkage so a re-run never silently overwrites history. Identity of a
+ * revision is `(decisionId, revisionHash)` where `revisionHash` covers the run + content, so retrying the same run
+ * with the same content is idempotent while a different run (or materially changed content) appends a new row.
+ */
+export type CanonicalDecisionRevision = {
+  decisionId: string
+  revisionHash: string
+  runId: string | null
+  producer: string
+  producerVersion: string
+  status: DecisionStatus
+  headline: string
+  explanation: string
+  recommendedAction: string | null
+  evidence: DecisionEvidenceRef[]
+  confidencePct: number | null
+  priorityScore: number | null
+  severity: DecisionSeverity
+  urgency: DecisionUrgency
+  source: DecisionSourceRef | null
+  dataAsOf: string | null
+  generatedAt: string
+  staleAt: string | null
+  freshness: DecisionFreshnessState
+  extensions: Record<string, unknown> | null
+  createdAt?: string
+}

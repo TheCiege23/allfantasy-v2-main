@@ -135,4 +135,79 @@ suite('canonical decision Prisma store (isolated sandbox)', () => {
     expect(r.persisted).toBe(0)
     expect(await db.canonicalDecision.count({ where: { decisionId: d.decisionId } })).toBe(0)
   })
+
+  // ── H3: concurrent-writer safety (real Postgres) ────────────────────────────────────────────────────────────
+  it('two CONCURRENT inserts of the same logical decision converge on exactly one row (no unhandled unique error)', async () => {
+    const store = new PrismaCanonicalDecisionStore(db)
+    const d = buildCanonicalDecision(input({ period: 'week:concurrent-insert' }))
+    // Both race to insert the same decisionId; a race-safe upsert must not throw and must leave ONE row.
+    const [r1, r2] = await Promise.all([
+      store.persistBatch({ decisions: [d], supersede: [], now: new Date('2026-07-29T12:00:00.000Z') }),
+      store.persistBatch({ decisions: [d], supersede: [], now: new Date('2026-07-29T12:00:01.000Z') }),
+    ])
+    expect(r1.created + r1.updated).toBe(1)
+    expect(r2.created + r2.updated).toBe(1)
+    expect(await db.canonicalDecision.count({ where: { decisionId: d.decisionId } })).toBe(1)
+  })
+
+  it('two CONCURRENT supersessions of the same prior decision are idempotent (final status superseded)', async () => {
+    const store = new PrismaCanonicalDecisionStore(db)
+    const oldD = buildCanonicalDecision(input({ period: 'week:concurrent-old' }))
+    await store.persistBatch({ decisions: [oldD], supersede: [], now: new Date('2026-07-29T12:00:00.000Z') })
+    const newA = buildCanonicalDecision(input({ period: 'week:concurrent-newA', supersedes: oldD.decisionId }))
+    const newB = buildCanonicalDecision(input({ period: 'week:concurrent-newB', supersedes: oldD.decisionId }))
+    await Promise.all([
+      store.persistBatch({ decisions: [newA], supersede: [{ oldDecisionId: oldD.decisionId, byDecisionId: newA.decisionId }], now: new Date() }),
+      store.persistBatch({ decisions: [newB], supersede: [{ oldDecisionId: oldD.decisionId, byDecisionId: newB.decisionId }], now: new Date() }),
+    ])
+    expect((await store.get(oldD.decisionId))!.status).toBe('superseded')
+  })
+
+  it('batch is ATOMIC — a DB-rejected item rolls back the whole batch (first item not persisted)', async () => {
+    const store = new PrismaCanonicalDecisionStore(db)
+    const good = buildCanonicalDecision(input({ period: 'week:atomic-good' }))
+    // Bypass the boundary validator and hand the store an item that violates a DB column limit (subjectKey VARCHAR(191)).
+    const bad = { ...buildCanonicalDecision(input({ period: 'week:atomic-bad' })), subjectKey: 'x'.repeat(400) }
+    await expect(
+      store.persistBatch({ decisions: [good, bad], supersede: [], now: new Date() }),
+    ).rejects.toBeTruthy()
+    expect(await db.canonicalDecision.count({ where: { decisionId: good.decisionId } })).toBe(0) // rolled back
+  })
+
+  // ── H2: append-only revision history (audit) ────────────────────────────────────────────────────────────────
+  it('a later run appends a revision and does NOT overwrite prior generated content', async () => {
+    const store = new PrismaCanonicalDecisionStore(db)
+    const run1 = buildCanonicalDecision(input({ period: 'week:hist', runId: `${NS}_runH1`, explanation: 'first-gen', confidencePct: 40 }))
+    await shadowPersistDecisions({ decisions: [run1], mode: 'shadow', store, env: enabledEnv() })
+    await shadowPersistDecisions({ decisions: [run1], mode: 'shadow', store, env: enabledEnv() }) // retry same → no new revision
+    const run2 = buildCanonicalDecision(input({ period: 'week:hist', runId: `${NS}_runH2`, explanation: 'second-gen', confidencePct: 90 }))
+    const r2 = await shadowPersistDecisions({ decisions: [run2], mode: 'shadow', store, env: enabledEnv() })
+    expect(run1.decisionId).toBe(run2.decisionId) // same logical decision
+    expect(r2.updated).toBe(1)
+    expect(r2.revised).toBe(1)
+
+    const current = await store.get(run1.decisionId)
+    expect(current!.explanation).toBe('second-gen') // current state = latest run
+    expect(current!.runId).toBe(`${NS}_runH2`)
+
+    const revs = await store.getRevisions(run1.decisionId)
+    expect(revs.length).toBe(2) // both runs preserved (retry did not duplicate)
+    expect(revs.map((r) => r.explanation)).toEqual(['first-gen', 'second-gen'])
+    expect(revs.map((r) => r.runId)).toEqual([`${NS}_runH1`, `${NS}_runH2`])
+    expect(revs[0]!.confidencePct).toBe(40) // prior generated content still recoverable
+  })
+
+  // ── H4: execution/source policy round-trips ─────────────────────────────────────────────────────────────────
+  it('native_actionable_dormant persists with sourceReadOnly=false; external stays read-only', async () => {
+    const store = new PrismaCanonicalDecisionStore(db)
+    const native = buildCanonicalDecision(input({ period: 'week:native', sourcePlatform: 'allfantasy', source: null, sourceExecutionPolicy: 'native_actionable_dormant' }))
+    const external = buildCanonicalDecision(input({ period: 'week:external' })) // sleeper default
+    await shadowPersistDecisions({ decisions: [native, external], mode: 'shadow', store, env: enabledEnv() })
+    const savedNative = await store.get(native.decisionId)
+    const savedExternal = await store.get(external.decisionId)
+    expect(savedNative!.sourceExecutionPolicy).toBe('native_actionable_dormant')
+    expect(savedNative!.sourceReadOnly).toBe(false)
+    expect(savedExternal!.sourceExecutionPolicy).toBe('external_read_only')
+    expect(savedExternal!.sourceReadOnly).toBe(true)
+  })
 })

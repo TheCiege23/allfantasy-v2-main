@@ -20,15 +20,26 @@ Code: `lib/decision-os/canonical/` (pure barrel `index.ts`; server-only Prisma s
 
 ## Envelope (`CanonicalDecision`, `contract.ts`)
 
-Typed fields for stable, business-critical concepts; constrained JSON (`evidence`, `extensions`) only for
-category-specific data not yet normalizable. Key fields: `contractVersion`, `decisionId`, `fingerprint`; identity
-(`userId`, `leagueId`, `connectedFranchiseId`, `sourcePlatform`, `sport`, `season`, `period`); classification
-(`category`, `subtype`, `scope`, `audience`); content (`headline`, `explanation`, `recommendedAction`,
-`evidence[]`); scoring (`confidencePct`, `severity`, `urgency`, `priorityScore`, `expectedImpact`); entities
-(`players[]`, `teamRef`); source (`source` ref + **`sourceReadOnly: true`**); time/freshness (`dataAsOf`,
-`generatedAt`, `staleAt`, `freshness`); classification-only entitlement/token (`entitlementTier`,
-`tokenCostClass`); lifecycle (`status`, `suppressionReason`, `conflictGroupKey`, `supersedes`); audit (`producer`,
-`producerVersion`, `runId`); `extensions`.
+Typed fields for stable, business-critical concepts; constrained + BOUNDED JSON (`evidence`, `extensions`) only
+for category-specific data not yet normalizable. Key fields: `contractVersion`, `decisionId`, `fingerprint`;
+identity (`userId`, `leagueId`, `connectedFranchiseId`, `sourcePlatform`, `sport`, `season`, `period`);
+classification (`category`, `subtype`, `subjectKey`, `scope`, `audience`); content (`headline`, `explanation`,
+`recommendedAction`, `evidence[]`); scoring (`confidencePct`, `severity`, `urgency`, `priorityScore`,
+`expectedImpact`); entities (`players[]`, `teamRef`); source (`source` ref + `sourceExecutionPolicy` +
+**derived `sourceReadOnly`**); time/freshness (`dataAsOf`, `generatedAt`, `staleAt`, `freshness`);
+classification-only entitlement/token (`entitlementTier`, `tokenCostClass`); lifecycle (`status`,
+`suppressionReason`, `conflictGroupKey`, `supersedes`); audit (`producer`, `producerVersion`, `runId`);
+`extensions`.
+
+**`subjectKey`** is the typed subject/action discriminator: a stable, deterministic id for the SPECIFIC subject a
+decision concerns when category+scope+players+teamRef do not already make it unique — which manager an
+`inactive_manager` signal is about, which trade proposal a `trade_review` evaluates, which matchup a
+`matchup_opportunity` concerns. It participates in identity (below) and MUST be stable across re-runs for the same
+logical subject (a roster/proposal/matchup id, never a per-run/random id).
+
+**Bounds.** Validation caps every string to its column, `evidence` to 50 items, `players` to 60, and `extensions`
+to 50 keys / 8 KB serialized, so constrained JSON can never silently become the real contract; oversized input is
+rejected before persistence rather than truncated by the database.
 
 Contract version: `CANONICAL_DECISION_CONTRACT_VERSION = '1'`. Consumers must check
 `isSupportedContractVersion(...)` and ignore/upgrade unknown versions.
@@ -47,11 +58,21 @@ waivers, Sunday Readiness, exposure, or connected-franchise resolution is comput
 ## Identity + idempotency (`identity.ts`)
 
 `fingerprint = sha256(stable identity tuple)` — user/league/connected-franchise/platform/sport/season/period/
-category/subtype/scope/audience/teamRef/players/conflictGroupKey. Content (headline/explanation/scoring) and
-timestamps are **excluded**, so a re-run that reworks wording/confidence for the SAME decision keeps the SAME
-`fingerprint` → SAME `decisionId` (`dcn:<fingerprint>`) → an idempotent UPSERT, not a duplicate. Use
+category/subtype/scope/audience/teamRef/players/conflictGroupKey/**subjectKey**. Content
+(headline/explanation/scoring) and timestamps are **excluded**, so a re-run that reworks wording/confidence for the
+SAME decision keeps the SAME `fingerprint` → SAME `decisionId` (`dcn:<fingerprint>`) → an idempotent UPSERT, not a
+duplicate. `subjectKey` is what keeps distinct same-category subjects apart (two inactive managers, two trade
+proposals with the same players, two matchups) — without it they would collapse to one decision. Use
 `buildCanonicalDecision(input)` — the only sanctioned constructor; producers cannot forge the version, id,
-fingerprint, or `sourceReadOnly` flag.
+fingerprint, or the derived `sourceReadOnly` flag.
+
+### Logical identity — exactly which fields define a "decision"
+
+A decision's logical identity is: contract version · WHO (`userId`, `leagueId`, `connectedFranchiseId`) · WHERE
+(`sourcePlatform`, `sport`, `season`, `period`) · WHAT KIND (`category`, `subtype`, `scope`, `audience`) · ABOUT
+WHAT (`teamRef`, `players`, `conflictGroupKey`, `subjectKey`). Everything else — wording, evidence, confidence,
+severity, urgency, priority, timestamps, freshness, status — is CONTENT, not identity, and may change across runs
+for the same decision.
 
 ## Lifecycle + supersession
 
@@ -59,6 +80,31 @@ fingerprint, or `sourceReadOnly` flag.
 decision that sets `supersedes: <oldDecisionId>` causes the store to mark the prior decision `superseded`
 (status-gated, idempotent). `conflictGroupKey` groups mutually-exclusive/duplicate decisions (e.g. the same waiver
 target across leagues) for a future dedup/portfolio layer — it is populated but **not** acted on in Phase 3A.
+
+## Audit history + run linkage (current-state + immutable revisions)
+
+`canonical_decisions` holds **current state** — one idempotent-upserted row per `decisionId`. Because a re-run
+overwrites that row, current state alone cannot preserve prior generated content or full run linkage, so the store
+ALSO appends an immutable revision to `canonical_decision_revisions` on every persist:
+
+- A revision's identity is `(decisionId, revisionHash)`, where `revisionHash = sha256(runId + all content fields)`.
+- Retrying the SAME run with the SAME content is idempotent — the hash matches, so no duplicate revision is added.
+- A LATER run (or materially changed content) yields a different hash → a new revision row, so the prior run's
+  generated content, confidence, priority, producer version, source snapshot, and status remain recoverable.
+
+This is the minimal "current-state + immutable revisions" model (not full event-sourcing). It gives: retry
+idempotency within a run; separate traceability of a later run; audit of previous generated content; deterministic
+current-state selection (the `canonical_decisions` row); recoverable supersession + producer-version + source-
+snapshot lineage; and no duplication from retries. Read by nothing live in Phase 3A.
+
+## Concurrency + idempotency
+
+`persistBatch` runs in ONE interactive transaction (atomic batch) and is safe for concurrent writers: current
+state is written with a native atomic upsert on the unique `decisionId` (INSERT … ON CONFLICT DO UPDATE — no
+find-then-insert TOCTOU), revisions are idempotent on their unique key, and the whole batch is wrapped in a BOUNDED
+retry that re-runs ONLY on a unique-constraint (P2002) or write-conflict/deadlock (P2034) — every other error
+surfaces immediately (no blanket error swallowing). Two concurrent writers of the same logical decision converge on
+exactly one row; a mid-batch failure rolls the whole batch back.
 
 ## Shadow-mode boundary (`decisionStore.ts`, `shadowFlag.ts`, `prismaDecisionStore.ts`)
 
@@ -74,11 +120,25 @@ This flag is INDEPENDENT of `DECISION_OS_MAINTENANCE_ENABLED`. Both remain off. 
 (`CanonicalDecisionStore`); tests use `InMemoryCanonicalDecisionStore`, production uses
 `PrismaCanonicalDecisionStore` (server-only). No UI, Chimmy, or notification code reads from the table.
 
+**Authentication boundary (future).** Phase 3A exposes NO route, cron, or job that calls `shadowPersistDecisions`.
+When a later phase adds a callable boundary, its required order is: (1) authenticate + authorize the internal
+caller, (2) evaluate `DECISION_OS_CANONICAL_SHADOW_ENABLED`, (3) confirm `mode: 'shadow'`, and only then (4) reach
+the run/DB/provider/token/freshness dependencies. Because no caller exists yet, authentication is that future
+boundary's responsibility and is NOT claimed as implemented here. Import-safety is guaranteed today: importing the
+pure barrel (`index.ts`) triggers no DB/provider/token/freshness/Chimmy/notification work, and the only
+`server-only`, `@/lib/prisma`-touching module (`prismaDecisionStore.ts`) is deliberately excluded from the barrel.
+
 ## Guarantees
 
-- **Provider read-only w.r.t. imported platforms.** `sourceReadOnly` is always `true` (enforced in the type and
-  the zod schema). AF may analyze imported (Sleeper/ESPN/Yahoo/Fantrax) leagues and emit read-only deep links, but
-  NEVER writes roster/lineup/waiver/trade/draft/commissioner/settings changes to them.
+- **Provider read-only w.r.t. imported platforms — via a typed execution policy.** Every decision carries
+  `sourceExecutionPolicy ∈ { external_read_only, advisory_only, native_actionable_dormant }`, and `sourceReadOnly`
+  is DERIVED from it by the builder (producers can't set it directly). Validation enforces the invariant that an
+  external platform (Sleeper/ESPN/Yahoo/Fantrax/MFL/Fleaflicker — see `EXTERNAL_SOURCE_PLATFORMS`) can NEVER be
+  `native_actionable_dormant` and must be `sourceReadOnly = true`. AF may analyze imported leagues and emit
+  read-only deep links but NEVER writes roster/lineup/waiver/trade/draft/commissioner/settings changes to them, and
+  no adapter can produce an externally-writable decision. The policy exists so the universal contract stays
+  accurate (a future NATIVE AllFantasy decision may be actionable) WITHOUT granting any execution now: Phase 3A
+  persists only and executes nothing on any policy, so `native_actionable_dormant` is representable but inert.
 - **Token-neutral.** `entitlementTier` / `tokenCostClass` are CLASSIFICATIONS only. Phase 3A never reserves,
   finalizes, or releases a token, and never mints freshness.
 - **Provider-neutral.** Provider-specific ids live only inside `source`; the canonical decision otherwise uses AF
@@ -101,8 +161,10 @@ evidence) rather than fabricating confidence, evidence, platform, or timestamps.
 ## For future producers
 
 Build a decision with `buildCanonicalDecision(input)` (or an adapter), then hand it to `shadowPersistDecisions`
-(shadow) — never construct the id/fingerprint by hand, never persist outside the boundary, never set
-`sourceReadOnly` to anything but `true`, and never charge a token or write to a source platform.
+(shadow) — never construct the id/fingerprint/`sourceReadOnly` by hand (they are stamped/derived), never persist
+outside the boundary, supply a stable `subjectKey` whenever multiple same-category decisions can coexist, leave
+`sourceExecutionPolicy` at `external_read_only` for imported-platform analysis, and never charge a token or write
+to a source platform.
 
 ## For future consumers (later phases)
 
@@ -112,13 +174,20 @@ Consumption (dashboard Decision Queue, Chimmy, portfolio, entitlement gating, no
 
 ## Database
 
-Additive model `CanonicalDecision` → table `canonical_decisions` (migration
-`20260730130000_canonical_decisions`, checksum `bf67b35e200e68bae98050dc0bdfebff48605fcaf95f7f3459a86101a53bc3e3`).
-Separate from `decision_intelligence_runs` (which holds AI *run* state, not individual decisions). Indexed for
-future queries by user/league/sport/season/category/severity/status/run/conflict-group/connected-franchise/
-freshness. Migration applied + verified only on the isolated sandbox; **NOT applied to production** — that is a
-later manual release gate (never `prisma migrate deploy`; use the repo's direct-SQL + `migrate resolve --applied`
-convention, see `PHASE2_MIGRATION_RUNBOOK.md`).
+Additive models `CanonicalDecision` → `canonical_decisions` (current state) and `CanonicalDecisionRevision` →
+`canonical_decision_revisions` (immutable audit history, FK → `canonical_decisions.decision_id` ON DELETE
+CASCADE). Migration `20260729130000_canonical_decisions`, checksum
+`837e199d7aabcc4a70f6dca807bd6a4c74b0c6a4629d844932f6ac145b96cb26`. (The original folder was `20260730130000_…`,
+a **future date** relative to the 2026-07-29 creation date; it was renamed to a valid same-day timestamp that
+sorts after the latest merged migration `20260729120000_intelligence_run_provider_exec_marker`.) The tables are
+separate from `decision_intelligence_runs` (AI *run* state, not individual decisions). Indexed for future queries
+by user/league/sport/season/category/severity/status/run/conflict-group/connected-franchise/freshness. Migration
+is purely additive (2 CREATE TABLE + indexes + 1 FK between the two new tables; no ALTER/DROP on any existing
+table), generated offline via `prisma migrate diff` (datamodel-to-datamodel). Applied + verified only on a freshly
+created disposable Neon database (44→46 cols on `canonical_decisions`, 22 on `canonical_decision_revisions`, all
+indexes + FK) that was deleted afterward — the earlier sandbox was NOT reused because its history still holds the
+old filename. **NOT applied to production** — that is a later manual release gate (never `prisma migrate deploy`;
+use the repo's direct-SQL + `migrate resolve --applied` convention, see `PHASE2_MIGRATION_RUNBOOK.md`).
 
 ## What Phase 3A deliberately does NOT activate
 

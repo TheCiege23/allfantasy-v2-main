@@ -17,6 +17,8 @@ import {
   canonicalShadowEnabled,
   CANONICAL_SHADOW_FLAG,
   computePriorityScore,
+  computeRevisionHash,
+  isExternalSourcePlatform,
   DECISION_CATEGORIES,
   type CanonicalDecision,
   type CanonicalDecisionInput,
@@ -207,6 +209,7 @@ describe('shadow persistence — safety / inertness', () => {
   const throwingStore: CanonicalDecisionStore = {
     persistBatch: async () => { throw new Error('store must NOT be called when shadow is disabled') },
     get: async () => { throw new Error('store must NOT be called when shadow is disabled') },
+    getRevisions: async () => { throw new Error('store must NOT be called when shadow is disabled') },
   }
   beforeEach(() => { saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]])); KEYS.forEach((k) => delete process.env[k]) })
   afterEach(() => { for (const k of KEYS) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k] } })
@@ -301,5 +304,156 @@ describe('shadow persistence — logic (enabled, in-memory)', () => {
     expect(r.created).toBe(1)
     expect(r.rejected.length).toBe(1)
     expect(store.rows.size).toBe(1)
+  })
+})
+
+// ── H1: logical identity (subjectKey) — distinct subjects must NOT collapse ───────────────────────────────────
+describe('logical identity / fingerprint collisions', () => {
+  const fp = (o: Partial<CanonicalDecisionInput>) => buildCanonicalDecision(baseInput(o)).fingerprint
+
+  it('two waiver targets (different players) in the same league/week stay distinct', () => {
+    const a = fp({ category: 'waiver_target', players: [{ canonicalPlayerId: 'pl-RB1' }] })
+    const b = fp({ category: 'waiver_target', players: [{ canonicalPlayerId: 'pl-RB2' }] })
+    expect(a).not.toBe(b)
+  })
+
+  it('two commissioner signals of the SAME category about different subjects stay distinct (subjectKey)', () => {
+    // Reproduces the pre-hardening collapse: commissioner signals set teamRef=null/players=[].
+    const mgrA = adaptCommissionerSignal({ id: 's1', type: 'inactive_manager', severity: 'high', title: 'Inactive', explanation: 'No moves', subjectKey: 'roster-A' }, ctx())
+    const mgrB = adaptCommissionerSignal({ id: 's2', type: 'inactive_manager', severity: 'high', title: 'Inactive', explanation: 'No moves', subjectKey: 'roster-B' }, ctx())
+    expect(mgrA.fingerprint).not.toBe(mgrB.fingerprint)
+    // …and WITHOUT a subjectKey they would collapse (documents why subjectKey is required for multi-subject signals).
+    const noKeyA = adaptCommissionerSignal({ id: 's1', type: 'inactive_manager', severity: 'high', title: 'Inactive', explanation: 'No moves' }, ctx())
+    const noKeyB = adaptCommissionerSignal({ id: 's2', type: 'inactive_manager', severity: 'high', title: 'Inactive', explanation: 'No moves' }, ctx())
+    expect(noKeyA.fingerprint).toBe(noKeyB.fingerprint)
+  })
+
+  it('two trade proposals with the SAME players stay distinct via subjectKey', () => {
+    const players = [{ canonicalPlayerId: 'pl-A' }, { canonicalPlayerId: 'pl-B' }]
+    const t1 = adaptTradeReview({ id: 't1', category: 'trade_review', title: 'Offer 1', explanation: 'x', players, subjectKey: 'trade-1001' }, ctx())
+    const t2 = adaptTradeReview({ id: 't2', category: 'trade_review', title: 'Offer 2', explanation: 'y', players, subjectKey: 'trade-1002' }, ctx())
+    expect(t1.fingerprint).not.toBe(t2.fingerprint)
+  })
+
+  it('one player, two DIFFERENT action subjects (category) are distinct by explicit identity rule', () => {
+    const player = [{ canonicalPlayerId: 'pl-X' }]
+    const startSit = fp({ category: 'start_sit', players: player })
+    const dropCand = fp({ category: 'drop_candidate', players: player })
+    expect(startSit).not.toBe(dropCand)
+  })
+
+  it('connected vs unconnected franchise contexts do not collide', () => {
+    const unconnected = fp({ connectedFranchiseId: null })
+    const connected = fp({ connectedFranchiseId: 'cf-1' })
+    expect(unconnected).not.toBe(connected)
+  })
+
+  it('NFL and NCAAF identities do not collide (sport is part of identity)', () => {
+    expect(fp({ sport: 'NFL' })).not.toBe(fp({ sport: 'NCAAF' }))
+  })
+
+  it('reworded re-run with the SAME subjectKey remains idempotent (same id)', () => {
+    const a = buildCanonicalDecision(baseInput({ subjectKey: 'trade-1001', category: 'trade_review' }))
+    const b = buildCanonicalDecision(baseInput({ subjectKey: 'trade-1001', category: 'trade_review', headline: 'reworded', confidencePct: 3, generatedAt: '2030-01-01T00:00:00.000Z' }))
+    expect(b.fingerprint).toBe(a.fingerprint)
+  })
+})
+
+// ── H4: execution / source policy ─────────────────────────────────────────────────────────────────────────────
+describe('execution / source policy', () => {
+  it('adapters default to external_read_only + sourceReadOnly true (no adapter is externally writable)', () => {
+    const d = adaptWaiverTarget({ id: 'w', title: 't', explanation: 'e', player: { canonicalPlayerId: 'pl-1' } }, ctx())
+    expect(d.sourceExecutionPolicy).toBe('external_read_only')
+    expect(d.sourceReadOnly).toBe(true)
+    expect(validateCanonicalDecision(d).ok).toBe(true)
+  })
+
+  it('an external platform can NEVER be native_actionable_dormant', () => {
+    const d = buildCanonicalDecision(baseInput({ sourcePlatform: 'sleeper', sourceExecutionPolicy: 'native_actionable_dormant' }))
+    expect(d.sourceReadOnly).toBe(false) // builder derived it…
+    expect(validateCanonicalDecision(d).ok).toBe(false) // …but validation refuses external + native
+  })
+
+  it('native AllFantasy source may be actionable-later (dormant) + is representable', () => {
+    const d = buildCanonicalDecision(baseInput({ sourcePlatform: 'allfantasy', source: null, sourceExecutionPolicy: 'native_actionable_dormant' }))
+    expect(d.sourceReadOnly).toBe(false)
+    expect(d.sourceExecutionPolicy).toBe('native_actionable_dormant')
+    expect(validateCanonicalDecision(d).ok).toBe(true)
+  })
+
+  it('advisory_only is read-only regardless of source', () => {
+    const d = buildCanonicalDecision(baseInput({ sourcePlatform: 'allfantasy', source: null, sourceExecutionPolicy: 'advisory_only' }))
+    expect(d.sourceReadOnly).toBe(true)
+    expect(validateCanonicalDecision(d).ok).toBe(true)
+  })
+
+  it('a forged read-only flag inconsistent with the policy is rejected', () => {
+    const d = { ...buildCanonicalDecision(baseInput({ sourcePlatform: 'allfantasy', source: null })), sourceReadOnly: false }
+    expect(validateCanonicalDecision(d).ok).toBe(false) // policy external_read_only ⇒ must be true
+  })
+
+  it('isExternalSourcePlatform recognizes the imported platforms only', () => {
+    for (const p of ['sleeper', 'espn', 'yahoo', 'fantrax', 'mfl', 'fleaflicker']) expect(isExternalSourcePlatform(p)).toBe(true)
+    for (const p of ['allfantasy', null, undefined]) expect(isExternalSourcePlatform(p as string | null)).toBe(false)
+  })
+})
+
+// ── H5: bounded JSON / oversized input rejection ──────────────────────────────────────────────────────────────
+describe('bounded JSON + oversized input', () => {
+  it('rejects an over-length evidence array', () => {
+    const evidence = Array.from({ length: 51 }, (_, i) => ({ id: `e${i}`, kind: 'matchup', label: 'x' }))
+    expect(validateCanonicalDecision(buildCanonicalDecision(baseInput({ evidence }))).ok).toBe(false)
+  })
+  it('rejects an over-length players array', () => {
+    const players = Array.from({ length: 61 }, (_, i) => ({ canonicalPlayerId: `pl-${i}` }))
+    expect(validateCanonicalDecision(buildCanonicalDecision(baseInput({ players }))).ok).toBe(false)
+  })
+  it('rejects extensions with too many keys', () => {
+    const extensions = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, 1]))
+    expect(validateCanonicalDecision(buildCanonicalDecision(baseInput({ extensions }))).ok).toBe(false)
+  })
+  it('rejects oversized extensions payload (bytes)', () => {
+    const extensions = { blob: 'x'.repeat(9000) }
+    expect(validateCanonicalDecision(buildCanonicalDecision(baseInput({ extensions }))).ok).toBe(false)
+  })
+  it('rejects an over-length explanation', () => {
+    expect(validateCanonicalDecision(buildCanonicalDecision(baseInput({ explanation: 'x'.repeat(5001) }))).ok).toBe(false)
+  })
+  it('accepts an at-limit evidence array (boundary)', () => {
+    const evidence = Array.from({ length: 50 }, (_, i) => ({ id: `e${i}`, kind: 'matchup', label: 'x' }))
+    expect(validateCanonicalDecision(buildCanonicalDecision(baseInput({ evidence }))).ok).toBe(true)
+  })
+})
+
+// ── H2: revision hash (audit history identity) ────────────────────────────────────────────────────────────────
+describe('revision hash', () => {
+  it('same content + run → same revision hash (idempotent retry)', () => {
+    const d = buildCanonicalDecision(baseInput())
+    expect(computeRevisionHash(d)).toBe(computeRevisionHash(buildCanonicalDecision(baseInput())))
+  })
+  it('different CONTENT → different revision hash (new revision appended)', () => {
+    const a = buildCanonicalDecision(baseInput())
+    const b = buildCanonicalDecision(baseInput({ explanation: 'materially different' }))
+    expect(computeRevisionHash(a)).not.toBe(computeRevisionHash(b))
+  })
+  it('different RUN, same content → different revision hash (run is traced)', () => {
+    const a = buildCanonicalDecision(baseInput({ runId: 'run-1' }))
+    const b = buildCanonicalDecision(baseInput({ runId: 'run-2' }))
+    expect(a.fingerprint).toBe(b.fingerprint) // same logical decision…
+    expect(computeRevisionHash(a)).not.toBe(computeRevisionHash(b)) // …distinct revision per run
+  })
+  it('in-memory store keeps append-only revision history across runs', async () => {
+    const store = new InMemoryCanonicalDecisionStore()
+    const env = { [CANONICAL_SHADOW_FLAG]: 'true' } as unknown as NodeJS.ProcessEnv
+    const run1 = buildCanonicalDecision(baseInput({ runId: 'run-1', explanation: 'first' }))
+    await shadowPersistDecisions({ decisions: [run1], mode: 'shadow', store, env })
+    await shadowPersistDecisions({ decisions: [run1], mode: 'shadow', store, env }) // retry same → no new revision
+    const run2 = buildCanonicalDecision(baseInput({ runId: 'run-2', explanation: 'updated' }))
+    const r2 = await shadowPersistDecisions({ decisions: [run2], mode: 'shadow', store, env })
+    expect(r2.updated).toBe(1) // current-state overwritten
+    const revs = await store.getRevisions(run1.decisionId)
+    expect(revs.length).toBe(2) // BOTH runs preserved (history not overwritten)
+    expect(revs.map((r) => r.explanation)).toEqual(['first', 'updated'])
+    expect(revs.map((r) => r.runId)).toEqual(['run-1', 'run-2'])
   })
 })
