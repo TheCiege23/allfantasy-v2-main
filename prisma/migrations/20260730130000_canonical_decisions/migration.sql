@@ -1,0 +1,88 @@
+-- Decision OS Phase 3A — canonical decision record (shadow-only persistence sink).
+-- Purely ADDITIVE: creates ONE new table + its indexes. No ALTER/DROP on any existing table.
+-- Generated offline via 'prisma migrate diff' (datamodel-to-datamodel, no DB connection). NOT applied to
+-- production by any build/deploy step. Apply via the documented repo convention (direct SQL + migrate
+-- resolve --applied) to an isolated/dev DB only. See docs/decision-os/PHASE2_MIGRATION_RUNBOOK.md.
+
+-- CreateTable
+CREATE TABLE "canonical_decisions" (
+    "id" TEXT NOT NULL,
+    "contract_version" VARCHAR(16) NOT NULL,
+    "decision_id" VARCHAR(191) NOT NULL,
+    "fingerprint" VARCHAR(191) NOT NULL,
+    "user_id" TEXT,
+    "league_id" TEXT,
+    "connected_franchise_id" TEXT,
+    "source_platform" VARCHAR(24),
+    "sport" VARCHAR(16) NOT NULL,
+    "season" INTEGER,
+    "period" VARCHAR(32),
+    "category" VARCHAR(48) NOT NULL,
+    "subtype" VARCHAR(48),
+    "scope" VARCHAR(16) NOT NULL,
+    "audience" VARCHAR(16) NOT NULL,
+    "headline" VARCHAR(300) NOT NULL,
+    "explanation" TEXT NOT NULL,
+    "recommended_action" TEXT,
+    "evidence" JSONB,
+    "confidence_pct" INTEGER,
+    "severity" VARCHAR(16) NOT NULL,
+    "urgency" VARCHAR(16) NOT NULL,
+    "priority_score" INTEGER,
+    "expected_impact" TEXT,
+    "players" JSONB,
+    "team_ref" TEXT,
+    "source" JSONB,
+    "source_read_only" BOOLEAN NOT NULL DEFAULT true,
+    "data_as_of" TIMESTAMP(3),
+    "generated_at" TIMESTAMP(3) NOT NULL,
+    "stale_at" TIMESTAMP(3),
+    "freshness" VARCHAR(16) NOT NULL,
+    "entitlement_tier" VARCHAR(24) NOT NULL,
+    "token_cost_class" VARCHAR(24) NOT NULL,
+    "status" VARCHAR(16) NOT NULL DEFAULT 'active',
+    "suppression_reason" VARCHAR(128),
+    "conflict_group_key" VARCHAR(191),
+    "supersedes_decision_id" VARCHAR(191),
+    "producer" VARCHAR(64) NOT NULL,
+    "producer_version" VARCHAR(32) NOT NULL,
+    "run_id" TEXT,
+    "extensions" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "canonical_decisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "canonical_decisions_decision_id_key" ON "canonical_decisions"("decision_id");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_user_id_category_idx" ON "canonical_decisions"("user_id", "category");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_league_id_category_idx" ON "canonical_decisions"("league_id", "category");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_sport_season_idx" ON "canonical_decisions"("sport", "season");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_status_severity_idx" ON "canonical_decisions"("status", "severity");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_connected_franchise_id_idx" ON "canonical_decisions"("connected_franchise_id");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_run_id_idx" ON "canonical_decisions"("run_id");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_conflict_group_key_idx" ON "canonical_decisions"("conflict_group_key");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_source_platform_idx" ON "canonical_decisions"("source_platform");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_generated_at_idx" ON "canonical_decisions"("generated_at");
+
+-- CreateIndex
+CREATE INDEX "canonical_decisions_stale_at_idx" ON "canonical_decisions"("stale_at");
