@@ -1,0 +1,110 @@
+.landing-preferences {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--color-divider);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--color-surface) 88%, transparent);
+  color: var(--color-text);
+}
+
+.landing-preferences__group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.landing-preferences button,
+.landing-preferences select {
+  min-height: 32px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.landing-preferences button {
+  padding: 5px 8px;
+}
+
+.landing-preferences button:hover,
+.landing-preferences button.is-active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  color: var(--color-accent-300);
+}
+
+.landing-preferences select {
+  max-width: 112px;
+  padding: 5px 8px;
+  border-color: var(--color-divider);
+  background: var(--color-surface);
+}
+
+.nocturne[data-landing-theme='light'] {
+  --color-bg: #f7f7fb;
+  --color-surface: #ffffff;
+  --color-text: #171827;
+  --color-divider: color-mix(in srgb, #171827 16%, transparent);
+  --color-neutral-100: #171827;
+  --color-neutral-200: #24263a;
+  --color-neutral-300: #3d4057;
+  --color-neutral-400: #565a72;
+  --color-neutral-500: #70758e;
+  --color-neutral-600: #858aa0;
+  --color-neutral-700: #a4a8b8;
+  --color-neutral-800: #d6d8e2;
+  --color-neutral-900: #ebeaf2;
+  --color-section: #ece9ff;
+  --color-section-glow: #d9d2ff;
+  --color-section-ghost: #c2b8fa;
+}
+
+.nocturne[data-landing-theme='dark'] {
+  --color-bg: #161826;
+  --color-surface: #232532;
+  --color-text: #e9e9ed;
+}
+
+.nocturne[data-landing-theme='af'] {
+  --color-bg: #070b14;
+  --color-surface: #101827;
+  --color-text: #f5f3ff;
+  --color-accent: #7c3aed;
+  --color-accent-2: #a78bfa;
+  --color-accent-300: #c4b5fd;
+  --color-accent-400: #a78bfa;
+  --color-accent-500: #8b5cf6;
+  --color-accent-600: #7c3aed;
+  --color-accent-700: #6d28d9;
+  --color-accent-800: #4c1d95;
+  --color-accent-900: #2e1065;
+  --color-section: #17113b;
+  --color-section-glow: #4c1d95;
+  --color-section-ghost: #6d28d9;
+}
+
+.nocturne[data-landing-theme='af']::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(124, 58, 237, 0.18), transparent 34%),
+    radial-gradient(circle at 84% 28%, rgba(59, 130, 246, 0.10), transparent 32%);
+}
+
+@media (max-width: 900px) {
+  .landing-preferences {
+    position: fixed;
+    right: 12px;
+    bottom: 12px;
+    z-index: 80;
+    box-shadow: 0 10px 35px rgba(0, 0, 0, 0.25);
+  }
+}
