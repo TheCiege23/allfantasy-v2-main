@@ -1,30 +1,10 @@
 import type { Metadata } from 'next'
-import dynamic from 'next/dynamic'
 import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { PageJsonLd } from '@/components/seo/JsonLd'
 import { LandingInviteCapture } from '@/components/landing/LandingInviteCapture'
+import LandingPageClient from '@/components/landing/nocturne/LandingNocturne'
 import { getHomeInitialSession } from '@/lib/landing/get-home-initial-session'
-
-/**
- * Landing page (Nocturne "1a" design). Replaces the legacy scrollytelling
- * `LandingPageClient`, which stays on disk for one-line rollback.
- *
- * Client-only: SSR-bundling this module on Windows Next 14.2 reliably hits
- * webpack-runtime `reading 'call'` at `next/image` and can corrupt `.next-dev-local`
- * manifests (`React Client Manifest` / `entryCSSFiles` / empty JSON).
- */
-const LandingPageClient = dynamic(() => import('@/components/landing/nocturne/LandingNocturne'), {
-  ssr: false,
-  loading: () => (
-    <div
-      className="flex min-h-[40vh] items-center justify-center text-sm"
-      style={{ background: '#161826', color: '#9397ab' }}
-    >
-      Loading…
-    </div>
-  ),
-})
 import {
   buildSeoMeta,
   getSoftwareApplicationSchema,
@@ -32,26 +12,25 @@ import {
 } from '@/lib/seo'
 
 export const metadata: Metadata = buildSeoMeta({
-  title: 'AllFantasy.ai — Run Your League. Win Your League. | NFL, NBA, NHL, MLB & More',
+  title: 'AllFantasy.ai — Every League You Play. One Screen.',
   description:
-    'AllFantasy.ai is the commissioner-first fantasy sports platform for serious managers. Build your league, draft live, manage trades and waivers, and chase the championship across NFL, NBA, NHL, MLB, NCAA, and Soccer.',
+    'Connect Sleeper, ESPN, and Yahoo leagues to one read-only fantasy sports command center. See your leagues, matchups, and what needs your attention without changing anything on the source platform.',
   canonicalPath: '/',
-  openGraphTitle: 'AllFantasy.ai — Run Your League. Win Your League.',
+  openGraphTitle: 'AllFantasy.ai — Every League You Play. One Screen.',
   openGraphDescription:
-    'The commissioner-first fantasy sports platform for serious managers. Live drafts, trades, waivers, standings, and championships — across every sport you play.',
-  twitterTitle: 'AllFantasy.ai — Run Your League. Win Your League.',
-  twitterDescription: 'The commissioner-first fantasy sports platform for serious managers.',
+    'Connect your fantasy leagues to one read-only command center for managers and commissioners.',
+  twitterTitle: 'AllFantasy.ai — Every League You Play. One Screen.',
+  twitterDescription:
+    'Connect Sleeper, ESPN, and Yahoo leagues to one read-only fantasy sports command center.',
   imagePath: '/af-crest.png',
   keywords: [
-    'fantasy sports',
-    'fantasy football',
-    'fantasy basketball',
-    'trade analyzer',
-    'waiver wire',
-    'draft assistant',
-    'dynasty fantasy',
-    'devy fantasy',
-    'fantasy league commissioner',
+    'fantasy sports dashboard',
+    'fantasy football league import',
+    'Sleeper league dashboard',
+    'ESPN fantasy league import',
+    'Yahoo fantasy league import',
+    'fantasy league commissioner tools',
+    'multi league fantasy dashboard',
     'AllFantasy',
   ],
 })
@@ -59,14 +38,14 @@ export const metadata: Metadata = buildSeoMeta({
 const HOME_WEBPAGE_SCHEMA = getWebPageSchema({
   name: 'AllFantasy.ai',
   description:
-    'Commissioner-first fantasy sports platform for NFL, NBA, NHL, MLB, NCAA, and Soccer with league management, live drafts, trades, and waiver tools.',
+    'A read-only fantasy sports command center that connects supported external leagues and shows managers and commissioners what needs attention.',
   url: '/',
 })
 
 const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
   name: 'AllFantasy.ai',
   description:
-    'Commissioner-first fantasy sports platform for serious managers with league management, live drafts, trade tools, and waiver wire tracking.',
+    'A read-only fantasy sports dashboard for connecting supported external leagues in one place.',
   url: 'https://allfantasy.ai/',
   applicationCategory: 'SportsApplication',
 })
