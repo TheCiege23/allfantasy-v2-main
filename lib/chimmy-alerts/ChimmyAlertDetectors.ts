@@ -36,10 +36,13 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
   const injured = signals.injuredStarters ?? []
   if (injured.length === 0) return out
 
-  const mins = minutesUntil(signals.lineupLockAt, now)
-
   for (const player of injured) {
     if (!isUrgentDesignation(player.designation)) continue
+
+    // The player's OWN kickoff is his lock. A league-wide time would be wrong for most of a
+    // roster — a Thursday-night starter locks Thursday, a 4:25pm starter locks Sunday
+    // afternoon. Fall back to a league-level lock only when the schedule has no game for him.
+    const mins = minutesUntil(player.lockAt ?? signals.lineupLockAt, now)
 
     // Past lock there is nothing the manager can do, so saying it would be noise.
     if (mins != null && mins < 0) continue
@@ -70,7 +73,7 @@ export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyA
         caveat,
       confidenceScore: player.stale ? 70 : 94,
       urgencySignal,
-      urgencyDeadlineAt: signals.lineupLockAt ?? null,
+      urgencyDeadlineAt: player.lockAt ?? signals.lineupLockAt ?? null,
       roleScope: 'member',
       // Short cooldown near lock: this is the one alert worth repeating.
       repeatCooldownMinutes: mins != null && mins <= 90 ? 20 : 120,

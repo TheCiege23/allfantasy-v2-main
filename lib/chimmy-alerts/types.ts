@@ -92,6 +92,14 @@ export interface InjuredStarterSignal {
   leagueName?: string | null
   /** Where the manager must actually go to fix it — imported leagues are not editable here. */
   platform?: string | null
+  /**
+   * When THIS player locks — his own kickoff, from the real schedule.
+   *
+   * Deliberately per-player rather than per-league. A Thursday-night starter locks Thursday
+   * while a 4:25pm starter locks Sunday afternoon, so a single league-wide lock time would be
+   * wrong for most of a roster. Null when the schedule has no game for him (bye, or no row).
+   */
+  lockAt?: string | null
   /** Best replacement on the bench, when a projection exists to rank by. */
   replacement?: { playerName: string; projectedPoints: number | null } | null
   /**
