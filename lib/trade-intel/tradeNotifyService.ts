@@ -5,6 +5,8 @@ import { getBaseUrl } from '@/lib/get-base-url'
 import { sendTemplatedEmail } from '@/lib/resend-client'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
+import { loadTradePsychology } from '@/lib/trade-intel/tradePsychologyLoader'
+import { canAccessForUser } from '@/lib/access/canAccessForUser'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { currentCompletedTradeIds } from '@/lib/trade-intel/sleeperTradeSync'
 
@@ -114,10 +116,20 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
       ),
     ]
     const users = await prisma.appUser
-      .findMany({ where: { id: { in: userIds } }, select: { email: true } })
-      .catch(() => [] as { email: string | null }[])
-    const emails = [...new Set(users.map((u) => u.email).filter((e): e is string => Boolean(e)))]
-    if (emails.length === 0) return base
+      .findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } })
+      .catch(() => [] as { id: string; email: string | null }[])
+    // Keep the id alongside the address: manager psychology is premium, and the
+    // entitlement is per recipient, so the email can no longer be built once and
+    // blasted to a list.
+    const recipients: Array<{ id: string; email: string }> = []
+    const seenEmails = new Set<string>()
+    for (const u of users) {
+      const email = u.email
+      if (!email || seenEmails.has(email)) continue
+      seenEmails.add(email)
+      recipients.push({ id: u.id, email })
+    }
+    if (recipients.length === 0) return base
 
     const leagueName = afLeagues[0].name ?? 'your league'
     const ledgerUrl = `${getBaseUrl()}/league/${afLeagues[0].id}?view=legacy`
@@ -126,9 +138,31 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
       // needs. Optional by design: if any of it is unavailable the email falls
       // back to what realized points alone can prove.
       const expectation = await loadTradeExpectation(sleeperLeagueId, trade).catch(() => null)
-      const { subject, html } = buildTradeGradeEmail({ leagueName, trade, ledgerUrl, expectation })
-      for (const to of emails) {
-        const sent = await sendTemplatedEmail({ to, subject, html }).catch(
+
+      // How these two have traded before. Context only — it never touches the
+      // grade — and premium, since it characterises other managers.
+      const psychology = await loadTradePsychology({
+        leagueId: afLeagues[0].id,
+        sides: trade.sides.map((s) => ({ rosterId: s.rosterId, managerName: s.managerName })),
+      }).catch(() => null)
+
+      for (const recipient of recipients) {
+        const entitled = psychology
+          ? await canAccessForUser('trade_analyzer', {
+              userId: recipient.id,
+              email: recipient.email,
+            })
+              .then((d) => d.allowed)
+              .catch(() => false)
+          : false
+        const { subject, html } = buildTradeGradeEmail({
+          leagueName,
+          trade,
+          ledgerUrl,
+          expectation,
+          psychology: entitled ? psychology : null,
+        })
+        const sent = await sendTemplatedEmail({ to: recipient.email, subject, html }).catch(
           () => ({ ok: false as const }),
         )
         if (sent.ok) base.emailsSent += 1

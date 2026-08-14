@@ -10,6 +10,10 @@ import type {
   SideExpectation,
   TradeExpectation,
 } from '@/lib/trade-intel/tradeExpectation'
+// TYPE-ONLY on purpose: the loader is `server-only`, and a value import from it
+// would drag prisma into this renderer. Vitest stubs `server-only`, so a test
+// suite would stay green while the module became unusable in a pure context.
+import type { TradePsychologyContext } from '@/lib/trade-intel/tradePsychologyLoader'
 
 /**
  * tradeGradeEmail — the "your league just traded" email, as a real visual.
@@ -423,16 +427,64 @@ function gradeBands(provisional: boolean): string {
 
 export type TradeGradeEmail = { subject: string; html: string }
 
+/**
+ * How these managers have traded before.
+ *
+ * Deliberately its own card, placed AFTER the grade reasoning. The grade is
+ * arithmetic on player values; a trading pattern is a different kind of claim,
+ * and blending the two would let a reputation quietly colour a number the reader
+ * takes as objective. Anyone who has not traded enough to have a pattern is said
+ * to have no pattern, not described as unremarkable.
+ */
+function psychologyCard(psychology: TradePsychologyContext | null): string {
+  if (!psychology) return ''
+
+  const rows = psychology.sides
+    .map((side) => {
+      const body =
+        side.labels.length > 0
+          ? `<span style="color:${TEXT};font-weight:600">${escapeHtml(side.labels.join(' · '))}</span>` +
+            `<span style="color:${FAINT}"> — from ${side.tradeEvidenceCount} recorded trade action${
+              side.tradeEvidenceCount === 1 ? '' : 's'
+            }${side.confidence ? `, ${escapeHtml(side.confidence)} confidence` : ''}</span>`
+          : `<span style="color:${FAINT}">${escapeHtml(side.shortfall ?? 'Not enough trading history yet.')}</span>`
+      return `<div style="font-size:13px;line-height:1.6;color:${MUTED};margin-bottom:4px">${escapeHtml(
+        side.managerName
+      )}: ${body}</div>`
+    })
+    .join('')
+
+  return `
+    <tr>
+      <td style="padding:14px 16px;background:${CARD};border:1px solid ${BORDER};border-radius:14px;margin-top:12px">
+        <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:${FAINT};font-weight:700;margin-bottom:6px">
+          How these managers trade
+        </div>
+        ${rows}
+        <div style="font-size:11px;color:${FAINT};line-height:1.5;margin-top:8px">
+          Based on past trades in this league. This did not affect the grade above.
+        </div>
+      </td>
+    </tr>`
+}
+
 export function buildTradeGradeEmail(params: {
   leagueName: string
   trade: GradedTrade
   ledgerUrl: string
   /** League/scoring/prior-season/roster context. Omit and the email says only what points prove. */
   expectation?: TradeExpectation | null
+  /**
+   * How these managers have traded before. CONTEXT ONLY — it never touches the
+   * grade, and is rendered in its own card below the reasoning so a reader can
+   * see it is a separate claim. Omit it and the email is exactly as it was.
+   */
+  psychology?: TradePsychologyContext | null
 }): TradeGradeEmail {
   const { leagueName, trade, ledgerUrl } = params
   const provisional = hasNoSignal(trade)
   const expectation = params.expectation?.available ? params.expectation : null
+  const psychology = params.psychology?.available ? params.psychology : null
 
   const bySideId = new Map((expectation?.sides ?? []).map((s) => [s.rosterId, s]))
   const projections = provisional
@@ -502,6 +554,7 @@ export function buildTradeGradeEmail(params: {
         }
       </td>
     </tr>
+    ${psychologyCard(psychology)}
     <tr>
       <td align="center" style="padding:20px 0 6px 0">
         <a href="${escapeHtml(ledgerUrl)}" style="display:inline-block;background:#ffffff;color:#0b0b0f;text-decoration:none;font-weight:800;font-size:14px;padding:12px 20px;border-radius:12px">
