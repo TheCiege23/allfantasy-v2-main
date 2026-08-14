@@ -141,10 +141,21 @@ export async function aggregateBehaviorSignals(
   const team = league?.teams.find(
     (t) => t.externalId === managerId || t.id === managerId || t.ownerName === username
   )
+  // LeagueTradeHistory.sleeperUsername does NOT hold a username — it holds the
+  // numeric Sleeper user id ("604531915508228096"). Teams are keyed by roster id
+  // ("9") and display name ("thisaintmyhouse"), so neither matched and the trade
+  // history fallback below returned nothing for every manager in every league.
+  // LeagueTeam.platformUserId is that id space, and it is populated for 935 of
+  // 1002 teams; adding it makes 207 of 207 manager-histories join.
   const managerCandidates = new Set<string>(
-    [managerId, username, team?.externalId, team?.id, team?.ownerName].filter(
-      (v): v is string => Boolean(v && String(v).trim().length > 0)
-    )
+    [
+      managerId,
+      username,
+      team?.externalId,
+      team?.id,
+      team?.ownerName,
+      team?.platformUserId,
+    ].filter((v): v is string => Boolean(v && String(v).trim().length > 0))
   )
 
   let tradeCount = 0
@@ -189,7 +200,10 @@ export async function aggregateBehaviorSignals(
     })
     for (const history of historyRows) {
       for (const t of history.trades) {
-        if (options?.season != null && t.season !== options.season) continue
+        // Trade psychology is cumulative, like draft: a 2026 league whose trades
+        // happened in 2023 has a trade history, not an empty one. Exact-season
+        // equality here discarded every one of them.
+        if (options?.season != null && t.season > options.season) continue
         const pGiven = (t.playersGiven as any[]) ?? []
         const pReceived = (t.playersReceived as any[]) ?? []
         const dkGiven = (t.picksGiven as any[]) ?? []
@@ -212,7 +226,7 @@ export async function aggregateBehaviorSignals(
       historyRows.reduce(
         (sum, h) =>
           sum +
-          h.trades.filter((t) => (options?.season != null ? t.season === options.season : true))
+          h.trades.filter((t) => (options?.season != null ? t.season <= options.season : true))
             .length,
         0
       )
