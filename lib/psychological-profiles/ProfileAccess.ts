@@ -21,13 +21,12 @@ import type { ManagerPsychProfileView } from './ManagerBehaviorQueryService'
  * unauthenticated: any caller could read a character read on any named manager in
  * any league, or spend compute generating them, just by knowing a league id.
  *
- * Gated on the trade analyzer's entitlement rather than a psychology-specific
- * one. A new SubscriptionFeatureId with no monetization-matrix entry resolves to
- * "locked for everyone", including paying users, and adding that entry means
- * inventing a price point. When psychology is priced on its own, OPPONENT_FEATURE
- * is the only line that changes.
+ * Sold on Pro and War Room, with Supreme inheriting both. War Room is not a
+ * superset of Pro, so this feature is the reason the access check now accepts ANY
+ * of a feature's plans rather than only the first one listed — see
+ * getAcceptedPlansForFeature.
  */
-const OPPONENT_FEATURE: SubscriptionFeatureId = 'trade_analyzer'
+const OPPONENT_FEATURE: SubscriptionFeatureId = 'manager_psychology'
 
 export type ProfileAccessDenied = {
   ok: false

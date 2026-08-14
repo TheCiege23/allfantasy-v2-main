@@ -70,6 +70,32 @@ export function getRequiredPlanForFeature(
   return planFamilyToSubscriptionPlanId(cat.requiredPlan[0])
 }
 
+/**
+ * Every plan that unlocks a feature, not just the first one listed.
+ *
+ * The catalog has always modelled `requiredPlan` as an ARRAY, and the access
+ * check read only element [0]. That was harmless for every feature shipped so
+ * far: all 32 entries are [X, 'af_supreme'], and Supreme is short-circuited
+ * separately, so the ignored entries never mattered. It stops being harmless the
+ * moment a feature is genuinely sold on two independent plans — Manager
+ * Psychology is offered on Pro and on War Room, and War Room is not a superset
+ * of Pro, so reading only [0] would silently lock out every War Room subscriber.
+ *
+ * getRequiredPlanForFeature still returns the FIRST plan, which is the one the
+ * upgrade prompts advertise; this is the set the gate actually checks.
+ */
+export function getAcceptedPlansForFeature(
+  featureId: SubscriptionFeatureId
+): SubscriptionPlanId[] {
+  const fromMatrix = getPremiumMonetizationForFeature(featureId)
+  if (fromMatrix) return [fromMatrix.requiredPlanId]
+  const cat = ENTITLEMENTS[featureId as keyof typeof ENTITLEMENTS]
+  if (!cat?.requiredPlan?.length) return []
+  return cat.requiredPlan
+    .map((family) => planFamilyToSubscriptionPlanId(family))
+    .filter((p): p is SubscriptionPlanId => p != null)
+}
+
 export function getDisplayPlanName(planId: SubscriptionPlanId): string {
   switch (planId) {
     case "pro":
@@ -132,10 +158,10 @@ export function hasFeatureAccessForPlans(
 ): boolean {
   if (!isActiveOrGraceStatus(status)) return false
   const expandedPlans = expandPlansWithBundle(plans)
-  const required = getRequiredPlanForFeature(featureId)
-  if (!required) return false
+  const accepted = getAcceptedPlansForFeature(featureId)
+  if (accepted.length === 0) return false
   return (
-    expandedPlans.includes(required) ||
+    accepted.some((plan) => expandedPlans.includes(plan)) ||
     expandedPlans.includes("supreme")
   )
 }

@@ -148,7 +148,7 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
 
       for (const recipient of recipients) {
         const entitled = psychology
-          ? await canAccessForUser('trade_analyzer', {
+          ? await canAccessForUser('manager_psychology', {
               userId: recipient.id,
               email: recipient.email,
             })

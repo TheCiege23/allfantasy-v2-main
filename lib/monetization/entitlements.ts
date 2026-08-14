@@ -17,6 +17,20 @@ export type EntitlementDef = {
 }
 
 export const ENTITLEMENTS = {
+  manager_psychology: {
+    key: 'manager_psychology',
+    label: 'Manager Psychology',
+    description:
+      'How the other managers in your league draft and trade, built only from behaviour actually recorded in that league. Your own profile is always free.',
+    // Pro and War Room both stand on their own here, and Supreme inherits both.
+    // War Room is not a superset of Pro, so naming Pro alone would have locked
+    // out every War Room subscriber for a feature that is squarely draft- and
+    // trade-room intelligence.
+    requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
+    upgradeUrl: '/pricing',
+    upgradeLabel: 'Unlock Manager Psychology',
+    highlightParam: 'manager_psychology',
+  },
   commissioner_ai_tools: {
     key: 'commissioner_ai_tools',
     label: 'Commissioner AI Tools',
