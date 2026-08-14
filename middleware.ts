@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
+import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
 import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
@@ -45,14 +46,11 @@ function canonicalProductionHostRedirect(request: NextRequest): NextResponse | n
 
 /**
  * App routes that must have a valid NextAuth session (JWT).
- * Matches: /af-rankings, /dashboard/rankings (redirect), /league/*
+ * Matches: /af-rankings, /dashboard/rankings (redirect), /league/*, /app/league/*
+ * (the last with a deliberate exception for shareable news articles).
+ *
+ * The rule lives in lib/auth/session-auth-paths so it can be tested directly.
  */
-function requiresSessionAuth(pathname: string): boolean {
-  if (pathname.startsWith("/af-rankings")) return true
-  if (pathname.startsWith("/dashboard/rankings")) return true
-  if (pathname.startsWith("/league/")) return true
-  return false
-}
 
 /** Paths that skip geo logic. Includes `/api/auth` so NextAuth + OAuth callbacks are never geo-blocked. */
 const GEO_EXEMPT_PREFIXES = [
