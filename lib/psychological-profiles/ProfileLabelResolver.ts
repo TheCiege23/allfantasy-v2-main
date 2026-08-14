@@ -97,6 +97,21 @@ const LABEL_DIMENSION: Record<ProfileLabel, PsychDimension> = {
  * happens to satisfy. An unobserved manager returns an empty array, which
  * callers must render as "not enough activity yet" — never as a personality.
  */
+/**
+ * Keep only the labels resting on a given evidence stream.
+ *
+ * Surfaces are dimension-specific: a draft room should not cite how someone
+ * trades, and a trade email should not cite how they draft. Both are real
+ * observations; each is off-topic in the other's context, and citing it there
+ * reads as padding a thin profile.
+ */
+export function filterLabelsByDimension(
+  labels: readonly ProfileLabel[],
+  dimension: PsychDimension
+): ProfileLabel[] {
+  return labels.filter((label) => LABEL_DIMENSION[label] === dimension)
+}
+
 export function resolveProfileLabels(
   signals: BehaviorSignalsOutput,
   thresholds: Partial<LabelThresholds> = {}
