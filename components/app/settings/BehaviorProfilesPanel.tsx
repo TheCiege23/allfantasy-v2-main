@@ -7,6 +7,12 @@ import { Brain, RefreshCw } from 'lucide-react'
 import type { LeagueTabProps } from '@/components/app/tabs/types'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
+type DimensionEvidence = {
+  evidenceCount: number
+  sufficient: boolean
+  confidence: 'high' | 'moderate' | 'low' | null
+}
+
 type ProfileListRow = {
   id: string
   managerId: string
@@ -19,6 +25,53 @@ type ProfileListRow = {
   waiverFocusScore: number
   riskToleranceScore: number
   updatedAt: string
+  /** Set when this manager is someone else and the viewer is not entitled. */
+  locked?: boolean
+  lockedReason?: string
+  /**
+   * Evidence-gated scores. A null means UNMEASURED and must render as such. The
+   * raw columns above are `Float @default(0)`, so rounding them prints a
+   * confident "Risk 0" for a manager nobody has ever watched.
+   */
+  displayScores?: {
+    aggressionScore: number | null
+    activityScore: number | null
+    tradeFrequencyScore: number | null
+    waiverFocusScore: number | null
+    riskToleranceScore: number | null
+  } | null
+  evidenceSummary?: {
+    dimensions: { trade: DimensionEvidence; draft: DimensionEvidence; roster: DimensionEvidence }
+    observedDimensions: string[]
+    missingDimensions: string[]
+    anySufficient: boolean
+  } | null
+}
+
+/**
+ * A score we never measured prints as a dash, never as a number.
+ *
+ * `displayScores` is absent on profiles written before the gate existed. That is
+ * also unmeasured, not an invitation to fall back to the raw column.
+ */
+function scoreText(value: number | null | undefined): string {
+  return typeof value === 'number' ? String(Math.round(value)) : '—'
+}
+
+/** What was actually observed, in plain words, so a thin profile explains itself. */
+function evidenceLine(profile: ProfileListRow): string | null {
+  const summary = profile.evidenceSummary
+  if (!summary) return null
+  const parts: string[] = []
+  const { trade, draft, roster } = summary.dimensions
+  if (draft?.evidenceCount) parts.push(`${draft.evidenceCount} picks`)
+  if (trade?.evidenceCount) parts.push(`${trade.evidenceCount} trade actions`)
+  if (roster?.evidenceCount) parts.push(`${roster.evidenceCount} waiver claims`)
+  if (parts.length === 0) return 'Nothing recorded for this manager yet.'
+  const observed = summary.observedDimensions.length
+    ? `Observed: ${summary.observedDimensions.join(', ')}.`
+    : 'Not enough in any one area to describe how they play yet.'
+  return `${parts.join(' · ')}. ${observed}`
 }
 
 export default function BehaviorProfilesPanel({ leagueId }: LeagueTabProps) {
@@ -274,14 +327,23 @@ export default function BehaviorProfilesPanel({ leagueId }: LeagueTabProps) {
                   {profile.sportLabel}
                 </span>
                 <div className="flex flex-wrap gap-1">
-                  {profile.profileLabels.slice(0, 4).map((label) => (
-                    <span
-                      key={`${profile.id}-${label}`}
-                      className="rounded border border-purple-500/25 bg-purple-500/10 px-1.5 py-0.5 text-[10px] text-purple-200"
-                    >
-                      {label}
+                  {profile.profileLabels.length > 0 ? (
+                    profile.profileLabels.slice(0, 4).map((label) => (
+                      <span
+                        key={`${profile.id}-${label}`}
+                        className="rounded border border-purple-500/25 bg-purple-500/10 px-1.5 py-0.5 text-[10px] text-purple-200"
+                      >
+                        {label}
+                      </span>
+                    ))
+                  ) : (
+                    // An empty label strip reads as "nothing notable about this
+                    // manager". It actually means we have not watched them enough
+                    // to say anything, which is a different statement.
+                    <span className="rounded border border-white/15 bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-white/45">
+                      {profile.locked ? 'Locked' : 'Not enough activity yet'}
                     </span>
-                  ))}
+                  )}
                 </div>
                 <div className="ml-auto flex flex-wrap gap-1">
                   <Link
@@ -316,12 +378,23 @@ export default function BehaviorProfilesPanel({ leagueId }: LeagueTabProps) {
                 </div>
               </div>
               <div className="mt-2 grid grid-cols-5 gap-1.5 text-[10px] text-white/65">
-                <div>Agg {Math.round(profile.aggressionScore)}</div>
-                <div>Act {Math.round(profile.activityScore)}</div>
-                <div>Trade {Math.round(profile.tradeFrequencyScore)}</div>
-                <div>Waiver {Math.round(profile.waiverFocusScore)}</div>
-                <div>Risk {Math.round(profile.riskToleranceScore)}</div>
+                <div>Agg {scoreText(profile.displayScores?.aggressionScore)}</div>
+                <div>Act {scoreText(profile.displayScores?.activityScore)}</div>
+                <div>Trade {scoreText(profile.displayScores?.tradeFrequencyScore)}</div>
+                <div>Waiver {scoreText(profile.displayScores?.waiverFocusScore)}</div>
+                <div>Risk {scoreText(profile.displayScores?.riskToleranceScore)}</div>
               </div>
+              {evidenceLine(profile) ? (
+                <p className="mt-1.5 text-[10px] text-white/45">{evidenceLine(profile)}</p>
+              ) : null}
+              {profile.locked ? (
+                <p className="mt-1.5 text-[10px] text-amber-200/80">
+                  {profile.lockedReason ?? 'Other managers are a premium capability.'}{' '}
+                  <Link href="/pricing" className="underline hover:text-amber-100">
+                    Unlock
+                  </Link>
+                </p>
+              ) : null}
               {explainByProfile[profile.id] && (
                 <p className="mt-2 text-xs text-white/70">{explainByProfile[profile.id]}</p>
               )}
