@@ -25,6 +25,8 @@ export interface LabelThresholds {
   balancedDrafterMaxConcentration: number
   /** Below this share of picks resolved, positional claims are not made at all. */
   positionMinCoverage: number
+  /** Deviation from league mean, in league-spread units, required for a draft label. */
+  draftPeerDeviation: number
 }
 
 const DEFAULT_THRESHOLDS: LabelThresholds = {
@@ -41,10 +43,15 @@ const DEFAULT_THRESHOLDS: LabelThresholds = {
   riskAverseMaxRisk: 35,
   // Half a manager's picks landing in rounds 1-3 is a genuinely premium-weighted
   // draft; a quarter or less is a back-weighted, volume approach.
-  // Calibrated against the observed spread in a real 12-team dynasty league,
-  // where early-round share ran 25.9% / 51.4% / 54.5%. The band between 30 and
-  // 50 is deliberately unlabelled: those managers have no distinctive draft
-  // shape and inventing one for them is the whole failure this module guards.
+  // Draft claims are made against a manager's OWN leaguemates, so this is a
+  // deviation in units of the league's spread, not a percentage. Absolute
+  // thresholds measured league draft depth instead of the manager: a 44-round
+  // league sat every one of its 14 managers at 20-23% early-round share and
+  // labelled all of them identically.
+  //
+  // One full spread-width keeps the label for managers who actually stand out
+  // and leaves the middle of the pack — most of any league — unlabelled.
+  draftPeerDeviation: 1,
   earlyRoundFocusedMinRate: 50,
   lateRoundAccumulatorMaxRate: 30,
   // With 4-6 positions in play an even spread sits near 20-25%, so half of all
@@ -98,11 +105,19 @@ export function resolveProfileLabels(
   const labels: ProfileLabel[] = []
   const activity = (signals.tradeFrequencyNorm + signals.waiverFocusNorm + signals.lineupChangeRate) / 3
 
-  if (signals.tradeCount >= t.tradeHeavyMinTrades) labels.push('trade-heavy')
+  // Busy relative to the league, not to a fixed number that a long-lived league
+  // clears by simply existing. The absolute floor stays as a sanity bound so a
+  // quiet league cannot crown its most active manager on two trades.
+  if (
+    signals.tradeFrequencyRelative >= t.draftPeerDeviation &&
+    signals.tradeCount >= t.tradeHeavyMinTrades
+  ) {
+    labels.push('trade-heavy')
+  }
   if (signals.waiverClaimCount >= t.waiverFocusedMinClaims) labels.push('waiver-focused')
   if (signals.aggressionNorm >= t.aggressiveMinScore || signals.tradeTimingLateRate >= 60) labels.push('aggressive')
   if (
-    signals.tradeCount <= t.conservativeMaxTrade &&
+    signals.tradeFrequencyRelative <= -t.draftPeerDeviation &&
     signals.waiverFocusNorm < 30 &&
     signals.riskNorm <= t.riskAverseMaxRisk
   ) {
@@ -133,9 +148,9 @@ export function resolveProfileLabels(
   // strategy. The evidence gate below would catch it, but a rule that only holds
   // because something downstream cleans up after it is a trap for the next edit.
   if (signals.draftPickCount > 0) {
-    if (signals.draftEarlyRoundRate >= t.earlyRoundFocusedMinRate) {
+    if (signals.draftEarlyRoundRelative >= t.draftPeerDeviation) {
       labels.push('early-round focused')
-    } else if (signals.draftEarlyRoundRate <= t.lateRoundAccumulatorMaxRate) {
+    } else if (signals.draftEarlyRoundRelative <= -t.draftPeerDeviation) {
       labels.push('late-round accumulator')
     }
   }
@@ -145,12 +160,9 @@ export function resolveProfileLabels(
   // reported as 0 — which without this guard would fire 'balanced drafter' for
   // every manager whose picks we failed to identify.
   if (signals.positionSampleCoverage >= t.positionMinCoverage) {
-    if (signals.positionPriorityConcentration >= t.positionFocusedMinConcentration) {
+    if (signals.positionConcentrationRelative >= t.draftPeerDeviation) {
       labels.push('position-focused')
-    } else if (
-      signals.positionPriorityConcentration > 0 &&
-      signals.positionPriorityConcentration <= t.balancedDrafterMaxConcentration
-    ) {
+    } else if (signals.positionConcentrationRelative <= -t.draftPeerDeviation) {
       labels.push('balanced drafter')
     }
   }

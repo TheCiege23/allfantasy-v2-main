@@ -29,6 +29,9 @@ const signals = (over: Record<string, number> = {}) =>
     draftEarlyRoundRate: 0,
     positionPriorityConcentration: 0,
     positionSampleCoverage: 0,
+    draftEarlyRoundRelative: 0,
+    positionConcentrationRelative: 0,
+    tradeFrequencyRelative: 0,
     picksTradedAway: 0,
     picksAcquired: 0,
     rebuildScore: 0,
@@ -95,6 +98,7 @@ describe('earned labels survive the gate', () => {
     const labels = resolveProfileLabels(
       signals({
         tradeCount: 2,
+        tradeFrequencyRelative: -1.4,
         picksTradedAway: 2,
         picksAcquired: 1,
         waiverClaimCount: 6,
@@ -146,8 +150,8 @@ describe('the draft dimension can now say what it sees', () => {
   // Draft is often the ONLY populated dimension, so without a vocabulary the
   // engine measured real differences between managers and reported nothing.
   it('separates a premium-pick drafter from a volume drafter', () => {
-    const early = resolveProfileLabels(signals({ draftPickCount: 44, draftEarlyRoundRate: 54.5 }))
-    const late = resolveProfileLabels(signals({ draftPickCount: 27, draftEarlyRoundRate: 25.9 }))
+    const early = resolveProfileLabels(signals({ draftPickCount: 44, draftEarlyRoundRelative: 1.4 }))
+    const late = resolveProfileLabels(signals({ draftPickCount: 27, draftEarlyRoundRelative: -1.3 }))
     expect(early).toContain('early-round focused')
     expect(early).not.toContain('late-round accumulator')
     expect(late).toContain('late-round accumulator')
@@ -157,7 +161,7 @@ describe('the draft dimension can now say what it sees', () => {
   it('calls nobody a late-round accumulator for never having drafted', () => {
     // draftEarlyRoundRate is 0 with no picks, and the threshold is an upper
     // bound — the exact shape that produced "conservative" from emptiness.
-    expect(resolveProfileLabels(signals({ draftPickCount: 0, draftEarlyRoundRate: 0 }))).toEqual([])
+    expect(resolveProfileLabels(signals({ draftPickCount: 0, draftEarlyRoundRelative: -2 }))).toEqual([])
   })
 
   it('withholds positional claims when the player join missed', () => {
@@ -165,13 +169,13 @@ describe('the draft dimension can now say what it sees', () => {
     // concentration comes back 0. Without the coverage guard that reads as a
     // perfectly balanced drafter for a manager whose picks we never identified.
     const blind = resolveProfileLabels(
-      signals({ draftPickCount: 44, draftEarlyRoundRate: 40, positionPriorityConcentration: 0, positionSampleCoverage: 0 })
+      signals({ draftPickCount: 44, positionConcentrationRelative: -2, positionSampleCoverage: 0 })
     )
     expect(blind).not.toContain('balanced drafter')
     expect(blind).not.toContain('position-focused')
 
     const seen = resolveProfileLabels(
-      signals({ draftPickCount: 44, draftEarlyRoundRate: 40, positionPriorityConcentration: 22, positionSampleCoverage: 95 })
+      signals({ draftPickCount: 44, positionConcentrationRelative: -1.5, positionSampleCoverage: 95 })
     )
     expect(seen).toContain('balanced drafter')
   })
@@ -224,5 +228,37 @@ describe('scores are not shown for dimensions we never observed', () => {
     const evidence = summarizeEvidenceRecords([])
     expect(evidence.anySufficient).toBe(false)
     expect(gateScores(raw, evidence).activityScore).toBeNull()
+  })
+})
+
+describe('a label must describe the manager, not the league he is in', () => {
+  it('stays silent when every manager in the league drafts alike', () => {
+    // Early-round share is dominated by how deep the league drafts. Measured
+    // live: a 44-round IDP dynasty sat all 14 of its managers at 20-23%, and a
+    // fixed threshold labelled every one of them "late-round accumulator" — a
+    // fact about the league's settings presented as a personality. Relative
+    // standing is 0 for all of them, and no one is distinctive.
+    const typical = resolveProfileLabels(signals({ draftPickCount: 40, draftEarlyRoundRelative: 0 }))
+    expect(typical).not.toContain('late-round accumulator')
+    expect(typical).not.toContain('early-round focused')
+  })
+
+  it('does not call a manager trade-heavy for a league simply being old', () => {
+    // Trade counts are cumulative across seasons, so an absolute bar of 6 was
+    // cleared by 9 of 12 managers in a five-season dynasty — roughly one trade a
+    // season each. Busy is a comparison, and it is made against leaguemates.
+    const average = resolveProfileLabels(signals({ tradeCount: 7, tradeFrequencyRelative: -0.6 }))
+    expect(average).not.toContain('trade-heavy')
+
+    const standout = resolveProfileLabels(signals({ tradeCount: 29, tradeFrequencyRelative: 1.6 }))
+    expect(standout).toContain('trade-heavy')
+  })
+
+  it('keeps the absolute floor so a quiet league cannot crown a two-trade manager', () => {
+    // Being the busiest in a league where nobody trades is not being busy.
+    const busiestOfTheQuiet = resolveProfileLabels(
+      signals({ tradeCount: 3, tradeFrequencyRelative: 2.2 })
+    )
+    expect(busiestOfTheQuiet).not.toContain('trade-heavy')
   })
 })
