@@ -14,6 +14,12 @@ const LABELS: Record<ChimmyOrchestrationIntent, string> = {
   draft: 'Draft strategy',
   matchup: 'Matchup outlook',
   league_strength: 'League strength / standings',
+  // These four belong to ChimmyOrchestrationIntent and were missing from this
+  // record, so it failed to typecheck — a red that had been sitting on main.
+  commissioner: 'Commissioner / league administration',
+  bracket: 'Bracket / tournament',
+  injury: 'Injury status',
+  weather: 'Weather impact',
   manager_psychology: 'Manager behavior / psychology',
   story_recap: 'Story / recap / narrative',
   general: 'General fantasy help',
@@ -41,9 +47,21 @@ export function classifyChimmyIntent(
     return score('story_recap', 3)
   }
   if (
-    /\b(psycholog|tilt|toxic|collusion|bad\s*manager|behavior|trash\s*talk|mind\s*game|manager\s*profil)\b/.test(
+    // Stems carry \w* because the closing \b otherwise makes them unmatchable:
+    // `\bpsycholog\b` cannot match "psychology" (g and y are both word chars, so
+    // there is no boundary between them). That was true of the original pattern,
+    // which means this intent never fired for the single most obvious word
+    // someone would use for it — and it failed silently, as a plausible general
+    // answer rather than an error.
+    /\b(psycholog\w*|tilt|toxic|collusion|bad\s*manager|behavio\w*|trash\s*talk|mind\s*game\w*|manager\s*profil\w*|tendenc\w*)\b/.test(
       text
-    )
+    ) ||
+    // Questions about a PERSON rather than an asset: "how does Stavros draft",
+    // "what kind of trader is he". Without these they fell through to the
+    // generic draft/trade branches, which answer about players instead of about
+    // the manager being asked about.
+    /\bhow\s+does\s+\w+\s+(draft|trade)\b/.test(text) ||
+    /\bwhat\s+kind\s+of\s+(manager|drafter|trader)\b/.test(text)
   ) {
     return score('manager_psychology', 3)
   }

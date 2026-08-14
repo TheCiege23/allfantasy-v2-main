@@ -10,6 +10,8 @@ import {
   resolveProfileAccess,
   presentProfile,
 } from '@/lib/psychological-profiles/ProfileAccess'
+import { rollUpManagerAcrossLeagues } from '@/lib/psychological-profiles/CrossLeagueRollup'
+import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,6 +47,35 @@ export async function GET(
         leagueId,
         profile: profile ? present(profile) : null,
       })
+    }
+
+    // ?rollup=<managerId> — the same manager across the leagues you SHARE with
+    // them. Served from this route rather than a new one; the scope is an
+    // intersection so it cannot report behaviour from leagues the caller is not
+    // in. Identity across leagues is the platform user id, so the roster id in
+    // the query is resolved to it first.
+    const rollupManagerId = url.searchParams?.get('rollup') ?? undefined
+    if (rollupManagerId) {
+      const team = await prisma.leagueTeam.findFirst({
+        where: {
+          leagueId,
+          OR: [{ externalId: rollupManagerId }, { id: rollupManagerId }],
+        },
+        select: { platformUserId: true },
+      })
+      if (!team?.platformUserId) {
+        return NextResponse.json({
+          leagueId,
+          rollup: null,
+          reason: 'This manager has no platform identity, so they cannot be matched across leagues.',
+        })
+      }
+      const rollup = await rollUpManagerAcrossLeagues({
+        viewerUserId: access.userId,
+        subjectPlatformUserId: team.platformUserId,
+        canSeeOthers: canSeeOpponents,
+      })
+      return NextResponse.json({ leagueId, rollup })
     }
 
     const managerAId = url.searchParams?.get('managerAId') ?? undefined

@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { runPsychologicalProfileEngine } from './PsychologicalProfileEngine'
+import { backfillTransactionFactsFromTradeHistory } from './TransactionFactBackfill'
 
 /**
  * ProfileRefreshService — generate psychological profiles for a whole league.
@@ -180,6 +181,19 @@ export async function refreshStaleLeagueProfiles(input?: {
   })
 
   const picked = ordered.slice(0, maxLeagues)
+
+  // Normalise these leagues' trades into the warehouse before profiling them, so
+  // the aggregator's PRIMARY path has rows instead of always falling through to
+  // the trade-history reader. Bounded to the same leagues this tick touches, so
+  // the work stays proportional to the rotation rather than sweeping everything
+  // every six hours. Swallowed: a warehouse hiccup must not stop profiling, which
+  // still works from the fallback.
+  try {
+    await backfillTransactionFactsFromTradeHistory({ leagueIds: picked })
+  } catch {
+    // fallback path still covers it
+  }
+
   const results: LeagueProfileRefreshResult[] = []
   for (const leagueId of picked) {
     try {
