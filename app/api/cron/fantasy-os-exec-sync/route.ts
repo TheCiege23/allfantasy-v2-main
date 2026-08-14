@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { resolveCadence } from '@/lib/fantasy-os/sync/season'
 import { runDueSleeperLeagues } from '@/lib/fantasy-os/sync/collector'
+import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 
 /**
  * Fantasy OS — season-aware Sleeper read-model refresh heartbeat (durable cron entrypoint).
@@ -61,7 +62,40 @@ export async function GET(req: NextRequest) {
 
   try {
     const summary = await runDueSleeperLeagues({ now, limit, concurrency })
-    return NextResponse.json({ ...heartbeat, executed: true, summary })
+
+    // Psychological profiles are refreshed AFTER a sync lands, never at import:
+    // a freshly imported league has no drafts, trades or rosters yet, so
+    // profiling it would characterise every manager from nothing. Once the sync
+    // has written real history there is something to observe.
+    //
+    // Bounded and swallowed — profiling is enrichment and must never take down
+    // the collector it rides along with. `manager_psych_profiles` sat at 0 rows
+    // because the engine had no caller; this is that caller.
+    let profiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
+    try {
+      const syncedExternalIds = (summary.results ?? [])
+        .filter((r) => r.executed && !r.error)
+        // runKey is `<provider>:<externalLeagueId>:<season>`.
+        .map((r) => String(r.runKey ?? '').split(':')[1] ?? '')
+        .filter(Boolean)
+
+      if (syncedExternalIds.length > 0) {
+        const refreshed = await refreshProfilesForExternalLeagues({
+          externalLeagueIds: syncedExternalIds,
+          maxLeagues: 10,
+        })
+        profiles = {
+          leaguesProfiled: refreshed.leaguesProfiled,
+          managersProfiled: refreshed.managersProfiled,
+        }
+      }
+    } catch (profileErr) {
+      profiles = {
+        error: profileErr instanceof Error ? profileErr.message.slice(0, 160) : 'profile refresh failed',
+      }
+    }
+
+    return NextResponse.json({ ...heartbeat, executed: true, summary, profiles })
   } catch (err) {
     return NextResponse.json(
       { ...heartbeat, executed: false, error: err instanceof Error ? err.message : 'sync failed' },

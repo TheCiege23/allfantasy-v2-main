@@ -110,3 +110,24 @@ describe('earned labels survive the gate', () => {
     expect(summary.overallConfidence).toBe('moderate')
   })
 })
+
+describe('a label must be able to come out differently', () => {
+  it('does not stamp "rookie-heavy" on everyone who ever drafted', () => {
+    // The live regression: with no acquisitions observed, rookieAcquisitionRate
+    // was (0 + picks) / (0 + 0 + picks) = 100 for EVERY manager, so all 12
+    // managers in a real league came back with the identical label. A claim that
+    // cannot come out any other way is not an observation about the manager.
+    //
+    // Draft evidence is genuinely present here (35 picks clears the floor), so
+    // the evidence gate cannot catch this — the ratio itself had to be fixed.
+    const labels = resolveProfileLabels(signals({ draftPickCount: 35, rookieAcquisitionRate: 0 }))
+    expect(labels).not.toContain('rookie-heavy')
+  })
+
+  it('still says rookie-heavy when a real acquisition mix leans rookie', () => {
+    // The fix must not make the label unreachable: a manager whose acquisitions
+    // really do skew young has demonstrated the trait and should be named.
+    const labels = resolveProfileLabels(signals({ draftPickCount: 35, rookieAcquisitionRate: 85 }))
+    expect(labels).toContain('rookie-heavy')
+  })
+})
