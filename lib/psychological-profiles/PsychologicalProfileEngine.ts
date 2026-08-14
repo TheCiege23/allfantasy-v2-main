@@ -83,9 +83,17 @@ export async function runPsychologicalProfileEngine(
   }
 
   const evidencePayloads = buildEvidenceFromSignals(signals, profileId, input.season)
-  for (const ev of evidencePayloads) {
-    await prisma.profileEvidenceRecord.create({
-      data: {
+
+  // Evidence is derived wholly from the current signals, so a run REPLACES the
+  // prior set rather than appending to it. This used to create a fresh row per
+  // evidence type on every run, which was survivable while the engine was only
+  // ever invoked by hand; now that a cron refreshes profiles after each sync it
+  // would add thousands of rows a day per league and leave readers picking a
+  // winner among stale duplicates.
+  await prisma.profileEvidenceRecord.deleteMany({ where: { profileId } })
+  if (evidencePayloads.length > 0) {
+    await prisma.profileEvidenceRecord.createMany({
+      data: evidencePayloads.map((ev) => ({
         managerId: ev.managerId,
         leagueId: ev.leagueId,
         sport: ev.sport,
@@ -94,7 +102,7 @@ export async function runPsychologicalProfileEngine(
         sourceReference: ev.sourceReference ?? undefined,
         ...(ev.createdAt ? { createdAt: ev.createdAt } : {}),
         profileId,
-      },
+      })),
     })
   }
 

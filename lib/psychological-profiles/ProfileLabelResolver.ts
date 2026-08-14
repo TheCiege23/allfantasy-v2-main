@@ -19,6 +19,12 @@ export interface LabelThresholds {
   quietStrategistMaxActivity: number
   valueFirstMinTradeTiming: number
   riskAverseMaxRisk: number
+  earlyRoundFocusedMinRate: number
+  lateRoundAccumulatorMaxRate: number
+  positionFocusedMinConcentration: number
+  balancedDrafterMaxConcentration: number
+  /** Below this share of picks resolved, positional claims are not made at all. */
+  positionMinCoverage: number
 }
 
 const DEFAULT_THRESHOLDS: LabelThresholds = {
@@ -33,6 +39,19 @@ const DEFAULT_THRESHOLDS: LabelThresholds = {
   quietStrategistMaxActivity: 38,
   valueFirstMinTradeTiming: 35,
   riskAverseMaxRisk: 35,
+  // Half a manager's picks landing in rounds 1-3 is a genuinely premium-weighted
+  // draft; a quarter or less is a back-weighted, volume approach.
+  // Calibrated against the observed spread in a real 12-team dynasty league,
+  // where early-round share ran 25.9% / 51.4% / 54.5%. The band between 30 and
+  // 50 is deliberately unlabelled: those managers have no distinctive draft
+  // shape and inventing one for them is the whole failure this module guards.
+  earlyRoundFocusedMinRate: 50,
+  lateRoundAccumulatorMaxRate: 30,
+  // With 4-6 positions in play an even spread sits near 20-25%, so half of all
+  // picks in one position is real focus and <=30% is genuine balance.
+  positionFocusedMinConcentration: 50,
+  balancedDrafterMaxConcentration: 30,
+  positionMinCoverage: 50,
 }
 
 /**
@@ -57,6 +76,10 @@ const LABEL_DIMENSION: Record<ProfileLabel, PsychDimension> = {
   'chaos agent': 'roster',
   'quiet strategist': 'roster',
   'rookie-heavy': 'draft',
+  'early-round focused': 'draft',
+  'late-round accumulator': 'draft',
+  'position-focused': 'draft',
+  'balanced drafter': 'draft',
 } as Record<ProfileLabel, PsychDimension>
 
 /**
@@ -103,6 +126,34 @@ export function resolveProfileLabels(
     labels.push('value-first')
   }
   if (signals.rookieAcquisitionRate >= t.rookieHeavyMinRate) labels.push('rookie-heavy')
+
+  // Draft shape. Both of these require picks to exist in their own right: the
+  // rates are 0 for a manager with no draft history, and a bare `<=` threshold
+  // would read that emptiness as "late-round accumulator" — absence dressed as a
+  // strategy. The evidence gate below would catch it, but a rule that only holds
+  // because something downstream cleans up after it is a trap for the next edit.
+  if (signals.draftPickCount > 0) {
+    if (signals.draftEarlyRoundRate >= t.earlyRoundFocusedMinRate) {
+      labels.push('early-round focused')
+    } else if (signals.draftEarlyRoundRate <= t.lateRoundAccumulatorMaxRate) {
+      labels.push('late-round accumulator')
+    }
+  }
+
+  // Positional claims need the positions to have actually resolved. Draft facts
+  // key players by provider id, and when that join misses, concentration is
+  // reported as 0 — which without this guard would fire 'balanced drafter' for
+  // every manager whose picks we failed to identify.
+  if (signals.positionSampleCoverage >= t.positionMinCoverage) {
+    if (signals.positionPriorityConcentration >= t.positionFocusedMinConcentration) {
+      labels.push('position-focused')
+    } else if (
+      signals.positionPriorityConcentration > 0 &&
+      signals.positionPriorityConcentration <= t.balancedDrafterMaxConcentration
+    ) {
+      labels.push('balanced drafter')
+    }
+  }
   if (signals.contentionScore >= t.winNowMinContention && signals.tradeTimingLateRate >= 30) labels.push('win-now')
   if (signals.rebuildScore >= t.rebuildMinScore && signals.rookieAcquisitionRate >= 40) labels.push('patient rebuilder')
 

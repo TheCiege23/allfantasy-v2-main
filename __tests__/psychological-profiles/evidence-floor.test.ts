@@ -6,6 +6,10 @@ import {
   evaluateDimension,
   summarizeEvidence,
 } from '@/lib/psychological-profiles/ProfileEvidenceFloor'
+import {
+  gateScores,
+  summarizeEvidenceRecords,
+} from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 
 const signals = (over: Record<string, number> = {}) =>
   ({
@@ -24,6 +28,7 @@ const signals = (over: Record<string, number> = {}) =>
     draftPickCount: 0,
     draftEarlyRoundRate: 0,
     positionPriorityConcentration: 0,
+    positionSampleCoverage: 0,
     picksTradedAway: 0,
     picksAcquired: 0,
     rebuildScore: 0,
@@ -63,7 +68,12 @@ describe('dimensions are gated independently', () => {
   it('gives a draft profile and withholds trade when only drafts exist', () => {
     // The real shape of a dynasty league mid-life: hundreds of picks, few trades.
     const labels = resolveProfileLabels(signals({ draftPickCount: 35, rookieAcquisitionRate: 62 }))
-    expect(labels).toEqual(['rookie-heavy'])
+    expect(labels).toContain('rookie-heavy')
+    // Draft labels are allowed; what must stay absent is anything resting on the
+    // trade or roster streams, which were never observed here.
+    expect(labels).not.toContain('conservative')
+    expect(labels).not.toContain('quiet strategist')
+    expect(labels).not.toContain('trade-heavy')
 
     const summary = summarizeEvidence(signals({ draftPickCount: 35, rookieAcquisitionRate: 62 }))
     expect(summary.observedDimensions).toEqual(['draft'])
@@ -129,5 +139,90 @@ describe('a label must be able to come out differently', () => {
     // really do skew young has demonstrated the trait and should be named.
     const labels = resolveProfileLabels(signals({ draftPickCount: 35, rookieAcquisitionRate: 85 }))
     expect(labels).toContain('rookie-heavy')
+  })
+})
+
+describe('the draft dimension can now say what it sees', () => {
+  // Draft is often the ONLY populated dimension, so without a vocabulary the
+  // engine measured real differences between managers and reported nothing.
+  it('separates a premium-pick drafter from a volume drafter', () => {
+    const early = resolveProfileLabels(signals({ draftPickCount: 44, draftEarlyRoundRate: 54.5 }))
+    const late = resolveProfileLabels(signals({ draftPickCount: 27, draftEarlyRoundRate: 25.9 }))
+    expect(early).toContain('early-round focused')
+    expect(early).not.toContain('late-round accumulator')
+    expect(late).toContain('late-round accumulator')
+    expect(late).not.toContain('early-round focused')
+  })
+
+  it('calls nobody a late-round accumulator for never having drafted', () => {
+    // draftEarlyRoundRate is 0 with no picks, and the threshold is an upper
+    // bound — the exact shape that produced "conservative" from emptiness.
+    expect(resolveProfileLabels(signals({ draftPickCount: 0, draftEarlyRoundRate: 0 }))).toEqual([])
+  })
+
+  it('withholds positional claims when the player join missed', () => {
+    // Draft facts key players by provider id; when that lookup fails,
+    // concentration comes back 0. Without the coverage guard that reads as a
+    // perfectly balanced drafter for a manager whose picks we never identified.
+    const blind = resolveProfileLabels(
+      signals({ draftPickCount: 44, draftEarlyRoundRate: 40, positionPriorityConcentration: 0, positionSampleCoverage: 0 })
+    )
+    expect(blind).not.toContain('balanced drafter')
+    expect(blind).not.toContain('position-focused')
+
+    const seen = resolveProfileLabels(
+      signals({ draftPickCount: 44, draftEarlyRoundRate: 40, positionPriorityConcentration: 22, positionSampleCoverage: 95 })
+    )
+    expect(seen).toContain('balanced drafter')
+  })
+})
+
+describe('scores are not shown for dimensions we never observed', () => {
+  const raw = {
+    aggressionScore: 0,
+    activityScore: 0,
+    tradeFrequencyScore: 0,
+    waiverFocusScore: 0,
+    riskToleranceScore: 0,
+  }
+
+  it('reports unmeasured as null, never as zero', () => {
+    // Every score column is Float @default(0), so an unwatched manager reads as
+    // a confident "0% risk tolerance" — a claim about a real person built from
+    // an absent row.
+    const evidence = summarizeEvidenceRecords([
+      { evidenceType: 'draft_evidence_count', value: 44 },
+      { evidenceType: 'trade_evidence_count', value: 0 },
+      { evidenceType: 'roster_evidence_count', value: 0 },
+    ])
+    const shown = gateScores(raw, evidence)
+    expect(shown.riskToleranceScore).toBeNull()
+    expect(shown.aggressionScore).toBeNull()
+    expect(shown.waiverFocusScore).toBeNull()
+    expect(evidence.observedDimensions).toEqual(['draft'])
+    // Draft feeds none of activity's three inputs, so it cannot license one.
+    expect(shown.activityScore).toBeNull()
+  })
+
+  it('shows a real zero once the dimension has been observed', () => {
+    // A manager watched across 9 trade actions who still scores 0 aggression has
+    // earned that 0. The gate must not swallow measured lows.
+    const evidence = summarizeEvidenceRecords([
+      { evidenceType: 'trade_evidence_count', value: 9 },
+      { evidenceType: 'draft_evidence_count', value: 0 },
+      { evidenceType: 'roster_evidence_count', value: 0 },
+    ])
+    const shown = gateScores(raw, evidence)
+    expect(shown.aggressionScore).toBe(0)
+    expect(shown.riskToleranceScore).toBe(0)
+    expect(shown.waiverFocusScore).toBeNull()
+  })
+
+  it('treats a profile written before counts existed as unmeasured', () => {
+    // Absent records must not be read as "nothing happened" — that is a guess,
+    // and guessing is what this gate exists to stop.
+    const evidence = summarizeEvidenceRecords([])
+    expect(evidence.anySufficient).toBe(false)
+    expect(gateScores(raw, evidence).activityScore).toBeNull()
   })
 })

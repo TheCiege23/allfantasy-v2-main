@@ -22,6 +22,9 @@ export interface BehaviorSignalsOutput {
   draftPickCount: number
   draftEarlyRoundRate: number
   positionPriorityConcentration: number
+  /** Share of draft picks whose position resolved, 0-100. Distinguishes a real
+   *  concentration of 0-30 from one we simply could not measure. */
+  positionSampleCoverage: number
   picksTradedAway: number
   picksAcquired: number
   rebuildScore: number
@@ -296,6 +299,8 @@ export async function aggregateBehaviorSignals(
   // Concentration read off a handful of resolved picks does not describe how
   // someone drafted 44 times. Below half coverage we report nothing rather than
   // extrapolating from the sample that happened to match.
+  const positionSampleCoverage =
+    draftFacts.length > 0 ? (resolvedPickCount / draftFacts.length) * 100 : 0
   const positionCoverageOk =
     draftFacts.length > 0 && resolvedPickCount >= Math.ceil(draftFacts.length / 2)
   const positionPriorityConcentration = positionCoverageOk
@@ -405,6 +410,7 @@ export async function aggregateBehaviorSignals(
     draftPickCount,
     draftEarlyRoundRate,
     positionPriorityConcentration,
+    positionSampleCoverage,
     picksTradedAway: picksGiven,
     picksAcquired: picksReceived,
     rebuildScore,
