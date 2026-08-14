@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveProfileAccess } from '@/lib/psychological-profiles/ProfileAccess'
 import { getProfileById } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 import { prisma } from '@/lib/prisma'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration'
@@ -35,6 +36,12 @@ export async function POST(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+    // An explanation is the profile in prose — the most revealing form of it.
+    const access = await resolveProfileAccess(leagueId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.reason }, { status: access.status })
+    }
 
     const body = await req.json().catch(() => ({}))
     const profileId = body.profileId
