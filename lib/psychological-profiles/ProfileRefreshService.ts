@@ -128,3 +128,72 @@ export async function refreshProfilesForExternalLeagues(input: {
     results,
   }
 }
+
+/**
+ * Refresh the least-recently-profiled leagues that actually have something to
+ * profile.
+ *
+ * WHY THIS EXISTS SEPARATELY FROM THE POST-SYNC PATH. Refreshing after a sync is
+ * the semantically correct trigger and it stays. It also does not run: the sync
+ * cron is gated behind FANTASY_OS_EXEC_SYNC_LIVE, which is not set, and
+ * league_sync_state holds 0 rows — the collector has never executed in
+ * production. A trigger wired to something that never fires is indistinguishable
+ * from no trigger at all, and profiles would have stayed empty in prod while
+ * looking wired up in the code.
+ *
+ * So this rotation rides on a cron that demonstrably does run. Leagues qualify by
+ * having draft history, which is the evidence stream that is actually populated;
+ * never-profiled leagues go first, then the stalest.
+ */
+export async function refreshStaleLeagueProfiles(input?: {
+  maxLeagues?: number
+  managersPerLeague?: number
+}): Promise<{ leaguesProfiled: number; managersProfiled: number; leagueIds: string[] }> {
+  const maxLeagues = input?.maxLeagues ?? 3
+
+  // Leagues with draft history — something to observe.
+  const withDrafts = await prisma.draftFact.groupBy({
+    by: ['leagueId'],
+    _count: { _all: true },
+  })
+  const candidateIds = withDrafts.map((r) => r.leagueId)
+  if (candidateIds.length === 0) {
+    return { leaguesProfiled: 0, managersProfiled: 0, leagueIds: [] }
+  }
+
+  // Staleness by the most recent profile write per league.
+  const profiled = await prisma.managerPsychProfile.groupBy({
+    by: ['leagueId'],
+    where: { leagueId: { in: candidateIds } },
+    _max: { updatedAt: true },
+  })
+  const lastRunByLeague = new Map(profiled.map((p) => [p.leagueId, p._max.updatedAt]))
+
+  const ordered = [...candidateIds].sort((a, b) => {
+    const ta = lastRunByLeague.get(a)
+    const tb = lastRunByLeague.get(b)
+    // Never profiled sorts first; otherwise oldest first.
+    if (!ta && !tb) return 0
+    if (!ta) return -1
+    if (!tb) return 1
+    return ta.getTime() - tb.getTime()
+  })
+
+  const picked = ordered.slice(0, maxLeagues)
+  const results: LeagueProfileRefreshResult[] = []
+  for (const leagueId of picked) {
+    try {
+      results.push(
+        await refreshLeagueProfiles({ leagueId, limit: input?.managersPerLeague })
+      )
+    } catch {
+      // One bad league must not stop the rotation.
+    }
+  }
+
+  return {
+    leaguesProfiled: results.length,
+    managersProfiled: results.reduce((a, r) => a + r.profiled, 0),
+    leagueIds: picked,
+  }
+}

@@ -13,6 +13,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { refreshStaleLeagueProfiles } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
@@ -141,11 +142,35 @@ async function handle(req: NextRequest) {
       devyIntel = { error: message.slice(0, 200) }
     }
 
+    // Psychological profiles ride along here because this cron actually runs.
+    //
+    // The semantically correct trigger is after a league sync, and that stays
+    // wired in fantasy-os-exec-sync. But that cron is gated behind
+    // FANTASY_OS_EXEC_SYNC_LIVE, which is unset, and league_sync_state holds 0
+    // rows — the collector has never executed in production. A trigger attached
+    // to something that never fires looks wired up in code and leaves the table
+    // empty in prod, which is how manager_psych_profiles sat at 0 rows to begin
+    // with.
+    //
+    // Bounded to a few of the stalest leagues per run and fully swallowed:
+    // profiling is enrichment and must never fail the player import it rides on.
+    let psychProfiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
+    if (!dryRun) {
+      try {
+        psychProfiles = await refreshStaleLeagueProfiles({ maxLeagues: 3 })
+      } catch (psychErr) {
+        psychProfiles = {
+          error: psychErr instanceof Error ? psychErr.message.slice(0, 160) : 'profile refresh failed',
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       dryRun: false,
       imported: result.imported,
       devyIntel,
+      psychProfiles,
       sports: result.sports,
       identity,
       staleFallbackApplied: result.staleFallbackApplied,
