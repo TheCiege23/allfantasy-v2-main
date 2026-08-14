@@ -5,6 +5,7 @@
 
 import type { ProfileLabel } from './types'
 import type { BehaviorSignalsOutput } from './BehaviorSignalAggregator'
+import { evaluateAllDimensions, type PsychDimension } from './ProfileEvidenceFloor'
 
 export interface LabelThresholds {
   tradeHeavyMinTrades: number
@@ -35,7 +36,36 @@ const DEFAULT_THRESHOLDS: LabelThresholds = {
 }
 
 /**
+ * Which evidence stream each label actually rests on.
+ *
+ * A label may only be emitted when ITS dimension cleared the evidence floor.
+ * Without this, the quiet archetypes fire on emptiness: every threshold for
+ * `conservative` and `quiet strategist` is an upper bound, so a manager with no
+ * recorded activity satisfies all of them and gets a personality he never
+ * demonstrated. Measured before this gate:
+ *
+ *   zero trades, zero claims, zero picks -> ["conservative", "quiet strategist"]
+ */
+const LABEL_DIMENSION: Record<ProfileLabel, PsychDimension> = {
+  'trade-heavy': 'trade',
+  aggressive: 'trade',
+  conservative: 'trade',
+  'value-first': 'trade',
+  'win-now': 'trade',
+  'patient rebuilder': 'trade',
+  'waiver-focused': 'roster',
+  'chaos agent': 'roster',
+  'quiet strategist': 'roster',
+  'rookie-heavy': 'draft',
+} as Record<ProfileLabel, PsychDimension>
+
+/**
  * Resolve profile labels from aggregated behavior signals.
+ *
+ * Labels are filtered by evidence: a dimension with too little recorded
+ * behaviour yields NO labels for that dimension rather than the ones absence
+ * happens to satisfy. An unobserved manager returns an empty array, which
+ * callers must render as "not enough activity yet" — never as a personality.
  */
 export function resolveProfileLabels(
   signals: BehaviorSignalsOutput,
@@ -76,7 +106,16 @@ export function resolveProfileLabels(
   if (signals.contentionScore >= t.winNowMinContention && signals.tradeTimingLateRate >= 30) labels.push('win-now')
   if (signals.rebuildScore >= t.rebuildMinScore && signals.rookieAcquisitionRate >= 40) labels.push('patient rebuilder')
 
-  return [...new Set(labels)]
+  // Evidence gate. Keep only labels whose own dimension was actually observed.
+  const evidence = evaluateAllDimensions(signals)
+  const gated = [...new Set(labels)].filter((label) => {
+    const dimension = LABEL_DIMENSION[label]
+    // An unmapped label is not silently trusted; it is dropped.
+    if (!dimension) return false
+    return evidence[dimension].sufficient
+  })
+
+  return gated
 }
 
 /**
