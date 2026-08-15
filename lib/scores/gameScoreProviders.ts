@@ -343,9 +343,10 @@ export async function fetchEspnGames(sport: 'NFL' | 'NCAAF'): Promise<ProviderRe
   const path = ESPN_PATH[sport]
   if (!path) return { source: 'espn', games: [], error: `no espn path for ${sport}` }
 
-  const payload = (await getJson(
-    `https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?limit=400`,
-  )) as { events?: Record<string, unknown>[]; season?: Record<string, unknown> } | null
+  // This module exists solely to feed /api/cron/import-scores, which writes
+  // sports_games; every read path goes to that table, not to this file.
+  const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?limit=400` // db-first-exception: score ingestion adapter, not a read path
+  const payload = (await getJson(url)) as { events?: Record<string, unknown>[]; season?: Record<string, unknown> } | null
 
   const rows = payload?.events
   if (!Array.isArray(rows)) {

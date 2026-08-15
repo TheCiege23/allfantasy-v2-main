@@ -95,7 +95,11 @@ export async function syncEspnInjuriesToDb(opts: {
 
   let payload: { injuries?: Array<Record<string, any>> } | null = null
   try {
-    const res = await fetch(`https://site.api.espn.com/apis/site/v2/sports/${path}/injuries`, {
+    // This module IS the ingestion boundary: its only job is provider fetch ->
+    // sports_injuries upsert, which populates the table every DB-first reader
+    // (injuryReadPort) consumes.
+    const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/injuries` // db-first-exception: injury ingestion writer, not a read path
+    const res = await fetch(url, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(20_000),
     })
