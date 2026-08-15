@@ -20,12 +20,12 @@ export async function GET(
   try {
     const { leagueId } = await ctx.params;
     if (!leagueId) {
+      return NextResponse.json({ error: "Missing leagueId" }, { status: 400 });
+    }
     // Membership gate. Reachable both directly and via the [section]
     // dispatcher, and was open to anyone holding a league id.
     const gate = await requireLeagueApiAccess(leagueId)
     if (!gate.ok) return gate.response
-      return NextResponse.json({ error: "Missing leagueId" }, { status: 400 });
-    }
     const url = new URL(_req.url);
     const seasonParam = url.searchParams?.get("season");
     const season = seasonParam != null ? parseInt(seasonParam, 10) : null;

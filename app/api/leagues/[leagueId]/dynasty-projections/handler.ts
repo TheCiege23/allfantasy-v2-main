@@ -518,12 +518,12 @@ export async function GET(
 ) {
   const { leagueId } = await ctx.params
   if (!leagueId) {
+    return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  }
   // Membership gate. Reachable both directly and via the [section]
   // dispatcher, and was open to anyone holding a league id.
   const gate = await requireLeagueApiAccess(leagueId)
   if (!gate.ok) return gate.response
-    return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
-  }
   const sportQuery = req.nextUrl.searchParams?.get('sport') ?? undefined
   const refresh = toBool(req.nextUrl.searchParams?.get('refresh'))
   const teamId = req.nextUrl.searchParams?.get('teamId') ?? undefined
@@ -571,12 +571,12 @@ export async function POST(
 ) {
   const { leagueId } = await ctx.params
   if (!leagueId) {
+    return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  }
   // Membership gate. Reachable both directly and via the [section]
   // dispatcher, and was open to anyone holding a league id.
   const gate = await requireLeagueApiAccess(leagueId)
   if (!gate.ok) return gate.response
-    return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
-  }
 
   let body: {
     teamInputs?: TeamDynastyInputs[]

@@ -9,11 +9,11 @@ export async function GET(
 ) {
   const { leagueId } = await params
   if (!leagueId) {
+    return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
+  }
   // Membership gate. This route was reachable by anyone holding a league id.
   const gate = await requireLeagueApiAccess(leagueId)
   if (!gate.ok) return gate.response
-    return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
-  }
 
   try {
     const [{ getDraftConfigForLeague }, { prisma }] = await Promise.all([
