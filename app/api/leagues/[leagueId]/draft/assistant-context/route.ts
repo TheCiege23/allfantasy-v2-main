@@ -5,7 +5,7 @@ import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { getLatestNews } from '@/lib/data/news'
-import { getInjuryReport } from '@/lib/data/players'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { buildChimmySportDataDigest } from '@/lib/chimmy/chimmy-sport-data-digest'
 
 export const dynamic = 'force-dynamic'
@@ -45,7 +45,11 @@ export async function GET(
   try {
     const [newsRows, injuryRows, chimmyDigest] = await Promise.all([
       getLatestNews(sport, 4),
-      getInjuryReport(sport),
+      // Canonical injury read port. getInjuryReport reads injury_report_records,
+      // which was orphaned when the cron moved to sports_injuries and froze at
+      // 2026-04-28 — so the draft assistant was quoting 108-day-old designations
+      // with a reportedAt the UI rendered as current.
+      listInjuryFacts({ sport, limit: 25 }),
       buildChimmySportDataDigest({ sport, includeNewsApi: false }),
     ])
 
@@ -58,14 +62,21 @@ export async function GET(
       source: row.source,
     }))
 
-    const injuries = injuryRows.slice(0, 6).map((row) => ({
-      playerName: row.playerName,
-      team: row.team ?? null,
-      status: row.status ?? null,
-      note: row.notes ?? null,
-      reportedAt: row.reportDate?.toISOString() ?? null,
-      source: null,
-    }))
+    // Stale rows are dropped, not relabelled: a draft board shows these beside
+    // players you are about to pick, and a three-month-old designation there is
+    // a confident claim about availability that nobody made today.
+    const injuries = (injuryRows.facts ?? [])
+      .filter((f) => !f.stale)
+      .slice(0, 6)
+      .map((f) => ({
+        playerName: f.playerName,
+        team: f.team ?? null,
+        // Null means no designation stated, NOT healthy.
+        status: f.status ?? 'no designation stated',
+        note: f.description ?? null,
+        reportedAt: (f.date ?? f.fetchedAt).toISOString(),
+        source: f.source ?? null,
+      }))
 
     const updatedAt = maxIsoDate([
       ...headlines.map((item) => item.publishedAt),

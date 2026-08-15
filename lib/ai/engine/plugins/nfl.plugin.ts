@@ -19,6 +19,7 @@ import "server-only"
 import type { SportPlugin, AIEngineInput } from "../types"
 import { getAiLanguageInstruction } from "@/lib/world-cup/worldCupI18n"
 import { prisma } from "@/lib/prisma"
+import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 
 // ─── Context type ─────────────────────────────────────────────────────────────
 
@@ -255,12 +256,25 @@ export const nflPlugin: SportPlugin<NflContext, NflProviderData, NflInsights> = 
           orderBy: { adp: "asc" },
           take: 300,
         }).catch(() => []) as Promise<Array<Record<string, unknown>>>,
-        (prisma as any).injuryReportRecord.findMany({
-          where: { sport: "NFL" },
-          orderBy: { reportDate: "desc" },
-          select: { playerName: true, team: true, status: true, position: true, bodyPart: true, notes: true },
-          take: 100,
-        }).catch(() => []) as Promise<Array<Record<string, unknown>>>,
+        // Canonical injury read port. This read injury_report_records, which was
+        // orphaned when the cron moved to sports_injuries and froze at
+        // 2026-04-28 — measured 108 days stale, and fed to the NFL engine as
+        // current. Stale rows are dropped rather than passed on.
+        listInjuryFacts({ sport: "NFL", limit: 100 })
+          .then((list) =>
+            (list.facts ?? [])
+              .filter((f) => !f.stale)
+              .map((f) => ({
+                playerName: f.playerName,
+                team: f.team,
+                // Null means no designation stated, NOT healthy.
+                status: f.status ?? "no designation stated",
+                position: f.position,
+                bodyPart: f.type,
+                notes: f.description,
+              }))
+          )
+          .catch(() => []) as Promise<Array<Record<string, unknown>>>,
       ])
 
       if (dbPlayers.length === 0 && dbInjuries.length === 0) return null

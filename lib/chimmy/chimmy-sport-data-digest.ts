@@ -3,10 +3,10 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getLatestNews } from '@/lib/data/news'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
-
-const NL = String.fromCharCode(10)
 import { getNewsApiEverythingDbFirst } from '@/lib/news/newsapi-cache'
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope'
+
+const NL = String.fromCharCode(10)
 
 const SPORT_NEWS_QUERY: Record<SupportedSport, string> = {
   NFL: '(NFL OR "fantasy football") AND (injury OR trade OR lineup)',
@@ -366,6 +366,77 @@ ${transactionRows
         orderBy: [{ season: 'desc' }, { updatedAt: 'desc' }],
         take: args.sport === 'all' ? 6 : 10,
       })
+
+      // player_season_stats holds NFL only (5,186 rows; zero for any other
+      // sport). College season stats live in fantasy_stat_lines — 5,530 NCAAF
+      // rows loaded from CFBD — where the player NAME is inside the stats JSON
+      // rather than a column, which is why a name query against the first table
+      // silently returned nothing for college and Chimmy reported no stats.
+      let fallbackStatChunk: string | null = null
+      let fallbackStatDates: Array<Date | null> = []
+      if (playerStatsRows.length === 0) {
+        // The JSON name filter is case-sensitive in Postgres and stored names
+        // are Title Case, while mentions arrive as the user typed them.
+        // Normalising the whole word — not just its first letter — is what lets
+        // an ALL-CAPS "JORDAN BROWN" match the stored "Jordan Brown".
+        const titleCase = (value: string) =>
+          value
+            .toLowerCase()
+            .split(' ')
+            .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+            .join(' ')
+        const nameFilters = [
+          ...new Set(
+            playerMentions.flatMap((n) => {
+              const title = titleCase(n)
+              return title === n ? [n] : [n, title]
+            })
+          ),
+        ]
+        const lineRows = await prisma.fantasyStatLine.findMany({
+          where: {
+            sport: sp,
+            OR: nameFilters.map((name) => ({
+              stats: { path: ['name'], string_contains: name },
+            })),
+          },
+          orderBy: [{ season: 'desc' }, { week: 'desc' }],
+          take: args.sport === 'all' ? 6 : 10,
+        }).catch(() => [] as Array<Record<string, unknown>>)
+
+        if (lineRows.length) {
+          fallbackStatDates = lineRows.map((r: any) => r.updatedAt ?? r.fetchedAt ?? null)
+          fallbackStatChunk = lineRows
+            .map((r: any) => {
+              const st = (r.stats ?? {}) as Record<string, any>
+              const agg = (st.regular_season ?? {}) as Record<string, any>
+              const name = st.name ?? st.riPlayerName ?? r.playerId
+              const bits: string[] = []
+              const push = (label: string, v: unknown) => {
+                if (typeof v === 'number') bits.push(`${label}: ${v}`)
+              }
+              push('G', agg.games_played)
+              push('Pts', agg.DK_fantasy_points)
+              push('PPG', agg.DK_fantasy_points_per_game)
+              push('PassYds', agg['passing.YDS'])
+              push('RushYds', agg['rushing.YDS'])
+              push('RecYds', agg['receiving.YDS'])
+              // The season is stated because these are completed-season
+              // aggregates. Without it the model presents last season's
+              // production as this year's form.
+              return `- ${name}${r.team ? ` (${r.team})` : ''} [${r.season} season totals]${bits.length ? ` · ${bits.join(', ')}` : ''}`
+            })
+            .join(NL)
+        }
+      }
+
+      if (fallbackStatChunk) {
+        sportReady.hasPlayerStats = true
+        const sourceKey = `fantasy_stat_lines_${sp}`
+        sources.push(sourceKey)
+        setSourceFreshness(sourceKey, fallbackStatDates)
+        chunks.push(`### ${sp} — Player season stats (fantasy stat lines)${NL}${fallbackStatChunk}`)
+      }
 
       if (playerStatsRows.length) {
         sportReady.hasPlayerStats = true
