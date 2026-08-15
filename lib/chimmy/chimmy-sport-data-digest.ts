@@ -2,7 +2,9 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getLatestNews } from '@/lib/data/news'
-import { getInjuryReport } from '@/lib/data/players'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
+
+const NL = String.fromCharCode(10)
 import { getNewsApiEverythingDbFirst } from '@/lib/news/newsapi-cache'
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope'
 
@@ -143,7 +145,15 @@ export async function buildChimmySportDataDigest(args: {
     const sportReady = ensureReadiness(sp)
     const [newsRows, injRows, gameRows, standingsRows, transactionRows] = await Promise.all([
       getLatestNews(sp, args.sport === 'all' ? 8 : 20),
-      getInjuryReport(sp),
+      // The canonical injury read port: TTL-respected, one row per player,
+      // freshest source wins, and it reports its own staleness.
+      //
+      // This previously called getInjuryReport, which reads injury_report_records
+      // and only refreshes when that table is EMPTY. It has not been empty since
+      // April, so Chimmy was handed 108-day-old designations with no date on them
+      // and stated them as current, while the live feed sat one table away.
+      // A fallback written for absence does nothing about staleness.
+      listInjuryFacts({ sport: sp, limit: args.sport === 'all' ? 12 : 35 }),
       wantsGames
         ? prisma.sportsGame.findMany({
             where: {
@@ -282,43 +292,50 @@ ${parsed
       }
     }
 
-    if (injRows.length) {
+    // Injuries are rendered ONLY when the feed is alive, and every line carries
+    // its own age. A stale designation is a confident false statement about a
+    // real player's availability — worse than saying nothing, because the model
+    // has no way to tell it is old and will present it as today's news.
+    //
+    // When the feed is stale or empty we say so and mark the category missing,
+    // rather than reaching for the older table. Falling back to staler data is
+    // what produced the three-month-old report in the first place.
+    const injuryFacts = injRows.facts ?? []
+    const freshInjuries = injuryFacts.filter((f) => !f.stale)
+
+    if (freshInjuries.length > 0) {
       sportReady.hasInjuries = true
-      const sourceKey = `injury_report_${sp}`
+      const sourceKey = `injury_facts_${sp}`
       sources.push(sourceKey)
-      setSourceFreshness(sourceKey, injRows.map((r) => r.reportDate))
+      setSourceFreshness(sourceKey, freshInjuries.map((f) => f.fetchedAt))
+      const newestIso = injRows.newestFetchedAt
+        ? injRows.newestFetchedAt.toISOString().slice(0, 10)
+        : 'unknown'
       chunks.push(
-        `### ${sp} — Injury report (DB / sports ingest)\n${injRows
+        `### ${sp} — Injury report (live feed, newest ${newestIso})
+${freshInjuries
           .slice(0, args.sport === 'all' ? 12 : 35)
-          .map(
-            (r) =>
-              `- ${r.playerName}${r.team ? ` (${r.team})` : ''}: ${r.status ?? 'Unknown'}${r.notes ? ` — ${String(r.notes).slice(0, 120)}` : ''}`
-          )
-          .join('\n')}`
+          .map((f) => {
+            const age = f.ageHours < 24
+              ? `${Math.max(0, Math.round(f.ageHours))}h ago`
+              : `${Math.round(f.ageHours / 24)}d ago`
+            // A null status means no designation was stated. It does NOT mean
+            // healthy, and must not be rendered as though it did.
+            const status = f.status ?? 'no designation stated'
+            const detail = f.description ? ` — ${String(f.description).slice(0, 120)}` : ''
+            const part = f.type ? ` [${f.type}]` : ''
+            return `- ${f.playerName}${f.team ? ` (${f.team})` : ''}: ${status}${part}${detail} (reported ${age})`
+          })
+          .join(NL)}`
       )
     } else {
-      const legacyInjuryRows =
-        (await (prisma as any).sportsInjury?.findMany?.({
-          where: { sport: sp },
-          orderBy: { date: 'desc' },
-          take: args.sport === 'all' ? 12 : 35,
-        })) ?? []
-      if (legacyInjuryRows.length) {
-        sportReady.hasInjuries = true
-        const sourceKey = `sports_injuries_${sp}`
-        sources.push(sourceKey)
-        setSourceFreshness(sourceKey, legacyInjuryRows.map((r: any) => r.date ?? r.fetchedAt ?? r.updatedAt))
-        chunks.push(
-          `### ${sp} - Injuries (DB cache)\n${legacyInjuryRows
-            .map(
-              (r: any) =>
-                `- ${r.playerName}${r.team ? ` (${r.team})` : ''}: ${r.status ?? 'Unknown'}${
-                  r.description ? ` - ${String(r.description).slice(0, 120)}` : ''
-                }`
-            )
-            .join('\n')}`
-        )
-      }
+      const reason = injuryFacts.length > 0
+        ? 'every row in the feed is past its freshness window'
+        : 'no live injury feed for this sport'
+      chunks.push(
+        `### ${sp} — Injury report
+UNAVAILABLE: ${reason}. Do not state or imply any player's injury status for ${sp}; say the feed is unavailable instead.`
+      )
     }
 
     if (transactionRows.length) {

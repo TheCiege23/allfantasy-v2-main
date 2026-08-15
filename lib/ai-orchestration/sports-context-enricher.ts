@@ -10,7 +10,8 @@ import { isSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { normalizeOrchestrationToolKey } from './tool-key-normalizer'
 import { getADP, getADPTrends } from '@/lib/data/adp'
 import { getLatestNews, getHighImpactNews } from '@/lib/data/news'
-import { getPlayerNews, getInjuryReport, searchPlayers } from '@/lib/data/players'
+import { getPlayerNews, searchPlayers } from '@/lib/data/players'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { getUpcomingGames } from '@/lib/data/schedules'
 
 type SportWithData = SupportedSport
@@ -299,11 +300,37 @@ export async function fetchSportsContextForEnvelope(
             .slice(0, 12)
 
           if (playerIds.length > 0) {
-            const [injuries, news] = await Promise.all([
-              getInjuryReport(sportTyped),
+            const [injuryList, news] = await Promise.all([
+              // Canonical injury read port — TTL-respected and self-reporting on
+              // staleness. This previously used getInjuryReport, which reads
+              // injury_report_records and only refreshes when that table is
+              // EMPTY; it has not been empty since April, so this enricher fed
+              // the model 108-day-old designations with no dates attached.
+              listInjuryFacts({ sport: sportTyped, limit: 25 }),
               Promise.all(playerIds.slice(0, 6).map((playerId) => getPlayerNews(playerId, 3))),
             ])
-            if (injuries.length > 0) out.injuries = injuries.slice(0, 25)
+            // Stale rows are dropped rather than caveated here: this payload is
+            // consumed as structured context, so a caveat in a sibling field is
+            // not reliably carried into the answer. Each surviving row states
+            // when it was reported.
+            const freshInjuries = (injuryList.facts ?? []).filter((f) => !f.stale)
+            if (freshInjuries.length > 0) {
+              out.injuries = freshInjuries.slice(0, 25).map((f) => ({
+                playerName: f.playerName,
+                team: f.team,
+                // Null means no designation was stated — NOT healthy.
+                status: f.status ?? 'no designation stated',
+                bodyPart: f.type,
+                notes: f.description,
+                reportedHoursAgo: Math.max(0, Math.round(f.ageHours)),
+                asOf: f.fetchedAt.toISOString(),
+              }))
+            } else {
+              out.injuriesUnavailable =
+                injuryList.feedStale || (injuryList.facts ?? []).length === 0
+                  ? `No live injury feed for ${sportTyped}; do not state any player's injury status.`
+                  : `Injury feed for ${sportTyped} is past its freshness window; do not state any player's injury status.`
+            }
             const flattenedNews = news.flat()
             if (flattenedNews.length > 0) out.playerNews = flattenedNews.slice(0, 18)
           }
