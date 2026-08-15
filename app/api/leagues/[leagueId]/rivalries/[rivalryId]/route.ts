@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getRivalryById } from '@/lib/rivalry-engine/RivalryQueryService'
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +16,9 @@ export async function GET(
   try {
     const { leagueId, rivalryId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     if (!rivalryId) return NextResponse.json({ error: 'Missing rivalryId' }, { status: 400 })
 
     const rivalry = await getRivalryById(rivalryId)

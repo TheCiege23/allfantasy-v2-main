@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { openaiChatText } from '@/lib/openai-client'
 import { getInsightBundle } from '@/lib/ai-simulation-integration'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 type TeamForecast = {
   teamId: string
@@ -24,6 +25,10 @@ export async function POST(
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
   const { leagueId } = await ctx.params
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
   let body: { season?: number; week?: number; teamForecasts?: TeamForecast[] } = {}
   try {
     body = await req.json().catch(() => ({}))

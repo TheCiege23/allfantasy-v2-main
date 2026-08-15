@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { computeDraftGrades, upsertDraftGrades, getDraftGrades } from "@/lib/rankings-engine/draft-grades"
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { buildBaselineMeta, ensureArray } from "@/lib/engine/response-guard"
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const GET = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/draft-grades",
@@ -9,6 +10,10 @@ export const GET = withApiUsage({
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
   try {
     const { leagueId } = ctx.params
+    // Membership gate. Reachable both directly and via the [section]
+    // dispatcher, and was open to anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     const url = new URL(req.url)
     const season = String(url.searchParams?.get("season") ?? "")
 
@@ -46,6 +51,10 @@ export const POST = withApiUsage({
   tool: "DraftGrades"
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
   const { leagueId } = ctx.params
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
   const body = await req.json().catch(() => ({}))
   const week = Number(body.week ?? 0)
 

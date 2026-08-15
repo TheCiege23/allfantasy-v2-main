@@ -12,6 +12,7 @@ import { generateDynastyProjection } from '@/lib/dynasty-engine/DynastyProjectio
 import { resolveSportForDynasty } from '@/lib/dynasty-engine/SportDynastyResolver'
 import type { DynastyProjectionOutput } from '@/lib/dynasty-engine/types'
 import type { FuturePickAsset, PlayerDynastyAsset, TeamDynastyInputs } from '@/lib/dynasty-projection/types'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 type LeagueLite = {
   id: string
@@ -517,6 +518,10 @@ export async function GET(
 ) {
   const { leagueId } = await ctx.params
   if (!leagueId) {
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
     return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   }
   const sportQuery = req.nextUrl.searchParams?.get('sport') ?? undefined
@@ -566,6 +571,10 @@ export async function POST(
 ) {
   const { leagueId } = await ctx.params
   if (!leagueId) {
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
     return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { buildTimelineForRivalry } from '@/lib/rivalry-engine/RivalryTimelineBuilder'
 import { prisma } from '@/lib/prisma'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,9 @@ export async function GET(
 ) {
   try {
     const { leagueId, rivalryId } = await ctx.params
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     if (!rivalryId) return NextResponse.json({ error: 'Missing rivalryId' }, { status: 400 })
 
     const rivalry = await prisma.rivalryRecord.findFirst({

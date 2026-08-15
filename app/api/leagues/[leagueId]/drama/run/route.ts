@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { runLeagueDramaEngine } from '@/lib/drama-engine/LeagueDramaEngine'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,6 +17,9 @@ export async function POST(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const league = await prisma.league.findUnique({
       where: { id: leagueId },

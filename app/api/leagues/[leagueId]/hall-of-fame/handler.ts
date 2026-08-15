@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { rebuildHallOfFame, getHallOfFame, getSeasonLeaderboard } from "@/lib/rankings-engine/hall-of-fame"
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { buildBaselineMeta, ensureArray } from "@/lib/engine/response-guard"
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const GET = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/hall-of-fame",
@@ -9,6 +10,10 @@ export const GET = withApiUsage({
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
   try {
     const { leagueId } = ctx.params
+    // Membership gate. Reachable both directly and via the [section]
+    // dispatcher, and was open to anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     const url = new URL(req.url)
     const season = url.searchParams?.get("season")
 
@@ -58,6 +63,10 @@ export const POST = withApiUsage({
 })(async (_: Request, ctx: { params: { leagueId: string } }) => {
   const { leagueId } = ctx.params
   if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
 
   const result = await rebuildHallOfFame({ leagueId })
   return NextResponse.json(result)

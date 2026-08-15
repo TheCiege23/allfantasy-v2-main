@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { queryHallOfFameEntries } from "@/lib/hall-of-fame-engine/HallOfFameQueryService"
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export async function GET(
   req: Request,
@@ -7,6 +8,9 @@ export async function GET(
 ) {
   try {
     const { leagueId } = await ctx.params
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     const url = new URL(req.url)
     const sport = url.searchParams?.get("sport")
     const season = url.searchParams?.get("season")

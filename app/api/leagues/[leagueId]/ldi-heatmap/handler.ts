@@ -2,12 +2,17 @@ import { NextResponse } from "next/server"
 import { buildLDIHeatmap } from "@/lib/rankings-engine/ldi-heatmap"
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { hardenLdiResponse } from "@/lib/ldi/harden-ldi"
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const GET = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/ldi-heatmap",
   tool: "LDIHeatmap"
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
   const { leagueId } = ctx.params
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
   const url = new URL(req.url)
   const week = Number(url.searchParams?.get("week") ?? 0)
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getEntryByIdScoped } from "@/lib/hall-of-fame-engine/HallOfFameQueryService"
 import { entryToNarrativeContext, buildWhyInductedPromptContext } from "@/lib/hall-of-fame-engine/AIHallOfFameNarrativeAdapter"
 import { getHallOfFameEntryWithLegacy } from "@/lib/prestige-governance/HallOfFameLegacyBridge"
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export async function GET(
   _req: Request,
@@ -10,6 +11,9 @@ export async function GET(
   try {
     const { leagueId, entryId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     if (!entryId) return NextResponse.json({ error: "Missing entryId" }, { status: 400 })
 
     const entry = await getEntryByIdScoped({ entryId, leagueId })

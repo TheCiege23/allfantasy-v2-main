@@ -3,6 +3,7 @@ import { requireDispersalDraftForLeague } from '@/lib/league/dispersal-draft-rou
 import { getLeagueRole } from '@/lib/league/permissions'
 import { DispersalDraftEngine } from '@/lib/dispersal-draft/DispersalDraftEngine'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,9 @@ export async function POST(_req: Request, ctx: { params: Promise<{ leagueId: str
     const userId = ent
 
     const { leagueId, draftId } = await ctx.params
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     if (!leagueId || !draftId) return NextResponse.json({ error: 'Missing params' }, { status: 400 })
 
     const role = await getLeagueRole(leagueId, userId)

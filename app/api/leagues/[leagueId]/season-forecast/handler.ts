@@ -12,12 +12,17 @@ import {
   type TeamForecastTrajectory,
 } from '@/lib/trajectory'
 import type { SeasonForecastHistoryRow } from '@/lib/trajectory/adapters/seasonForecast'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export async function GET(
   req: NextRequest,
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
   const { leagueId } = await ctx.params
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
   const { searchParams } = new URL(req.url)
   const season = parseInt(searchParams?.get('season') ?? '', 10)
   const week = parseInt(searchParams?.get('week') ?? '', 10)
@@ -91,6 +96,10 @@ export async function POST(
   ctx: { params: Promise<{ leagueId: string }> }
 ) {
   const { leagueId } = await ctx.params
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
   let body: { season?: number; week?: number; totalWeeks?: number; playoffSpots?: number; byeSpots?: number; simulations?: number } = {}
   try {
     body = await req.json().catch(() => ({}))

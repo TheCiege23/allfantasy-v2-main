@@ -12,6 +12,7 @@ import { getCachedSpecialtyDraftPool } from '@/lib/draft-room/specialty-draft-po
 import { isOrphanPlatformUserId } from '@/lib/orphan-ai-manager/orphanRosterResolver'
 import { prisma } from '@/lib/prisma'
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,6 +24,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ leagueId: 
 
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const role = await getLeagueRole(leagueId, userId)
     if (role !== 'commissioner' && role !== 'co_commissioner') {

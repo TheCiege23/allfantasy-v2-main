@@ -2,12 +2,17 @@ import { NextResponse } from "next/server"
 import { getRankHistory } from "@/lib/rankings-engine/snapshots"
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { buildBaselineMeta, ensureArray } from "@/lib/engine/response-guard"
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const GET = withApiUsage({
   endpoint: "/api/leagues/[leagueId]/rank-history",
   tool: "RankHistory"
 })(async (req: Request, ctx: { params: { leagueId: string } }) => {
   const { leagueId } = ctx.params
+  // Membership gate. Reachable both directly and via the [section]
+  // dispatcher, and was open to anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
   const url = new URL(req.url)
   const rosterId = String(url.searchParams?.get("rosterId") ?? "")
   const limit = Number(url.searchParams?.get("limit") ?? 12)

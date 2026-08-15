@@ -4,6 +4,7 @@ import {
   runRelationshipInsightOrchestrator,
 } from '@/lib/relationship-insights'
 import { normalizeOptionalSportForRelationship } from '@/lib/relationship-insights/SportRelationshipResolver'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,10 @@ export async function GET(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. Reachable both directly and via the [section]
+    // dispatcher, and was open to anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const url = new URL(req.url)
     const sport = normalizeOptionalSportForRelationship(url.searchParams?.get('sport'))
@@ -48,6 +53,10 @@ export async function POST(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. Reachable both directly and via the [section]
+    // dispatcher, and was open to anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const body = await req.json().catch(() => ({}))
     const seasonCandidate =

@@ -4,6 +4,7 @@ import { runRivalryEngine } from '@/lib/rivalry-engine/RivalryEngine'
 import { normalizeSportForRivalry } from '@/lib/rivalry-engine/SportRivalryResolver'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -240,6 +241,10 @@ export async function GET(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. Reachable both directly and via the [section]
+    // dispatcher, and was open to anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const url = new URL(req.url)
     const sportRaw = url.searchParams?.get('sport')
@@ -282,6 +287,10 @@ export async function POST(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. Reachable both directly and via the [section]
+    // dispatcher, and was open to anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const league = await prisma.league.findUnique({
       where: { id: leagueId },
