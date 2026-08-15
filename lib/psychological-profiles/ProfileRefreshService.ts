@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { runPsychologicalProfileEngine } from './PsychologicalProfileEngine'
 import { backfillTransactionFactsFromTradeHistory } from './TransactionFactBackfill'
+import { ingestSleeperTradeFacts } from './SleeperTradeFactIngest'
 
 /**
  * ProfileRefreshService — generate psychological profiles for a whole league.
@@ -192,6 +193,19 @@ export async function refreshStaleLeagueProfiles(input?: {
     await backfillTransactionFactsFromTradeHistory({ leagueIds: picked })
   } catch {
     // fallback path still covers it
+  }
+
+  // Then pull trades straight from the provider for the same leagues. The
+  // backfill above can only normalise what LeagueTradeHistory already holds,
+  // which covered 29 of 57 Sleeper leagues — the rest never had the legacy
+  // importer run against them, so no amount of re-normalising reaches them.
+  // Trade psychology was thin because the data was never asked for, not because
+  // managers had not traded.
+  try {
+    await ingestSleeperTradeFacts({ leagueIds: picked })
+  } catch {
+    // Enrichment: a provider hiccup must not stop the profile run, which still
+    // has draft evidence and whatever trades already landed.
   }
 
   const results: LeagueProfileRefreshResult[] = []

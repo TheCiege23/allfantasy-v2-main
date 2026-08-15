@@ -249,7 +249,59 @@ export async function aggregateBehaviorSignals(
   // which works out to barely one trade a season. Busy is a comparison, and the
   // only fair comparison is against the people in the same league.
   let tradeFrequencyRelative = 0
-  if (platformIds.length > 0) {
+
+  // Peer counts come from the warehouse FIRST, because that is where trades now
+  // land. SleeperTradeFactIngest pulls straight from the provider for every
+  // league, while LeagueTradeHistory only holds leagues someone ran the legacy
+  // importer against.
+  //
+  // Reading only the legacy table produced a specific and confusing failure: a
+  // manager could have 70 recorded trade actions, clear the evidence floor, and
+  // still get NO label — because the peer comparison found an empty table,
+  // returned 0 deviation, and every relative threshold silently failed. Evidence
+  // said "we watched him", the labels said nothing, and neither was wrong on its
+  // own terms.
+  const factPeers = await prisma.transactionFact
+    .groupBy({
+      by: ['managerId'],
+      where: {
+        leagueId,
+        sport: sportNorm,
+        type: { in: ['trade', 'TRADE'] },
+        ...seasonThrough(options?.season),
+      },
+      _count: { _all: true },
+    })
+    .catch(() => [] as Array<{ managerId: string | null; _count: { _all: number } }>)
+
+  const factCounts = factPeers
+    .filter((r) => r.managerId != null)
+    .map((r) => r._count._all)
+
+  // BOTH sides of the comparison must come from the same source.
+  //
+  // Using this manager's `tradeCount` — which prefers the richer LeagueTradeHistory
+  // number — against peer counts drawn from transaction facts compares two
+  // different measurements. Measured in KBFL: fact counts ran 1-7 per manager
+  // (mean 2.6) while tradeCount for the same people read 44-70, so everyone
+  // landed many spreads above their peers and 7 of 8 came back "trade-heavy".
+  // A ratio whose numerator and denominator are counted differently is not a
+  // comparison, and it produces exactly the uniform label this module already
+  // learned to distrust.
+  const ownFactCount = (() => {
+    for (const candidate of managerCandidates) {
+      const hit = factPeers.find((r) => r.managerId === candidate)
+      if (hit) return hit._count._all
+    }
+    return null
+  })()
+
+  if (factCounts.length >= 3 && ownFactCount != null) {
+    const mean = factCounts.reduce((a, v) => a + v, 0) / factCounts.length
+    const variance = factCounts.reduce((a, v) => a + (v - mean) ** 2, 0) / factCounts.length
+    const spread = Math.max(Math.sqrt(variance), 2)
+    tradeFrequencyRelative = (ownFactCount - mean) / spread
+  } else if (platformIds.length > 0) {
     const leagueHistories = await prisma.leagueTradeHistory.findMany({
       where: { sleeperLeagueId: { in: platformIds } },
       select: {
