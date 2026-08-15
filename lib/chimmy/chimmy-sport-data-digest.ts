@@ -338,6 +338,49 @@ UNAVAILABLE: ${reason}. Do not state or imply any player's injury status for ${s
       )
     }
 
+    // Game weather. The forecast pipeline exists and runs — /api/weather/refresh-cron
+    // every three hours, OpenWeatherMap key verified live — but nothing in the
+    // Chimmy path ever read it, so the assistant could not answer "is it going to
+    // be windy in Buffalo" despite the row sitting in the database.
+    //
+    // Only unexpired rows are used. A lapsed forecast is not a forecast, and the
+    // read paths that honour expiresAt are the reason the TTL had to be raised to
+    // outlive the refresh cadence.
+    if (wantsGames) {
+      const weatherRows = await prisma.weatherCache
+        .findMany({
+          where: { sport: sp, expiresAt: { gt: now } },
+          orderBy: { forecastForTime: 'asc' },
+          take: args.sport === 'all' ? 4 : 10,
+        })
+        .catch(() => [] as Array<Record<string, unknown>>)
+
+      if (weatherRows.length) {
+        const sourceKey = `weather_${sp}`
+        sources.push(sourceKey)
+        setSourceFreshness(sourceKey, weatherRows.map((w: any) => w.fetchedAt))
+        chunks.push(
+          `### ${sp} — Game weather (forecast)${NL}${weatherRows
+            .map((w: any) => {
+              const indoors = Boolean(w.isIndoor || w.isDome || w.roofClosed)
+              if (indoors) {
+                // Stating the roof matters more than the number: an indoor game
+                // has no weather effect, and quoting a temperature invites one.
+                return `- ${w.cacheKey ?? 'venue'}: indoors — weather not a factor`
+              }
+              const bits: string[] = []
+              if (typeof w.temperatureF === 'number') bits.push(`${Math.round(w.temperatureF)}F`)
+              if (w.conditionLabel) bits.push(String(w.conditionLabel))
+              if (typeof w.windSpeedMph === 'number') bits.push(`wind ${Math.round(w.windSpeedMph)}mph`)
+              if (typeof w.precipChancePct === 'number') bits.push(`precip ${Math.round(w.precipChancePct)}%`)
+              const when = w.forecastForTime ? formatEt(new Date(w.forecastForTime)) : 'time TBD'
+              return `- ${w.cacheKey ?? 'venue'} (${when}): ${bits.length ? bits.join(', ') : 'no readings'}`
+            })
+            .join(NL)}`
+        )
+      }
+    }
+
     if (transactionRows.length) {
       const sourceKey = `transactions_${sp}`
       sources.push(sourceKey)

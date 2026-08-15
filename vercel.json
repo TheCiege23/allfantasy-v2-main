@@ -49,6 +49,10 @@
       "schedule": "*/15 * * * *"
     },
     {
+      "path": "/api/cron/import-injuries?sport=NCAAF",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/import-stat-lines",
       "schedule": "30 7 * * *"
     },
