@@ -199,6 +199,47 @@ export async function fetchCfbdGames(season: number, week?: number): Promise<Pro
 
 // ── TheSportsDB (both sports) ────────────────────────────────────────────────
 
+
+/**
+ * One status vocabulary across providers.
+ *
+ * Measured in production, sports_games.status held all of these at once:
+ * "scheduled", "Finished", "NS", "FT", "completed", "After Over Time", "AOT",
+ * "Final", "TBD" — and one NCAAF row whose status was the literal string
+ * "9/6 - 7:30 PM EDT". Every provider speaks its own dialect, so any downstream
+ * "is this game over?" check was guesswork, and the safe-looking default (treat
+ * unknown as not-final) silently mislabels finished games.
+ *
+ * Unrecognised input returns null rather than a guess. A null status is legible
+ * as "we do not know"; "scheduled" would be a claim.
+ */
+export type CanonicalGameStatus = 'scheduled' | 'in_progress' | 'final' | 'postponed' | 'canceled'
+
+export function normalizeGameStatus(raw: unknown): CanonicalGameStatus | null {
+  if (raw == null) return null
+  const v = String(raw).trim().toLowerCase()
+  if (!v) return null
+
+  // A date/time in the status column is a scheduling artefact, not a state.
+  if (/\d{1,2}\/\d{1,2}/.test(v) || /\b(am|pm)\b/.test(v)) return 'scheduled'
+
+  if (['ft', 'aot', 'final', 'finished', 'completed', 'complete', 'closed', 'full time',
+       'after over time', 'final/ot', 'final ot', 'status_final', 'post'].includes(v)) return 'final'
+  if (v.startsWith('final')) return 'final'
+
+  if (['ns', 'tbd', 'scheduled', 'pre', 'pregame', 'not started', 'status_scheduled',
+       'upcoming'].includes(v)) return 'scheduled'
+
+  if (['live', 'in progress', 'inprogress', 'in_progress', 'status_in_progress', 'halftime',
+       'ht', 'q1', 'q2', 'q3', 'q4', 'ot', '1h', '2h'].includes(v)) return 'in_progress'
+  if (/^(q[1-4]|p[1-4]|ot\d*)$/.test(v)) return 'in_progress'
+
+  if (v.includes('postpon') || v.includes('delayed') || v.includes('suspend')) return 'postponed'
+  if (v.includes('cancel') || v.includes('abandon') || v.includes('forfeit')) return 'canceled'
+
+  return null
+}
+
 const THE_SPORTS_DB_LEAGUE: Record<string, string> = {
   NFL: '4391',
   NCAAF: '4479',
@@ -216,6 +257,41 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
   if (!leagueId) return { source: 'thesportsdb', games: [], error: `no league id for ${sport}` }
 
   const byId = new Map<string, ProviderGame>()
+  // Season-wide slate FIRST. eventspastleague/eventsnextleague return only ~15
+  // and ~20 rows, which is why NCAAF sat at 97 games in the database while
+  // TheSportsDB itself carried 866 for the 2026 season and 1,525 for 2025.
+  const seasonYearForCall = new Date().getFullYear()
+  for (const season of [seasonYearForCall, seasonYearForCall - 1]) {
+    const payload = (await getJson(
+      `https://www.thesportsdb.com/api/v1/json/${key}/eventsseason.php?id=${leagueId}&s=${season}`,
+    )) as { events?: Record<string, unknown>[] } | null
+    const rows = payload?.events
+    if (!Array.isArray(rows)) continue
+    for (const r of rows) {
+      const externalId = str(r.idEvent)
+      const home = str(r.strHomeTeam)
+      const away = str(r.strAwayTeam)
+      if (!externalId || !home || !away) continue
+      const date = str(r.dateEvent)
+      const time = str(r.strTime)
+      byId.set(externalId, {
+        externalId,
+        homeTeam: home,
+        awayTeam: away,
+        homeScore: num(r.intHomeScore),
+        awayScore: num(r.intAwayScore),
+        status: normalizeGameStatus(r.strStatus),
+        startTime: date ? toDate(`${date}T${time ?? '00:00:00'}Z`) : null,
+        week: weekOrNull(r.intRound),
+        season: seasonYear(r.strSeason) ?? (date ? Number(date.slice(0, 4)) : null),
+        raw: r,
+      })
+    }
+    // One season with data is enough; the prior year is only a fallback for the
+    // gap between seasons.
+    if (byId.size > 0) break
+  }
+
   for (const file of ['eventspastleague', 'eventsnextleague']) {
     const payload = (await getJson(
       `https://www.thesportsdb.com/api/v1/json/${key}/${file}.php?id=${leagueId}`,
@@ -236,7 +312,7 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
         awayTeam: away,
         homeScore: num(r.intHomeScore),
         awayScore: num(r.intAwayScore),
-        status: str(r.strStatus),
+        status: normalizeGameStatus(r.strStatus),
         startTime: date ? toDate(`${date}T${time ?? '00:00:00'}Z`) : null,
         // Observed 500 and 200 on real rows — TheSportsDB uses intRound for its
         // own bucketing, not a football week. Rejected rather than stored wrong.
@@ -248,6 +324,76 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
   }
 
   return { source: 'thesportsdb', games: [...byId.values()], error: null }
+}
+
+
+const ESPN_PATH: Record<string, string> = {
+  NFL: 'football/nfl',
+  NCAAF: 'football/college-football',
+}
+
+/**
+ * ESPN's public scoreboard. No key, and it is the only one of these feeds that
+ * reports in-progress state reliably, so it is what makes "is this game live
+ * right now" answerable.
+ *
+ * Verified live 2026-08-15: NFL 16 events, NCAAF 99 events.
+ */
+export async function fetchEspnGames(sport: 'NFL' | 'NCAAF'): Promise<ProviderResult> {
+  const path = ESPN_PATH[sport]
+  if (!path) return { source: 'espn', games: [], error: `no espn path for ${sport}` }
+
+  const payload = (await getJson(
+    `https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard?limit=400`,
+  )) as { events?: Record<string, unknown>[]; season?: Record<string, unknown> } | null
+
+  const rows = payload?.events
+  if (!Array.isArray(rows)) {
+    return { source: 'espn', games: [], error: 'no events in scoreboard payload' }
+  }
+
+  const games: ProviderGame[] = []
+  for (const r of rows) {
+    const externalId = str(r.id)
+    const comp = Array.isArray((r as any).competitions) ? (r as any).competitions[0] : null
+    const teams = Array.isArray(comp?.competitors) ? comp.competitors : []
+    const homeRow = teams.find((t: any) => t?.homeAway === 'home')
+    const awayRow = teams.find((t: any) => t?.homeAway === 'away')
+    const home = str(homeRow?.team?.displayName ?? homeRow?.team?.name)
+    const away = str(awayRow?.team?.displayName ?? awayRow?.team?.name)
+    if (!externalId || !home || !away) continue
+
+    // ESPN reports state as pre/in/post alongside a human detail string; the
+    // state is the reliable half.
+    const state = str(comp?.status?.type?.state)
+    const detail = str(comp?.status?.type?.description ?? comp?.status?.type?.shortDetail)
+    const status =
+      state === 'in' ? 'in_progress'
+      : state === 'post' ? 'final'
+      : state === 'pre' ? 'scheduled'
+      : normalizeGameStatus(detail)
+
+    // ESPN sends score "0" for games that have not kicked off, so reading it
+    // unconditionally invents a 0-0 result for every scheduled game — 99 of 99
+    // NCAAF rows on first run. Scores are only real once the game is live or
+    // finished.
+    const played = status === 'in_progress' || status === 'final'
+
+    games.push({
+      externalId,
+      homeTeam: home,
+      awayTeam: away,
+      homeScore: played ? num(homeRow?.score) : null,
+      awayScore: played ? num(awayRow?.score) : null,
+      status,
+      startTime: toDate(str(r.date)),
+      week: weekOrNull((r as any).week?.number ?? (payload as any)?.week?.number),
+      season: num((r as any).season?.year ?? (payload as any)?.season?.year),
+      raw: r,
+    })
+  }
+
+  return { source: 'espn', games, error: null }
 }
 
 /**
@@ -269,9 +415,23 @@ export async function fetchGamesForSport(
     attempts.push(await fetchCfbdGames(season, week))
   }
 
-  // TheSportsDB always runs: it is the corroborating source, and it fills in
-  // when the primary carries a slate but no scores yet.
+  // TheSportsDB always runs: it is the corroborating source, it carries the
+  // season-wide slate, and it fills in when the primary has games but no scores.
   attempts.push(await fetchTheSportsDbGames(sport))
 
-  return attempts
+  // ESPN last, and for BOTH sports: it is the only feed here that reports
+  // in-progress state, so it is what upgrades a stored "scheduled" to live.
+  attempts.push(await fetchEspnGames(sport))
+
+  // Normalise centrally rather than per provider. Each feed speaks its own
+  // dialect ("completed", "FT", "NS"), and a provider added later would
+  // otherwise reintroduce a fourth vocabulary into the same column.
+  // normalizeGameStatus is idempotent, so already-canonical values pass through.
+  return attempts.map((attempt) => ({
+    ...attempt,
+    games: attempt.games.map((game) => ({
+      ...game,
+      status: normalizeGameStatus(game.status),
+    })),
+  }))
 }

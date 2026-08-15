@@ -157,6 +157,10 @@
       "schedule": "*/2 * * * *"
     },
     {
+      "path": "/api/cron/import-scores?sport=NCAAF",
+      "schedule": "*/2 * * * *"
+    },
+    {
       "path": "/api/cron/recompute-allfantasy-adp",
       "schedule": "0 9 * * *"
     },
