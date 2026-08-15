@@ -226,6 +226,9 @@ export function normalizeGameStatus(raw: unknown): CanonicalGameStatus | null {
   if (['ft', 'aot', 'final', 'finished', 'completed', 'complete', 'closed', 'full time',
        'after over time', 'final/ot', 'final ot', 'status_final', 'post'].includes(v)) return 'final'
   if (v.startsWith('final')) return 'final'
+  // "Match Finished" is the single most common legacy value in this column (334
+  // rows), and an exact-match list missed it entirely.
+  if (v.includes('finished') || v.includes('full time')) return 'final'
 
   if (['ns', 'tbd', 'scheduled', 'pre', 'pregame', 'not started', 'status_scheduled',
        'upcoming'].includes(v)) return 'scheduled'
@@ -233,8 +236,20 @@ export function normalizeGameStatus(raw: unknown): CanonicalGameStatus | null {
   if (['live', 'in progress', 'inprogress', 'in_progress', 'status_in_progress', 'halftime',
        'ht', 'q1', 'q2', 'q3', 'q4', 'ot', '1h', '2h'].includes(v)) return 'in_progress'
   if (/^(q[1-4]|p[1-4]|ot\d*)$/.test(v)) return 'in_progress'
+  // sports_games carries every sport, so the column also holds baseball and
+  // period markers: "Top 2nd", "Mid 2nd", "IN8", "3:00 - 1st". A game with an
+  // inning or a clock on it is being played.
+  if (/^(top|bot|bottom|mid|end)\s/.test(v)) return 'in_progress'
+  if (/^in\d+$/.test(v)) return 'in_progress'
+  // "Second Half", "1st Half" — a half in play is a game in play. 'halftime' is
+  // already handled above and lands in the same state.
+  if (v.includes('half')) return 'in_progress'
+  if (/^\d{1,2}:\d{2}\s*-\s*/.test(v)) return 'in_progress'
+  // A delay interrupts a game in progress; it is not a postponement of one that
+  // has not started.
+  if (v.includes('delay') && /(top|bot|mid|end|\d(st|nd|rd|th))/.test(v)) return 'in_progress'
 
-  if (v.includes('postpon') || v.includes('delayed') || v.includes('suspend')) return 'postponed'
+  if (v.includes('postpon') || v.includes('delay') || v.includes('suspend')) return 'postponed'
   if (v.includes('cancel') || v.includes('abandon') || v.includes('forfeit')) return 'canceled'
 
   return null
