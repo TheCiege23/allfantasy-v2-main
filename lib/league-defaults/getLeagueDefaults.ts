@@ -117,6 +117,116 @@ function numericOr(value: unknown, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
 }
 
+/**
+ * Playoff and waiver defaults ship in two key spellings, both of which are widely consumed:
+ * snake_case (the sport-defaults registry shape, e.g. `playoff_start_week`) and camelCase
+ * (the format-contract shape, e.g. `playoffStartWeek`).
+ *
+ * They used to be assembled independently — the snake keys arrived by spreading the registry
+ * defaults, the camel keys were recomputed underneath with their own fallback chains — so the
+ * two could disagree about the same league. An NCAAF devy league reported playoffs starting in
+ * week 13 under one spelling and week 15 under the other; an 8-manager NFL redraft league had
+ * 6 playoff teams under one and 4 under the other; a dynasty league had FAAB waivers under one
+ * and no waiver type at all under the other.
+ *
+ * Both spellings are now projected from a single resolved value per field. Nothing in this
+ * module may write one spelling of a mirrored field on its own.
+ */
+type SettingsKeyMirror = readonly [snakeKey: string, camelKey: string]
+
+const PLAYOFF_KEY_MIRRORS: readonly SettingsKeyMirror[] = [
+  ['playoff_team_count', 'playoffTeams'],
+  ['playoff_start_week', 'playoffStartWeek'],
+  ['playoff_weeks', 'playoffWeeks'],
+  ['first_round_byes', 'firstRoundByes'],
+  ['total_rounds', 'totalRounds'],
+  ['championship_length', 'championshipLength'],
+  ['regular_season_end_week', 'regularSeasonEndWeek'],
+  ['championship_week', 'championshipWeek'],
+  /** One matchup per playoff round; the sport-defaults registry calls this `matchup_length`. */
+  ['matchup_length', 'playoffWeeksPerRound'],
+]
+
+const WAIVER_KEY_MIRRORS: readonly SettingsKeyMirror[] = [
+  ['waiver_type', 'waiverType'],
+  ['FAAB_budget_default', 'faabBudget'],
+  ['processing_days', 'processingDays'],
+  ['processing_time_utc', 'processingTimeUtc'],
+  ['free_agent_unlock_behavior', 'freeAgentUnlockBehavior'],
+  ['game_lock_behavior', 'gameLockBehavior'],
+]
+
+/** `null` is a real value (no-playoff formats set `playoff_start_week: null`); only `undefined` means absent. */
+function firstPresent(...values: readonly unknown[]): unknown {
+  for (const value of values) {
+    if (value !== undefined) return value
+  }
+  return undefined
+}
+
+/**
+ * Merge a snake_case registry default with a camelCase format contract, then force both
+ * spellings of every mirrored field to the one winning value.
+ *
+ * Precedence per field: explicit override > format contract > sport/variant registry >
+ * derived fallback. The format contract outranks the registry because it is the more specific
+ * authority — it is resolved from sport, format *and* manager count, whereas the registry only
+ * varies by sport and variant.
+ */
+function projectMirroredSettings(input: {
+  mirrors: readonly SettingsKeyMirror[]
+  registryDefaults: Record<string, unknown>
+  contractSettings?: Record<string, unknown> | null
+  overrides?: Record<string, unknown> | null
+  fallbacks?: Record<string, unknown> | null
+}): Record<string, unknown> {
+  const { mirrors, registryDefaults, contractSettings, overrides, fallbacks } = input
+  const merged: Record<string, unknown> = { ...registryDefaults, ...(contractSettings ?? {}) }
+
+  for (const [snakeKey, camelKey] of mirrors) {
+    const resolved = firstPresent(
+      overrides?.[camelKey],
+      overrides?.[snakeKey],
+      contractSettings?.[camelKey],
+      contractSettings?.[snakeKey],
+      registryDefaults[snakeKey],
+      registryDefaults[camelKey],
+      fallbacks?.[camelKey],
+      fallbacks?.[snakeKey],
+    )
+    if (resolved === undefined) {
+      delete merged[snakeKey]
+      delete merged[camelKey]
+      continue
+    }
+    merged[snakeKey] = resolved
+    merged[camelKey] = resolved
+  }
+
+  return merged
+}
+
+/**
+ * The registry only knows when playoffs start; the redraft/keeper contracts additionally
+ * publish where the regular season ends and when the championship is played. Derive those two
+ * for the formats that have no contract (dynasty, devy, c2c, …) so every format answers the
+ * question, and let a contract that states them explicitly win.
+ */
+function derivePlayoffWeekBounds(args: {
+  startWeek: unknown
+  playoffWeeks: unknown
+}): { regularSeasonEndWeek: number | null; championshipWeek: number | null } {
+  const startWeek = Number(args.startWeek)
+  if (!Number.isFinite(startWeek) || startWeek <= 0) {
+    return { regularSeasonEndWeek: null, championshipWeek: null }
+  }
+  const spanWeeks = numericOr(args.playoffWeeks, 1)
+  return {
+    regularSeasonEndWeek: startWeek - 1,
+    championshipWeek: startWeek + spanWeeks - 1,
+  }
+}
+
 export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueFoundationDefaults {
   const sport = normalizeToSupportedSport(input.sport)
   const format = normalizeFormat(input.format)
@@ -206,6 +316,16 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
   const waiverDefaults = resolution.waiverDefaults as unknown as Record<string, unknown>
   const scheduleDefaults = resolution.scheduleDefaults as unknown as Record<string, unknown>
   const canonicalRosterSettings = (canonicalSnapshot?.rosterSettings as Record<string, unknown> | undefined) ?? {}
+  /** Guillotine crowns the last team standing rather than running a bracket. */
+  const playoffOverrides = format === 'guillotine' ? { playoffTeams: 1, playoffStartWeek: null } : null
+  const playoffWeekBounds = derivePlayoffWeekBounds({
+    startWeek: firstPresent(
+      playoffOverrides?.playoffStartWeek,
+      canonicalPlayoffSettings?.playoffStartWeek,
+      playoff.playoff_start_week,
+    ),
+    playoffWeeks: firstPresent(canonicalPlayoffSettings?.playoffWeeks, playoff.playoff_weeks),
+  })
 
   return {
     sport,
@@ -253,24 +373,19 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
           : null,
       c2cConfig: format === 'c2c' ? { enabled: true, collegeRounds: [Math.max(1, rounds - 1), rounds] } : null,
     },
-    waiverSettings: {
-      ...waiverDefaults,
-      ...(canonicalWaiverSettings ?? {}),
-    },
+    waiverSettings: projectMirroredSettings({
+      mirrors: WAIVER_KEY_MIRRORS,
+      registryDefaults: waiverDefaults,
+      contractSettings: canonicalWaiverSettings,
+    }),
     playoffSettings: {
-      ...playoff,
-      ...(canonicalPlayoffSettings ?? {}),
-      playoffTeams: numericOr(
-        canonicalPlayoffSettings?.playoffTeams ?? playoff.playoffTeams ?? playoff.teams,
-        format === 'guillotine' ? 1 : 6,
-      ),
-      playoffStartWeek:
-        canonicalPlayoffSettings?.playoffStartWeek ??
-        playoff.playoffStartWeek ??
-        playoff.startWeek ??
-        (format === 'guillotine' ? null : 15),
-      playoffWeeksPerRound:
-        canonicalPlayoffSettings?.playoffWeeksPerRound ?? playoff.playoffWeeksPerRound ?? playoff.weeksPerRound ?? 1,
+      ...projectMirroredSettings({
+        mirrors: PLAYOFF_KEY_MIRRORS,
+        registryDefaults: playoff,
+        contractSettings: canonicalPlayoffSettings,
+        overrides: playoffOverrides,
+        fallbacks: { ...playoffWeekBounds, playoffWeeksPerRound: 1 },
+      }),
       seedingRule: canonicalPlayoffSettings?.standingsRule ?? playoff.seedingRule ?? playoff.seeding ?? 'record_then_points',
       lowerBracket: canonicalPlayoffSettings?.lowerBracket ?? playoff.lowerBracket ?? 'consolation',
     },
