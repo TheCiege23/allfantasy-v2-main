@@ -250,8 +250,12 @@ export default function LoginContent() {
         )}
         {oauthErrorParam && !error && (
           <NocturneBanner tone="accent" icon={TriangleAlert}>
+            {/* OAuthCallback fires when the PROVIDER rejects the callback (e.g. Spotify
+                answering 403 to the profile request), not only when a cookie is missing.
+                The old copy named the browser as the cause, sending users to clear cookies
+                for something they cannot fix. Lead with the retry, offer the real fallback. */}
             {oauthErrorParam === "OAuthCallback"
-              ? "Social sign-in couldn't complete — your session may have expired or the browser blocked the sign-in cookie. Please try again."
+              ? "Social sign-in couldn't complete. Please try again — if it keeps failing, sign in with your email and password instead."
               : oauthErrorParam === "OAuthAccountNotLinked"
                 ? "This social account is already linked to a different AllFantasy account. Sign in with your original method and connect it from settings."
                 : oauthErrorParam === "SOCIAL_EMAIL_UNVERIFIED"
