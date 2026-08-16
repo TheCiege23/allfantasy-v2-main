@@ -42,6 +42,17 @@ const { prismaMock, state } = vi.hoisted(() => {
     legacyLeague: {
       count: vi.fn(async () => 0),
     },
+    // Third identity store. linkAfUserToLegacy now writes it in the SAME transaction as
+    // the other two, so the duplicate-league gate can never read a link the other stores
+    // already recorded.
+    platformIdentity: {
+      findFirst: vi.fn(async () => null),
+      create: vi.fn(async () => ({})),
+      update: vi.fn(async () => ({})),
+    },
+    // The three identity writes are atomic; the mock runs the callback against itself so
+    // the stateful assertions above still observe them.
+    $transaction: vi.fn(async (fn: (tx: unknown) => unknown) => fn(prismaMock)),
   }
   return { prismaMock, state }
 })
@@ -70,6 +81,37 @@ describe('claimGuestTrialForUser — idempotent signup migration', () => {
     expect(replay.claimed).toBe(false)
     expect(replay).toMatchObject({ reason: 'already-linked' })
     expect(prismaMock.appUser.update).toHaveBeenCalledTimes(1) // still once — no duplicate claim
+  })
+
+  it('writes the PlatformIdentity row the duplicate-league gate reads', async () => {
+    // Without this row resolveLinkedAccounts finds no siblings, so a second account
+    // belonging to the same human would join the same league unchallenged. A link that
+    // populated only the two older stores would leave the gate blind.
+    const token = await signGuestSessionToken({ legacyUserId: 'legacy-1', sleeperUsername: 'theghost' })
+
+    await claimGuestTrialForUser('user-1', token)
+
+    expect(prismaMock.platformIdentity.create).toHaveBeenCalledTimes(1)
+    expect(prismaMock.platformIdentity.create.mock.calls[0][0].data).toMatchObject({
+      userId: 'user-1',
+      platform: 'sleeper',
+      platformUserId: 'sl-1',
+      platformUsername: 'theghost',
+    })
+  })
+
+  it('refuses the whole link when the Sleeper id is on another profile (no half-write)', async () => {
+    // Previously this case updated AppUser.legacyUserId and then silently SKIPPED the
+    // profile write, leaving the account linked in one store and unlinked in another.
+    const token = await signGuestSessionToken({ legacyUserId: 'legacy-1', sleeperUsername: 'theghost' })
+    prismaMock.userProfile.findFirst.mockResolvedValueOnce({ userId: 'someone-else' })
+
+    const result = await claimGuestTrialForUser('user-1', token)
+
+    expect(result.claimed).toBe(false)
+    expect(prismaMock.appUser.update).not.toHaveBeenCalled()
+    expect(prismaMock.userProfile.upsert).not.toHaveBeenCalled()
+    expect(prismaMock.platformIdentity.create).not.toHaveBeenCalled()
   })
 
   it('is a no-op when there is no guest token (the common sign-in case)', async () => {
