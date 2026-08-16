@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { loginUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
+import { CLOSED_BETA_ENABLED } from "@/lib/beta-invite/closedBetaFlag"
 import { resolveSignupRedirectPath } from "@/lib/auth/SignupFlowController"
 import { rememberUnifiedAuthDestination } from "@/lib/auth/UnifiedAuthOrchestrator"
 import { getTermsUrl, getPrivacyUrl, getNoGamblingPolicyUrl } from "@/lib/legal/LegalRouteResolver"
@@ -80,8 +81,14 @@ export default function SignupContent() {
   // at /api/auth/beta/claim; `?invite=` is a secondary carry for a pasted token. `beta=1`
   // shows the closed-beta context; `betaError` is the honest reason from an OAuth rejection.
   const inviteParam = searchParams?.get("invite")?.trim() || undefined
-  const betaMode = searchParams?.get("beta") === "1"
-  const betaErrorCode = searchParams?.get("betaError")?.trim() || undefined
+  // Both beta params are IGNORED while signup is open. They are client-supplied claims, not
+  // server policy, and the server can no longer produce a betaError code at all — so a stale
+  // tab, bookmark, back-navigation or shared link carrying `?betaError=INVITE_REQUIRED` was
+  // still rendering "AllFantasy is in a closed beta" as a red alert over a working form.
+  const betaMode = CLOSED_BETA_ENABLED && searchParams?.get("beta") === "1"
+  const betaErrorCode = CLOSED_BETA_ENABLED
+    ? searchParams?.get("betaError")?.trim() || undefined
+    : undefined
   const betaErrorMessage = betaErrorCode ? resolveBetaErrorMessage(betaErrorCode) : undefined
 
   const [fullName, setFullName] = useState("")
