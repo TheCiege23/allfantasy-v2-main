@@ -24,6 +24,9 @@ import crypto from "crypto"
 
 import type { Prisma, PrismaClient } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+// Shared with the signup page, which is a client component and cannot import this
+// server-only module. Both sides must read ONE switch — see closedBetaFlag.
+import { CLOSED_BETA_ENABLED } from "@/lib/beta-invite/closedBetaFlag"
 
 /** A Prisma client or an interactive-transaction client — so consume can run inside a caller's tx. */
 export type PrismaLike = PrismaClient | Prisma.TransactionClient
@@ -67,21 +70,6 @@ export function admissionErrorMessage(code: AdmissionErrorCode): string {
       return "We couldn't verify your invitation right now. Please try again in a moment."
   }
 }
-
-/**
- * SIGNUP IS OPEN. Closed beta is over — anyone can create an account, no invitation.
- *
- * This constant is the authority, NOT the environment. `INVITE_ONLY` is deliberately no
- * longer read: the flag is set in deployed environments that the repo cannot see or edit,
- * and a stale value left behind there must never be able to silently re-close public
- * signup. Config drift closing the front door is exactly the failure this replaces.
- *
- * The gate itself is intact, not deleted. Every account-creation path still routes through
- * `isInviteOnlyEnabled()`, and the invite machinery (issue/revoke/validate/consume, admin
- * panel, admission cookie) is untouched — so running another closed beta is a one-line
- * change here, not a re-implementation.
- */
-const CLOSED_BETA_ENABLED = false
 
 /**
  * Is closed-beta invite-only mode on? Always false while signup is open.
