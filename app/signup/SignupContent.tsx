@@ -337,7 +337,9 @@ export default function SignupContent() {
               color: "var(--color-neutral-300)",
             }}
           >
-            {betaErrorMessage ?? "AllFantasy is in a controlled closed beta. Use your invitation to create an account."}{" "}
+            {/* Signup is OPEN — an invite link is a welcome, not a requirement. Only the
+                error variant (unreachable while the gate is off) still mentions invitations. */}
+            {betaErrorMessage ?? "Welcome to AllFantasy. Signup is open — create your account below to get started."}{" "}
             <Link href={loginUrlWithIntent(postSignupDestination)} style={{ fontWeight: 600 }}>
               Already have an account? Sign in
             </Link>

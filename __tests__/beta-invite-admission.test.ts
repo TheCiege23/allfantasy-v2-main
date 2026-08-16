@@ -53,22 +53,23 @@ beforeEach(() => {
   mocks.updateMany.mockResolvedValue({ count: 1 })
 })
 
-describe("isInviteOnlyEnabled — flag resolution & fail-closed default", () => {
-  it("defaults to DISABLED when unset (documented open-signup default)", () => {
+describe("isInviteOnlyEnabled — signup is OPEN", () => {
+  it("is disabled when nothing is configured", () => {
     expect(isInviteOnlyEnabled({})).toBe(false)
   })
-  it("enables on 1/true/yes/on", () => {
-    for (const v of ["1", "true", "TRUE", "yes", "on"]) expect(isInviteOnlyEnabled({ INVITE_ONLY: v })).toBe(true)
+  it("stays disabled even when a stale INVITE_ONLY is still set in the environment", () => {
+    // The whole point of the open-signup change: a leftover flag in a deployed environment
+    // (Vercel/Railway) must NOT be able to re-close public signup behind the repo's back.
+    for (const v of ["1", "true", "TRUE", "yes", "on", "maybe"]) {
+      expect(isInviteOnlyEnabled({ INVITE_ONLY: v })).toBe(false)
+    }
   })
-  it("disables on 0/false/no/off/empty", () => {
-    for (const v of ["0", "false", "no", "off", ""]) expect(isInviteOnlyEnabled({ INVITE_ONLY: v })).toBe(false)
+  it("stays disabled in production regardless of the flag (no silent re-closing)", () => {
+    expect(isInviteOnlyEnabled({ INVITE_ONLY: "1", VERCEL_ENV: "production" })).toBe(false)
+    expect(isInviteOnlyEnabled({ INVITE_ONLY: "maybe", NODE_ENV: "production" })).toBe(false)
   })
-  it("FAILS CLOSED on a malformed flag in production (never silently opens signup)", () => {
-    expect(isInviteOnlyEnabled({ INVITE_ONLY: "maybe", VERCEL_ENV: "production" })).toBe(true)
-    expect(isInviteOnlyEnabled({ INVITE_ONLY: "maybe", NODE_ENV: "production" })).toBe(true)
-  })
-  it("treats a malformed flag as disabled OUTSIDE production (dev convenience)", () => {
-    expect(isInviteOnlyEnabled({ INVITE_ONLY: "maybe", NODE_ENV: "development" })).toBe(false)
+  it("reads the real process env without throwing (default-argument path)", () => {
+    expect(isInviteOnlyEnabled()).toBe(false)
   })
 })
 

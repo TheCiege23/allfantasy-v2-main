@@ -69,25 +69,28 @@ export function admissionErrorMessage(code: AdmissionErrorCode): string {
 }
 
 /**
- * Is closed-beta invite-only mode on?
+ * SIGNUP IS OPEN. Closed beta is over — anyone can create an account, no invitation.
  *
- * Enabled: INVITE_ONLY ∈ {1,true,yes,on}. Disabled: {0,false,no,off,unset}.
- * MALFORMED (anything else): in production → ENABLED (fail closed, per the mandate that
- * production must never silently open signup on a bad flag); in dev/test → disabled + warn.
- * This is a pure function of the environment — no NEXT_PUBLIC exposure.
+ * This constant is the authority, NOT the environment. `INVITE_ONLY` is deliberately no
+ * longer read: the flag is set in deployed environments that the repo cannot see or edit,
+ * and a stale value left behind there must never be able to silently re-close public
+ * signup. Config drift closing the front door is exactly the failure this replaces.
+ *
+ * The gate itself is intact, not deleted. Every account-creation path still routes through
+ * `isInviteOnlyEnabled()`, and the invite machinery (issue/revoke/validate/consume, admin
+ * panel, admission cookie) is untouched — so running another closed beta is a one-line
+ * change here, not a re-implementation.
  */
-export function isInviteOnlyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = (env.INVITE_ONLY ?? "").trim().toLowerCase()
-  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true
-  if (raw === "0" || raw === "false" || raw === "no" || raw === "off" || raw === "") return false
+const CLOSED_BETA_ENABLED = false
 
-  const isProd = env.VERCEL_ENV === "production" || (env.NODE_ENV === "production" && !env.VERCEL_ENV)
-  if (isProd) {
-    console.warn("[beta-invite] INVITE_ONLY is malformed in production — failing closed (invite required).")
-    return true
-  }
-  console.warn("[beta-invite] INVITE_ONLY is malformed (non-production) — treating as disabled.")
-  return false
+/**
+ * Is closed-beta invite-only mode on? Always false while signup is open.
+ *
+ * Keeps its `env` parameter so callers and tests are unchanged, and so a future closed
+ * beta can go back to reading a flag without touching a single call site.
+ */
+export function isInviteOnlyEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
+  return CLOSED_BETA_ENABLED
 }
 
 export function normalizeEmail(email: string | null | undefined): string {
