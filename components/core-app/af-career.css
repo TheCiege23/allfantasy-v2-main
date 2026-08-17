@@ -1,0 +1,142 @@
+/* Career. Authored on var(--token) — see the global light-mode readable clamp. */
+.af-cr { display: flex; flex-direction: column; gap: 26px; }
+
+.af-cr-head { display: flex; flex-direction: column; gap: 6px; }
+.af-cr-title {
+  margin: 0;
+  font: 900 26px/1.15 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.af-cr-sub { margin: 0; font-size: 13px; color: var(--muted); max-width: 62ch; }
+
+/* ---- level ---- */
+
+.af-cr-level {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+}
+
+.af-cr-level-top {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* The API hands back a per-tier colour. It tints the numeral and the bar only —
+   never a filled background behind text, because we do not control the contrast
+   of a colour that arrives at runtime. */
+.af-cr-level-num {
+  font: 900 34px/1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.04em;
+}
+.af-cr-level-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.af-cr-level-tier {
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-cr-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--line2);
+  overflow: hidden;
+}
+.af-cr-bar-fill { height: 100%; border-radius: 999px; }
+
+.af-cr-bar-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- stats ---- */
+
+.af-cr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.af-cr-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+}
+
+.af-cr-stat-label {
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-cr-stat-value {
+  font: 800 22px/1.1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+/* A withheld number is styled as absent, not as a value. */
+.af-cr-stat-value--none {
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--faint);
+}
+.af-cr-stat-note { font-size: 11.5px; line-height: 1.4; color: var(--muted); }
+
+/* ---- notices ---- */
+
+.af-cr-notice {
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-cr-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 22px 20px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+}
+.af-cr-empty-title { margin: 0; font-size: 15px; font-weight: 700; color: var(--text); }
+.af-cr-empty-body { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); max-width: 60ch; }
+
+.af-cr-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 9px 15px;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  text-decoration: none;
+}
+.af-cr-btn:hover { border-color: var(--accent); }
+.af-cr-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-cr-btn--primary { border-color: var(--accent); }
+
+.af-cr-foot { font-size: 11.5px; color: var(--faint); }

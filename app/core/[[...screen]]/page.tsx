@@ -29,6 +29,7 @@ import AuthV4 from '@/components/core-app/screens/AuthV4'
 import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens/ImportV4'
 import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
+import { Career } from '@/components/core-app/screens/Career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 
 export const dynamic = 'force-dynamic'
@@ -314,6 +315,11 @@ export default async function AfCorePage({
         />
       ) : activeKey === 'tools' ? (
         <Tools />
+      ) : activeKey === 'career' ? (
+        // No server loader on purpose — Career fetches /api/user/rank itself so a
+        // cold-profile rank recalculation cannot hold the whole shell's render.
+        // The reasoning is written out at the top of the screen.
+        <Career />
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
           <Portfolio data={portfolio} />
