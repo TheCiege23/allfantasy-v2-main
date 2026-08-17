@@ -29,6 +29,8 @@ import AuthV4 from '@/components/core-app/screens/AuthV4'
 import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens/ImportV4'
 import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
+import { Career } from '@/components/core-app/screens/Career'
+import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 
 export const dynamic = 'force-dynamic'
@@ -158,6 +160,14 @@ export default async function AfCorePage({
    * Home answers "what needs me now" from a queue; this answers "what do I have".
    */
   const portfolio = activeKey === 'portfolio' ? await getPortfolio(userId).catch(() => null) : null
+
+  // Career derives from imported history; ?platform= narrows it to one provider.
+  const career =
+    activeKey === 'career'
+      ? await getCareerData(userId, typeof sp.platform === 'string' ? sp.platform : null).catch(
+          () => null
+        )
+      : null
 
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
   const playerDetail =
@@ -314,6 +324,20 @@ export default async function AfCorePage({
         />
       ) : activeKey === 'tools' ? (
         <Tools />
+      ) : activeKey === 'career' ? (
+        career ? (
+          <Career data={career} view={typeof sp.view === 'string' ? sp.view : null} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Career
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read your career history just now. This is a read failure on our side, not a
+              sign that you have none.
+            </p>
+          </div>
+        )
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
           <Portfolio data={portfolio} />
