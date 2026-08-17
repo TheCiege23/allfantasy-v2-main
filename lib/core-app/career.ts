@@ -389,11 +389,21 @@ export async function getCareerData(
     leaguesPlayed += 1
     if (league.sport) sportsSeen.add(league.sport)
 
+    /*
+     * ⚠ A PLAYOFF BERTH REQUIRES GAMES. Measured on production: the 2026 season
+     * came back as 0-0-0 with 25 playoff appearances across 54 leagues, because
+     * `finalStanding` and `playoffSeed` are already populated on leagues that
+     * have not played a snap — seeding, not a result. Crediting those produces a
+     * season that made the playoffs 25 times without winning a game, and it
+     * inflates the career playoff total that prestige is scored on.
+     */
+    const playedGames = roster.wins + roster.losses + roster.ties > 0
     const madePlayoffs =
-      roster.isChampion ||
-      (league.playoffTeams != null &&
-        ((roster.playoffSeed != null && roster.playoffSeed <= league.playoffTeams) ||
-          (roster.finalStanding != null && roster.finalStanding <= league.playoffTeams)))
+      playedGames &&
+      (roster.isChampion ||
+        (league.playoffTeams != null &&
+          ((roster.playoffSeed != null && roster.playoffSeed <= league.playoffTeams) ||
+            (roster.finalStanding != null && roster.finalStanding <= league.playoffTeams))))
     if (madePlayoffs) acc.playoffs += 1
 
     if (roster.isChampion) {
