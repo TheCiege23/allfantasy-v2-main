@@ -134,9 +134,10 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     /*
      * Restored: 'career' was pulled from the rail while it rendered "this screen
      * has not been built yet" — an apology occupying prime real estate. The
-     * screen now renders the real record from /api/user/rank (seasons, leagues,
-     * W-L, titles, playoff runs, level), and withholds any number it has no data
-     * behind rather than showing a zero.
+     * screen is the trophy room now, built from imported league history via
+     * lib/core-app/career.ts — seasons, leagues, W-L, titles, playoff runs,
+     * prestige and legacy — and it withholds any number it has no data behind
+     * rather than showing a zero.
      */
     // Label and glyph are the handoff's, verbatim: "Your career" with ★. I first
     // shipped "Career" with ◷ — which is Waivers' glyph, so the rail had the same
