@@ -206,7 +206,190 @@ function CareerArc({ data }: { data: CareerData }) {
   )
 }
 
+/** Compact arc for the mobile frame — the handoff's 320x96 box at height 72. */
+function MobileArc({ data }: { data: CareerData }) {
+  const pts = data.seasons.filter((s) => s.winRate != null)
+  if (pts.length < 2) return null
+  const X0 = 12
+  const X1 = 318
+  const BASE = 88
+  const step = (X1 - X0) / (pts.length - 1)
+  const y = (v: number) => BASE - ((Math.max(0.35, Math.min(v, 0.85)) - 0.35) / 0.5) * 68
+  const coords = pts.map((s, i) => ({ x: X0 + i * step, y: y(s.winRate as number), s }))
+  const line = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ')
+  return (
+    <svg className="af-crm-arc" viewBox="0 0 320 96" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="af-crm-arcfill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.34" />
+          <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={`${line} L${X1},${BASE} L${X0},${BASE} Z`} fill="url(#af-crm-arcfill)" />
+      <path d={line} fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {coords.map((c) => (
+        <circle
+          key={c.s.season}
+          cx={c.x}
+          cy={c.y}
+          r={c.s.championships > 0 ? 5 : 4}
+          fill={c.s.championships > 0 ? 'var(--warn)' : 'var(--accent)'}
+        />
+      ))}
+    </svg>
+  )
+}
+
+/**
+ * Mobile frame (390x844).
+ *
+ * ⚠ THE HANDOFF'S BOTTOM TAB BAR IS DELIBERATELY NOT HERE. The mock is a
+ * standalone phone frame, so it carries its own five-item nav (Home, Portfolio,
+ * Career, Trades, Chimmy). This screen renders INSIDE AfCoreShell, which already
+ * owns navigation — shipping the bar would put two navs on one screen, disagreeing
+ * about which item is current. The shell's nav is the real one.
+ */
+function CareerMobile({ data }: { data: CareerData }) {
+  const titles = data.titles.slice(0, 3)
+  const peak = data.seasons
+    .filter((s) => s.winRate != null)
+    .reduce<null | { season: number; winRate: number }>(
+      (a, s) => (a == null || (s.winRate as number) > a.winRate ? { season: s.season, winRate: s.winRate as number } : a),
+      null
+    )
+
+  return (
+    <div className="af-crm">
+      <header className="af-crm-head">
+        <div className="af-crm-badge">RANK ART PENDING</div>
+        <h1 className="af-crm-handle">{data.handle ?? 'Your career'}</h1>
+        <div className="af-crm-chips">
+          {data.level != null ? (
+            <span className="af-crm-chip">
+              LVL {data.level}{data.levelName ? ` · ${data.levelName.toUpperCase()}` : ''}
+            </span>
+          ) : null}
+          <span className="af-crm-chip af-crm-chip--ro">READ-ONLY</span>
+        </div>
+      </header>
+
+      <div className="af-crm-body">
+        {data.isEmpty ? (
+          <>
+            <p className="af-crm-note">
+              No completed seasons yet. The trophy room is built from finished seasons —
+              {data.activeLeagues.length > 0
+                ? ` your ${data.activeLeagues.length} live ${data.activeLeagues.length === 1 ? 'league' : 'leagues'} will land here once they finish.`
+                : ' import past seasons to backfill it.'}
+            </p>
+            <Link className="af-crm-cta" href="/import?returnTo=%2Fcore%2Fcareer">Import past seasons</Link>
+          </>
+        ) : (
+          <>
+            <div className="af-crm-tiles">
+              <div className="af-crm-tile af-crm-tile--rings">
+                <span className="af-crm-tile-l">RINGS</span>
+                <span className="af-crm-tile-v af-crm-tile-v--warn">{data.championships}</span>
+              </div>
+              <div className="af-crm-tile">
+                <span className="af-crm-tile-l">WIN %</span>
+                <span className={`af-crm-tile-v${data.winRate != null ? ' af-crm-tile-v--good' : ' af-crm-tile-v--none'}`}>
+                  {data.winRate != null ? (data.winRate * 100).toFixed(1) : 'no games'}
+                </span>
+              </div>
+              <div className="af-crm-tile">
+                <span className="af-crm-tile-l">SEASONS</span>
+                <span className="af-crm-tile-v">{data.seasonsPlayed}</span>
+              </div>
+            </div>
+
+            {data.seasons.filter((s) => s.winRate != null).length >= 2 ? (
+              <section className="af-crm-card">
+                <div className="af-crm-cardhead">
+                  <h2 className="af-crm-cardtitle">CAREER ARC</h2>
+                  <span className="af-crm-titlesflag">◉ TITLES</span>
+                </div>
+                <MobileArc data={data} />
+                <div className="af-crm-arcfoot">
+                  <span>
+                    {data.firstSeason} — {data.lastSeason} · win rate, games-weighted
+                  </span>
+                  {peak ? <span className="af-crm-peak">PEAK {(peak.winRate * 100).toFixed(0)}%</span> : null}
+                </div>
+              </section>
+            ) : null}
+
+            {data.prestige || data.legacy ? (
+              <section className="af-crm-card">
+                {data.prestige ? (
+                  <div className="af-crm-score">
+                    <div className="af-crm-scorerow">
+                      <span className="af-crm-scoreval af-crm-scoreval--accent">
+                        {data.prestige.total.toFixed(1)}
+                      </span>
+                      <span className="af-crm-scoreof">/ 100</span>
+                      <span className="af-crm-scorelabel">GM PRESTIGE</span>
+                    </div>
+                    <div className="af-crm-bar">
+                      <i style={{ width: `${data.prestige.total}%`, background: 'var(--accent)' }} />
+                    </div>
+                  </div>
+                ) : null}
+                {data.legacy ? (
+                  <div className="af-crm-score">
+                    <div className="af-crm-scorerow">
+                      <span className="af-crm-scoreval af-crm-scoreval--warn">{data.legacy.total}</span>
+                      <span className="af-crm-scoreof">/ 100</span>
+                      <span className="af-crm-scorelabel">LEGACY</span>
+                    </div>
+                    <div className="af-crm-bar">
+                      {data.legacy.dimensions.map((d) => (
+                        <i key={d.key} style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }} />
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </section>
+            ) : null}
+
+            {titles.length > 0 ? (
+              <section className="af-crm-card">
+                <div className="af-crm-cardhead">
+                  <h2 className="af-crm-cardtitle">
+                    THE SHELF · {data.championships} {data.championships === 1 ? 'TITLE' : 'TITLES'}
+                  </h2>
+                </div>
+                {titles.map((t) => (
+                  <div key={`${t.season}-${t.leagueName}`} className="af-crm-shelfrow">
+                    <span className="af-crm-shelf-glyph" aria-hidden="true">◉</span>
+                    <span className="af-crm-shelf-year">{t.season}</span>
+                    <span className="af-crm-shelf-name">{t.leagueName}</span>
+                    <span className="af-crm-shelf-plat" data-platform={t.platform} title={t.platform}>
+                      {t.platform.charAt(0).toUpperCase()}
+                    </span>
+                  </div>
+                ))}
+              </section>
+            ) : null}
+
+            <Link className="af-crm-cta" href="/core/career?share=1">Share career card</Link>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function Career({ data }: { data: CareerData }) {
+  return (
+    <>
+      <CareerDesktop data={data} />
+      <CareerMobile data={data} />
+    </>
+  )
+}
+
+function CareerDesktop({ data }: { data: CareerData }) {
   const {
     prestige,
     legacy,
@@ -221,7 +404,7 @@ export function Career({ data }: { data: CareerData }) {
   const openSlot = activeLeagues[0] ?? null
 
   return (
-    <div className="af-cr">
+    <div className="af-cr af-cr-desktop">
       {/* ── Identity ───────────────────────────────────────────────────── */}
       <aside className="af-cr-id">
         <div className="af-cr-idhead">
