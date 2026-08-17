@@ -138,7 +138,10 @@ function navItems(props: AfCoreShellProps): NavItem[] {
      * W-L, titles, playoff runs, level), and withholds any number it has no data
      * behind rather than showing a zero.
      */
-    { key: 'career', label: 'Career', glyph: '◷', href: '/core/career' },
+    // Label and glyph are the handoff's, verbatim: "Your career" with ★. I first
+    // shipped "Career" with ◷ — which is Waivers' glyph, so the rail had the same
+    // mark twice.
+    { key: 'career', label: 'Your career', glyph: '★', href: '/core/career' },
     {
       key: 'rankings',
       label: 'Rankings',
