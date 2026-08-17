@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Dash34Countdown, Dash34Time } from './Dashboard34Live'
 import '@/components/core-app/af-dash34.css'
 
 /**
@@ -59,8 +60,18 @@ export type Dash34League = {
 
 export type Dash34Data = {
   firstLock?: {
-    /** Pre-formatted "1:04:12" — the ticking is the client's job, not this file's. */
+    /** Pre-formatted "1:04:12" — the server's paint, and the ticker's starting value. */
     countdown: string
+    /** ISO target. When set, `Dash34Countdown` ticks from it after hydration. */
+    countdownTo?: string | null
+    /**
+     * What the countdown is counting to.
+     *
+     * ⚠ NOT ALWAYS "FIRST LOCK". A lineup lock is a per-league rule we hold for no
+     * league, so the loader labels this "FIRST KICKOFF" — a real deadline, and a
+     * different claim from the one the handoff's mock makes.
+     */
+    countdownLabel?: string | null
     kickoffLabel: string
     headline: string
     slots: Array<{ key?: string | null; label: string; tone?: 'bad' | 'warn' | null }>
@@ -68,31 +79,113 @@ export type Dash34Data = {
     openLabel: string
   } | null
   today?: { wins: number; losses: number; health?: { score: number; label: string } | null } | null
+  /** `time` is an ISO timestamp; `Dash34Time` localises it after hydration. */
   next24?: Array<{ text: string; time: string; tone?: 'warn' | 'accent' | null }> | null
   leagues: Dash34League[]
   /** Leagues with nothing needing attention, collapsed to the footnote row. */
   quiet?: { count: number; sample?: string | null } | null
+  /**
+   * Leagues that DO need attention but did not fit the cap.
+   *
+   * ⚠ NOT THE SAME NUMBER AS `quiet`, AND THEY WERE ADDED TOGETHER ONCE. That
+   * printed "53 leagues are quiet — nothing needs you" over an account where
+   * nearly all 53 had a flagged starter. An overflowed league is hidden by a list
+   * limit; a quiet one has been looked at and cleared.
+   */
+  overflow?: number
   totalLeagues: number
   brief?: { title: string; headline: string; body: string; time?: string | null; avatarUrl?: string | null } | null
   book?: Array<{ initials: string; name: string; note: string; exposure?: string | null; tone?: 'bad' | 'warn' | null }> | null
-  chatter?: { unread: number; messages: Array<{ initials: string; who: string; text: string; fromDiscord?: boolean }> } | null
   chatUnread?: number
+  /**
+   * One account-wide fact stated once, above the list.
+   *
+   * ⚠ THIS IS THE 604-ROW FIX. The old home derived one "League data is stale"
+   * issue per league and rendered 604 of them for a real account — the same
+   * sentence, 604 times, burying everything that actually needed a decision.
+   * "Sync has never run" is one fact about the connection, not N facts about N
+   * leagues, so it is said once and carries the action the rows carried.
+   */
+  notice?: { title: string; body: string; href?: string | null; label?: string | null } | null
+  /**
+   * What this screen is NOT watching.
+   *
+   * Carried over from the old home deliberately. A dashboard with no warnings on
+   * it reads as "everything is fine", which is only true if everything is being
+   * checked — and most of this is not. Naming the gaps is what stops a quiet
+   * screen from being a lie.
+   */
+  coverage?: Array<{ label: string; reason: string }> | null
+  /**
+   * AF Legacy board rows kept out of the list — historical season snapshots from
+   * the career import, not leagues you play. Stated, never silently dropped.
+   */
+  legacyCount?: number
 }
 
-const TOOLS = [
+/*
+ * ⚠ EVERY ONE OF THESE POINTS AT A SCREEN THAT EXISTS. Rankings and Commissioner
+ * HQ used to point at `/core/rankings` and `/core/commissioner`, which are listed
+ * in the route's SCREEN_KEYS but render the "not built yet" apology — a nav link
+ * whose only job is to say sorry. They go to `/rankings` and `/commissioner-os`,
+ * which are real, even though both leave the /core shell.
+ *
+ * Trade lab and Waiver plan are league-scoped: without a `?league=` they land on
+ * a screen that asks which league, which is honest but is a wasted click, so the
+ * loader's league context is threaded through when there is one.
+ */
+const TOOLS: ReadonlyArray<{ href: string; glyph: string; name: string; leagueScoped?: boolean }> = [
   { href: '/core/players', glyph: '●', name: 'Player finder' },
-  { href: '/core/trades', glyph: '⇄', name: 'Trade lab' },
-  { href: '/core/waivers', glyph: '◷', name: 'Waiver plan' },
-  { href: '/core/rankings', glyph: '↑', name: 'Rankings' },
+  { href: '/core/trades', glyph: '⇄', name: 'Trade lab', leagueScoped: true },
+  { href: '/core/waivers', glyph: '◷', name: 'Waiver plan', leagueScoped: true },
+  { href: '/rankings', glyph: '↑', name: 'Rankings' },
   { href: '/core/career', glyph: '★', name: 'Career & Legacy' },
-  { href: '/core/commissioner', glyph: '⚑', name: 'Commissioner HQ' },
-] as const
+  { href: '/commissioner-os', glyph: '⚑', name: 'Commissioner HQ' },
+]
+
+/** Chimmy's chat surface. `/chimmy` is the marketing page, not the assistant. */
+const CHIMMY_HREF = '/chimmy/chat'
+
+function toolHref(t: { href: string; leagueScoped?: boolean }, leagueId: string | null): string {
+  if (!t.leagueScoped || !leagueId) return t.href
+  return `${t.href}?league=${encodeURIComponent(leagueId)}`
+}
+
+/**
+ * League initials for the avatar fallback.
+ *
+ * ⚠ THIS BROKE HYDRATION, NOT JUST THE GLYPH. Real league names start with emoji
+ * — "🪓 Elimination Station 2", "$20 Pirate League". The first cut did
+ * `parts[0][0]`, which is a UTF-16 code UNIT, so it cut "🪓" in half and emitted a
+ * lone surrogate. The server and the client serialise that differently, React saw
+ * "E" against "�E", and the mismatch took down hydration for the whole
+ * document — "the server HTML was replaced with client content". A cosmetic-looking
+ * string bug that cost the entire page its server render.
+ *
+ * So: iterate CODE POINTS, and prefer letters and digits, which is what a monogram
+ * is for. A name with nothing alphanumeric in it keeps its first whole code point
+ * rather than falling back to "??" — an emoji tile is a better handle than a shrug.
+ */
+const ALNUM = /[\p{L}\p{N}]/u
 
 function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean)
-  if (parts.length === 0) return '??'
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
-  return (parts[0][0] + parts[1][0]).toUpperCase()
+  const trimmed = name.trim()
+  if (!trimmed) return '??'
+
+  const words = trimmed.split(/\s+/).filter(Boolean)
+  const firstAlnum = words
+    .map((w) => Array.from(w).find((ch) => ALNUM.test(ch)))
+    .filter((ch): ch is string => Boolean(ch))
+
+  if (firstAlnum.length >= 2) return (firstAlnum[0] + firstAlnum[1]).toUpperCase()
+
+  if (firstAlnum.length === 1) {
+    const word = words.find((w) => Array.from(w).some((ch) => ALNUM.test(ch))) ?? ''
+    const chars = Array.from(word).filter((ch) => ALNUM.test(ch))
+    return chars.slice(0, 2).join('').toUpperCase()
+  }
+
+  return Array.from(trimmed)[0] ?? '??'
 }
 
 function LeagueTile({ l }: { l: Dash34League }) {
@@ -103,6 +196,10 @@ function LeagueTile({ l }: { l: Dash34League }) {
   )
 }
 
+function isExternal(href: string): boolean {
+  return /^https?:\/\//i.test(href)
+}
+
 function priorityAttr(p: Dash34League['priority']): string | undefined {
   if (p === 'urgent') return 'true'
   if (p === 'draft') return 'draft'
@@ -111,8 +208,8 @@ function priorityAttr(p: Dash34League['priority']): string | undefined {
 
 /* ── Desktop ─────────────────────────────────────────────────────────────── */
 
-function Desktop({ data }: { data: Dash34Data }) {
-  const { firstLock, today, next24, leagues, quiet, brief, book, chatter } = data
+function Desktop({ data, leagueId }: { data: Dash34Data; leagueId: string | null }) {
+  const { firstLock, today, next24, leagues, quiet, brief, book, notice, coverage } = data
 
   return (
     <div className="af-d34">
@@ -122,8 +219,14 @@ function Desktop({ data }: { data: Dash34Data }) {
           <section className="af-d34-lock" aria-label="Most urgent">
             <div className="af-d34-lockcard">
               <div className="af-d34-count">
-                <span className="af-d34-count-l">FIRST LOCK</span>
-                <span className="af-d34-count-v">{firstLock.countdown}</span>
+                <span className="af-d34-count-l">{firstLock.countdownLabel ?? 'FIRST LOCK'}</span>
+                <span className="af-d34-count-v">
+                  {firstLock.countdownTo ? (
+                    <Dash34Countdown to={firstLock.countdownTo} initial={firstLock.countdown} />
+                  ) : (
+                    firstLock.countdown
+                  )}
+                </span>
                 <span className="af-d34-count-sub">{firstLock.kickoffLabel}</span>
               </div>
               <span className="af-d34-lockrule" aria-hidden="true" />
@@ -143,11 +246,27 @@ function Desktop({ data }: { data: Dash34Data }) {
                 ) : null}
               </div>
               <div className="af-d34-lockcta">
-                <Link className="af-d34-open" href={firstLock.openHref} target="_blank" rel="noreferrer">
-                  {firstLock.openLabel} ↗
+                {/*
+                  ⚠ `target="_blank"` ONLY WHEN THE LINK ACTUALLY LEAVES. The handoff's
+                  CTA opens Sleeper, but the loader points this at an AF screen
+                  whenever it has no platform deep link — and opening our own page
+                  in a new tab, with an "↗" claiming it left, is a small lie the
+                  reader notices immediately.
+                */}
+                <Link
+                  className="af-d34-open"
+                  href={firstLock.openHref}
+                  {...(isExternal(firstLock.openHref)
+                    ? { target: '_blank', rel: 'noopener noreferrer' }
+                    : {})}
+                >
+                  {firstLock.openLabel}
+                  {isExternal(firstLock.openHref) ? ' ↗' : ''}
                 </Link>
-                {/* AF is read-only. The promise lives under the CTA. */}
-                <p className="af-d34-ro">AF reads your league. Lineups change on the platform.</p>
+                {/* AF is read-only. The promise belongs under a CTA that leaves. */}
+                {isExternal(firstLock.openHref) ? (
+                  <p className="af-d34-ro">AF reads your league. Lineups change on the platform.</p>
+                ) : null}
               </div>
             </div>
 
@@ -181,7 +300,9 @@ function Desktop({ data }: { data: Dash34Data }) {
                       <div className="af-d34-feedrow" key={`${n.time}-${i}`}>
                         <span className="af-d34-feeddot" data-tone={n.tone ?? undefined} />
                         <span className="af-d34-feedtxt">{n.text}</span>
-                        <span className="af-d34-feedtime">{n.time}</span>
+                        <span className="af-d34-feedtime">
+                          <Dash34Time iso={n.time} />
+                        </span>
                       </div>
                     ))}
                   </div>
@@ -200,6 +321,18 @@ function Desktop({ data }: { data: Dash34Data }) {
             </span>
             <Link className="af-d34-llink" href="/core/portfolio">Portfolio view →</Link>
           </div>
+
+          {notice ? (
+            <div className="af-d34-notice" role="status">
+              <div className="af-d34-notice-b">
+                <strong className="af-d34-notice-t">{notice.title}</strong>
+                <p className="af-d34-notice-p">{notice.body}</p>
+              </div>
+              {notice.href ? (
+                <Link className="af-d34-jumpbtn" href={notice.href}>{notice.label ?? 'Fix this'}</Link>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="af-d34-cols" aria-hidden="true">
             <span>LEAGUE</span><span>MATCHUP</span><span>AF PROJ</span><span />
@@ -264,6 +397,38 @@ function Desktop({ data }: { data: Dash34Data }) {
             ))}
           </div>
 
+          {/*
+            The empty state is two different sentences, because they are two
+            different situations. "You have no leagues" is an onboarding problem
+            with an import button; "all of your leagues are quiet" is a good
+            outcome and must not be dressed up as a failure.
+          */}
+          {leagues.length === 0 ? (
+            <div className="af-d34-empty">
+              <strong className="af-d34-notice-t">
+                {data.totalLeagues === 0 ? 'No leagues connected yet' : 'Nothing needs you right now'}
+              </strong>
+              <p className="af-d34-notice-p">
+                {data.totalLeagues === 0
+                  ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+                  : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
+              </p>
+              <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>
+                {data.totalLeagues === 0 ? 'Connect a platform' : 'Open Portfolio'}
+              </Link>
+            </div>
+          ) : null}
+
+          {data.overflow && data.overflow > 0 ? (
+            <div className="af-d34-quiet" style={{ marginTop: 10 }}>
+              <span className="af-d34-quiet-t">
+                {data.overflow} more {data.overflow === 1 ? 'league' : 'leagues'} also {data.overflow === 1 ? 'has' : 'have'} something
+                flagged — this list shows the {leagues.length} that need you most.
+              </span>
+              <Link className="af-d34-llink" href="/core/portfolio">Show all {data.totalLeagues} →</Link>
+            </div>
+          ) : null}
+
           {quiet && quiet.count > 0 ? (
             <div className="af-d34-quiet" style={{ marginTop: 10 }}>
               <span className="af-d34-quiet-t">
@@ -274,6 +439,22 @@ function Desktop({ data }: { data: Dash34Data }) {
               <Link className="af-d34-llink" href="/core/portfolio">Show all {data.totalLeagues} →</Link>
             </div>
           ) : null}
+
+          {/*
+            The AF Legacy tail, named rather than dropped. These are past-season
+            snapshots from the career import — 543 of them on one production
+            account — and putting them in a list headed "what needs you first"
+            is exactly how that list became unreadable.
+          */}
+          {data.legacyCount && data.legacyCount > 0 ? (
+            <div className="af-d34-quiet" style={{ marginTop: 8 }}>
+              <span className="af-d34-quiet-t">
+                {data.legacyCount} past {data.legacyCount === 1 ? 'season' : 'seasons'} imported from your
+                history — not leagues you play now.
+              </span>
+              <Link className="af-d34-llink" href="/core/career">Career &amp; Legacy →</Link>
+            </div>
+          ) : null}
         </section>
 
         {/* Tool nav, under the league list. */}
@@ -281,13 +462,38 @@ function Desktop({ data }: { data: Dash34Data }) {
           <h2 className="af-d34-cols" style={{ padding: '0 0 8px' }}>EVERYTHING ELSE</h2>
           <div className="af-d34-tools">
             {TOOLS.map((t) => (
-              <Link key={t.href} className="af-d34-tool" href={t.href}>
+              <Link key={t.href} className="af-d34-tool" href={toolHref(t, leagueId)}>
                 <span className="af-d34-tool-g" aria-hidden="true">{t.glyph}</span>
                 <span className="af-d34-tool-n">{t.name}</span>
               </Link>
             ))}
           </div>
         </section>
+
+        {/*
+          What is NOT being watched.
+
+          Carried over from the screen this replaces, and the one thing from it
+          worth keeping wholesale. A home page showing no problems reads as an
+          all-clear; it has only earned that if every category is actually being
+          checked, and most are not. Collapsed by default so it informs without
+          competing with the list.
+        */}
+        {coverage && coverage.length ? (
+          <details className="af-d34-cov">
+            <summary className="af-d34-cov-s">
+              Not yet watched: {coverage.length} {coverage.length === 1 ? 'thing' : 'things'}
+            </summary>
+            <ul className="af-d34-cov-l">
+              {coverage.map((c) => (
+                <li key={c.label}>
+                  <b>{c.label}</b>
+                  <span>{c.reason}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        ) : null}
       </div>
 
       {/* Right column */}
@@ -306,8 +512,7 @@ function Desktop({ data }: { data: Dash34Data }) {
             <h2 className="af-d34-briefh">{brief.headline}</h2>
             <p className="af-d34-briefb">{brief.body}</p>
             <div className="af-d34-briefcta">
-              <Link className="af-d34-open" href="/core/chimmy">Ask Chimmy</Link>
-              <Link className="af-d34-jumpbtn" href="/core/chimmy?full=1">Full briefing</Link>
+              <Link className="af-d34-open" href={CHIMMY_HREF}>Ask Chimmy</Link>
             </div>
           </section>
         ) : null}
@@ -333,32 +538,24 @@ function Desktop({ data }: { data: Dash34Data }) {
         <section className="af-d34-card">
           <div className="af-d34-cardhead"><span>JUMP BACK IN</span></div>
           <div className="af-d34-jump">
-            <Link className="af-d34-jumpbtn" href="/core/trades"><span aria-hidden="true">⇄</span>Trade lab</Link>
-            <Link className="af-d34-jumpbtn" href="/core/waivers"><span aria-hidden="true">◈</span>Waiver plan</Link>
+            <Link className="af-d34-jumpbtn" href={toolHref({ href: '/core/trades', leagueScoped: true }, leagueId)}>
+              <span aria-hidden="true">⇄</span>Trade lab
+            </Link>
+            <Link className="af-d34-jumpbtn" href={toolHref({ href: '/core/waivers', leagueScoped: true }, leagueId)}>
+              <span aria-hidden="true">◈</span>Waiver plan
+            </Link>
           </div>
         </section>
 
-        {chatter && chatter.messages.length ? (
-          <section className="af-d34-card">
-            <div className="af-d34-cardhead">
-              <span>LEAGUE CHATTER</span>
-              {chatter.unread > 0 ? <span className="af-d34-badge">{chatter.unread} NEW</span> : null}
-            </div>
-            <div className="af-d34-chat">
-              {chatter.messages.map((m, i) => (
-                <div className="af-d34-chatrow" key={`${m.who}-${i}`}>
-                  <span className="af-d34-chatav">{m.initials}</span>
-                  <p className="af-d34-chatbody">
-                    <span className="af-d34-chatwho">{m.who}</span>
-                    {m.fromDiscord ? <span className="af-d34-discord">FROM DISCORD</span> : null}
-                    {' — '}{m.text}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <Link className="af-d34-more" href="/core/communications">Open communications →</Link>
-          </section>
-        ) : null}
+        {/*
+          ⚠ LEAGUE CHATTER WAS REMOVED, NOT HIDDEN. The handoff's card is fed by a
+          Discord ingest that does not exist, and its only control — "Open
+          communications →" — pointed at `/core/communications`, which is not a
+          route: the catch-all would have swallowed it and quietly re-rendered
+          this same home page. A card that can never hold data, whose one button
+          goes nowhere, is not worth carrying. It comes back when there is an
+          ingest and a destination.
+        */}
       </aside>
     </div>
   )
@@ -366,8 +563,8 @@ function Desktop({ data }: { data: Dash34Data }) {
 
 /* ── Mobile ──────────────────────────────────────────────────────────────── */
 
-function Mobile({ data }: { data: Dash34Data }) {
-  const { firstLock, leagues, quiet } = data
+function Mobile({ data, leagueId }: { data: Dash34Data; leagueId: string | null }) {
+  const { firstLock, leagues, quiet, notice } = data
   // Three leagues, rest behind "Show all" — the handoff's mobile delta.
   const shown = leagues.slice(0, 3)
 
@@ -385,8 +582,14 @@ function Mobile({ data }: { data: Dash34Data }) {
       {firstLock ? (
         <section className="af-d34m-lock" aria-label="Most urgent">
           <div className="af-d34m-lockrow">
-            <span className="af-d34m-count">{firstLock.countdown}</span>
-            <span className="af-d34m-lockl">FIRST LOCK</span>
+            <span className="af-d34m-count">
+              {firstLock.countdownTo ? (
+                <Dash34Countdown to={firstLock.countdownTo} initial={firstLock.countdown} />
+              ) : (
+                firstLock.countdown
+              )}
+            </span>
+            <span className="af-d34m-lockl">{firstLock.countdownLabel ?? 'FIRST LOCK'}</span>
           </div>
           <h2 className="af-d34m-lockh">{firstLock.headline}</h2>
           {firstLock.slots.length ? (
@@ -399,16 +602,36 @@ function Mobile({ data }: { data: Dash34Data }) {
               ))}
             </div>
           ) : null}
-          <Link className="af-d34m-rowask" data-priority="true" href={firstLock.openHref} target="_blank" rel="noreferrer">
-            {firstLock.openLabel} ↗
+          <Link
+            className="af-d34m-rowask"
+            data-priority="true"
+            href={firstLock.openHref}
+            {...(isExternal(firstLock.openHref) ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+          >
+            {firstLock.openLabel}
+            {isExternal(firstLock.openHref) ? ' ↗' : ''}
           </Link>
-          <p className="af-d34-ro" style={{ maxWidth: 'none', textAlign: 'left' }}>
-            AF reads your league. Lineups change on the platform.
-          </p>
+          {isExternal(firstLock.openHref) ? (
+            <p className="af-d34-ro" style={{ maxWidth: 'none', textAlign: 'left' }}>
+              AF reads your league. Lineups change on the platform.
+            </p>
+          ) : null}
         </section>
       ) : null}
 
       <h1 className="af-d34-h1" style={{ fontSize: 20 }}>Your leagues</h1>
+
+      {notice ? (
+        <div className="af-d34-notice" role="status">
+          <div className="af-d34-notice-b">
+            <strong className="af-d34-notice-t">{notice.title}</strong>
+            <p className="af-d34-notice-p">{notice.body}</p>
+          </div>
+          {notice.href ? (
+            <Link className="af-d34-jumpbtn" href={notice.href}>{notice.label ?? 'Fix this'}</Link>
+          ) : null}
+        </div>
+      ) : null}
 
       {shown.map((l) => (
         <article className="af-d34m-row" key={l.id} data-priority={priorityAttr(l.priority)}>
@@ -442,18 +665,51 @@ function Mobile({ data }: { data: Dash34Data }) {
         </article>
       ))}
 
-      {leagues.length > shown.length || (quiet && quiet.count > 0) ? (
+      {leagues.length === 0 ? (
+        <div className="af-d34-empty">
+          <strong className="af-d34-notice-t">
+            {data.totalLeagues === 0 ? 'No leagues connected yet' : 'Nothing needs you right now'}
+          </strong>
+          <p className="af-d34-notice-p">
+            {data.totalLeagues === 0
+              ? 'Connect Sleeper, ESPN or Yahoo and your leagues appear here. Read-only, about a minute.'
+              : `Across ${data.totalLeagues} ${data.totalLeagues === 1 ? 'league' : 'leagues'}, nothing we can currently detect is waiting on a decision.`}
+          </p>
+          <Link className="af-d34-open" href={data.totalLeagues === 0 ? '/import' : '/core/portfolio'}>
+            {data.totalLeagues === 0 ? 'Connect a platform' : 'Open Portfolio'}
+          </Link>
+        </div>
+      ) : null}
+
+      {leagues.length > shown.length || (data.overflow ?? 0) > 0 || (quiet && quiet.count > 0) ? (
         <div className="af-d34-quiet">
           <span className="af-d34-quiet-t">
-            {quiet && quiet.count > 0 ? `${quiet.count} quiet — nothing needs you.` : 'More leagues'}
+            {(() => {
+              // Mobile shows three rows, so its hidden count is the desktop
+              // overflow PLUS the rows this frame trimmed — otherwise the number
+              // under the list contradicts the list above it.
+              const hidden = leagues.length - shown.length + (data.overflow ?? 0)
+              if (hidden > 0 && quiet && quiet.count > 0) return `${hidden} more flagged · ${quiet.count} quiet`
+              if (hidden > 0) return `${hidden} more ${hidden === 1 ? 'league' : 'leagues'} flagged`
+              return `${quiet!.count} quiet — nothing needs you.`
+            })()}
           </span>
           <Link className="af-d34-llink" href="/core/portfolio">Show all →</Link>
         </div>
       ) : null}
 
+      {data.legacyCount && data.legacyCount > 0 ? (
+        <div className="af-d34-quiet">
+          <span className="af-d34-quiet-t">
+            {data.legacyCount} past {data.legacyCount === 1 ? 'season' : 'seasons'} from your history.
+          </span>
+          <Link className="af-d34-llink" href="/core/career">Career &amp; Legacy →</Link>
+        </div>
+      ) : null}
+
       <div className="af-d34m-chips">
         {TOOLS.map((t) => (
-          <Link key={t.href} className="af-d34m-chiplink" href={t.href}>{t.name}</Link>
+          <Link key={t.href} className="af-d34m-chiplink" href={toolHref(t, leagueId)}>{t.name}</Link>
         ))}
       </div>
     </div>
@@ -461,13 +717,22 @@ function Mobile({ data }: { data: Dash34Data }) {
 }
 
 export function Dashboard34({ data }: { data: Dash34Data }) {
+  /*
+   * League context for the league-scoped tools. The list is already sorted by
+   * what needs you first, so the top row is the league a manager is most likely
+   * to be acting on — better than dropping them on a screen that asks which one.
+   * Null when there are no leagues, and the links then go to the unscoped screen
+   * rather than to `?league=undefined`.
+   */
+  const leagueId = data.leagues[0]?.id ?? null
+
   return (
     <>
-      <Desktop data={data} />
-      <Mobile data={data} />
+      <Desktop data={data} leagueId={leagueId} />
+      <Mobile data={data} leagueId={leagueId} />
       {/* Chat is a floating bubble, not a tab. Desktop 60px, mobile 56px above
           the bottom nav; the right column reserves 88px so nothing sits under it. */}
-      <Link className="af-d34-fab" href="/core/chimmy" aria-label="Open chat">
+      <Link className="af-d34-fab" href={CHIMMY_HREF} aria-label="Open chat">
         Ask Chimmy
         {data.chatUnread ? <span className="af-d34-fabdot">{data.chatUnread}</span> : null}
       </Link>

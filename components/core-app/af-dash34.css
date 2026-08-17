@@ -647,3 +647,71 @@
   text-decoration: none;
   box-shadow: var(--shadow);
 }
+
+/* ── Notice, empty state and coverage ──────────────────────────────────────
+ *
+ * Three blocks the handoff's mock has no equivalent for, because the mock is
+ * drawn against data that exists. All three exist to say what is NOT there:
+ * a sync that has never run, a list with nothing in it, and the categories this
+ * screen does not watch. They are deliberately quieter than the league rows —
+ * an absence is context, not an alert.
+ */
+
+.af-d34-notice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--warn);
+  background: var(--surface2);
+}
+.af-d34-notice-b { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.af-d34-notice-t {
+  font: 800 13px/1.3 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.af-d34-notice-p {
+  margin: 0;
+  font: 400 12px/1.5 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  color: var(--muted);
+}
+
+.af-d34-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 26px 22px;
+  border-radius: 14px;
+  border: 1px dashed var(--line2);
+  background: var(--surface);
+}
+.af-d34-empty .af-d34-notice-p { max-width: 46ch; }
+
+/* Collapsed by default: it informs, it does not compete with the list. */
+.af-d34-cov { border-top: 1px solid var(--line); padding-top: 12px; }
+.af-d34-cov-s {
+  cursor: pointer;
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-d34-cov-s:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.af-d34-cov-l { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 7px; }
+.af-d34-cov-l li { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.af-d34-cov-l b {
+  flex: none;
+  min-width: 176px;
+  font: 700 12px/1.4 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  color: var(--muted);
+}
+.af-d34-cov-l span {
+  flex: 1;
+  min-width: 0;
+  font: 400 12px/1.4 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  color: var(--faint);
+}
