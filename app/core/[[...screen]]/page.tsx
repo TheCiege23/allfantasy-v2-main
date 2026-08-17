@@ -326,7 +326,7 @@ export default async function AfCorePage({
         <Tools />
       ) : activeKey === 'career' ? (
         career ? (
-          <Career data={career} />
+          <Career data={career} view={typeof sp.view === 'string' ? sp.view : null} />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

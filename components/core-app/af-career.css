@@ -369,6 +369,24 @@
 }
 .af-cr-count-v { font: 900 20px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace; color: var(--text); }
 
+/* Platform filter — only rendered when there is more than one to pick. */
+.af-cr-filter { display: flex; gap: 6px; flex-wrap: wrap; }
+.af-cr-filter-opt {
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  font: 700 11px/1 var(--font-archivo, 'Archivo'), system-ui, sans-serif;
+  color: var(--muted);
+  text-decoration: none;
+}
+.af-cr-filter-opt[aria-current='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-cr-filter-opt:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* Help bubble */
 .af-cr-help {
   position: relative;

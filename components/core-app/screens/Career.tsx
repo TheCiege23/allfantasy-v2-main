@@ -372,7 +372,7 @@ function CareerMobile({ data }: { data: CareerData }) {
               </section>
             ) : null}
 
-            <Link className="af-crm-cta" href="/core/career?share=1">Share career card</Link>
+            {/* Share generator does not exist yet — see the desktop action row. */}
           </>
         )}
       </div>
@@ -380,16 +380,62 @@ function CareerMobile({ data }: { data: CareerData }) {
   )
 }
 
-export function Career({ data }: { data: CareerData }) {
+export function Career({ data, view }: { data: CareerData; view?: string | null }) {
+  const active = TABS.some((t) => t.key === view) ? (view as string) : 'trophy'
   return (
     <>
-      <CareerDesktop data={data} />
+      <CareerDesktop data={data} view={active} />
       <CareerMobile data={data} />
     </>
   )
 }
 
-function CareerDesktop({ data }: { data: CareerData }) {
+/** Honest panel for a tab that exists in the design but is not built. */
+function UnbuiltView({ label }: { label: string }) {
+  return (
+    <div className="af-cr-empty">
+      <p className="af-cr-empty-t">{label} is not built yet.</p>
+      <p className="af-cr-empty-b">
+        It is in the design and listed here so the tabs match it, but the panel behind it does not
+        exist — so this says so rather than showing you an empty one. Trophy room is the built view.
+      </p>
+      <Link href="/core/career" className="af-cr-btn af-cr-btn--primary">Back to Trophy room</Link>
+    </div>
+  )
+}
+
+/**
+ * Platform selector. Links rather than a <select>, because the filter is a
+ * server round-trip on ?platform= — a select would need JS to navigate, and
+ * these are one-click targets either way. Only rendered when there is more than
+ * one platform to choose between; a dropdown with a single option is furniture.
+ */
+function PlatformFilter({ data }: { data: CareerData }) {
+  if (data.platforms.length < 2) return null
+  return (
+    <div className="af-cr-filter" role="group" aria-label="Filter by platform">
+      <Link
+        href="/core/career"
+        className="af-cr-filter-opt"
+        aria-current={data.platform == null ? 'true' : undefined}
+      >
+        All platforms
+      </Link>
+      {data.platforms.map((p) => (
+        <Link
+          key={p}
+          href={`/core/career?platform=${encodeURIComponent(p)}`}
+          className="af-cr-filter-opt"
+          aria-current={data.platform === p ? 'true' : undefined}
+        >
+          {p.charAt(0).toUpperCase() + p.slice(1)}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function CareerDesktop({ data, view }: { data: CareerData; view: string }) {
   const {
     prestige,
     legacy,
@@ -500,8 +546,14 @@ function CareerDesktop({ data }: { data: CareerData }) {
 
         <div className="af-cr-spacer" />
 
+        {/*
+          The handoff's action row is "Share career card" + "Records". The share
+          generator (frames 26a/13b) does not exist, so that button is not here —
+          a primary CTA that goes nowhere is worse than an empty slot, and it was
+          pointing at ?share=1 which nothing reads. Records is a real destination
+          now that the tab renders something.
+        */}
         <div className="af-cr-actions">
-          <Link className="af-cr-btn af-cr-btn--primary" href="/core/career?share=1">Share career card</Link>
           <Link className="af-cr-btn af-cr-btn--ghost" href="/core/career?view=records">Records</Link>
         </div>
       </aside>
@@ -510,11 +562,12 @@ function CareerDesktop({ data }: { data: CareerData }) {
       <div className="af-cr-main">
         <nav className="af-cr-tabs" aria-label="Career views">
           {TABS.map((t) =>
-            t.key === 'trophy' ? (
+            t.key === view ? (
               <span key={t.key} className="af-cr-tab" aria-current="page">{t.label}</span>
             ) : (
-              <Link key={t.key} className="af-cr-tab" href={`/core/career?view=${t.key}`}
-                title="Not built yet">{t.label}</Link>
+              <Link key={t.key} className="af-cr-tab" href={`/core/career?view=${t.key}`}>
+                {t.label}
+              </Link>
             )
           )}
           <div className="af-cr-tabstats">
@@ -538,7 +591,9 @@ function CareerDesktop({ data }: { data: CareerData }) {
         </nav>
 
         <div className="af-cr-body">
-          {data.isEmpty ? (
+          {view !== 'trophy' ? (
+            <UnbuiltView label={TABS.find((t) => t.key === view)?.label ?? 'This view'} />
+          ) : data.isEmpty ? (
             <div className="af-cr-empty">
               <p className="af-cr-empty-t">No completed seasons yet.</p>
               <p className="af-cr-empty-b">
@@ -553,6 +608,8 @@ function CareerDesktop({ data }: { data: CareerData }) {
             </div>
           ) : (
             <>
+              <PlatformFilter data={data} />
+
               {/* B1. Shelf */}
               <div className="af-cr-sechead">
                 <h2 className="af-cr-sectitle">
