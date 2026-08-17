@@ -4,6 +4,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
 import SpotifyProvider from "next-auth/providers/spotify";
+import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
@@ -382,6 +383,17 @@ if (spotifyClientId && spotifyClientSecret) {
       clientId: spotifyClientId,
       clientSecret: spotifyClientSecret,
       allowDangerousEmailAccountLinking: true,
+      // next-auth's default is `scope=user-read-email` alone, which is NOT enough for its
+      // own userinfo step: that calls GET /v1/me, which requires `user-read-private` and
+      // answers 403 without it — the token exchange succeeds and the callback then fails
+      // with OAuthCallbackError. Requesting the shared list fixes sign-in and, because the
+      // access token is persisted on AuthAccount, hands /api/spotify/token a token that
+      // already carries playback scope — so signing in with Spotify connects the music
+      // widget in the same step instead of requiring a second authorization.
+      authorization: {
+        url: "https://accounts.spotify.com/authorize",
+        params: { scope: SPOTIFY_SCOPES },
+      },
     })
   );
 }

@@ -2,9 +2,15 @@
  * P0-1 BETA-GATE — behavioral coverage of the OAuth new-account admission seam.
  *
  * Complements the source-assertion no-bypass test with real execution of
- * linkSocialAccountToAppUser's create branch under INVITE_ONLY: a genuinely new OAuth
+ * linkSocialAccountToAppUser's create branch: with the gate ACTIVE, a genuinely new OAuth
  * account is blocked without a matching invite, succeeds with one, and an email mismatch
  * is refused — while an existing-user resolution never consumes an invite.
+ *
+ * SIGNUP IS OPEN as shipped, so the gate is driven here by stubbing `isInviteOnlyEnabled`
+ * rather than by setting INVITE_ONLY (which the service deliberately ignores now — see
+ * betaAdmissionService). That keeps this closed-beta coverage alive and honest for whenever
+ * CLOSED_BETA_ENABLED is flipped back on, and lets the last test assert the shipped
+ * default: a brand-new OAuth user is created with no invite at all.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -26,6 +32,14 @@ const mocks = vi.hoisted(() => ({
   getXPRemainingToNextTier: vi.fn(),
   bcryptHash: vi.fn(),
   admissionCookie: { value: null as string | null },
+  isInviteOnlyEnabled: vi.fn(),
+}))
+
+// Partial mock: every real admission primitive (hashing, validate, consume) runs unchanged;
+// only the on/off switch is stubbed so a test can exercise the closed-beta branch.
+vi.mock("@/lib/beta-invite/betaAdmissionService", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/beta-invite/betaAdmissionService")>()),
+  isInviteOnlyEnabled: mocks.isInviteOnlyEnabled,
 }))
 
 vi.mock("@/lib/prisma", () => ({
@@ -76,7 +90,7 @@ const RAW = "oauth-admission-token-abcdefgh"
 
 beforeEach(() => {
   vi.clearAllMocks()
-  process.env.INVITE_ONLY = "1"
+  mocks.isInviteOnlyEnabled.mockReturnValue(true) // exercise the closed-beta branch
   mocks.admissionCookie.value = null
   mocks.hasProfanityInUsername.mockReturnValue(false)
   mocks.getTierFromXP.mockReturnValue("bronze")
@@ -100,14 +114,14 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  delete process.env.INVITE_ONLY
+  vi.restoreAllMocks()
 })
 
 function pendingInviteFor(email: string) {
   return { id: "inv-1", invitedEmail: email, status: "pending", expiresAt: null }
 }
 
-describe("OAuth new-account admission under INVITE_ONLY", () => {
+describe("OAuth new-account admission when the closed-beta gate is ACTIVE", () => {
   it("BLOCKS a new OAuth account with no admission token", async () => {
     mocks.admissionCookie.value = null
     await expect(
@@ -166,8 +180,10 @@ describe("OAuth new-account admission under INVITE_ONLY", () => {
     expect(mocks.betaUpdateMany).not.toHaveBeenCalled() // invite untouched
   })
 
-  it("does not require an invite at all when INVITE_ONLY is off", async () => {
-    delete process.env.INVITE_ONLY
+  // The SHIPPED default. isInviteOnlyEnabled is false in production, so this is the path a
+  // real new user takes: OAuth signup with no invite, no admission cookie, no invite lookup.
+  it("creates a new OAuth account with no invite when the gate is off (open signup)", async () => {
+    mocks.isInviteOnlyEnabled.mockReturnValue(false)
     mocks.admissionCookie.value = null
 
     const result = await linkSocialAccountToAppUser({

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
+import { SPOTIFY_SCOPES } from '@/lib/spotify/scopes'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,14 +11,10 @@ const SPOTIFY_REDIRECT_URI =
   process.env.SPOTIFY_REDIRECT_URI ??
   `${process.env.NEXTAUTH_URL ?? 'https://www.allfantasy.ai'}/api/auth/spotify/callback`
 
-const SCOPES = [
-  'user-read-playback-state',
-  'user-modify-playback-state',
-  'user-read-currently-playing',
-  'streaming',
-  'user-read-email',
-  'user-read-private',
-].join(' ')
+// Shared with the NextAuth Spotify provider. These two flows hit the SAME Spotify app, and
+// when their scope lists drifted apart sign-in broke while connect kept working — see
+// lib/spotify/scopes.ts. Do not re-inline a second list here.
+const SCOPES = SPOTIFY_SCOPES
 
 export async function GET() {
   const session = (await getServerSession(authOptions as never)) as {

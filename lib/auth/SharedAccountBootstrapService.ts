@@ -6,9 +6,30 @@ import { DEFAULT_THEME } from '@/lib/theme/constants'
 export async function ensureSharedAccountProfile(input: {
   userId: string
   displayName?: string | null
+  /**
+   * The signup consent tick, carried across the OAuth redirect (see signupConsentCookie).
+   * Without it an OAuth account was created with `ageConfirmedAt` null even when the user
+   * HAD checked the box, so every later gate reported they never confirmed.
+   *
+   * Only ever set, never cleared: this runs on every authenticated request, and passing
+   * `false` for an already-confirmed user must not retract a real prior confirmation.
+   */
+  ageConfirmed?: boolean
 }): Promise<void> {
+  const consentedAt = input.ageConfirmed ? new Date() : null
+  // Age is deliberately NOT part of this update payload: it is written by the guarded
+  // updateMany below so a repeat sign-in can never overwrite the ORIGINAL consent
+  // timestamp with a later one. The date it was given is the record.
   const update = input.displayName ? { displayName: input.displayName } : {}
   try {
+    if (consentedAt) {
+      // Set only when currently null. updateMany takes a filter, so this is one
+      // conditional write rather than a read-then-write that could race.
+      await prisma.userProfile.updateMany({
+        where: { userId: input.userId, ageConfirmedAt: null },
+        data: { ageConfirmedAt: consentedAt },
+      })
+    }
     await prisma.userProfile.upsert({
       where: { userId: input.userId },
       update,
@@ -18,6 +39,7 @@ export async function ensureSharedAccountProfile(input: {
         timezone: DEFAULT_SIGNUP_TIMEZONE,
         themePreference: DEFAULT_THEME,
         ...(input.displayName ? { displayName: input.displayName } : {}),
+        ...(consentedAt ? { ageConfirmedAt: consentedAt } : {}),
       },
     })
   } catch (error) {

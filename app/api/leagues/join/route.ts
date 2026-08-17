@@ -13,6 +13,7 @@ import { resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
 import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
+import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +90,29 @@ export async function POST(req: NextRequest) {
     })
     if (existing) {
       return { success: true as const, leagueId: result.leagueId, alreadyMember: true as const }
+    }
+
+    // DUPLICATE-ACCOUNT GATE. The `leagueId_platformUserId` lookup above only catches this
+    // same AppUser rejoining. One human holding several AF accounts (three sign-in methods
+    // on three different emails are indistinguishable from three people) would otherwise
+    // take a second team in the same league under the other account.
+    //
+    // The only trustworthy link between those accounts is a shared platform identity — the
+    // same Sleeper account cannot belong to two humans. This is evidence-based, so it can
+    // only refuse when we HAVE evidence: a user who never imported has no identity to match
+    // on and is let through, which is a real coverage limit, not an oversight.
+    const priorClaim = await findExistingLeagueClaim(
+      { userId, leagueId: result.leagueId },
+      tx,
+    )
+    if (priorClaim?.viaOtherAccount) {
+      return {
+        success: false as const,
+        status: 409,
+        error:
+          'One of your other AllFantasy accounts already has a team in this league. Sign in with that account to manage it — a league can only be joined once per person.',
+        code: 'DUPLICATE_LEAGUE_CLAIM' as const,
+      }
     }
 
     const [league, leagueRosters, draftSession, profile] = await Promise.all([
@@ -294,8 +318,13 @@ export async function POST(req: NextRequest) {
   })
 
   if (!joinResult.success) {
+    // An explicit code from the branch wins: the duplicate-account refusal needs its own
+    // code so the client can offer "sign in with your other account" instead of rendering
+    // a generic failure. Status-derived codes stay as the fallback for the older branches.
+    const explicitCode = (joinResult as { code?: string }).code
     const code =
-      joinResult.status === 402 ? 'PAYMENT_REQUIRED' : joinResult.status === 404 ? 'LEAGUE_NOT_FOUND' : undefined
+      explicitCode ??
+      (joinResult.status === 402 ? 'PAYMENT_REQUIRED' : joinResult.status === 404 ? 'LEAGUE_NOT_FOUND' : undefined)
     return NextResponse.json(
       { error: joinResult.error, ...(code ? { code } : {}) },
       { status: joinResult.status },

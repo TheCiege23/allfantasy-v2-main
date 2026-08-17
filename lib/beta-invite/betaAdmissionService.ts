@@ -24,6 +24,9 @@ import crypto from "crypto"
 
 import type { Prisma, PrismaClient } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+// Shared with the signup page, which is a client component and cannot import this
+// server-only module. Both sides must read ONE switch — see closedBetaFlag.
+import { CLOSED_BETA_ENABLED } from "@/lib/beta-invite/closedBetaFlag"
 
 /** A Prisma client or an interactive-transaction client — so consume can run inside a caller's tx. */
 export type PrismaLike = PrismaClient | Prisma.TransactionClient
@@ -69,25 +72,13 @@ export function admissionErrorMessage(code: AdmissionErrorCode): string {
 }
 
 /**
- * Is closed-beta invite-only mode on?
+ * Is closed-beta invite-only mode on? Always false while signup is open.
  *
- * Enabled: INVITE_ONLY ∈ {1,true,yes,on}. Disabled: {0,false,no,off,unset}.
- * MALFORMED (anything else): in production → ENABLED (fail closed, per the mandate that
- * production must never silently open signup on a bad flag); in dev/test → disabled + warn.
- * This is a pure function of the environment — no NEXT_PUBLIC exposure.
+ * Keeps its `env` parameter so callers and tests are unchanged, and so a future closed
+ * beta can go back to reading a flag without touching a single call site.
  */
-export function isInviteOnlyEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
-  const raw = (env.INVITE_ONLY ?? "").trim().toLowerCase()
-  if (raw === "1" || raw === "true" || raw === "yes" || raw === "on") return true
-  if (raw === "0" || raw === "false" || raw === "no" || raw === "off" || raw === "") return false
-
-  const isProd = env.VERCEL_ENV === "production" || (env.NODE_ENV === "production" && !env.VERCEL_ENV)
-  if (isProd) {
-    console.warn("[beta-invite] INVITE_ONLY is malformed in production — failing closed (invite required).")
-    return true
-  }
-  console.warn("[beta-invite] INVITE_ONLY is malformed (non-production) — treating as disabled.")
-  return false
+export function isInviteOnlyEnabled(_env: NodeJS.ProcessEnv = process.env): boolean {
+  return CLOSED_BETA_ENABLED
 }
 
 export function normalizeEmail(email: string | null | undefined): string {

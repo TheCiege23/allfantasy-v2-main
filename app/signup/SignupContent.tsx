@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { loginUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
+import { CLOSED_BETA_ENABLED } from "@/lib/beta-invite/closedBetaFlag"
 import { resolveSignupRedirectPath } from "@/lib/auth/SignupFlowController"
 import { rememberUnifiedAuthDestination } from "@/lib/auth/UnifiedAuthOrchestrator"
 import { getTermsUrl, getPrivacyUrl, getNoGamblingPolicyUrl } from "@/lib/legal/LegalRouteResolver"
@@ -80,8 +81,14 @@ export default function SignupContent() {
   // at /api/auth/beta/claim; `?invite=` is a secondary carry for a pasted token. `beta=1`
   // shows the closed-beta context; `betaError` is the honest reason from an OAuth rejection.
   const inviteParam = searchParams?.get("invite")?.trim() || undefined
-  const betaMode = searchParams?.get("beta") === "1"
-  const betaErrorCode = searchParams?.get("betaError")?.trim() || undefined
+  // Both beta params are IGNORED while signup is open. They are client-supplied claims, not
+  // server policy, and the server can no longer produce a betaError code at all — so a stale
+  // tab, bookmark, back-navigation or shared link carrying `?betaError=INVITE_REQUIRED` was
+  // still rendering "AllFantasy is in a closed beta" as a red alert over a working form.
+  const betaMode = CLOSED_BETA_ENABLED && searchParams?.get("beta") === "1"
+  const betaErrorCode = CLOSED_BETA_ENABLED
+    ? searchParams?.get("betaError")?.trim() || undefined
+    : undefined
   const betaErrorMessage = betaErrorCode ? resolveBetaErrorMessage(betaErrorCode) : undefined
 
   const [fullName, setFullName] = useState("")
@@ -337,7 +344,9 @@ export default function SignupContent() {
               color: "var(--color-neutral-300)",
             }}
           >
-            {betaErrorMessage ?? "AllFantasy is in a controlled closed beta. Use your invitation to create an account."}{" "}
+            {/* Signup is OPEN — an invite link is a welcome, not a requirement. Only the
+                error variant (unreachable while the gate is off) still mentions invitations. */}
+            {betaErrorMessage ?? "Welcome to AllFantasy. Signup is open — create your account below to get started."}{" "}
             <Link href={loginUrlWithIntent(postSignupDestination)} style={{ fontWeight: 600 }}>
               Already have an account? Sign in
             </Link>
@@ -549,7 +558,17 @@ export default function SignupContent() {
           <span>or continue with</span>
         </div>
 
-        <NocturneOAuthGrid callbackUrl={postSignupDestination} />
+        {/* The consent checkbox governs OAuth signup exactly as it governs the credentials
+            submit. Previously only `callbackUrl` was passed, so a tick made here never
+            reached the server and the resulting account had no age confirmation recorded. */}
+        <NocturneOAuthGrid
+          callbackUrl={postSignupDestination}
+          consent={{
+            granted: consentChecked,
+            onMissing: () =>
+              setError("Please confirm you're 18+ and agree to the terms to continue."),
+          }}
+        />
 
         <p
           style={{
