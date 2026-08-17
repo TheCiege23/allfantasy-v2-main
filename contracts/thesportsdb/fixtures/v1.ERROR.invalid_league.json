@@ -1,0 +1,24 @@
+{
+  "_probe": {
+    "name": "ERROR.invalid_league",
+    "endpoint": "eventsnextleague.php",
+    "params": {
+      "id": "999999999"
+    },
+    "why": "bogus NUMERIC id -> {\"events\":null}, no error signal at all",
+    "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/eventsnextleague.php?id=999999999",
+    "captured_at": "2026-08-17T16:10:22.659Z",
+    "season_phase": "preseason",
+    "key_tier": "paid-or-unknown",
+    "http_status": 200,
+    "api_message": null,
+    "top_level_key": "events",
+    "top_level_type": "null",
+    "returned_null": true,
+    "row_count": 0,
+    "error": null
+  },
+  "response": {
+    "events": null
+  }
+}

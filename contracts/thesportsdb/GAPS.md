@@ -17,7 +17,7 @@ events, with a soccer control proving the endpoint and key were functional.
 | `R-04` | `lookupplayerstats` **works for NFL** | Jalen Hurts (34201502): 2024 passing 2903 yd / 18 TD, rushing 630 yd / 14 TD. |
 | `R-05` | NFL `idLeague` = **4391** | Verified live. |
 | `R-06` | NCAAF `idLeague` = **4479**, `strLeague` = **"NCAA Division 1"** | `?l=NCAA Football` → `{"teams":null}`. |
-| `R-07` | v1 returns **HTTP 200 on errors** | Invalid league → `200` + `{"events":[],"Message":"Invalid League ID passed"}`. |
+| `R-07` | v1 returns **HTTP 200 on errors** | ✅ Still true. ⚠️ But the *shape* recorded here was wrong — corrected by `R-18`. There is **no `Message` key**. |
 | `R-08` | Free tier **silently truncates lists** | US American-football league search returned 5 leagues, omitting NFL and NCAA D1. No indicator. |
 | `R-09` | `searchteams.php` free tier is **"Arsenal" only** | Vendor documents this explicitly. |
 | `R-10` | Quarter scores exist only as an **HTML string** in `strResult` | `"Quarter 1:<br>7 7 <br>Quarter 2<br>14 13 <br>..."` |
@@ -29,7 +29,25 @@ events, with a soccer control proving the endpoint and key were functional.
 | `R-16` | Paid key confirmed — **no list truncation** | `all_leagues.php` → 1527 leagues. `R-08` saw the free key silently truncate a league list to 5 rows. A full-length list is the cheap tell for which tier a key is on. Fixture: `v1.all_leagues.json`. |
 | `R-17` | `lookupplayerstats.php` returns **multi-season** rows, not one aggregate | Jalen Hurts (34201502) → **34 rows** under `.playerstats`. `R-04` established it works; the row count shows it spans seasons, so a parser taking `[0]` silently reads one arbitrary season. Fixture: `v1.lookupplayerstats.NFL.json`. |
 
-**Fixtures are now populated** (`fixtures/`, 14 captured 2026-08-17). Every fixture is
+| `R-18` | 🛑 **The error message REPLACES the data array. There is no `Message` key.** | Probed 2026-08-17, 4 variants. `eventsnextleague.php?id=notanumber` → HTTP 200 + `{"events":"Invalid League ID passed"}` — the message is the **value of the data key**, a string where an array belongs. `R-07` recorded `{"events":[],"Message":"..."}`; that shape did **not** reproduce on any endpoint tried. Fixture: `v1.ERROR.nonnumeric_league.json`. |
+| `R-19` | ⚠️ A bogus **numeric** id gives no error signal *at all* | `eventsnextleague.php?id=999999999` → `{"events":null}`; `lookupleague.php?id=999999999` → `{"leagues":null}`; `search_all_teams.php?l=NoSuchLeagueXYZ` → `{"teams":null}`. Identical to a legitimately empty result. **Only non-numeric input produces the string error.** Fixture: `v1.ERROR.invalid_league.json`. |
+
+### The three types one key can hold
+
+This is the practical consequence of `R-18` + `R-19`, and the reason
+`lib/sports-data/theSportsDbContract.ts` exists:
+
+| `.events` is | Meaning | Naive `(body.events ?? []).length` |
+|---|---|---|
+| array | success | correct |
+| `null` | no data **or** a silently-rejected id | `0` — plausible, hides the rejection |
+| **string** | request rejected; this is the message | **`24`** — the message's character count, read as a row count |
+
+`??` does not fire on a string, so the error path is the dangerous one: it reports
+two dozen phantom rows rather than zero. Parse with `parseV1Body`, which returns a
+discriminated union and refuses to collapse these three cases together.
+
+**Fixtures are now populated** (`fixtures/`, 16 captured 2026-08-17). Every fixture is
 `{ "_probe": {...}, "response": <raw body> }` — `response` is the verbatim vendor payload and is
 the shape authority; `_probe` carries `captured_at`, `season_phase`, `http_status`, `returned_null`
 and the redacted URL, so a null can never again be mistaken for an off-season artifact.

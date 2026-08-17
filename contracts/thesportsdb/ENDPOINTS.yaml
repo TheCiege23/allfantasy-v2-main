@@ -37,11 +37,22 @@ versions:
     free_key: "123"                 # also accepts "3"
     style: "*.php endpoints with query params"
     available_to: [free, premium, business]
+    # ⚠️ CORRECTED 2026-08-17 by live probe. The previously documented shape
+    # ({"events":[],"Message":"..."}) did NOT reproduce on any endpoint tried.
+    # See GAPS.md R-18 / R-19.
     error_behavior: >
-      ⚠️ Returns HTTP 200 on errors with a body like
-      {"events":[],"Message":"Invalid League ID passed"}. Note capital M.
-      NEVER treat 200 as success without inspecting the body.
-    empty_result: "null (e.g. {\"teams\":null}) — NOT []"
+      ⚠️ Returns HTTP 200 on errors. The error message REPLACES the data array —
+      {"events":"Invalid League ID passed"} — so the data key holds a STRING.
+      There is NO `Message` key. `(body.events ?? []).length` therefore returns
+      24, the message's character count, silently read as a row count.
+      NEVER treat 200 as success, and check the VALUE'S TYPE, not just its
+      presence.
+    error_shape_by_input:
+      non_numeric_id: '{"events":"Invalid League ID passed"}'   # string in the data slot
+      bogus_numeric_id: '{"events":null}'                       # NO error signal at all
+      bogus_league_name: '{"teams":null}'                       # NO error signal at all
+    empty_result: "null (e.g. {\"teams\":null}) — NOT []. Indistinguishable from a rejected numeric id."
+    parser: lib/sports-data/theSportsDbContract.ts   # parseV1Body — discriminated union over all three cases
 
   v2:
     base_url: https://www.thesportsdb.com/api/v2/json
