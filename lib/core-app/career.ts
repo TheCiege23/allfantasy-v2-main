@@ -31,6 +31,40 @@ import { prisma } from '@/lib/prisma'
 
 export type CareerPlatform = string
 
+/**
+ * League lifecycle. The provider's own vocabulary, not ours — measured on
+ * production, `status` only ever holds `complete`, `in_season`, `drafting`,
+ * `pre_draft` (plus `setup` and NULL on modern rows), and every 2026 row is one
+ * of the live three while every 2020–2025 row is `complete`. So the split needs
+ * no heuristic.
+ *
+ * ⚠ `archived` IS NOT IN THE DATA. Nothing in either table marks a league
+ * archived, so nothing here can return it honestly. The type carries the case so
+ * the UI can be written against the full set, and `classifyStatus` will start
+ * returning it the moment a real signal exists — a rule (last season older than
+ * N years and never continued) or a column. Until then no league is archived,
+ * rather than some heuristic quietly labelling live leagues dead.
+ */
+export type LeagueLifecycle = 'active' | 'completed' | 'archived' | 'unknown'
+
+export function classifyStatus(status: string | null | undefined): LeagueLifecycle {
+  const s = (status ?? '').trim().toLowerCase()
+  if (s === 'complete' || s === 'completed') return 'completed'
+  if (s === 'in_season' || s === 'drafting' || s === 'pre_draft' || s === 'setup') return 'active'
+  return 'unknown'
+}
+
+/** A league still being played — the design's "open slot", never career totals. */
+export type ActiveLeague = {
+  season: number
+  leagueName: string
+  platform: CareerPlatform
+  sport: string | null
+  status: string | null
+  /** Record so far this season; null before any games. */
+  record: string | null
+}
+
 export type CareerSeasonRow = {
   season: number
   wins: number
@@ -70,6 +104,13 @@ export type PrestigeComponent = {
   weight: number
   /** How this component is written on screen: "3/10", "58%". */
   display: string
+  /**
+   * True when the raw value is at or past the cap. Measured on a real account:
+   * 521 leagues against a cap of 15 rendered as "521/15", which reads as a
+   * broken widget rather than a maxed one. The UI shows saturated components as
+   * MAXED — the cap is working as the handoff intends, and saying so is honest.
+   */
+  saturated: boolean
 }
 
 export type LegacyDimension = {
@@ -90,7 +131,21 @@ export type CareerData = {
   platform: CareerPlatform | null
 
   seasonsPlayed: number
+  /**
+   * Completed league-SEASONS. A dynasty league running six years is six here.
+   * This is what rates are computed against.
+   */
   leaguesPlayed: number
+  /**
+   * Distinct leagues by name. Measured on a real account: 543 rows resolved to
+   * 287 distinct names, so counting rows as "leagues" nearly doubled it. This is
+   * the number a human means by "how many leagues am I in".
+   */
+  distinctLeagues: number
+  /** Still being played — the design's open slot. Never in career totals. */
+  activeLeagues: ActiveLeague[]
+  /** Rows whose status we could not classify, so the UI can be honest about them. */
+  unknownStatusCount: number
   wins: number
   losses: number
   ties: number
@@ -203,18 +258,54 @@ function consistencyScore(seasons: CareerSeasonRow[]): number | null {
 }
 
 /**
- * Dynasty: sustained success rather than one good year — the share of seasons
- * at or above a winning record, scaled by how many seasons there are to judge.
- * A single 1-0 season is not a dynasty, so tenure damps the result until there
- * is a real sample.
+ * Dynasty: title rate plus deep playoff runs, PER LEAGUE ENTERED.
+ *
+ * ⚠ THIS REPLACES A SHARE-OF-WINNING-SEASONS METRIC THAT COULD NOT SEE A REAL
+ * CAREER. That version scored the share of seasons averaging >=50%, which broke
+ * on a manager playing ~90 leagues at once: averaging across that many entries
+ * pulls every season toward the mean, so an account with twelve championships
+ * scored Dynasty 0. Averaging hides exactly the excellence the metric exists to
+ * find.
+ *
+ * Rate-per-league is immune to that, because volume divides out. Both halves are
+ * measured against what the league SIZE makes likely rather than a flat number:
+ * in a 12-team league random title rate is 1/12 and a playoff berth is
+ * playoffTeams/teamCount. Beating those is the signal; entering more leagues is
+ * not.
+ *
+ * ⚠ IT CAN SCORE LOW ON A BIG CAREER, AND THAT IS THE POINT. Winning twelve
+ * titles across several hundred entries can still be below what entering that
+ * many would hand you by chance. This returns what the arithmetic says.
  */
-function dynastyScore(seasons: CareerSeasonRow[]): number | null {
-  const rated = seasons.filter((s) => s.winRate != null)
-  if (rated.length === 0) return null
-  const winning = rated.filter((s) => (s.winRate as number) >= 0.5).length
-  const share = winning / rated.length
-  const sample = Math.min(rated.length / 5, 1) // full credit at five seasons
-  return Math.round(share * sample * 100)
+function dynastyScore(input: {
+  championships: number
+  playoffAppearances: number
+  leagueSeasons: number
+  /** Mean team count across entered leagues; falls back to 12. */
+  avgTeamCount: number | null
+  /** Mean playoff berths per league; falls back to half the field. */
+  avgPlayoffTeams: number | null
+}): number | null {
+  const { championships, playoffAppearances, leagueSeasons } = input
+  if (leagueSeasons <= 0) return null
+
+  const teams = input.avgTeamCount && input.avgTeamCount > 1 ? input.avgTeamCount : 12
+  const berths =
+    input.avgPlayoffTeams && input.avgPlayoffTeams > 0 ? input.avgPlayoffTeams : teams / 2
+
+  const expectedTitleRate = 1 / teams
+  const expectedRunRate = Math.min(berths / teams, 0.95)
+
+  const titleRate = championships / leagueSeasons
+  const runRate = playoffAppearances / leagueSeasons
+
+  // Lift over chance. 3x random titles is an elite ceiling; 2x playoff rate is
+  // near the practical maximum, so both saturate rather than run away.
+  const titleLift = Math.min(titleRate / expectedTitleRate, 3) / 3
+  const runLift = Math.min(runRate / expectedRunRate, 2) / 2
+
+  // Titles carry more than runs — reaching the playoffs is the price of entry.
+  return Math.max(0, Math.min(100, Math.round((titleLift * 0.6 + runLift * 0.4) * 100)))
 }
 
 export async function getCareerData(
@@ -235,6 +326,7 @@ export async function getCareerData(
     import_made_playoffs: boolean | null
     import_won_championship: boolean | null
     scoring: string | null
+    status: string | null
   }
 
   let importRows: ImportRow[] = []
@@ -242,7 +334,7 @@ export async function getCareerData(
     importRows = await prisma.$queryRaw<ImportRow[]>`
       SELECT season, platform, sport::text AS sport, name,
              import_wins, import_losses, import_ties,
-             import_made_playoffs, import_won_championship, scoring
+             import_made_playoffs, import_won_championship, scoring, status
       FROM leagues
       WHERE "userId" = ${userId}
         AND import_wins IS NOT NULL
@@ -264,6 +356,7 @@ export async function getCareerData(
     scoringType: string | null
     teamCount: number | null
     playoffTeams: number | null
+    status: string | null
     rosters: Array<{
       wins: number
       losses: number
@@ -292,6 +385,7 @@ export async function getCareerData(
           scoringType: true,
           teamCount: true,
           playoffTeams: true,
+          status: true,
           rosters: {
             where: { isOwner: true },
             take: 1,
@@ -327,7 +421,16 @@ export async function getCareerData(
   const sportsSeen = new Set<string>()
   const bySeason = new Map<number, SeasonAccumulator>()
   const titles: CareerTitle[] = []
+  const activeLeagues: ActiveLeague[] = []
+  const distinctNames = new Set<string>()
   let leaguesPlayed = 0
+  let unknownStatusCount = 0
+  // League size, gathered only from completed entries — dynasty is measured
+  // against what the field size makes likely.
+  let teamCountSum = 0
+  let teamCountN = 0
+  let playoffTeamsSum = 0
+  let playoffTeamsN = 0
 
   const bump = (season: number): SeasonAccumulator => {
     let acc = bySeason.get(season)
@@ -345,10 +448,28 @@ export async function getCareerData(
     const k = key(platform, row.season, row.name)
     if (seen.has(k)) continue
     seen.add(k)
+    if (row.name?.trim()) distinctNames.add(row.name.trim().toLowerCase())
 
     const w = row.import_wins ?? 0
     const l = row.import_losses ?? 0
     const t = row.import_ties ?? 0
+
+    const lifecycle = classifyStatus(row.status)
+    if (lifecycle === 'unknown') unknownStatusCount += 1
+    if (lifecycle !== 'completed') {
+      // Live (or unclassifiable) leagues feed the open slot, never the career.
+      activeLeagues.push({
+        season: row.season,
+        leagueName: row.name?.trim() || 'Unnamed league',
+        platform,
+        sport: row.sport,
+        status: row.status,
+        record: w + l + t > 0 ? `${w}-${l}${t > 0 ? `-${t}` : ''}` : null,
+      })
+      if (row.sport) sportsSeen.add(row.sport)
+      continue
+    }
+
     const acc = bump(row.season)
     acc.wins += w
     acc.losses += l
@@ -377,9 +498,37 @@ export async function getCareerData(
     const k = key(platform, league.season, league.name)
     if (seen.has(k)) continue
     seen.add(k)
+    if (league.name.trim()) distinctNames.add(league.name.trim().toLowerCase())
 
     const roster = league.rosters[0]
     if (!roster) continue
+
+    const lifecycle = classifyStatus(league.status)
+    if (lifecycle === 'unknown') unknownStatusCount += 1
+    if (lifecycle !== 'completed') {
+      activeLeagues.push({
+        season: league.season,
+        leagueName: league.name,
+        platform,
+        sport: league.sport,
+        status: league.status,
+        record:
+          roster.wins + roster.losses + roster.ties > 0
+            ? `${roster.wins}-${roster.losses}${roster.ties > 0 ? `-${roster.ties}` : ''}`
+            : null,
+      })
+      if (league.sport) sportsSeen.add(league.sport)
+      continue
+    }
+
+    if (league.teamCount != null) {
+      teamCountSum += league.teamCount
+      teamCountN += 1
+    }
+    if (league.playoffTeams != null) {
+      playoffTeamsSum += league.playoffTeams
+      playoffTeamsN += 1
+    }
 
     const acc = bump(league.season)
     acc.wins += roster.wins
@@ -450,6 +599,9 @@ export async function getCareerData(
   const winRate = rate(wins, losses, ties)
   const seasonsPlayed = seasons.length
 
+  // Empty means no COMPLETED history to build a career from. Someone mid-way
+  // through their first season has active leagues and no career yet — the shelf
+  // and the arc have nothing to show, and saying so beats drawing an empty chart.
   const isEmpty = seasonsPlayed === 0 && leaguesPlayed === 0
 
   /* ── prestige ──────────────────────────────────────────────────────────── */
@@ -476,6 +628,7 @@ export async function getCareerData(
         ratio,
         weight: spec.weight,
         display: r.display,
+        saturated: r.value >= spec.max,
       }
     })
     const total =
@@ -491,7 +644,13 @@ export async function getCareerData(
       championship: Math.min(championships / 10, 1) * 100,
       playoff: leaguesPlayed > 0 ? Math.min(playoffAppearances / leaguesPlayed, 1) * 100 : null,
       consistency: consistencyScore(seasons),
-      dynasty: dynastyScore(seasons),
+      dynasty: dynastyScore({
+        championships,
+        playoffAppearances,
+        leagueSeasons: leaguesPlayed,
+        avgTeamCount: teamCountN > 0 ? teamCountSum / teamCountN : null,
+        avgPlayoffTeams: playoffTeamsN > 0 ? playoffTeamsSum / playoffTeamsN : null,
+      }),
     }
 
     const available = LEGACY_SPEC.filter((s) => scores[s.key] != null)
@@ -514,12 +673,16 @@ export async function getCareerData(
   }
 
   titles.sort((a, b) => b.season - a.season)
+  activeLeagues.sort((a, b) => b.season - a.season || a.leagueName.localeCompare(b.leagueName))
 
   return {
     platforms: [...platformsSeen].sort(),
     platform: wanted,
     seasonsPlayed,
     leaguesPlayed,
+    distinctLeagues: distinctNames.size,
+    activeLeagues,
+    unknownStatusCount,
     wins,
     losses,
     ties,
