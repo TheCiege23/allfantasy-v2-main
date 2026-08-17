@@ -5,9 +5,11 @@ import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { deriveOutstandingIssues } from '@/lib/core-app/outstandingIssues'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
+import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
-import DashboardAllLeagues from '@/components/core-app/screens/DashboardAllLeagues'
+import Dashboard34 from '@/components/core-app/screens/Dashboard34'
+import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
@@ -64,6 +66,14 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   rankings: 'rankings',
   commissioner: 'commissioner',
   tools: 'tools',
+}
+
+function titleCase(slug: string): string {
+  return slug
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(' ')
 }
 
 const PLATFORM_MARK: Record<string, string> = {
@@ -136,14 +146,24 @@ export default async function AfCorePage({
   const leagueListPayload = await getDashboardLeagueListForUser(userId).catch(() => null)
   const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
 
-  const rail: RailLeague[] = leagues.map((l) => ({
+  /*
+   * ⚠ THE RAIL IS LEAGUES YOU PLAY, NOT YOUR IMPORT HISTORY. `hasUnifiedRecord:
+   * false` marks an AF Legacy board row — a past-season snapshot from the career
+   * import with no row in `leagues`. One production account carries 543 of them
+   * against 60 real teams, and letting them into this list is what produced a
+   * 604-tile rail and a 604-row home. Same filter the home loader applies, for
+   * the same reason.
+   */
+  const playedLeagues = leagues.filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
+
+  const rail: RailLeague[] = playedLeagues.map((l) => ({
     id: l.id,
     name: l.name,
     platform: String(l.platform ?? 'manual').toLowerCase(),
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
   }))
 
-  const { issues, detectorsUnavailable } = deriveOutstandingIssues({ leagues })
+  const { issues } = deriveOutstandingIssues({ leagues })
 
   // Screen 2 is the same route with a league selected — the handoff describes it
   // as the main column becoming "that league's world", not a separate page.
@@ -211,12 +231,57 @@ export default async function AfCorePage({
       ? await getWarRoomData(selectedLeagueId, userId).catch(() => null)
       : null
 
-  // The shell requires a sync age, so it cannot render without one being decided.
-  // Null here means "never synced", which describeAge renders as stale — the
-  // honest reading until a per-league sync timestamp is wired through.
-  const syncAge = describeAge('roster', null)
-
   const now = new Date()
+
+  /*
+   * The 34a home. Only loaded when it is the screen being rendered — it reads
+   * rosters and the injury feed, and paying for that on /core/trades would be a
+   * cost for something nobody is looking at.
+   */
+  const dash34 =
+    activeKey === 'home' && !selectedLeagueId
+      ? await getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).catch(() => null)
+      : null
+
+  /*
+   * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
+   * synced" — with a comment saying a per-league timestamp was not wired through.
+   * It is: the league list already selects `League.lastSyncedAt`. Measured on
+   * production it is null for all 98 leagues, so the label does not change today,
+   * but it will the moment a sync runs, and the shell no longer lies about
+   * whether it is looking.
+   */
+  const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
+    const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
+    if (!raw) return latest
+    const d = raw instanceof Date ? raw : new Date(raw)
+    if (Number.isNaN(d.getTime())) return latest
+    return latest == null || d > latest ? d : latest
+  }, null)
+  const syncAge = describeAge('roster', lastSynced, now)
+
+  /*
+   * The plan chip and token meter. The handoff is explicit that the meter must be
+   * visible BEFORE anything spends, and Chimmy is the only thing that spends — so
+   * the number belongs in the chrome, not on the screen that happens to open the
+   * chat. `null` on a read failure omits the chip rather than showing a made-up
+   * tier or a zero balance the user does not actually have.
+   */
+  const access = await aiAccessResolver.resolveForUser({ userId, now }).catch(() => null)
+  const plan = access
+    ? {
+        // Plan ids are slugs — 'war_room', 'supreme'. Rendering one raw puts an
+        // internal identifier in the chrome of the signed-in home.
+        name: access.hasSubscription
+          ? titleCase(access.subscription.plans[0] ?? 'premium')
+          : access.trial.inTrial
+            ? `Trial · ${access.trial.daysRemaining}d left`
+            : 'Free',
+        tokensLeft: access.tokenBalance,
+      }
+    : null
+
+  const commissionerCount = playedLeagues.filter((l) => Boolean(l.isCommissioner)).length
 
   return (
     <AfCoreShell
@@ -224,8 +289,9 @@ export default async function AfCorePage({
       leagues={rail}
       syncAge={{ label: syncAge.label, stale: syncAge.stale }}
       selectedLeagueId={selectedLeagueId}
-      weekLabel={null}
-      plan={null}
+      weekLabel={dash34?.weekLabel ?? null}
+      plan={plan}
+      commissionerCount={commissionerCount}
     >
       {leagueHome ? (
         <LeagueHome
@@ -353,12 +419,28 @@ export default async function AfCorePage({
           </div>
         )
       ) : activeKey === 'home' ? (
-        <DashboardAllLeagues
-          issues={issues}
-          detectorsUnavailable={detectorsUnavailable}
-          leagueCount={leagues.length}
-          now={now.toISOString()}
-        />
+        /*
+         * ⚠ THIS REPLACED THE "OUTSTANDING ISSUES" QUEUE, AND THE QUEUE IS WHY.
+         * That screen derived one row per league per problem and rendered 604 of
+         * them — the same "League data is stale" sentence, 604 times — for a real
+         * account. 34a leads with the single most time-critical thing, then a
+         * league list ranked by what needs you, capped, with the account-wide
+         * facts stated once. The queue's one genuinely load-bearing feature, the
+         * "not yet watched" disclosure, is carried across as `coverage`.
+         */
+        dash34 ? (
+          <Dashboard34 data={dash34} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Your leagues
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read your leagues just now. This is a read failure on our side, not a sign
+              that you have none.
+            </p>
+          </div>
+        )
       ) : (
         <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
           <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
