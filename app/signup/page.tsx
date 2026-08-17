@@ -7,11 +7,7 @@ import { AuthV4 } from "@/components/core-app/screens/AuthV4";
 
 export const dynamic = "force-dynamic";
 
-export default function SignupPage() {
-  return (
-    <ClientOnlyAuthPage>
-      <AuthPageShell>
-        /*
+/*
  * ⚠ CUTOVER: AuthV4 replaced the previous SignupContent here.
  *
  * The auth WORKFLOW is unchanged and was NOT rewired — AuthV4 calls the same
@@ -25,7 +21,18 @@ export default function SignupPage() {
  * The shells (AuthPageShell / ClientOnlyAuthPage) are kept because they carry the
  * page chrome and the client-only boundary. One-line rollback: restore the
  * SignupContent import and element.
+ *
+ * ⚠ THIS COMMENT LIVES ABOVE THE COMPONENT, NOT INSIDE THE JSX, AND MUST STAY
+ * THERE. It previously sat between the AuthPageShell and AuthV4 elements as a
+ * bare block comment. In JSX children position that is not a comment at all —
+ * it is literal text, so the whole block rendered as visible copy at the top of
+ * the production sign-up page. Commenting inside JSX requires wrapping the
+ * block in braces; keeping it out here avoids the question entirely.
  */
+export default function SignupPage() {
+  return (
+    <ClientOnlyAuthPage>
+      <AuthPageShell>
         <AuthV4 mode="signup" />
       </AuthPageShell>
     </ClientOnlyAuthPage>
