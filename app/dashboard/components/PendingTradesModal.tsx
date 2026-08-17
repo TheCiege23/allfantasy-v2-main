@@ -92,6 +92,7 @@ export function PendingTradesModal({ isOpen, onClose, data, loading, hasProAcces
                             Trade from {trade.proposedBy}
                             {trade.proposedAt ? ` · ${formatRelativeDate(trade.proposedAt)}` : ''}
                           </span>
+                          {trade.chimmyVerdict ? (
                           <span
                             className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold ${
                               trade.chimmyVerdict === 'accept'
@@ -107,6 +108,7 @@ export function PendingTradesModal({ isOpen, onClose, data, loading, hasProAcces
                                 ? '✗ Decline'
                                 : '↔ Negotiate'}
                           </span>
+                          ) : null}
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -130,6 +132,7 @@ export function PendingTradesModal({ isOpen, onClose, data, loading, hasProAcces
                           </div>
                         </div>
 
+                        {trade.chimmyReason ? (
                         <div className="rounded-lg border border-cyan-500/[0.12] bg-cyan-500/[0.06] p-2.5">
                           <div className="flex gap-2">
                             <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cyan-500 to-violet-600 text-[9px] font-bold text-white">
@@ -138,6 +141,7 @@ export function PendingTradesModal({ isOpen, onClose, data, loading, hasProAcces
                             <p className="text-[12px] leading-snug text-cyan-100">{trade.chimmyReason}</p>
                           </div>
                         </div>
+                        ) : null}
 
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <button

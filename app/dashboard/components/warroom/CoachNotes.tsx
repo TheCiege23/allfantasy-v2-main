@@ -38,11 +38,16 @@ export function CoachNotes({
     }))
 
   const tradeNotes: Note[] = pendingTrades.flatMap((league) =>
-    league.trades.map((trade) => ({
-      key: `trade-${trade.transactionId}`,
-      leagueName: league.leagueName,
-      message: trade.chimmyReason,
-    })),
+    league.trades
+      // chimmyReason is empty when no AI verdict was computed (the home screen
+      // no longer runs a per-trade model call). Skip those instead of emitting
+      // a note with a blank message.
+      .filter((trade) => Boolean(trade.chimmyReason))
+      .map((trade) => ({
+        key: `trade-${trade.transactionId}`,
+        leagueName: league.leagueName,
+        message: trade.chimmyReason,
+      })),
   )
 
   const notes = [...lineupNotes, ...tradeNotes].slice(0, MAX_NOTES)

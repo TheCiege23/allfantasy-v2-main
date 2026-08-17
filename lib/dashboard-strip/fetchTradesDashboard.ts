@@ -1,4 +1,3 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import type { SleeperTransaction } from '@/lib/sleeper-client'
 import { getAllPlayers, getLeagueRosters, getLeagueTransactions, getLeagueUsers } from '@/lib/api-cache/SleeperCacheLayer'
@@ -8,7 +7,6 @@ import type {
   TradeAsset,
   TradesDashboardResponse,
 } from '@/app/dashboard/dashboardStripApiTypes'
-import { getChimmyOfficialTimePrefix } from '@/lib/time-engine/chimmyPromptPrefix'
 
 const TRADES_DASHBOARD_TTL_MS = 15 * 60 * 1000
 
@@ -93,50 +91,8 @@ function buildTradeAssetsForRoster(args: {
   return { assetsGiven, assetsReceived }
 }
 
-async function chimmyTradeVerdict(args: {
-  leagueName: string
-  gives: string
-  gets: string
-  timeHint?: string
-}): Promise<{ verdict: 'accept' | 'decline' | 'negotiate'; reason: string }> {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
-  if (!apiKey) {
-    return { verdict: 'negotiate', reason: 'Review the trade in the app before accepting.' }
-  }
-  try {
-    const anthropic = new Anthropic({ apiKey })
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 220,
-      system:
-        'You are Chimmy, AllFantasy AI trade evaluator. Respond ONLY with JSON: {"verdict":"accept"|"decline"|"negotiate","reason":"1 sentence"}',
-      messages: [
-        {
-          role: 'user',
-          content: `${args.timeHint ? `${args.timeHint}\n\n` : ''}League: ${args.leagueName}. User gives: ${args.gives}. User receives: ${args.gets}. Quick verdict?`,
-        },
-      ],
-    })
-    const block = msg.content[0]
-    const raw = block?.type === 'text' ? block.text.trim() : ''
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim()
-    const parsed = JSON.parse(cleaned) as { verdict?: string; reason?: string }
-    const v = parsed.verdict?.toLowerCase()
-    const verdict =
-      v === 'accept' || v === 'decline' || v === 'negotiate' ? v : 'negotiate'
-    return {
-      verdict,
-      reason: typeof parsed.reason === 'string' ? parsed.reason : 'Weigh roster fit and future value before deciding.',
-    }
-  } catch {
-    return { verdict: 'negotiate', reason: 'Compare this to consensus values in your league chat before locking in.' }
-  }
-}
-
 /** Pending Sleeper trades for the user’s teams (dashboard / Today Actions). */
 export async function fetchTradesDashboard(userId: string): Promise<TradesDashboardResponse> {
-  const tradeTimeHint = await getChimmyOfficialTimePrefix(userId)
-
   const leagues = await prisma.league.findMany({
     where: {
       platform: 'sleeper',
@@ -231,24 +187,14 @@ export async function fetchTradesDashboard(userId: string): Promise<TradesDashbo
             creator?.display_name ||
             (tx.creator ? `Manager ${tx.creator.slice(0, 6)}` : 'Another team')
 
-          const gives = assetsGiven.map((a) => a.playerName).join(', ') || '(picks only)'
-          const gets = assetsReceived.map((a) => a.playerName).join(', ') || '(picks only)'
-
-          const verdict = await chimmyTradeVerdict({
-            leagueName: league.name ?? 'League',
-            gives,
-            gets,
-            timeHint: tradeTimeHint,
-          })
-
           leagueTrades.push({
             transactionId: tx.transaction_id,
             proposedBy,
             proposedAt: tx.created ? new Date(tx.created).toISOString() : null,
             assetsGiven,
             assetsReceived,
-            chimmyVerdict: verdict.verdict,
-            chimmyReason: verdict.reason,
+            chimmyVerdict: null,
+            chimmyReason: '',
           })
         }
       }
