@@ -8,12 +8,27 @@
 meta:
   vendor: Rolling Insights (Rolling Wave Consulting Inc., Calgary, Alberta, Canada)
   base_url: https://rest.datafeeds.rolling-insights.com/api/v1
-  base_url_env: ROLLING_INSIGHTS_BASE_URL
+  # ⚠️ CORRECTED 2026-08-17 against the code. ROLLING_INSIGHTS_BASE_URL was
+  # documented here as canonical but is read by exactly ONE file. See
+  # env_var_reality below — set the wrong name and most call paths silently
+  # fall back to a default.
+  base_url_env: ROLLING_INSIGHTS_REST_BASE_URL
   contract_version: 1.0.0
   captured_at: 2026-08-16
   skill_repo: github.com/Rolling-Insights/sports-datafeeds-by-rolling-insights-skill
   skill_repo_branch: production   # NOT main
   governing_law: Alberta, Canada
+
+  # ⚠️ AUTHORITY ORDER — newest first. The vendor pointed us at new docs
+  # on 2026-08-16 that supersede the Notion pages.
+  authority:
+    1: docs.datafeeds.rolling-insights.com   # OpenAPI 3.1.0, info.version 1.0.0
+                                             # PRE-RELEASE ("yet to be formally released")
+                                             # 84 paths. Most accurate shape source.
+    2: vendor Discord answers 2026-08-16     # see VENDOR-QA.md — covers undocumented features
+    3: skill repo (production branch)        # good operational guidance
+    4: Notion docs                           # STALE: http:// URLs, 2019 samples
+  see_also: PLAY-BY-PLAY.yaml, VENDOR-QA.md
 
   # Vendor self-describes as an UNOFFICIAL, MEDIUM-LATENCY provider that collects
   # from public sources. Not an official league feed. Fine for fantasy; NOT
@@ -25,9 +40,31 @@ meta:
 auth:
   mechanism: query_parameter
   param_name: RSC_token          # exact casing; case-sensitive
-  env_var: RSC_TOKEN
+  # ⚠️ CORRECTED 2026-08-17. RSC_TOKEN was documented as canonical; it is read
+  # by 4 files. ROLLING_INSIGHTS_RSC_TOKEN is read by 13. See env_var_reality.
+  env_var: ROLLING_INSIGHTS_RSC_TOKEN
   header_alternative: none       # there is NO Bearer/Authorization option
   https_required: true           # vendor: "Never use http://"
+
+  # -------------------------------------------------------------------------
+  # This repo does not agree with itself on env var names. Counted 2026-08-17
+  # over lib/ app/ scripts/ server/. Documenting the drift rather than pretending
+  # one name is canonical, because following a single name silently no-ops.
+  # -------------------------------------------------------------------------
+  env_var_reality:
+    token:
+      ROLLING_INSIGHTS_RSC_TOKEN: 13        # most common
+      ROLLING_INSIGHTS_CLIENT_SECRET2: 11   # ALSO holds the RSC token (ri-players-server)
+      RSC_TOKEN: 4                          # what this contract used to claim
+      also_seen: [ROLLING_INSIGHTS_CLIENT_SECRET, ROLLING_INSIGHTS_API_KEY,
+                  ROLLING_INSIGHTS_KEY, ROLLING_INSIGHTS_RSC_TOKEN2]
+    base_url:
+      ROLLING_INSIGHTS_REST_BASE_URL: 12    # most common
+      ROLLING_INSIGHTS_BASE_URL: 1          # what this contract used to claim
+      also_seen: [ROLLING_INSIGHTS_REST_BASE, ROLLING_INSIGHTS_API_BASE]
+    rule: >
+      Before adding a provider call, grep for the name actually read on the path
+      you are touching. Do not assume this contract's name is the one in effect.
 
   security_rules:
     - RSC_token MUST be redacted in every log, error message, and trace.
@@ -38,14 +75,33 @@ auth:
 # ============================================================================
 transport:
   # -------------------------------------------------------------------------
-  # ⚠️ THE 304 RULE — most important operational detail in this contract
+  # ⚠️⚠️ THE 304 CONFLICT — TWO VENDOR SOURCES DISAGREE. UNRESOLVED.
   # -------------------------------------------------------------------------
-  # 304 is NOT a "nothing changed" success signal. The vendor's own guidance:
-  #   "Treat 304 as a cache problem, not a success."
-  # It originates from intermediary caching, not a designed conditional-GET
-  # protocol. There is NO reliable ETag / update-marker contract.
-  # DO NOT build change detection on 304. Poll with cache-busting and diff
-  # payloads yourself.
+  304_conflict:
+    skill_repo_says: >
+      "Treat 304 as a cache problem, not a success." Prescribes no-cache headers
+      + fresh ms cache-buster + retry once.
+    new_openapi_says: >
+      Component named `NotModified`: "Not modified — valid request with no new
+      data to return (empty result set)" — i.e. 304 IS a legitimate freshness
+      signal meaning empty.
+    status: UNRESOLVED — these are opposite readings. Escalated to vendor (VENDOR-QA.md).
+
+    additional_evidence:
+      - 304 is declared on only 14 of 84 operations — and ONLY for DARTS and PGA.
+      - "/live/{date}/NFL declares only [200, 401, 403] — no 304 at all."
+      - Absence of a declared 304 is NOT a guarantee it won't occur; the spec is
+        pre-release and response-code sets are inconsistent across sports.
+
+    # ---------------------------------------------------------------------
+    # ✅ OUR RULE: cache-bust + hash-diff. This is SAFE UNDER BOTH READINGS.
+    #   - If 304 is a cache artifact: busting defeats it. Correct.
+    #   - If 304 genuinely means "empty": busting costs one extra request and
+    #     you no-op on an unchanged hash. Also correct.
+    # Change detection is ALWAYS by payload_sha256 in our DB, never by HTTP
+    # status. Do not make product behaviour depend on resolving this.
+    # ---------------------------------------------------------------------
+    our_rule: cache_bust_and_hash_diff
   # -------------------------------------------------------------------------
   required_live_headers:
     Accept: application/json
@@ -71,10 +127,61 @@ transport:
     vendor_recommendation_seconds: 5   # "at least a 5-10 second delay between calls"
     our_gameday_cadence_seconds: 35    # well above the floor; see INTEGRATION.md
     note: Vendor markets "no hidden rate limits". No documented 429.
+    openapi_confirms: >
+      New spec has ZERO occurrences of rate limit / 429 / throttle / quota, and
+      declares no 429 response on any of the 84 operations.
+    unanswered: >
+      ⚠️ Asked the vendor for the /live rate limit and whether a 304 counts
+      against it. NOT ANSWERED. See VENDOR-QA.md follow-ups.
+
+  # -------------------------------------------------------------------------
+  # ✅ WEBHOOKS EXIST — vendor-confirmed 2026-08-16, but UNDOCUMENTED.
+  # -------------------------------------------------------------------------
+  webhooks:
+    available: true
+    vendor_quote: >
+      "Yes, we offer a webhook push option. This can be configured by opening a
+      support ticket with our Customer Care team."
+    provisioning: support ticket (not self-serve)
+    documented: false
+    openapi_state: >
+      ⚠️ The new spec has a top-level `webhooks:` key whose value is literally
+      `{}`. The word "webhook" appears exactly once in the whole spec — that
+      empty key. No payload format, no event types, no HMAC/signature scheme,
+      no retry policy, no delivery guarantees are documented ANYWHERE.
+    implication: >
+      This is the single biggest architectural win available (removes 35s of
+      detection lag) AND the biggest undocumented risk. Open the ticket, get the
+      payload contract in writing, and commit it here before building on it.
+    required_before_use:
+      - payload schema + example
+      - event type list
+      - signature/HMAC verification scheme
+      - retry policy and delivery guarantee (at-least-once? ordering?)
+      - whether webhooks fire for stat CORRECTIONS or only new events
+    design_note: >
+      Even with webhooks, KEEP POLLING as a slower reconciliation net. Webhook
+      delivery is rarely guaranteed, and our dedupe_key already makes duplicate
+      delivery harmless. Hybrid: webhook primary (low latency) + poll every
+      2-5 min (completeness).
 
   stat_corrections:
     reprocess_window_hours: 12   # corrections re-run for ~12h AFTER game ends
     implication: Final stats are NOT immutable at the whistle. Reconcile pass required.
+    vendor_quote: >
+      "If a statistic is corrected during the game, that correction will be
+      reflected in a subsequent version of the live box score. We don't currently
+      provide flags specifically identifying stat corrections."
+    vendor_reasons_given:
+      - play initially recorded incorrectly at field level
+      - official decision changed
+      - public source data updated
+      - vendor adjusted how a play was interpreted
+    no_correction_flag: true
+    # ⚠️ Consequence: a correction is INDISTINGUISHABLE from a new play in the
+    # box score. See PLAY-BY-PLAY.yaml correction_detection for the two-layer
+    # strategy (PBP reversal flags + negative-delta guard).
+    hard_rule: NEVER emit an alert on a negative stat delta.
 
 # ============================================================================
 envelope:
@@ -176,6 +283,19 @@ support_consequences:
     Fantasy points appear as FIELDS inside football payloads (DK_fantasy_points,
     DK_fantasy_points_per_game). There is no fantasy endpoint. These are DraftKings
     scoring only — useless for custom league settings. Score from raw stats instead.
+  - >
+    ❌ NO PROJECTIONS. Vendor-confirmed 2026-08-16: "We don't currently offer
+    projection endpoints. This is something on our roadmap." Feature-request board:
+    https://app.loopedin.io/datafeeds-by-rolling-insights#/ideas-board
+    → Upvote it, but plan as if it will never ship. Projections come from
+    Fantasy Nerds ($499/yr, raw stat categories, IDP) or your own model built on
+    nflverse. See player-values-pipeline-spec.md §4.
+  - >
+    ❌ NO ADP, NO TRADE VALUES, NO DYNASTY VALUES. Vendor-confirmed: "We leave
+    these types of calculated values to our customers, since different companies
+    often have their own methodologies." FantasyCalc + DynastyProcess remain the
+    values layer. This is arguably GOOD — it means they are not competing with you
+    on the analytics layer, which is relevant to the ToS competitive-use clause.
 
 # ============================================================================
 endpoints:
@@ -227,23 +347,86 @@ endpoints:
       league:    { required_for: [SOCCER] }
     required_headers: [Cache-Control, Pragma]
     purpose: Live scores, current box state, player box lines.
+    declared_responses: [200, 401, 403]   # ⚠️ NFL live declares NO 304 and NO 404
     notes:
       - This is the PRIMARY game-day endpoint. Player-level box stats live here.
       - Returns started AND finished events for the given date.
-      - 304 => retry once with fresh buster.
+      - 304 => retry once with fresh buster (see transport.304_conflict).
+    nfl_top_level_keys: [sport, away_team_name, home_team_name, game_time,
+                         game_status, status, game_ID, game_location, game_arena,
+                         season_type, season, week, full_box, event_name, round,
+                         player_box]
+    nfl_new_fields:
+      # Present in the new spec, absent from the old contract:
+      - DK_fantasy_points   # on BOTH team and player box
+      - "snap_counts { defense, offense, specialTeams }"
+      - targets             # per player — useful for market-share projections
+
+    # -----------------------------------------------------------------------
+    # ✅ LIVE GAME STATE — resolves the "everything was null" observation
+    # -----------------------------------------------------------------------
+    live_game_state:
+      # ⚠️ The vendor called this `currentBox` in Discord. That name does NOT
+      # exist in the spec. The real path is full_box.current.
+      correct_path: data.NFL[].full_box.current
+      vendor_informal_name: currentBox   # do not code against this
+      full_box_keys: [away_team, home_team, current]
+
+      lifecycle:
+        vendor_quote: >
+          "The currentBox is populated while a game is live, as it represents the
+          current state of the game. Once the game has been completed, currentBox
+          will be null."
+        resolves: >
+          ✅ Your all-null observation was from a FINAL-state payload. That is
+          expected behaviour, not a bug and not an unpopulated field. Re-probe
+          during a live game to capture the populated shape.
+
+      fields:
+        Quarter:           { type: string,  note: "⚠️ STRING, not integer. 'F' when final." }
+        TimeRemaining:     { type: [string, "null"], example: "00:00" }
+        Down:              { type: [integer, "null"] }
+        Distance:          { type: [integer, "null"] }
+        YardLine:          { type: [integer, "null"],
+                             note: "⚠️ INTEGER here. PBP play.yardLine is a STRING ('BUF 25')." }
+        YardLineTerritory: { type: [string, "null"], example: "BUF" }
+        Possession:        { type: [string, "null"], example: "BUF",
+                             note: "⚠️ ABBREVIATION here. PBP play.possession is a FULL TEAM NAME." }
+        RedZone:           { type: [boolean, "null"] }
+        poss:              { type: string, note: "lowercase duplicate of Possession" }
+        field:             { type: string, example: "BUF 25", note: "lowercase convenience string" }
+
+      cross_sport_naming_trap: >
+        ⚠️ "Current box" is THREE different field names across sports:
+          NFL / NCAAFB : full_box.current  (full football state)
+          NBA / NCAABB : full_box.current  (only { Quarter, TimeRemaining })
+          MLB          : full_box.current_box
+                         { inning, inning_half, outs, balls, strikes,
+                           current_batter{id,name,position},
+                           current_pitcher{id,name,position} }
+          DARTS        : top-level current_box { leg, throwing, points_to_checkout }
+        Do not write one accessor for all sports.
 
   play_by_play:
     method: GET
     path: /play-by-play/{SPORT}
-    supported_sports: [MLB, NBA, NFL]
+    supported_sports: [MLB, NBA, NFL]   # confirmed UNCHANGED in the new docs
     query_params:
       RSC_token: { required: true }
       game_id:   { required: true }
       _:         { required: false, value: epoch_ms }
+    full_schema: PLAY-BY-PLAY.yaml      # ← full field list lives there
+    bundling: >
+      ✅ INCLUDED with the Live Feed tier. Vendor: "Play-by-play is currently
+      included for customers who purchase our live data, so there is no separate
+      play-by-play package required."
     notes:
       - Parse as an EVENT SEQUENCE, not a box score.
       - Requires game_id from /schedule or /live first.
-      - Do NOT substitute /live if asked whether PBP exists for an unsupported sport.
+      - "⚠️ `sequence` is NON-CONTIGUOUS. High-water mark only, never a count."
+      - "⚠️ Touchdowns are NOT in the `event` enum — use isTouchdown + isScoringPlay."
+      - "✅ `yardsGained` is the 20+ yard detection field."
+      - "✅ details.isReversed / isOverruled / isReplayOverturned give officiating-reversal detection."
 
   team_info:
     method: GET
@@ -381,11 +564,51 @@ fields:
       round:       [null, 1, 2, 3, 4]
       game_status: ["<game time>", "<Time Quarter>", Final, "Final OT"]
     injuries:
+      # Confirmed against the new OpenAPI spec. Five flat fields. That's all.
+      envelope: "data.NFL[] -> { team, team_id, injuries[] }"
       fields: [player, player_id, injury, date_injured, returns]
-      returns_values: ["Week To Week", "Out For Season"]
-      note: >
-        No practice-participation granularity (DNP/Limited/Full). For the official
-        Wed/Thu/Fri practice grid, parse NFL.com injury reports separately.
+      player_id_type: string      # ⚠️ STRING for NFL/MLB/NBA/NHL, INTEGER for SOCCER
+      date_injured_format: >
+        ⚠️ INCONSISTENT AND NOT ISO. Observed: "2026-1-29" (NFL, not zero-padded),
+        "2026-04-15" (MLB), "Jul 20, 2026" (SOCCER). Parse defensively per sport.
+      returns_field: >
+        ⚠️ FREE-FORM PROSE, no enum. Observed values mix designations and
+        narrative: "Probable", "60-Day IL", "Out For Season", "Week To Week",
+        "Questionable For Start Of Training Camp", "TBA". You will need a
+        normalization layer; do not treat this as structured.
+
+      # ❌ ANSWERED DEFINITIVELY — practice participation does NOT exist.
+      practice_participation: false
+      practice_evidence: >
+        Searched the entire new OpenAPI spec: `practice` = 41 hits, ALL of them
+        "Best practices" prose. `participation` = 0. `DNP` = 0. `Limited` = 0.
+        No day-of-week fields. The vendor was asked directly and did not answer
+        this question; the spec settles it as a NO.
+      practice_workaround: >
+        For the Wed/Thu/Fri DNP-Limited-Full grid, parse official NFL.com injury
+        reports separately. See live-gameday-architecture.md §6 Layer 1.
+
+      # Cadence — materially slower than assumed. This SAVES money.
+      update_cadence:
+        vendor_quote: >
+          "Injury information is collected each morning. On game days, we also
+          collect an additional update approximately one hour before each game
+          begins."
+        schedule: daily each morning + ~T-1h before each game
+        NOT_realtime: true
+        source_policy: >
+          "Our injury information is based on information officially reported by
+          teams and made publicly available. We do not base injury statuses on
+          rumours or observations from reporters."
+        implication: >
+          ⚠️ REVISE THE POLLING PLAN. There is no point polling /injuries every
+          35s — the data only changes twice a day. Poll at ~06:00 local and again
+          at T-90m per game. This is the OFFICIAL-REPORT layer, not the
+          breaking-news layer.
+          The "no rumours" policy is a RELIABILITY FEATURE: fewer false positives,
+          which is what the developing-vs-confirmed UX needs. But it means a
+          separate breaking-news source (e.g. Rotowire) is still REQUIRED for
+          sub-hour injury news.
 
   NBA:
     confidence: low   # partial hints only

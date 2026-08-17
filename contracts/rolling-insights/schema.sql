@@ -332,6 +332,69 @@ COMMENT ON COLUMN ri.event_game.detection_confidence IS
   'detection is HIGH. Surface this to users rather than implying completeness.';
 
 -- ============================================================================
+-- WEBHOOK INGESTION  (vendor-confirmed 2026-08-16; contract still UNDOCUMENTED)
+--
+-- Webhooks are provisioned via a Rolling Insights support ticket. No payload
+-- schema, event-type list, signature scheme, or retry policy exists in writing.
+-- These tables are deliberately shape-agnostic until that contract lands.
+--
+-- DESIGN: webhook is PRIMARY (low latency), polling remains a slower
+-- reconciliation net. Delivery is assumed at-most-once and unordered until
+-- proven otherwise.
+-- ============================================================================
+
+CREATE TABLE ri.webhook_delivery (
+  id              BIGSERIAL PRIMARY KEY,
+  received_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Raw body stored before any parsing, exactly like raw_response.
+  headers         JSONB       NOT NULL,   -- ⚠️ redact any auth/signature secret
+  body            JSONB,
+  body_raw        TEXT,                   -- needed verbatim for HMAC verification
+  body_sha256     TEXT,
+  signature_valid BOOLEAN,                -- NULL until a scheme is documented
+  -- Idempotency. Assume duplicates until the vendor guarantees otherwise.
+  vendor_event_id TEXT,
+  dedupe_key      TEXT NOT NULL,
+  processed_at    TIMESTAMPTZ,
+  process_error   TEXT,
+  UNIQUE (dedupe_key)
+);
+
+CREATE INDEX webhook_delivery_unprocessed_idx
+  ON ri.webhook_delivery (received_at) WHERE processed_at IS NULL;
+
+COMMENT ON TABLE ri.webhook_delivery IS
+  'Land the raw body FIRST, ack fast, process async. Never do parsing or event '
+  'detection inside the HTTP handler — a slow handler causes vendor retries, '
+  'which causes duplicates. dedupe_key makes duplicates harmless.';
+
+COMMENT ON COLUMN ri.webhook_delivery.signature_valid IS
+  'NULL until the vendor documents an HMAC/signature scheme. Until then, protect '
+  'the endpoint with an unguessable path segment + IP allowlist, and treat every '
+  'payload as untrusted input.';
+
+-- Reconciliation: did polling find something the webhook never delivered?
+-- This measures actual delivery reliability rather than trusting a claim.
+CREATE TABLE ri.webhook_gap_audit (
+  id              BIGSERIAL PRIMARY KEY,
+  sport           ri.sport_code NOT NULL,
+  game_id         TEXT        NOT NULL,
+  detected_by     TEXT        NOT NULL CHECK (detected_by IN ('poll','webhook')),
+  event_dedupe_key TEXT       NOT NULL,
+  first_seen_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  -- Populated if the other channel later delivers the same event.
+  other_channel_at TIMESTAMPTZ,
+  lag_ms          INT,
+  UNIQUE (event_dedupe_key, detected_by)
+);
+
+COMMENT ON TABLE ri.webhook_gap_audit IS
+  'Run for the first few weeks after enabling webhooks. Events with '
+  'detected_by = poll and other_channel_at IS NULL are webhook delivery MISSES. '
+  'lag_ms quantifies the latency win. Do not disable polling until this table '
+  'shows a miss rate you are willing to accept.';
+
+-- ============================================================================
 -- SCHEDULER / POLLING CONTROL
 -- ============================================================================
 
@@ -355,18 +418,29 @@ CREATE TABLE ri.poll_job (
 CREATE INDEX poll_job_due_idx ON ri.poll_job (next_run_at)
   WHERE enabled = true;
 
--- Cadence reference (see INTEGRATION.md §4):
+-- Cadence reference (see INTEGRATION.md §4). REVISED 2026-08-16 after vendor Q&A.
+--
 --   live, game in progress ......... 35s   (user requirement: 30-45s)
---   injuries, game day ............. 35s
+--                                          → drop to 120-300s once webhooks land
 --   play_by_play, game in progress . 35s   (MLB/NBA/NFL only)
+--                                          → drop to 120-300s once webhooks land
 --   live, game scheduled <30m out .. 60s
 --   schedule, daily ................ 1/day 06:00 local + 1/hr on game days
---   injuries, non-game day ......... 1/hour
 --   team_info / player_info ........ 1/day
 --   team_stats / player_stats ...... 1/day (offseason: 1/week)
 --   depth_charts ................... 1/day
 --   reconcile finalized games ...... hourly for 12h after finalized_at
--- Vendor recommends >= 5s between calls. 35s is comfortably above the floor.
+--
+--   ⚠️ injuries ..................... 06:00 local + T-90m per game
+--      REVISED DOWN from 35s. Vendor confirmed injury data is collected once each
+--      morning plus one update ~1h before each game. Polling faster than that
+--      returns identical payloads. Official-report layer only — it carries NO
+--      practice participation and explicitly excludes reporter tweets, so a
+--      separate breaking-news source is still required.
+--
+-- Vendor recommends >= 5s between calls. No documented hard limit; the new
+-- OpenAPI declares no 429 on any of 84 operations. The /live limit and whether
+-- 304 counts against it were ASKED AND NOT ANSWERED — see VENDOR-QA.md.
 
 -- ============================================================================
 -- APP-FACING READ VIEWS
