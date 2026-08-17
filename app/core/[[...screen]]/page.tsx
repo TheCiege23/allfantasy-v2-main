@@ -30,6 +30,7 @@ import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens
 import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
+import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 
 export const dynamic = 'force-dynamic'
@@ -159,6 +160,14 @@ export default async function AfCorePage({
    * Home answers "what needs me now" from a queue; this answers "what do I have".
    */
   const portfolio = activeKey === 'portfolio' ? await getPortfolio(userId).catch(() => null) : null
+
+  // Career derives from imported history; ?platform= narrows it to one provider.
+  const career =
+    activeKey === 'career'
+      ? await getCareerData(userId, typeof sp.platform === 'string' ? sp.platform : null).catch(
+          () => null
+        )
+      : null
 
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
   const playerDetail =
@@ -316,10 +325,19 @@ export default async function AfCorePage({
       ) : activeKey === 'tools' ? (
         <Tools />
       ) : activeKey === 'career' ? (
-        // No server loader on purpose — Career fetches /api/user/rank itself so a
-        // cold-profile rank recalculation cannot hold the whole shell's render.
-        // The reasoning is written out at the top of the screen.
-        <Career />
+        career ? (
+          <Career data={career} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Career
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read your career history just now. This is a read failure on our side, not a
+              sign that you have none.
+            </p>
+          </div>
+        )
       ) : activeKey === 'portfolio' ? (
         portfolio ? (
           <Portfolio data={portfolio} />

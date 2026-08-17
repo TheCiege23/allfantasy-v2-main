@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getLevelFromXp } from '@/lib/rank/levels'
 
 /**
  * Career — the trophy room's data layer, derived from imported league history.
@@ -158,6 +159,14 @@ export type LegacyDimension = {
 }
 
 export type CareerData = {
+  /** Display handle. Null rather than a placeholder if we have no name. */
+  handle: string | null
+  /** 25-rung ladder position, from the canonical XP engine. Null if never scored. */
+  level: number | null
+  levelName: string | null
+  nextLevelName: string | null
+  xp: { total: number; nextThreshold: number | null; toNext: number | null; progressPct: number | null } | null
+
   /** Every platform the user has imported from — drives the dropdown. */
   platforms: CareerPlatform[]
   /** Active filter; null = all platforms. */
@@ -425,6 +434,33 @@ export async function getCareerData(
   platformFilter?: string | null
 ): Promise<CareerData> {
   const wanted = platformFilter?.trim().toLowerCase() || null
+
+  /*
+   * Identity and ladder position. Read from the SAME denormalised columns
+   * /api/user/rank uses, deliberately — two surfaces disagreeing about someone's
+   * level is worse than either being slightly stale. `xp_total` is the canonical
+   * engine's output; `getLevelFromXp` is the one ladder.
+   */
+  let handle: string | null = null
+  let xpTotal: number | null = null
+  try {
+    const [appUser, rows] = await Promise.all([
+      prisma.appUser.findUnique({
+        where: { id: userId },
+        select: { username: true, displayName: true },
+      }),
+      prisma.$queryRaw<Array<{ xp_total: bigint | number | null }>>`
+        SELECT xp_total FROM user_profiles WHERE "userId" = ${userId} LIMIT 1
+      `,
+    ])
+    handle = appUser?.displayName?.trim() || appUser?.username?.trim() || null
+    const raw = rows[0]?.xp_total
+    if (raw != null) xpTotal = Number(raw)
+  } catch (err) {
+    console.error('[core-app/career] identity/xp read failed:', err)
+  }
+
+  const level = xpTotal != null ? getLevelFromXp(xpTotal) : null
 
   /* ── source 1: multi-platform import columns on `leagues` ──────────────── */
   type ImportRow = {
@@ -828,6 +864,33 @@ export async function getCareerData(
   )
 
   return {
+    handle,
+    level: level?.level ?? null,
+    levelName: level?.name ?? null,
+    nextLevelName: level?.nextLevel?.name ?? null,
+    xp:
+      xpTotal != null && level
+        ? {
+            total: xpTotal,
+            /*
+             * ⚠ ABSOLUTE, NOT THE BAND SIZE. `xpForLevel` is the WIDTH of the
+             * current level (13,000), while the handoff's "next 55,000" is the
+             * total you must reach. Shipping the band size would have printed
+             * "next 13,000" beside a 43,908 total — a next target below the
+             * number next to it. Confirmed against the mock's own arithmetic:
+             * 43,908 + 11,092 = 55,000.
+             */
+            nextThreshold:
+              level.xpForLevel != null && level.xpIntoLevel != null
+                ? xpTotal + Math.max(0, level.xpForLevel - level.xpIntoLevel)
+                : null,
+            toNext:
+              level.xpForLevel != null && level.xpIntoLevel != null
+                ? Math.max(0, level.xpForLevel - level.xpIntoLevel)
+                : null,
+            progressPct: level.progressPct ?? null,
+          }
+        : null,
     platforms: [...platformsSeen].sort(),
     platform: wanted,
     seasonsPlayed,

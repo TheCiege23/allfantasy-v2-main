@@ -1,303 +1,518 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import type { CareerData, PrestigeComponent } from '@/lib/core-app/career'
 import '@/components/core-app/af-career.css'
 
 /**
- * Career — your record across every league and season we know about.
+ * Career — the trophy room (handoff 33a), desktop frame.
  *
- * ⚠ THIS WAS THE LAST RAIL SLOT RENDERING AN APOLOGY. It was pulled out of the
- * nav rather than left pointing at a "not built yet" panel; this puts it back.
+ * ⚠ THIS REPLACED AN EARLIER CAREER SCREEN OF MY OWN INVENTION. There was no
+ * career design in the first two handoffs, so the interim version was a guess.
+ * This one follows 33a, which is marked final fidelity.
  *
- * ⚠ IT FETCHES /api/user/rank INSTEAD OF TAKING A SERVER LOADER, which is a
- * deliberate break from the lib/core-app/<screen>.ts pattern the other screens
- * use. That endpoint is not a plain read: on a cold profile it calls
- * calculateAndSaveRank before it answers. Awaiting that in the page's server
- * render would hold the entire shell — rail, topbar and all — behind a rank
- * recalculation. It also already exists, and this repo is at Vercel's hard route
- * ceiling, so the alternative is a route we cannot afford.
+ * ⚠ EVERY FIGURE COMES FROM getCareerData, WHICH READS IMPORTED HISTORY. None of
+ * the handoff's demo values (@guap, 187-134, 47.7, the 2024 Dynasty Dragons ring)
+ * are hard-coded anywhere. Where the design shows something imports cannot
+ * answer, this says so rather than printing the mock's number:
  *
- * ⚠ EVERY NUMBER HERE IS WITHHELD RATHER THAN ZEROED WHEN WE HAVE NO DATA. The
- * endpoint returns winRate: 0 when totalGames is 0 (route.ts computes
- * `totalGames > 0 ? … : 0`), and a 0% win rate rendered on a career page reads as
- * a catastrophic record rather than an empty one. Same for the grade: aiScore is
- * null unless a report exists, and a letter grade next to "import your leagues to
- * unlock" is the exact contradiction the rank route was already fixed to stop
- * emitting. No number is invented to fill a slot.
+ *   Rivalry / Awards   named as unmeasured under the legacy bar
+ *   Hall of Fame       omitted — no entries exist to render
+ *   Badge case         deferred at your direction
+ *   Trusted score      omitted — no reputation rows for this path
+ *   Title odds         omitted from the open slot; needs a projection
+ *
+ * The tabs are links, not state, so the view is deep-linkable exactly as the
+ * handoff asks (`?view=seasons`). Only Trophy room is implemented; the others
+ * are marked so nobody clicks into a blank panel.
  */
 
-type CareerStats = {
-  seasonsPlayed: number
-  totalWins: number
-  totalLosses: number
-  championships: number
-  playoffAppearances: number
-  leaguesPlayed: number
+const TABS = [
+  { key: 'trophy', label: 'Trophy room' },
+  { key: 'seasons', label: 'Seasons' },
+  { key: 'hall', label: 'Hall of Fame' },
+  { key: 'records', label: 'Records' },
+] as const
+
+/** Legacy bar ramp. Not tokens — the handoff lists these four literally. */
+const LEGACY_COLORS: Record<string, string> = {
+  championship: 'var(--warn)',
+  playoff: 'var(--accent)',
+  consistency: '#4d9be0',
+  dynasty: '#7c8bd0',
 }
 
-type RankBlock = {
-  aiReportGrade: string | null
-  aiScore: number | null
-  aiInsight: string | null
-  winRate: number | null
-  playoffRate: number | null
-  totalWins: number
-  totalLosses: number
-  totalTies: number
-}
-
-type RankResponse = {
-  imported?: boolean
-  level?: number | null
-  levelName?: string | null
-  tierGroup?: string | null
-  color?: string | null
-  xpTotal?: number | null
-  xpIntoLevel?: number | null
-  xpForLevel?: number | null
-  progressPct?: number | null
-  nextLevelName?: string | null
-  careerStats?: CareerStats | null
-  rank?: RankBlock | null
-  rankProcessing?: boolean
-  rankCalculatedAt?: string | null
-}
-
-type LoadState =
-  | { kind: 'loading' }
-  | { kind: 'error' }
-  | { kind: 'ready'; data: RankResponse }
-
-function formatInt(n: number): string {
+function nf(n: number): string {
   return n.toLocaleString('en-US')
 }
 
-export function Career() {
-  const [state, setState] = useState<LoadState>({ kind: 'loading' })
+function HelpDot({ body, left }: { body: string; left?: boolean }) {
+  return (
+    <span className="af-cr-help" data-left={left ? '' : undefined} tabIndex={0} role="note">
+      ?<span className="af-cr-helpbody">{body}</span>
+    </span>
+  )
+}
 
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/user/rank', { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
-      .then((data: RankResponse) => {
-        if (!cancelled) setState({ kind: 'ready', data })
-      })
-      .catch(() => {
-        if (!cancelled) setState({ kind: 'error' })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [])
+/** Radial prestige gauge. Geometry is the handoff's: r=52 on a 128 viewBox. */
+function Gauge({ value }: { value: number }) {
+  const r = 52
+  const circumference = 2 * Math.PI * r
+  const dash = Math.max(0, Math.min(value / 100, 1)) * circumference
+  return (
+    <svg className="af-cr-gauge" viewBox="0 0 128 128" width={116} height={116} aria-hidden="true">
+      <circle cx="64" cy="64" r={r} fill="none" stroke="var(--line2)" strokeWidth="11" />
+      <circle
+        cx="64"
+        cy="64"
+        r={r}
+        fill="none"
+        stroke="var(--accent)"
+        strokeWidth="11"
+        strokeLinecap="round"
+        strokeDasharray={`${dash} ${circumference}`}
+        transform="rotate(-90 64 64)"
+      />
+      <text
+        x="64"
+        y="62"
+        textAnchor="middle"
+        fill="var(--text)"
+        style={{ font: "700 26px var(--font-jetbrains-mono, 'JetBrains Mono'), monospace" }}
+      >
+        {value.toFixed(1)}
+      </text>
+      <text
+        x="64"
+        y="80"
+        textAnchor="middle"
+        fill="var(--faint)"
+        style={{ font: "500 10px var(--font-jetbrains-mono, 'JetBrains Mono'), monospace" }}
+      >
+        / 100
+      </text>
+    </svg>
+  )
+}
 
-  if (state.kind === 'loading') {
+function componentTone(c: PrestigeComponent): string {
+  if (c.key === 'championships') return 'var(--warn)'
+  if (c.key === 'winRate') return 'var(--good)'
+  return 'var(--accent)'
+}
+
+/**
+ * Career arc. The handoff hard-codes a ten-point path; this projects whatever
+ * seasons actually exist onto the same 700x196 viewBox, so it is correct for a
+ * two-season career as well as a ten-season one.
+ */
+function CareerArc({ data }: { data: CareerData }) {
+  const pts = data.seasons.filter((s) => s.winRate != null)
+  if (pts.length < 2) {
     return (
-      <div className="af-cr">
-        <header className="af-cr-head">
-          <h1 className="af-cr-title">Career</h1>
-        </header>
-        <p className="af-cr-sub">Loading your record…</p>
-      </div>
+      <p className="af-cr-caption">
+        {pts.length === 0
+          ? 'No completed seasons yet, so there is no arc to draw.'
+          : 'One completed season so far — an arc needs at least two to mean anything.'}
+      </p>
     )
   }
 
-  if (state.kind === 'error') {
-    return (
-      <div className="af-cr">
-        <header className="af-cr-head">
-          <h1 className="af-cr-title">Career</h1>
-        </header>
-        {/* A read failure is not the same as an empty career, and saying "no
-            history" here would be a lie told by a network error. */}
-        <div className="af-cr-empty">
-          <p className="af-cr-empty-title">We could not load your career just now.</p>
-          <p className="af-cr-empty-body">
-            This is a read failure on our side, not a sign that you have no history. Reloading
-            usually clears it.
-          </p>
-        </div>
-      </div>
-    )
-  }
+  const X0 = 40
+  const X1 = 676
+  const BASE = 170
+  const step = pts.length > 1 ? (X1 - X0) / (pts.length - 1) : 0
+  // The handoff's window: 35%-85% mapped across 130px above the baseline.
+  const y = (v: number) => BASE - ((Math.max(0.35, Math.min(v, 0.85)) - 0.35) / 0.5) * 130
+  const coords = pts.map((s, i) => ({
+    x: X0 + i * step,
+    y: y(s.winRate as number),
+    s,
+  }))
+  const line = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ')
+  const area = `${line} L${X1},${BASE} L${X0},${BASE} Z`
+  const peak = coords.reduce((a, b) => ((b.s.winRate as number) > (a.s.winRate as number) ? b : a))
 
-  const { data } = state
-  const stats = data.careerStats ?? null
-  const rank = data.rank ?? null
+  return (
+    <>
+      <svg className="af-cr-arc" viewBox="0 0 700 196" preserveAspectRatio="none" role="img"
+        aria-label={`Win rate by season, ${pts[0].season} to ${pts[pts.length - 1].season}`}>
+        {[17, 69, 121].map((gy) => (
+          <line key={gy} x1={X0} x2={X1} y1={gy} y2={gy} stroke="var(--line)" strokeWidth="1" />
+        ))}
+        <line x1={X0} x2={X1} y1={BASE} y2={BASE} stroke="var(--line2)" strokeWidth="1" />
+        {[
+          { v: 0.85, y: 21 },
+          { v: 0.65, y: 73 },
+          { v: 0.45, y: 125 },
+        ].map((t) => (
+          <text key={t.v} x={30} y={t.y} textAnchor="end" fill="var(--faint)"
+            style={{ font: "500 9px var(--font-jetbrains-mono, 'JetBrains Mono'), monospace" }}>
+            {Math.round(t.v * 100)}%
+          </text>
+        ))}
+        <defs>
+          <linearGradient id="af-cr-arcfill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.34" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={area} fill="url(#af-cr-arcfill)" />
+        <path d={line} fill="none" stroke="var(--accent)" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />
+        {coords.map((c) => {
+          const isTitle = c.s.championships > 0
+          return (
+            <g key={c.s.season}>
+              <circle
+                cx={c.x}
+                cy={c.y}
+                r={isTitle ? 6.5 : 4}
+                fill={isTitle ? 'var(--warn)' : 'var(--bg)'}
+                stroke={isTitle ? 'var(--warn)' : 'var(--accent)'}
+                strokeWidth={isTitle ? 0 : 2.5}
+              />
+              {/* Nodes are 4-6.5px; the design asks for a >=24px hit area. */}
+              <circle cx={c.x} cy={c.y} r={12} fill="transparent">
+                <title>
+                  {`${c.s.season}: ${c.s.wins}-${c.s.losses}${c.s.ties ? `-${c.s.ties}` : ''} · ${(
+                    (c.s.winRate as number) * 100
+                  ).toFixed(1)}% · ${c.s.leagueCount} ${c.s.leagueCount === 1 ? 'league' : 'leagues'}${
+                    c.s.championships ? ` · ${c.s.championships} title${c.s.championships > 1 ? 's' : ''}` : ''
+                  }`}
+                </title>
+              </circle>
+            </g>
+          )
+        })}
+        <text x={peak.x} y={Math.max(14, peak.y - 16)} textAnchor="middle" fill="var(--warn)"
+          style={{ font: "700 10px var(--font-jetbrains-mono, 'JetBrains Mono'), monospace" }}>
+          {`${((peak.s.winRate as number) * 100).toFixed(0)}% · PEAK`}
+        </text>
+        {coords.map((c) => (
+          <text key={c.s.season} x={c.x} y={188} textAnchor="middle"
+            fill={c.s.championships > 0 ? 'var(--warn)' : 'var(--faint)'}
+            style={{
+              font: `${c.s.championships > 0 ? 700 : 500} 10px var(--font-jetbrains-mono, 'JetBrains Mono'), monospace`,
+            }}>
+            {String(c.s.season).slice(2)}
+          </text>
+        ))}
+      </svg>
+      <p className="af-cr-caption">
+        Regular-season win rate across every league you played that year, weighted by games. Completed
+        seasons only — leagues still being played are not in this line.
+      </p>
+    </>
+  )
+}
 
-  const games = rank ? rank.totalWins + rank.totalLosses + rank.totalTies : 0
-  const hasGames = games > 0
-  const leaguesPlayed = stats?.leaguesPlayed ?? 0
-  const hasHistory = Boolean(stats) && (hasGames || leaguesPlayed > 0 || (stats?.seasonsPlayed ?? 0) > 0)
+export function Career({ data }: { data: CareerData }) {
+  const {
+    prestige,
+    legacy,
+    titles,
+    activeLeagues,
+    leagueCounts,
+    distinctLeagues,
+    currentSeason,
+  } = data
 
-  if (!hasHistory) {
-    return (
-      <div className="af-cr">
-        <header className="af-cr-head">
-          <h1 className="af-cr-title">Career</h1>
-        </header>
-        <div className="af-cr-empty">
-          <p className="af-cr-empty-title">No seasons on record yet.</p>
-          <p className="af-cr-empty-body">
-            Career is built from finished seasons. Import a league with history and your record,
-            titles and playoff runs land here — nothing is shown until then, rather than a page of
-            zeroes.
-          </p>
-          <Link href="/import?returnTo=%2Fcore%2Fcareer" className="af-cr-btn af-cr-btn--primary">
-            Import a league
-          </Link>
-        </div>
-        {data.rankProcessing ? (
-          <p className="af-cr-notice">
-            We are still working through an import. This page will fill in once it finishes.
-          </p>
-        ) : null}
-      </div>
-    )
-  }
-
-  const record = rank
-    ? `${rank.totalWins}-${rank.totalLosses}${rank.totalTies > 0 ? `-${rank.totalTies}` : ''}`
-    : stats
-      ? `${stats.totalWins}-${stats.totalLosses}`
-      : null
-
-  // Withheld unless there are games behind it — see the header note.
-  const winRate = hasGames && rank?.winRate != null ? rank.winRate : null
-  const playoffRate = leaguesPlayed > 0 && rank?.playoffRate != null ? rank.playoffRate : null
-
-  const levelColor = data.color ?? 'var(--accent)'
-  const progressPct =
-    data.progressPct != null ? Math.max(0, Math.min(100, Math.round(data.progressPct))) : null
+  const record = data.games > 0 ? `${nf(data.wins)}–${nf(data.losses)}` : null
+  const openSlot = activeLeagues[0] ?? null
 
   return (
     <div className="af-cr">
-      <header className="af-cr-head">
-        <h1 className="af-cr-title">Career</h1>
-        <p className="af-cr-sub">
-          Everything we know about how you have actually done — across{' '}
-          {formatInt(stats?.seasonsPlayed ?? 0)}{' '}
-          {(stats?.seasonsPlayed ?? 0) === 1 ? 'season' : 'seasons'} and {formatInt(leaguesPlayed)}{' '}
-          {leaguesPlayed === 1 ? 'league' : 'leagues'}.
-        </p>
-      </header>
+      {/* ── Identity ───────────────────────────────────────────────────── */}
+      <aside className="af-cr-id">
+        <div className="af-cr-idhead">
+          <svg className="af-cr-crest" width="24" height="26" viewBox="0 0 24 26" aria-hidden="true">
+            <path d="M12 1 22 6.5v13L12 25 2 19.5v-13Z" fill="none" stroke="var(--accent)" strokeWidth="1.5" />
+            <text x="12" y="16" textAnchor="middle" fill="var(--accent)"
+              style={{ font: "800 8px var(--font-archivo, 'Archivo'), sans-serif" }}>AF</text>
+          </svg>
+          <span className="af-cr-eyebrow">
+            {data.firstSeason && data.lastSeason
+              ? `CAREER · ${data.firstSeason}—${data.lastSeason}`
+              : 'CAREER'}
+          </span>
+          <span className="af-cr-ro">READ-ONLY</span>
+        </div>
 
-      {data.rankProcessing ? (
-        <p className="af-cr-notice">
-          An import is still being processed, so these numbers may still move.
-        </p>
-      ) : null}
-
-      {data.level != null ? (
-        <section className="af-cr-level">
-          <div className="af-cr-level-top">
-            <span className="af-cr-level-num" style={{ color: levelColor }}>
-              {data.level}
-            </span>
-            <span className="af-cr-level-name">{data.levelName ?? `Level ${data.level}`}</span>
-            {data.tierGroup ? <span className="af-cr-level-tier">{data.tierGroup}</span> : null}
+        <div className="af-cr-hero">
+          {/*
+            The bundle ships rank art for level 14 only, and the ladder is 25
+            levels. Rather than show the wrong badge to everyone who is not a
+            level 14, the slot states the level until the other 24 arrive.
+          */}
+          <div className="af-cr-badge--none">
+            {data.prestige ? `RANK ART\nPENDING` : 'NO RANK YET'}
           </div>
+          <h1 className="af-cr-handle">{data.handle ?? 'Your career'}</h1>
+          <div className="af-cr-chips">
+            {data.level != null ? (
+              <span className="af-cr-chip af-cr-chip--lvl">
+                LVL {data.level}{data.levelName ? ` · ${data.levelName.toUpperCase()}` : ''}
+              </span>
+            ) : null}
+          </div>
+          <p className="af-cr-subline">
+            {data.seasonsPlayed} {data.seasonsPlayed === 1 ? 'season' : 'seasons'} ·{' '}
+            {nf(distinctLeagues)} {distinctLeagues === 1 ? 'league' : 'leagues'}
+            {data.sports.length ? ` · ${data.sports.map((s) => s.toUpperCase()).join(', ')}` : ''} ·{' '}
+            {nf(data.leaguesPlayed)} completed league-seasons
+          </p>
+        </div>
 
-          {progressPct != null ? (
-            <>
-              <div
-                className="af-cr-bar"
-                role="progressbar"
-                aria-valuenow={progressPct}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-label="Progress to next level"
-              >
-                <div
-                  className="af-cr-bar-fill"
-                  style={{ width: `${progressPct}%`, background: levelColor }}
-                />
+        {prestige ? (
+          <section className="af-cr-panel af-cr-prestige">
+            <Gauge value={prestige.total} />
+            <div className="af-cr-comps">
+              <h2 className="af-cr-comphead">
+                GM PRESTIGE
+                <HelpDot body="Championships 30%, career win rate 20%, tenure 20%, league diversity 15%, playoff appearances 15%. Each part is capped so one huge number can't carry the score — a capped part shows as MAXED." />
+              </h2>
+              {prestige.components.map((c) => (
+                <div key={c.key} className="af-cr-comp">
+                  <span className="af-cr-comp-label">{c.label}</span>
+                  <span className="af-cr-track">
+                    <i className="af-cr-fill" style={{ width: `${c.ratio * 100}%`, background: componentTone(c) }} />
+                  </span>
+                  <span className={`af-cr-comp-val${c.saturated ? ' af-cr-comp-val--max' : ''}`}>
+                    {c.saturated ? 'MAXED' : c.display}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {data.xp ? (
+          <section className="af-cr-panel af-cr-panel--xp">
+            <h2 className="af-cr-xphead">
+              CAREER XP{data.level != null ? ` · LEVEL ${data.level} OF 25` : ''}
+              <HelpDot left body="XP accrues from recorded results across every league you have imported — wins, playoff berths and championships each carry a different weight." />
+            </h2>
+            <div className="af-cr-xprow">
+              <span className="af-cr-xpval">{nf(data.xp.total)}</span>
+              {data.levelName ? <span className="af-cr-xptier">{data.levelName.toUpperCase()}</span> : <span className="af-cr-xptier" />}
+              {data.xp.nextThreshold != null ? (
+                <span className="af-cr-xpnext">next {nf(data.xp.nextThreshold)}</span>
+              ) : null}
+            </div>
+            {data.xp.progressPct != null ? (
+              <div className="af-cr-xpbar">
+                <i style={{ width: `${Math.max(0, Math.min(data.xp.progressPct, 100))}%` }} />
               </div>
-              <div className="af-cr-bar-label">
-                <span>
-                  {data.xpIntoLevel != null && data.xpForLevel != null
-                    ? `${formatInt(data.xpIntoLevel)} / ${formatInt(data.xpForLevel)} XP`
-                    : data.xpTotal != null
-                      ? `${formatInt(data.xpTotal)} XP`
-                      : ''}
-                </span>
-                {data.nextLevelName ? <span>Next: {data.nextLevelName}</span> : null}
+            ) : null}
+            <div className="af-cr-xpfoot">
+              <span className="af-cr-xpfoot-txt">
+                {data.xp.toNext != null && data.nextLevelName
+                  ? `${nf(data.xp.toNext)} XP to ${data.nextLevelName}`
+                  : 'Top of the ladder'}
+              </span>
+              <Link className="af-cr-xplink" href="/core/rankings">Rankings →</Link>
+            </div>
+          </section>
+        ) : null}
+
+        <div className="af-cr-spacer" />
+
+        <div className="af-cr-actions">
+          <Link className="af-cr-btn af-cr-btn--primary" href="/core/career?share=1">Share career card</Link>
+          <Link className="af-cr-btn af-cr-btn--ghost" href="/core/career?view=records">Records</Link>
+        </div>
+      </aside>
+
+      {/* ── Main ──────────────────────────────────────────────────────── */}
+      <div className="af-cr-main">
+        <nav className="af-cr-tabs" aria-label="Career views">
+          {TABS.map((t) =>
+            t.key === 'trophy' ? (
+              <span key={t.key} className="af-cr-tab" aria-current="page">{t.label}</span>
+            ) : (
+              <Link key={t.key} className="af-cr-tab" href={`/core/career?view=${t.key}`}
+                title="Not built yet">{t.label}</Link>
+            )
+          )}
+          <div className="af-cr-tabstats">
+            <span className="af-cr-tabstat">
+              <span className="af-cr-tabstat-l">RECORD</span>
+              <span className={`af-cr-tabstat-v${record ? '' : ' af-cr-tabstat-v--none'}`}>
+                {record ?? 'no games'}
+              </span>
+            </span>
+            <span className="af-cr-tabstat">
+              <span className="af-cr-tabstat-l">WIN %</span>
+              <span className={`af-cr-tabstat-v${data.winRate != null ? ' af-cr-tabstat-v--good' : ' af-cr-tabstat-v--none'}`}>
+                {data.winRate != null ? (data.winRate * 100).toFixed(1) : '—'}
+              </span>
+            </span>
+            <span className="af-cr-tabstat">
+              <span className="af-cr-tabstat-l">RINGS</span>
+              <span className="af-cr-tabstat-v af-cr-tabstat-v--warn">{data.championships}</span>
+            </span>
+          </div>
+        </nav>
+
+        <div className="af-cr-body">
+          {data.isEmpty ? (
+            <div className="af-cr-empty">
+              <p className="af-cr-empty-t">No completed seasons yet.</p>
+              <p className="af-cr-empty-b">
+                The trophy room is built from finished seasons. You have {activeLeagues.length}{' '}
+                {activeLeagues.length === 1 ? 'league' : 'leagues'} in progress — once they finish, your
+                record, rings and career arc land here. Nothing is shown until then rather than a page
+                of zeroes.
+              </p>
+              <Link href="/import?returnTo=%2Fcore%2Fcareer" className="af-cr-btn af-cr-btn--primary">
+                Import past seasons
+              </Link>
+            </div>
+          ) : (
+            <>
+              {/* B1. Shelf */}
+              <div className="af-cr-sechead">
+                <h2 className="af-cr-sectitle">
+                  THE SHELF · {data.championships} {data.championships === 1 ? 'CHAMPIONSHIP' : 'CHAMPIONSHIPS'}
+                </h2>
+                <span className="af-cr-sechint">Every ring links to the league it was won in</span>
+              </div>
+              {titles.length === 0 ? (
+                <div className="af-cr-empty">
+                  <p className="af-cr-empty-t">No championships on record yet.</p>
+                  <p className="af-cr-empty-b">
+                    {nf(data.leaguesPlayed)} completed league-seasons and no title so far. The shelf fills
+                    the first time you win one.
+                  </p>
+                </div>
+              ) : (
+                <div className="af-cr-shelf">
+                  {titles.slice(0, 3).map((t) => (
+                    <div key={`${t.season}-${t.leagueName}`} className="af-cr-ring">
+                      <div className="af-cr-ring-top">
+                        <span className="af-cr-ring-glyph" aria-hidden="true">◉</span>
+                        <span className="af-cr-ring-year">{t.season}</span>
+                        <span className="af-cr-plat" data-platform={t.platform} title={t.platform}>
+                          {t.platform.charAt(0).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="af-cr-ring-name">{t.leagueName}</h3>
+                        {t.record ? <p className="af-cr-ring-detail">{t.record}</p> : null}
+                      </div>
+                      {t.settingsLabel ? <span className="af-cr-ring-set">{t.settingsLabel}</span> : null}
+                    </div>
+                  ))}
+                  {/* Open slot — the live league, never counted in the career. */}
+                  <div className="af-cr-slot">
+                    <span className="af-cr-slot-l">
+                      OPEN SLOT{currentSeason ? ` · ${currentSeason}` : ''}
+                    </span>
+                    {openSlot ? (
+                      <>
+                        <p className="af-cr-slot-h">{openSlot.leagueName}</p>
+                        <p className="af-cr-slot-p">
+                          {openSlot.record
+                            ? `${openSlot.record} this season`
+                            : 'Season has not started'}
+                          {leagueCounts.active > 1 ? ` · ${leagueCounts.active} leagues live` : ''}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="af-cr-slot-p">No leagues in progress this season.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* B2. Lower grid */}
+              <div className="af-cr-lower">
+                <div className="af-cr-lowerleft">
+                  <section className="af-cr-card">
+                    <div className="af-cr-sechead">
+                      <h2 className="af-cr-sectitle">CAREER ARC · WIN RATE BY SEASON</h2>
+                      <span className="af-cr-legend"><i className="af-cr-dot" />title season</span>
+                    </div>
+                    <CareerArc data={data} />
+                  </section>
+
+                  {legacy ? (
+                    <section className="af-cr-card">
+                      <div className="af-cr-legacyhead">
+                        <h2 className="af-cr-sectitle">LEGACY SCORE · WHAT MAKES THE {legacy.total}</h2>
+                        <span className="af-cr-legacytotal">{legacy.total}</span>
+                        <HelpDot left body="Each dimension is scored 0-100 from recorded results, then multiplied by its weight. The bar is those products stacked — they add up to your score." />
+                      </div>
+                      <div className="af-cr-stack">
+                        {legacy.dimensions.map((d) => (
+                          <i key={d.key} style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }} />
+                        ))}
+                      </div>
+                      <div className="af-cr-lgrid">
+                        {legacy.dimensions.map((d) => (
+                          <div key={d.key} className="af-cr-lrow">
+                            <span className="af-cr-swatch" style={{ background: LEGACY_COLORS[d.key] }} />
+                            <span className="af-cr-lname">{d.label}</span>
+                            <span className="af-cr-lmath">{d.score} × {Math.round(d.weight * 100)}%</span>
+                            <span className="af-cr-lcontrib">{d.contribution.toFixed(1)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {legacy.unavailable.length ? (
+                        <>
+                          <div className="af-cr-divider" />
+                          <p className="af-cr-missing">
+                            {legacy.unavailable.join(' and ')} are not scored. {legacy.unavailable.length > 1 ? 'They need' : 'It needs'}{' '}
+                            head-to-head results and an awards record, and an import carries a season
+                            record rather than an opponent ledger. The weights above are re-normalised
+                            across what is measurable, so the score is not quietly depressed by data
+                            nobody has.
+                          </p>
+                        </>
+                      ) : null}
+                    </section>
+                  ) : null}
+                </div>
+
+                <div className="af-cr-side">
+                  <div className="af-cr-counts">
+                    <div className="af-cr-count">
+                      <span className="af-cr-count-l">ACTIVE</span>
+                      <span className="af-cr-count-v">{leagueCounts.active}</span>
+                    </div>
+                    <div className="af-cr-count">
+                      <span className="af-cr-count-l">ARCHIVED</span>
+                      <span className="af-cr-count-v">{leagueCounts.archived}</span>
+                    </div>
+                    <div className="af-cr-count">
+                      <span className="af-cr-count-l">PLAYOFFS</span>
+                      <span className="af-cr-count-v">{nf(data.playoffAppearances)}</span>
+                    </div>
+                  </div>
+
+                  {/*
+                    Hall of Fame and the badge case are the design's other two
+                    right-column cards. Badges are deferred at your direction, and
+                    no hall-of-fame entries exist to render — an empty card that
+                    says "2 entries" with nothing in it would be worse than the
+                    card not being here yet.
+                  */}
+                  <section className="af-cr-card">
+                    <h2 className="af-cr-sectitle">LEAGUES</h2>
+                    <p className="af-cr-caption">
+                      {nf(distinctLeagues)} leagues across {data.seasonsPlayed}{' '}
+                      {data.seasonsPlayed === 1 ? 'season' : 'seasons'} — {leagueCounts.active} live,{' '}
+                      {leagueCounts.archived} archived
+                      {leagueCounts.completed > 0 ? `, ${leagueCounts.completed} finished this season` : ''}.
+                      A league is archived when it has history but no entry this season.
+                    </p>
+                  </section>
+                </div>
               </div>
             </>
-          ) : null}
-        </section>
-      ) : null}
-
-      <div className="af-cr-grid">
-        <div className="af-cr-stat">
-          <span className="af-cr-stat-label">Record</span>
-          {record ? (
-            <span className="af-cr-stat-value af-num">{record}</span>
-          ) : (
-            <span className="af-cr-stat-value af-cr-stat-value--none">no games recorded</span>
           )}
-        </div>
-
-        <div className="af-cr-stat">
-          <span className="af-cr-stat-label">Win rate</span>
-          {winRate != null ? (
-            <span className="af-cr-stat-value af-num">{winRate}%</span>
-          ) : (
-            <span className="af-cr-stat-value af-cr-stat-value--none">
-              no games behind it yet
-            </span>
-          )}
-        </div>
-
-        <div className="af-cr-stat">
-          <span className="af-cr-stat-label">Championships</span>
-          <span className="af-cr-stat-value af-num">{formatInt(stats?.championships ?? 0)}</span>
-        </div>
-
-        <div className="af-cr-stat">
-          <span className="af-cr-stat-label">Playoff runs</span>
-          <span className="af-cr-stat-value af-num">
-            {formatInt(stats?.playoffAppearances ?? 0)}
-          </span>
-          {playoffRate != null ? (
-            <span className="af-cr-stat-note">{playoffRate}% of leagues played</span>
-          ) : null}
-        </div>
-
-        <div className="af-cr-stat">
-          <span className="af-cr-stat-label">Seasons</span>
-          <span className="af-cr-stat-value af-num">{formatInt(stats?.seasonsPlayed ?? 0)}</span>
-        </div>
-
-        <div className="af-cr-stat">
-          <span className="af-cr-stat-label">Leagues</span>
-          <span className="af-cr-stat-value af-num">{formatInt(leaguesPlayed)}</span>
         </div>
       </div>
-
-      {/*
-        The grade renders ONLY when a report exists. legacy_ai_reports has held no
-        rows, which is why the rank route stopped defaulting this to 70 / "C-" —
-        rendering the letter here anyway would put that fabrication straight back
-        on screen.
-      */}
-      {rank?.aiScore != null && rank.aiReportGrade ? (
-        <section className="af-cr-level">
-          <div className="af-cr-level-top">
-            <span className="af-cr-level-num" style={{ color: levelColor }}>
-              {rank.aiReportGrade}
-            </span>
-            <span className="af-cr-level-name">Chimmy&apos;s read</span>
-          </div>
-          {rank.aiInsight ? <p className="af-cr-sub">{rank.aiInsight}</p> : null}
-        </section>
-      ) : null}
-
-      {data.rankCalculatedAt ? (
-        <p className="af-cr-foot">
-          Last calculated {new Date(data.rankCalculatedAt).toLocaleDateString('en-US')}.
-        </p>
-      ) : null}
     </div>
   )
 }
