@@ -32,9 +32,14 @@ export type CoreIssue = {
   title: string
   /** "Sleeper › Lineup · locks in 1h 04m" — platform, area, then the specifics. */
   meta: string
-  leagueId: string
-  leagueName: string
-  platform: string
+  /*
+   * Nullable because not every issue belongs to one league. The collapsed
+   * stale-sync row stands for all of them at once, and pinning it to an
+   * arbitrary member would make the row lie about what it describes.
+   */
+  leagueId: string | null
+  leagueName: string | null
+  platform: string | null
   /** Absolute deadline, when one is known. Drives sort and the urgent styling. */
   deadline: Date | null
   action: { label: string; href: string; external: boolean } | null
@@ -85,6 +90,8 @@ export function deriveOutstandingIssues(input: {
 }): OutstandingIssuesResult {
   const now = input.now ?? new Date()
   const issues: CoreIssue[] = []
+  /** Held back so they can be collapsed when there are too many to act on. */
+  const staleIssues: CoreIssue[] = []
 
   for (const league of input.leagues) {
     const platform = String(league.platform ?? '').toLowerCase()
@@ -115,7 +122,7 @@ export function deriveOutstandingIssues(input: {
     const lastSync = input.lastSyncByLeague?.[league.id] ?? null
     const age = describeAge('roster', lastSync, now)
     if (age.stale) {
-      issues.push({
+      staleIssues.push({
         id: `${league.id}:stale`,
         severity: 'warn',
         glyph: '◷',
@@ -135,6 +142,49 @@ export function deriveOutstandingIssues(input: {
         action: action ? { ...action, external: true } : null,
       })
     }
+  }
+
+  /*
+   * ⚠ COLLAPSE THE STALE-SYNC ROWS ABOVE A HANDFUL. Measured on production: one
+   * account produced 604 of them, every row reading "League data is stale —
+   * <name> · never read", and they buried the queue completely — the screen that
+   * is supposed to answer "what needs me now" answered it 604 times with the
+   * same sentence.
+   *
+   * The per-league rows are only useful while you can act on them one at a time.
+   * Past that they are one fact about the account, not N facts about N leagues,
+   * and the honest presentation is to say it once with the count. The individual
+   * rows are not dropped silently — the aggregate states how many it stands for,
+   * and it carries the same action as the rows it replaces.
+   */
+  const STALE_ROW_LIMIT = 3
+  if (staleIssues.length > STALE_ROW_LIMIT) {
+    const neverRead = staleIssues.filter((i) => i.meta?.includes('never read')).length
+    // Every stale row is per-league so it always carries a platform; the filter
+    // is for the type, which cannot know that.
+    const platforms = [...new Set(staleIssues.map((i) => i.platform).filter((p): p is string => p != null))]
+    issues.push({
+      id: 'stale:aggregate',
+      severity: 'warn',
+      glyph: '◷',
+      title:
+        neverRead === staleIssues.length
+          ? `${staleIssues.length} leagues have never been read`
+          : `${staleIssues.length} leagues have stale data`,
+      meta:
+        platforms.length === 1
+          ? `${titleCasePlatform(platforms[0])} › Sync · nothing has been read for these leagues yet`
+          : `${platforms.length} platforms › Sync · nothing has been read for these leagues yet`,
+      // Deliberately not scoped to one league — it is about all of them, and
+      // pinning it to an arbitrary member would make the row lie about itself.
+      leagueId: null,
+      leagueName: null,
+      platform: platforms.length === 1 ? platforms[0] : null,
+      deadline: null,
+      action: null,
+    })
+  } else {
+    issues.push(...staleIssues)
   }
 
   // Soonest deadline first, exactly as the handoff sorts it. Issues without a

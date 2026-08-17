@@ -75,6 +75,13 @@ export type AfCoreShellProps = {
   children: React.ReactNode
 }
 
+/**
+ * How many league tiles the rail shows before handing off to Portfolio. Eight
+ * fits above the fold at the shortest viewport the shell targets; beyond that
+ * the rail stops being scannable anyway.
+ */
+const RAIL_TILE_LIMIT = 8
+
 function navItems(props: AfCoreShellProps): NavItem[] {
   return [
     { key: 'home', label: 'Home', glyph: '▣', href: '/core' },
@@ -203,7 +210,14 @@ export function AfCoreShell(props: AfCoreShellProps) {
 
         <div className="af-rail-divider" />
 
-        {leagues.map((l) => (
+        {/*
+          ⚠ CAPPED. The rail is a switcher, not an inventory. Seen on production:
+          an account with 604 leagues rendered 604 tiles down a fixed-width column,
+          running many screens past the fold and pushing the add button and the
+          profile link somewhere nobody would ever scroll to. Portfolio is the
+          screen that lists everything; this shows the first few and hands off.
+        */}
+        {leagues.slice(0, RAIL_TILE_LIMIT).map((l) => (
           <Link
             key={l.id}
             href={`/core?league=${encodeURIComponent(l.id)}`}
@@ -216,6 +230,17 @@ export function AfCoreShell(props: AfCoreShellProps) {
             {l.hasAlert ? <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} /> : null}
           </Link>
         ))}
+
+        {leagues.length > RAIL_TILE_LIMIT ? (
+          <Link
+            href="/core/portfolio"
+            className="af-rail-tile af-rail-more"
+            title={`${leagues.length - RAIL_TILE_LIMIT} more leagues — open Portfolio`}
+            aria-label={`${leagues.length - RAIL_TILE_LIMIT} more leagues. Open Portfolio to see all of them.`}
+          >
+            +{leagues.length - RAIL_TILE_LIMIT > 99 ? '99' : leagues.length - RAIL_TILE_LIMIT}
+          </Link>
+        ) : null}
 
         <Link href="/import" className="af-rail-tile af-rail-add" aria-label="Add a league">
           +
