@@ -38,12 +38,13 @@ export type CareerPlatform = string
  * of the live three while every 2020–2025 row is `complete`. So the split needs
  * no heuristic.
  *
- * ⚠ `archived` IS NOT IN THE DATA. Nothing in either table marks a league
- * archived, so nothing here can return it honestly. The type carries the case so
- * the UI can be written against the full set, and `classifyStatus` will start
- * returning it the moment a real signal exists — a rule (last season older than
- * N years and never continued) or a column. Until then no league is archived,
- * rather than some heuristic quietly labelling live leagues dead.
+ * ⚠ `archived` IS NOT A ROW STATUS AND `classifyStatus` NEVER RETURNS IT. That
+ * is the whole point of the distinction: `status` describes a league-SEASON
+ * ("this year's edition finished"), while archived is a property of the LEAGUE
+ * ("it ran, and it is not running now"). No row can carry it, because a 2023 row
+ * looks identical whether the league died in 2023 or is still going in 2026.
+ * It is resolved one level up, in `rollUpLeagues`, by asking whether the league
+ * appears in the current season at all.
  */
 export type LeagueLifecycle = 'active' | 'completed' | 'archived' | 'unknown'
 
@@ -52,6 +53,38 @@ export function classifyStatus(status: string | null | undefined): LeagueLifecyc
   if (s === 'complete' || s === 'completed') return 'completed'
   if (s === 'in_season' || s === 'drafting' || s === 'pre_draft' || s === 'setup') return 'active'
   return 'unknown'
+}
+
+/**
+ * One league across every season of it, with its lifecycle resolved.
+ *
+ * ⚠ THE ARCHIVED RULE: a league is archived when it has recorded history and no
+ * entry in the CURRENT season. Not an age cutoff — "older than two years" would
+ * archive a league that simply skipped a year and came back, and would also
+ * archive everything for a user who stopped importing. Absence from the current
+ * season is the signal that means what a person means by archived: it ran, and
+ * you are not in it now.
+ *
+ * The current season is taken from the data (the newest season the user has),
+ * not from the clock. A user whose newest import is 2025 should see their 2025
+ * leagues as current rather than have the entire portfolio go archived because
+ * the calendar rolled over.
+ *
+ * It is DERIVED, never stored, so a returning league un-archives itself the
+ * moment a new season lands. Nothing has to be migrated or un-set.
+ */
+export type CareerLeague = {
+  /** Lower-cased name — the identity key across seasons. */
+  key: string
+  name: string
+  platform: CareerPlatform
+  sport: string | null
+  firstSeason: number
+  lastSeason: number
+  /** How many seasons of this league are on record. */
+  seasonCount: number
+  championships: number
+  lifecycle: LeagueLifecycle
 }
 
 /** A league still being played — the design's "open slot", never career totals. */
@@ -142,6 +175,11 @@ export type CareerData = {
    * the number a human means by "how many leagues am I in".
    */
   distinctLeagues: number
+  /** Every league, one row each, with its lifecycle resolved. */
+  leagues: CareerLeague[]
+  /** The season "now" is measured against — the newest the user has, not the clock. */
+  currentSeason: number | null
+  leagueCounts: { active: number; completed: number; archived: number; unknown: number }
   /** Still being played — the design's open slot. Never in career totals. */
   activeLeagues: ActiveLeague[]
   /** Rows whose status we could not classify, so the UI can be honest about them. */
@@ -308,6 +346,80 @@ function dynastyScore(input: {
   return Math.max(0, Math.min(100, Math.round((titleLift * 0.6 + runLift * 0.4) * 100)))
 }
 
+/**
+ * Collapse league-seasons into leagues and resolve each one's lifecycle.
+ *
+ * A league is:
+ *   active    — it has an entry in the current season whose status is live
+ *   completed — its current-season entry is finished (this year's edition is done)
+ *   archived  — it has history but NO entry in the current season at all
+ *
+ * `currentSeason` comes from the data rather than the clock, so a user who has
+ * not imported this year still sees their newest season as current instead of
+ * having every league they own flip to archived on New Year's Day.
+ */
+export function rollUpLeagues(
+  rows: Array<{
+    key: string
+    name: string
+    platform: CareerPlatform
+    sport: string | null
+    season: number
+    status: string | null
+    isChampion: boolean
+  }>
+): { leagues: CareerLeague[]; currentSeason: number | null } {
+  if (rows.length === 0) return { leagues: [], currentSeason: null }
+
+  const currentSeason = rows.reduce((m, r) => Math.max(m, r.season), rows[0].season)
+
+  const byKey = new Map<string, CareerLeague & { currentRowStatuses: LeagueLifecycle[] }>()
+  for (const r of rows) {
+    let entry = byKey.get(r.key)
+    if (!entry) {
+      entry = {
+        key: r.key,
+        name: r.name,
+        platform: r.platform,
+        sport: r.sport,
+        firstSeason: r.season,
+        lastSeason: r.season,
+        seasonCount: 0,
+        championships: 0,
+        lifecycle: 'unknown',
+        currentRowStatuses: [],
+      }
+      byKey.set(r.key, entry)
+    }
+    entry.firstSeason = Math.min(entry.firstSeason, r.season)
+    entry.lastSeason = Math.max(entry.lastSeason, r.season)
+    entry.seasonCount += 1
+    if (r.isChampion) entry.championships += 1
+    if (r.season === currentSeason) entry.currentRowStatuses.push(classifyStatus(r.status))
+  }
+
+  const leagues: CareerLeague[] = [...byKey.values()].map((e) => {
+    const { currentRowStatuses, ...league } = e
+    let lifecycle: LeagueLifecycle
+    if (currentRowStatuses.length === 0) {
+      // Nothing this season — it ran and it is not running now.
+      lifecycle = 'archived'
+    } else if (currentRowStatuses.includes('active')) {
+      lifecycle = 'active'
+    } else if (currentRowStatuses.includes('completed')) {
+      lifecycle = 'completed'
+    } else {
+      lifecycle = 'unknown'
+    }
+    return { ...league, lifecycle }
+  })
+
+  leagues.sort(
+    (a, b) => b.lastSeason - a.lastSeason || a.name.localeCompare(b.name)
+  )
+  return { leagues, currentSeason }
+}
+
 export async function getCareerData(
   userId: string,
   platformFilter?: string | null
@@ -423,6 +535,16 @@ export async function getCareerData(
   const titles: CareerTitle[] = []
   const activeLeagues: ActiveLeague[] = []
   const distinctNames = new Set<string>()
+  /** Every league-season seen, live or finished — the input to the lifecycle rollup. */
+  const leagueSeasonRows: Array<{
+    key: string
+    name: string
+    platform: CareerPlatform
+    sport: string | null
+    season: number
+    status: string | null
+    isChampion: boolean
+  }> = []
   let leaguesPlayed = 0
   let unknownStatusCount = 0
   // League size, gathered only from completed entries — dynasty is measured
@@ -448,7 +570,17 @@ export async function getCareerData(
     const k = key(platform, row.season, row.name)
     if (seen.has(k)) continue
     seen.add(k)
-    if (row.name?.trim()) distinctNames.add(row.name.trim().toLowerCase())
+    const importName = row.name?.trim() || 'Unnamed league'
+    if (row.name?.trim()) distinctNames.add(importName.toLowerCase())
+    leagueSeasonRows.push({
+      key: importName.toLowerCase(),
+      name: importName,
+      platform,
+      sport: row.sport,
+      season: row.season,
+      status: row.status,
+      isChampion: row.import_won_championship === true,
+    })
 
     const w = row.import_wins ?? 0
     const l = row.import_losses ?? 0
@@ -502,6 +634,16 @@ export async function getCareerData(
 
     const roster = league.rosters[0]
     if (!roster) continue
+
+    leagueSeasonRows.push({
+      key: league.name.trim().toLowerCase(),
+      name: league.name,
+      platform,
+      sport: league.sport,
+      season: league.season,
+      status: league.status,
+      isChampion: roster.isChampion,
+    })
 
     const lifecycle = classifyStatus(league.status)
     if (lifecycle === 'unknown') unknownStatusCount += 1
@@ -675,12 +817,34 @@ export async function getCareerData(
   titles.sort((a, b) => b.season - a.season)
   activeLeagues.sort((a, b) => b.season - a.season || a.leagueName.localeCompare(b.leagueName))
 
+  const { leagues: rolledLeagues, currentSeason: rolledCurrentSeason } =
+    rollUpLeagues(leagueSeasonRows)
+  const leagueCounts = rolledLeagues.reduce(
+    (acc, l) => {
+      acc[l.lifecycle] += 1
+      return acc
+    },
+    { active: 0, completed: 0, archived: 0, unknown: 0 }
+  )
+
   return {
     platforms: [...platformsSeen].sort(),
     platform: wanted,
     seasonsPlayed,
     leaguesPlayed,
-    distinctLeagues: distinctNames.size,
+    /*
+     * ⚠ DERIVED FROM THE ROLLUP, NOT FROM A SEPARATE NAME SET. Counting names
+     * independently produced 287 while the rollup produced 271, because the name
+     * set was filled before the "does this league have an owner roster" check and
+     * the rollup after it — 16 legacy leagues carry no roster row for this user.
+     * Two different answers to "how many leagues" on the same screen is the kind
+     * of thing that makes every other number look untrustworthy, so there is now
+     * one source.
+     */
+    distinctLeagues: rolledLeagues.length,
+    leagues: rolledLeagues,
+    currentSeason: rolledCurrentSeason,
+    leagueCounts,
     activeLeagues,
     unknownStatusCount,
     wins,
