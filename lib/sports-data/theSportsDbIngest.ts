@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
+import { describeFailure, parseV1Body } from '@/lib/sports-data/theSportsDbContract'
 
 /**
  * TheSportsDB ingestion — everything the provider actually serves.
@@ -109,19 +110,50 @@ const intOf = (v: unknown): number | null => {
 async function v1<T>(path: string, params: Record<string, string>): Promise<T | null> {
   const key = getTheSportsDbApiKeyOrFallback()
   const qs = new URLSearchParams(params).toString()
+
+  let text: string
   try {
     // db-first-exception: provider ingestion writer — fetch -> sports_* tables, not a read path
     const url = `${V1}/${key}/${path}?${qs}`
     const res = await fetch(url, { signal: AbortSignal.timeout(30_000) })
     if (!res.ok) return null
-    const text = await res.text()
-    // Dead endpoints answer an HTML error page with a 200, which JSON.parse would
-    // throw on — treat it as "no data" rather than crashing the whole sweep.
-    if (!text.trim() || text.trimStart().startsWith('<')) return null
-    return JSON.parse(text) as T
+    text = await res.text()
   } catch {
     return null
   }
+
+  // The envelope is hostile: a rejected request answers HTTP 200 with the error
+  // message sitting IN the data slot -- {"events":"Invalid League ID passed"}.
+  // Returning that verbatim let a 24-character string flow on as if it were
+  // rows: `data?.teams?.length` reads 24 and passes a truthiness check, so a
+  // sweep reported "24 fetched, 0 written" -- a rejected request wearing the
+  // costume of a write failure. See contracts/thesportsdb/GAPS.md R-18.
+  const parsed = parseV1Body(text)
+
+  if (!parsed.ok) {
+    if (parsed.reason === 'unrecognized_envelope' && parsed.keys.length > 1) {
+      // Multi-key envelopes are not a shape any committed fixture shows. Rather
+      // than drop data on an endpoint that has never been probed, keep the old
+      // behaviour and say so.
+      console.warn(`[tsdb] ${path}: ${describeFailure(parsed)} — passing through unparsed`)
+      try {
+        return JSON.parse(text) as T
+      } catch {
+        return null
+      }
+    }
+
+    // api_error is the one worth shouting about: nothing else in the response
+    // distinguishes it from success.
+    if (parsed.reason === 'api_error') {
+      console.warn(`[tsdb] ${path}: ${describeFailure(parsed)}`)
+    }
+    return null
+  }
+
+  // Same envelope shape callers already destructure, but the data slot is now
+  // guaranteed to be an array.
+  return { [parsed.key]: parsed.rows } as T
 }
 
 async function v2Json<T>(path: string): Promise<T | null> {
