@@ -13,6 +13,7 @@ import {
   type AdmissionErrorCode,
 } from "@/lib/beta-invite/betaAdmissionService";
 import { BETA_ADMISSION_COOKIE } from "@/lib/beta-invite/betaAdmissionCookie";
+import { SIGNUP_CONSENT_COOKIE, isConsentCookieValue } from "@/lib/auth/signupConsentCookie";
 
 const OAUTH_PLACEHOLDER_BCRYPT_ROUNDS = 10;
 
@@ -36,6 +37,21 @@ async function readOAuthAdmissionToken(): Promise<string | null> {
     return store.get(BETA_ADMISSION_COOKIE)?.value ?? null;
   } catch {
     return null;
+  }
+}
+
+/**
+ * The signup consent tick, carried across the provider redirect (see signupConsentCookie).
+ * Absent for a sign-in that did not originate at /signup, which is correct: nothing was
+ * ticked, so nothing is recorded. Never throws — a failed read must not block sign-in.
+ */
+async function readSignupConsentCookie(): Promise<boolean> {
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    return isConsentCookieValue(store.get(SIGNUP_CONSENT_COOKIE)?.value);
+  } catch {
+    return false;
   }
 }
 
@@ -453,6 +469,10 @@ export async function linkSocialAccountToAppUser(
     await ensureSharedAccountProfile({
       userId: user.id,
       displayName: user.displayName,
+      // The 18+/terms tick from /signup, carried across the provider redirect. Without
+      // this an OAuth account was created with ageConfirmedAt null even when the user had
+      // checked the box, and every later gate then reported they never confirmed.
+      ageConfirmed: await readSignupConsentCookie(),
     });
   } catch (error) {
     console.error(

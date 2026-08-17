@@ -558,7 +558,17 @@ export default function SignupContent() {
           <span>or continue with</span>
         </div>
 
-        <NocturneOAuthGrid callbackUrl={postSignupDestination} />
+        {/* The consent checkbox governs OAuth signup exactly as it governs the credentials
+            submit. Previously only `callbackUrl` was passed, so a tick made here never
+            reached the server and the resulting account had no age confirmation recorded. */}
+        <NocturneOAuthGrid
+          callbackUrl={postSignupDestination}
+          consent={{
+            granted: consentChecked,
+            onMissing: () =>
+              setError("Please confirm you're 18+ and agree to the terms to continue."),
+          }}
+        />
 
         <p
           style={{
