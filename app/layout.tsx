@@ -138,6 +138,31 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <link rel="stylesheet" href="/railway-styles.css" />
         ) : null}
 
+        {/*
+          The core-app design handoff's two typefaces. Every .af-core surface
+          asks for Archivo and JetBrains Mono by name, and nothing was loading
+          them, so all of it fell through to system-ui and generic monospace —
+          the display headings and the mono labels are most of that design's
+          character, and none of it was reaching a user.
+
+          Loaded here rather than from af-core.css because an @import inside a
+          route-bundled CSS file is dropped whenever another af-*.css is
+          concatenated ahead of it (measured: af-geo.css was). This is the same
+          <link> mechanism the railway-styles fallback above already uses, and
+          the one place ordering is guaranteed.
+
+          Global, but inert for every page that does not name these families:
+          the browser fetches the small stylesheet and downloads a font file
+          only when matching text is actually rendered. Weights are exactly the
+          handoff's — Archivo 400/600/700/800/900, JetBrains Mono 400/500/700/800.
+        */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap"
+        />
+
         {metaPixelId ? (
           <script
             id="meta-pixel-immediate-bootstrap"

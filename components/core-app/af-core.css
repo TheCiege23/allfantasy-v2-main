@@ -22,6 +22,31 @@
  * correctly even before any mode attribute is applied.
  */
 
+/*
+ * ⚠ THE HANDOFF'S TWO TYPEFACES ARE LOADED FROM app/layout.tsx, NOT FROM HERE.
+ *
+ * Every rule in this folder asks for `var(--font-archivo, 'Archivo', …)` and
+ * `var(--font-jetbrains-mono, 'JetBrains Mono', …)`, but neither variable was
+ * ever defined and nothing pulled the families in — so all of it silently
+ * resolved to the tail of the fallback chain, system-ui and generic monospace.
+ * The surface rendered in the wrong type from the day it shipped. No test could
+ * catch it: every declaration is present and valid, only the font was missing.
+ *
+ * ⚠ DO NOT "FIX" THIS BY PUTTING @import BACK AT THE TOP OF THIS FILE. That was
+ * the first attempt and it does not work, for a reason that is invisible in the
+ * source: Next concatenates this file into one route bundle with the other
+ * af-*.css files, and af-geo.css lands ahead of it. By the time the parser
+ * reaches the @import, seven style rules have already gone by, and CSS requires
+ * @import to precede every rule — so the browser drops it silently. Measured:
+ * the rule was present at line 80 of the served bundle and
+ * document.styleSheets contained no import rule at all. Bundle order is not
+ * something this file can control, so the load belongs where order is certain.
+ *
+ * The same trap applies to the @import in
+ * components/dashboard/adaptive/adaptive-dashboard.css, which is where this
+ * approach was copied from.
+ */
+
 .af-core {
   --bg: #06070f;
   --surface: #0d1020;
@@ -113,6 +138,25 @@ html[data-mode='light'] .af-core {
   --tier-blue-soft: rgba(24, 95, 165, 0.1);
 }
 
+/*
+ * ⚠ THIS BLOCK WAS NOT PORTED VERBATIM, DESPITE WHAT THE HEADER ABOVE CLAIMED.
+ * It was hand-typed: nine tokens carried approximated values (--text #f4f0ff
+ * against the handoff's #f4efff, --chip re-tinted purple against a plain white
+ * wash, and a --hero whose second gradient was pink rgba(236,72,153) where the
+ * handoff specifies teal rgba(94,234,212)), and twenty-one were simply absent.
+ *
+ * Absent is the worse half. A token missing here does not fail — it inherits the
+ * dark value from `.af-core` above, so AF mode rendered dark mode's semantics
+ * and platform marks while looking deliberate. Thirteen of those twenty-one
+ * genuinely differ between dark and AF in the handoff: --good/--bad and their
+ * -soft pairs, every Sleeper/ESPN/green platform mark, and the whole --tier-blue
+ * trio. The other eight are identical to dark and were inheriting correctly by
+ * coincidence; they are written out anyway so the next edit to dark cannot
+ * silently drag AF along with it.
+ *
+ * Now diffed against design_handoff_core_app/tokens.css programmatically —
+ * all 39 tokens present and byte-identical, as light and dark already were.
+ */
 html[data-mode='af'] .af-core {
   --bg: #0d0819;
   --surface: #170f2b;
@@ -120,19 +164,40 @@ html[data-mode='af'] .af-core {
   --rail: #120b22;
   --line: rgba(167, 139, 250, 0.16);
   --line2: rgba(167, 139, 250, 0.3);
-  --text: #f4f0ff;
-  --text2: #d9cffb;
-  --muted: #a394d0;
-  --faint: #6f5f9c;
+  --text: #f4efff;
+  --text2: #dbd0f7;
+  --muted: #a99ecb;
+  --faint: #7b6fa4;
   --accent: #a78bfa;
-  --accent-ink: #12071f;
+  --accent-ink: #120b22;
   --accent-soft: rgba(167, 139, 250, 0.14);
-  --accent-line: rgba(167, 139, 250, 0.34);
-  --chip: rgba(167, 139, 250, 0.08);
-  --chip-line: rgba(167, 139, 250, 0.18);
+  --accent-line: rgba(167, 139, 250, 0.36);
+  --good: #5eead4;
+  --warn: #fbbf24;
+  --bad: #fb7185;
+  --good-soft: rgba(94, 234, 212, 0.12);
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --bad-soft: rgba(251, 113, 133, 0.12);
+  --chip: rgba(255, 255, 255, 0.05);
+  --chip-line: rgba(255, 255, 255, 0.1);
   --hero: radial-gradient(760px 420px at 18% 10%, rgba(167, 139, 250, 0.18), transparent 68%),
-    radial-gradient(600px 380px at 88% 30%, rgba(236, 72, 153, 0.12), transparent 70%);
+    radial-gradient(600px 380px at 88% 30%, rgba(94, 234, 212, 0.1), transparent 70%);
   --chimmy: linear-gradient(160deg, #241640, #170f2b 58%);
+  --shadow: 0 40px 120px -60px rgba(0, 0, 0, 0.9);
+  --p-sleeper-bg: #1e2450;
+  --p-sleeper-fg: #b4c8ff;
+  --p-espn-bg: #48163a;
+  --p-espn-fg: #ffb8d4;
+  --p-yahoo-bg: #3a1d55;
+  --p-yahoo-fg: #dcb4ff;
+  --p-green-bg: #123a3a;
+  --p-green-fg: #8ff0e2;
+  --p-gold-bg: #3a2a12;
+  --p-gold-fg: #f6c445;
+  --p-gold-soft: rgba(246, 196, 69, 0.14);
+  --tier-blue: #8f8bf0;
+  --tier-blue-fg: #b9b3ff;
+  --tier-blue-soft: rgba(143, 139, 240, 0.2);
 }
 
 /*
