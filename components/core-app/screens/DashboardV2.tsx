@@ -1,4 +1,5 @@
 import { LeaguePanel } from '@/components/core-app/dash-v2/LeaguePanel'
+import { ToolsGrid } from '@/components/core-app/dash-v2/ToolsGrid'
 import { SectionHeader } from '@/components/core-app/dash-v2/SectionHeader'
 import { Priorities } from '@/components/core-app/dash-v2/Priorities'
 import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
@@ -88,6 +89,22 @@ export function DashboardV2({
         leagues={leagues}
         totalLeagues={total}
         commissionerCount={commissionerCount}
+        /*
+         * The identity footer shows the career level beside the name. It comes
+         * from the same `career` object Rankings & Legacy renders, so the two
+         * cannot disagree — and it is omitted rather than defaulted when the
+         * career engine has no level for this account, because "LEVEL 1" on an
+         * unranked account is a measurement nobody took.
+         */
+        levelLabel={
+          career?.levelName
+            ? career.level != null
+              ? `LEVEL ${career.level} · ${career.levelName}`
+              : career.levelName
+            : career?.level != null
+              ? `LEVEL ${career.level}`
+              : null
+        }
         /*
          * `quiet` only — never quiet + overflow. The Dash34Data type carries an
          * explicit warning that adding them printed "53 leagues are quiet —
@@ -241,6 +258,21 @@ export function DashboardV2({
             counter={career?.level != null ? `LEVEL ${career.level}` : null}
           />
           <Legacy data={career} />
+        </section>
+
+        {/*
+          The handoff's six-tile grid. It sits last because every tile is a way
+          OUT of this screen — the sections above are what the dashboard is for,
+          and a grid of exits above them competes with the work.
+        */}
+        <section>
+          <SectionHeader label="Tools" />
+          <ToolsGrid
+            totalLeagues={total}
+            commissionerCount={commissionerCount}
+            levelName={career?.levelName ?? null}
+            hasCareer={Boolean(career && !career.isEmpty)}
+          />
         </section>
       </main>
 

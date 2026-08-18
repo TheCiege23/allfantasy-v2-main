@@ -29,17 +29,36 @@ export function ChimmyFab({ unread = 0 }: { unread?: number }) {
 
   if (!open) {
     return (
-      <button
-        type="button"
-        className="af-d2-fab"
-        onClick={() => setOpen(true)}
-        aria-label="Ask Chimmy"
-      >
-        <span className="af-d2-fab-mark" aria-hidden>
-          CH
-        </span>
-        {unread > 0 ? <span className="af-d2-fab-badge af-num">{unread}</span> : null}
-      </button>
+      /*
+       * The launcher is the "Ask Chimmy" pill plus the robot-king mark, per the
+       * handoff. The label ships because a bare avatar in the corner does not
+       * say what it does — and this is the one control on the screen that costs
+       * tokens to use, so it should be opened deliberately rather than poked at.
+       *
+       * ⚠ THE ART ALREADY EXISTED AND NOTHING USED IT. public/af-robot-king.png
+       * has been in the repo the whole time while this rendered the letters
+       * "CH". Plain <img>, not next/image: a small static local asset where the
+       * optimiser buys nothing.
+       */
+      <div className="af-d2-fab-wrap">
+        <button
+          type="button"
+          className="af-d2-fab-pill"
+          onClick={() => setOpen(true)}
+        >
+          Ask Chimmy
+        </button>
+        <button
+          type="button"
+          className="af-d2-fab"
+          onClick={() => setOpen(true)}
+          aria-label="Ask Chimmy"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img className="af-d2-fab-img" src="/af-robot-king.png" alt="" width={58} height={58} />
+          {unread > 0 ? <span className="af-d2-fab-badge af-num">{unread}</span> : null}
+        </button>
+      </div>
     )
   }
 
@@ -47,7 +66,8 @@ export function ChimmyFab({ unread = 0 }: { unread?: number }) {
     <section className="af-d2-chat" aria-label="Ask Chimmy">
       <header className="af-d2-chat-head">
         <span className="af-d2-chat-mark" aria-hidden>
-          CH
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/af-robot-king.png" alt="" width={30} height={30} />
         </span>
         <span className="af-d2-chat-who">
           <span className="af-d2-chat-name">Chimmy</span>

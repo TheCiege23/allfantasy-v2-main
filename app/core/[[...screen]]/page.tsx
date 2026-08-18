@@ -334,7 +334,12 @@ export default async function AfCorePage({
        */
       getDraftHqAll(
         userId,
-        playedLeagues.map((l) => ({ id: l.id, name: l.name, platform: String(l.platform ?? '') })),
+        playedLeagues.map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: String(l.platform ?? ''),
+          imageUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
+        })),
       ).catch(() => null),
       getWeekAll(
         userId,

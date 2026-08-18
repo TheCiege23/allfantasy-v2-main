@@ -1047,28 +1047,41 @@
 /* A 61-row inventory should scroll inside its own box, not the page. */
 .af-core .af-d2-portfolio { max-height: 420px; overflow-y: auto; }
 
-/* ── FAB clears the app's floating mode toggle ───────────────────────── */
+/* ── FAB clearance ───────────────────────────────────────────────────── */
 
 /*
- * The global theme switch is a fixed control in the same bottom-right corner, and
- * it sits ABOVE the Chimmy launcher — the launcher was unreachable behind it.
- * Raising the FAB clears it rather than moving a control the rest of the app
- * shares. Both stay in the corner; only one of them is ours to move.
+ * ⚠ THE DESKTOP 92px LIFT IS GONE, AND ONLY BECAUSE THE THING IT CLEARED IS.
+ * The launcher used to sit under the app's floating mode toggle in the same
+ * bottom-right corner, so it was raised to stay clickable. That toggle no longer
+ * renders on either dashboard route — `GlobalModeToggle` bails on `/dashboard`
+ * and on `/core/dashboard-v2`, because the one appearance control now lives in
+ * the settings popup under the user's name. Leaving the lift in would float the
+ * launcher 92px above an empty corner.
+ *
+ * ⚠ THE LIFT IS STILL REQUIRED BELOW 900px, FOR A DIFFERENT REASON. The mobile
+ * bottom tab bar is 56px at `bottom: 0` and switches on at the 900px stacking
+ * breakpoint — NOT at 640px. Dropping the launcher to its 22px base across the
+ * whole range would land it on top of the tab bar between 641px and 900px, which
+ * is exactly the gap the previous 640px-only rule left open.
  */
-.af-core .af-d2-fab { bottom: 92px; }
-.af-core .af-d2-chat { bottom: 92px; }
+/* Only the chat panel is positioned here now. The launcher moved inside
+   .af-d2-fab-wrap, which owns the corner and its tab-bar clearance. */
+@media (max-width: 900px) {
+  .af-core .af-d2-chat { bottom: 88px; }
+}
 
 @media (max-width: 640px) {
-  .af-core .af-d2-fab { bottom: 88px; }
+  /* Full-width bottom sheet on a phone, so it meets the tab bar rather than
+     floating above it. */
   .af-core .af-d2-chat { bottom: 0; }
 }
 
 /* The left panel scrolls independently so a 61-league list never pushes the
-   import CTA or the theme switch out of reach. */
+   import CTA or the identity footer out of reach. */
 /*
  * Desktop only. The panel is a fixed-width column beside the main content, so
- * pinning it and letting it scroll internally keeps the import CTA and theme
- * switch reachable at 61 leagues. Reset below the stacking breakpoint: once the
+ * pinning it and letting it scroll internally keeps the import CTA and the
+ * identity footer reachable at 61 leagues. Reset below the stacking breakpoint: once the
  * panel sits ABOVE the content, a sticky 100vh scroll box would occupy the whole
  * first screen and trap the page scroll behind it.
  */
@@ -1231,5 +1244,775 @@
 
   .af-core .af-d2-chat {
     bottom: 56px;
+  }
+}
+
+/* Draft card identity: avatar + name, so a rail of similarly-named leagues is
+   still scannable. */
+.af-core .af-d2-draft-id { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-core .af-d2-draft-tile {
+  width: 26px; height: 26px; flex: none; overflow: hidden;
+  display: grid; place-items: center; border-radius: 7px;
+  background: var(--chip); border: 1px solid var(--chip-line);
+  font-size: 9px; font-weight: 800; color: var(--text2);
+}
+.af-core .af-d2-draft-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── Import CTA: colour-shifting ─────────────────────────────────────── */
+
+/*
+ * The import button is the one action a new account must find, so it animates
+ * rather than sitting flat. `prefers-reduced-motion` stops the animation and
+ * keeps a static gradient — motion is the enhancement, contrast is not.
+ */
+.af-core .af-d2-import-cta {
+  background: linear-gradient(
+    100deg,
+    var(--accent) 0%,
+    var(--warn) 45%,
+    var(--good) 70%,
+    var(--accent) 100%
+  );
+  background-size: 300% 100%;
+  border-color: transparent;
+  animation: af-d2-import-shift 9s ease-in-out infinite;
+}
+
+@keyframes af-d2-import-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-d2-import-cta { animation: none; background-position: 0% 50%; }
+}
+
+/* The label sits on a moving gradient, so it needs its own contrast rather than
+   inheriting --accent-ink, which is only guaranteed against --accent. */
+.af-core .af-d2-import-cta-label,
+.af-core .af-d2-import-cta-plats {
+  color: #0b1020;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.af-core .af-d2-import-cta-plats { opacity: 0.9; }
+
+/* ── Exposure: player + league identity ──────────────────────────────── */
+
+.af-core .af-d2-exp-item { border-bottom: 1px solid var(--line); padding: 10px 0; }
+.af-core .af-d2-exp-item:last-child { border-bottom: 0; }
+.af-core .af-d2-exp-row { display: flex; align-items: center; gap: 10px; }
+.af-core .af-d2-exp-mark { overflow: hidden; }
+.af-core .af-d2-exp-mark img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.af-core .af-d2-exp-leagues { margin: 6px 0 0 38px; }
+.af-core .af-d2-exp-leagues-toggle {
+  cursor: pointer; list-style: none; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.12em; color: var(--accent);
+}
+.af-core .af-d2-exp-leagues-toggle::-webkit-details-marker { display: none; }
+.af-core .af-d2-exp-leagues[open] .af-d2-exp-leagues-toggle::after { content: ' ▲'; }
+.af-core .af-d2-exp-leagues:not([open]) .af-d2-exp-leagues-toggle::after { content: ' ▼'; }
+.af-core .af-d2-exp-league-list {
+  list-style: none; margin: 7px 0 0; padding: 0;
+  display: flex; flex-direction: column; gap: 5px;
+}
+.af-core .af-d2-exp-league { display: flex; align-items: center; gap: 8px; }
+.af-core .af-d2-exp-league-tile {
+  width: 22px; height: 22px; flex: none; overflow: hidden;
+  display: grid; place-items: center; border-radius: 6px;
+  background: var(--chip); border: 1px solid var(--chip-line);
+  font-size: 8px; font-weight: 800; color: var(--text2);
+}
+.af-core .af-d2-exp-league-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.af-core .af-d2-exp-league-name {
+  font-size: 12px; color: var(--text2);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.af-core .af-d2-exp-league-plat {
+  margin-left: auto; font-size: 8px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--faint);
+}
+
+/* ── Portfolio: spacing + per-league detail ──────────────────────────── */
+
+.af-core .af-d2-portfolio-item { border-bottom: 1px solid var(--line); }
+.af-core .af-d2-portfolio-item:last-child { border-bottom: 0; }
+.af-core .af-d2-portfolio-row { padding: 0; }
+.af-core .af-d2-portfolio-summary-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 13px 2px; cursor: pointer; list-style: none; min-height: 48px;
+}
+.af-core .af-d2-portfolio-summary-row::-webkit-details-marker { display: none; }
+.af-core .af-d2-portfolio-detail { padding: 4px 2px 16px; }
+.af-core .af-d2-portfolio-facts {
+  margin: 0; display: grid; gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.af-core .af-d2-portfolio-facts dt {
+  font-size: 8px; font-weight: 800; letter-spacing: 0.14em; color: var(--faint);
+}
+.af-core .af-d2-portfolio-facts dd { margin: 3px 0 0; font-size: 12px; color: var(--text2); }
+
+/* ── Legacy grade ring ───────────────────────────────────────────────── */
+
+.af-core .af-d2-legacy-score {
+  margin-left: auto; position: relative; width: 92px; height: 92px; flex: none;
+  display: grid; place-content: center; text-align: center;
+}
+.af-core .af-d2-legacy-ring {
+  position: absolute; inset: 0; border-radius: 999px;
+  /* The arc IS the score — conic-gradient stops at --af-d2-ring, set inline from
+     the measured prestige value. */
+  background: conic-gradient(var(--accent) var(--af-d2-ring, 0%), var(--chip) 0);
+  mask: radial-gradient(circle, transparent 60%, #000 61%);
+  -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
+}
+.af-core .af-d2-legacy-score-label { font-size: 7px; letter-spacing: 0.1em; }
+
+/* ── Mobile parity for everything added after the first mobile pass ──── */
+
+/*
+ * ⚠ THESE WERE ALL DESKTOP-ONLY. The grade ring, the portfolio rows, the
+ * exposure league lists and the draft identity block were written after the
+ * original @media block and inherited none of it. On a 390px screen that means a
+ * 92px ring competing with the level text, three-column rows overflowing their
+ * container, and a facts grid whose 150px minimum forces two cramped columns.
+ *
+ * Every rule below is a reflow, not a hide — the same information, stacked. The
+ * one exception is the exposure share bar, which is redundant beside the "7 of 61
+ * · 11%" it visualises.
+ */
+@media (max-width: 640px) {
+  /* Legacy: the ring drops under the identity rather than beside it. */
+  .af-core .af-d2-legacy-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .af-core .af-d2-legacy-score {
+    margin-left: 0;
+    width: 76px;
+    height: 76px;
+  }
+
+  .af-core .af-d2-legacy-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Portfolio: the summary stacks; the right-hand chip drops to its own line. */
+  .af-core .af-d2-portfolio-summary-row {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 12px 2px;
+  }
+
+  .af-core .af-d2-portfolio-name {
+    flex: 1 1 100%;
+  }
+
+  .af-core .af-d2-portfolio-right {
+    margin-left: 0;
+  }
+
+  /* One column: 150px minimums forced two cramped columns at this width. */
+  .af-core .af-d2-portfolio-facts {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* Exposure: the league list keeps its indent but not at the cost of the name. */
+  .af-core .af-d2-exp-leagues {
+    margin-left: 0;
+  }
+
+  .af-core .af-d2-exp-league-name {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* The share text carries the ratio, so the bar is the redundant half. */
+  .af-core .af-d2-exp-share {
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  /* Draft identity: keep the avatar, let the name take the rest. */
+  .af-core .af-d2-draft-id {
+    min-width: 0;
+  }
+
+  .af-core .af-d2-draft-name {
+    min-width: 0;
+  }
+
+  /* Section headers wrap their counter instead of squeezing the label. */
+  .af-core .af-d2-sec-head {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .af-core .af-d2-sec-count {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  /* Priority cards: the timer drops under the badge rather than off the edge. */
+  .af-core .af-d2-prio-top {
+    flex-wrap: wrap;
+  }
+
+  .af-core .af-d2-prio-timer {
+    margin-left: 0;
+  }
+
+  /* Top bar: plan + sync chips wrap rather than push the clock off-screen. */
+  .af-core .af-d2-topbar-right {
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Identity + settings popup (panel footer) ─────────────────────────── */
+
+.af-core .af-d2-user--button {
+  width: 100%;
+  /* A button, not a div: it opens a menu, so it has to be reachable by keyboard
+     and announce itself. The chrome is reset because af-btn is the wrong weight
+     for a footer identity row. */
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  padding: 6px;
+  margin: -6px;
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.af-core .af-d2-user--button:hover,
+.af-core .af-d2-user--button[aria-expanded='true'] {
+  background: var(--chip);
+  border-color: var(--line);
+}
+
+.af-core .af-d2-user--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The uploaded avatar fills the same circle the initials fallback occupies, so
+   the row does not reflow when a profile image loads. */
+.af-core .af-d2-user-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.af-core .af-d2-user-avatar--lg {
+  width: 40px;
+  height: 40px;
+  font-size: 13px;
+}
+
+.af-core .af-d2-user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-user-caret {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-core .af-d2-user.is-loading .af-d2-user-avatar,
+.af-core .af-d2-user.is-loading .af-d2-user-name {
+  background: var(--chip);
+  border-color: transparent;
+  border-radius: 6px;
+  color: transparent;
+  min-width: 90px;
+}
+
+/*
+ * ⚠ FIXED, NOT ABSOLUTE, AND THAT IS NOT A STYLE CHOICE. `.af-d2-panel` carries
+ * `overflow-y: auto` on desktop (it scrolls independently so a 61-league list
+ * never pushes this control out of reach). An absolutely-positioned menu inside
+ * that box is CLIPPED BY IT — opening upward from the footer, the taller the
+ * menu the more of it disappears behind the panel's scroll edge. Anchoring to
+ * the viewport escapes the clip entirely.
+ *
+ * The coordinates track the panel's own geometry: `.af-d2-panel` is 300px wide
+ * with 14px horizontal padding, is the first flex child of a full-bleed shell
+ * with no centering, and therefore occupies x = 14px…286px. Width is 272px to
+ * match. If the panel width or padding changes, these change with it.
+ */
+.af-core .af-d2-usermenu {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  width: 272px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  /* Tall accounts (four modes + six links) must not push the menu off-screen. */
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.af-core .af-d2-usermenu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-core .af-d2-usermenu-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-d2-usermenu-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-usermenu-handle {
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-core .af-d2-usermenu-label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+
+.af-core .af-d2-mode-seg {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--line);
+}
+
+.af-core .af-d2-mode-opt {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  cursor: pointer;
+  min-height: 32px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.af-core .af-d2-mode-opt:hover {
+  color: var(--text);
+}
+
+.af-core .af-d2-mode-opt.is-active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.af-core .af-d2-usermenu-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.af-core .af-d2-usermenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  /* 44px is the tap target these rows have to clear on a phone. */
+  min-height: 44px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.af-core .af-d2-usermenu-item:hover {
+  background: var(--chip);
+  color: var(--text);
+}
+
+.af-core .af-d2-usermenu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.af-core .af-d2-usermenu-hint {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.af-core .af-d2-usermenu-item--danger {
+  color: var(--bad);
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 9px 9px;
+}
+
+.af-core .af-d2-usermenu-item--danger:hover {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+/*
+ * On a phone the panel is full-width in normal flow rather than a fixed rail, so
+ * an upward-anchored menu can end up above the fold. Pinning it to the viewport
+ * keeps it reachable and lets it use the full width, which the four-up mode
+ * segment needs to stay legible.
+ */
+@media (max-width: 900px) {
+  .af-core .af-d2-usermenu {
+    /* `width` is set on the desktop rule to match the 300px rail; it has to be
+       cleared here or `right` cannot take effect and the menu stays rail-width
+       on a phone. */
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: 12px;
+    max-height: 78vh;
+  }
+
+  .af-core .af-d2-mode-opt {
+    font-size: 11px;
+    min-height: 40px;
+  }
+
+  .af-core .af-d2-usermenu-item {
+    font-size: 13px;
+  }
+}
+
+/* ── Player search: sizing + autocomplete ─────────────────────────────── */
+
+/*
+ * ⚠ THE SEARCH WAS TOO WIDE BECAUSE IT WAS THE ONLY FLEXIBLE ITEM IN THE BAR.
+ * `flex: 1 1 auto` with the clock and the plan/sync chips both `flex: none`
+ * meant it absorbed every spare pixel — on a wide monitor that is most of the
+ * top bar for a control that holds one short line of text. It still flexes, so
+ * the bar stays fluid, but it now stops at a readable width.
+ */
+.af-core .af-d2-topbar-search-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.af-core .af-d2-topbar-search {
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+.af-core .af-d2-topbar-search-icon {
+  flex: none;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--faint);
+}
+
+.af-core .af-d2-topbar-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.af-core .af-d2-topbar-search-input::placeholder {
+  color: var(--muted);
+}
+
+.af-core .af-d2-topbar-search-input:focus {
+  outline: none;
+}
+
+.af-core .af-d2-topbar-search:focus-within {
+  border-color: var(--accent);
+}
+
+/* Safari renders a native clear affordance that collides with the ⌘K chip. */
+.af-core .af-d2-topbar-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.af-core .af-d2-ac {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.af-core .af-d2-ac-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-d2-ac-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.af-core .af-d2-ac-row.is-active {
+  background: var(--chip);
+}
+
+.af-core .af-d2-ac-img {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.af-core .af-d2-ac-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Headshots are top-weighted; centring them crops the face. */
+  object-position: top center;
+}
+
+.af-core .af-d2-ac-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-d2-ac-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-ac-meta {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Tools grid ───────────────────────────────────────────────────────── */
+
+.af-core .af-d2-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.af-core .af-d2-tool {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  text-decoration: none;
+  min-height: 60px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.af-core .af-d2-tool:hover {
+  border-color: var(--accent-line);
+  background: var(--surface2);
+}
+
+.af-core .af-d2-tool-glyph {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.af-core .af-d2-tool-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-d2-tool-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-core .af-d2-tool-sub {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Chimmy launcher: pill + robot-king mark ──────────────────────────── */
+
+.af-core .af-d2-fab-wrap {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/*
+ * The mark is inside the wrapper now, so its own fixed positioning has to go —
+ * two fixed boxes cannot sit side by side. The wrapper owns the corner.
+ */
+.af-core .af-d2-fab-wrap .af-d2-fab {
+  position: static;
+  right: auto;
+  bottom: auto;
+}
+
+.af-core .af-d2-fab-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.af-core .af-d2-fab-pill {
+  appearance: none;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-fab-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.af-core .af-d2-chat-mark img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+@media (max-width: 900px) {
+  /* The wrapper is what sits in the corner now, so it takes the tab-bar
+     clearance the bare launcher used to carry. 76px matches the value the file
+     already settled on for that launcher, against `.af-d2-main`'s 96px reserve
+     for the 56px tab bar. */
+  .af-core .af-d2-fab-wrap {
+    bottom: 76px;
+  }
+
+  .af-core .af-d2-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .af-core .af-d2-fab-wrap {
+    right: 16px;
+    bottom: 76px;
+  }
+
+  /* The label costs width a phone does not have beside the mark. */
+  .af-core .af-d2-fab-pill {
+    display: none;
+  }
+
+  .af-core .af-d2-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Full-bleed on a phone: the 420px cap is a desktop constraint. */
+  .af-core .af-d2-topbar-search-wrap {
+    max-width: none;
   }
 }

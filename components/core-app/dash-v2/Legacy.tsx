@@ -68,10 +68,32 @@ export function Legacy({ data }: { data: CareerData | null }) {
           ) : null}
         </div>
 
+        {/*
+          The grade ring. The handoff draws a circular badge with a letter; the
+          number inside is real (the prestige engine's 0–100), so it is rendered
+          as a ring around that value rather than as a letter.
+
+          ⚠ NO LETTER IS INVENTED. Mapping 75 to "B+" means choosing a grading
+          curve nothing in this codebase defines, and a letter reads as an
+          assessment rather than as a score — the same failure as a "C" trade
+          grade that actually meant no data. The ring shows the measured number
+          and the scale it is out of.
+
+          ⚠ NO LEVEL ARTWORK EITHER. The design pairs this with a rank badge
+          image; there is no level/rank/tier asset anywhere in public/, so the
+          tier renders as its name in accent rather than as a placeholder graphic
+          standing in for art that does not exist.
+        */}
         {data.prestige ? (
-          <div className="af-d2-legacy-score">
-            <span className="af-d2-legacy-score-num af-num">{Math.round(data.prestige.total)}</span>
-            <span className="af-d2-legacy-score-label af-num">PRESTIGE</span>
+          <div
+            className="af-d2-legacy-score"
+            style={{ ['--af-d2-ring' as string]: `${Math.max(0, Math.min(100, data.prestige.total))}%` }}
+          >
+            <span className="af-d2-legacy-ring" aria-hidden />
+            <span className="af-d2-legacy-score-num af-num">
+              {Math.round(data.prestige.total)}
+            </span>
+            <span className="af-d2-legacy-score-label af-num">PRESTIGE / 100</span>
           </div>
         ) : null}
       </div>
