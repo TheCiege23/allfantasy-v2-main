@@ -163,27 +163,50 @@ export function LeaguePanel({
               <ul className="af-d2-list">
                 {group.rows.map((league) => (
                   <li key={league.id}>
+                    {/*
+                      Sleeper's row anatomy, with our labels: platform avatar,
+                      then name / league info / state stacked beside it, and the
+                      state carries a colour-coded dot rather than a right-aligned
+                      chip. The dot is what makes a long list scannable — the eye
+                      finds colour in a column faster than it reads text at the
+                      ragged right edge of truncated names.
+                    */}
                     <Link href={league.href} className="af-d2-row">
-                      <span className="af-d2-tile" aria-hidden>
-                        {initialsOf(league.name)}
+                      <span className="af-d2-tile" data-platform={league.platform} aria-hidden>
+                        {/* Same treatment as Dashboard34's LeagueTile — a plain
+                            img with an initials fallback, not next/image: these
+                            are arbitrary platform CDN hosts. */}
+                        {league.imageUrl ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={league.imageUrl} alt="" />
+                        ) : (
+                          initialsOf(league.name)
+                        )}
                       </span>
                       <span className="af-d2-row-text">
                         <span className="af-d2-row-name">{league.name}</span>
-                        <span className="af-d2-row-meta af-num">
-                          {[league.platform, league.formatLabel].filter(Boolean).join(' · ')}
-                        </span>
+                        {/* League info: season, size, type, scoring — already
+                            composed by the loader as "2026 · 12-team · Dynasty ·
+                            PPR". This is the line the direction asked for. */}
+                        {league.formatLabel ? (
+                          <span className="af-d2-row-meta af-num">{league.formatLabel}</span>
+                        ) : null}
+                        {league.chips?.[0] ? (
+                          <span
+                            className={`af-d2-row-state af-num af-d2-row-state--${
+                              league.priority ?? 'plain'
+                            }`}
+                          >
+                            <span className="af-d2-dot" aria-hidden />
+                            {league.chips[0].label}
+                          </span>
+                        ) : null}
                       </span>
-                      {league.chips?.[0] ? (
-                        <span
-                          className={`af-d2-chip af-num af-d2-chip--${league.priority ?? 'plain'}`}
-                        >
-                          {league.chips[0].label}
-                        </span>
-                      ) : null}
                       {/*
                         No score is rendered. 0 of 893 LeagueTeam rows carry a
                         result, so any number here would be invented rather than
-                        read. The row keeps the slot so scores can drop in later.
+                        read. Scored weeks live in WeeklyMatchup and are shown in
+                        Your Week, where their season can be labelled honestly.
                       */}
                     </Link>
                   </li>
