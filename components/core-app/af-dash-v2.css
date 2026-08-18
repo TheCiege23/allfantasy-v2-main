@@ -993,3 +993,18 @@
     width: 100%; max-height: 86vh; border-radius: 16px 16px 0 0;
   }
 }
+
+/* Links to capabilities that live in AfCoreShell's nav — this screen renders
+   outside the shell, so without these they would vanish rather than move. */
+.af-core .af-d2-panel-links { display: flex; flex-direction: column; gap: 2px; }
+.af-core .af-d2-panel-link {
+  display: flex; align-items: center; gap: 8px; padding: 9px 10px;
+  border-radius: 9px; text-decoration: none; font-size: 12px; font-weight: 700;
+  color: var(--text2); min-height: 44px;
+}
+.af-core .af-d2-panel-link:hover { background: var(--surface2); color: var(--accent); }
+.af-core .af-d2-panel-link-count {
+  margin-left: auto; padding: 1px 6px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent);
+  font-size: 9px; font-weight: 800;
+}
