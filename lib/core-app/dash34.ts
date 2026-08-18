@@ -1,8 +1,10 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getTeamInfo } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import type {
+  Dash34Brief,
   Dash34Data,
   Dash34League,
   Dash34StateChip,
@@ -28,6 +30,42 @@ import type {
  *     lineup lock, and it says so. We hold no per-league lock rules.
  *   - `SportsInjury` rows: **5,153**, refreshed within the hour. Joined to
  *     rosters this produces a genuine "moving your book".
+ *
+ * ⚠ RE-COUNTED ON PRODUCTION 2026-08-18, BEFORE BUILDING THE BRIEF. Nothing that
+ * was missing has arrived, so no line below was upgraded from "omitted" to
+ * "shown" on the strength of a hope:
+ *
+ *   - `leagues.lastSyncedAt` non-null: **54 of 98, and that changed WHILE this
+ *     was being written.** It read 0 of 98 at 13:00 and 54 of 98 at 13:52, with
+ *     `syncStatus` going from `pending`×56 to `synced`×54 / `failed`×2. Sleeper
+ *     sync is genuinely running now — the notice below correctly stops firing for
+ *     an account whose leagues have been read, and `everSynced` is what decides
+ *     that rather than a constant.
+ *   - `league_teams` with ANY result (W/L/T/PF/PA): **still 0 of 893, AFTER those
+ *     54 syncs landed.** THIS IS THE LOAD-BEARING NUMBER, NOT THE ONE ABOVE. Sync
+ *     running is not the same as results existing: it is writing `lastSyncedAt`
+ *     and no wins, losses or points. So "you're 19 behind" and "78% to win" still
+ *     have no operand, and every line that depends on a score stays omitted.
+ *
+ *     ⚠ DO NOT TREAT A FRESH `lastSyncedAt` AS PERMISSION TO SHOW A SCORE. The
+ *     two moved independently once already; re-count `league_teams` before
+ *     un-omitting anything that needs a result.
+ *   - `league_teams.currentRank` non-null: **798** — a dense 1..N per league.
+ *     ⚠ IT IS NOT USED HERE AND MUST NOT BE. It is an ordering written over rows
+ *     whose wins, losses and points are all zero, so it ranks nothing. Surfacing
+ *     it would be the "a C grade means zero data" failure with a number instead
+ *     of a letter.
+ *   - `WeeklyMatchup`: **262 rows, every one season 2025**, 204 with points, over
+ *     6 league ids — and **0 of those ids join `leagues.id`**. They are platform
+ *     league ids, the other of the two id spaces. There is no current-season
+ *     scored matchup for anybody.
+ *   - `SportsGame` future rows: **4,268 (608 NFL)**, and all 32 NFL clubs appear
+ *     in one. Per-club kickoff times ARE stored — the handoff assumed they were
+ *     not — so "when does this player next play" is real, and it is the only
+ *     time-pressure claim on the design's brief that survives.
+ *   - `SportsInjury`: **5,209 rows, `date` non-null on all 5,209**, 1,144 fetched
+ *     inside the last hour, NFL rows dated to today. So the design's "30 min ago"
+ *     is a real timestamp and does not have to be synthesised.
  *
  * ⚠ AF LEGACY BOARD ROWS ARE NOT LEAGUES YOU PLAY. One production account
  * carries 60 claimed teams and **543** `LegacyLeague` board rows — historical
@@ -133,6 +171,34 @@ export function formatCountdown(ms: number): string {
   const secs = total % 60
   if (days > 0) return `${days}d ${pad(hours)}:${pad(mins)}`
   return `${hours}:${pad(mins)}:${pad(secs)}`
+}
+
+/**
+ * "30 min ago" — how old a fact is.
+ *
+ * ⚠ SAME CONTRACT AS `formatCountdown`: the server renders this so the row paints
+ * with its real width, and `Dash34Ago` re-derives it on the client from the ISO
+ * instant. Both sides must produce the same shape from the same elapsed time or
+ * the value visibly jumps on hydration, so this function is the single definition
+ * and the client copy mirrors it exactly.
+ *
+ * Negative elapsed time is possible and is not an error: `SportsInjury.date` is
+ * the provider's stamp, not ours, and a feed a few minutes ahead of our clock
+ * would otherwise render "-1 min ago". It clamps to "just now".
+ */
+export function formatAgo(ms: number): string {
+  if (ms < 60_000) return 'just now'
+  const mins = Math.floor(ms / 60_000)
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  return `${Math.floor(days / 365)}y ago`
 }
 
 /**
@@ -333,12 +399,26 @@ export async function getDash34Data(
 
   const playerIds = [...everyPlayerId]
 
-  const [playerRows, injuryRows] = await Promise.all([
+  const [playerRows, injuryRows, nflFixtures] = await Promise.all([
     playerIds.length
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: playerIds } },
-            select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
+            /*
+             * `sport` is selected only to gate the kickoff join below. Club codes
+             * are NOT unique across sports — ATL, CHI, DET, MIA and PHI are all
+             * both an NFL and an NBA club — so joining a player's code straight
+             * into `lib/team-abbrev.ts` (which is an NFL table) would tell an NBA
+             * owner their Hawks forward kicks off with the Falcons.
+             */
+            select: {
+              sleeperId: true,
+              name: true,
+              position: true,
+              team: true,
+              sport: true,
+              imageUrl: true,
+            },
           })
           .catch(() => [])
       : Promise.resolve([]),
@@ -347,10 +427,63 @@ export async function getDash34Data(
         where: { sport: { in: sports } },
         orderBy: { fetchedAt: 'desc' },
         take: 4000,
-        select: { playerName: true, status: true, description: true },
+        /*
+         * ⚠ `date` IS THE REPORT'S OWN TIMESTAMP; `fetchedAt` IS WHEN WE POLLED.
+         * The card says "reported 30 min ago", which is a claim about the report,
+         * so it reads `date` and shows nothing when `date` is null rather than
+         * silently substituting the poll time — those are two different facts and
+         * only one of them answers "is this news".
+         */
+        select: { playerName: true, status: true, description: true, date: true },
       })
       .catch(() => []),
+    /*
+     * Next kickoff per NFL club, for "when does this player actually play".
+     *
+     * Read unconditionally when an NFL league is in play rather than after the
+     * book is built, so it stays inside this one Promise.all instead of adding a
+     * serial round-trip to the home page's critical path. 200 rows is roughly
+     * eight days of fixtures — production carries the same game from two sources
+     * (one row with `week`, one without), so the raw count overstates the number
+     * of distinct games by about half and the map takes first-seen per club.
+     */
+    sports.includes('NFL')
+      ? prisma.sportsGame
+          .findMany({
+            where: { sport: 'NFL', startTime: { gte: now } },
+            orderBy: { startTime: 'asc' },
+            take: 200,
+            select: { startTime: true, homeTeam: true, awayTeam: true },
+          })
+          .catch(() => [])
+      : Promise.resolve([]),
   ])
+
+  /**
+   * Full club name → its next kickoff. `SportsGame` stores "Atlanta Falcons"
+   * while `SportsPlayer.team` stores "ATL", which is why this is keyed on the
+   * long form and the lookup runs the short form through `getTeamInfo` first.
+   * Ascending order means the first row seen for a club IS its next game.
+   */
+  const nextKickoffByClub = new Map<string, Date>()
+  for (const g of nflFixtures) {
+    if (!g.startTime) continue
+    for (const club of [g.homeTeam, g.awayTeam]) {
+      const key = club?.trim().toLowerCase()
+      if (!key || nextKickoffByClub.has(key)) continue
+      nextKickoffByClub.set(key, g.startTime)
+    }
+  }
+
+  /** Next kickoff for an NFL club code, or null when we cannot resolve it. */
+  function kickoffFor(sport: string | null, team: string | null): Date | null {
+    if (String(sport ?? '').toUpperCase() !== 'NFL') return null
+    const info = getTeamInfo(team)
+    // getTeamInfo returns null for anything outside the 32-club table, so free
+    // agents and unrecognised codes fall out here rather than matching loosely.
+    if (!info) return null
+    return nextKickoffByClub.get(info.fullName.trim().toLowerCase()) ?? null
+  }
 
   /*
    * ⚠ `sleeperId` IS NOT UNIQUE IN `SportsPlayer` — 501 distinct roster ids
@@ -361,32 +494,46 @@ export async function getDash34Data(
    */
   const playerById = new Map<
     string,
-    { name: string; position: string | null; imageUrl: string | null }
+    {
+      name: string
+      position: string | null
+      team: string | null
+      sport: string | null
+      imageUrl: string | null
+    }
   >()
   for (const p of playerRows) {
     if (!p.sleeperId || playerById.has(p.sleeperId)) continue
     playerById.set(p.sleeperId, {
       name: p.name,
       position: p.position,
+      team: p.team,
+      sport: p.sport,
       imageUrl: p.imageUrl ?? null,
     })
   }
 
-  const injuryByName = new Map<string, { status: string; description: string | null }>()
+  const injuryByName = new Map<
+    string,
+    { status: string; description: string | null; reportedAt: Date | null }
+  >()
   for (const i of injuryRows) {
     if (!i.status) continue
     const key = i.playerName.trim().toLowerCase()
     if (injuryByName.has(key)) continue
     if (HEALTHY.has(i.status.trim().toLowerCase())) continue
-    injuryByName.set(key, { status: i.status, description: i.description })
+    injuryByName.set(key, { status: i.status, description: i.description, reportedAt: i.date })
   }
 
   /** Designation for a roster id, or null when we hold none. Never "healthy". */
   function designationOf(playerId: string): {
     name: string
     position: string | null
+    team: string | null
+    sport: string | null
     status: string
     description: string | null
+    reportedAt: Date | null
     imageUrl: string | null
   } | null {
     const p = playerById.get(playerId)
@@ -396,8 +543,11 @@ export async function getDash34Data(
     return {
       name: p.name,
       position: p.position,
+      team: p.team,
+      sport: p.sport,
       status: inj.status,
       description: inj.description,
+      reportedAt: inj.reportedAt,
       imageUrl: p.imageUrl ?? null,
     }
   }
@@ -408,8 +558,11 @@ export async function getDash34Data(
     name: string
     imageUrl: string | null
     position: string | null
+    team: string | null
+    sport: string | null
     status: string
     description: string | null
+    reportedAt: Date | null
     leagues: Set<string>
     startingIn: number
   }
@@ -453,8 +606,11 @@ export async function getDash34Data(
           name: d.name,
           imageUrl: d.imageUrl,
           position: d.position,
+          team: d.team,
+          sport: d.sport,
           status: d.status,
           description: d.description,
+          reportedAt: d.reportedAt,
           leagues: new Set([leagueId]),
           startingIn: isStarter ? 1 : 0,
         })
@@ -655,44 +811,250 @@ export async function getDash34Data(
       return a.name.localeCompare(b.name)
     })
     .slice(0, BOOK_LIMIT)
-    .map((b) => ({
-      initials: initialsOf(b.name),
-      name: b.name,
-      imageUrl: b.imageUrl,
-      /*
-       * The leagues carrying this player, resolved to something renderable. The
-       * set of ids was already being collected to COUNT exposure; naming them is
-       * what turns "7 of 61" from a number into something actionable — you can
-       * see which seven without opening seven leagues.
-       */
-      leagues: [...b.leagues]
-        .map((id) => {
-          const row = active.find((l) => l.id === id)
-          return row
-            ? {
-                id,
-                name: leagueDisplayName(row.name),
-                platform: String(row.platform ?? ''),
-                imageUrl: imageOf(row),
-              }
-            : null
-        })
-        .filter((x): x is { id: string; name: string; platform: string; imageUrl: string | null } => x !== null)
-        .sort((a, b2) => a.name.localeCompare(b2.name)),
-      note: [b.position, b.status].filter(Boolean).join(' · '),
-      exposure: `${b.leagues.size} of ${totalActive}`,
-      /*
-       * The same fact as numbers. A share bar needs a ratio, and parsing it back
-       * out of the display string would break the moment the wording changes.
-       */
-      exposureCount: b.leagues.size,
-      exposureTotal: totalActive,
-      tone: isUnavailable(b.status) ? ('bad' as const) : ('warn' as const),
-    }))
+    .map((b) => {
+      const kickoff = kickoffFor(b.sport, b.team)
+      return {
+        initials: initialsOf(b.name),
+        name: b.name,
+        imageUrl: b.imageUrl,
+        /*
+         * The leagues carrying this player, resolved to something renderable. The
+         * set of ids was already being collected to COUNT exposure; naming them is
+         * what turns "7 of 61" from a number into something actionable — you can
+         * see which seven without opening seven leagues.
+         */
+        leagues: [...b.leagues]
+          .map((id) => {
+            const row = active.find((l) => l.id === id)
+            return row
+              ? {
+                  id,
+                  name: leagueDisplayName(row.name),
+                  platform: String(row.platform ?? ''),
+                  imageUrl: imageOf(row),
+                }
+              : null
+          })
+          .filter((x): x is { id: string; name: string; platform: string; imageUrl: string | null } => x !== null)
+          .sort((a, b2) => a.name.localeCompare(b2.name)),
+        note: [b.position, b.status].filter(Boolean).join(' · '),
+        /*
+         * The two halves of `note` again, separately. The badge needs the slot on
+         * its own and the status line needs the designation on its own; splitting
+         * the joined string back apart in the component would put a parser
+         * between the loader and the screen for a fact the loader already holds.
+         */
+        position: b.position,
+        team: b.team,
+        status: b.status,
+        exposure: `${b.leagues.size} of ${totalActive}`,
+        /*
+         * The same fact as numbers. A share bar needs a ratio, and parsing it back
+         * out of the display string would break the moment the wording changes.
+         */
+        exposureCount: b.leagues.size,
+        exposureTotal: totalActive,
+        /* How many of those leagues have them in the lineup, not just rostered. */
+        startingIn: b.startingIn,
+        /*
+         * ⚠ REAL OR ABSENT. `SportsInjury.date` is non-null on all 5,209 production
+         * rows, so this is normally set — but it is emitted as null rather than
+         * back-filled from `fetchedAt` or from `now` when it is missing, and the
+         * card renders no freshness line at all in that case. An invented "just
+         * now" on a three-week-old designation is worse than no timestamp.
+         */
+        reportedAt: b.reportedAt ? b.reportedAt.toISOString() : null,
+        reportedAgo: b.reportedAt ? formatAgo(now.getTime() - b.reportedAt.getTime()) : null,
+        /*
+         * NFL only, and null for every other sport — see the note on the player
+         * select. This is the club's next scheduled game, which is what makes one
+         * flagged starter more urgent than another; it is NOT a lineup lock.
+         */
+        nextKickoffAt: kickoff ? kickoff.toISOString() : null,
+        tone: isUnavailable(b.status) ? ('bad' as const) : ('warn' as const),
+      }
+    })
 
   /* ── Honest notices ────────────────────────────────────────────────────── */
 
   const everSynced = active.some((l) => Boolean(l.lastSyncedAt))
+
+  /* ── Chimmy's brief ────────────────────────────────────────────────────── */
+
+  /*
+   * ⚠ NOT ONE TOKEN IS SPENT BUILDING THIS. Every line below is assembled from
+   * values already computed above — the ranked list, the injury book, the fixture
+   * read — and no model is called. That is not an optimisation, it is the
+   * requirement: PR #433 removed three per-league Anthropic call sites from the
+   * signed-in home precisely because they billed on every page view, and a brief
+   * generated on load would put the same charge back on the same screen. Chimmy
+   * spends when the user clicks "Ask Chimmy", and only then.
+   *
+   * ⚠ FOUR OF THE DESIGN'S FIVE CLAIMS ARE ABSENT ON PURPOSE, NOT PENDING.
+   * Re-measured on production today (see the header):
+   *
+   *   "the FLEX is worth ~11 points"  — no projection exists for any roster slot.
+   *   "you're 19 behind"              — 0 of 893 team rows carry a score.
+   *   "78% to win"                    — no win model; /my-team's figure is a
+   *                                     points ratio, which is a different number
+   *                                     wearing the same %.
+   *   "the Yahoo center can wait"     — needs the player's own game time…
+   *
+   * …and that last one is the exception. Per-club kickoffs ARE stored (4,268
+   * future rows, all 32 NFL clubs present), so `nextKickoffAt` is real and the
+   * brief can say which flagged player plays first. It is the only urgency claim
+   * on the design that has an operand, and it carries the card.
+   *
+   * A line whose input is missing is dropped from the array. None is defaulted,
+   * because a defaulted line is indistinguishable from a measured one — the same
+   * failure as a "C" trade grade that actually means we hold no data.
+   */
+  /*
+   * ⚠ `leagues`, NOT `shown`. These count across EVERY active league, uncapped,
+   * while the priority cards below the brief render the top 8. That gap is the
+   * point: on the 60-league account the cards can show three urgent leagues while
+   * the brief correctly says eleven. Counting only the visible ones would make
+   * the summary agree with the list by under-reporting the account, which is the
+   * "53 leagues are quiet" failure in a different costume.
+   */
+  const urgentLeagues = leagues.filter((l) => l.priority === 'urgent')
+  const draftingLeagues = leagues.filter((l) => l.priority === 'draft')
+  const flaggedLeagues = leagues.filter((l) => (hurtByLeague.get(l.id) ?? NO_HURT).total > 0)
+
+  const briefLines: Dash34Brief['lines'] = []
+
+  /*
+   * The concentration line. This is the one thing this product knows that no
+   * single-league app can: the same designation hitting several of your teams at
+   * once. It leads when it is true of more than one league — in one league it is
+   * just an injury, and the league row already says so.
+   */
+  const topRow = bookRows[0] ?? null
+  if (topRow && topRow.exposureCount != null && topRow.exposureCount > 1) {
+    const startingClause =
+      topRow.startingIn > 0
+        ? ` — in your lineup in ${topRow.startingIn} of them`
+        : ' — on the bench in all of them'
+    briefLines.push({
+      key: 'concentration',
+      tone: topRow.tone,
+      text:
+        `${topRow.name}${topRow.position ? ` (${topRow.position})` : ''} is ` +
+        `${topRow.status.toLowerCase()} in ${topRow.exposureCount} of your ` +
+        `${totalActive} leagues${startingClause}.`,
+    })
+  }
+
+  /*
+   * When that player next plays. Rendered as an instant rather than a phrase, so
+   * the component can localise it — the server cannot know the reader's zone, and
+   * a kickoff in the wrong one is the number someone sets an alarm by.
+   */
+  if (topRow?.nextKickoffAt) {
+    briefLines.push({
+      key: 'kickoff',
+      tone: 'plain',
+      text: `${topRow.name} plays next at`,
+      atIso: topRow.nextKickoffAt,
+    })
+  }
+
+  /*
+   * What is actually waiting on a decision. Three separate counts rather than one
+   * total: a starter who cannot play, a draft on the clock, and a flag that is
+   * only worth a look are three different jobs, and summing them is how a queue
+   * stops telling you what to do first.
+   */
+  if (urgentLeagues.length > 0) {
+    briefLines.push({
+      key: 'urgent',
+      tone: 'bad',
+      text:
+        `${urgentLeagues.length} ${urgentLeagues.length === 1 ? 'league has' : 'leagues have'} ` +
+        `a starter who cannot play: ${urgentLeagues.slice(0, 3).map((l) => l.name).join(', ')}` +
+        `${urgentLeagues.length > 3 ? ` and ${urgentLeagues.length - 3} more` : ''}.`,
+    })
+  }
+  if (draftingLeagues.length > 0) {
+    briefLines.push({
+      key: 'drafting',
+      tone: 'warn',
+      text:
+        `${draftingLeagues.length} ${draftingLeagues.length === 1 ? 'draft is' : 'drafts are'} ` +
+        `on the clock: ${draftingLeagues.slice(0, 3).map((l) => l.name).join(', ')}.`,
+    })
+  }
+  /*
+   * Only stated when it is NOT already covered by the urgent line — otherwise the
+   * same league is counted twice in consecutive sentences and the brief reads as
+   * though there is more wrong than there is.
+   */
+  const onlyFlagged = flaggedLeagues.filter((l) => l.priority !== 'urgent').length
+  if (onlyFlagged > 0) {
+    briefLines.push({
+      key: 'flagged',
+      tone: 'warn',
+      text: `${onlyFlagged} more ${onlyFlagged === 1 ? 'league carries' : 'leagues carry'} a flagged player who can still play.`,
+    })
+  }
+
+  /*
+   * The headline restates the single biggest fact, and it is chosen by the same
+   * ranking the list uses so the two can never disagree about what matters most.
+   */
+  const briefHeadline =
+    urgentLeagues.length > 0
+      ? `${urgentLeagues.length} ${urgentLeagues.length === 1 ? 'lineup needs' : 'lineups need'} a change`
+      : draftingLeagues.length > 0
+        ? `${draftingLeagues.length} ${draftingLeagues.length === 1 ? 'draft is' : 'drafts are'} running`
+        : flaggedLeagues.length > 0
+          ? `${flaggedLeagues.length} ${flaggedLeagues.length === 1 ? 'league has' : 'leagues have'} a player worth a look`
+          : 'Nothing is waiting on you'
+
+  /*
+   * ⚠ THE CARD SHOWS UP EVEN WHEN THERE IS NOTHING TO SAY, AND THAT IS THE POINT.
+   * With no lines the headline is "Nothing is waiting on you" and the caveat
+   * below states what was and was not checked. Hiding the card in the quiet case
+   * would leave the reader unable to tell "checked, all clear" from "not looking".
+   */
+  const chimmyBrief: Dash34Brief = {
+    /*
+     * ⚠ NOT "SUNDAY BRIEF". The design names a weekday; the only weekday this
+     * loader could defend is the one belonging to the next kickoff, and that is a
+     * date in the SERVER's zone, not the reader's. Naming the wrong day at the top
+     * of the home screen is a worse error than not naming one, so the eyebrow is
+     * day-free and the real, localisable kickoff instant sits beside it.
+     */
+    label: "CHIMMY'S BRIEF",
+    headline: briefHeadline,
+    lines: briefLines,
+    countdown:
+      firstLock && firstLock.countdownTo
+        ? {
+            initial: firstLock.countdown,
+            to: firstLock.countdownTo,
+            label: firstLock.countdownLabel ?? 'FIRST KICKOFF',
+          }
+        : null,
+    /*
+     * What the brief did NOT read. Load-bearing: everything above is derived from
+     * the injury feed and the fixture list, neither of which is your league. With
+     * sync never having run there are no scores, no records and no lineups behind
+     * any of it, and a brief that sounds this confident has to say so.
+     */
+    caveat: everSynced
+      ? 'Built from the injury feed and the fixture list. Live scores, projections and standings are not part of it.'
+      : `Built from the injury feed and the fixture list — not from your leagues. No sync has ever run against ${totalActive === 1 ? 'your league' : `any of your ${totalActive} leagues`}, so there are no scores, records or lineups behind this.`,
+    askLabel: 'Ask Chimmy',
+    /*
+     * The second action goes to the full ranked list, which is on this same page —
+     * an anchor, not a route. There is no separate briefing surface to link to and
+     * the repo is at Vercel's 2,048-route ceiling, so inventing one would cost a
+     * route to duplicate a section the reader is already scrolling towards.
+     */
+    moreHref: '#af-d2-needs',
+    moreLabel: 'See every call',
+  }
 
   return {
     firstLock,
@@ -711,9 +1073,11 @@ export async function getDash34Data(
     quiet,
     overflow,
     totalLeagues: totalActive,
-    // No brief is generated on this path. Chimmy is the only thing that spends
+    // No *generated* brief on this path. Chimmy is the only thing that spends
     // tokens, and a home page that spends on every load would bill for a visit.
+    // `chimmyBrief` below is the deterministic one and costs nothing.
     brief: null,
+    chimmyBrief,
     book: bookRows.length > 0 ? bookRows : null,
     legacyCount,
     weekLabel:

@@ -61,6 +61,46 @@ export type Dash34League = {
   actionLabel?: string
 }
 
+/**
+ * Chimmy's brief — the hero card, assembled from the priorities engine.
+ *
+ * ⚠ THERE IS NO MODEL BEHIND THIS TYPE. Every field is filled from Postgres reads
+ * the home loader already performs, and nothing on this path calls an LLM. The
+ * signed-in home had three per-league Anthropic call sites removed in PR #433
+ * because they billed on every page view; a brief written on load would be the
+ * same charge under a new name. `askLabel` is the click that spends, and the user
+ * has to press it.
+ *
+ * ⚠ `lines` IS SPARSE BY DESIGN. Each entry has a real operand behind it, and a
+ * line whose input is missing is never emitted with a default. The design's point
+ * deltas, score gaps and win probabilities are all absent for that reason — there
+ * is no projection, no result and no win model on this database.
+ */
+export type Dash34Brief = {
+  /** Mono eyebrow. Deliberately carries no weekday — see the loader's note. */
+  label: string
+  headline: string
+  lines: Array<{
+    key: string
+    text: string
+    /**
+     * An instant the line ends with, localised on the client. Kept as an ISO
+     * string rather than folded into `text` because the server cannot know the
+     * reader's time zone, and a kickoff shown in the wrong one is the one value
+     * on this card someone might act on.
+     */
+    atIso?: string | null
+    tone?: 'bad' | 'warn' | 'plain' | null
+  }>
+  /** The real next kickoff, when one is scheduled. `initial` is the server paint. */
+  countdown?: { initial: string; to: string; label: string } | null
+  /** What the brief did not read. Always present — a confident card must say. */
+  caveat: string
+  askLabel: string
+  moreHref: string
+  moreLabel: string
+}
+
 export type Dash34Data = {
   firstLock?: {
     /** Pre-formatted "1:04:12" — the server's paint, and the ticker's starting value. */
@@ -100,6 +140,11 @@ export type Dash34Data = {
   overflow?: number
   totalLeagues: number
   brief?: { title: string; headline: string; body: string; time?: string | null; avatarUrl?: string | null } | null
+  /**
+   * The DETERMINISTIC brief — see `Dash34Brief`. Distinct from `brief` above,
+   * which is the model-written shape and stays null on this path.
+   */
+  chimmyBrief?: Dash34Brief | null
   book?: Array<{
     initials: string
     name: string
@@ -108,11 +153,36 @@ export type Dash34Data = {
     /** The leagues carrying this player — names an exposure count cannot. */
     leagues?: Array<{ id: string; name: string; platform: string; imageUrl: string | null }>
     note: string
+    /**
+     * `note` split back into its parts, because the badge and the status line
+     * need them separately. Both may be null — the feed carries rows with no
+     * position, and an empty badge is omitted rather than filled with "—".
+     */
+    position?: string | null
+    team?: string | null
+    status?: string | null
     /** Human form, e.g. "7 of 61". */
     exposure?: string | null
     /** Same fact as numbers, so a share bar does not parse the string above. */
     exposureCount?: number | null
     exposureTotal?: number | null
+    /** Of those leagues, how many have them in the lineup rather than rostered. */
+    startingIn?: number | null
+    /**
+     * When the DESIGNATION was reported — `SportsInjury.date`, the provider's own
+     * stamp, never our poll time and never `now`. Null means we hold no date, and
+     * the row then shows no freshness at all.
+     */
+    reportedAt?: string | null
+    /** The server's rendering of `reportedAt`; `Dash34Ago` re-derives it client-side. */
+    reportedAgo?: string | null
+    /**
+     * The player's club's next scheduled game. NFL only — club codes collide
+     * across sports and `lib/team-abbrev.ts` is an NFL table.
+     *
+     * ⚠ A KICKOFF, NOT A LINEUP LOCK. We hold no lock rule for any league.
+     */
+    nextKickoffAt?: string | null
     tone?: 'bad' | 'warn' | null
   }> | null
   chatUnread?: number
