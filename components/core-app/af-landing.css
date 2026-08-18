@@ -890,3 +890,58 @@
     height: 56px;
   }
 }
+
+
+/*
+ * ── Language switch ───────────────────────────────────────────────────────
+ *
+ * Two links, not a toggle: the active one is the current document, the other is
+ * a real navigation. Styled as a segmented control so it reads as one control
+ * rather than two stray nav links.
+ */
+.af-lp-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--chip);
+}
+
+.af-lp-nav-right .af-lp-lang-opt {
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+.af-lp-nav-right .af-lp-lang-opt:hover {
+  color: var(--text);
+}
+
+.af-lp-nav-right .af-lp-lang-opt[data-active='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/*
+ * The switch stays visible on phones. It is the one nav control a Spanish
+ * reader needs before anything else on the page makes sense to them, so it is
+ * explicitly exempt from whatever the mobile nav hides.
+ */
+@media (max-width: 720px) {
+  .af-lp-lang {
+    order: -1;
+  }
+
+  .af-lp-nav-right .af-lp-lang-opt {
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+}
