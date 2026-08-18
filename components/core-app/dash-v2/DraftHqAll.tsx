@@ -55,7 +55,19 @@ export function DraftHqAll({ data }: { data: DraftHqAllData | null }) {
               ) : null}
             </div>
 
-            <h3 className="af-d2-draft-name">{row.leagueName}</h3>
+            <div className="af-d2-draft-id">
+              {/* The league's own avatar — a wall of identical cards is unreadable
+                  when six of them are "TheCiege26's 12-Team NFL Redraft League". */}
+              <span className="af-d2-draft-tile" aria-hidden>
+                {row.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={row.imageUrl} alt="" />
+                ) : (
+                  row.leagueName.trim().slice(0, 2).toUpperCase()
+                )}
+              </span>
+              <h3 className="af-d2-draft-name">{row.leagueName}</h3>
+            </div>
 
             <p className="af-d2-draft-meta af-num">
               {[

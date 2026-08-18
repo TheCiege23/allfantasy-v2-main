@@ -1,4 +1,5 @@
 import { LeaguePanel } from '@/components/core-app/dash-v2/LeaguePanel'
+import { ToolsGrid } from '@/components/core-app/dash-v2/ToolsGrid'
 import { SectionHeader } from '@/components/core-app/dash-v2/SectionHeader'
 import { Priorities } from '@/components/core-app/dash-v2/Priorities'
 import { ChimmyBrief } from '@/components/core-app/dash-v2/ChimmyBrief'
@@ -89,6 +90,22 @@ export function DashboardV2({
         leagues={leagues}
         totalLeagues={total}
         commissionerCount={commissionerCount}
+        /*
+         * The identity footer shows the career level beside the name. It comes
+         * from the same `career` object Rankings & Legacy renders, so the two
+         * cannot disagree — and it is omitted rather than defaulted when the
+         * career engine has no level for this account, because "LEVEL 1" on an
+         * unranked account is a measurement nobody took.
+         */
+        levelLabel={
+          career?.levelName
+            ? career.level != null
+              ? `LEVEL ${career.level} · ${career.levelName}`
+              : career.levelName
+            : career?.level != null
+              ? `LEVEL ${career.level}`
+              : null
+        }
         /*
          * `quiet` only — never quiet + overflow. The Dash34Data type carries an
          * explicit warning that adding them printed "53 leagues are quiet —
@@ -240,12 +257,17 @@ export function DashboardV2({
 
         <section>
           {/*
-            "Moving your book", not "Player exposure". The list is injury-led and
-            capped at six, so a header promising exposure implies a complete table
-            and invites the reader to conclude they roster six players. The "?"
+            "Moving your book", not "Player exposure". The list is INJURY-LED, so a
+            header promising exposure implies a complete roster table. The "?"
             carries that caveat at the TOP of the section — the footnote saying the
-            same thing sits below six rows, which is after the misreading has
+            same thing sits below the rows, which is after the misreading has
             already happened.
+
+            ⚠ THE CAVEAT IS "INJURY-LED", NOT "CAPPED AT SIX". Both this hint and
+            the footnote said six until BOOK_LIMIT moved from 6 to 40 — 34a still
+            shows six, the v2 module lists them all. A cap stated as a number is a
+            number that goes stale the moment the constant moves, so the wording
+            names the FILTER (a status worth flagging) rather than the limit.
 
             The link goes to /my-players, which is the real cross-league exposure
             audit: every player, starter/bench/IR split, per-league appearances.
@@ -254,7 +276,7 @@ export function DashboardV2({
           */}
           <SectionHeader
             label="Moving your book"
-            hint="Injury-led and capped at six rows. This is what you are most exposed to that is currently a problem — a player carrying a designation across several of your leagues — not a full table of everyone you roster."
+            hint="Injury-led: it lists the players carrying a status worth flagging, ordered by how many of your leagues hold them. This is what you are most exposed to that is currently a problem — not a full table of everyone you roster."
             hintLabel="What this list covers"
             counter={
               data?.book?.[0]?.exposureTotal
@@ -272,6 +294,21 @@ export function DashboardV2({
             counter={career?.level != null ? `LEVEL ${career.level}` : null}
           />
           <Legacy data={career} />
+        </section>
+
+        {/*
+          The handoff's six-tile grid. It sits last because every tile is a way
+          OUT of this screen — the sections above are what the dashboard is for,
+          and a grid of exits above them competes with the work.
+        */}
+        <section>
+          <SectionHeader label="Tools" />
+          <ToolsGrid
+            totalLeagues={total}
+            commissionerCount={commissionerCount}
+            levelName={career?.levelName ?? null}
+            hasCareer={Boolean(career && !career.isEmpty)}
+          />
         </section>
       </main>
 

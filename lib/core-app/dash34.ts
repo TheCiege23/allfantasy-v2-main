@@ -401,7 +401,14 @@ export async function getDash34Data(
              * into `lib/team-abbrev.ts` (which is an NFL table) would tell an NBA
              * owner their Hawks forward kicks off with the Falcons.
              */
-            select: { sleeperId: true, name: true, position: true, team: true, sport: true },
+            select: {
+              sleeperId: true,
+              name: true,
+              position: true,
+              team: true,
+              sport: true,
+              imageUrl: true,
+            },
           })
           .catch(() => [])
       : Promise.resolve([]),
@@ -477,7 +484,13 @@ export async function getDash34Data(
    */
   const playerById = new Map<
     string,
-    { name: string; position: string | null; team: string | null; sport: string | null }
+    {
+      name: string
+      position: string | null
+      team: string | null
+      sport: string | null
+      imageUrl: string | null
+    }
   >()
   for (const p of playerRows) {
     if (!p.sleeperId || playerById.has(p.sleeperId)) continue
@@ -486,6 +499,7 @@ export async function getDash34Data(
       position: p.position,
       team: p.team,
       sport: p.sport,
+      imageUrl: p.imageUrl ?? null,
     })
   }
 
@@ -510,6 +524,7 @@ export async function getDash34Data(
     status: string
     description: string | null
     reportedAt: Date | null
+    imageUrl: string | null
   } | null {
     const p = playerById.get(playerId)
     if (!p) return null
@@ -523,6 +538,7 @@ export async function getDash34Data(
       status: inj.status,
       description: inj.description,
       reportedAt: inj.reportedAt,
+      imageUrl: p.imageUrl ?? null,
     }
   }
 
@@ -530,6 +546,7 @@ export async function getDash34Data(
 
   type BookEntry = {
     name: string
+    imageUrl: string | null
     position: string | null
     team: string | null
     sport: string | null
@@ -577,6 +594,7 @@ export async function getDash34Data(
       } else {
         book.set(key, {
           name: d.name,
+          imageUrl: d.imageUrl,
           position: d.position,
           team: d.team,
           sport: d.sport,
@@ -766,6 +784,12 @@ export async function getDash34Data(
 
   /* ── Moving your book ──────────────────────────────────────────────────── */
 
+  /*
+   * 34a shows six; the v2 exposure module lists them all, ordered by how many
+   * leagues carry the player. One builder, one ordering — the cap is the only
+   * difference, so it is a constant rather than two code paths.
+   */
+  const BOOK_LIMIT = 40
   const totalActive = active.length
   const bookRows = [...book.values()]
     .sort((a, b) => {
@@ -776,12 +800,33 @@ export async function getDash34Data(
       if (b.leagues.size !== a.leagues.size) return b.leagues.size - a.leagues.size
       return a.name.localeCompare(b.name)
     })
-    .slice(0, 6)
+    .slice(0, BOOK_LIMIT)
     .map((b) => {
       const kickoff = kickoffFor(b.sport, b.team)
       return {
         initials: initialsOf(b.name),
         name: b.name,
+        imageUrl: b.imageUrl,
+        /*
+         * The leagues carrying this player, resolved to something renderable. The
+         * set of ids was already being collected to COUNT exposure; naming them is
+         * what turns "7 of 61" from a number into something actionable — you can
+         * see which seven without opening seven leagues.
+         */
+        leagues: [...b.leagues]
+          .map((id) => {
+            const row = active.find((l) => l.id === id)
+            return row
+              ? {
+                  id,
+                  name: leagueDisplayName(row.name),
+                  platform: String(row.platform ?? ''),
+                  imageUrl: imageOf(row),
+                }
+              : null
+          })
+          .filter((x): x is { id: string; name: string; platform: string; imageUrl: string | null } => x !== null)
+          .sort((a, b2) => a.name.localeCompare(b2.name)),
         note: [b.position, b.status].filter(Boolean).join(' · '),
         /*
          * The two halves of `note` again, separately. The badge needs the slot on

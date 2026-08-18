@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { Dash34Time } from '@/components/core-app/screens/Dashboard34Live'
+import { PlayerSearch } from '@/components/core-app/dash-v2/PlayerSearch'
 
 /**
  * Dashboard v2 top bar.
@@ -46,14 +46,12 @@ export function TopBar({
       </div>
 
       {/*
-        Search is a link, not an input. A box that looks like search but does
-        nothing until JS mounts is worse than a control that navigates to the
-        screen that actually searches.
+        Real autocomplete now, but it kept the property the old link had: the
+        control is a <form> whose action is the full search page, so it still
+        works before hydration and without JavaScript. The suggestion list is an
+        enhancement on top of that, not a replacement for it. See PlayerSearch.
       */}
-      <Link href="/core/players" className="af-d2-topbar-search">
-        <span className="af-d2-topbar-search-text">Search any player or league</span>
-        <span className="af-d2-topbar-kbd af-num">⌘K</span>
-      </Link>
+      <PlayerSearch leagueCount={leagueCount} />
 
       <div className="af-d2-topbar-right">
         {planName ? <span className="af-d2-topbar-plan af-num">{planName}</span> : null}
