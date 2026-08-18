@@ -81,3 +81,29 @@ Beyond the duplicate-slot fixes, there is room to go further:
 Neither is done. Both change how live production jobs are invoked, and the
 failure mode is silent — a job simply stops running. Do them deliberately, with
 `vercel crons ls` before and after, not as a side effect of another change.
+
+## Injury polling cadence
+
+`/api/cron/import-injuries` runs **hourly**, not every 15 minutes.
+
+The vendor collects injuries **twice a day** — each morning, plus roughly an hour
+before each game — from official team reports only, explicitly not from reporter
+observations. `contracts/rolling-insights/ENDPOINTS.yaml` records the quote and
+the instruction: *"There is no point polling /injuries every 35s — the data only
+changes twice a day. Poll at ~06:00 local and again at T-90m per game."*
+
+Hourly is the closest a Vercel cron gets to that. **T-90m per game is not
+expressible** — it is relative to a kickoff time, and cron schedules are absolute.
+Hourly catches both the morning collection and every pre-game update within an
+hour of publication, at 24 calls a day instead of 96.
+
+⚠ THE TRADE IS REAL AND WORTH KNOWING. Worst-case staleness goes from 15 minutes
+to 60. An injury designation published at 11:15 on a Sunday is now seen at 12:00
+rather than 11:30, and that is a lineup-relevant hour. The saving is ~72 calls a
+day, which is negligible against the ~14,000 a live Sunday costs. This cadence
+matches the vendor's documented guidance; if pre-kickoff freshness turns out to
+matter more than doc-conformance, `*/15` was the better setting and reverting is
+one line.
+
+For the Wed/Thu/Fri DNP / Limited / Full grid: it does not exist in this feed at
+all (vendor-confirmed `WONTFIX`). Parse NFL.com injury reports separately.
