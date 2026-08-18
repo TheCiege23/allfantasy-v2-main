@@ -1697,6 +1697,155 @@ export default async function AdminPage({
           </div>
         </section>
 
+        {/*
+          ── Early-access waitlist ──────────────────────────────────────────
+          The list was never lost, only never shown: EarlyAccessSignup has been
+          collecting since April and nothing in this panel read it, so the only
+          way to know it existed was to query the database directly.
+
+          ⚠ CONFIRMED AND UNCONFIRMED ARE REPORTED SEPARATELY, ON PURPOSE. A
+          signup that never confirmed is a weaker consent signal than one that
+          did. Showing a single total invites reading "N signups" as "N people
+          who opted in", which is the number that matters if this list is ever
+          emailed — and emailing people who never confirmed is how a sending
+          domain gets burned.
+
+          ⚠ READ ONLY. There is no send button here by design. Bulk email to a
+          months-old list is one-way and belongs behind an explicit decision
+          about recipients and copy, not a click on a dashboard.
+        */}
+        <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">
+              Early-access waitlist
+            </h2>
+            <span className="text-[11px] text-white/45">
+              {data.waitlist.firstAt ? (
+                <>
+                  {formatDate(data.waitlist.firstAt)} &rarr; {formatDate(data.waitlist.lastAt ?? data.waitlist.firstAt)}
+                </>
+              ) : (
+                "no signups yet"
+              )}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+              <div className="text-2xl font-black text-white">{data.waitlist.total}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Total signups</div>
+            </div>
+            <div className="rounded-2xl border border-emerald-300/20 bg-black/25 p-3">
+              <div className="text-2xl font-black text-emerald-300">{data.waitlist.confirmed}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Confirmed</div>
+            </div>
+            <div className="rounded-2xl border border-amber-300/20 bg-black/25 p-3">
+              <div className="text-2xl font-black text-amber-300">{data.waitlist.unconfirmed}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Never confirmed</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+              <div className="text-2xl font-black text-white">{data.waitlist.last30Days}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Last 30 days</div>
+            </div>
+          </div>
+
+          {/* How old the list is, at a glance — a dormant list and a growing one
+              call for completely different decisions. */}
+          {data.waitlist.byMonth.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {data.waitlist.byMonth.map((m) => (
+                <span
+                  key={m.month}
+                  className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[11px] text-white/70"
+                >
+                  {m.month} &middot; <span className="font-black text-white">{m.count}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {(data.waitlist.bySource.length > 0 || data.waitlist.byUtmSource.length > 0) ? (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">By source</div>
+                <ul className="mt-2 space-y-1 text-sm text-white/70">
+                  {data.waitlist.bySource.map((r) => (
+                    <li key={r.source} className="flex justify-between gap-3">
+                      <span className="truncate">{r.source}</span>
+                      <span className="font-black text-white">{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">By UTM source</div>
+                <ul className="mt-2 space-y-1 text-sm text-white/70">
+                  {data.waitlist.byUtmSource.map((r) => (
+                    <li key={r.source} className="flex justify-between gap-3">
+                      <span className="truncate">{r.source}</span>
+                      <span className="font-black text-white">{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                <tr>
+                  <th className="py-2 pr-3">Email</th>
+                  <th className="py-2 pr-3">Name</th>
+                  <th className="py-2 pr-3">Confirmed</th>
+                  <th className="py-2 pr-3">Source</th>
+                  <th className="py-2 pr-3">Campaign</th>
+                  <th className="py-2 pr-3">Signed up</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {data.waitlist.recent.length > 0 ? (
+                  data.waitlist.recent.map((row) => (
+                    <tr key={row.email} className="text-white/76">
+                      {/* Full address, not masked: the operator deciding whether
+                          to email this list needs to see who is on it. This page
+                          is already behind the admin allowlist. */}
+                      <td className="py-3 font-mono text-xs text-white">{row.email}</td>
+                      <td className="py-3">{row.name ?? "—"}</td>
+                      <td className="py-3">
+                        <span
+                          className={
+                            row.confirmed
+                              ? "rounded-full border border-emerald-300/30 px-2 py-0.5 text-[10px] font-black text-emerald-300"
+                              : "rounded-full border border-amber-300/30 px-2 py-0.5 text-[10px] font-black text-amber-300"
+                          }
+                        >
+                          {row.confirmed ? "YES" : "NO"}
+                        </span>
+                      </td>
+                      <td className="py-3 text-xs text-white/55">{row.source ?? "—"}</td>
+                      <td className="py-3 text-xs text-white/55">{row.utmCampaign ?? row.utmSource ?? "—"}</td>
+                      <td className="py-3 text-xs text-white/55">{formatDate(row.createdAt)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-white/45">
+                      No waitlist signups recorded.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {data.waitlist.total > data.waitlist.recent.length ? (
+            <p className="mt-3 text-[11px] text-white/45">
+              Showing the {data.waitlist.recent.length} most recent of {data.waitlist.total}.
+            </p>
+          ) : null}
+        </section>
+
         <section className="grid gap-4 xl:grid-cols-2">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
             <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">Recent Users</h2>
