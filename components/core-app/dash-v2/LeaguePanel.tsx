@@ -25,7 +25,14 @@ import { PanelUserMenu } from '@/components/core-app/dash-v2/PanelUserMenu'
 
 type Group = { key: string; label: string; rows: Dash34League[] }
 
-const SPORT_FILTERS = ['ALL', 'NFL', 'NBA', 'NHL'] as const
+/*
+ * ⚠ THE LIST IS A SUPERSET, NOT A PROMISE. Only chips whose sport actually
+ * appears on this account render (see availableSports below), so widening this
+ * cannot produce a filter that matches nothing. It was NFL/NBA/NHL only, which
+ * silently hid the sport filter entirely from anyone whose leagues are MLB,
+ * college or soccer — their chip row just never appeared.
+ */
+const SPORT_FILTERS = ['ALL', 'NFL', 'NBA', 'NHL', 'MLB', 'NCAAF', 'NCAAB', 'SOCCER'] as const
 type SportFilter = (typeof SPORT_FILTERS)[number]
 
 function hasChip(league: Dash34League, label: string): boolean {

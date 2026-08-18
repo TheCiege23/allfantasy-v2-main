@@ -1064,13 +1064,13 @@
  * whole range would land it on top of the tab bar between 641px and 900px, which
  * is exactly the gap the previous 640px-only rule left open.
  */
+/* Only the chat panel is positioned here now. The launcher moved inside
+   .af-d2-fab-wrap, which owns the corner and its tab-bar clearance. */
 @media (max-width: 900px) {
-  .af-core .af-d2-fab { bottom: 88px; }
   .af-core .af-d2-chat { bottom: 88px; }
 }
 
 @media (max-width: 640px) {
-  .af-core .af-d2-fab { bottom: 88px; }
   /* Full-width bottom sheet on a phone, so it meets the tab bar rather than
      floating above it. */
   .af-core .af-d2-chat { bottom: 0; }
@@ -1720,5 +1720,299 @@
 
   .af-core .af-d2-usermenu-item {
     font-size: 13px;
+  }
+}
+
+/* ── Player search: sizing + autocomplete ─────────────────────────────── */
+
+/*
+ * ⚠ THE SEARCH WAS TOO WIDE BECAUSE IT WAS THE ONLY FLEXIBLE ITEM IN THE BAR.
+ * `flex: 1 1 auto` with the clock and the plan/sync chips both `flex: none`
+ * meant it absorbed every spare pixel — on a wide monitor that is most of the
+ * top bar for a control that holds one short line of text. It still flexes, so
+ * the bar stays fluid, but it now stops at a readable width.
+ */
+.af-core .af-d2-topbar-search-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+}
+
+.af-core .af-d2-topbar-search {
+  width: 100%;
+  flex: 1 1 auto;
+}
+
+.af-core .af-d2-topbar-search-icon {
+  flex: none;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--faint);
+}
+
+.af-core .af-d2-topbar-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.af-core .af-d2-topbar-search-input::placeholder {
+  color: var(--muted);
+}
+
+.af-core .af-d2-topbar-search-input:focus {
+  outline: none;
+}
+
+.af-core .af-d2-topbar-search:focus-within {
+  border-color: var(--accent);
+}
+
+/* Safari renders a native clear affordance that collides with the ⌘K chip. */
+.af-core .af-d2-topbar-search-input::-webkit-search-cancel-button {
+  appearance: none;
+}
+
+.af-core .af-d2-ac {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.af-core .af-d2-ac-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-d2-ac-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.af-core .af-d2-ac-row.is-active {
+  background: var(--chip);
+}
+
+.af-core .af-d2-ac-img {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.af-core .af-d2-ac-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Headshots are top-weighted; centring them crops the face. */
+  object-position: top center;
+}
+
+.af-core .af-d2-ac-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-d2-ac-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-ac-meta {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Tools grid ───────────────────────────────────────────────────────── */
+
+.af-core .af-d2-tools {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.af-core .af-d2-tool {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  text-decoration: none;
+  min-height: 60px;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.af-core .af-d2-tool:hover {
+  border-color: var(--accent-line);
+  background: var(--surface2);
+}
+
+.af-core .af-d2-tool-glyph {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 14px;
+}
+
+.af-core .af-d2-tool-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-d2-tool-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-core .af-d2-tool-sub {
+  font-size: 11px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Chimmy launcher: pill + robot-king mark ──────────────────────────── */
+
+.af-core .af-d2-fab-wrap {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  z-index: 45;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/*
+ * The mark is inside the wrapper now, so its own fixed positioning has to go —
+ * two fixed boxes cannot sit side by side. The wrapper owns the corner.
+ */
+.af-core .af-d2-fab-wrap .af-d2-fab {
+  position: static;
+  right: auto;
+  bottom: auto;
+}
+
+.af-core .af-d2-fab-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.af-core .af-d2-fab-pill {
+  appearance: none;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-fab-pill:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.af-core .af-d2-chat-mark img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+@media (max-width: 900px) {
+  /* The wrapper is what sits in the corner now, so it takes the tab-bar
+     clearance the bare launcher used to carry. 76px matches the value the file
+     already settled on for that launcher, against `.af-d2-main`'s 96px reserve
+     for the 56px tab bar. */
+  .af-core .af-d2-fab-wrap {
+    bottom: 76px;
+  }
+
+  .af-core .af-d2-tools {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .af-core .af-d2-fab-wrap {
+    right: 16px;
+    bottom: 76px;
+  }
+
+  /* The label costs width a phone does not have beside the mark. */
+  .af-core .af-d2-fab-pill {
+    display: none;
+  }
+
+  .af-core .af-d2-tools {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* Full-bleed on a phone: the 420px cap is a desktop constraint. */
+  .af-core .af-d2-topbar-search-wrap {
+    max-width: none;
   }
 }

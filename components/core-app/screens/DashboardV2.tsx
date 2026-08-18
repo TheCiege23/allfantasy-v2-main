@@ -1,4 +1,5 @@
 import { LeaguePanel } from '@/components/core-app/dash-v2/LeaguePanel'
+import { ToolsGrid } from '@/components/core-app/dash-v2/ToolsGrid'
 import { SectionHeader } from '@/components/core-app/dash-v2/SectionHeader'
 import { Priorities } from '@/components/core-app/dash-v2/Priorities'
 import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
@@ -257,6 +258,21 @@ export function DashboardV2({
             counter={career?.level != null ? `LEVEL ${career.level}` : null}
           />
           <Legacy data={career} />
+        </section>
+
+        {/*
+          The handoff's six-tile grid. It sits last because every tile is a way
+          OUT of this screen — the sections above are what the dashboard is for,
+          and a grid of exits above them competes with the work.
+        */}
+        <section>
+          <SectionHeader label="Tools" />
+          <ToolsGrid
+            totalLeagues={total}
+            commissionerCount={commissionerCount}
+            levelName={career?.levelName ?? null}
+            hasCareer={Boolean(career && !career.isEmpty)}
+          />
         </section>
       </main>
 
