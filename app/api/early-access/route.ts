@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains";
 import { emailSchema, sanitizeString } from "@/lib/validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getResendClient } from "@/lib/resend-client";
@@ -353,6 +354,25 @@ export const POST = withApiUsage({
 
       return NextResponse.json(
         { ok: true, alreadyExists: true, emailSent: false },
+        { headers: corsHeaders }
+      );
+    }
+
+    /*
+     * ⚠ SAME RESERVED-DOMAIN GUARD AS THE REGISTER MIRROR. This endpoint is
+     * public and e2e suites post to it directly, so it is the other way test
+     * addresses reach the marketing list. Answered as a normal success, with the
+     * same body the real path returns, so a test asserting a 200 still passes —
+     * the row simply is not written.
+     *
+     * Returning here also skips the owner-notification email below, which is
+     * the point: every e2e signup currently mails
+     * allfantasysportsapp@gmail.com a "New Early Access Signup" alert for an
+     * address that does not exist.
+     */
+    if (isUndeliverableEmailDomain(email)) {
+      return NextResponse.json(
+        { ok: true, alreadyExists: false, emailSent: false },
         { headers: corsHeaders }
       );
     }

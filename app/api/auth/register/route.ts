@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
 import { prisma } from "@/lib/prisma"
+import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup"
 import { getPlatformEvents, EVENT } from "@/lib/events"
 import { Prisma, VerificationMethod } from "@prisma/client"
@@ -719,20 +720,35 @@ export async function POST(req: Request) {
           ? displayName.trim()
           : username
       const mirrorConfirmedAt = method === "PHONE" ? new Date() : null
-      await prisma.earlyAccessSignup.upsert({
-        where: { email },
-        create: {
-          email,
-          name: mirrorName,
-          source: "account_signup",
-          confirmedAt: mirrorConfirmedAt,
-        },
-        update: {
-          name: mirrorName,
-          // Only promote source if the row was previously a waitlist entry.
-          // We intentionally DO NOT overwrite an existing confirmedAt.
-        },
-      })
+
+      /*
+       * ⚠ A RESERVED-DOMAIN ADDRESS NEVER ENTERS THE MARKETING LIST. This mirror
+       * is why EarlyAccessSignup held 114 e2e rows out of 146 — every test that
+       * registers an account wrote one, and because Vercel PREVIEW deployments
+       * point at the PRODUCTION database, those were production writes. The real
+       * waitlist was 32 people; the number on the dashboard was 146.
+       *
+       * The guard is domain reservation rather than an environment check,
+       * because NODE_ENV cannot see that a preview is talking to the production
+       * database. Registration itself is unaffected — the account is created,
+       * the test passes, only the marketing-list mirror is skipped.
+       */
+      if (!isUndeliverableEmailDomain(email)) {
+        await prisma.earlyAccessSignup.upsert({
+          where: { email },
+          create: {
+            email,
+            name: mirrorName,
+            source: "account_signup",
+            confirmedAt: mirrorConfirmedAt,
+          },
+          update: {
+            name: mirrorName,
+            // Only promote source if the row was previously a waitlist entry.
+            // We intentionally DO NOT overwrite an existing confirmedAt.
+          },
+        })
+      }
     } catch (mirrorErr) {
       console.warn("[register] EarlyAccessSignup mirror failed (non-blocking):", mirrorErr)
     }
