@@ -36,6 +36,7 @@ import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
+import { getWeekAll } from '@/lib/core-app/weekAll'
 
 export const dynamic = 'force-dynamic'
 
@@ -263,7 +264,7 @@ export default async function AfCorePage({
      * "all leagues", so those sections stay placeholders until an aggregator
      * exists.
      */
-    const [careerData, portfolioData, draftData] = await Promise.all([
+    const [careerData, portfolioData, draftData, weekData] = await Promise.all([
       getCareerData(userId).catch(() => null),
       getPortfolio(userId).catch(() => null),
       /*
@@ -277,6 +278,15 @@ export default async function AfCorePage({
         userId,
         playedLeagues.map((l) => ({ id: l.id, name: l.name, platform: String(l.platform ?? '') })),
       ).catch(() => null),
+      getWeekAll(
+        userId,
+        playedLeagues.map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: String(l.platform ?? ''),
+          platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+        })),
+      ).catch(() => null),
     ])
     return (
       <DashboardV2
@@ -285,6 +295,7 @@ export default async function AfCorePage({
         career={careerData}
         portfolio={portfolioData}
         drafts={draftData}
+        week={weekData}
       />
     )
   }

@@ -5,10 +5,12 @@ import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
 import { Legacy } from '@/components/core-app/dash-v2/Legacy'
 import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInventory'
 import { DraftHqAll } from '@/components/core-app/dash-v2/DraftHqAll'
+import { YourWeek } from '@/components/core-app/dash-v2/YourWeek'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
 import type { DraftHqAllData } from '@/lib/core-app/draftHqAll'
+import type { WeekAllData } from '@/lib/core-app/weekAll'
 // af-core.css carries the .af-core token layer. This screen renders OUTSIDE
 // AfCoreShell (it brings its own left panel), so the shell does not import it
 // here — without this line every var(--surface) / var(--line) below computes to
@@ -43,6 +45,7 @@ export function DashboardV2({
   career = null,
   portfolio = null,
   drafts = null,
+  week = null,
 }: {
   data: Dash34Data | null
   /** From the loader's result, not from Dash34Data — passed in rather than
@@ -54,6 +57,8 @@ export function DashboardV2({
   portfolio?: PortfolioData | null
   /** Cross-league draft states, from the aggregator — not the per-league loader. */
   drafts?: DraftHqAllData | null
+  /** Real scored matchups. Carries its own season — do not assume current. */
+  week?: WeekAllData | null
 }) {
   const leagues = data?.leagues ?? []
   const total = data?.totalLeagues ?? 0
@@ -84,16 +89,6 @@ export function DashboardV2({
       />
 
       <main className="af-d2-main">
-        <section>
-          <SectionHeader label="Season timeline" counter={weekLabel} />
-          <div className="af-d2-card">
-            <p className="af-d2-empty">
-              Timeline nodes are derived from each league&rsquo;s season dates. Not wired
-              yet — this is the next module.
-            </p>
-          </div>
-        </section>
-
         {/*
           One account-wide fact, stated once. This is the 604-row fix: the old
           home derived a "League data is stale" issue per league and rendered it
@@ -141,14 +136,18 @@ export function DashboardV2({
         </section>
 
         <section>
-          <SectionHeader label="Your week — every matchup" />
-          <div className="af-d2-card">
-            <p className="af-d2-empty">
-              Win probability needs a projection per matchup. The projection loader
-              exists; the matchup results it scores against do not — 0 of 893 team
-              rows carry a result.
-            </p>
-          </div>
+          {/* The counter states the season these numbers are from. Every cached
+              row is 2025 while the clock reads 2026, so an unlabelled "your week"
+              would read as live. */}
+          <SectionHeader
+            label="Your week — every matchup"
+            counter={
+              week?.season != null && week.week != null
+                ? `WEEK ${week.week} · ${week.season}`
+                : null
+            }
+          />
+          <YourWeek data={week} />
         </section>
 
         <section>
