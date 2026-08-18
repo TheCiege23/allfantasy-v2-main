@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 
 /**
@@ -114,27 +115,99 @@ function recordOf(t: { wins: number; losses: number; ties: number }): string {
   return t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`
 }
 
+/** Reads an integer out of the settings blob, tolerating string values. */
+function settingWeek(settings: unknown, ...keys: string[]): number | null {
+  if (!settings || typeof settings !== 'object') return null
+  const bag = settings as Record<string, unknown>
+  for (const key of keys) {
+    const raw = bag[key]
+    const n = typeof raw === 'number' ? raw : typeof raw === 'string' ? Number(raw) : NaN
+    if (Number.isFinite(n) && n > 0 && n < 30) return Math.floor(n)
+  }
+  return null
+}
+
 /**
  * The season timeline.
  *
- * Built ONLY from a known current week — the handoff's stages (offseason, rookie
- * draft, trade deadline, playoffs, championship) are league-configured dates we
- * do not store for imported leagues. Rather than invent "Trade deadline in 2
- * days", the timeline shows the phases we can place from the week number alone
- * and says the rest are unconfigured.
+ * ⚠ THE DEADLINE AND PLAYOFF STAGES ARE THE LEAGUE'S OWN, NOT A GENERIC NFL
+ * CALENDAR. This was previously built from the week number alone, on the stated
+ * grounds that those are "league-configured dates we do not store". That is
+ * true of the handoff's Offseason and Rookie draft stages and NOT true of the
+ * other two: `trade_deadline_week` and `playoff_start_week` are both present in
+ * League.settings on production Sleeper leagues. A 12-team league with a Week 11
+ * deadline and a 14-team league with a Week 13 deadline are different seasons,
+ * and hardcoding 14/15/17 told both of them the same thing.
+ *
+ * ⚠ OFFSEASON AND ROOKIE DRAFT ARE STILL OMITTED. The handoff draws them with
+ * real dates ("AUG 14"). Nothing stores a draft date — DraftSession carries no
+ * scheduled time — so those stages would be decoration with a made-up date
+ * under them. A shorter true timeline beats a complete invented one.
  */
-function buildTimeline(currentWeek: number | null): SectionState<SeasonStage[]> {
+function buildTimeline(
+  currentWeek: number | null,
+  settings: unknown,
+): SectionState<SeasonStage[]> {
   if (currentWeek == null) {
     return { available: false, reason: 'no current week on file for this league' }
   }
 
-  const stages: Array<{ key: string; label: string; when: string; startWeek: number; endWeek: number }> = [
-    { key: 'early', label: 'Weeks 1–6', when: 'SEP–OCT', startWeek: 1, endWeek: 6 },
-    { key: 'mid', label: 'Weeks 7–13', when: 'OCT–DEC', startWeek: 7, endWeek: 13 },
-    { key: 'push', label: 'Playoff push', when: 'WK 14', startWeek: 14, endWeek: 14 },
-    { key: 'playoffs', label: 'Playoffs', when: 'WK 15–16', startWeek: 15, endWeek: 16 },
-    { key: 'final', label: 'Championship', when: 'WK 17', startWeek: 17, endWeek: 18 },
-  ]
+  const playoffStart =
+    settingWeek(settings, 'playoff_start_week', 'playoffStartWeek') ??
+    settingWeek((settings as Record<string, unknown> | null)?.playoffSettings, 'playoffStartWeek')
+  const deadline = settingWeek(settings, 'trade_deadline_week', 'tradeDeadlineWeek')
+
+  // Fall back only where the league told us nothing; each fallback is labelled
+  // in `when` so the reader is not shown a guess dressed as a setting.
+  const playoffWeek = playoffStart ?? 15
+  const finalWeek = playoffWeek + 2
+  const configured = playoffStart != null
+
+  const stages: Array<{ key: string; label: string; when: string; startWeek: number; endWeek: number }> = []
+
+  stages.push({
+    key: 'regular',
+    label: `Weeks 1–${Math.max(1, (deadline ?? playoffWeek) - 1)}`,
+    when: 'REGULAR SEASON',
+    startWeek: 1,
+    endWeek: Math.max(1, (deadline ?? playoffWeek) - 1),
+  })
+
+  if (deadline != null) {
+    stages.push({
+      key: 'deadline',
+      label: 'Trade deadline',
+      when: `WK ${deadline}`,
+      startWeek: deadline,
+      endWeek: deadline,
+    })
+  }
+
+  if ((deadline ?? 0) + 1 <= playoffWeek - 1) {
+    stages.push({
+      key: 'push',
+      label: 'Playoff push',
+      when: `WK ${(deadline ?? 0) + 1}–${playoffWeek - 1}`,
+      startWeek: (deadline ?? 0) + 1,
+      endWeek: playoffWeek - 1,
+    })
+  }
+
+  stages.push({
+    key: 'playoffs',
+    label: 'Playoffs',
+    when: configured ? `WK ${playoffWeek}–${finalWeek - 1}` : `WK ${playoffWeek}–${finalWeek - 1} · default`,
+    startWeek: playoffWeek,
+    endWeek: finalWeek - 1,
+  })
+
+  stages.push({
+    key: 'final',
+    label: 'Championship',
+    when: configured ? `WK ${finalWeek}` : `WK ${finalWeek} · default`,
+    startWeek: finalWeek,
+    endWeek: 30,
+  })
 
   return {
     available: true,
@@ -161,6 +234,11 @@ export async function getLeagueHomeData(
       season: true,
       leagueType: true,
       updatedAt: true,
+      // The timeline used to be built from the week number alone. These two keys
+      // are present in League.settings on production Sleeper leagues, so the
+      // deadline and playoff stages can be placed from the league's OWN
+      // configuration instead of a generic NFL calendar.
+      settings: true,
     },
   })
   if (!league) return null
@@ -254,6 +332,13 @@ export async function getLeagueHomeData(
 
   const currentWeek = nextGame?.week ?? null
 
+  // One league through the shared aggregator — three set-based queries, and the
+  // same status vocabulary handling (including `complete` vs `completed`).
+  const draftAll = await getDraftHqAll(userId, [
+    { id: league.id, name: league.name, platform: league.platform },
+  ]).catch(() => null)
+  const draftRow = draftAll?.rows?.[0] ?? null
+
   return {
     league: {
       id: league.id,
@@ -266,11 +351,45 @@ export async function getLeagueHomeData(
     },
     yourTeam,
     standings,
-    timeline: buildTimeline(currentWeek),
+    timeline: buildTimeline(currentWeek, league.settings),
     // Live matchup needs per-week scoring for imported leagues, which no writer
     // produces today. The handoff's 71% win probability would be fabricated.
     matchup: { available: false, reason: 'no weekly matchup or scoring data ingested for imported leagues' },
-    draftHq: { available: false, reason: 'pick inventory and lottery odds are not ingested' },
+    /*
+     * ⚠ THIS REASON WAS STALE. It said "pick inventory and lottery odds are not
+     * ingested", which is true of the handoff's LOTTERY ODDS and false of the
+     * draft itself: DraftSession and DraftPick are populated and already feed
+     * Draft Season HQ on the all-leagues dashboard. Reusing that aggregator for
+     * one league rather than writing a second query, so the two surfaces cannot
+     * disagree about the same draft.
+     */
+    draftHq: draftRow
+      ? {
+          available: true,
+          data: {
+            headline:
+              draftRow.phase === 'unknown'
+                ? draftRow.rawStatus
+                : draftRow.phase === 'live'
+                  ? 'Draft is live'
+                  : draftRow.phase === 'done'
+                    ? 'Draft complete'
+                    : 'Draft not started',
+            detail: [
+              draftRow.teamCount != null ? `${draftRow.teamCount} teams` : null,
+              draftRow.rounds != null ? `${draftRow.rounds} rounds` : null,
+              draftRow.draftType,
+              draftRow.picksMade != null
+                ? `${draftRow.picksMade} ${draftRow.picksMade === 1 ? 'pick' : 'picks'} recorded`
+                : null,
+              // Pick inventory and lottery odds genuinely are not ingested — the
+              // part of the old reason that was right, kept.
+            ]
+              .filter(Boolean)
+              .join(' · '),
+          },
+        }
+      : { available: false, reason: 'no draft has been set up for this league' },
     commissioner: { available: false, reason: 'votes and commissioner tasks are not ingested for imported leagues' },
     buzz: { available: false, reason: 'league transactions are not ingested for this platform yet' },
     syncAge: { label: age.label, stale: age.stale },
