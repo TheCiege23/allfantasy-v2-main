@@ -2,6 +2,7 @@ import { LeaguePanel } from '@/components/core-app/dash-v2/LeaguePanel'
 import { ToolsGrid } from '@/components/core-app/dash-v2/ToolsGrid'
 import { SectionHeader } from '@/components/core-app/dash-v2/SectionHeader'
 import { Priorities } from '@/components/core-app/dash-v2/Priorities'
+import { ChimmyBrief } from '@/components/core-app/dash-v2/ChimmyBrief'
 import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
 import { Legacy } from '@/components/core-app/dash-v2/Legacy'
 import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInventory'
@@ -182,6 +183,20 @@ export function DashboardV2({
         ) : null}
 
         {/*
+          The brief leads, above the priority cards it summarises. It is built
+          from the same ranking those cards use — see ChimmyBrief's note on why no
+          model runs here — so the two can never disagree about what matters most.
+        */}
+        <ChimmyBrief data={data} />
+
+        {/*
+          ⚠ MERGE RESOLUTION — BOTH SIDES KEPT ON PURPOSE. Two branches added a
+          lead element here independently: the brief (a summary of what needs
+          you) and this strip (the scoreboard — record and health). They answer
+          different questions, so taking either side alone would have silently
+          deleted a shipped feature. The brief sits first because it summarises
+          everything below it, including this strip.
+
           The top strip. Health always renders — as a score or as an explicit
           unknown — because a league exists whether or not we have read it, and
           an absent health tile lets the reader fill in the blank themselves
@@ -231,7 +246,23 @@ export function DashboardV2({
           week next to a waiver run makes neither legible.
         */}
         <section>
+          {/*
+            The id is the brief card's "See every call" target. There is no
+            separate briefing surface to link to and the repo sits at Vercel's
+            2,048-route ceiling, so the second action is an in-page anchor to the
+            full ranked list rather than a new route duplicating it.
+          */}
           <SectionHeader
+            /*
+             * ⚠ id FROM ONE BRANCH, LABEL FROM THE OTHER, AND BOTH ON PURPOSE.
+             * The label has to describe what the body renders, and the body
+             * renders `strip.next24` — so main's wording wins; "Needs your call"
+             * over a list of kickoffs and waiver runs would name a different
+             * section. The id is the ONLY target of the brief's "see every call"
+             * link (`moreHref: '#af-d2-needs'`), so dropping it would point that
+             * link at nothing.
+             */
+            id="af-d2-needs"
             label="Next 24 hours — all leagues"
             counter={strip?.next24.length ? `${strip.next24.length} ITEMS` : null}
           />
@@ -290,13 +321,34 @@ export function DashboardV2({
         </section>
 
         <section>
+          {/*
+            "Moving your book", not "Player exposure". The list is INJURY-LED, so a
+            header promising exposure implies a complete roster table. The "?"
+            carries that caveat at the TOP of the section — the footnote saying the
+            same thing sits below the rows, which is after the misreading has
+            already happened.
+
+            ⚠ THE CAVEAT IS "INJURY-LED", NOT "CAPPED AT SIX". Both this hint and
+            the footnote said six until BOOK_LIMIT moved from 6 to 40 — 34a still
+            shows six, the v2 module lists them all. A cap stated as a number is a
+            number that goes stale the moment the constant moves, so the wording
+            names the FILTER (a status worth flagging) rather than the limit.
+
+            The link goes to /my-players, which is the real cross-league exposure
+            audit: every player, starter/bench/IR split, per-league appearances.
+            It is a live route — not in vercel-next-build.cjs's exclusion list —
+            so this is not a dead link, and it costs no new route.
+          */}
           <SectionHeader
-            label="Player exposure"
+            label="Moving your book"
+            hint="Injury-led: it lists the players carrying a status worth flagging, ordered by how many of your leagues hold them. This is what you are most exposed to that is currently a problem — not a full table of everyone you roster."
+            hintLabel="What this list covers"
             counter={
               data?.book?.[0]?.exposureTotal
                 ? `ACROSS ${data.book[0].exposureTotal} LEAGUES`
                 : null
             }
+            action={{ href: '/my-players', label: 'Full exposure audit' }}
           />
           <Exposure data={data} />
         </section>

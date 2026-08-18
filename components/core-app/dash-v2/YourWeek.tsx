@@ -17,10 +17,25 @@ export function YourWeek({ data }: { data: WeekAllData | null }) {
   if (!data || data.rows.length === 0) {
     return (
       <div className="af-d2-card">
+        {/*
+          ⚠ TWO DIFFERENT EMPTY STATES, AND THE READER NEEDS TO KNOW WHICH.
+          "We have no schedule for your leagues" and "the schedule exists but
+          nothing has kicked off yet" look identical on screen and mean opposite
+          things — the first is a data gap worth chasing, the second is just a
+          Tuesday. Before this, unscored matchups were rendered as played games
+          at 0.00 and counted as LOSSES, so the screen said "0-2" for a week
+          nobody had played.
+        */}
         <p className="af-d2-empty">
-          No scored matchups on file for your leagues yet. Weekly results are
-          cached from the platform when a league syncs — once that runs, every
-          league&rsquo;s week shows here with its real margin.
+          {data && data.unscored > 0
+            ? `${data.unscored} ${
+                data.unscored === 1 ? 'matchup is' : 'matchups are'
+              } scheduled but not played yet${
+                data.week != null && data.season != null
+                  ? ` (week ${data.week}, ${data.season})`
+                  : ''
+              }. Scores appear here once games are final.`
+            : 'No scored matchups on file for your leagues yet. Weekly results are cached from the platform when a league syncs — once that runs, every league’s week shows here with its real margin.'}
         </p>
       </div>
     )

@@ -15,6 +15,8 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
+import LeagueHome from '@/components/core-app/screens/LeagueHome'
+import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
@@ -44,7 +46,27 @@ export const dynamic = 'force-dynamic'
  * home and a 604-tile rail. Same filter the /core route applies, for the same
  * reason.
  */
-export default async function DashboardPage() {
+/**
+ * ⚠ `?league=` IS THE LEAGUE-SCOPED STATE OF THIS SCREEN, NOT A SECOND ROUTE.
+ * The 3b handoff offers `/dashboard?league=:id` or `/league/:id`; the query
+ * parameter is the one that costs nothing, and this repo is at Vercel's 2048
+ * route ceiling.
+ *
+ * ⚠ THIS RECONNECTS A SCREEN THE CUTOVER ORPHANED. LeagueHome and its loader
+ * already existed and were reached through DashboardShell — the Nocturne shell
+ * that /dashboard stopped rendering when it moved to DashboardV2. So selecting a
+ * league left the dashboard entirely while a working implementation sat
+ * unreferenced. It is now the same route in a different state.
+ */
+type DashboardSearchParams = { [key: string]: string | string[] | undefined }
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: DashboardSearchParams
+}) {
+  const rawLeague = searchParams?.league
+  const selectedLeagueId = typeof rawLeague === 'string' && rawLeague.trim() ? rawLeague.trim() : null
   const missingEnvVars = getDashboardMissingEnvVars()
   if (missingEnvVars.length > 0) {
     const issue = createDashboardRuntimeIssue(missingEnvVars)
@@ -159,6 +181,28 @@ export default async function DashboardPage() {
       leagueCount: leagueListPayload ? leagueListPayload.leagues.length : null,
       getCookie: (name) => cookies().get(name)?.value,
     })
+
+    /*
+     * The league view replaces the all-leagues body, deliberately. Season
+     * timeline, Draft HQ and Commissioner Hub exist ONLY in this state — there
+     * is no single season calendar across 60 leagues, which is the rule the 3b
+     * handoff opens with and the reason the timeline was pulled off 3a.
+     *
+     * A league id that does not resolve (deleted, or not yours) falls through to
+     * the all-leagues dashboard rather than erroring: the loader returns null
+     * for both cases, and a dead link should land somewhere useful.
+     */
+    if (selectedLeagueId) {
+      const leagueHome = await getLeagueHomeData(selectedLeagueId, userId).catch(() => null)
+      if (leagueHome) {
+        const otherIssues = playedLeagues.filter((l) => l.id !== leagueHome.league.id).length
+        return (
+          <div className="af-core af-lh-shell">
+            <LeagueHome data={leagueHome} otherLeagueIssueCount={otherIssues} />
+          </div>
+        )
+      }
+    }
 
     return (
       <DashboardV2

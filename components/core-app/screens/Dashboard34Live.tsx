@@ -79,3 +79,86 @@ function utcLabel(iso: string): string {
   if (Number.isNaN(d.getTime())) return ''
   return `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
 }
+
+/**
+ * How old a fact is — "30 min ago".
+ *
+ * ⚠ SAME TWO-PASS CONTRACT AS THE COUNTDOWN, AND FOR THE SAME REASON. Elapsed
+ * time is derived from `Date.now()`, which the server and the reader never agree
+ * on, so the first client paint MUST be the string the server sent. `initial` is
+ * that string; `useEffect` runs after hydration and re-derives from `iso`.
+ * Computing it during render instead is a hydration mismatch on a page that has
+ * already been taken down once by one.
+ *
+ * ⚠ `format` BELOW MIRRORS `formatAgo` IN lib/core-app/dash34.ts. If the two
+ * drift, the value visibly changes shape the instant the page hydrates.
+ */
+export function Dash34Ago({ iso, initial }: { iso: string; initial: string }) {
+  const [label, setLabel] = useState(initial)
+
+  useEffect(() => {
+    const at = new Date(iso).getTime()
+    if (!Number.isFinite(at)) return
+    const tick = () => setLabel(formatAgo(Date.now() - at))
+    tick()
+    // A minute, not a second: the coarsest unit this renders is minutes, so a
+    // faster interval would re-render the row without ever changing a character.
+    const id = window.setInterval(tick, 60_000)
+    return () => window.clearInterval(id)
+  }, [iso])
+
+  return <>{label}</>
+}
+
+/** Must produce the same shape as `formatAgo` in lib/core-app/dash34.ts. */
+function formatAgo(ms: number): string {
+  if (ms < 60_000) return 'just now'
+  const mins = Math.floor(ms / 60_000)
+  if (mins < 60) return `${mins} min ago`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `${hours}h ago`
+  const days = Math.floor(hours / 24)
+  if (days < 7) return `${days}d ago`
+  const weeks = Math.floor(days / 7)
+  if (weeks < 5) return `${weeks}w ago`
+  const months = Math.floor(days / 30)
+  if (months < 12) return `${months}mo ago`
+  return `${Math.floor(days / 365)}y ago`
+}
+
+/**
+ * A day AND a time — "Thu 8:20 PM" — for an instant that may not be today.
+ *
+ * `Dash34Time` above renders the clock only, which is right for a row already
+ * scoped to the next 24 hours. A player's next kickoff can be six days out, and
+ * "8:20 PM" with no day attached reads as tonight.
+ *
+ * Same two-pass rule: UTC on the server and on the first client paint, local
+ * afterwards.
+ */
+export function Dash34When({ iso }: { iso: string }) {
+  const utc = utcDayLabel(iso)
+  const [label, setLabel] = useState(utc)
+
+  useEffect(() => {
+    const d = new Date(iso)
+    if (Number.isNaN(d.getTime())) return
+    setLabel(
+      d.toLocaleString(undefined, {
+        weekday: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+    )
+  }, [iso])
+
+  return <>{label}</>
+}
+
+const UTC_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function utcDayLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${UTC_DAYS[d.getUTCDay()]} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
+}

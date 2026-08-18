@@ -2,7 +2,6 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import type { SectionState } from './leagueHome'
-import { leagueDisplayName } from './leagueHome'
 
 /**
  * The three cross-league cards that sit at the top of Dashboard v2: today's
@@ -295,15 +294,38 @@ async function resolveHealth(
  *
  * TWO row kinds are real, and a third was cut:
  *
- * ✔ WAIVER RUNS — from `LeagueWaiverSettings.processingDayOfWeek` +
- *   `processingTimeUtc`. The handoff recorded this as having NO SOURCE after
- *   finding no matching key in `League.settings`, which is correct about that
- *   JSON blob and wrong about the database: the timing lives in a dedicated
- *   table, populated for 79 of 98 production leagues, and `lib/core-app/waivers.ts`
- *   already reads and ships it. That file also records the trap worth repeating —
- *   `League.waiverProcessTime` is a schema `@default("02:00")` that every league
- *   carries, so reading THAT column is how you print a default as an ingested
- *   fact. This reads the ingested table, and skips leagues whose waivers are off.
+ * ✘ WAIVER RUNS — CUT, AND THIS REVERSES AN EARLIER DECISION IN THIS FILE.
+ *   They were built from `LeagueWaiverSettings.processingDayOfWeek` +
+ *   `processingTimeUtc` on the reasoning that this is "the ingested table",
+ *   unlike `League.waiverProcessTime` (a schema `@default("02:00")`). Half of
+ *   that is right: `League.waiverProcessTime` IS a default. The other half is
+ *   not — `LeagueWaiverSettings` is ALSO populated from our own defaults, just
+ *   less obviously.
+ *
+ *   Measured on production rather than argued:
+ *
+ *     day=2 time=10:00  ->  61 leagues
+ *     day=1 time=12:00  ->  18 leagues
+ *
+ *   TWO distinct values across the entire database, correlated with waiverType.
+ *   And 54 of those leagues have since synced from Sleeper without the values
+ *   changing — if the column were ingested, syncing would have produced varied
+ *   real times.
+ *
+ *   The code says the same thing: every writer of these columns sources from
+ *   `getWaiverDefaults(sport, variant)` — a pure defaults function — via
+ *   lib/waiver-defaults/ and lib/sport-defaults/. None of the eight writers is
+ *   an import adapter. Nothing reads waiver timing off a provider.
+ *
+ *   So "Waivers process · Dynasty Dragons · 10:00" was our own creation default
+ *   printed as that league's measured rule. That is the same failure as a "C"
+ *   trade grade meaning no-data, and the row is cut until something genuinely
+ *   ingests waiver timing.
+ *
+ *   TO RESTORE IT: persist Sleeper's waiver settings (its league blob does
+ *   expose them) in applySleeperLeagueSync, and gate this on provenance — a
+ *   value equal to the sport default is indistinguishable from an unset one, so
+ *   the gate has to be "we read this from the provider", not "this is non-null".
  *
  * ✔ GAMES — from `SportsGame`, scoped to the sports the user actually plays.
  *
@@ -325,54 +347,28 @@ async function resolveNext24(
   if (leagues.length === 0) return []
 
   const horizon = new Date(now.getTime() + 24 * 3_600_000)
-  const leagueIds = leagues.map((l) => l.id).filter(Boolean)
   const sports = [...new Set(leagues.map((l) => String(l.sport ?? 'NFL').toUpperCase()))]
 
-  const [waiverSettings, games] = await Promise.all([
-    prisma.leagueWaiverSettings
-      .findMany({
-        where: { leagueId: { in: leagueIds } },
-        select: {
-          leagueId: true,
-          waiverType: true,
-          processingDayOfWeek: true,
-          processingTimeUtc: true,
-        },
-      })
-      .catch(() => []),
-    prisma.sportsGame
-      .findMany({
-        where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
-        orderBy: { startTime: 'asc' },
-        take: 20,
-        select: { sport: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
-      })
-      .catch(() => []),
-  ])
+  // The LeagueWaiverSettings read is gone with the waiver rows — see the header.
+  // Querying a column we have proven we cannot trust would just invite someone to
+  // render it again.
+  const games = await prisma.sportsGame
+    .findMany({
+      where: { sport: { in: sports }, startTime: { gte: now, lte: horizon } },
+      orderBy: { startTime: 'asc' },
+      take: 20,
+      select: { sport: true, startTime: true, week: true, homeTeam: true, awayTeam: true },
+    })
+    .catch(() => [])
 
-  const nameById = new Map(leagues.map((l) => [l.id, leagueDisplayName(l.name)]))
   const rows: Next24Row[] = []
 
-  for (const s of waiverSettings) {
-    // Waivers turned off means free agents are instant — there is no run to
-    // announce, and a row saying otherwise would describe a rule the league
-    // does not have.
-    if (String(s.waiverType ?? '').toLowerCase() === 'off') continue
-    const day = s.processingDayOfWeek
-    const time = s.processingTimeUtc?.trim()
-    if (day == null || day < 0 || day > 6 || !time) continue
-
-    const runsAt = nextWeeklyRun(now, horizon, day, time)
-    if (!runsAt) continue
-
-    rows.push({
-      kind: 'waiver',
-      text: 'Waivers process',
-      sub: nameById.get(s.leagueId) ?? null,
-      time: runsAt.toISOString(),
-      tone: 'warn',
-    })
-  }
+  /*
+   * No waiver rows. See the header — the timing columns hold our own sport
+   * defaults, not provider data, so every row would have announced a rule the
+   * league never told us. `nextWeeklyRun` is kept and still tested: it is
+   * correct arithmetic waiting on a trustworthy input.
+   */
 
   for (const g of games) {
     if (!g.startTime) continue

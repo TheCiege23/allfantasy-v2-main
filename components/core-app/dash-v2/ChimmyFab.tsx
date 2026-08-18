@@ -1,6 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+
+import { CHIMMY_OPEN_EVENT } from '@/components/core-app/dash-v2/ChimmyAsk'
 
 /**
  * Chimmy launcher — collapsed by default, opens only on click.
@@ -26,6 +28,33 @@ import { useState } from 'react'
  */
 export function ChimmyFab({ unread = 0 }: { unread?: number }) {
   const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLElement | null>(null)
+
+  /*
+   * "Ask Chimmy" on the brief card opens this panel. The button is a sibling
+   * several levels up the tree, and lifting this `useState` to DashboardV2 to
+   * share it would make that screen a client component and ship its career,
+   * portfolio, draft and week payloads to the browser. A window event is the
+   * cheap seam.
+   *
+   * Opening still spends nothing — the thread starts empty either way. The
+   * standing rule is about generation, not about visibility.
+   */
+  useEffect(() => {
+    const onOpen = () => setOpen(true)
+    window.addEventListener(CHIMMY_OPEN_EVENT, onOpen)
+    return () => window.removeEventListener(CHIMMY_OPEN_EVENT, onOpen)
+  }, [])
+
+  /*
+   * Focus moves into the panel when it opens. Without this, a keyboard or screen
+   * reader user who presses "Ask Chimmy" at the top of the page is left with
+   * focus on a button that has just vanished from the layout, and the panel that
+   * replaced it is 2,000px away at the bottom of the document.
+   */
+  useEffect(() => {
+    if (open) panelRef.current?.focus()
+  }, [open])
 
   if (!open) {
     return (
@@ -63,7 +92,7 @@ export function ChimmyFab({ unread = 0 }: { unread?: number }) {
   }
 
   return (
-    <section className="af-d2-chat" aria-label="Ask Chimmy">
+    <section className="af-d2-chat" aria-label="Ask Chimmy" ref={panelRef} tabIndex={-1}>
       <header className="af-d2-chat-head">
         <span className="af-d2-chat-mark" aria-hidden>
           {/* eslint-disable-next-line @next/next/no-img-element */}

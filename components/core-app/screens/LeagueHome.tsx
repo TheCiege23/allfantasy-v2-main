@@ -1,6 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+/*
+ * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen used to render only
+ * inside AfCoreShell, which imports the token layer for everything under it. It
+ * now also renders at /dashboard?league=, OUTSIDE that shell — where every
+ * var(--surface) / var(--line) / var(--accent) below would resolve to nothing:
+ * cards paint transparent with 0px borders and no error is thrown. Exactly the
+ * failure the landing page shipped with before the same import fixed it.
+ */
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-league-home.css'
 import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 
@@ -81,7 +90,9 @@ export function LeagueHome({ data, otherLeagueIssueCount }: LeagueHomeProps) {
           </div>
         </div>
 
-        <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
+        {/* Back to the all-leagues dashboard — the state this screen is a
+            variant OF, not /core, which is a different surface. */}
+        <Link href="/dashboard" className="af-btn af-btn--ghost af-lh-back">
           Back to home →
         </Link>
       </header>

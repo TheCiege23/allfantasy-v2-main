@@ -40,21 +40,40 @@ function hasChip(league: Dash34League, label: string): boolean {
 }
 
 /** Mirrors dash34's rank() ordering so both surfaces sort the same way. */
+/*
+ * ⚠ "DRAFTING" IS ITS OWN GROUP NOW, NOT A RENAME OF "NEEDS YOU". Those were one
+ * bucket (`priority === 'urgent' || priority === 'draft'`) under the heading
+ * NEEDS YOU. Simply relabelling it DRAFTING would have put a league with an
+ * unavailable starter — urgent, not drafting — under a heading that says it is
+ * drafting, which is a false statement about that league rather than a wording
+ * choice. Splitting keeps both true: a live draft goes to DRAFTING, everything
+ * else urgent stays in NEEDS YOU, and NEEDS YOU self-hides when it is empty
+ * (which is why the panel looks like a pure rename today — right now every
+ * urgent league IS drafting).
+ */
 function groupOf(league: Dash34League): string {
-  if (league.priority === 'urgent' || league.priority === 'draft') return 'needs'
+  if (league.priority === 'draft' || hasChip(league, 'DRAFTING')) return 'drafting'
+  if (league.priority === 'urgent') return 'needs'
   if (hasChip(league, 'PRE DRAFT')) return 'predraft'
   if (hasChip(league, 'YOU COMMISH')) return 'commish'
   return 'other'
 }
 
+/*
+ * ⚠ THE LAST GROUP IS "YOU JOINED", NOT "YOUR LEAGUES". Every group on this
+ * panel is one of your leagues, so "YOUR LEAGUES" named the whole list rather
+ * than this slice of it — and sitting under YOU COMMISSION it read as the
+ * opposite of what it is. These are the leagues you play in but do not run.
+ */
 const GROUP_LABELS: Record<string, string> = {
+  drafting: 'DRAFTING',
   needs: 'NEEDS YOU',
   predraft: 'PRE DRAFT',
   commish: 'YOU COMMISSION',
-  other: 'YOUR LEAGUES',
+  other: 'YOU JOINED',
 }
 
-const GROUP_ORDER = ['needs', 'predraft', 'commish', 'other']
+const GROUP_ORDER = ['drafting', 'needs', 'predraft', 'commish', 'other']
 
 export function LeaguePanel({
   leagues,
@@ -208,7 +227,14 @@ export function LeaguePanel({
                       sub-screen we think is most urgent".
                     */}
                     <Link
-                      href={`/core?league=${encodeURIComponent(league.id)}`}
+                      /*
+                       * ⚠ /dashboard, NOT /core. Choosing a league is a STATE of
+                       * this screen, not a trip to a different product surface —
+                       * the league-scoped view now renders at ?league= on the
+                       * same route, which is also where the season timeline,
+                       * Draft HQ and Commissioner Hub live.
+                       */
+                      href={`/dashboard?league=${encodeURIComponent(league.id)}`}
                       className="af-d2-row"
                     >
                       <span className="af-d2-tile" data-platform={league.platform} aria-hidden>
@@ -275,8 +301,23 @@ export function LeaguePanel({
             <span className="af-d2-panel-link-count af-num">{commissionerCount}</span>
           ) : null}
         </Link>
-        <Link href="/core/war-room" className="af-d2-panel-link">
-          War Room
+        {/*
+          ⚠ THE HREF MOVED WITH THE LABEL, DELIBERATELY. Renaming this to
+          "Legacy & Rankings" while it still pointed at /core/war-room would have
+          been a link that lies about where it goes. `career` is the Legacy
+          screen and is a real key in SCREEN_KEYS, so the label and the
+          destination now agree.
+
+          ⚠ WAR ROOM IS NOW UNLINKED FROM THIS PANEL, and it is not in the Tools
+          grid either (that grid is Player finder / Trade lab / Waiver plan /
+          Rankings / Career & Legacy / Commissioner HQ). This screen renders
+          OUTSIDE AfCoreShell, whose nav normally carries it — which is the whole
+          reason these panel links exist. So /core/war-room is currently reachable
+          only by typing the URL. Kept as requested; add a tile if that access
+          matters.
+        */}
+        <Link href="/core/career" className="af-d2-panel-link">
+          Legacy &amp; Rankings
         </Link>
         <Link href="/core/tools" className="af-d2-panel-link">
           Tools

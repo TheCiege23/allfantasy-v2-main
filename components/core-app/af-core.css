@@ -55,9 +55,47 @@
   --line: rgba(255, 255, 255, 0.07);
   --line2: rgba(255, 255, 255, 0.13);
   --text: #eef0fa;
+  /*
+   * ⚠ `--muted` AND `--faint` ARE RAISED ABOVE THE HANDOFF'S VALUES IN ALL THREE
+   * THEMES. Second intentional divergence from tokens.css; see the semantic-tone
+   * note for the first. Do not restore either.
+   *
+   * `--faint` FAILED WCAG 1.4.3 IN EVERY THEME, and it is not a decorative token:
+   * grepped across components/ and app/, 168 of its 170 uses are `color:` — it is
+   * the fourth text tier, and the only two exceptions are 7px dots.
+   *
+   * Measured on the worst ground each tier actually sits on (a `--chip` overlay
+   * on `--surface2`, which is where small print in a card-inside-a-card lands):
+   *
+   *              light          dark           af
+   *   --faint    2.46  ✗        2.94  ✗        3.54  ✗
+   *   --muted    4.56  ~        5.90  ✓        6.42  ✓
+   *
+   * ⚠ RAISING `--faint` ALONE WOULD HAVE DESTROYED A TIER. `--faint` needs ≈4.6
+   * to clear the floor, and light's `--muted` was sitting at 4.56 — the two would
+   * have rendered identically and the light palette would have silently dropped
+   * from four text tiers to three. So `--muted` moves up with it, and the ladder
+   * is re-cut to the same shape in every theme rather than each drifting:
+   *
+   *     text2  >  --muted 6.5  >  --faint 4.6      (≈1.4× between each)
+   *
+   * Hue and saturation are held throughout; only lightness moved. `--text` and
+   * `--text2` already cleared by a wide margin and are untouched.
+   *
+   * ⚠ CONSEQUENCE, SO IT IS NOT A SURPRISE LATER: every de-emphasised label in
+   * `.af-core` steps up one notch in weight — light-mode `--faint` now reads
+   * roughly where `--muted` used to. That is what raising a failing floor looks
+   * like; the quiet tier is still quiet, it is merely legible. 327 rules across
+   * the af-* stylesheets read these two tokens.
+   *
+   * ⚠ SCOPED TO `.af-core`. app/globals.css declares its own `--muted`/`--faint`
+   * at `:root` for non-af-core surfaces, and its `--text-secondary: var(--muted)`
+   * alias resolves against THAT one, not this. Nothing outside the af-* screens
+   * moves.
+   */
   --text2: #c3c9e6;
-  --muted: #8f97bd;
-  --faint: #5d648a;
+  --muted: #989fc2;
+  --faint: #7d84a8;
   --accent: #22d3ee;
   --accent-ink: #04050c;
   --accent-soft: rgba(34, 211, 238, 0.12);
@@ -104,21 +142,85 @@ html[data-mode='light'] .af-core {
   --line2: rgba(11, 16, 32, 0.16);
   --text: #0b1020;
   --text2: #333c5c;
-  --muted: #5d6688;
-  --faint: #8b93b0;
-  --accent: #0a7ea4;
+  /* Re-cut ladder — see the note in the base .af-core block. */
+  --muted: #484f69;
+  --faint: #5c6587;
+  /*
+   * ⚠ ALSO DARKER THAN THE HANDOFF (#0a7ea4), FOR THE SAME MEASURED REASON AS THE
+   * THREE SEMANTIC TONES BELOW — see the long note there before changing either.
+   *
+   * The handoff value fails 4.5:1 everywhere except plain --surface:
+   *
+   *     on --surface 4.63 ✓   on --bg 4.29 ✗
+   *     on --surface2 4.10 ✗   on --accent-soft 4.06 ✗
+   *
+   * `on --bg` is the one that matters most and is the easiest to miss: section
+   * headers, group labels and every "→" link sit on the PAGE ground, not on a
+   * card, and --bg is darker than --surface. So the accent text that reads
+   * acceptably inside a card fails the moment it sits between two of them.
+   *
+   * ⚠ THIS IS A VISIBLE CHANGE TO EVERY LIGHT-MODE SCREEN, and it is a smaller
+   * one than it sounds: same hue, same saturation, ~9% less lightness. It is the
+   * light palette's accent, not the brand mark — dark and AF keep #22d3ee
+   * untouched, and both already measure 8.28–11.12.
+   *
+   * -soft and -line are the same colour at their own alphas and are regenerated
+   * from the new triplet; they are not independent values.
+   */
+  --accent: #096d8e;
   --accent-ink: #ffffff;
-  --accent-soft: rgba(10, 126, 164, 0.1);
-  --accent-line: rgba(10, 126, 164, 0.3);
-  --good: #0b8f66;
-  --warn: #a86a06;
-  --bad: #cf3355;
-  --good-soft: rgba(11, 143, 102, 0.1);
-  --warn-soft: rgba(168, 106, 6, 0.1);
-  --bad-soft: rgba(207, 51, 85, 0.1);
+  --accent-soft: rgba(9, 109, 142, 0.1);
+  --accent-line: rgba(9, 109, 142, 0.3);
+  /*
+   * ⚠ THESE THREE ARE DARKER THAN THE HANDOFF'S tokens.css, DELIBERATELY. DO NOT
+   * "RESTORE" THEM TO MATCH IT — the note further down this file records that all
+   * 39 tokens were once byte-identical to the handoff, and this is the one
+   * intentional divergence.
+   *
+   * Measured 2026-08-18 against the light grounds these actually sit on. The
+   * handoff's values fail WCAG 1.4.3 (4.5:1 for normal text) on every one of
+   * them, and the semantic tones are the worst place in the palette for that to
+   * be true: they are the signal that something needs attention, so a tone
+   * nobody can read is a warning that does not warn.
+   *
+   *                    on --surface   on its own -soft   white on it
+   *   --good #0b8f66       4.09  ✗         3.61  ✗          4.09  ✗
+   *   --warn #a86a06       4.44  ✗         3.92  ✗          4.44  ✗
+   *   --bad  #cf3355       4.93  ✓         4.26  ✗          4.93  ✓
+   *
+   * The values below are the minimum darkening (hue and saturation held, only
+   * lightness moved) that clears 4.5:1 on --surface, on --surface2, on --bg, on
+   * each tone's own -soft tint over BOTH surfaces, and for white text sitting on
+   * the tone as a solid fill. Every pairing now measures 4.52–5.94.
+   *
+   * ⚠ DARKENING IS SAFE IN BOTH DIRECTIONS HERE, WHICH IS WHY IT IS THE WHOLE
+   * FIX. Grepped first: where these tokens are a solid BACKGROUND they always
+   * carry white or --accent-ink text (.af-d2-fab-badge, .af-d34-fabdot,
+   * .af-mt-fix, .af-d34-ask[data-priority='draft']), so a darker fill raises that
+   * contrast too. Everywhere else they are a dot or a bar with no text on them.
+   *
+   * ⚠ LIGHT MODE ONLY. Dark and AF were measured at the same time and every tone
+   * clears 4.5 by a wide margin there (5.41–12.94), so those blocks are
+   * untouched — the defect is this block's, not the palette system's.
+   *
+   * The -soft pairs are the same colours at the same alpha and are regenerated
+   * from the new triplets; they are NOT independent values and must move
+   * together. (--p-gold-soft below happens to share the old --warn triplet but is
+   * a separate platform-mark token with its own --p-gold-fg, and is left alone.)
+   */
+  --good: #097352;
+  --warn: #8d5905;
+  --bad: #ba2c4b;
+  --good-soft: rgba(9, 115, 82, 0.1);
+  --warn-soft: rgba(141, 89, 5, 0.1);
+  --bad-soft: rgba(186, 44, 75, 0.1);
   --chip: rgba(11, 16, 32, 0.045);
   --chip-line: rgba(11, 16, 32, 0.1);
-  --hero: radial-gradient(760px 420px at 18% 10%, rgba(10, 126, 164, 0.1), transparent 68%),
+  /* First stop is the accent glow and moves with `--accent` above; the second is
+     an independent blue and does not. A decorative wash at 10% — no text sits on
+     it — but leaving it on the old triplet is the drift this file elsewhere
+     complains about. */
+  --hero: radial-gradient(760px 420px at 18% 10%, rgba(9, 109, 142, 0.1), transparent 68%),
     radial-gradient(600px 380px at 88% 30%, rgba(59, 130, 246, 0.09), transparent 70%);
   --chimmy: linear-gradient(160deg, #e8f6fb, #ffffff 58%);
   --shadow: 0 30px 80px -50px rgba(11, 16, 32, 0.4);
@@ -166,8 +268,9 @@ html[data-mode='af'] .af-core {
   --line2: rgba(167, 139, 250, 0.3);
   --text: #f4efff;
   --text2: #dbd0f7;
-  --muted: #a99ecb;
-  --faint: #7b6fa4;
+  /* Re-cut ladder — see the note in the base .af-core block. */
+  --muted: #aa9fcc;
+  --faint: #8e84b1;
   --accent: #a78bfa;
   --accent-ink: #120b22;
   --accent-soft: rgba(167, 139, 250, 0.14);
