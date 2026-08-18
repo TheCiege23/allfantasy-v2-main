@@ -271,6 +271,50 @@ async function applyTeamsRosters(
   // claim; Roster keyed by platformUserId with rebuilt lineup_sections; TeamPerformance by [teamId,season,week]).
   await bootstrapLeagueFromNormalizedImport(leagueId, normalized)
 
+  /*
+   * ⚠ WRITE THE RESULTS BACK ONTO LeagueTeam. Nothing did, so LeagueTeam carried
+   * a result on 0 of 893 production rows — which is why the dashboard has no
+   * records, no standings and no "today's record", and why every surface that
+   * reads them omits itself. The standings were already being fetched and
+   * normalized on every sync; they were written into LeagueSeason and never back
+   * onto the teams the app actually reads.
+   *
+   * Matched on [leagueId, externalId] <- source_team_id, which is the table's own
+   * unique key, so a result can never land on the wrong team.
+   *
+   * Empty-response protection, same rule the roster path above follows: a
+   * provider hiccup that returns no standings must not zero a populated league.
+   * Absent standings means "we did not learn anything", not "everyone is 0-0".
+   */
+  const standings = Array.isArray(normalized.standings) ? normalized.standings : []
+  if (standings.length === 0) {
+    out.notes.push('teams_rosters: no standings in response — left existing records untouched')
+  } else {
+    let written = 0
+    for (const row of standings) {
+      const externalId = String(row.source_team_id ?? '').trim()
+      if (!externalId) continue
+      const res = await prisma.leagueTeam
+        .updateMany({
+          where: { leagueId, externalId },
+          data: {
+            wins: row.wins,
+            losses: row.losses,
+            ties: row.ties,
+            pointsFor: row.points_for,
+            // points_against is optional on the normalized entry; leave the
+            // stored value alone rather than writing 0 over a real number.
+            ...(typeof row.points_against === 'number'
+              ? { pointsAgainst: row.points_against }
+              : {}),
+          },
+        })
+        .catch(() => ({ count: 0 }))
+      written += res.count
+    }
+    out.notes.push(`teams_rosters: wrote records onto ${written} team row(s)`)
+  }
+
   const after = await snapshotTeamsRosters(leagueId)
 
   for (const r of normalized.rosters) {

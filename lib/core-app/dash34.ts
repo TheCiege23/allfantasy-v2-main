@@ -338,7 +338,7 @@ export async function getDash34Data(
       ? prisma.sportsPlayer
           .findMany({
             where: { sleeperId: { in: playerIds } },
-            select: { sleeperId: true, name: true, position: true, team: true },
+            select: { sleeperId: true, name: true, position: true, team: true, imageUrl: true },
           })
           .catch(() => [])
       : Promise.resolve([]),
@@ -359,10 +359,17 @@ export async function getDash34Data(
    * rather than from the row count, which would have overstated every exposure
    * figure on this screen by roughly 2.5×.
    */
-  const playerById = new Map<string, { name: string; position: string | null }>()
+  const playerById = new Map<
+    string,
+    { name: string; position: string | null; imageUrl: string | null }
+  >()
   for (const p of playerRows) {
     if (!p.sleeperId || playerById.has(p.sleeperId)) continue
-    playerById.set(p.sleeperId, { name: p.name, position: p.position })
+    playerById.set(p.sleeperId, {
+      name: p.name,
+      position: p.position,
+      imageUrl: p.imageUrl ?? null,
+    })
   }
 
   const injuryByName = new Map<string, { status: string; description: string | null }>()
@@ -375,18 +382,31 @@ export async function getDash34Data(
   }
 
   /** Designation for a roster id, or null when we hold none. Never "healthy". */
-  function designationOf(playerId: string): { name: string; position: string | null; status: string; description: string | null } | null {
+  function designationOf(playerId: string): {
+    name: string
+    position: string | null
+    status: string
+    description: string | null
+    imageUrl: string | null
+  } | null {
     const p = playerById.get(playerId)
     if (!p) return null
     const inj = injuryByName.get(p.name.trim().toLowerCase())
     if (!inj) return null
-    return { name: p.name, position: p.position, status: inj.status, description: inj.description }
+    return {
+      name: p.name,
+      position: p.position,
+      status: inj.status,
+      description: inj.description,
+      imageUrl: p.imageUrl ?? null,
+    }
   }
 
   /* ── Per-league hurt counts, and the exposure book in the same pass ─────── */
 
   type BookEntry = {
     name: string
+    imageUrl: string | null
     position: string | null
     status: string
     description: string | null
@@ -431,6 +451,7 @@ export async function getDash34Data(
       } else {
         book.set(key, {
           name: d.name,
+          imageUrl: d.imageUrl,
           position: d.position,
           status: d.status,
           description: d.description,
@@ -617,6 +638,12 @@ export async function getDash34Data(
 
   /* ── Moving your book ──────────────────────────────────────────────────── */
 
+  /*
+   * 34a shows six; the v2 exposure module lists them all, ordered by how many
+   * leagues carry the player. One builder, one ordering — the cap is the only
+   * difference, so it is a constant rather than two code paths.
+   */
+  const BOOK_LIMIT = 40
   const totalActive = active.length
   const bookRows = [...book.values()]
     .sort((a, b) => {
@@ -627,10 +654,31 @@ export async function getDash34Data(
       if (b.leagues.size !== a.leagues.size) return b.leagues.size - a.leagues.size
       return a.name.localeCompare(b.name)
     })
-    .slice(0, 6)
+    .slice(0, BOOK_LIMIT)
     .map((b) => ({
       initials: initialsOf(b.name),
       name: b.name,
+      imageUrl: b.imageUrl,
+      /*
+       * The leagues carrying this player, resolved to something renderable. The
+       * set of ids was already being collected to COUNT exposure; naming them is
+       * what turns "7 of 61" from a number into something actionable — you can
+       * see which seven without opening seven leagues.
+       */
+      leagues: [...b.leagues]
+        .map((id) => {
+          const row = active.find((l) => l.id === id)
+          return row
+            ? {
+                id,
+                name: leagueDisplayName(row.name),
+                platform: String(row.platform ?? ''),
+                imageUrl: imageOf(row),
+              }
+            : null
+        })
+        .filter((x): x is { id: string; name: string; platform: string; imageUrl: string | null } => x !== null)
+        .sort((a, b2) => a.name.localeCompare(b2.name)),
       note: [b.position, b.status].filter(Boolean).join(' · '),
       exposure: `${b.leagues.size} of ${totalActive}`,
       /*

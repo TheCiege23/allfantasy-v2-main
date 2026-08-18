@@ -103,6 +103,10 @@ export type Dash34Data = {
   book?: Array<{
     initials: string
     name: string
+    /** Player headshot when SportsPlayer carries one. */
+    imageUrl?: string | null
+    /** The leagues carrying this player — names an exposure count cannot. */
+    leagues?: Array<{ id: string; name: string; platform: string; imageUrl: string | null }>
     note: string
     /** Human form, e.g. "7 of 61". */
     exposure?: string | null
