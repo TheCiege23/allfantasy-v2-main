@@ -5,16 +5,34 @@ import { useState } from 'react'
 import '@/components/core-app/af-landing.css'
 
 /**
+ * The B2B band is built and kept, but off the public landing page.
+ *
+ * AllFantasy is not selling the business offer yet, and `/` is the B2C
+ * acquisition surface: a player arriving from search should meet "connect your
+ * leagues", not "run Decision OS over your own league data". Shipping both on
+ * one page buries the consumer pitch under an enterprise one.
+ *
+ * Nothing is deleted. Flip this to true to restore the band, the "For business"
+ * nav item and the Partners chip together — they hang off this one constant so
+ * they cannot return half-wired. Both nav items are in-page links to #business,
+ * so neither may render while the band does not: they would be dead anchors.
+ *
+ * A real /for-business route is the better long-term home, and is deliberately
+ * NOT done here: this repo sits at Vercel's hard 2048-route ceiling, where
+ * going over yields a broken deployment that still builds green locally.
+ */
+const SHOW_B2B = false
+
+/**
  * Landing page — the "landing, auth & import" handoff.
  *
  * Token values in that handoff are byte-identical to the core-app one, so this
  * reuses the `.af-core` scope rather than duplicating a second copy that would
  * drift. See af-core.css for why the scope exists at all.
  *
- * ⚠ NOT MOUNTED AT `/`. The live homepage is LandingNocturne and this is a
- * preview until someone has looked at it — replacing the production marketing
- * page, which carries the SEO and every acquisition link, is a decision to make
- * deliberately rather than as a side effect of a redesign landing.
+ * MOUNTED AT `/` — app/page.tsx renders this component, so it carries the SEO
+ * and every acquisition link. (This note previously claimed the opposite; it
+ * was left behind when the cut-over happened.)
  *
  * ⚠ THE B2B BAND SELLS "WE RUN DECISION OS AND CHIMMY OVER YOUR DATA" — a business
  * connects its own league data and we return decisions and signals, through their
@@ -292,22 +310,29 @@ export function LandingV4() {
           <a href="#how">How it works</a>
           <a href="#pricing">Pricing</a>
           <a href="#faq">For commissioners</a>
-          {/* The handoff puts this in --accent: it is the only nav item pointing
-              at a different audience, and the colour is what separates it. */}
-          <a href="#business" className="af-lp-nav-business">
-            For business
-          </a>
+          {/* Accent-coloured in the handoff because it is the only nav item
+              aimed at another audience. Gated with the band it points at. */}
+          {SHOW_B2B ? (
+            <a href="#business" className="af-lp-nav-business">
+              For business
+            </a>
+          ) : null}
         </div>
 
         <div className="af-lp-nav-right">
           <Link href="/login">Sign in</Link>
-          <span className="af-lp-nav-divider" aria-hidden />
-          {/* Chip read "API", which is not what this band offers — see the note
-              on the B2B section. The link stays; the wrong label does not. */}
-          <a href="#business" className="af-lp-partners">
-            Partners
-            <span className="af-lp-api-chip af-num">DEMO</span>
-          </a>
+          {/* Divider and Partners both belong to the B2B band: Partners is an
+              in-page link to #business, so it is a dead anchor without it, and
+              the divider would then separate nothing. */}
+          {SHOW_B2B ? (
+            <>
+              <span className="af-lp-nav-divider" aria-hidden />
+              <a href="#business" className="af-lp-partners">
+                Partners
+                <span className="af-lp-api-chip af-num">DEMO</span>
+              </a>
+            </>
+          ) : null}
           <Link href="/signup" className="af-btn af-lp-cta">
             Get started free
           </Link>
@@ -444,7 +469,8 @@ export function LandingV4() {
       </section>
 
       {/* ── AllFantasy for Business ─────────────────────────────────── */}
-      <section className="af-lp-b2b" id="business">
+      {SHOW_B2B ? (
+        <section className="af-lp-b2b" id="business">
         <div className="af-lp-b2b-head">
           <div className="af-lp-b2b-intro">
             <span className="af-lp-eyebrow af-num af-lp-eyebrow--accent">AllFantasy for business</span>
@@ -514,6 +540,7 @@ export function LandingV4() {
           <DemoForm />
         </div>
       </section>
+      ) : null}
 
       {/* ── Brown Pig network ───────────────────────────────────────── */}
       <section className="af-lp-network">
