@@ -143,7 +143,65 @@ try {
 }
 const invokedScript = (f) => f.startsWith('scripts/') && cfgBlob.includes(f);
 
-const prodRoots = [...universe].filter((f) => isProdEntry(f) || invokedScript(f));
+/**
+ * Nested package.json files mark distributable packages (the sdk-runtime/*
+ * widget packages, for one). Their consumers live outside this repo entirely,
+ * so the import graph can never reach them - seed each package's declared
+ * entry fields as roots instead, or the whole package reads as dead.
+ */
+function packageEntryPoints() {
+  const roots = new Set();
+  const pkgFiles = tracked
+    .map((f) => f.split(String.fromCharCode(92)).join('/'))
+    .filter((f) => f.endsWith('/package.json') && !IGNORED.test(f));
+
+  for (const pf of pkgFiles) {
+    const dir = path.posix.dirname(pf);
+    let manifest;
+    try {
+      manifest = JSON.parse(fs.readFileSync(path.join(ROOT, pf), 'utf8'));
+    } catch {
+      continue;
+    }
+    const specs = [];
+    const collect = (v) => {
+      if (typeof v === 'string') specs.push(v);
+      else if (v && typeof v === 'object') for (const k of Object.values(v)) collect(k);
+    };
+    collect(manifest.main);
+    collect(manifest.module);
+    collect(manifest.browser);
+    collect(manifest.exports);
+    collect(manifest.bin);
+
+    for (const s of specs) {
+      // Declared entries often point at build output; map back to source too.
+      const cleaned = s.replace(/^\.\//, '');
+      const candidates = [
+        cleaned,
+        cleaned.replace(/^dist\//, 'src/'),
+        cleaned.replace(/^dist\//, ''),
+      ].flatMap((c) => [c, c.replace(/\.(js|mjs|cjs|d\.ts)$/, '.ts'), c.replace(/\.(js|mjs|cjs)$/, '.tsx')]);
+      for (const c of candidates) {
+        const r = resolveSpec('./' + c, dir + '/x');
+        if (r && universe.has(r)) roots.add(r);
+      }
+    }
+    // Fall back to the package's index if nothing resolved from the manifest.
+    if (![...roots].some((r) => r.startsWith(dir + '/'))) {
+      for (const c of ['index', 'src/index']) {
+        const r = resolveSpec('./' + c, dir + '/x');
+        if (r && universe.has(r)) roots.add(r);
+      }
+    }
+  }
+  return roots;
+}
+
+const pkgRoots = packageEntryPoints();
+const prodRoots = [...universe].filter(
+  (f) => isProdEntry(f) || invokedScript(f) || pkgRoots.has(f)
+);
 const testRoots = [...universe].filter(isTestFile);
 
 // ---------------------------------------------------------------- reachability
