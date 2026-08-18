@@ -48,6 +48,15 @@ async function sleeperLiveScores(userId: string): Promise<DashboardLiveScore[]> 
   if (!me) return []
 
   const leagues = await prisma.league.findMany({
+    // This query is truncated by `take`, so ordering decides *which* leagues are
+    // covered at all - not merely what order they come back in.
+    // Stable, total ordering: season and id are non-null and id is unique, so
+    // the result set cannot silently reorder between requests. Mirrors
+    // lib/dashboard/get-dashboard-league-list.ts so this set lines up with the
+    // league list the user actually sees. Deliberately not lastSyncedAt: it is
+    // nullable, and Postgres sorts NULLS FIRST on DESC, so never-synced leagues
+    // would sort to the top.
+    orderBy: [{ season: 'desc' }, { name: 'asc' }, { id: 'asc' }],
     where: {
       platform: 'sleeper',
       platformLeagueId: { not: '' },
