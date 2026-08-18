@@ -1,7 +1,10 @@
 'use client'
 
 import Link from 'next/link'
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
+import { PlayerVerdict } from '@/components/core-app/player-finder/PlayerVerdict'
+import { SwapCandidates } from '@/components/core-app/player-finder/SwapCandidates'
 import { playerRef } from '@/lib/core-app/playerRef'
 import type { PlayerDetail, PlayerMatch } from '@/lib/core-app/playerFinder'
 import type { SectionState } from '@/lib/core-app/leagueHome'
@@ -16,6 +19,26 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
  * number." This screen keeps it literally — every figure shown is read from an
  * ingested row, and everything we cannot compute says so in words instead of
  * rendering a dash that looks like a measurement.
+ *
+ * ── 2a LAYOUT ────────────────────────────────────────────────────────────────
+ * Restructured to the handoff's three columns: a 360px search rail, the main
+ * column, and a 384px decision column. The rail's 82px platform strip is NOT
+ * rebuilt here — that is AfCoreShell's rail, and this screen renders inside it.
+ *
+ * ⚠ TWO PANELS IN THE DESIGN ARE NOT BUILT, ON PURPOSE, BECAUSE NOTHING BACKS
+ * THEM. Measured before building rather than discovered afterwards:
+ *
+ *   - INJURY TIMELINE (WED DNP / THU LP / FRI FP). No provider we ingest carries
+ *     practice participation; `sportsInjury` holds a status and a description and
+ *     nothing else. The status we DO have renders as a single chip instead.
+ *   - SNAP SHARE. `snapShare` is a hardcoded unavailable section — "snap share is
+ *     not ingested by any current provider". Its tile is removed rather than
+ *     shown permanently empty.
+ *   - RECENTLY SEARCHED. Nothing persists a per-user search history, so there is
+ *     no list to render.
+ *
+ * ⚠ THE CHIMMY CARD IS COMPUTED, NOT GENERATED — see PlayerVerdict for why a
+ * page-load LLM call was rejected.
  */
 
 export type PlayerFinderProps = {
@@ -56,8 +79,15 @@ function StatTile({
 
 export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFinderProps) {
   return (
-    <div className="af-pf">
-      {/* ── Search ──────────────────────────────────────────────────── */}
+    <div className="af-core af-pf af-pf--2a">
+      {/* ── Search rail (360px) ─────────────────────────────────────── */}
+      {/*
+        The rail owns the search, the matches and the live-data promise. h1 is
+        "Player Finder" and the player name is h2 — the SEO order the handoff
+        specifies, and the reverse of what this screen shipped with.
+      */}
+      <aside className="af-pf-rail" aria-label="Search">
+        <h1 className="af-display af-pf-h1">Player Finder</h1>
       <form className="af-pf-search-wrap" method="get" action="/core/players">
         <label className="af-search af-pf-search">
           <span className="af-search-icon" aria-hidden>
@@ -81,7 +111,6 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
         </p>
       </form>
 
-      <div className="af-pf-body">
         {/* ── Matches ───────────────────────────────────────────────── */}
         <section className="af-card af-pf-matches">
           <header className="af-pf-section-head">
@@ -118,6 +147,19 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
           )}
         </section>
 
+        {/*
+          The live-data promise is pinned to the foot of the rail, where the
+          handoff puts it. It is a claim about every number on this screen, so
+          it belongs beside the search rather than buried under one section.
+        */}
+        <p className="af-pf-rail-foot">
+          Stats, injuries and news come from live sports data — never an invented
+          number.
+        </p>
+      </aside>
+
+      <main className="af-pf-main">
+
         {/* ── Detail ────────────────────────────────────────────────── */}
         {detail ? (
           <section className="af-card af-pf-detail">
@@ -138,7 +180,7 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
               )}
 
               <div className="af-pf-identity">
-                <h1 className="af-display af-pf-name">{detail.player.name}</h1>
+                <h2 className="af-display af-pf-name">{detail.player.name}</h2>
                 <div className="af-pf-line">
                   {[
                     detail.player.position,
@@ -182,7 +224,6 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
                     : undefined
                 }
               />
-              <StatTile label="Snap share" state={detail.snapShare} />
               <StatTile
                 label="Pos rank"
                 state={detail.positionRank}
@@ -423,7 +464,19 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
             <p className="af-pf-unavailable">Pick a match to see slots, injury and season history.</p>
           </section>
         )}
-      </div>
+      </main>
+
+      {/*
+        The decision column. It renders only when there is a resolved player AND
+        real per-league impact behind it — an empty rail of headed cards would
+        imply we looked and found nothing, which is different from not looking.
+      */}
+      {detail && detail.impact.available && detail.impact.data.length > 0 ? (
+        <aside className="af-pf-side" aria-label="What to do">
+          <PlayerVerdict playerName={detail.player.name} impact={detail.impact.data} />
+          <SwapCandidates impact={detail.impact.data} />
+        </aside>
+      ) : null}
     </div>
   )
 }

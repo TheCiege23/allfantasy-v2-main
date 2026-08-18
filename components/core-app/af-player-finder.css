@@ -467,3 +467,344 @@
   border: 1px solid currentColor;
   color: var(--warn, #a8701f);
 }
+
+/* ═════════════════════════════════════════════════════════════════════════
+   2a — Player Finder, three-column layout
+
+   The handoff's skeleton is `82px rail | 360px search rail | 1fr main | 384px
+   right`. The 82px strip is NOT rebuilt here: this screen renders inside
+   AfCoreShell, which already owns that rail. Duplicating it would put two
+   platform strips on the page.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+.af-core.af-pf--2a {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr) 384px;
+  align-items: start;
+  gap: 0;
+  /* ⚠ MUST CLEAR THE OLD `.af-pf { max-width: 1180px }`. That cap is right for a
+     single stacked column and wrong for a 360 + 1fr + 384 grid — it would squeeze
+     the main column to nothing on a wide screen while leaving the page half
+     empty. `.af-core.af-pf--2a` outranks `.af-pf`, but only for the properties it
+     actually names, so max-width has to be reset explicitly. */
+  max-width: none;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/*
+ * When there is no resolved player the decision column does not render, so the
+ * grid would leave a 384px hole on the right. `:has()` lets the two remaining
+ * columns take the width instead. Progressive: a browser without :has() simply
+ * keeps the empty track, which is the current behaviour rather than a break.
+ */
+.af-core.af-pf--2a:not(:has(.af-pf-side)) {
+  grid-template-columns: 360px minmax(0, 1fr);
+}
+
+/* ── Search rail ──────────────────────────────────────────────────────── */
+
+.af-core .af-pf-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 18px;
+  background: var(--surface2);
+  border-right: 1px solid var(--line);
+  /* Independently scrollable so a long match list never pushes the live-data
+     promise off the bottom of the rail. */
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+.af-core .af-pf-h1 {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-core .af-pf-rail-foot {
+  margin: auto 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Main column ──────────────────────────────────────────────────────── */
+
+.af-core .af-pf-main {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px 22px;
+  min-width: 0;
+}
+
+/* ── Decision column ──────────────────────────────────────────────────── */
+
+.af-core .af-pf-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 20px 18px 20px 0;
+  min-width: 0;
+  position: sticky;
+  top: 0;
+  max-height: 100vh;
+  overflow-y: auto;
+}
+
+/* ── Chimmy verdict ───────────────────────────────────────────────────── */
+
+.af-core .af-pf-verdict {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  /* The handoff's gradient token. Falls back to the plain surface where the
+     token layer is not loaded, rather than painting transparent. */
+  background: var(--chimmy, var(--surface));
+  border: 1px solid var(--accent-line);
+}
+
+.af-core .af-pf-verdict-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.af-core .af-pf-verdict-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.af-core .af-pf-verdict-id {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.af-core .af-pf-verdict-scope {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+
+.af-core .af-pf-verdict-headline {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-core .af-pf-verdict-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-core .af-pf-verdict-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--chip);
+  font-size: 12px;
+}
+
+/* Slot truth beats projection: a league where he is NOT starting is the one
+   that needs a decision, so it carries the warning colour. */
+.af-core .af-pf-verdict-row[data-starting='false'] .af-pf-verdict-slot {
+  color: var(--bad);
+}
+
+.af-core .af-pf-verdict-row[data-starting='true'] .af-pf-verdict-slot {
+  color: var(--good);
+}
+
+.af-core .af-pf-verdict-league {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text2);
+}
+
+.af-core .af-pf-verdict-slot {
+  flex: none;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+}
+
+.af-core .af-pf-verdict-pts {
+  flex: none;
+  min-width: 38px;
+  text-align: right;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-pf-verdict-readonly {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-pf-verdict-cta {
+  justify-content: center;
+  min-height: 44px;
+}
+
+/* ── Swap candidates ──────────────────────────────────────────────────── */
+
+.af-core .af-pf-swaps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+}
+
+.af-core .af-pf-swaps-title {
+  margin: 0;
+}
+
+.af-core .af-pf-swap-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.af-core .af-pf-swap-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-core .af-pf-swap-row:last-child {
+  border-bottom: 0;
+}
+
+.af-core .af-pf-swap-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.af-core .af-pf-swap-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-pf-swap-meta {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-pf-swap-pts {
+  flex: none;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text2);
+}
+
+/* Green ONLY when he actually beats the searched player under that league's
+   scoring — see SwapCandidates for why the sign of `delta` is load-bearing. */
+.af-core .af-pf-swap-pts[data-better='true'] {
+  color: var(--good);
+}
+
+.af-core .af-pf-swaps-foot {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Responsive ───────────────────────────────────────────────────────── */
+
+/*
+ * Below the three-column width the decision column moves under the main content
+ * rather than being dropped: on a phone "what do I do" is the whole reason the
+ * screen was opened, so it must not be the thing that disappears.
+ */
+@media (max-width: 1180px) {
+  .af-core.af-pf--2a,
+  .af-core.af-pf--2a:not(:has(.af-pf-side)) {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  .af-core .af-pf-side {
+    grid-column: 1 / -1;
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding: 0 22px 20px;
+  }
+}
+
+@media (max-width: 860px) {
+  .af-core.af-pf--2a,
+  .af-core.af-pf--2a:not(:has(.af-pf-side)) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The rail stops being a rail: it is the search, and it goes on top. */
+  .af-core .af-pf-rail {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 16px;
+  }
+
+  .af-core .af-pf-h1 {
+    font-size: 22px;
+  }
+
+  .af-core .af-pf-main {
+    padding: 16px;
+  }
+
+  .af-core .af-pf-side {
+    padding: 0 16px 16px;
+  }
+
+  .af-core .af-pf-verdict-headline {
+    font-size: 17px;
+  }
+}
