@@ -1,6 +1,7 @@
 import { LeaguePanel } from '@/components/core-app/dash-v2/LeaguePanel'
 import { SectionHeader } from '@/components/core-app/dash-v2/SectionHeader'
 import { Priorities } from '@/components/core-app/dash-v2/Priorities'
+import { ChimmyBrief } from '@/components/core-app/dash-v2/ChimmyBrief'
 import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
 import { Legacy } from '@/components/core-app/dash-v2/Legacy'
 import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInventory'
@@ -154,6 +155,13 @@ export function DashboardV2({
           </div>
         ) : null}
 
+        {/*
+          The brief leads, above the priority cards it summarises. It is built
+          from the same ranking those cards use — see ChimmyBrief's note on why no
+          model runs here — so the two can never disagree about what matters most.
+        */}
+        <ChimmyBrief data={data} />
+
         <section>
           <SectionHeader
             label="Today's priorities"
@@ -165,7 +173,14 @@ export function DashboardV2({
         </section>
 
         <section>
+          {/*
+            The id is the brief card's "See every call" target. There is no
+            separate briefing surface to link to and the repo sits at Vercel's
+            2,048-route ceiling, so the second action is an in-page anchor to the
+            full ranked list rather than a new route duplicating it.
+          */}
           <SectionHeader
+            id="af-d2-needs"
             label="Needs your call — all leagues"
             counter={data?.next24?.length ? `${data.next24.length} ITEMS` : null}
           />
@@ -224,13 +239,29 @@ export function DashboardV2({
         </section>
 
         <section>
+          {/*
+            "Moving your book", not "Player exposure". The list is injury-led and
+            capped at six, so a header promising exposure implies a complete table
+            and invites the reader to conclude they roster six players. The "?"
+            carries that caveat at the TOP of the section — the footnote saying the
+            same thing sits below six rows, which is after the misreading has
+            already happened.
+
+            The link goes to /my-players, which is the real cross-league exposure
+            audit: every player, starter/bench/IR split, per-league appearances.
+            It is a live route — not in vercel-next-build.cjs's exclusion list —
+            so this is not a dead link, and it costs no new route.
+          */}
           <SectionHeader
-            label="Player exposure"
+            label="Moving your book"
+            hint="Injury-led and capped at six rows. This is what you are most exposed to that is currently a problem — a player carrying a designation across several of your leagues — not a full table of everyone you roster."
+            hintLabel="What this list covers"
             counter={
               data?.book?.[0]?.exposureTotal
                 ? `ACROSS ${data.book[0].exposureTotal} LEAGUES`
                 : null
             }
+            action={{ href: '/my-players', label: 'Full exposure audit' }}
           />
           <Exposure data={data} />
         </section>
