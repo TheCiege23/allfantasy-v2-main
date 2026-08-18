@@ -1,0 +1,253 @@
+--- # ============================================================================
+# Rolling Insights — Play-by-Play Contract
+# NORMATIVE. Extracted from the new OpenAPI 3.1.0 spec at
+# docs.datafeeds.rolling-insights.com (info.version 1.0.0, pre-release).
+# Captured: 2026-08-16
+#
+# This is the schema your big-play / TD / defensive-event alerts run on.
+# ============================================================================
+
+meta:
+  source: OpenAPI 3.1.0 spec, docs.datafeeds.rolling-insights.com
+  spec_status: pre-release   # tags[] is empty; vendor says "yet to be formally released"
+  supersedes: Notion docs
+  captured_at: 2026-08-16
+
+  # Confirmed in the NEW docs — unchanged from the old contract.
+  supported_sports: [MLB, NBA, NFL]
+  unsupported: [NCAAFB, NCAABB, NHL, SOCCER, PGA, DARTS]
+  ncaafb_note: >
+    Still no NCAAFB play-by-play. The box-score-diff limitation in
+    INTEGRATION.md §5 stands. CollegeFootballData remains the CFB plays source.
+
+  bundling: >
+    ✅ Play-by-play is INCLUDED with the Live Feed tier — no separate package.
+    (Confirmed by vendor, 2026-08-16.) Removes a cost line from the earlier estimate.
+
+endpoint:
+  method: GET
+  path: /play-by-play/NFL
+  query_params:
+    RSC_token: { required: true }
+    game_id:   { required: true, type: string, example: "20251221-1-26" }
+  declared_responses: [200, 401, 403, 404]
+  declared_304: false   # ⚠️ not declared here — see ENDPOINTS.yaml transport.304_conflict
+
+envelope:
+  path: data.NFL[]
+  required: [game_ID, awayTeamName, homeTeamName, plays]
+  fields:
+    game_ID:      string
+    awayTeamName: string
+    homeTeamName: string
+    plays:        array
+
+# ============================================================================
+# PLAY OBJECT — all 21 keys are in the spec's `required` list
+# ============================================================================
+play:
+  sequence:      { type: integer,
+                   warning: "⚠️ NON-CONTIGUOUS. Samples show NFL 2, MLB 41, NBA 6. Monotonic-but-sparse, NOT 1..N. Safe as a high-water mark, NOT as a count." }
+  quarter:       { type: integer }
+  gameClock:     { type: string, example: "14:56 - 1st" }
+  event:         { type: string, enum: [kickoff, pass, run, sack, interception,
+                                        incompletion, fumble, penalty, field_goal,
+                                        punt, safety, not_available] }
+  down:          { type: [integer, "null"] }
+  yardsToGo:     { type: [integer, "null"] }
+  yardLine:      { type: [string, "null"], example: "BUF 25",
+                   note: "STRING, territory-prefixed. Contrast full_box.current.YardLine which is an INTEGER." }
+  yardsGained:   { type: [integer, "null"],
+                   note: "✅ THE FIELD FOR 20+ YARD DETECTION. Also duplicated at details.yardsGained." }
+  possession:    { type: string, example: "Buffalo Bills",
+                   note: "FULL TEAM NAME, not an abbreviation. full_box.current.Possession uses 'BUF'." }
+  success:       boolean
+  isBlocked:     boolean
+  isReturned:    boolean
+  isReversed:    boolean
+  isFirstDown:   boolean
+  isRecovered:   boolean
+  isTouchdown:   boolean
+  isChallenged:  boolean
+  isScoringPlay: boolean
+  description:   string
+  players:       array     # see below
+  details:       object    # see below
+
+  absent_fields:
+    # Present on NBA plays but NOT on NFL. Do not expect them.
+    - points          # NBA only
+    - score           # NBA only (running score object)
+    - playId
+    - driveId
+    - drive
+    - timestamp
+    - epa
+    - win_probability
+    - redZone         # play level — RedZone exists only on full_box.current
+
+# ============================================================================
+# ⚠️ SCORING CLASSIFICATION — the biggest gotcha in this schema
+# ============================================================================
+scoring_classification:
+  problem: >
+    TOUCHDOWN IS NOT IN THE `event` ENUM. Neither is two-point conversion.
+    There is no `scoringType` field. You must combine four signals.
+
+  rules:
+    touchdown:      "play.isTouchdown == true"
+    any_score:      "play.isScoringPlay == true"
+    field_goal:     "play.event == 'field_goal' AND play.success == true"
+    safety:         "play.event == 'safety'"
+    extra_point:    "details.pointsAfterTouchdown.type == 'extra_point'"
+    two_point:      "details.pointsAfterTouchdown.type == 'two_point_conversion'"
+    sack:           "play.event == 'sack'"
+    interception:   "play.event == 'interception'"
+    fumble:         "play.event == 'fumble'"
+    big_play:       "play.yardsGained >= 20"
+
+  unit_attribution:
+    # Determine OFFENSE / DEFENSE / SPECIAL_TEAMS from event + player roles.
+    OFFENSE:       "event in [pass, run] and isTouchdown"
+    DEFENSE:       "event in [interception, fumble, safety] and isTouchdown"
+    SPECIAL_TEAMS: "event in [kickoff, punt, field_goal] and (isTouchdown or isReturned)"
+    note: >
+      Cross-check against players[].role — a defensive TD will carry a player with
+      role 'interceptor' or 'recoverer'. Do not rely on `event` alone.
+
+# ============================================================================
+# PLAYERS ARRAY — per-play participants
+# ============================================================================
+players_item:
+  id:            { type: [integer, "null"],
+                   warning: "⚠️ INTEGER here. /injuries player_id is a STRING for NFL. Cast on join." }
+  name:          string
+  role:          { type: string, enum: [kicker, returner, defender, passer, receiver,
+                                        rusher, lateral_receiver, snapper, holder,
+                                        punter, recoverer, interceptor, fumbler,
+                                        penalty_committed, penalty_declined] }
+  action:        { type: string, enum: [kick, return, tackle, pass, receive, rush,
+                                        snap, hold, punt, pressure, sack, sacked,
+                                        defend, intercepted, incomplete_pass, fumble,
+                                        fumble_recovery, penalty_committed] }
+  position:      { type: [string, "null"], example: "QB" }
+  teamAbbr:      { type: [string, "null"] }
+  hasTeamPrefix: boolean       # semantics undocumented — see GAPS
+  metadata:
+    context:   { type: string }   # semantics undocumented
+    eventType: { type: string }   # semantics undocumented
+
+# For IDP / defensive alerts, map role+action:
+idp_event_mapping:
+  SACK:         "role == 'defender' AND action == 'sack'"
+  TACKLE:       "role == 'defender' AND action == 'tackle'"
+  PRESSURE:     "role == 'defender' AND action == 'pressure'"
+  PASS_DEFEND:  "role == 'defender' AND action == 'defend'"
+  INTERCEPTION: "role == 'interceptor'"
+  FUMBLE_REC:   "role == 'recoverer' AND action == 'fumble_recovery'"
+  FORCED_FUMBLE: "role == 'fumbler' — ⚠️ ambiguous: may mean the player who FUMBLED, not who forced it. Verify against description."
+
+# ============================================================================
+# DETAILS OBJECT
+# ============================================================================
+details:
+  noPlay:              boolean
+  successful:          boolean
+  isFirstDown:         boolean
+  isReversed:          boolean
+  isOverruled:         boolean
+  isChallenged:        boolean
+  isReplayUpheld:      boolean
+  isReplayReviewed:    boolean
+  isReplayOverturned:  boolean
+  yardsGained:         { type: [integer, "null"] }
+  distance:            { type: [integer, "null"],
+                         warning: "⚠️ Semantics UNDOCUMENTED. In the sample it was 0 on a play where yardsToGo was 10. DO NOT assume it equals yards-to-go." }
+  penaltyType:         { type: [string, "null"], example: "Offensive Holding" }
+  challenger:          { type: [string, "null"] }
+  challengeReason:     { type: [string, "null"] }
+  challengeRuling:     { type: [string, "null"], example: "REVERSED" }
+  replayRuling:        { type: [string, "null"] }
+  replayReviewReason:  { type: [string, "null"] }
+  pointsAfterTouchdown:
+    type:       { enum: [extra_point, two_point_conversion] }
+    successful: boolean
+    kicker:     string
+    passer:     string
+    receiver:   { type: [string, "null"] }
+
+# ============================================================================
+# 🔑 CORRECTION DETECTION — better than the vendor's own answer
+# ============================================================================
+correction_detection:
+  vendor_position: >
+    Vendor (Discord, 2026-08-16): "We don't currently provide flags specifically
+    identifying stat corrections." Reasons given: field-level recording errors,
+    official decision changes, public source updates, and their own
+    reinterpretation of a play.
+
+  but: >
+    ✅ The PBP schema DOES carry officiating-reversal flags the vendor did not
+    mention. These cover the on-field-reversal subset of corrections:
+      details.isReversed, details.isOverruled, details.isReplayOverturned,
+      details.isReplayUpheld, details.isChallenged, details.noPlay,
+      details.challengeRuling ("REVERSED"), play.isReversed
+    They do NOT cover stat-source corrections (a yardage figure silently revised
+    by the upstream provider).
+
+  detection_strategy:
+    # Two-layer. Neither alone is sufficient.
+    layer_1_pbp_flags:
+      signal: "isReversed | isOverruled | isReplayOverturned | noPlay == true"
+      means: officiating reversal — the play did not stand as originally recorded
+      action: "Retract any alert already sent for this sequence. Do not re-alert."
+      confidence: HIGH
+
+    layer_2_negative_delta:
+      signal: "a cumulative box-score stat DECREASES between polls"
+      means: >
+        A correction occurred. This is the ONLY reliable signal for
+        stat-source corrections, since there is no flag.
+      action: "Never emit a big-play/TD alert on a negative delta. Update silently, then notify of the revision."
+      confidence: MEDIUM
+
+  hard_rules:
+    - >
+      🚫 NEVER emit an alert on a negative stat delta. A yardage total dropping
+      is a correction, not a play. Without this guard, a correction fires a
+      phantom "big play" notification.
+    - >
+      Alerts must be RETRACTABLE. Store the notification ID against the
+      event_game row so a reversal can send a correction. Silently mutating a
+      score the user already saw is worse than being slow.
+    - >
+      Label alerts PROVISIONAL until the game is final AND the 12h correction
+      window has closed. Same "developing vs confirmed" pattern as injuries.
+    - >
+      Sequence numbers are sparse — track a high-water mark, never assume
+      contiguity, and re-read the full plays array each poll rather than
+      requesting a delta.
+
+# ============================================================================
+# OTHER SPORTS — shape differs materially. Do not reuse the NFL parser.
+# ============================================================================
+nba:
+  play_keys: [sequence, period, gameClock, event, action, points, isScoringPlay,
+              score, possession, players, details, description]
+  event_enum: [field_goal_made, field_goal_missed, free_throw_made,
+               free_throw_missed, rebound, foul, turnover, jump_ball,
+               goaltending, kicked_ball, timeout]
+  action_enum: [make_2pt, make_3pt, make_ft, miss_2pt, miss_3pt, miss_ft,
+                rebound_def, rebound_off, rebound_team, personal_foul_committed,
+                shooting_foul_committed, offensive_foul_committed,
+                technical_foul_committed, flagrant_foul_committed, turnover,
+                jump_ball, goaltending, kicked_ball, timeout]
+  role_enum: [shooter, assister, blocker, rebounder, stealer, fouler, fouled,
+              turnover_player, jump_ball_player, jump_ball_receiver]
+  note: "NBA has `points` and a running `score` object. NFL has NEITHER."
+
+mlb:
+  play_keys: [sequence, inning, event, out, outCount, players, details, description]
+  event_enum: null   # ⚠️ FREE-FORM string, no enum. e.g. "Groundout"
+  role_enum: [batter, runner, fielder, pitcher, playerIn, playerOut]
+  note: "`inning` is a single STRING ('Top 6'), not integer + half. No gameClock."
