@@ -36,6 +36,7 @@ import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
+import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll } from '@/lib/core-app/weekAll'
 
@@ -322,7 +323,7 @@ export default async function AfCorePage({
      * "all leagues", so those sections stay placeholders until an aggregator
      * exists.
      */
-    const [careerData, portfolioData, draftData, weekData] = await Promise.all([
+    const [careerData, portfolioData, draftData, weekData, stripData] = await Promise.all([
       getCareerData(userId).catch(() => null),
       getPortfolio(userId).catch(() => null),
       /*
@@ -350,6 +351,24 @@ export default async function AfCorePage({
           platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
         })),
       ).catch(() => null),
+      /*
+       * The three top cards. `lastSyncedAt` is passed through because it is the
+       * health tile's primary gate — the engine reports high confidence on the
+       * strength of roster rows alone, and production has 873 rosters across
+       * leagues that have never once been synced. Dropping this field here would
+       * silently re-open the exact bug the tile exists to prevent.
+       */
+      getTodayStrip(
+        userId,
+        playedLeagues.map((l) => ({
+          id: l.id,
+          name: l.name,
+          sport: (l as { sport?: string | null }).sport ?? null,
+          platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+          lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
+        })),
+        now,
+      ).catch(() => null),
     ])
     return (
       <DashboardV2
@@ -359,6 +378,7 @@ export default async function AfCorePage({
         portfolio={portfolioData}
         drafts={draftData}
         week={weekData}
+        strip={stripData}
         nowIso={now.toISOString()}
         planName={plan?.name ?? null}
         syncedLabel={syncAge.stale ? null : syncAge.label}

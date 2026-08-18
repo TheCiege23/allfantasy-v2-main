@@ -8,7 +8,9 @@ import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInven
 import { DraftHqAll } from '@/components/core-app/dash-v2/DraftHqAll'
 import { YourWeek } from '@/components/core-app/dash-v2/YourWeek'
 import { Exposure } from '@/components/core-app/dash-v2/Exposure'
-import { NeedsYourCall } from '@/components/core-app/dash-v2/NeedsYourCall'
+import { TodayRecord } from '@/components/core-app/dash-v2/TodayRecord'
+import { LeagueHealth } from '@/components/core-app/dash-v2/LeagueHealth'
+import { Next24 } from '@/components/core-app/dash-v2/Next24'
 import { TopBar } from '@/components/core-app/dash-v2/TopBar'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { MobileChrome } from '@/components/core-app/dash-v2/MobileChrome'
@@ -17,6 +19,7 @@ import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
 import type { DraftHqAllData } from '@/lib/core-app/draftHqAll'
 import type { WeekAllData } from '@/lib/core-app/weekAll'
+import type { TodayStripData } from '@/lib/core-app/todayStrip'
 // af-core.css carries the .af-core token layer. This screen renders OUTSIDE
 // AfCoreShell (it brings its own left panel), so the shell does not import it
 // here — without this line every var(--surface) / var(--line) below computes to
@@ -52,6 +55,7 @@ export function DashboardV2({
   portfolio = null,
   drafts = null,
   week = null,
+  strip = null,
   nowIso,
   planName = null,
   syncedLabel = null,
@@ -69,6 +73,12 @@ export function DashboardV2({
   drafts?: DraftHqAllData | null
   /** Real scored matchups. Carries its own season — do not assume current. */
   week?: WeekAllData | null
+  /**
+   * The three cross-league cards at the top: today's record, league health and
+   * the next 24 hours. Each carries its own availability — see todayStrip.ts for
+   * which gates are open on production and why.
+   */
+  strip?: TodayStripData | null
   /** Server instant for the bar clock; localised after hydration. */
   nowIso: string
   planName?: string | null
@@ -171,6 +181,32 @@ export function DashboardV2({
           </div>
         ) : null}
 
+        {/*
+          The top strip. Health always renders — as a score or as an explicit
+          unknown — because a league exists whether or not we have read it, and
+          an absent health tile lets the reader fill in the blank themselves
+          (they fill it in with "fine"). The record tile renders only when
+          something is actually scored: a 0–0 reads as a day that was played and
+          lost, which is worse than saying nothing.
+        */}
+        {strip ? (
+          <section>
+            <div className="af-d2-strip">
+              <TodayRecord state={strip.record} />
+              <LeagueHealth state={strip.health} />
+            </div>
+            {/*
+              The record's reason, stated once under the strip rather than inside
+              a tile that is deliberately absent. Without this the account is
+              never told why there is no scoreboard — with it, the omission is a
+              sentence instead of a gap.
+            */}
+            {!strip.record.available ? (
+              <p className="af-d2-strip-note">{strip.record.reason}</p>
+            ) : null}
+          </section>
+        ) : null}
+
         <section>
           <SectionHeader
             label="Today's priorities"
@@ -181,12 +217,25 @@ export function DashboardV2({
           <Priorities data={data} />
         </section>
 
+        {/*
+          ⚠ REPLACES "Needs your call — all leagues", WHICH RENDERED `dash34.next24`.
+          That list was game kickoffs only; this one is the same kickoffs plus
+          real waiver runs, so keeping both would print every kickoff twice under
+          two headings that make the same claim. NeedsYourCall.tsx is still on
+          disk — restoring it is one section block.
+
+          ⚠ AND IT IS NOT THE SEASON TIMELINE. This is a cross-league "what needs
+          me before tomorrow" strip. The season timeline — playoff start, trade
+          deadline, the shape of a league's year — is per-league and belongs on
+          the league dashboard, reached by choosing a league. Putting a playoff
+          week next to a waiver run makes neither legible.
+        */}
         <section>
           <SectionHeader
-            label="Needs your call — all leagues"
-            counter={data?.next24?.length ? `${data.next24.length} ITEMS` : null}
+            label="Next 24 hours — all leagues"
+            counter={strip?.next24.length ? `${strip.next24.length} ITEMS` : null}
           />
-          <NeedsYourCall data={data} />
+          <Next24 rows={strip?.next24 ?? []} />
         </section>
 
         <section>
