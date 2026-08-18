@@ -357,6 +357,7 @@ export default async function AfCorePage({
         nowIso={now.toISOString()}
         planName={plan?.name ?? null}
         syncedLabel={syncAge.stale ? null : syncAge.label}
+        commissionerCount={playedLeagues.filter((l) => Boolean(l.isCommissioner)).length}
       />
     )
   }

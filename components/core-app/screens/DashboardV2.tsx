@@ -9,6 +9,7 @@ import { YourWeek } from '@/components/core-app/dash-v2/YourWeek'
 import { Exposure } from '@/components/core-app/dash-v2/Exposure'
 import { NeedsYourCall } from '@/components/core-app/dash-v2/NeedsYourCall'
 import { TopBar } from '@/components/core-app/dash-v2/TopBar'
+import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
@@ -52,6 +53,7 @@ export function DashboardV2({
   nowIso,
   planName = null,
   syncedLabel = null,
+  commissionerCount = 0,
 }: {
   data: Dash34Data | null
   /** From the loader's result, not from Dash34Data — passed in rather than
@@ -71,6 +73,7 @@ export function DashboardV2({
   /** Real sync age when one exists; null means nothing has ever synced, which
    *  the bar states outright rather than showing an invented age. */
   syncedLabel?: string | null
+  commissionerCount?: number
 }) {
   const leagues = data?.leagues ?? []
   const total = data?.totalLeagues ?? 0
@@ -81,6 +84,7 @@ export function DashboardV2({
       <LeaguePanel
         leagues={leagues}
         totalLeagues={total}
+        commissionerCount={commissionerCount}
         /*
          * `quiet` only — never quiet + overflow. The Dash34Data type carries an
          * explicit warning that adding them printed "53 leagues are quiet —
@@ -101,6 +105,20 @@ export function DashboardV2({
       />
 
       <main className="af-d2-main">
+        {/*
+          ⚠ COMPLIANCE, NOT CHROME. AfCoreShell renders this once so every screen
+          inside it inherits the check — and this screen deliberately sits OUTSIDE
+          that shell, so it has to render it itself. The component's own note is
+          explicit: every other item on the cutover ledger costs a feature, this
+          one costs compliance. Without it a dashboard offering paid plans would
+          do so in states where we have determined we cannot sell them.
+
+          It renders nothing while the hook is loading, by design — showing a
+          restriction before we know where someone is would tell unrestricted
+          users they cannot buy.
+        */}
+        <GeoRestrictionNotice />
+
         {/*
           syncedLabel is null whenever the account carries the never-synced
           notice — the bar then states that outright instead of showing an age it

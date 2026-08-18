@@ -54,11 +54,14 @@ export function LeaguePanel({
   totalLeagues,
   quietSummary = null,
   user = null,
+  commissionerCount = 0,
 }: {
   leagues: Dash34League[]
   totalLeagues: number
   quietSummary?: { count: number; text: string } | null
   user?: { name: string; levelLabel?: string | null } | null
+  /** Leagues you commission — badges the Commissioner Hub link. */
+  commissionerCount?: number
 }) {
   const [sport, setSport] = useState<SportFilter>('ALL')
 
@@ -234,6 +237,27 @@ export function LeaguePanel({
           </div>
         ) : null}
       </div>
+
+      {/*
+        Commissioner and Communications live in AfCoreShell's nav, and this screen
+        renders outside that shell — so without these entries the two capabilities
+        would simply vanish from the dashboard rather than move. They are links to
+        the existing screens, not reimplementations.
+      */}
+      <nav className="af-d2-panel-links" aria-label="More">
+        <Link href="/core/commissioner" className="af-d2-panel-link">
+          Commissioner Hub
+          {commissionerCount && commissionerCount > 0 ? (
+            <span className="af-d2-panel-link-count af-num">{commissionerCount}</span>
+          ) : null}
+        </Link>
+        <Link href="/core/war-room" className="af-d2-panel-link">
+          War Room
+        </Link>
+        <Link href="/core/tools" className="af-d2-panel-link">
+          Tools
+        </Link>
+      </nav>
 
       <div className="af-d2-panel-foot">
         {/* The import CTA lives at the top of the panel now — see the note there.
