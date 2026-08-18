@@ -93,7 +93,7 @@ function seasonYear(v: unknown): number | null {
  * or a client response. Nothing in this module logs, and it needs to stay that
  * way.
  */
-function cacheBusted(url: string): string {
+export function cacheBusted(url: string): string {
   return `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`
 }
 

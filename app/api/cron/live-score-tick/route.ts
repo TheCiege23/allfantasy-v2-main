@@ -15,6 +15,7 @@ import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLiveScoringForActiveSeasons } from '@/server/services/liveScoring/liveScoreRunner'
 import { RollingInsightsLiveProvider } from '@/lib/live/rollingInsightsLiveProvider'
 import { runPollLoop, LIVE_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
+import { refreshPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 
 /**
  * Opt-in Rolling Insights live provider, PRESEASON ONLY.
@@ -108,6 +109,7 @@ export async function GET(request: NextRequest) {
      * and a Sunday gets 35s coverage.
      */
     let loop: Awaited<ReturnType<typeof runPollLoop>> | null = null
+    let pbp: Awaited<ReturnType<typeof refreshPlayByPlayFeed>> | null = null
 
     const report = await withSyncJobRun(
       {
@@ -119,9 +121,26 @@ export async function GET(request: NextRequest) {
         sport: 'NFL',
       },
       async () => {
-        let last = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
+        /*
+         * Scores and plays are polled in the SAME tick, at the same 35s cadence
+         * INTEGRATION.md §4 specifies for both. They are separate endpoints —
+         * /live returns the whole slate in one call, /play-by-play needs a
+         * game_id each — so a Sunday is 1 + N calls per cycle. The vendor has
+         * confirmed no quota (GAPS N-03), and this is the ~85% of call volume
+         * that estimate was about.
+         *
+         * ⚠ PLAYS MUST NEVER TAKE DOWN SCORING. The feed is a retention feature;
+         * the score is the product. If play-by-play throws, the tick still
+         * returns the scoring result and the loop keeps going.
+         */
+        const tickOnce = async () => {
+          const scored = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
+          pbp = await refreshPlayByPlayFeed().catch(() => pbp)
+          return scored
+        }
+        let last = await tickOnce()
         loop = await runPollLoop(async () => {
-          last = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
+          last = await tickOnce()
         })
         return last
       },
@@ -141,6 +160,12 @@ export async function GET(request: NextRequest) {
           pollElapsedMs: loop?.elapsedMs ?? 0,
           pollIntervalMs: LIVE_POLL_INTERVAL_MS,
           pollBudgetMs: POLL_BUDGET_MS,
+          /* `pbpSkipped: 'no-token'` is a configuration problem; 'no-live-games'
+             is a Tuesday. Distinguishing them in telemetry is the difference
+             between an alert and a shrug. */
+          pbpGamesPolled: pbp?.gamesPolled ?? 0,
+          pbpNewEvents: pbp?.newEvents ?? 0,
+          pbpSkipped: pbp?.skipped ?? null,
         },
       }),
     )
