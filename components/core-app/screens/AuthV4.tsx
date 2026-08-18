@@ -4,6 +4,15 @@ import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
 import { Suspense, useState } from 'react'
+// af-core.css carries the .af-core token layer (--surface, --surface2, --line2,
+// --accent …) for all three modes. AfCoreShell imports it for screens inside the
+// shell; these pages render standalone at /login and /signup, so without it every
+// token below is undefined. Measured on live /login before this fix: --surface,
+// --surface2 and --line2 all computed to "", the card painted transparent with a
+// 0px border, and the primary Sign in button had background rgba(0,0,0,0) — an
+// invisible CTA. --accent also fell through to the unrelated #2563eb in
+// globals.css instead of the design's teal. Must precede af-auth.css.
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-auth.css'
 import { isSocialProviderEnabled, type SocialProvider } from '@/lib/auth/SocialProviderResolver'
 import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
@@ -367,8 +376,16 @@ function AuthInner({ mode }: { mode: AuthMode }) {
 export function AuthV4({ mode }: { mode: AuthMode }) {
   return (
     <div className="af-core af-au">
+      {/*
+        The wordmark is the way home. It was a plain <span>, so /login and
+        /signup were dead ends — no link back to the marketing site anywhere on
+        the page (verified: no a[href="/"] in the DOM). The handoff's top bar is
+        brand-left, cross-link-right, and the brand is the home affordance.
+      */}
       <div className="af-au-brand">
-        <span className="af-au-wordmark">AllFantasy</span>
+        <Link href="/" className="af-au-wordmark" aria-label="AllFantasy — back to home">
+          AllFantasy
+        </Link>
       </div>
       {/*
         ⚠ THE SUSPENSE BOUNDARY IS NOT DECORATION — IT KEEPS THE FORM USABLE.

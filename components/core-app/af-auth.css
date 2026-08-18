@@ -24,11 +24,19 @@
   gap: 9px;
 }
 
+/* The wordmark is an <a> to "/" — it is the only way home from auth. Colour and
+   decoration are pinned so it does not inherit default link styling if the
+   Tailwind preflight ordering ever changes underneath this file. */
 .af-au-wordmark {
   font-weight: 900;
   font-size: 20px;
   letter-spacing: -0.02em;
   color: var(--text);
+  text-decoration: none;
+}
+
+.af-au-wordmark:hover {
+  color: var(--accent);
 }
 
 /* ── Card ────────────────────────────────────────────────────────────── */
