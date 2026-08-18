@@ -32,6 +32,13 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
   const sinceInjury = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const leagues = await prisma.league.findMany({
+    // Stable, total ordering: season and id are non-null and id is unique, so
+    // the result set cannot silently reorder between requests. Mirrors
+    // lib/dashboard/get-dashboard-league-list.ts so this set lines up with the
+    // league list the user actually sees. Deliberately not lastSyncedAt: it is
+    // nullable, and Postgres sorts NULLS FIRST on DESC, so never-synced leagues
+    // would sort to the top.
+    orderBy: [{ season: 'desc' }, { name: 'asc' }, { id: 'asc' }],
     where: {
       platform: 'sleeper',
       OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
