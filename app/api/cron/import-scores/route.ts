@@ -8,9 +8,22 @@
  * calling the provider, protecting the API-Sports daily quota.
  *
  * Optional query params:
- *   sport   — "NFL" (default) or "NCAAF"
+ *   sport   — "NFL" or "NCAAF". OMITTED MEANS BOTH — see below.
  *   season  — 4-digit year string (defaults to current season)
  *   force   — "true" to skip the 90-second gate (admin/manual use)
+ *
+ * ⚠ OMITTING `sport` NOW RUNS EVERY SPORT, AND THAT IS THE POINT. This used to
+ * default to NFL, so covering NCAAF took a SECOND cron entry pointing at the same
+ * route with `?sport=NCAAF` on the identical two-minute schedule. Two Vercel cron
+ * slots for one job. The route now iterates the sports itself and vercel.json
+ * declares it once.
+ *
+ * Total provider load is unchanged: the same two sports are fetched on the same
+ * cadence, sequentially in one invocation instead of in two. The 90-second gate
+ * is keyed per sport, so one sport being gated never suppresses the other.
+ *
+ * An EXPLICIT `?sport=` still runs exactly that one sport and returns the
+ * original single-sport response shape, because admin and manual callers pass it.
  */
 
 import type { NextRequest } from "next/server"
@@ -33,13 +46,30 @@ import { fetchGamesForSport, type ProviderGame } from "@/lib/scores/gameScorePro
  * `weather/refresh-cron` already do, and those are the crons that were returning 200.
  */
 export const dynamic = "force-dynamic"
-export const maxDuration = 60
+/*
+ * ⚠ RAISED BECAUSE ONE INVOCATION NOW DOES BOTH SPORTS. This ran per sport in
+ * two separate crons, each with its own budget; folding them into one
+ * sequential run roughly doubles the worst-case wall time, and the old ceiling
+ * would have started timing out the second sport — which fails silently as a
+ * partial sync rather than an obvious error. Vercel's ceiling is 300s.
+ */
+export const maxDuration = 120
 
 const GATE_SECONDS = 90
 
-function resolveSport(param: string | null): "NFL" | "NCAAF" {
+type Sport = "NFL" | "NCAAF"
+
+/** Every sport this cron covers when no explicit `sport` is given. */
+const ALL_SPORTS: Sport[] = ["NFL", "NCAAF"]
+
+function resolveSport(param: string | null): Sport {
   if (param?.toUpperCase() === "NCAAF") return "NCAAF"
   return "NFL"
+}
+
+/** Explicit `?sport=` → just that one. Absent → every sport. */
+function resolveSports(param: string | null): Sport[] {
+  return param ? [resolveSport(param)] : ALL_SPORTS
 }
 
 async function isGated(sport: string): Promise<boolean> {
@@ -109,9 +139,7 @@ async function persistGames(
   return written
 }
 
-async function handle(req: NextRequest) {
-  const url = new URL(req.url)
-  const sport = resolveSport(url.searchParams.get("sport"))
+async function runOneSport(url: URL, sport: Sport) {
   const season = url.searchParams.get("season") ?? undefined
   const force = url.searchParams.get("force") === "true"
 
@@ -119,13 +147,13 @@ async function handle(req: NextRequest) {
 
   try {
     if (!force && (await isGated(sport))) {
-      return NextResponse.json({
+      return {
         ok: true,
         gated: true,
         sport,
         reason: `Last sync was within ${GATE_SECONDS}s — skipping to conserve provider quota.`,
         durationMs: Date.now() - startedAt,
-      })
+      }
     }
 
     // API-Sports first, for continuity — but it is plan-blocked for the current
@@ -158,7 +186,7 @@ async function handle(req: NextRequest) {
       count += written
     }
 
-    return NextResponse.json({
+    return {
       ok: true,
       gated: false,
       sport,
@@ -168,15 +196,56 @@ async function handle(req: NextRequest) {
       diagnostics,
       durationMs: Date.now() - startedAt,
       timestamp: new Date().toISOString(),
-    })
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    console.error("[cron/import-scores] failed:", message)
-    return NextResponse.json(
-      { ok: false, sport, error: message.slice(0, 240), durationMs: Date.now() - startedAt },
-      { status: 500 }
-    )
+    console.error(`[cron/import-scores] ${sport} failed:`, message)
+    return {
+      ok: false,
+      sport,
+      error: message.slice(0, 240),
+      durationMs: Date.now() - startedAt,
+    }
   }
+}
+
+async function handle(req: NextRequest) {
+  const url = new URL(req.url)
+  const explicit = url.searchParams.get("sport")
+  const sports = resolveSports(explicit)
+
+  /*
+   * Sequential, not Promise.all: these hit the same rate-limited providers, and
+   * the whole reason this route self-gates is to protect that quota. Firing both
+   * sports concurrently would undo it.
+   *
+   * ⚠ ONE SPORT FAILING MUST NOT SUPPRESS THE OTHER. runOneSport catches its own
+   * errors and returns a result object rather than throwing, so NCAAF still runs
+   * when NFL's provider is down. That is the property the two separate crons had
+   * for free, and losing it would be a real regression.
+   */
+  const results = []
+  for (const sport of sports) {
+    results.push(await runOneSport(url, sport))
+  }
+
+  // Explicit single-sport callers keep the exact response they had before.
+  if (explicit) {
+    const only = results[0]!
+    return NextResponse.json(only, { status: only.ok ? 200 : 500 })
+  }
+
+  const anyFailed = results.some((r) => !r.ok)
+  return NextResponse.json(
+    {
+      ok: !anyFailed,
+      sports: results,
+      timestamp: new Date().toISOString(),
+    },
+    // A partial failure is still a 500 so the cron shows as failing rather than
+    // silently succeeding with one sport missing.
+    { status: anyFailed ? 500 : 200 },
+  )
 }
 
 export async function GET(req: NextRequest) {
