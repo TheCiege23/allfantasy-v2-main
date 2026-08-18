@@ -980,6 +980,72 @@
   font-variant-numeric: tabular-nums; min-width: 64px; text-align: right;
 }
 
+/* The league name on a waiver row, or the sport and week on a kickoff. Its own
+   line so a long league name wraps under the label instead of pushing the time
+   off the row. */
+.af-core .af-d2-call-sub {
+  display: block; margin-top: 2px;
+  font-size: 11px; color: var(--faint);
+}
+
+/* ── Today strip — record + health ───────────────────────────────────── */
+
+/*
+ * auto-fit rather than a fixed two-column track, because the record tile
+ * renders nothing at all when there is no scored matchup. With a fixed grid
+ * that leaves a visible empty cell next to health, which reads as a tile that
+ * failed to load — the exact impression the whole strip is built to avoid.
+ */
+.af-core .af-d2-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+}
+
+.af-core .af-d2-stat { display: flex; flex-direction: column; }
+.af-core .af-d2-stat-label {
+  margin: 0; font-size: 10px; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--muted);
+}
+.af-core .af-d2-stat-value {
+  margin: 6px 0 0; font-size: 34px; line-height: 1.05;
+  font-variant-numeric: tabular-nums; color: var(--text);
+}
+.af-core .af-d2-stat-value b { font-weight: 700; color: var(--good); }
+.af-core .af-d2-stat-value i { font-style: normal; font-weight: 700; color: var(--bad); }
+.af-core .af-d2-stat-sep { margin: 0 6px; color: var(--faint); font-weight: 400; }
+.af-core .af-d2-stat-status {
+  margin: 6px 0 0; font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--warn);
+}
+.af-core .af-d2-stat-sub { margin: 4px 0 0; font-size: 11px; color: var(--faint); }
+
+/*
+ * The unknown reading. It keeps the tile's full structure — mark, status word,
+ * supporting line — so the strip does not resize when a real score arrives, and
+ * so the state reads as deliberate rather than as a number that failed to load.
+ * Everything drops to --faint: an unknown health must never carry the amber of
+ * a real warning, because amber is a finding and this is the absence of one.
+ */
+.af-core .af-d2-stat.is-unknown { border-style: dashed; border-color: var(--line2); }
+.af-core .af-d2-stat-value.is-unknown { color: var(--faint); }
+.af-core .af-d2-stat-status.is-unknown { color: var(--faint); }
+.af-core .af-d2-stat-why {
+  margin: 6px 0 0; font-size: 11px; line-height: 1.45; color: var(--muted);
+}
+
+/* Why there is no scoreboard, said once under the strip rather than inside the
+   tile that is deliberately not rendering. */
+.af-core .af-d2-strip-note {
+  margin: 10px 0 0; font-size: 11px; line-height: 1.45; color: var(--muted);
+}
+
+@media (max-width: 900px) {
+  /* One per row below the stacking breakpoint — two 34px numerals side by side
+     on a 390px screen leaves no room for the status word under either. */
+  .af-core .af-d2-strip { grid-template-columns: 1fr; }
+}
+
 /* ── Mobile (390×844) ────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
