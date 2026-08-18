@@ -367,9 +367,28 @@
   min-height: 100vh;
 }
 
+/*
+ * ⚠ `overflow-x: clip`, NOT `hidden`, AND THAT DISTINCTION IS THE WHOLE POINT.
+ * Something in this column can exceed its width and push the PAGE sideways —
+ * the symptom is the left panel's padding disappearing because the document is
+ * scrolled right, clipping "AllFantasy" against the viewport edge.
+ *
+ * `overflow-x: hidden` would fix it and break something else: it makes the
+ * element a scroll container, and `position: sticky` on the league panel then
+ * sticks to that container instead of the viewport. `clip` contains the
+ * overflow WITHOUT creating a scroll container, so the panel keeps working.
+ *
+ * This is defensive, not a root-cause fix — it stops the page from scrolling
+ * sideways rather than finding the one wide child. The rails that are SUPPOSED
+ * to scroll horizontally (Draft Season HQ) carry their own `overflow-x: auto`
+ * and are unaffected, and the fixed-position Chimmy launcher and settings popup
+ * are outside this box entirely.
+ */
 .af-core .af-d2-main {
   flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   padding: 20px 22px 60px;
   display: flex;
   flex-direction: column;

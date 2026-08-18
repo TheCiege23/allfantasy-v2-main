@@ -67,7 +67,14 @@ export function PortfolioInventory({ data }: { data: PortfolioData | null }) {
     <details className="af-d2-card af-d2-portfolio-wrap">
       <summary className="af-d2-portfolio-summary">
         <span className="af-d2-portfolio-summary-text">
-          {rows.length} {rows.length === 1 ? 'league' : 'leagues'}
+          {/*
+            ⚠ THIS COUNT IS NOT THE HEADER'S COUNT, AND IT SAYS SO. The top bar
+            and the league panel show every active league; this shows the ones
+            with a team claimed to the account, which is a smaller set. Rendering
+            a bare "62 leagues" beside a header reading 63 makes one of them look
+            wrong — naming the measure is what makes both correct.
+          */}
+          {rows.length} {rows.length === 1 ? 'league' : 'leagues'} with a team claimed
           {withRoster > 0 ? ` · ${withRoster} with a roster` : ''}
           {data.commissionedCount > 0 ? ` · you commission ${data.commissionedCount}` : ''}
         </span>
