@@ -269,6 +269,50 @@ export default async function AfCorePage({
    * No new route: a segment on the existing catch-all, which is what this route
    * exists for. The repo sits at Vercel's hard 2048-route ceiling.
    */
+
+  /*
+   * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
+   * synced" — with a comment saying a per-league timestamp was not wired through.
+   * It is: the league list already selects `League.lastSyncedAt`. Measured on
+   * production it is null for all 98 leagues, so the label does not change today,
+   * but it will the moment a sync runs, and the shell no longer lies about
+   * whether it is looking.
+   */
+  const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
+    const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
+    if (!raw) return latest
+    const d = raw instanceof Date ? raw : new Date(raw)
+    if (Number.isNaN(d.getTime())) return latest
+    return latest == null || d > latest ? d : latest
+  }, null)
+  const syncAge = describeAge('roster', lastSynced, now)
+
+  /*
+   * The plan chip and token meter. The handoff is explicit that the meter must be
+   * visible BEFORE anything spends, and Chimmy is the only thing that spends — so
+   * the number belongs in the chrome, not on the screen that happens to open the
+   * chat. `null` on a read failure omits the chip rather than showing a made-up
+   * tier or a zero balance the user does not actually have.
+   */
+  const access = await aiAccessResolver.resolveForUser({ userId, now }).catch(() => null)
+  const plan = access
+    ? {
+        // Plan ids are slugs — 'war_room', 'supreme'. Rendering one raw puts an
+        // internal identifier in the chrome of the signed-in home.
+        name: access.hasSubscription
+          ? titleCase(access.subscription.plans[0] ?? 'premium')
+          : access.trial.inTrial
+            ? `Trial · ${access.trial.daysRemaining}d left`
+            : 'Free',
+        tokensLeft: access.tokenBalance,
+      }
+    : null
+
+  /*
+   * Placed AFTER `plan` and `syncAge` are computed, not before. It reads both,
+   * and the first version of this dispatch sat above their declarations — tsc
+   * caught it as use-before-declaration rather than it failing at runtime.
+   */
   if (segment === 'dashboard-v2') {
     /*
      * Both of these are CROSS-LEAGUE, which is why they can feed this screen.
@@ -310,47 +354,12 @@ export default async function AfCorePage({
         portfolio={portfolioData}
         drafts={draftData}
         week={weekData}
+        nowIso={now.toISOString()}
+        planName={plan?.name ?? null}
+        syncedLabel={syncAge.stale ? null : syncAge.label}
       />
     )
   }
-
-  /*
-   * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never
-   * synced" — with a comment saying a per-league timestamp was not wired through.
-   * It is: the league list already selects `League.lastSyncedAt`. Measured on
-   * production it is null for all 98 leagues, so the label does not change today,
-   * but it will the moment a sync runs, and the shell no longer lies about
-   * whether it is looking.
-   */
-  const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
-    const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
-    if (!raw) return latest
-    const d = raw instanceof Date ? raw : new Date(raw)
-    if (Number.isNaN(d.getTime())) return latest
-    return latest == null || d > latest ? d : latest
-  }, null)
-  const syncAge = describeAge('roster', lastSynced, now)
-
-  /*
-   * The plan chip and token meter. The handoff is explicit that the meter must be
-   * visible BEFORE anything spends, and Chimmy is the only thing that spends — so
-   * the number belongs in the chrome, not on the screen that happens to open the
-   * chat. `null` on a read failure omits the chip rather than showing a made-up
-   * tier or a zero balance the user does not actually have.
-   */
-  const access = await aiAccessResolver.resolveForUser({ userId, now }).catch(() => null)
-  const plan = access
-    ? {
-        // Plan ids are slugs — 'war_room', 'supreme'. Rendering one raw puts an
-        // internal identifier in the chrome of the signed-in home.
-        name: access.hasSubscription
-          ? titleCase(access.subscription.plans[0] ?? 'premium')
-          : access.trial.inTrial
-            ? `Trial · ${access.trial.daysRemaining}d left`
-            : 'Free',
-        tokensLeft: access.tokenBalance,
-      }
-    : null
 
   const commissionerCount = playedLeagues.filter((l) => Boolean(l.isCommissioner)).length
 

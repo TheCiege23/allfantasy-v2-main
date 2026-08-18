@@ -905,3 +905,91 @@
   font-size: 10px; color: var(--muted); min-width: 78px; text-align: right; white-space: nowrap;
 }
 .af-core .af-d2-exp-foot { margin: 0; font-size: 11px; line-height: 1.5; color: var(--muted); }
+
+/* ── Top bar ─────────────────────────────────────────────────────────── */
+
+.af-core .af-d2-topbar {
+  display: flex; align-items: center; gap: 14px; min-height: 62px;
+  padding: 10px 0 14px; border-bottom: 1px solid var(--line); margin-bottom: 6px;
+}
+.af-core .af-d2-topbar-when { display: flex; flex-direction: column; }
+.af-core .af-d2-topbar-time { font-size: 15px; font-weight: 800; color: var(--text); }
+.af-core .af-d2-topbar-sub {
+  font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint);
+}
+.af-core .af-d2-topbar-search {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 10px; min-width: 0;
+  padding: 9px 12px; border-radius: 10px; background: var(--surface2);
+  border: 1px solid var(--line); text-decoration: none; min-height: 44px;
+}
+.af-core .af-d2-topbar-search:hover { border-color: var(--accent-line); }
+.af-core .af-d2-topbar-search-text {
+  font-size: 12px; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.af-core .af-d2-topbar-kbd {
+  margin-left: auto; font-size: 9px; letter-spacing: 0.08em; color: var(--faint);
+  padding: 2px 6px; border-radius: 5px; border: 1px solid var(--chip-line); background: var(--chip);
+}
+.af-core .af-d2-topbar-right { display: flex; align-items: center; gap: 8px; flex: none; }
+.af-core .af-d2-topbar-plan {
+  padding: 4px 8px; border-radius: 6px; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line);
+}
+.af-core .af-d2-topbar-sync {
+  padding: 4px 8px; border-radius: 6px; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.1em; background: var(--chip); color: var(--muted); border: 1px solid var(--chip-line);
+}
+.af-core .af-d2-topbar-sync.is-never { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+
+/* ── Needs your call ─────────────────────────────────────────────────── */
+
+.af-core .af-d2-calls { list-style: none; margin: 0; padding: 0; }
+.af-core .af-d2-call {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+}
+.af-core .af-d2-call:last-child { border-bottom: 0; }
+.af-core .af-d2-call-dot {
+  width: 7px; height: 7px; flex: none; border-radius: 999px; background: var(--faint);
+}
+.af-core .af-d2-call-dot.is-warn { background: var(--warn); }
+.af-core .af-d2-call-dot.is-accent { background: var(--accent); }
+.af-core .af-d2-call-text { font-size: 13px; color: var(--text2); }
+.af-core .af-d2-call-time {
+  margin-left: auto; font-size: 11px; color: var(--faint);
+  /* Tabular figures + fixed width so a tick never reflows the row. */
+  font-variant-numeric: tabular-nums; min-width: 64px; text-align: right;
+}
+
+/* ── Mobile (390×844) ────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .af-core .af-d2-main { padding: 14px 14px 84px; gap: 20px; }
+
+  /* The bar stacks: clock line, then search full width. */
+  .af-core .af-d2-topbar { flex-wrap: wrap; gap: 10px; }
+  .af-core .af-d2-topbar-search { order: 3; flex-basis: 100%; }
+
+  /* Priority cards go single-column so the lead card is never half-width. */
+  .af-core .af-d2-prio { grid-template-columns: 1fr; }
+
+  /* Rails keep their horizontal scroll but lose the desktop card width. */
+  .af-core .af-d2-draft { flex-basis: 74vw; }
+
+  /* Exposure: the bar is the first thing to go — the share number carries it. */
+  .af-core .af-d2-exp-bar { display: none; }
+  .af-core .af-d2-exp-share { min-width: 0; }
+
+  /* Week rows drop the raw score line and keep W/L, league and margin. */
+  .af-core .af-d2-week-score { display: none; }
+
+  /* Clear the FAB, which is pinned bottom-right. */
+  .af-core .af-d2-legacy-link { margin-bottom: 8px; }
+  .af-core .af-d2-fab { right: 16px; bottom: 16px; }
+  .af-core .af-d2-chat {
+    right: 0; bottom: 0; left: 0;
+    width: 100%; max-height: 86vh; border-radius: 16px 16px 0 0;
+  }
+}

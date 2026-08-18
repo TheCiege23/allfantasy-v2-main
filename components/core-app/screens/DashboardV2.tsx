@@ -7,6 +7,8 @@ import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInven
 import { DraftHqAll } from '@/components/core-app/dash-v2/DraftHqAll'
 import { YourWeek } from '@/components/core-app/dash-v2/YourWeek'
 import { Exposure } from '@/components/core-app/dash-v2/Exposure'
+import { NeedsYourCall } from '@/components/core-app/dash-v2/NeedsYourCall'
+import { TopBar } from '@/components/core-app/dash-v2/TopBar'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
@@ -47,6 +49,9 @@ export function DashboardV2({
   portfolio = null,
   drafts = null,
   week = null,
+  nowIso,
+  planName = null,
+  syncedLabel = null,
 }: {
   data: Dash34Data | null
   /** From the loader's result, not from Dash34Data — passed in rather than
@@ -60,6 +65,12 @@ export function DashboardV2({
   drafts?: DraftHqAllData | null
   /** Real scored matchups. Carries its own season — do not assume current. */
   week?: WeekAllData | null
+  /** Server instant for the bar clock; localised after hydration. */
+  nowIso: string
+  planName?: string | null
+  /** Real sync age when one exists; null means nothing has ever synced, which
+   *  the bar states outright rather than showing an invented age. */
+  syncedLabel?: string | null
 }) {
   const leagues = data?.leagues ?? []
   const total = data?.totalLeagues ?? 0
@@ -91,6 +102,19 @@ export function DashboardV2({
 
       <main className="af-d2-main">
         {/*
+          syncedLabel is null whenever the account carries the never-synced
+          notice — the bar then states that outright instead of showing an age it
+          cannot compute. lastSyncedAt is null on all 98 leagues.
+        */}
+        <TopBar
+          nowIso={nowIso}
+          weekLabel={weekLabel}
+          planName={planName}
+          syncedLabel={syncedLabel}
+          leagueCount={total > 0 ? total : null}
+        />
+
+        {/*
           One account-wide fact, stated once. This is the 604-row fix: the old
           home derived a "League data is stale" issue per league and rendered it
           604 times. Sync having never run is one fact about the connection, not
@@ -116,6 +140,14 @@ export function DashboardV2({
             }
           />
           <Priorities data={data} />
+        </section>
+
+        <section>
+          <SectionHeader
+            label="Needs your call — all leagues"
+            counter={data?.next24?.length ? `${data.next24.length} ITEMS` : null}
+          />
+          <NeedsYourCall data={data} />
         </section>
 
         <section>
