@@ -299,11 +299,31 @@ export function LandingV4() {
 
       {/* ── Brown Pig network ───────────────────────────────────────── */}
       <section className="af-lp-network">
-        <span className="af-label">From Brown Pig LLC</span>
-        <h2 className="af-lp-h2">Apps that solve real problems</h2>
+        {/*
+          The parent mark. public/brand/brown-pig-llc.png has been in the repo the
+          whole time and nothing referenced it — the section rendered its heading
+          and six cards with no logo at all, which is why the page had ZERO images
+          on it. Plain <img>, not next/image: this is a static local asset in a
+          server component and the optimiser buys nothing at this size.
+        */}
+        <div className="af-lp-network-head">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            className="af-lp-network-mark"
+            src="/brand/brown-pig-llc.png"
+            alt="Brown Pig LLC"
+            width={72}
+            height={72}
+            loading="lazy"
+          />
+          <div>
+            <span className="af-label">From Brown Pig LLC</span>
+            <h2 className="af-lp-h2">Apps that solve real problems</h2>
         <p className="af-lp-network-body">
           AllFantasy is one of six products we build and run. One account family, same standard.
-        </p>
+            </p>
+          </div>
+        </div>
         <div className="af-lp-network-grid">
           {NETWORK.map((n) => (
             <a key={n.name} href={n.href} className="af-lp-network-card" target="_blank" rel="noopener noreferrer">
@@ -334,7 +354,21 @@ export function LandingV4() {
         </div>
         <div className="af-lp-footer-legal">
           <span>© 2026 AllFantasy.ai</span>
-          <span className="af-label">Built by Brown Pig LLC</span>
+          <span className="af-lp-footer-builtby">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="af-lp-footer-mark"
+              src="/brand/brown-pig-llc.png"
+              alt=""
+              width={34}
+              height={34}
+              loading="lazy"
+            />
+            <span className="af-lp-footer-builtby-text">
+              <span className="af-label">Built by</span>
+              <strong className="af-lp-footer-builtby-name">Brown Pig LLC</strong>
+            </span>
+          </span>
         </div>
         {/*
           Jurisdiction copy is a compliance statement, not decoration — it stays
