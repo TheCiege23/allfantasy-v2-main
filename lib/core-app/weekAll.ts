@@ -43,6 +43,13 @@ export type WeekAllData = {
   week: number | null
   /** Leagues the user has that carry no matchup history at all. */
   withoutHistory: number
+  /**
+   * Matchups that EXIST for this week but have not been played. Distinct from
+   * `withoutHistory`: those leagues have no schedule at all, these have one that
+   * has not started. Before a season opens this is the whole list, and saying so
+   * is the difference between "no results yet" and an empty screen.
+   */
+  unscored: number
   record: { wins: number; losses: number } | null
 }
 
@@ -55,6 +62,7 @@ export async function getWeekAll(
     season: null,
     week: null,
     withoutHistory: leagues.length,
+    unscored: 0,
     record: null,
   }
 
@@ -100,9 +108,31 @@ export async function getWeekAll(
   }
 
   const rows: WeekRow[] = []
+
+  let unscored = 0
   for (const m of matchups) {
     const meta = mine.get(`${m.leagueId}:${m.rosterId}`)
     if (!meta) continue // not the user's team in that league
+
+    /*
+     * ⚠ AN UNSCORED MATCHUP IS NOT A PLAYED ONE, AND IT WAS BEING COUNTED AS A
+     * LOSS. WeeklyMatchup holds a row as soon as the schedule exists, with
+     * pointsFor/pointsAgainst at 0 and `win` unset. Those rows were pushed
+     * unconditionally, so the dashboard rendered "L  0.00 — 0.00  +0.00" for a
+     * game nobody has played — and because `won` is `win === 1`, every one of
+     * them landed in the LOSS column. That is where "0-2 in week 2" came from on
+     * an account whose season has not started: two fabricated defeats.
+     *
+     * A real fantasy matchup that finished 0-0 does not occur; a scheduled one
+     * that has not started always looks exactly like this. Skipping them is the
+     * difference between "no results yet" and "you lost".
+     */
+    const scored = m.pointsFor > 0 || m.pointsAgainst > 0
+    if (!scored) {
+      unscored += 1
+      continue
+    }
+
     rows.push({
       leagueId: meta.leagueId,
       leagueName: meta.name,
@@ -117,6 +147,13 @@ export async function getWeekAll(
 
   rows.sort((a, b) => b.pointsFor - a.pointsFor)
 
+  /*
+   * Surfaced rather than swallowed. "Nothing to show" and "12 matchups exist but
+   * none have been played" are different states, and the second one is the
+   * common case before a season opens — the reader should be told which they are
+   * looking at.
+   */
+
   const record = rows.length
     ? { wins: rows.filter((r) => r.won).length, losses: rows.filter((r) => !r.won).length }
     : null
@@ -126,6 +163,7 @@ export async function getWeekAll(
     season: latest.seasonYear,
     week: latest.week,
     withoutHistory: Math.max(0, leagues.length - rows.length),
+    unscored,
     record,
   }
 }
