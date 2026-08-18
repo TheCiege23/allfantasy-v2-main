@@ -32,6 +32,18 @@ export interface BuildSeoMetaInput {
   noIndex?: boolean
   /** Optional keywords. */
   keywords?: string[]
+  /**
+   * `hreflang` alternates, as language code -> path or absolute URL. Emitted as
+   * `alternates.languages` alongside the canonical.
+   *
+   * Only set this where the SAME page is genuinely served in more than one
+   * language at distinct addresses. Declaring an alternate that returns the
+   * canonical language tells a crawler the two are translations of each other
+   * when they are the same document, which is worse than declaring nothing.
+   */
+  languageAlternates?: Record<string, string>
+  /** OpenGraph locale (e.g. 'es_US'). Defaults to the OG default when unset. */
+  ogLocale?: string
 }
 
 /**
@@ -68,13 +80,29 @@ export function buildSeoMeta(input: BuildSeoMetaInput): Metadata {
       },
     },
     metadataBase: new URL(BASE),
-    alternates: canonical ? { canonical } : undefined,
+    alternates:
+      canonical || input.languageAlternates
+        ? {
+            ...(canonical ? { canonical } : {}),
+            ...(input.languageAlternates
+              ? {
+                  languages: Object.fromEntries(
+                    Object.entries(input.languageAlternates).map(([lang, href]) => [
+                      lang,
+                      href.startsWith('http') ? href : `${BASE}${href}`,
+                    ]),
+                  ),
+                }
+              : {}),
+          }
+        : undefined,
     openGraph: {
       title: ogTitle,
       description: ogDesc,
       url: canonical,
       siteName: SITE_NAME,
       type: 'website',
+      ...(input.ogLocale ? { locale: input.ogLocale } : {}),
       images: [{ url: imageUrl }],
     },
     twitter: {
