@@ -1059,4 +1059,24 @@
 
 /* The left panel scrolls independently so a 61-league list never pushes the
    import CTA or the theme switch out of reach. */
-.af-core .af-d2-panel { max-height: 100vh; overflow-y: auto; position: sticky; top: 0; }
+/*
+ * Desktop only. The panel is a fixed-width column beside the main content, so
+ * pinning it and letting it scroll internally keeps the import CTA and theme
+ * switch reachable at 61 leagues. Reset below the stacking breakpoint: once the
+ * panel sits ABOVE the content, a sticky 100vh scroll box would occupy the whole
+ * first screen and trap the page scroll behind it.
+ */
+.af-core .af-d2-panel {
+  max-height: 100vh;
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+}
+
+@media (max-width: 900px) {
+  .af-core .af-d2-panel {
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
+}
