@@ -89,6 +89,22 @@ export function DashboardV2({
         totalLeagues={total}
         commissionerCount={commissionerCount}
         /*
+         * The identity footer shows the career level beside the name. It comes
+         * from the same `career` object Rankings & Legacy renders, so the two
+         * cannot disagree — and it is omitted rather than defaulted when the
+         * career engine has no level for this account, because "LEVEL 1" on an
+         * unranked account is a measurement nobody took.
+         */
+        levelLabel={
+          career?.levelName
+            ? career.level != null
+              ? `LEVEL ${career.level} · ${career.levelName}`
+              : career.levelName
+            : career?.level != null
+              ? `LEVEL ${career.level}`
+              : null
+        }
+        /*
          * `quiet` only — never quiet + overflow. The Dash34Data type carries an
          * explicit warning that adding them printed "53 leagues are quiet —
          * nothing needs you" over an account where nearly all 53 had a flagged

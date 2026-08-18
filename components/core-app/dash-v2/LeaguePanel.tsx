@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
+import { PanelUserMenu } from '@/components/core-app/dash-v2/PanelUserMenu'
 
 /**
  * Dashboard v2 left panel (300px) — the league list, grouped by urgency.
@@ -52,13 +53,20 @@ export function LeaguePanel({
   leagues,
   totalLeagues,
   quietSummary = null,
-  user = null,
+  levelLabel = null,
   commissionerCount = 0,
 }: {
   leagues: Dash34League[]
   totalLeagues: number
   quietSummary?: { count: number; text: string } | null
-  user?: { name: string; levelLabel?: string | null } | null
+  /*
+   * ⚠ REPLACED A `user` PROP THAT NO CALLER EVER PASSED. DashboardV2 renders this
+   * panel without it, so the identity footer was dead markup on every account —
+   * it defaulted to null and rendered nothing. Identity now comes from
+   * `useSettingsProfile` inside PanelUserMenu; only the career level, which that
+   * hook does not carry, is still threaded through.
+   */
+  levelLabel?: string | null
   /** Leagues you commission — badges the Commissioner Hub link. */
   commissionerCount?: number
 }) {
@@ -106,10 +114,12 @@ export function LeaguePanel({
           <span className="af-d2-wordmark">AllFantasy</span>
         </Link>
         {/*
-          NO THEME SWITCH HERE. The app already renders a global floating one
-          (the fixed control in the bottom-right corner), so putting a second in
-          this header showed two switches for a single setting — and they sat on
-          screen at the same time. One control, one setting.
+          NO THEME SWITCH HERE. This header carried a `ModeToggle` while the app
+          ALSO rendered its fixed `GlobalModeToggle` in the bottom-right corner —
+          two switches for one setting, both on screen at once. The single
+          control now lives in the settings popup under the user's name at the
+          foot of this panel, which is also where `GlobalModeToggle` steps aside
+          for it. One control, one setting.
         */}
       </div>
 
@@ -266,23 +276,13 @@ export function LeaguePanel({
         </Link>
       </nav>
 
-      <div className="af-d2-panel-foot">
-        {/* The import CTA lives at the top of the panel now — see the note there.
-            The footer keeps only identity, so the two are not competing. */}
-        {user ? (
-          <div className="af-d2-user">
-            <span className="af-d2-user-avatar" aria-hidden>
-              {initialsOf(user.name)}
-            </span>
-            <span className="af-d2-user-text">
-              <span className="af-d2-user-name">{user.name}</span>
-              {user.levelLabel ? (
-                <span className="af-d2-user-level af-num">{user.levelLabel}</span>
-              ) : null}
-            </span>
-          </div>
-        ) : null}
-      </div>
+      {/*
+        Identity sits under the league list, and opening it is how you reach
+        settings and the one appearance control on this screen. The import CTA
+        lives at the top of the panel — see the note there — so the two primary
+        actions are not competing for the same corner.
+      */}
+      <PanelUserMenu levelLabel={levelLabel} />
     </aside>
   )
 }

@@ -1047,28 +1047,41 @@
 /* A 61-row inventory should scroll inside its own box, not the page. */
 .af-core .af-d2-portfolio { max-height: 420px; overflow-y: auto; }
 
-/* ── FAB clears the app's floating mode toggle ───────────────────────── */
+/* ── FAB clearance ───────────────────────────────────────────────────── */
 
 /*
- * The global theme switch is a fixed control in the same bottom-right corner, and
- * it sits ABOVE the Chimmy launcher — the launcher was unreachable behind it.
- * Raising the FAB clears it rather than moving a control the rest of the app
- * shares. Both stay in the corner; only one of them is ours to move.
+ * ⚠ THE DESKTOP 92px LIFT IS GONE, AND ONLY BECAUSE THE THING IT CLEARED IS.
+ * The launcher used to sit under the app's floating mode toggle in the same
+ * bottom-right corner, so it was raised to stay clickable. That toggle no longer
+ * renders on either dashboard route — `GlobalModeToggle` bails on `/dashboard`
+ * and on `/core/dashboard-v2`, because the one appearance control now lives in
+ * the settings popup under the user's name. Leaving the lift in would float the
+ * launcher 92px above an empty corner.
+ *
+ * ⚠ THE LIFT IS STILL REQUIRED BELOW 900px, FOR A DIFFERENT REASON. The mobile
+ * bottom tab bar is 56px at `bottom: 0` and switches on at the 900px stacking
+ * breakpoint — NOT at 640px. Dropping the launcher to its 22px base across the
+ * whole range would land it on top of the tab bar between 641px and 900px, which
+ * is exactly the gap the previous 640px-only rule left open.
  */
-.af-core .af-d2-fab { bottom: 92px; }
-.af-core .af-d2-chat { bottom: 92px; }
+@media (max-width: 900px) {
+  .af-core .af-d2-fab { bottom: 88px; }
+  .af-core .af-d2-chat { bottom: 88px; }
+}
 
 @media (max-width: 640px) {
   .af-core .af-d2-fab { bottom: 88px; }
+  /* Full-width bottom sheet on a phone, so it meets the tab bar rather than
+     floating above it. */
   .af-core .af-d2-chat { bottom: 0; }
 }
 
 /* The left panel scrolls independently so a 61-league list never pushes the
-   import CTA or the theme switch out of reach. */
+   import CTA or the identity footer out of reach. */
 /*
  * Desktop only. The panel is a fixed-width column beside the main content, so
- * pinning it and letting it scroll internally keeps the import CTA and theme
- * switch reachable at 61 leagues. Reset below the stacking breakpoint: once the
+ * pinning it and letting it scroll internally keeps the import CTA and the
+ * identity footer reachable at 61 leagues. Reset below the stacking breakpoint: once the
  * panel sits ABOVE the content, a sticky 100vh scroll box would occupy the whole
  * first screen and trap the page scroll behind it.
  */
@@ -1455,5 +1468,257 @@
   /* Top bar: plan + sync chips wrap rather than push the clock off-screen. */
   .af-core .af-d2-topbar-right {
     flex-wrap: wrap;
+  }
+}
+
+/* ── Identity + settings popup (panel footer) ─────────────────────────── */
+
+.af-core .af-d2-user--button {
+  width: 100%;
+  /* A button, not a div: it opens a menu, so it has to be reachable by keyboard
+     and announce itself. The chrome is reset because af-btn is the wrong weight
+     for a footer identity row. */
+  appearance: none;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  padding: 6px;
+  margin: -6px;
+  cursor: pointer;
+  text-align: left;
+  min-height: 44px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.af-core .af-d2-user--button:hover,
+.af-core .af-d2-user--button[aria-expanded='true'] {
+  background: var(--chip);
+  border-color: var(--line);
+}
+
+.af-core .af-d2-user--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The uploaded avatar fills the same circle the initials fallback occupies, so
+   the row does not reflow when a profile image loads. */
+.af-core .af-d2-user-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.af-core .af-d2-user-avatar--lg {
+  width: 40px;
+  height: 40px;
+  font-size: 13px;
+}
+
+.af-core .af-d2-user-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-user-caret {
+  margin-left: auto;
+  flex: none;
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-core .af-d2-user.is-loading .af-d2-user-avatar,
+.af-core .af-d2-user.is-loading .af-d2-user-name {
+  background: var(--chip);
+  border-color: transparent;
+  border-radius: 6px;
+  color: transparent;
+  min-width: 90px;
+}
+
+/*
+ * ⚠ FIXED, NOT ABSOLUTE, AND THAT IS NOT A STYLE CHOICE. `.af-d2-panel` carries
+ * `overflow-y: auto` on desktop (it scrolls independently so a 61-league list
+ * never pushes this control out of reach). An absolutely-positioned menu inside
+ * that box is CLIPPED BY IT — opening upward from the footer, the taller the
+ * menu the more of it disappears behind the panel's scroll edge. Anchoring to
+ * the viewport escapes the clip entirely.
+ *
+ * The coordinates track the panel's own geometry: `.af-d2-panel` is 300px wide
+ * with 14px horizontal padding, is the first flex child of a full-bleed shell
+ * with no centering, and therefore occupies x = 14px…286px. Width is 272px to
+ * match. If the panel width or padding changes, these change with it.
+ */
+.af-core .af-d2-usermenu {
+  position: fixed;
+  left: 14px;
+  bottom: 14px;
+  width: 272px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  /* Tall accounts (four modes + six links) must not push the menu off-screen. */
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
+.af-core .af-d2-usermenu-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-core .af-d2-usermenu-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-d2-usermenu-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-usermenu-handle {
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-core .af-d2-usermenu-label {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+  margin-bottom: 6px;
+}
+
+.af-core .af-d2-mode-seg {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--line);
+}
+
+.af-core .af-d2-mode-opt {
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  cursor: pointer;
+  min-height: 32px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.af-core .af-d2-mode-opt:hover {
+  color: var(--text);
+}
+
+.af-core .af-d2-mode-opt.is-active {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.af-core .af-d2-usermenu-items {
+  display: flex;
+  flex-direction: column;
+}
+
+.af-core .af-d2-usermenu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  text-decoration: none;
+  text-align: left;
+  cursor: pointer;
+  /* 44px is the tap target these rows have to clear on a phone. */
+  min-height: 44px;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.af-core .af-d2-usermenu-item:hover {
+  background: var(--chip);
+  color: var(--text);
+}
+
+.af-core .af-d2-usermenu-item:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.af-core .af-d2-usermenu-hint {
+  margin-left: auto;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.af-core .af-d2-usermenu-item--danger {
+  color: var(--bad);
+  margin-top: 4px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 9px 9px;
+}
+
+.af-core .af-d2-usermenu-item--danger:hover {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+/*
+ * On a phone the panel is full-width in normal flow rather than a fixed rail, so
+ * an upward-anchored menu can end up above the fold. Pinning it to the viewport
+ * keeps it reachable and lets it use the full width, which the four-up mode
+ * segment needs to stay legible.
+ */
+@media (max-width: 900px) {
+  .af-core .af-d2-usermenu {
+    /* `width` is set on the desktop rule to match the 300px rail; it has to be
+       cleared here or `right` cannot take effect and the menu stays rail-width
+       on a phone. */
+    left: 12px;
+    right: 12px;
+    width: auto;
+    bottom: 12px;
+    max-height: 78vh;
+  }
+
+  .af-core .af-d2-mode-opt {
+    font-size: 11px;
+    min-height: 40px;
+  }
+
+  .af-core .af-d2-usermenu-item {
+    font-size: 13px;
   }
 }
