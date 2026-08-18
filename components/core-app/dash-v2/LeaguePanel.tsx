@@ -128,7 +128,15 @@ export function LeaguePanel({
         weight once an account is established and the wrong weight for everyone
         else, so the prominent version is the one that ships.
       */}
-      <Link href="/core/import" className="af-d2-import-cta">
+      {/*
+        /import, NOT /core/import. `import` is not in SCREEN_KEYS, so /core/import
+        hits the catch-all's "unknown segment → home" fallback and silently
+        re-renders the dashboard. A prominent CTA whose whole job is helping
+        someone find the importer, quietly returning them to where they already
+        were, is worse than no button. The live flow (ImportV4, with provider
+        availability from provider-ui-config) is mounted at /import.
+      */}
+      <Link href="/import" className="af-d2-import-cta">
         <span className="af-d2-import-cta-label">+ Import a league</span>
         <span className="af-d2-import-cta-plats af-num">SLEEPER · ESPN · YAHOO</span>
       </Link>
