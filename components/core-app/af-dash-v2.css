@@ -383,3 +383,322 @@
     border-bottom: 1px solid var(--line);
   }
 }
+
+/* ── Import CTA ──────────────────────────────────────────────────────── */
+
+/*
+ * Solid accent, above the league list. Import is the one action a user with no
+ * leagues must be able to find without hunting, so it carries real weight rather
+ * than the handoff's dashed footer row.
+ */
+.af-core .af-d2-import-cta {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 12px 14px;
+  border-radius: 11px;
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  text-decoration: none;
+  min-height: 44px;
+}
+
+.af-core .af-d2-import-cta:hover {
+  filter: brightness(1.06);
+}
+
+.af-core .af-d2-import-cta-label {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--accent-ink);
+}
+
+.af-core .af-d2-import-cta-plats {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--accent-ink);
+  opacity: 0.8;
+}
+
+/* ── Account-wide notice ─────────────────────────────────────────────── */
+
+.af-core .af-d2-notice {
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  border-radius: 14px;
+  padding: 14px 16px;
+}
+
+.af-core .af-d2-notice-title {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-d2-notice-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.af-core .af-d2-notice-link {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* ── Priority cards ──────────────────────────────────────────────────── */
+
+.af-core .af-d2-prio {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.af-core .af-d2-prio-card {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding: 15px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  /* Urgency reads as a top bar, per the handoff. */
+  border-top-width: 3px;
+}
+
+.af-core .af-d2-prio-card--bad {
+  border-top-color: var(--bad);
+}
+
+.af-core .af-d2-prio-card--warn {
+  border-top-color: var(--warn);
+}
+
+.af-core .af-d2-prio-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.af-core .af-d2-prio-rank {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--faint);
+}
+
+.af-core .af-d2-prio-badge {
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.af-core .af-d2-prio-badge--bad {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+.af-core .af-d2-prio-badge--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.af-core .af-d2-prio-timer {
+  margin-left: auto;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-d2-prio-headline {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.af-core .af-d2-prio-body {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-d2-prio-league {
+  margin: 0;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-d2-prio-cta {
+  margin-top: 4px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  text-align: center;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Exactly one card gets this — the lead. See the note in Priorities.tsx. */
+.af-core .af-d2-prio-cta.is-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ── Chimmy launcher ─────────────────────────────────────────────────── */
+
+.af-core .af-d2-fab {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: 58px;
+  height: 58px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  box-shadow: var(--shadow);
+}
+
+.af-core .af-d2-fab-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bad);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+}
+
+.af-core .af-d2-chat {
+  position: fixed;
+  right: 22px;
+  bottom: 22px;
+  width: min(392px, calc(100vw - 32px));
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.af-core .af-d2-chat-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-core .af-d2-chat-mark,
+.af-core .af-d2-fab-mark {
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.af-core .af-d2-chat-mark {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-core .af-d2-chat-who {
+  display: flex;
+  flex-direction: column;
+}
+
+.af-core .af-d2-chat-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-core .af-d2-chat-status {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+}
+
+.af-core .af-d2-chat-min {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.af-core .af-d2-chat-body {
+  padding: 14px;
+}
+
+.af-core .af-d2-chat-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-d2-chat-foot {
+  padding: 12px 14px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-d2-chat-input {
+  width: 100%;
+  padding: 11px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 13px;
+  min-height: 44px;
+}
+
+.af-core .af-d2-chat-soon {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+}

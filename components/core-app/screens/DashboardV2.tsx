@@ -1,5 +1,7 @@
 import { LeaguePanel } from '@/components/core-app/dash-v2/LeaguePanel'
 import { SectionHeader } from '@/components/core-app/dash-v2/SectionHeader'
+import { Priorities } from '@/components/core-app/dash-v2/Priorities'
+import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 // af-core.css carries the .af-core token layer. This screen renders OUTSIDE
 // AfCoreShell (it brings its own left panel), so the shell does not import it
@@ -12,11 +14,14 @@ import '@/components/core-app/af-dash-v2.css'
 /**
  * Dashboard v2 — shell slice.
  *
- * This is the structural half of the v2 handoff: the 300px league panel and the
- * section-header system every module drops into. The modules themselves (season
- * timeline, today's priorities, draft HQ, your week, needs your call, portfolio,
- * exposure, legacy) are not built here yet; each section below is present with a
- * real header and an explicit statement of what it is waiting on.
+ * Built so far: the 300px league panel, the section-header system, the
+ * account-wide notice, Today's priorities (real, from firstLock + the ranked
+ * league list), and the Chimmy launcher.
+ *
+ * Still placeholders: season timeline, draft HQ, your week, portfolio, exposure
+ * and legacy. Each is present with a real header and an explicit statement of
+ * what it is waiting on — six of them already have loaders, so those are
+ * composition rather than new backend work.
  *
  * ⚠ THE PLACEHOLDER LINES ARE DELIBERATE AND SPECIFIC. They name the missing
  * source rather than saying "Loading…" — the handoff's own build rule is that no
@@ -72,19 +77,32 @@ export function DashboardV2({
           </div>
         </section>
 
+        {/*
+          One account-wide fact, stated once. This is the 604-row fix: the old
+          home derived a "League data is stale" issue per league and rendered it
+          604 times. Sync having never run is one fact about the connection, not
+          N facts about N leagues.
+        */}
+        {data?.notice ? (
+          <div className="af-d2-notice">
+            <p className="af-d2-notice-title">{data.notice.title}</p>
+            <p className="af-d2-notice-body">{data.notice.body}</p>
+            {data.notice.href && data.notice.label ? (
+              <a className="af-d2-notice-link" href={data.notice.href}>
+                {data.notice.label}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
+
         <section>
           <SectionHeader
             label="Today's priorities"
-            counter={leagues.length > 0 ? `${leagues.length} LEAGUES RANKED` : null}
+            counter={
+              leagues.length > 0 ? `${leagues.length} OF ${total} LEAGUES RANKED` : null
+            }
           />
-          <div className="af-d2-card">
-            <p className="af-d2-empty">
-              Ranked by what needs you first, using the signals that exist today: an
-              unavailable starter, a draft in progress, and being the commissioner.
-              Live scores are not among them — no league has ever synced, so no
-              result is on file to rank against.
-            </p>
-          </div>
+          <Priorities data={data} />
         </section>
 
         <section>
@@ -118,6 +136,13 @@ export function DashboardV2({
           </div>
         </section>
       </main>
+
+      {/*
+        Collapsed by default; opening is the user's decision. Nothing is generated
+        on load — see the note in ChimmyFab for why a proactive opening line would
+        bill for every dashboard visit.
+      */}
+      <ChimmyFab unread={data?.chatUnread ?? 0} />
     </div>
   )
 }

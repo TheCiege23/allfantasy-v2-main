@@ -116,6 +116,20 @@ export function LeaguePanel({
         <span className="af-d2-total af-num">{totalLeagues}</span>
       </div>
 
+      {/*
+        Import is the primary action in this panel, not a footer afterthought.
+        It sits above the list and carries the solid accent fill: connecting a
+        platform is the one thing a user with no leagues — or with leagues on a
+        platform they have not connected yet — has to be able to find without
+        hunting. The handoff put a dashed row in the footer; that is the right
+        weight once an account is established and the wrong weight for everyone
+        else, so the prominent version is the one that ships.
+      */}
+      <Link href="/core/import" className="af-d2-import-cta">
+        <span className="af-d2-import-cta-label">+ Import a league</span>
+        <span className="af-d2-import-cta-plats af-num">SLEEPER · ESPN · YAHOO</span>
+      </Link>
+
       {availableSports.length > 1 ? (
         <div className="af-d2-filters" role="group" aria-label="Filter leagues by sport">
           {availableSports.map((option) => (
@@ -187,10 +201,8 @@ export function LeaguePanel({
       </div>
 
       <div className="af-d2-panel-foot">
-        <Link href="/core/import" className="af-d2-import af-num">
-          <span className="af-d2-import-label">+ Import a league</span>
-          <span className="af-d2-import-plats">SLEEPER · ESPN · YAHOO</span>
-        </Link>
+        {/* The import CTA lives at the top of the panel now — see the note there.
+            The footer keeps only identity, so the two are not competing. */}
         {user ? (
           <div className="af-d2-user">
             <span className="af-d2-user-avatar" aria-hidden>
