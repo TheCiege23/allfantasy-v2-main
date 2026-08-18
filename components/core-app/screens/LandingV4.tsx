@@ -1,7 +1,10 @@
-'use client'
-
 import Link from 'next/link'
-import { useState } from 'react'
+import {
+  getLandingCopy,
+  DEFAULT_LANDING_LANG,
+  LANDING_LANGS,
+  type LandingLang,
+} from '@/lib/i18n/landing-copy'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
 // AfCoreShell imports it for every screen inside the shell — but this one renders
 // standalone at `/`, so without this line every `var(--surface)` and `var(--line)`
@@ -38,6 +41,7 @@ import '@/components/core-app/af-landing.css'
  * /core/partners. This page is B2C only.
  */
 
+// Platform names are brands, so they are not translated; only the "soon" chip is.
 const PLATFORMS = [
   { name: 'Sleeper', state: 'live' as const },
   { name: 'ESPN', state: 'live' as const },
@@ -45,73 +49,48 @@ const PLATFORMS = [
   { name: 'MFL · Fantrax', state: 'soon' as const },
 ]
 
-const REASONS = [
-  {
-    n: '01',
-    title: ['All your leagues,', 'one board.'],
-    body: 'Sleeper, ESPN and Yahoo, with your real rosters and history. One Sunday view instead of four tabs.',
-  },
-  {
-    n: '02',
-    title: ['One player,', 'every league.'],
-    body: 'Search a name and see every team you have him on, his injury status, and the swap or waiver that follows in each one.',
-  },
-  {
-    n: '03',
-    title: ['Know what', 'needs you.'],
-    body: 'Unset lineups, waiver runs, trades on the clock — each tagged with the league and the deadline it belongs to.',
-  },
-]
+// Hrefs are language-independent; the descriptions come from the copy module.
+const NETWORK_HREFS: Record<string, string> = {
+  Gooby: 'https://gogooby.com',
+  'Cafe Con Chimmy': 'https://cafeconchimmy.com',
+  'Parent Playbook': 'https://playbook.chimaura.com',
+  PetPass: 'https://petpass.chimaura.com',
+  SideQuest: 'https://sidequest.chimaura.com',
+  StoryVault: 'https://storyvault.chimaura.com',
+}
 
-const FAQ = [
-  {
-    q: 'Can I import my Sleeper, ESPN and Yahoo leagues?',
-    a: 'Yes — read-only. We copy your real rosters, matchups and scoring, and never change anything on the platform.',
-  },
-  {
-    q: 'How does the cross-league player finder work?',
-    a: 'Search a player once and see every league you roster him in, his slot and injury status, and what to do about him in each.',
-  },
-  {
-    q: 'Is AllFantasy gambling or DFS?',
-    a: 'No. AllFantasy is 100% season-long fantasy sports. No sportsbook, no daily fantasy.',
-  },
-  {
-    q: 'What does it cost?',
-    a: 'Free forever for players. Paid plans run $9.99–$29.99/mo and can be cancelled anytime.',
-  },
-]
-
-/*
- * ⚠ EVERY CAPABILITY BELOW IS SOMETHING THAT EXISTS AND RUNS. Written from the
- * live route map and the shipped programs, not from a wish list: the Decision OS
- * surfaces are the four deterministic routes in docs/decision-os, manager
- * psychology shipped to production, and Chimmy is the live assistant with its
- * freshness contract. A business band is the worst place to describe a roadmap as
- * a product — the reader books a call on the strength of it.
- */
-/*
- * ⚠ THE OFFER IS "WE RUN THIS OVER YOUR DATA", NOT "YOUR USERS SIGN UP FOR OURS".
- * Every line is written from the buyer's side of that boundary — their leagues,
- * their users, their surface — because the two readings imply completely
- * different products and an earlier draft was neutral enough to be read either
- * way. Neutral copy is not safe copy here: it lets a reader book a call for the
- * thing we are not selling.
+/**
+ * Language switch — two plain links, not a client toggle.
  *
- * ⚠ EVERY CAPABILITY MAPS TO SOMETHING THAT SHIPS — the four deterministic
- * Decision OS routes, the manager-psychology program live in production, and
- * Chimmy's league-scoped answers with their freshness contract. A business band
- * is the worst place to describe a roadmap as a product: the reader books a call
- * on the strength of it.
+ * ⚠ IT HAS TO BE A REAL HREF. A button flipping React state would leave the URL
+ * (and therefore the shareable address, the crawlable document and the metadata)
+ * on English no matter what the reader picked. These render as `<a>` in the
+ * server response, so both languages are reachable and indexable without
+ * JavaScript, and `hreflang` on each one tells a crawler what it will get.
  */
-const NETWORK = [
-  { name: 'Gooby', body: 'Social discovery for people and their dogs.', href: 'https://gogooby.com' },
-  { name: 'Cafe Con Chimmy', body: 'Culture, coffee and conversation from the Chimmy world.', href: 'https://cafeconchimmy.com' },
-  { name: 'Parent Playbook', body: 'Practical plays for parents, one situation at a time.', href: 'https://playbook.chimaura.com' },
-  { name: 'PetPass', body: 'Every pet record, vet visit and reminder in one pass.', href: 'https://petpass.chimaura.com' },
-  { name: 'SideQuest', body: 'Turn the side hustle into a tracked, finishable quest.', href: 'https://sidequest.chimaura.com' },
-  { name: 'StoryVault', body: 'Record and keep the family stories before they are gone.', href: 'https://storyvault.chimaura.com' },
-]
+function LangSwitch({ lang, label }: { lang: LandingLang; label: string }) {
+  return (
+    <div className="af-lp-lang" role="group" aria-label={label}>
+      {LANDING_LANGS.map((code) => {
+        const active = code === lang
+        return (
+          <Link
+            key={code}
+            // English is the canonical URL, so it drops the param rather than
+            // creating a second address for the same document.
+            href={code === DEFAULT_LANDING_LANG ? '/' : `/?lang=${code}`}
+            hrefLang={code}
+            className="af-lp-lang-opt af-num"
+            data-active={active ? 'true' : undefined}
+            aria-current={active ? 'true' : undefined}
+          >
+            {code === 'en' ? 'EN' : 'ES'}
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
 
 function Shield() {
   return (
@@ -135,9 +114,16 @@ function Shield() {
   )
 }
 
-export function LandingV4() {
+export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang } = {}) {
+  const c = getLandingCopy(lang)
+
   return (
-    <div className="af-core af-lp">
+    /*
+     * `lang` on the wrapper, not just on <html>: the root layout is shared with
+     * every other route and cannot see this page's searchParams, so without this
+     * a screen reader would announce the Spanish page in an English voice.
+     */
+    <div className="af-core af-lp" lang={c.htmlLang}>
       {/* ── Nav ─────────────────────────────────────────────────────── */}
       <nav className="af-lp-nav" aria-label="Main">
         <Link href="/" className="af-lp-brand">
@@ -146,24 +132,25 @@ export function LandingV4() {
         </Link>
 
         <div className="af-lp-nav-links">
-          <a href="#how">How it works</a>
-          <a href="#pricing">Pricing</a>
-          <a href="#faq">For commissioners</a>
+          <a href="#how">{c.nav.how}</a>
+          <a href="#pricing">{c.nav.pricing}</a>
+          <a href="#faq">{c.nav.forCommissioners}</a>
         </div>
 
         <div className="af-lp-nav-right">
-          <Link href="/login">Sign in</Link>
+          <LangSwitch lang={lang} label={c.nav.langLabel} />
+          <Link href="/login">{c.nav.signIn}</Link>
           {/* Partners points at the B2B screen, which is served by the
               /core catch-all as the `partners` segment — no extra route. It was
               previously an in-page #business anchor, which became a dead link
               when the band moved off this page. */}
           <span className="af-lp-nav-divider" aria-hidden />
           <Link href="/core/partners" className="af-lp-partners">
-            Partners
+            {c.nav.partners}
             <span className="af-lp-api-chip af-num">API</span>
           </Link>
           <Link href="/signup" className="af-btn af-lp-cta">
-            Get started free
+            {c.nav.getStarted}
           </Link>
         </div>
       </nav>
@@ -171,27 +158,22 @@ export function LandingV4() {
       {/* ── Hero ────────────────────────────────────────────────────── */}
       <header className="af-lp-hero" id="how">
         <div className="af-lp-hero-text">
-          <span className="af-lp-eyebrow af-num">Fantasy sports only · no gambling</span>
+          <span className="af-lp-eyebrow af-num">{c.hero.eyebrow}</span>
           <h1 className="af-lp-h1">
-            Every league you play.
+            {c.hero.h1a}
             <br />
-            <span className="af-lp-h1-accent">One screen.</span>
+            <span className="af-lp-h1-accent">{c.hero.h1b}</span>
           </h1>
-          <p className="af-lp-sub">
-            Connect Sleeper, ESPN and Yahoo. See what needs you across every league, and exactly
-            where to go and fix it.
-          </p>
+          <p className="af-lp-sub">{c.hero.sub}</p>
           <div className="af-lp-hero-ctas">
             <Link href="/signup" className="af-btn af-lp-cta-lg">
-              Get started free
+              {c.hero.ctaPrimary}
             </Link>
             <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">
-              See how it works
+              {c.hero.ctaSecondary}
             </a>
           </div>
-          <p className="af-lp-reassure">
-            Free forever for players · Read-only · Cancel anytime
-          </p>
+          <p className="af-lp-reassure">{c.hero.reassure}</p>
         </div>
 
         {/*
@@ -201,8 +183,8 @@ export function LandingV4() {
         */}
         <aside className="af-lp-hero-card" aria-label="Example of the leagues view">
           <div className="af-lp-card-head">
-            <span className="af-lp-card-title">Your leagues</span>
-            <span className="af-lp-card-week af-num">Week 12 · example</span>
+            <span className="af-lp-card-title">{c.hero.cardTitle}</span>
+            <span className="af-lp-card-week af-num">{c.hero.cardWeek}</span>
           </div>
           {[
             { mark: 'S', platform: 'sleeper', name: 'Dynasty Dragons', meta: 'Sleeper · Dynasty PPR', score: '96.2', against: '–88.4', tag: 'Set flex', tone: 'bad' },
@@ -229,7 +211,9 @@ export function LandingV4() {
           ))}
           <div className="af-lp-card-foot">
             <span className="af-lp-card-foot-text">
-              Two fixes worth <strong>+13.0</strong> — Chimmy, across all 4 leagues
+              {c.hero.cardFootBefore}
+              <strong>+13.0</strong>
+              {c.hero.cardFootAfter}
             </span>
           </div>
         </aside>
@@ -237,23 +221,25 @@ export function LandingV4() {
 
       {/* ── Connects to ─────────────────────────────────────────────── */}
       <section className="af-lp-connects">
-        <span className="af-label">Connects to</span>
+        <span className="af-label">{c.connects.label}</span>
         <div className="af-lp-connect-row">
           {PLATFORMS.map((p) => (
             <span key={p.name} className="af-lp-connect" data-state={p.state}>
               {p.name}
-              {p.state === 'soon' ? <span className="af-lp-soon af-num">soon</span> : null}
+              {p.state === 'soon' ? (
+                <span className="af-lp-soon af-num">{c.connects.soon}</span>
+              ) : null}
             </span>
           ))}
         </div>
-        <span className="af-lp-sports af-num">NFL · NBA · NHL · MLB · NCAA · SOCCER</span>
+        <span className="af-lp-sports af-num">{c.connects.sports}</span>
       </section>
 
       {/* ── Three reasons ───────────────────────────────────────────── */}
       <section className="af-lp-reasons">
-        <h2 className="af-lp-h2">Three things you can&apos;t do anywhere else</h2>
+        <h2 className="af-lp-h2">{c.reasons.h2}</h2>
         <div className="af-lp-reason-grid">
-          {REASONS.map((r) => (
+          {c.reasons.items.map((r) => (
             <article key={r.n} className="af-lp-reason">
               <span className="af-lp-reason-n af-num">{r.n}</span>
               <h3 className="af-lp-reason-title">
@@ -269,26 +255,23 @@ export function LandingV4() {
 
       {/* ── Pricing line ────────────────────────────────────────────── */}
       <section className="af-lp-pricing" id="pricing">
-        <h2 className="af-lp-h2">Free to see it all. Upgrade to act on it.</h2>
-        <p className="af-lp-pricing-body">
-          Every league, live score and standing is free. Paid plans from $9.99/mo add trade grades,
-          projections and commissioner tools.
-        </p>
+        <h2 className="af-lp-h2">{c.pricing.h2}</h2>
+        <p className="af-lp-pricing-body">{c.pricing.body}</p>
         <div className="af-lp-pricing-ctas">
           <Link href="/signup" className="af-btn">
-            Start free
+            {c.pricing.ctaPrimary}
           </Link>
           <Link href="/pricing" className="af-btn af-btn--ghost">
-            Compare plans
+            {c.pricing.ctaSecondary}
           </Link>
         </div>
       </section>
 
       {/* ── FAQ ─────────────────────────────────────────────────────── */}
       <section className="af-lp-faq" id="faq">
-        <h2 className="af-lp-h2">Questions managers ask</h2>
+        <h2 className="af-lp-h2">{c.faq.h2}</h2>
         <div className="af-lp-faq-list">
-          {FAQ.map((f) => (
+          {c.faq.items.map((f) => (
             <details key={f.q} className="af-lp-faq-item">
               <summary className="af-lp-faq-q">{f.q}</summary>
               <p className="af-lp-faq-a">{f.a}</p>
@@ -317,23 +300,31 @@ export function LandingV4() {
             loading="lazy"
           />
           <div>
-            <span className="af-label">From Brown Pig LLC</span>
-            <h2 className="af-lp-h2">Apps that solve real problems</h2>
-        <p className="af-lp-network-body">
-          AllFantasy is one of six products we build and run. One account family, same standard.
-            </p>
+            <span className="af-label">{c.network.label}</span>
+            <h2 className="af-lp-h2">{c.network.h2}</h2>
+            <p className="af-lp-network-body">{c.network.body}</p>
           </div>
         </div>
         <div className="af-lp-network-grid">
-          {NETWORK.map((n) => (
-            <a key={n.name} href={n.href} className="af-lp-network-card" target="_blank" rel="noopener noreferrer">
-              <span className="af-lp-network-name">{n.name}</span>
-              <span className="af-lp-network-desc">{n.body}</span>
-              <span className="af-lp-network-link af-num">
-                {n.href.replace(/^https?:\/\//, '')} →
-              </span>
-            </a>
-          ))}
+          {c.network.cards.map((n) => {
+            const href = NETWORK_HREFS[n.name]
+            if (!href) return null
+            return (
+              <a
+                key={n.name}
+                href={href}
+                className="af-lp-network-card"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span className="af-lp-network-name">{n.name}</span>
+                <span className="af-lp-network-desc">{n.body}</span>
+                <span className="af-lp-network-link af-num">
+                  {href.replace(/^https?:\/\//, '')} →
+                </span>
+              </a>
+            )
+          })}
         </div>
       </section>
 
@@ -345,11 +336,11 @@ export function LandingV4() {
             <span className="af-lp-wordmark">AllFantasy</span>
           </span>
           <nav className="af-lp-footer-links" aria-label="Footer">
-            <Link href="/core/players">Player finder</Link>
-            <Link href="/dashboard">Dashboard</Link>
-            <Link href="/privacy">Privacy</Link>
-            <Link href="/terms">Terms</Link>
-            <Link href="/data-deletion">Data deletion</Link>
+            <Link href="/core/players">{c.footer.playerFinder}</Link>
+            <Link href="/dashboard">{c.footer.dashboard}</Link>
+            <Link href="/privacy">{c.footer.privacy}</Link>
+            <Link href="/terms">{c.footer.terms}</Link>
+            <Link href="/data-deletion">{c.footer.dataDeletion}</Link>
           </nav>
         </div>
         <div className="af-lp-footer-legal">
@@ -365,7 +356,7 @@ export function LandingV4() {
               loading="lazy"
             />
             <span className="af-lp-footer-builtby-text">
-              <span className="af-label">Built by</span>
+              <span className="af-label">{c.footer.builtByLabel}</span>
               <strong className="af-lp-footer-builtby-name">Brown Pig LLC</strong>
             </span>
           </span>
@@ -374,10 +365,7 @@ export function LandingV4() {
           Jurisdiction copy is a compliance statement, not decoration — it stays
           in the footer verbatim.
         */}
-        <p className="af-lp-footer-compliance">
-          Not available in WA. Paid leagues restricted in HI, ID, MT, NV. 100% fantasy sports — no
-          gambling, no DFS.
-        </p>
+        <p className="af-lp-footer-compliance">{c.footer.compliance}</p>
       </footer>
     </div>
   )
