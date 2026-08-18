@@ -31,6 +31,8 @@ export type DraftHqAllRow = {
   leagueId: string
   leagueName: string
   platform: string | null
+  /** Platform league avatar, so a draft card is recognisable at a glance. */
+  imageUrl: string | null
   /** Normalised bucket for grouping and ordering. */
   phase: DraftPhase
   /** The value straight from the row — shown when `phase` is 'unknown'. */
@@ -71,7 +73,12 @@ const PHASE_RANK: Record<DraftPhase, number> = { live: 0, upcoming: 1, unknown: 
 
 export async function getDraftHqAll(
   userId: string,
-  leagues: Array<{ id: string; name?: string | null; platform?: string | null }>,
+  leagues: Array<{
+    id: string
+    name?: string | null
+    platform?: string | null
+    imageUrl?: string | null
+  }>,
 ): Promise<DraftHqAllData> {
   const empty: DraftHqAllData = {
     rows: [],
@@ -140,6 +147,7 @@ export async function getDraftHqAll(
       leagueId: session.leagueId,
       leagueName: meta?.name?.trim() || 'League',
       platform: meta?.platform ?? null,
+      imageUrl: meta?.imageUrl ?? null,
       phase,
       rawStatus: session.status,
       draftType: session.draftType ?? null,

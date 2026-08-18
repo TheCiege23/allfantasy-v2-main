@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
-import { ModeToggle } from '@/components/theme/ModeToggle'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
 
 /**
@@ -107,11 +106,11 @@ export function LeaguePanel({
           <span className="af-d2-wordmark">AllFantasy</span>
         </Link>
         {/*
-          The L / D / AF switch. Reuses the app's ModeToggle rather than a second
-          implementation, so this panel cannot drift out of step with the global
-          theme state or write the cookie differently.
+          NO THEME SWITCH HERE. The app already renders a global floating one
+          (the fixed control in the bottom-right corner), so putting a second in
+          this header showed two switches for a single setting — and they sat on
+          screen at the same time. One control, one setting.
         */}
-        <ModeToggle className="af-d2-modes" />
       </div>
 
       <div className="af-d2-panel-title">

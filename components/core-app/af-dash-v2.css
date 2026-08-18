@@ -1233,3 +1233,52 @@
     bottom: 56px;
   }
 }
+
+/* Draft card identity: avatar + name, so a rail of similarly-named leagues is
+   still scannable. */
+.af-core .af-d2-draft-id { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.af-core .af-d2-draft-tile {
+  width: 26px; height: 26px; flex: none; overflow: hidden;
+  display: grid; place-items: center; border-radius: 7px;
+  background: var(--chip); border: 1px solid var(--chip-line);
+  font-size: 9px; font-weight: 800; color: var(--text2);
+}
+.af-core .af-d2-draft-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── Import CTA: colour-shifting ─────────────────────────────────────── */
+
+/*
+ * The import button is the one action a new account must find, so it animates
+ * rather than sitting flat. `prefers-reduced-motion` stops the animation and
+ * keeps a static gradient — motion is the enhancement, contrast is not.
+ */
+.af-core .af-d2-import-cta {
+  background: linear-gradient(
+    100deg,
+    var(--accent) 0%,
+    var(--warn) 45%,
+    var(--good) 70%,
+    var(--accent) 100%
+  );
+  background-size: 300% 100%;
+  border-color: transparent;
+  animation: af-d2-import-shift 9s ease-in-out infinite;
+}
+
+@keyframes af-d2-import-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-core .af-d2-import-cta { animation: none; background-position: 0% 50%; }
+}
+
+/* The label sits on a moving gradient, so it needs its own contrast rather than
+   inheriting --accent-ink, which is only guaranteed against --accent. */
+.af-core .af-d2-import-cta-label,
+.af-core .af-d2-import-cta-plats {
+  color: #0b1020;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.af-core .af-d2-import-cta-plats { opacity: 0.9; }
