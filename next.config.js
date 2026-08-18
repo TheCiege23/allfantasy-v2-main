@@ -52,9 +52,15 @@ const nextConfig = {
     // When layout.tsx / globals.css don't change between commits, webpack
     // reuses stale cache entries that omit CSS from app-build-manifest.json,
     // causing the deployed site to have no <link rel="stylesheet"> tags.
-    // We also detect Railway via RAILWAY_ENVIRONMENT (more reliably injected
-    // at build time than RAILWAY_PROJECT_ID) and fall back to process.platform
-    // so Linux CI/CD environments are always protected even without Railway vars.
+    // We detect Railway via RAILWAY_ENVIRONMENT (more reliably injected at build
+    // time than RAILWAY_PROJECT_ID).
+    //
+    // This is scoped to Railway deliberately. It used to fall back to
+    // `process.platform === 'linux'`, which also caught Vercel -- so every
+    // preview and production build recompiled all ~1,670 routes with no
+    // filesystem cache. The stale-CSS bug above is specific to the Nixpacks
+    // cache volume being keyed to service ID; Vercel keys its own .next/cache
+    // per project and restores it between builds, so it is not affected.
     const isRailwayBuild = !!(
       process.env.RAILWAY_PROJECT_ID ||
       process.env.RAILWAY_ENVIRONMENT ||
@@ -62,7 +68,7 @@ const nextConfig = {
       process.env.RAILWAY_DEPLOYMENT_ID ||
       process.env.RAILWAY_GIT_COMMIT_SHA
     );
-    if (!dev && (isRailwayBuild || process.platform === 'linux')) {
+    if (!dev && isRailwayBuild) {
       config.cache = false;
     }
 
@@ -186,8 +192,12 @@ const configWithSentry = hasSentryDsn
       project: process.env.SENTRY_PROJECT ?? '',
       // Suppress verbose Sentry CLI output in non-CI environments.
       silent: !process.env.CI,
-      // Upload client-side source maps for better stack traces.
-      widenClientFileUpload: true,
+      // Upload client-side source maps for better stack traces. Left narrow:
+      // widening it pulls far more client bundles into source-map generation
+      // and upload on every build, which is a meaningful share of build time on
+      // a bundle this size. Flip back to true when chasing a client-side error
+      // whose stack trace is not resolving.
+      widenClientFileUpload: false,
       // Strip source maps from the deployed bundle (they're in Sentry).
       hideSourceMaps: true,
       // Suppress the Sentry logger in the bundle (saves ~7 kB).
