@@ -46,11 +46,7 @@
     },
     {
       "path": "/api/cron/import-injuries",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/import-injuries?sport=NCAAF",
-      "schedule": "*/15 * * * *"
+      "schedule": "0 * * * *"
     },
     {
       "path": "/api/cron/import-stat-lines",
@@ -162,10 +158,6 @@
     },
     {
       "path": "/api/cron/import-scores",
-      "schedule": "*/2 * * * *"
-    },
-    {
-      "path": "/api/cron/import-scores?sport=NCAAF",
       "schedule": "*/2 * * * *"
     },
     {
