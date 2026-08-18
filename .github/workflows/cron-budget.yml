@@ -1,0 +1,27 @@
+name: Cron budget
+
+on:
+  pull_request:
+    # No `branches:` filter, matching i18n-placeholder-parity: filtering PR runs
+    # to main/master silently skipped every stacked PR, and cron entries are
+    # exactly the kind of change that arrives on one.
+  push:
+    branches: [main, master]
+
+jobs:
+  cron-budget:
+    name: Cron budget
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # No `npm ci`. The check reads vercel.json with the Node standard library
+      # and has no dependencies, so installing would be most of the runtime for
+      # nothing.
+      - name: Check the cron ceiling and fold-in rule
+        run: node scripts/cron-budget-check.mjs
