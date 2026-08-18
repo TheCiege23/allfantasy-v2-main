@@ -227,7 +227,14 @@ export function LeaguePanel({
                       sub-screen we think is most urgent".
                     */}
                     <Link
-                      href={`/core?league=${encodeURIComponent(league.id)}`}
+                      /*
+                       * ⚠ /dashboard, NOT /core. Choosing a league is a STATE of
+                       * this screen, not a trip to a different product surface —
+                       * the league-scoped view now renders at ?league= on the
+                       * same route, which is also where the season timeline,
+                       * Draft HQ and Commissioner Hub live.
+                       */
+                      href={`/dashboard?league=${encodeURIComponent(league.id)}`}
                       className="af-d2-row"
                     >
                       <span className="af-d2-tile" data-platform={league.platform} aria-hidden>
