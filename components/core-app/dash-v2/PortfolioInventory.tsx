@@ -76,16 +76,57 @@ export function PortfolioInventory({ data }: { data: PortfolioData | null }) {
 
       <ul className="af-d2-portfolio">
         {rows.map((row) => (
-          <li key={row.leagueId} className="af-d2-portfolio-row">
-            <span className="af-d2-portfolio-name">{row.leagueName}</span>
-            <span className="af-d2-portfolio-meta af-num">
-              {[row.platform, row.sport, row.season].filter(Boolean).join(' · ')}
-            </span>
-            <span className="af-d2-portfolio-right af-num">
-              {row.isCommissioner ? <span className="af-d2-portfolio-commish">COMMISH</span> : null}
-              {row.rosterCount != null ? `${row.rosterCount} players` : 'no roster imported'}
-              {/* record intentionally omitted — see the note at the top. */}
-            </span>
+          <li key={row.leagueId} className="af-d2-portfolio-item">
+            {/*
+              Each league opens to its own roster detail rather than the list
+              carrying every fact inline. At 61 leagues an always-expanded row is
+              a wall; the summary answers "what is this league" and the body
+              answers "what is in it".
+            */}
+            <details className="af-d2-portfolio-row">
+              <summary className="af-d2-portfolio-summary-row">
+                <span className="af-d2-portfolio-name">{row.leagueName}</span>
+                <span className="af-d2-portfolio-meta af-num">
+                  {[row.platform, row.sport, row.season].filter(Boolean).join(' · ')}
+                </span>
+                <span className="af-d2-portfolio-right af-num">
+                  {row.isCommissioner ? (
+                    <span className="af-d2-portfolio-commish">COMMISH</span>
+                  ) : null}
+                  {row.rosterCount != null ? `${row.rosterCount} players` : 'no roster'}
+                </span>
+              </summary>
+
+              <div className="af-d2-portfolio-detail">
+                <dl className="af-d2-portfolio-facts">
+                  <div>
+                    <dt className="af-num">TEAM</dt>
+                    <dd>{row.team?.name ?? 'Not resolved'}</dd>
+                  </div>
+                  <div>
+                    <dt className="af-num">ROSTER</dt>
+                    <dd>
+                      {row.rosterCount != null
+                        ? `${row.rosterCount} players imported`
+                        : 'No roster imported yet'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="af-num">RECORD</dt>
+                    {/*
+                      Null on every team on this database — 0 of 893 LeagueTeam
+                      rows carry a result. Saying so beats printing 0-0, which
+                      reads as a played-and-lost season rather than as no data.
+                    */}
+                    <dd>{row.team?.record ?? 'No results synced'}</dd>
+                  </div>
+                  <div>
+                    <dt className="af-num">ROLE</dt>
+                    <dd>{row.isCommissioner ? 'You commission this league' : 'Manager'}</dd>
+                  </div>
+                </dl>
+              </div>
+            </details>
           </li>
         ))}
       </ul>
