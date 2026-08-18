@@ -385,6 +385,13 @@
 
 /* The panel is fixed-width by design; below the breakpoint it becomes a normal
    stacked block rather than squeezing the main column to nothing. */
+/*
+ * Below the breakpoint the shell has ONE flow child — main. The panel is lifted
+ * out into a fixed drawer (see "Mobile chrome" at the foot of this file), so the
+ * old behaviour of stacking it full-width above the content is deliberately gone:
+ * on a 61-league account that meant scrolling past 61 rows to reach the first
+ * priority card.
+ */
 @media (max-width: 900px) {
   .af-core.af-d2-shell {
     flex-direction: column;
@@ -394,7 +401,6 @@
     width: 100%;
     min-height: 0;
     border-right: 0;
-    border-bottom: 1px solid var(--line);
   }
 }
 
@@ -1078,5 +1084,152 @@
     position: static;
     max-height: none;
     overflow-y: visible;
+  }
+}
+
+/* ── Mobile chrome: ☰ drawer + bottom tab bar ────────────────────────── */
+
+/*
+ * Desktop: the chrome is inert. The panel slot is a plain flex child, and the
+ * mobile header, scrim and tab bar are not rendered at all. Everything below
+ * only switches on under the stacking breakpoint.
+ */
+.af-core .af-d2-mhead,
+.af-core .af-d2-tabbar,
+.af-core .af-d2-scrim {
+  display: none;
+}
+
+.af-core .af-d2-panel-slot {
+  display: contents;
+}
+
+@media (max-width: 900px) {
+  /*
+   * `display: contents` is dropped here because the slot has to become a real
+   * positioned box to slide. On desktop it stays contents so the panel remains a
+   * direct flex child of the shell and the two-column layout is untouched.
+   */
+  .af-core .af-d2-panel-slot {
+    display: block;
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: min(88vw, 320px);
+    z-index: 60;
+    transform: translateX(-100%);
+    transition: transform 180ms ease;
+    /* Not just off-screen: an untabbable drawer, so focus cannot land inside it
+       while it is closed. */
+    visibility: hidden;
+  }
+
+  .af-core .af-d2-panel-slot[data-open='true'] {
+    transform: translateX(0);
+    visibility: visible;
+    box-shadow: var(--shadow);
+  }
+
+  .af-core .af-d2-panel-slot .af-d2-panel {
+    height: 100%;
+    max-height: none;
+    overflow-y: auto;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+  }
+
+  .af-core .af-d2-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    border: 0;
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .af-core .af-d2-mhead {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+
+  .af-core .af-d2-mhead-brand {
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: var(--text);
+  }
+
+  .af-core .af-d2-mhead-btn {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 44px;
+    min-width: 44px;
+    justify-content: center;
+    padding: 0 12px;
+    border-radius: 10px;
+    border: 1px solid var(--line2);
+    background: var(--surface2);
+    color: var(--text);
+    font-size: 16px;
+    cursor: pointer;
+  }
+
+  .af-core .af-d2-mhead-count {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--muted);
+  }
+
+  /* Bottom tab bar. 56px + the safe-area inset so it clears a home indicator. */
+  .af-core .af-d2-tabbar {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 50;
+    background: var(--surface);
+    border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+
+  .af-core .af-d2-tab {
+    flex: 1 1 0;
+    min-height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    text-decoration: none;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .af-core .af-d2-tab.is-active {
+    color: var(--accent);
+  }
+
+  /* Main clears the fixed tab bar; the FAB sits above it rather than behind. */
+  .af-core .af-d2-main {
+    padding-bottom: 96px;
+  }
+
+  .af-core .af-d2-fab {
+    bottom: 76px;
+  }
+
+  .af-core .af-d2-chat {
+    bottom: 56px;
   }
 }

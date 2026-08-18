@@ -10,6 +10,7 @@ import { Exposure } from '@/components/core-app/dash-v2/Exposure'
 import { NeedsYourCall } from '@/components/core-app/dash-v2/NeedsYourCall'
 import { TopBar } from '@/components/core-app/dash-v2/TopBar'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
+import { MobileChrome } from '@/components/core-app/dash-v2/MobileChrome'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
@@ -82,7 +83,8 @@ export function DashboardV2({
 
   return (
     <div className="af-core af-d2 af-d2-shell">
-      <LeaguePanel
+      <MobileChrome leagueCount={total > 0 ? total : null}>
+        <LeaguePanel
         leagues={leagues}
         totalLeagues={total}
         commissionerCount={commissionerCount}
@@ -103,7 +105,8 @@ export function DashboardV2({
               }
             : null
         }
-      />
+        />
+      </MobileChrome>
 
       <main className="af-d2-main">
         {/*
