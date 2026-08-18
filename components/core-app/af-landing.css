@@ -824,3 +824,69 @@
     align-items: center;
   }
 }
+
+/* ── Brand marks ─────────────────────────────────────────────────────── */
+
+/*
+ * The Brown Pig logo. The asset was in the repo and unreferenced, so the whole
+ * landing page rendered with zero <img> elements — the network section and the
+ * footer both showed their text lockups with nothing beside them.
+ */
+.af-core .af-lp-network-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.af-core .af-lp-network-mark {
+  width: 72px;
+  height: 72px;
+  flex: none;
+  border-radius: 12px;
+  object-fit: contain;
+  /* The artwork ships on a cream field; in dark and AF modes a bare PNG floats.
+     A surface tile behind it keeps the lockup deliberate in all three themes. */
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  padding: 4px;
+}
+
+.af-core .af-lp-footer-builtby {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.af-core .af-lp-footer-mark {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 8px;
+  object-fit: contain;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  padding: 2px;
+}
+
+.af-core .af-lp-footer-builtby-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.af-core .af-lp-footer-builtby-name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .af-core .af-lp-network-head {
+    gap: 12px;
+  }
+
+  .af-core .af-lp-network-mark {
+    width: 56px;
+    height: 56px;
+  }
+}

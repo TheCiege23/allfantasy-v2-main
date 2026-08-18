@@ -165,6 +165,25 @@ async function applyLeagueState(
     rosterSize: normalized.league.rosterSize ?? undefined,
     starters: (rosterPositions ?? undefined) as Prisma.InputJsonValue | undefined,
     settings: mergedSettings as Prisma.InputJsonValue,
+    /*
+     * ⚠ NOTHING WAS WRITING THIS COLUMN. Grepped every write across lib/ and
+     * app/api: League.lastSyncedAt had no writer anywhere, so it was null on all
+     * 98 production leagues — and every surface that reads it ("never synced",
+     * the sync-age chip, the dashboard's account-wide notice) reported a sync
+     * that had never happened even while this collector ran every 30 minutes.
+     * The banner was not describing a broken sync; it was describing a column
+     * nobody stamped.
+     *
+     * Stamped on every successful apply, not only when something CHANGED. "When
+     * did we last read this league" and "when did this league last differ" are
+     * different questions, and the freshness chip asks the first one — a league
+     * that has genuinely not changed in a week is still freshly read.
+     *
+     * Deliberately NOT part of the change-detection fingerprint below, which
+     * compares data-bearing columns only. Including it would make every run look
+     * like an import and destroy the unchanged/imported split.
+     */
+    lastSyncedAt: new Date(),
     ...(tier0 as Prisma.LeagueUpdateInput),
   }
 
@@ -251,6 +270,50 @@ async function applyTeamsRosters(
   // REUSE the canonical, claim-preserving upsert (LeagueTeam by [leagueId,externalId] never nulls a
   // claim; Roster keyed by platformUserId with rebuilt lineup_sections; TeamPerformance by [teamId,season,week]).
   await bootstrapLeagueFromNormalizedImport(leagueId, normalized)
+
+  /*
+   * ⚠ WRITE THE RESULTS BACK ONTO LeagueTeam. Nothing did, so LeagueTeam carried
+   * a result on 0 of 893 production rows — which is why the dashboard has no
+   * records, no standings and no "today's record", and why every surface that
+   * reads them omits itself. The standings were already being fetched and
+   * normalized on every sync; they were written into LeagueSeason and never back
+   * onto the teams the app actually reads.
+   *
+   * Matched on [leagueId, externalId] <- source_team_id, which is the table's own
+   * unique key, so a result can never land on the wrong team.
+   *
+   * Empty-response protection, same rule the roster path above follows: a
+   * provider hiccup that returns no standings must not zero a populated league.
+   * Absent standings means "we did not learn anything", not "everyone is 0-0".
+   */
+  const standings = Array.isArray(normalized.standings) ? normalized.standings : []
+  if (standings.length === 0) {
+    out.notes.push('teams_rosters: no standings in response — left existing records untouched')
+  } else {
+    let written = 0
+    for (const row of standings) {
+      const externalId = String(row.source_team_id ?? '').trim()
+      if (!externalId) continue
+      const res = await prisma.leagueTeam
+        .updateMany({
+          where: { leagueId, externalId },
+          data: {
+            wins: row.wins,
+            losses: row.losses,
+            ties: row.ties,
+            pointsFor: row.points_for,
+            // points_against is optional on the normalized entry; leave the
+            // stored value alone rather than writing 0 over a real number.
+            ...(typeof row.points_against === 'number'
+              ? { pointsAgainst: row.points_against }
+              : {}),
+          },
+        })
+        .catch(() => ({ count: 0 }))
+      written += res.count
+    }
+    out.notes.push(`teams_rosters: wrote records onto ${written} team row(s)`)
+  }
 
   const after = await snapshotTeamsRosters(leagueId)
 
