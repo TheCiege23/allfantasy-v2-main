@@ -27,6 +27,7 @@ import { getDraftHqData } from '@/lib/core-app/draftHq'
 import WarRoom from '@/components/core-app/screens/WarRoom'
 import { getWarRoomData } from '@/lib/core-app/warRoom'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
+import Partners from '@/components/core-app/screens/Partners'
 import AuthV4 from '@/components/core-app/screens/AuthV4'
 import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens/ImportV4'
 import { Portfolio } from '@/components/core-app/screens/Portfolio'
@@ -112,6 +113,19 @@ export default async function AfCorePage({
    */
   if (segment === 'landing-preview') {
     return <LandingV4 />
+  }
+
+  /*
+   * AllFantasy for Business, at /core/partners.
+   *
+   * Served here rather than as its own /partners route because the repo sits at
+   * Vercel's hard 2048-route ceiling — this catch-all is the whole point: every
+   * handoff screen behind ONE route. Same placement rules as the landing above:
+   * before the session gate and outside AfCoreShell, because it is a marketing
+   * page for people who are NOT signed in and carries its own nav.
+   */
+  if (segment === 'partners') {
+    return <Partners />
   }
 
   // Auth previews are ungated for the same reason the landing is: sign-in and
