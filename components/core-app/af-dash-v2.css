@@ -347,7 +347,18 @@
 
 /* ── Shell ───────────────────────────────────────────────────────────── */
 
-.af-core .af-d2-shell {
+/*
+ * ⚠ COMPOUND SELECTOR, NOT DESCENDANT. The screen renders
+ * <div class="af-core af-d2 af-d2-shell">, so the shell class is ON the .af-core
+ * element rather than inside it. `.af-core .af-d2-shell` (with a space) never
+ * matches, and the symptom is not an obvious break: the shell silently stays
+ * display:block, the 300px 100vh panel takes the top of the page, and <main>
+ * lands BELOW it — a blank top-right, then content appearing full-width once you
+ * scroll past 100vh. Every other rule in this file targets a real descendant and
+ * is correctly written with a space.
+ */
+
+.af-core.af-d2-shell {
   display: flex;
   align-items: flex-start;
   gap: 0;
@@ -375,7 +386,7 @@
 /* The panel is fixed-width by design; below the breakpoint it becomes a normal
    stacked block rather than squeezing the main column to nothing. */
 @media (max-width: 900px) {
-  .af-core .af-d2-shell {
+  .af-core.af-d2-shell {
     flex-direction: column;
   }
 
