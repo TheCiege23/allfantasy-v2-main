@@ -4,9 +4,11 @@ import { Priorities } from '@/components/core-app/dash-v2/Priorities'
 import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
 import { Legacy } from '@/components/core-app/dash-v2/Legacy'
 import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInventory'
+import { DraftHqAll } from '@/components/core-app/dash-v2/DraftHqAll'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
+import type { DraftHqAllData } from '@/lib/core-app/draftHqAll'
 // af-core.css carries the .af-core token layer. This screen renders OUTSIDE
 // AfCoreShell (it brings its own left panel), so the shell does not import it
 // here — without this line every var(--surface) / var(--line) below computes to
@@ -22,10 +24,12 @@ import '@/components/core-app/af-dash-v2.css'
  * account-wide notice, Today's priorities (real, from firstLock + the ranked
  * league list), and the Chimmy launcher.
  *
- * Still placeholders: season timeline, draft HQ, your week, portfolio, exposure
- * and legacy. Each is present with a real header and an explicit statement of
- * what it is waiting on — six of them already have loaders, so those are
- * composition rather than new backend work.
+ * Also real: Draft Season HQ (cross-league aggregator), Portfolio (league
+ * inventory) and Rankings & Legacy (career engine).
+ *
+ * Still placeholders: season timeline, your week and player exposure. Those are
+ * NOT simple composition — the projection loader is per-matchup and there are no
+ * results to score against, so each needs work before it can say anything true.
  *
  * ⚠ THE PLACEHOLDER LINES ARE DELIBERATE AND SPECIFIC. They name the missing
  * source rather than saying "Loading…" — the handoff's own build rule is that no
@@ -38,6 +42,7 @@ export function DashboardV2({
   weekLabel = null,
   career = null,
   portfolio = null,
+  drafts = null,
 }: {
   data: Dash34Data | null
   /** From the loader's result, not from Dash34Data — passed in rather than
@@ -47,6 +52,8 @@ export function DashboardV2({
    *  asks for that its loader cannot answer. */
   career?: CareerData | null
   portfolio?: PortfolioData | null
+  /** Cross-league draft states, from the aggregator — not the per-league loader. */
+  drafts?: DraftHqAllData | null
 }) {
   const leagues = data?.leagues ?? []
   const total = data?.totalLeagues ?? 0
@@ -116,13 +123,21 @@ export function DashboardV2({
         </section>
 
         <section>
-          <SectionHeader label="Draft Season HQ" />
-          <div className="af-d2-card">
-            <p className="af-d2-empty">
-              Draft states come from the draft-HQ loader, which already exists. Not
-              composed into this screen yet.
-            </p>
-          </div>
+          <SectionHeader
+            label="Draft Season HQ"
+            counter={
+              drafts
+                ? [
+                    drafts.counts.live > 0 ? `${drafts.counts.live} LIVE` : null,
+                    drafts.counts.upcoming > 0 ? `${drafts.counts.upcoming} UPCOMING` : null,
+                    drafts.counts.done > 0 ? `${drafts.counts.done} DONE` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ') || null
+                : null
+            }
+          />
+          <DraftHqAll data={drafts} />
         </section>
 
         <section>

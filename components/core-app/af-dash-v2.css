@@ -767,3 +767,43 @@
 .af-core .af-d2-portfolio-foot {
   margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: var(--muted);
 }
+
+/* ── Draft rail ──────────────────────────────────────────────────────── */
+
+.af-core .af-d2-rail {
+  display: flex; gap: 10px; overflow-x: auto; padding-bottom: 6px;
+}
+.af-core .af-d2-draft {
+  flex: 0 0 186px; display: flex; flex-direction: column; gap: 6px; padding: 13px;
+  border-radius: 14px; background: var(--surface); border: 1px solid var(--line);
+  border-top-width: 3px; border-top-color: var(--line);
+}
+.af-core .af-d2-draft--live { border-top-color: var(--bad); }
+.af-core .af-d2-draft--upcoming { border-top-color: var(--warn); }
+.af-core .af-d2-draft--done { border-top-color: var(--good); }
+.af-core .af-d2-draft-top { display: flex; align-items: center; gap: 6px; }
+.af-core .af-d2-draft-state {
+  padding: 2px 6px; border-radius: 5px; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.1em; background: var(--chip); color: var(--muted);
+}
+.af-core .af-d2-draft-state--live { background: var(--bad-soft); color: var(--bad); }
+.af-core .af-d2-draft-state--upcoming { background: var(--warn-soft); color: var(--warn); }
+.af-core .af-d2-draft-state--done { background: var(--good-soft); color: var(--good); }
+.af-core .af-d2-draft-slot { margin-left: auto; font-size: 9px; color: var(--faint); }
+.af-core .af-d2-draft-name {
+  margin: 0; font-size: 13px; font-weight: 800; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.af-core .af-d2-draft-meta {
+  margin: 0; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+}
+.af-core .af-d2-draft-detail { margin: 0; font-size: 11px; color: var(--muted); }
+.af-core .af-d2-draft-cta {
+  margin-top: auto; padding: 8px; border-radius: 9px; text-align: center;
+  text-decoration: none; font-size: 12px; font-weight: 700;
+  background: var(--chip); border: 1px solid var(--chip-line); color: var(--text2);
+  min-height: 44px; display: flex; align-items: center; justify-content: center;
+}
+.af-core .af-d2-rail-foot {
+  margin: 8px 0 0; font-size: 11px; color: var(--muted);
+}

@@ -35,6 +35,7 @@ import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
+import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 
 export const dynamic = 'force-dynamic'
 
@@ -262,9 +263,20 @@ export default async function AfCorePage({
      * "all leagues", so those sections stay placeholders until an aggregator
      * exists.
      */
-    const [careerData, portfolioData] = await Promise.all([
+    const [careerData, portfolioData, draftData] = await Promise.all([
       getCareerData(userId).catch(() => null),
       getPortfolio(userId).catch(() => null),
+      /*
+       * playedLeagues, NOT leagues. The unfiltered list carries AF Legacy board
+       * rows (hasUnifiedRecord: false) — 543 of them on one production account
+       * against 60 real teams. Passing those in would widen the IN () clause to
+       * 604 ids and put past-season snapshots in a live draft rail. Same filter
+       * the rail and the home loader apply, for the same reason.
+       */
+      getDraftHqAll(
+        userId,
+        playedLeagues.map((l) => ({ id: l.id, name: l.name, platform: String(l.platform ?? '') })),
+      ).catch(() => null),
     ])
     return (
       <DashboardV2
@@ -272,6 +284,7 @@ export default async function AfCorePage({
         weekLabel={dash34?.weekLabel ?? null}
         career={careerData}
         portfolio={portfolioData}
+        drafts={draftData}
       />
     )
   }
