@@ -1354,3 +1354,106 @@
   -webkit-mask: radial-gradient(circle, transparent 60%, #000 61%);
 }
 .af-core .af-d2-legacy-score-label { font-size: 7px; letter-spacing: 0.1em; }
+
+/* ── Mobile parity for everything added after the first mobile pass ──── */
+
+/*
+ * ⚠ THESE WERE ALL DESKTOP-ONLY. The grade ring, the portfolio rows, the
+ * exposure league lists and the draft identity block were written after the
+ * original @media block and inherited none of it. On a 390px screen that means a
+ * 92px ring competing with the level text, three-column rows overflowing their
+ * container, and a facts grid whose 150px minimum forces two cramped columns.
+ *
+ * Every rule below is a reflow, not a hide — the same information, stacked. The
+ * one exception is the exposure share bar, which is redundant beside the "7 of 61
+ * · 11%" it visualises.
+ */
+@media (max-width: 640px) {
+  /* Legacy: the ring drops under the identity rather than beside it. */
+  .af-core .af-d2-legacy-top {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .af-core .af-d2-legacy-score {
+    margin-left: 0;
+    width: 76px;
+    height: 76px;
+  }
+
+  .af-core .af-d2-legacy-tiles {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Portfolio: the summary stacks; the right-hand chip drops to its own line. */
+  .af-core .af-d2-portfolio-summary-row {
+    flex-wrap: wrap;
+    gap: 4px 10px;
+    padding: 12px 2px;
+  }
+
+  .af-core .af-d2-portfolio-name {
+    flex: 1 1 100%;
+  }
+
+  .af-core .af-d2-portfolio-right {
+    margin-left: 0;
+  }
+
+  /* One column: 150px minimums forced two cramped columns at this width. */
+  .af-core .af-d2-portfolio-facts {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* Exposure: the league list keeps its indent but not at the cost of the name. */
+  .af-core .af-d2-exp-leagues {
+    margin-left: 0;
+  }
+
+  .af-core .af-d2-exp-league-name {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  /* The share text carries the ratio, so the bar is the redundant half. */
+  .af-core .af-d2-exp-share {
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  /* Draft identity: keep the avatar, let the name take the rest. */
+  .af-core .af-d2-draft-id {
+    min-width: 0;
+  }
+
+  .af-core .af-d2-draft-name {
+    min-width: 0;
+  }
+
+  /* Section headers wrap their counter instead of squeezing the label. */
+  .af-core .af-d2-sec-head {
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
+  .af-core .af-d2-sec-count {
+    margin-left: 0;
+    flex-basis: 100%;
+  }
+
+  /* Priority cards: the timer drops under the badge rather than off the edge. */
+  .af-core .af-d2-prio-top {
+    flex-wrap: wrap;
+  }
+
+  .af-core .af-d2-prio-timer {
+    margin-left: 0;
+  }
+
+  /* Top bar: plan + sync chips wrap rather than push the clock off-screen. */
+  .af-core .af-d2-topbar-right {
+    flex-wrap: wrap;
+  }
+}
