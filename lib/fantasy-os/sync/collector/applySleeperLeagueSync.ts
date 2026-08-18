@@ -165,6 +165,25 @@ async function applyLeagueState(
     rosterSize: normalized.league.rosterSize ?? undefined,
     starters: (rosterPositions ?? undefined) as Prisma.InputJsonValue | undefined,
     settings: mergedSettings as Prisma.InputJsonValue,
+    /*
+     * ⚠ NOTHING WAS WRITING THIS COLUMN. Grepped every write across lib/ and
+     * app/api: League.lastSyncedAt had no writer anywhere, so it was null on all
+     * 98 production leagues — and every surface that reads it ("never synced",
+     * the sync-age chip, the dashboard's account-wide notice) reported a sync
+     * that had never happened even while this collector ran every 30 minutes.
+     * The banner was not describing a broken sync; it was describing a column
+     * nobody stamped.
+     *
+     * Stamped on every successful apply, not only when something CHANGED. "When
+     * did we last read this league" and "when did this league last differ" are
+     * different questions, and the freshness chip asks the first one — a league
+     * that has genuinely not changed in a week is still freshly read.
+     *
+     * Deliberately NOT part of the change-detection fingerprint below, which
+     * compares data-bearing columns only. Including it would make every run look
+     * like an import and destroy the unchanged/imported split.
+     */
+    lastSyncedAt: new Date(),
     ...(tier0 as Prisma.LeagueUpdateInput),
   }
 
