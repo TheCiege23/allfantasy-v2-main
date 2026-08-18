@@ -2,6 +2,14 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
+// af-core.css carries the .af-core token layer (--surface, --line, --accent …).
+// AfCoreShell imports it for every screen inside the shell — but this one renders
+// standalone at `/`, so without this line every `var(--surface)` and `var(--line)`
+// below resolves to nothing: cards paint transparent with a 0px border, and
+// --accent falls through to the unrelated #2563eb in app/globals.css. Verified on
+// the live page before this fix: --surface, --surface2 and --line all computed to
+// the empty string. Must precede af-landing.css so tokens exist before use.
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-landing.css'
 
 /**
