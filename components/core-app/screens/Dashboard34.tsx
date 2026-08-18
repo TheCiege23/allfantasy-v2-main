@@ -42,6 +42,9 @@ export type Dash34League = {
   imageUrl?: string | null
   /** "2026 12-Team Dynasty PPR" */
   formatLabel?: string | null
+  /** League sport (NFL / NBA / NHL …). Carried so a sport filter can be real
+   *  rather than decorative — the loader already selects it. */
+  sport?: string | null
   /** Your handle IN THAT LEAGUE — per-league identity, not the AF account name. */
   usernameInLeague?: string | null
   chips?: Dash34StateChip[]

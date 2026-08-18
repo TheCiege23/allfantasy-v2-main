@@ -27,6 +27,7 @@ import { getDraftHqData } from '@/lib/core-app/draftHq'
 import WarRoom from '@/components/core-app/screens/WarRoom'
 import { getWarRoomData } from '@/lib/core-app/warRoom'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
+import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import AuthV4 from '@/components/core-app/screens/AuthV4'
 import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens/ImportV4'
 import { Portfolio } from '@/components/core-app/screens/Portfolio'
@@ -239,9 +240,22 @@ export default async function AfCorePage({
    * cost for something nobody is looking at.
    */
   const dash34 =
-    activeKey === 'home' && !selectedLeagueId
+    (activeKey === 'home' || segment === 'dashboard-v2') && !selectedLeagueId
       ? await getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).catch(() => null)
       : null
+
+  /*
+   * Dashboard v2 — served AFTER the session gate (a signed-in surface that needs
+   * the user's leagues) but OUTSIDE AfCoreShell, because it brings its own 300px
+   * left panel. Inside the shell it would render a league rail beside a league
+   * panel.
+   *
+   * No new route: a segment on the existing catch-all, which is what this route
+   * exists for. The repo sits at Vercel's hard 2048-route ceiling.
+   */
+  if (segment === 'dashboard-v2') {
+    return <DashboardV2 data={dash34} weekLabel={dash34?.weekLabel ?? null} />
+  }
 
   /*
    * ⚠ SYNC AGE IS NOW READ, NOT ASSUMED. This was hardcoded to `null` — "never

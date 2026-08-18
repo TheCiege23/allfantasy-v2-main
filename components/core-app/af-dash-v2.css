@@ -1,0 +1,385 @@
+/*
+ * Dashboard v2 — left panel + section-header system.
+ *
+ * Scoped under `.af-core` like every other af-*.css file, so it inherits the
+ * token layer (--surface, --line, --accent …) rather than defining a second set
+ * that would drift. The screen that renders this MUST import af-core.css itself:
+ * that layer is imported by AfCoreShell, and anything rendering outside the shell
+ * gets undefined tokens — which computes to transparent backgrounds and 0px
+ * borders, not to an error. That failure shipped twice (landing, auth) before
+ * being caught, so it is written down here.
+ *
+ * Every colour below is a token. No literal hex, so light / dark / AF all work
+ * from the same rules.
+ */
+
+/* ── Section header ──────────────────────────────────────────────────── */
+
+.af-core .af-d2-sec-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+
+.af-core .af-d2-sec-tab {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--accent);
+  flex: none;
+}
+
+.af-core .af-d2-sec-label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+
+/* Right-aligned counter. `margin-left:auto` rather than a spacer element so the
+   header collapses correctly when there is no counter to show. */
+.af-core .af-d2-sec-count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Left panel ──────────────────────────────────────────────────────── */
+
+.af-core .af-d2-panel {
+  width: 300px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 14px;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  min-height: 100vh;
+}
+
+.af-core .af-d2-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-core .af-d2-brand {
+  text-decoration: none;
+}
+
+.af-core .af-d2-wordmark {
+  font-weight: 900;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-core .af-d2-brand:hover .af-d2-wordmark {
+  color: var(--accent);
+}
+
+.af-core .af-d2-panel-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.af-core .af-d2-h1 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-core .af-d2-total {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+/* ── Sport filters ───────────────────────────────────────────────────── */
+
+.af-core .af-d2-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.af-core .af-d2-filter {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  cursor: pointer;
+}
+
+.af-core .af-d2-filter.is-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ── Groups ──────────────────────────────────────────────────────────── */
+
+.af-core .af-d2-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  flex: 1 1 auto;
+}
+
+.af-core .af-d2-group-label {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 7px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-d2-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-core .af-d2-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 10px;
+  border-radius: 11px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  text-decoration: none;
+  /* 44px minimum touch target — the handoff's mobile rule, applied everywhere
+     so the desktop and mobile rows cannot diverge. */
+  min-height: 44px;
+}
+
+.af-core .af-d2-row:hover {
+  border-color: var(--accent-line);
+}
+
+.af-core .af-d2-tile {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--text2);
+}
+
+.af-core .af-d2-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.af-core .af-d2-row-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  /* League names are user-supplied and frequently long; clip rather than let a
+     single name widen the fixed-width panel. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-d2-row-meta {
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── State chips ─────────────────────────────────────────────────────── */
+
+.af-core .af-d2-chip {
+  margin-left: auto;
+  flex: none;
+  padding: 3px 7px;
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--muted);
+}
+
+/* Urgency colours per the handoff: red = act now, amber = soon,
+   blue = this week, gold = commissioner. */
+.af-core .af-d2-chip--urgent {
+  background: var(--bad-soft);
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.af-core .af-d2-chip--draft {
+  background: var(--warn-soft);
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+/* ── Quiet + empty ───────────────────────────────────────────────────── */
+
+.af-core .af-d2-quiet,
+.af-core .af-d2-empty {
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px dashed var(--line2);
+  background: transparent;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+.af-core .af-d2-panel-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.af-core .af-d2-import {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 11px 12px;
+  border-radius: 11px;
+  border: 1px dashed var(--line2);
+  text-decoration: none;
+  min-height: 44px;
+}
+
+.af-core .af-d2-import:hover {
+  border-color: var(--accent);
+}
+
+.af-core .af-d2-import-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-core .af-d2-import-plats {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+}
+
+.af-core .af-d2-user {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.af-core .af-d2-user-avatar {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.af-core .af-d2-user-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-core .af-d2-user-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-core .af-d2-user-level {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Shell ───────────────────────────────────────────────────────────── */
+
+.af-core .af-d2-shell {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.af-core .af-d2-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 20px 22px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+
+.af-core .af-d2-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+/* The panel is fixed-width by design; below the breakpoint it becomes a normal
+   stacked block rather than squeezing the main column to nothing. */
+@media (max-width: 900px) {
+  .af-core .af-d2-shell {
+    flex-direction: column;
+  }
+
+  .af-core .af-d2-panel {
+    width: 100%;
+    min-height: 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}

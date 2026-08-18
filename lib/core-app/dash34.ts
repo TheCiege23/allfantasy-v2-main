@@ -494,6 +494,7 @@ export async function getDash34Data(
       platform,
       imageUrl: imageOf(row),
       formatLabel: formatLabelOf(row),
+      sport: row.sport ?? null,
       /*
        * ⚠ `ownerName` IS THE HANDLE; `teamName` IS THE TEAM. The handoff asks for
        * "your username in that league", and reading `teamName` first put "$20 SF",
