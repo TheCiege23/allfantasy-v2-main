@@ -870,3 +870,38 @@
 .af-core .af-d2-row-state--urgent { color: var(--bad); }
 .af-core .af-d2-row-state--draft { color: var(--warn); }
 .af-core .af-d2-row-state--plain { color: var(--faint); }
+
+/* ── Player exposure ─────────────────────────────────────────────────── */
+
+.af-core .af-d2-exposure { list-style: none; margin: 0 0 10px; padding: 0; }
+.af-core .af-d2-exp-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--line);
+}
+.af-core .af-d2-exp-row:last-child { border-bottom: 0; }
+.af-core .af-d2-exp-mark {
+  width: 28px; height: 28px; flex: none; display: grid; place-items: center;
+  border-radius: 999px; background: var(--chip); border: 1px solid var(--chip-line);
+  font-size: 10px; font-weight: 800; color: var(--text2);
+}
+.af-core .af-d2-exp-text { display: flex; flex-direction: column; min-width: 0; }
+.af-core .af-d2-exp-name {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.af-core .af-d2-exp-note {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+}
+.af-core .af-d2-exp-note.is-bad { color: var(--bad); }
+.af-core .af-d2-exp-note.is-warn { color: var(--warn); }
+.af-core .af-d2-exp-bar {
+  margin-left: auto; width: 96px; height: 6px; flex: none;
+  border-radius: 999px; background: var(--chip); overflow: hidden;
+}
+.af-core .af-d2-exp-bar > span { display: block; height: 100%; }
+.af-core .af-d2-exp-bar > span.is-bad { background: var(--bad); }
+.af-core .af-d2-exp-bar > span.is-warn { background: var(--warn); }
+.af-core .af-d2-exp-share {
+  font-size: 10px; color: var(--muted); min-width: 78px; text-align: right; white-space: nowrap;
+}
+.af-core .af-d2-exp-foot { margin: 0; font-size: 11px; line-height: 1.5; color: var(--muted); }

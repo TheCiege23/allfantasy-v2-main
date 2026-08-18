@@ -98,7 +98,17 @@ export type Dash34Data = {
   overflow?: number
   totalLeagues: number
   brief?: { title: string; headline: string; body: string; time?: string | null; avatarUrl?: string | null } | null
-  book?: Array<{ initials: string; name: string; note: string; exposure?: string | null; tone?: 'bad' | 'warn' | null }> | null
+  book?: Array<{
+    initials: string
+    name: string
+    note: string
+    /** Human form, e.g. "7 of 61". */
+    exposure?: string | null
+    /** Same fact as numbers, so a share bar does not parse the string above. */
+    exposureCount?: number | null
+    exposureTotal?: number | null
+    tone?: 'bad' | 'warn' | null
+  }> | null
   chatUnread?: number
   /**
    * One account-wide fact stated once, above the list.

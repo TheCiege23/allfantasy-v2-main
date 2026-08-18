@@ -171,7 +171,19 @@ export function LeaguePanel({
                       finds colour in a column faster than it reads text at the
                       ragged right edge of truncated names.
                     */}
-                    <Link href={league.href} className="af-d2-row">
+                    {/*
+                      Choosing a league opens THAT LEAGUE'S DASHBOARD, always.
+                      league.href is action-specific — the loader points it at
+                      my-team, or draft-hq, or the league home depending on what
+                      is wrong — which is right for a priority card ("do this
+                      now") and wrong for a list row. Picking a league from a list
+                      means "show me this league", not "jump me into whichever
+                      sub-screen we think is most urgent".
+                    */}
+                    <Link
+                      href={`/core?league=${encodeURIComponent(league.id)}`}
+                      className="af-d2-row"
+                    >
                       <span className="af-d2-tile" data-platform={league.platform} aria-hidden>
                         {/* Same treatment as Dashboard34's LeagueTile — a plain
                             img with an initials fallback, not next/image: these

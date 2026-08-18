@@ -6,6 +6,7 @@ import { Legacy } from '@/components/core-app/dash-v2/Legacy'
 import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInventory'
 import { DraftHqAll } from '@/components/core-app/dash-v2/DraftHqAll'
 import { YourWeek } from '@/components/core-app/dash-v2/YourWeek'
+import { Exposure } from '@/components/core-app/dash-v2/Exposure'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 import type { CareerData } from '@/lib/core-app/career'
 import type { PortfolioData } from '@/lib/core-app/portfolio'
@@ -166,6 +167,18 @@ export function DashboardV2({
             }
           />
           <PortfolioInventory data={portfolio} />
+        </section>
+
+        <section>
+          <SectionHeader
+            label="Player exposure"
+            counter={
+              data?.book?.[0]?.exposureTotal
+                ? `ACROSS ${data.book[0].exposureTotal} LEAGUES`
+                : null
+            }
+          />
+          <Exposure data={data} />
         </section>
 
         <section>
