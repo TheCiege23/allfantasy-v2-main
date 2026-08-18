@@ -702,3 +702,68 @@
   letter-spacing: 0.12em;
   color: var(--faint);
 }
+
+/* ── Legacy ──────────────────────────────────────────────────────────── */
+
+.af-core .af-d2-legacy { display: flex; flex-direction: column; gap: 12px; }
+.af-core .af-d2-legacy-top { display: flex; align-items: flex-start; gap: 14px; }
+.af-core .af-d2-legacy-id { display: flex; flex-direction: column; gap: 3px; }
+.af-core .af-d2-legacy-tier {
+  font-size: 9px; font-weight: 800; letter-spacing: 0.16em; color: var(--accent);
+}
+.af-core .af-d2-legacy-level { font-size: 17px; font-weight: 800; color: var(--text); }
+.af-core .af-d2-legacy-xp { font-size: 10px; letter-spacing: 0.06em; color: var(--faint); }
+.af-core .af-d2-legacy-score { margin-left: auto; text-align: right; }
+.af-core .af-d2-legacy-score-num { font-size: 24px; font-weight: 800; color: var(--accent); }
+.af-core .af-d2-legacy-score-label {
+  display: block; font-size: 9px; letter-spacing: 0.14em; color: var(--faint);
+}
+.af-core .af-d2-legacy-bar {
+  height: 6px; border-radius: 999px; background: var(--chip); overflow: hidden;
+}
+.af-core .af-d2-legacy-bar > span { display: block; height: 100%; background: var(--accent); }
+.af-core .af-d2-legacy-tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px;
+}
+.af-core .af-d2-legacy-tile {
+  display: flex; flex-direction: column; gap: 2px; padding: 10px;
+  border-radius: 11px; background: var(--surface2); border: 1px solid var(--line);
+}
+.af-core .af-d2-legacy-tile-val { font-size: 16px; font-weight: 800; color: var(--text); }
+.af-core .af-d2-legacy-tile-lab {
+  font-size: 9px; letter-spacing: 0.12em; color: var(--faint);
+}
+.af-core .af-d2-legacy-gaps {
+  margin: 0; font-size: 11px; line-height: 1.5; color: var(--muted);
+}
+.af-core .af-d2-legacy-link {
+  align-self: flex-start; font-size: 12px; font-weight: 700; color: var(--accent);
+  text-decoration: none;
+}
+
+/* ── Portfolio inventory ─────────────────────────────────────────────── */
+
+.af-core .af-d2-portfolio { list-style: none; margin: 0 0 10px; padding: 0; }
+.af-core .af-d2-portfolio-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 9px 0; border-bottom: 1px solid var(--line);
+}
+.af-core .af-d2-portfolio-row:last-child { border-bottom: 0; }
+.af-core .af-d2-portfolio-name {
+  font-size: 13px; font-weight: 700; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.af-core .af-d2-portfolio-meta {
+  font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint);
+}
+.af-core .af-d2-portfolio-right {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  font-size: 10px; color: var(--muted); white-space: nowrap;
+}
+.af-core .af-d2-portfolio-commish {
+  padding: 2px 6px; border-radius: 5px; font-size: 9px; font-weight: 800;
+  letter-spacing: 0.1em; background: var(--p-gold-soft, var(--chip)); color: var(--p-gold-fg, var(--muted));
+}
+.af-core .af-d2-portfolio-foot {
+  margin: 0 0 10px; font-size: 11px; line-height: 1.5; color: var(--muted);
+}

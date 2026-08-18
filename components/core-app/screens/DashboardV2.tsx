@@ -2,7 +2,11 @@ import { LeaguePanel } from '@/components/core-app/dash-v2/LeaguePanel'
 import { SectionHeader } from '@/components/core-app/dash-v2/SectionHeader'
 import { Priorities } from '@/components/core-app/dash-v2/Priorities'
 import { ChimmyFab } from '@/components/core-app/dash-v2/ChimmyFab'
+import { Legacy } from '@/components/core-app/dash-v2/Legacy'
+import { PortfolioInventory } from '@/components/core-app/dash-v2/PortfolioInventory'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
+import type { CareerData } from '@/lib/core-app/career'
+import type { PortfolioData } from '@/lib/core-app/portfolio'
 // af-core.css carries the .af-core token layer. This screen renders OUTSIDE
 // AfCoreShell (it brings its own left panel), so the shell does not import it
 // here — without this line every var(--surface) / var(--line) below computes to
@@ -32,11 +36,17 @@ import '@/components/core-app/af-dash-v2.css'
 export function DashboardV2({
   data,
   weekLabel = null,
+  career = null,
+  portfolio = null,
 }: {
   data: Dash34Data | null
   /** From the loader's result, not from Dash34Data — passed in rather than
    *  widening this prop to the server-only return type. */
   weekLabel?: string | null
+  /** Cross-league reads. Both are real; each module documents what the handoff
+   *  asks for that its loader cannot answer. */
+  career?: CareerData | null
+  portfolio?: PortfolioData | null
 }) {
   const leagues = data?.leagues ?? []
   const total = data?.totalLeagues ?? 0
@@ -127,13 +137,29 @@ export function DashboardV2({
         </section>
 
         <section>
-          <SectionHeader label="Portfolio — roster market value" />
-          <div className="af-d2-card">
-            <p className="af-d2-empty">
-              Backed by the existing portfolio loader. Not composed into this screen
-              yet.
-            </p>
-          </div>
+          {/*
+            Titled "league inventory", not "roster market value". getPortfolio
+            returns the former; the latter needs per-player values summed per
+            roster, which is separate work. Naming the section after the module
+            we wish we had would be the dishonest half of shipping this one.
+          */}
+          <SectionHeader
+            label="Portfolio — league inventory"
+            counter={
+              portfolio?.commissionedCount
+                ? `${portfolio.commissionedCount} COMMISSIONED`
+                : null
+            }
+          />
+          <PortfolioInventory data={portfolio} />
+        </section>
+
+        <section>
+          <SectionHeader
+            label="Rankings &amp; Legacy"
+            counter={career?.level != null ? `LEVEL ${career.level}` : null}
+          />
+          <Legacy data={career} />
         </section>
       </main>
 

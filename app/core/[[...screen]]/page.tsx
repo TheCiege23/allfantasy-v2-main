@@ -254,7 +254,26 @@ export default async function AfCorePage({
    * exists for. The repo sits at Vercel's hard 2048-route ceiling.
    */
   if (segment === 'dashboard-v2') {
-    return <DashboardV2 data={dash34} weekLabel={dash34?.weekLabel ?? null} />
+    /*
+     * Both of these are CROSS-LEAGUE, which is why they can feed this screen.
+     * getDraftHqData and getWarRoomData take a leagueId — they are per-league
+     * and cannot back a cross-league module. Wiring one of them to a single
+     * arbitrary league would put one league's draft under a header that says
+     * "all leagues", so those sections stay placeholders until an aggregator
+     * exists.
+     */
+    const [careerData, portfolioData] = await Promise.all([
+      getCareerData(userId).catch(() => null),
+      getPortfolio(userId).catch(() => null),
+    ])
+    return (
+      <DashboardV2
+        data={dash34}
+        weekLabel={dash34?.weekLabel ?? null}
+        career={careerData}
+        portfolio={portfolioData}
+      />
+    )
   }
 
   /*
