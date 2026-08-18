@@ -14,6 +14,7 @@ import { prisma } from '@/lib/prisma'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLiveScoringForActiveSeasons } from '@/server/services/liveScoring/liveScoreRunner'
 import { RollingInsightsLiveProvider } from '@/lib/live/rollingInsightsLiveProvider'
+import { runPollLoop, LIVE_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
 
 /**
  * Opt-in Rolling Insights live provider, PRESEASON ONLY.
@@ -76,6 +77,17 @@ function resolveLiveProvider() {
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * ⚠ RAISED FOR THE IN-INVOCATION POLL LOOP, AND IT MUST EXCEED POLL_BUDGET_MS.
+ * INTEGRATION.md §4 asks for a 35s cadence on live data; Vercel cron granularity
+ * is one minute, so a single invocation polls several times inside its own
+ * lifetime instead of one invocation per poll. The loop budgets 105s against
+ * this cron's 120s interval, leaving margin at both ends — under maxDuration so
+ * the function is not killed mid-tick, and under the interval so invocation N
+ * finishes before N+1 starts.
+ */
+export const maxDuration = 120
+
 export async function GET(request: NextRequest) {
   // `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`, and
   // LEAGUE_CRON_SECRET is set in production — so a BARE call compares Vercel's
@@ -88,6 +100,15 @@ export async function GET(request: NextRequest) {
 
   try {
     const provider = resolveLiveProvider()
+
+    /*
+     * One tick is exactly what this route used to do per invocation. The loop
+     * repeats it at the live cadence while games are on, and stops after a
+     * single pass when nothing is — so a quiet Tuesday costs what it always did
+     * and a Sunday gets 35s coverage.
+     */
+    let loop: Awaited<ReturnType<typeof runPollLoop>> | null = null
+
     const report = await withSyncJobRun(
       {
         jobName: 'cron-live-score-tick',
@@ -97,7 +118,13 @@ export async function GET(request: NextRequest) {
         provider: provider ? 'rolling_insights_preseason' : 'sleeper',
         sport: 'NFL',
       },
-      async () => runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {}),
+      async () => {
+        let last = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
+        loop = await runPollLoop(async () => {
+          last = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
+        })
+        return last
+      },
       (r) => ({
         rowsRead: r.ticked,
         rowsUpdated: r.summaries.reduce((s, x) => s + x.affectedMatchups, 0),
@@ -106,6 +133,14 @@ export async function GET(request: NextRequest) {
           seasonsTicked: r.ticked,
           seasonsPolled: r.polled,
           liveProvider: provider ? 'rolling_insights_preseason' : 'sleeper',
+          /* Recorded so a quiet Sunday can be told apart from a broken loop:
+             ticks=1 with 'no-active-games' is correct on a Tuesday and a bug at
+             4pm on a Sunday. */
+          pollTicks: loop?.ticks ?? 1,
+          pollStoppedBecause: loop?.stoppedBecause ?? 'no-active-games',
+          pollElapsedMs: loop?.elapsedMs ?? 0,
+          pollIntervalMs: LIVE_POLL_INTERVAL_MS,
+          pollBudgetMs: POLL_BUDGET_MS,
         },
       }),
     )
