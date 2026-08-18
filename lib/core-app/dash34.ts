@@ -35,11 +35,21 @@ import type {
  * was missing has arrived, so no line below was upgraded from "omitted" to
  * "shown" on the strength of a hope:
  *
- *   - `leagues.lastSyncedAt` non-null: **still 0 of 98**. `syncStatus` reads
- *     `pending` on 56, `manual` on 23, null on 19 — never `synced`. Setting
- *     FANTASY_OS_EXEC_SYNC_LIVE has not put a timestamp on a single row.
- *   - `league_teams` with ANY result (W/L/T/PF/PA): **still 0 of 893**. So
- *     "you're 19 behind" and "78% to win" have no operand, not a missing model.
+ *   - `leagues.lastSyncedAt` non-null: **54 of 98, and that changed WHILE this
+ *     was being written.** It read 0 of 98 at 13:00 and 54 of 98 at 13:52, with
+ *     `syncStatus` going from `pending`×56 to `synced`×54 / `failed`×2. Sleeper
+ *     sync is genuinely running now — the notice below correctly stops firing for
+ *     an account whose leagues have been read, and `everSynced` is what decides
+ *     that rather than a constant.
+ *   - `league_teams` with ANY result (W/L/T/PF/PA): **still 0 of 893, AFTER those
+ *     54 syncs landed.** THIS IS THE LOAD-BEARING NUMBER, NOT THE ONE ABOVE. Sync
+ *     running is not the same as results existing: it is writing `lastSyncedAt`
+ *     and no wins, losses or points. So "you're 19 behind" and "78% to win" still
+ *     have no operand, and every line that depends on a score stays omitted.
+ *
+ *     ⚠ DO NOT TREAT A FRESH `lastSyncedAt` AS PERMISSION TO SHOW A SCORE. The
+ *     two moved independently once already; re-count `league_teams` before
+ *     un-omitting anything that needs a result.
  *   - `league_teams.currentRank` non-null: **798** — a dense 1..N per league.
  *     ⚠ IT IS NOT USED HERE AND MUST NOT BE. It is an ordering written over rows
  *     whose wins, losses and points are all zero, so it ranks nothing. Surfacing
