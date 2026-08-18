@@ -652,6 +652,14 @@ export async function getDash34Data(
     today: null,
     next24: next24.length > 0 ? next24 : null,
     leagues: shown,
+    /*
+     * Every league that needs something, uncapped, plus the quiet ones — for the
+     * Dashboard v2 left panel, which is a browsable list rather than a top-N
+     * queue. `leagues` stays capped at LIST_LIMIT because the 34a main column
+     * is a queue and a 60-row queue is an inventory. Two surfaces, two shapes,
+     * one ranking.
+     */
+    allLeagues: [...needs, ...quietLeagues],
     quiet,
     overflow,
     totalLeagues: totalActive,

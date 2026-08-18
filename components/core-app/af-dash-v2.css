@@ -1008,3 +1008,44 @@
   background: var(--accent-soft); color: var(--accent);
   font-size: 9px; font-weight: 800;
 }
+
+/* ── Portfolio: collapsed by default ─────────────────────────────────── */
+
+.af-core .af-d2-portfolio-wrap { padding: 0; }
+.af-core .af-d2-portfolio-summary {
+  display: flex; align-items: center; gap: 10px; padding: 14px 16px;
+  cursor: pointer; list-style: none; min-height: 44px;
+}
+.af-core .af-d2-portfolio-summary::-webkit-details-marker { display: none; }
+.af-core .af-d2-portfolio-summary-text { font-size: 13px; color: var(--text2); }
+.af-core .af-d2-portfolio-summary-hint {
+  margin-left: auto; font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--accent);
+}
+.af-core .af-d2-portfolio-wrap[open] .af-d2-portfolio-summary-hint::after { content: ' ▲'; }
+.af-core .af-d2-portfolio-wrap:not([open]) .af-d2-portfolio-summary-hint::after { content: ' ▼'; }
+.af-core .af-d2-portfolio-wrap .af-d2-portfolio { padding: 0 16px; }
+.af-core .af-d2-portfolio-wrap .af-d2-portfolio-foot,
+.af-core .af-d2-portfolio-wrap .af-d2-legacy-link { margin: 0 16px 14px; }
+/* A 61-row inventory should scroll inside its own box, not the page. */
+.af-core .af-d2-portfolio { max-height: 420px; overflow-y: auto; }
+
+/* ── FAB clears the app's floating mode toggle ───────────────────────── */
+
+/*
+ * The global theme switch is a fixed control in the same bottom-right corner, and
+ * it sits ABOVE the Chimmy launcher — the launcher was unreachable behind it.
+ * Raising the FAB clears it rather than moving a control the rest of the app
+ * shares. Both stay in the corner; only one of them is ours to move.
+ */
+.af-core .af-d2-fab { bottom: 92px; }
+.af-core .af-d2-chat { bottom: 92px; }
+
+@media (max-width: 640px) {
+  .af-core .af-d2-fab { bottom: 88px; }
+  .af-core .af-d2-chat { bottom: 0; }
+}
+
+/* The left panel scrolls independently so a 61-league list never pushes the
+   import CTA or the theme switch out of reach. */
+.af-core .af-d2-panel { max-height: 100vh; overflow-y: auto; position: sticky; top: 0; }

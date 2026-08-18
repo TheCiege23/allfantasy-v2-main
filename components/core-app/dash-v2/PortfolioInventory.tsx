@@ -57,8 +57,23 @@ export function PortfolioInventory({ data }: { data: PortfolioData | null }) {
 
   const withRoster = rows.filter((r) => (r.rosterCount ?? 0) > 0).length
 
+  /*
+   * Collapsed by default. At 61 leagues this list is ~1,800px of rows that push
+   * every section below it off the page — the inventory is reference material,
+   * not something to scroll past on every visit. <details> rather than React
+   * state so it works before hydration and stays keyboard-accessible for free.
+   */
   return (
-    <div className="af-d2-card">
+    <details className="af-d2-card af-d2-portfolio-wrap">
+      <summary className="af-d2-portfolio-summary">
+        <span className="af-d2-portfolio-summary-text">
+          {rows.length} {rows.length === 1 ? 'league' : 'leagues'}
+          {withRoster > 0 ? ` · ${withRoster} with a roster` : ''}
+          {data.commissionedCount > 0 ? ` · you commission ${data.commissionedCount}` : ''}
+        </span>
+        <span className="af-d2-portfolio-summary-hint af-num">SHOW ALL</span>
+      </summary>
+
       <ul className="af-d2-portfolio">
         {rows.map((row) => (
           <li key={row.leagueId} className="af-d2-portfolio-row">
@@ -76,18 +91,14 @@ export function PortfolioInventory({ data }: { data: PortfolioData | null }) {
       </ul>
 
       <p className="af-d2-portfolio-foot">
-        {rows.length} {rows.length === 1 ? 'league' : 'leagues'}, {withRoster} with a
-        roster imported. Market value per roster is not shown — that needs
-        per-player values summed per league, which is not wired yet.
-        {data.commissionedCount > 0
-          ? ` You commission ${data.commissionedCount} of them.`
-          : ''}
+        Market value per roster is not shown — that needs per-player values summed
+        per league, which is not wired yet.
       </p>
 
       <Link href="/core/portfolio" className="af-d2-legacy-link">
         Open Portfolio
       </Link>
-    </div>
+    </details>
   )
 }
 

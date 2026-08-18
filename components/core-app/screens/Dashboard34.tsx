@@ -85,6 +85,8 @@ export type Dash34Data = {
   /** `time` is an ISO timestamp; `Dash34Time` localises it after hydration. */
   next24?: Array<{ text: string; time: string; tone?: 'warn' | 'accent' | null }> | null
   leagues: Dash34League[]
+  /** Uncapped ranked list for the v2 left panel. `leagues` above stays capped. */
+  allLeagues?: Dash34League[]
   /** Leagues with nothing needing attention, collapsed to the footnote row. */
   quiet?: { count: number; sample?: string | null } | null
   /**

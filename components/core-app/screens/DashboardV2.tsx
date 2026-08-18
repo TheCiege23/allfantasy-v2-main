@@ -75,7 +75,8 @@ export function DashboardV2({
   syncedLabel?: string | null
   commissionerCount?: number
 }) {
-  const leagues = data?.leagues ?? []
+  // The panel browses everything; the priority cards still use the capped list.
+  const leagues = data?.allLeagues ?? data?.leagues ?? []
   const total = data?.totalLeagues ?? 0
   const quiet = data?.quiet ?? null
 
