@@ -78,10 +78,15 @@ Traced through `lib/decision-os/lineup/{loader,world,dco,index}.ts` and
    `byeWeek` — **not** the canonical `Roster.playerData` JSON blob.
 3. The week comes from `RedraftSeason.currentWeek`.
 
-**Hidden coupling (critical):** `resolveRedraftRosterLookup` is **not read-only**. Under safe
-conditions it performs `prisma.redraftRoster.update(...)` ("owner repair"). The lineup loader is
-documented "READ-ONLY" but transitively can write. See §9 (Critical debt) — the shadow's read-only
-guarantee leaks here.
+**Hidden coupling (RESOLVED — was critical):** `resolveRedraftRosterLookup` is **not read-only**;
+under safe conditions it performs `prisma.redraftRoster.update(...)` ("owner repair"). That resolver
+still exists and still writes, deliberately, for the legacy routes that depend on the repair.
+
+What changed: the identity logic was split. `resolveRedraftRosterLookupCore` does the lookup, and two
+thin wrappers sit on top of it — `resolveRedraftRosterLookupReadOnly` (returns the core result and
+stops) and `resolveRedraftRosterLookup` (core, then applies `maybeRepairRedraftRosterOwner`). The
+lineup loader imports the **ReadOnly** wrapper, so the shadow's read-only guarantee no longer leaks.
+See §9.
 
 **Note — the lineup slice already has a canonical leg.** The *second* validator
 (`loadCanonicalValidatorContext` → `validateCanonicalRosterPayload`) reads the canonical `League`
@@ -384,7 +389,7 @@ tables remain as a gameplay engine + parity reference, not a Decision OS source.
 
 | Severity | Item | Detail | Disposition |
 |---|---|---|---|
-| **Critical** | Lineup "read-only" loader can write | `loadLineupSetInputs` → `resolveRedraftRosterLookup` → `prisma.redraftRoster.update` (owner repair). The shadow's read-only invariant is transitively violated. | **Must fix before/with Phase D.** Extract a pure read-only identity resolver for the substrate; owner-repair becomes an explicit non-shadow maintenance op. |
+| ~~**Critical**~~ **RESOLVED** | Lineup "read-only" loader could write | Was: `loadLineupSetInputs` → `resolveRedraftRosterLookup` → `prisma.redraftRoster.update` (owner repair), transitively violating the shadow's read-only invariant. | **Fixed as prescribed.** `resolveRedraftRosterLookupReadOnly` is the pure resolver; owner-repair stays in the write-capable `resolveRedraftRosterLookup` for legacy callers (`keeper/context`, `redraft/roster`). `lineup/loader.ts` imports the ReadOnly seam. Enforced by architecture tests that ban the regex `resolveRedraftRosterLookup(?!ReadOnly)` in substrate source. |
 | **High** | Two roster tables | Canonical `Roster.playerData` (JSON) vs `RedraftRoster` + `RedraftRosterPlayer[]` (rows). Source of the entire lineup/trade incompatibility. | Substrate reads canonical `Roster`; redraft projection becomes an adapter (§7). |
 | **High** | No canonical trade evaluation memo | `RedraftTradeValueSnapshot` is redraft-only; `AfLeagueTrade` has none. | Phase E: compute memo from canonical values, or degrade honestly (mirror 3+ team pattern). |
 | **High** | Duplicated transaction stores | `WaiverClaim`/`RedraftWaiverClaim`, `AfLeagueTrade`/`RedraftTradeProposal`, `TeamPerformance`/`RedraftMatchup`. | Out of scope for the bridge; flag for a separate canonicalization track. Decision OS reads the canonical side. |
@@ -408,7 +413,7 @@ tables remain as a gameplay engine + parity reference, not a Decision OS source.
 | **Roster freshness** | Imported roster lags the provider; lineup/trade act on stale rosters. | Trust + uncertainty surfaced; shadow-only until freshness SLAs are validated; `DecisionShadowScope` to pilot on opted-in leagues. |
 | **Trade timing** | Canonical evaluation memo computed at read time may differ run-to-run if values drift. | Pin the memo to a value snapshot at proposal time (mirror redraft's persisted-snapshot pattern); parity against the redraft snapshot where both exist. |
 | **Waiver timing** | Already canonical — low risk; FAAB/priority freshness only. | Existing slice unaffected; reuse its freshness handling. |
-| **Concurrency** | Owner-repair writes (today) racing with reads. | Removing the write from the read path (Critical debt) eliminates this for the shadow. |
+| **Concurrency** | Owner-repair writes racing with reads. | **Eliminated for the shadow** — the read path now calls `resolveRedraftRosterLookupReadOnly`, which issues no writes. Legacy routes that still call the write-capable resolver retain the original race; unchanged and out of scope here. |
 | **Telemetry** | Need to debug imported-league shadows without origin branching. | Origin (`provider`, `source`) travels as a **telemetry flag only** (§5.2); the viewer already filters by `userId`/`leagueId`. |
 | **Testing** | New substrate needs coverage for imported *and* native, partial syncs, JSON-blob edge cases. | Canonical fakes mirroring the slice fakes; architecture tests forbidding provider/`redraft*` references above the substrate; per-phase staging parity scripts (prod-host guard, like `slice4-staging-parity.ts`). |
 | **Rollback** | A bad substrate read could affect a shipped slice. | Phases D–E swap loader internals **behind the existing flags**; default off; shadow-only; instant revert by flag. No cutover in Phase 2. |
@@ -452,8 +457,8 @@ path; the redraft engine becomes one adapter feeding the substrate, not a second
 
 **Consequences:**
 - New shared layer to build and own (the substrate) — the single net-new surface.
-- The Critical read-only debt (owner-repair write in the identity path) **must** be retired before the
-  lineup bridge ships.
+- ~~The Critical read-only debt (owner-repair write in the identity path) **must** be retired before the
+  lineup bridge ships.~~ **Done** — retired via the ReadOnly resolver split; see §9.
 - The trade slice gains a canonical evaluation memo (or an honest `unsupported` degrade) — the only
   genuinely new computation in Phase 2.
 - Cutover of any shadow remains a **separate, later** decision governed by the Decision Registry; Phase 2

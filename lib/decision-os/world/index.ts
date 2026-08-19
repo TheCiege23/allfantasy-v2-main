@@ -10,12 +10,14 @@
  * paths; the F2-layer signal projectors feed the lineup memo via `lineup/signalFacts.ts` and the
  * trade market seam via `trade/enrichmentPort.ts` (F2.5). Nothing here writes.
  *
- * CRITICAL-DEBT NOTE (read-only identity resolution): the legacy redraft path resolves a roster's
- * owner via `resolveRedraftRosterLookup`, which performs owner repair with `prisma.redraftRoster.update`
- * (a WRITE). This substrate deliberately does NOT use that path; it joins Roster→LeagueTeam with the
- * pure, write-free {@link matchTeamIdForRoster}. Extracting a guaranteed read-only resolver out of
- * `resolveRedraftRosterLookup` remains the recommended first follow-up before the lineup bridge, so
- * the existing redraft callers can share the same write-free resolution.
+ * READ-ONLY IDENTITY RESOLUTION (debt retired): the legacy redraft path resolves a roster's owner via
+ * `resolveRedraftRosterLookup`, which performs owner repair with `prisma.redraftRoster.update` (a
+ * WRITE). This substrate deliberately does NOT use that path; it joins Roster→LeagueTeam with the
+ * pure, write-free {@link matchTeamIdForRoster}.
+ *
+ * The follow-up this note used to recommend has since landed: `resolveRedraftRosterLookupReadOnly`
+ * now exposes the same resolution with no write, and the lineup bridge consumes it. The write-capable
+ * variant survives only for the legacy callers that depend on the repair.
  */
 import { assembleCanonicalWorld, type AssembleOptions } from './assemble'
 import type { CanonicalWorld } from './facts'
