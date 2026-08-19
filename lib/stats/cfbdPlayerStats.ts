@@ -127,8 +127,81 @@ function dkFantasyPoints(stats: Record<string, number | string>): number | null 
   )
 }
 
-/** Offensive skill positions. Defensive stats exist but no fantasy surface reads them yet. */
-const FANTASY_POSITIONS = new Set(['QB', 'RB', 'FB', 'WR', 'TE'])
+/** Offensive skill positions — scored by `dkFantasyPoints`. */
+const OFFENSIVE_POSITIONS = new Set(['QB', 'RB', 'FB', 'WR', 'TE'])
+
+/**
+ * Defensive positions — scored by `idpFantasyPoints`.
+ *
+ * ⚠ THESE WERE PREVIOUSLY DISCARDED AT INGEST. The parse loop above is
+ * category-agnostic and CFBD returns a full defensive stat line, but the
+ * position filter dropped every defender before the row was written — so the
+ * table held 5,530 college players and not one defensive stat. College IDP was
+ * not missing from the vendor; we were throwing it away.
+ *
+ * The list is broad on purpose: CFBD's position strings are not normalised, so
+ * the same player can arrive as DE, EDGE, or DL depending on the school.
+ */
+const DEFENSIVE_POSITIONS = new Set([
+  'DL', 'DE', 'DT', 'NT', 'EDGE',
+  'LB', 'ILB', 'OLB', 'MLB',
+  'DB', 'CB', 'S', 'FS', 'SS',
+])
+
+const FANTASY_POSITIONS = new Set([...OFFENSIVE_POSITIONS, ...DEFENSIVE_POSITIONS])
+
+/**
+ * A conventional IDP baseline, applied to CFBD season totals.
+ *
+ * ⚠ THIS IS A DEFAULT, NOT A LEAGUE'S SCORING. IDP settings vary more than
+ * offensive ones — some leagues pay 1.5 a solo tackle, some pay 4 a sack, some
+ * score tackles for loss and some don't. The raw stats are written alongside
+ * this number precisely so a league's own settings can re-score from them; this
+ * exists so a defender has A basis at all instead of being refused for
+ * `no_scoring_basis`, which is what happens to every player without one.
+ *
+ * Two honest notes:
+ *   - CFBD gives total and solo tackles, so assists are derived as TOT - SOLO.
+ *     A source that ever reports SOLO > TOT would produce a negative, so it is
+ *     floored at zero rather than trusted.
+ *   - Sacks are also tackles for loss. Most IDP formats pay both, and this
+ *     follows that convention rather than trying to de-duplicate them.
+ */
+function idpFantasyPoints(stats: Record<string, number | string>): number | null {
+  const n = (key: string): number => {
+    const v = stats[key]
+    return typeof v === 'number' && Number.isFinite(v) ? v : 0
+  }
+
+  const total = n('defensive.TOT')
+  const solo = n('defensive.SOLO')
+  const assists = Math.max(0, total - solo)
+  const sacks = n('defensive.SACKS')
+  const tfl = n('defensive.TFL')
+  const passesDefended = n('defensive.PD')
+  const defTd = n('defensive.TD')
+  const hurries = n('defensive.QB HUR')
+  const interceptions = n('interceptions.INT')
+  // On a defender this is a recovery, not recovering one's own fumble.
+  const fumbleRecoveries = n('fumbles.REC')
+
+  const anyProduction =
+    total || solo || sacks || tfl || passesDefended || defTd || hurries ||
+    interceptions || fumbleRecoveries
+  if (!anyProduction) return null
+
+  return (
+    solo * 1 +
+    assists * 0.5 +
+    sacks * 2 +
+    tfl * 1 +
+    passesDefended * 1 +
+    defTd * 6 +
+    hurries * 1 +
+    interceptions * 3 +
+    fumbleRecoveries * 2
+  )
+}
 
 type CfbdStatRow = {
   season?: number
@@ -283,9 +356,18 @@ export async function syncCfbdPlayerStatsToDb(opts?: {
       continue
     }
 
-    // Null when the player recorded no offensive production at all; the field is
-    // then omitted rather than written as 0, which would read as "scored zero".
-    const dkTotal = dkFantasyPoints(entry.stats)
+    /*
+     * Which formula applies is decided by POSITION, not by which stats happen
+     * to be present. A linebacker who caught a two-point conversion still gets
+     * scored as a defender, and a running back who made a tackle after an
+     * interception does not suddenly get IDP credit for it.
+     *
+     * Null when the player recorded no production the formula can see; the
+     * field is then omitted rather than written as 0, which would read as
+     * "scored zero" instead of "we have no basis".
+     */
+    const isDefender = DEFENSIVE_POSITIONS.has(entry.position)
+    const dkTotal = isDefender ? idpFantasyPoints(entry.stats) : dkFantasyPoints(entry.stats)
 
     try {
       const data = {
@@ -351,4 +433,15 @@ export async function syncCfbdPlayerStatsToDb(opts?: {
   }
 
   return result
+}
+
+/**
+ * Exported for tests only. The scoring formulas are the part most likely to
+ * drift silently — a wrong constant produces a plausible number, not an error.
+ */
+export const __testables = {
+  idpFantasyPoints,
+  dkFantasyPoints,
+  DEFENSIVE_POSITIONS,
+  OFFENSIVE_POSITIONS,
 }
