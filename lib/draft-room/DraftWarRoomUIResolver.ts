@@ -4,7 +4,7 @@
  */
 
 /** URL to open Legacy Draft War Room (mock draft tab). */
-export const DRAFT_WAR_ROOM_LEGACY_URL = '/af-legacy?tab=mock-draft'
+export const DRAFT_WAR_ROOM_LEGACY_URL = '/legacy?tab=mock-draft'
 
 /** URL to open league draft tab (app) with war room panel. */
 export function getLeagueDraftTabUrl(leagueId: string): string {

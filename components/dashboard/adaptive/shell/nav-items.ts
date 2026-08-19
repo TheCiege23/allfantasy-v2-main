@@ -68,7 +68,7 @@ export const NAV_ITEMS: NavItem[] = [
     key: 'messages', label: 'Messages', Icon: Mail, href: '/messages',
     badge: { kind: 'count', countKey: 'messages' },
   },
-  { key: 'chat', label: 'League Chat', Icon: MessageSquare, href: '/af-legacy?tab=chat' },
+  { key: 'chat', label: 'League Chat', Icon: MessageSquare, href: '/legacy?tab=chat' },
   { key: 'settings', label: 'Settings', Icon: Settings, href: '/settings' },
 ]
 

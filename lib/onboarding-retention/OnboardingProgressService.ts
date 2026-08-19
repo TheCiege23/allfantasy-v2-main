@@ -25,7 +25,7 @@ const CHECKLIST_SPEC: Record<
   choose_tools: {
     label: "Choose preferred tools",
     description: "Try Trade Analyzer, Mock Draft, Brackets, or Chimmy AI.",
-    href: "/af-legacy?tab=trade-center",
+    href: "/legacy?tab=trade",
     ctaLabel: "Explore tools",
   },
   connect_platforms: {

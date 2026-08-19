@@ -19,8 +19,8 @@ export interface WelcomeFlowProps {
 }
 
 const TOOL_LINKS = [
-  { label: "Trade analyzer", href: "/af-legacy?tab=trade-center" },
-  { label: "Mock draft", href: "/af-legacy?tab=mock-draft" },
+  { label: "Trade analyzer", href: "/legacy?tab=trade" },
+  { label: "Mock draft", href: "/legacy?tab=mock-draft" },
   { label: "Brackets", href: "/brackets" },
   { label: "Chimmy AI", href: "/chimmy" },
 ]

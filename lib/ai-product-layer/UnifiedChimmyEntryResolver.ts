@@ -9,7 +9,7 @@ import { buildAIChatHref, resolveSportForAIChat } from '@/lib/chimmy-chat';
 
 const CHIMMY_LANDING = '/chimmy';
 const CHIMMY_CHAT_ROUTE = '/chimmy/chat';
-const LEGACY_CHAT = '/af-legacy?tab=chat';
+const LEGACY_CHAT = '/legacy?tab=chat';
 
 function normalizeChimmyContext(context?: AIProductContext) {
   if (!context) return undefined;

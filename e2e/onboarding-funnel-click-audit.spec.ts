@@ -159,7 +159,7 @@ test.describe("@activation onboarding funnel click audit", () => {
           id: "choose_tools",
           label: "Choose preferred tools",
           description: "Try a tool.",
-          href: "/af-legacy?tab=trade-center",
+          href: "/legacy?tab=trade",
           ctaLabel: "Explore tools",
           completed: completedTaskIds.has("choose_tools"),
         },
@@ -234,7 +234,7 @@ test.describe("@activation onboarding funnel click audit", () => {
 
     const expectedChecklistRoutes: Array<[string, string]> = [
       ["select_sports", "/onboarding/funnel"],
-      ["choose_tools", "/af-legacy?tab=trade-center"],
+      ["choose_tools", "/legacy?tab=trade"],
       ["join_or_create_league", "/leagues"],
       ["first_ai_action", "/chimmy"],
       ["referral_share", "/referral"],
