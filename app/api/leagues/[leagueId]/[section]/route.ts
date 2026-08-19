@@ -33,6 +33,7 @@ const HANDLERS: Record<string, () => Promise<Record<string, unknown>>> = {
   'commentary': () => import('../commentary/handler'),
   'commissioner-controls': () => import('../commissioner-controls/handler'),
   'commissioner-rating': () => import('../commissioner-rating/handler'),
+  'league-type': () => import('../league-type/handler'),
   'dispersal-draft': () => import('../dispersal-draft/handler'),
   'divisions': () => import('../divisions/handler'),
   'downsize': () => import('../downsize/handler'),
