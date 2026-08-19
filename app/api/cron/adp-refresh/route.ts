@@ -25,6 +25,7 @@ import { runAdpImporter } from "@/lib/workers/adp-importer"
  * `weather/refresh-cron` already do, and those are the crons that were returning 200.
  */
 import { ingestPlayerValues } from "@/lib/player-values/ingestPlayerValues"
+import { valueStoredTrades } from "@/lib/trade-valuation/valueStoredTrades"
 
 export const dynamic = "force-dynamic"
 export const maxDuration = 300
@@ -84,10 +85,40 @@ async function handle(req: NextRequest) {
       playerValues = { error: message.slice(0, 200) }
     }
 
+    /*
+     * TRADE VALUATION RIDES ALONG, AND THIS IS THE ONLY THING THAT SCHEDULES IT.
+     *
+     * LeagueTrade.analyzed / valueGiven / valueReceived had NO writer at all -- the sole
+     * writer of that table (normalize-historical) never touched them, so they sat at
+     * their defaults permanently. computeManagerTendencies filters on exactly those
+     * fields and returns null below two survivors, so every manager fell through,
+     * pre-analysis cached nothing, and matchmaking silently degraded to positional
+     * overlap while presenting a five-dimension model.
+     *
+     * ORDER MATTERS: this runs AFTER the capture above, so a trade dated today can be
+     * priced against values captured moments earlier instead of waiting a day.
+     *
+     * Bounded to 100 per run. This route already does the ADP import and the value
+     * capture under a 300s ceiling, so the backlog drains over days rather than racing
+     * the timeout. FantasyCalc caches for an hour in-process, so batch size barely
+     * changes the provider cost. Use scripts/value-stored-trades.ts to clear history.
+     *
+     * FAILURE IS ISOLATED for the same reason as the capture: ADP is already written.
+     */
+    let tradeValuation: Awaited<ReturnType<typeof valueStoredTrades>> | { error: string } | null = null
+    try {
+      tradeValuation = await valueStoredTrades({ limit: 100 })
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      console.error("[cron/adp-refresh] trade valuation failed:", message)
+      tradeValuation = { error: message.slice(0, 200) }
+    }
+
     return NextResponse.json({
       ok: true,
       dryRun: false,
       playerValues,
+      tradeValuation,
       imported: result.imported,
       sports: result.sports,
       season: result.season,
