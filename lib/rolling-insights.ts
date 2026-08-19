@@ -1413,14 +1413,30 @@ export async function fetchNFLPlayerStats(options: {
   season?: string
 }): Promise<RIPlayerSeasonStatsRow[]> {
   // Normalize season the same way fetchNFLRoster does — RI accepts either plain
-  // year (e.g. "2024") or a "YYYY-YYYY" range. The projections endpoint expects
-  // a plain year in the URL path, so strip a trailing "-YYYY" if present.
+  // year (e.g. "2024") or a "YYYY-YYYY" range. The path expects a plain year, so
+  // strip a trailing "-YYYY" if present.
   const seasonRaw = options.season ?? String(new Date().getUTCFullYear())
   const seasonForPath = seasonRaw.includes('-') ? seasonRaw.split('-')[0] : seasonRaw
 
+  /*
+   * ⚠ `player_stats`, NOT `projections`. Rolling Insights has no projections
+   * feed at all — vendor-confirmed, and the provider's own dataType map points
+   * `projections` at four candidate paths that do not exist, so every call
+   * returned HTTP 400 and this function returned [].
+   *
+   * That was not always true. `player-stats` used to be the first candidate
+   * under `projections`, which made this work by accident while also letting a
+   * historical stat line be labelled a forecast. Removing it was correct and
+   * must stay — see the note in lib/workers/providers/rolling-insights.ts. What
+   * was missed is that THIS caller kept asking for `projections` afterwards, so
+   * it has been silently fetching nothing ever since.
+   *
+   * The function name says player stats and the consumer writes
+   * PlayerSeasonStats, so `player_stats` is what it always meant to ask for.
+   */
   const result = await rollingInsightsProvider({
     sport: 'NFL',
-    dataType: 'projections',
+    dataType: 'player_stats',
     query: { season: seasonForPath },
   })
   if (!Array.isArray(result.data)) return []
