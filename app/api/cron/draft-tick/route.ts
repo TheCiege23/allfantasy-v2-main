@@ -25,6 +25,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { processExpiredDraftPicks } from '@/lib/live-draft-engine/expired-picks/processExpiredDraftPicks'
+import { mirrorActiveSleeperDrafts } from '@/lib/draft/mirrorActiveSleeperDrafts'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,12 +41,36 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  // Inert until deliberately enabled — see SAFETY above.
+  /*
+   * MIRRORING RUNS FIRST, AND OUTSIDE THE FLAG.
+   *
+   * DRAFT_TICK_CRON_ENABLED guards server-side AUTOPICK — picking on a manager's behalf,
+   * which is a visible behavioural change to a live draft and correctly defaults off.
+   * Mirroring an externally-hosted Sleeper draft makes no pick and writes nothing upstream;
+   * it copies a board Sleeper already shows. Putting it behind the autopick switch would
+   * leave every imported league's draft board empty for an unrelated reason.
+   *
+   * `syncDraftFromSleeper` had zero callers before this — the same failure the autopick
+   * scanner had, and the reason this route exists at all.
+   *
+   * Failure is contained: a mirror problem must not stop autopick from advancing a draft.
+   */
+  let mirror: Awaited<ReturnType<typeof mirrorActiveSleeperDrafts>> | { error: string } | null = null
+  try {
+    mirror = await mirrorActiveSleeperDrafts({ maxDrafts: 40 })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    console.error('[cron/draft-tick] sleeper mirror failed:', message)
+    mirror = { error: message.slice(0, 200) }
+  }
+
+  // Autopick is inert until deliberately enabled — see SAFETY above.
   if (!isEnabled()) {
     return NextResponse.json({
       ok: true,
       disabled: true,
-      reason: 'DRAFT_TICK_CRON_ENABLED is not "true"',
+      reason: 'DRAFT_TICK_CRON_ENABLED is not "true" — autopick skipped, mirror still ran',
+      mirror,
       ranAt: new Date().toISOString(),
     })
   }
@@ -74,7 +99,7 @@ export async function GET(request: NextRequest) {
       }),
     )
 
-    return NextResponse.json({ ok: true, ...summary, ranAt: new Date().toISOString() })
+    return NextResponse.json({ ok: true, ...summary, mirror, ranAt: new Date().toISOString() })
   } catch (err) {
     return NextResponse.json(
       { ok: false, error: err instanceof Error ? err.message : 'draft-tick failed' },
