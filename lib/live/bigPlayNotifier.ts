@@ -71,7 +71,70 @@ async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string
     if (!list.includes(owner)) list.push(owner)
     out.set(row.playerId, list)
   }
+
+  /*
+   * ⚠ IMPORTED LEAGUES ARE THE MAJORITY AND LIVE IN A DIFFERENT SHAPE. Redraft
+   * rosters are relational rows; imported (Sleeper) rosters are a JSON blob on
+   * `Roster.playerData`, holding SLEEPER player ids under `.players`. Measured:
+   * 205 redraft roster rows against 914 imported ones. Querying only the first
+   * means the feature fires for a fifth of the league and looks broken to
+   * everyone else.
+   *
+   * The ids do not match either — the play feed speaks Rolling Insights ids —
+   * so this crosses through PlayerIdentityMap, which carries both spellings on
+   * the same row. A player with no identity row is skipped, not guessed at.
+   */
+  await addImportedLeagueOwners(playerIds, out)
   return out
+}
+
+/**
+ * Resolve imported-league owners for the same players.
+ *
+ * Uses a JSONB containment test rather than loading every roster: `?` asks
+ * whether the players array contains that id, which Postgres can answer
+ * without us pulling 914 blobs into memory every poll.
+ */
+async function addImportedLeagueOwners(
+  riPlayerIds: string[],
+  out: Map<string, string[]>,
+): Promise<void> {
+  try {
+    const identities = await prisma.playerIdentityMap.findMany({
+      where: { rollingInsightsId: { in: riPlayerIds }, sleeperId: { not: null } },
+      select: { rollingInsightsId: true, sleeperId: true },
+    })
+    if (identities.length === 0) return
+
+    for (const identity of identities) {
+      const riId = identity.rollingInsightsId
+      const sleeperId = identity.sleeperId
+      if (!riId || !sleeperId) continue
+
+      const rosters = await prisma.$queryRawUnsafe<Array<{ platformUserId: string }>>(
+        `SELECT DISTINCT r."platformUserId"
+         FROM rosters r
+         WHERE r."playerData"->'players' @> $1::jsonb`,
+        JSON.stringify([sleeperId]),
+      )
+
+      const list = out.get(riId) ?? []
+      for (const row of rosters) {
+        /*
+         * ⚠ platformUserId, NOT our user id. On an imported league this is the
+         * SLEEPER user id — the notification layer resolves it. Treating it as
+         * our own uuid would silently address nobody.
+         */
+        if (row.platformUserId && !list.includes(row.platformUserId)) {
+          list.push(row.platformUserId)
+        }
+      }
+      if (list.length > 0) out.set(riId, list)
+    }
+  } catch {
+    // Imported-league resolution is additive. If it fails, redraft managers
+    // still get their alerts rather than nobody getting any.
+  }
 }
 
 /** The line a manager actually reads on their phone. */

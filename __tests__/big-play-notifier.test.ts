@@ -1,8 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const h = vi.hoisted(() => ({ findMany: vi.fn(), ingestBatch: vi.fn() }))
+const h = vi.hoisted(() => ({
+  findMany: vi.fn(), ingestBatch: vi.fn(),
+  identityFind: vi.fn(), rawQuery: vi.fn(),
+}))
 vi.mock('@/lib/prisma', () => ({
-  prisma: { redraftRosterPlayer: { findMany: h.findMany } },
+  prisma: {
+    redraftRosterPlayer: { findMany: h.findMany },
+    playerIdentityMap: { findMany: h.identityFind },
+    $queryRawUnsafe: h.rawQuery,
+  },
 }))
 vi.mock('@/lib/notification-engine', () => ({ ingestBatch: h.ingestBatch }))
 
@@ -33,6 +40,8 @@ beforeEach(() => {
   h.ingestBatch.mockReset()
   h.findMany.mockResolvedValue(rostered())
   h.ingestBatch.mockResolvedValue([])
+  h.identityFind.mockReset(); h.identityFind.mockResolvedValue([])
+  h.rawQuery.mockReset(); h.rawQuery.mockResolvedValue([])
 })
 
 describe('who gets told', () => {
@@ -147,5 +156,53 @@ describe('notificationTitleFor', () => {
     expect(notificationTitleFor(ev({ type: 'TOUCHDOWN' }))).toBe('Touchdown')
     expect(notificationTitleFor(ev({ type: 'DEFENSIVE_SCORE' }))).toBe('Defensive touchdown')
     expect(notificationTitleFor(ev({ type: 'SPECIAL_TEAMS_SCORE' }))).toBe('Special teams touchdown')
+  })
+})
+
+describe('imported leagues', () => {
+  it('notifies Sleeper managers, who outnumber redraft managers 4 to 1', async () => {
+    // 205 redraft roster rows against 914 imported ones. Querying only the
+    // first fires for a fifth of the league and looks broken to everyone else.
+    h.findMany.mockResolvedValue([])
+    h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
+    h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }])
+
+    const res = await notifyBigPlays([ev()])
+    expect(res.notificationsSent).toBe(1)
+    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['sleeper-user-9'])
+  })
+
+  it('crosses RI ids to Sleeper ids rather than assuming they match', async () => {
+    h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
+    h.rawQuery.mockResolvedValue([])
+    await notifyBigPlays([ev()])
+    // The feed speaks Rolling Insights ids; rosters hold Sleeper ids.
+    expect(h.identityFind.mock.calls[0][0].where.rollingInsightsId.in).toEqual(['101'])
+    expect(h.rawQuery.mock.calls[0][1]).toBe(JSON.stringify(['11560']))
+  })
+
+  it('skips a player with no identity row instead of guessing', async () => {
+    h.findMany.mockResolvedValue([])
+    h.identityFind.mockResolvedValue([])
+    const res = await notifyBigPlays([ev()])
+    expect(res.skipped).toBe('no-rosters')
+    expect(h.rawQuery).not.toHaveBeenCalled()
+  })
+
+  it('still alerts redraft managers when the imported lookup fails', async () => {
+    // Imported resolution is additive. A failure there must not mean nobody
+    // gets an alert.
+    h.identityFind.mockRejectedValue(new Error('db down'))
+    const res = await notifyBigPlays([ev()])
+    expect(res.notificationsSent).toBe(1)
+    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['user-1'])
+  })
+
+  it('merges both league types for the same player without duplicates', async () => {
+    h.findMany.mockResolvedValue(rostered('101', 'redraft-user'))
+    h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
+    h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }, { platformUserId: 'sleeper-user-9' }])
+    await notifyBigPlays([ev()])
+    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['redraft-user', 'sleeper-user-9'])
   })
 })
