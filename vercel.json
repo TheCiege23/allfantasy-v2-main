@@ -37,7 +37,7 @@
       "schedule": "50 6 * * *"
     },
     {
-      "path": "/api/cron/sync-player-images",
+      "path": "/api/cron/sync-player-images?sport=all",
       "schedule": "10 5 * * *"
     },
     {
