@@ -6,6 +6,13 @@ export type AdminSessionPayload = {
   email?: string;
   name?: string;
   role?: string;
+  /**
+   * How this admin session was established — audit metadata only, never the identity of a
+   * specific person. "password" marks the shared-password login (which carries no email/id):
+   * it lets attribution record the honest "password-admin" method instead of "unknown-admin".
+   * Absent on legacy cookies signed before this field existed. Covered by the HMAC signature.
+   */
+  authMethod?: string;
   expiresAt?: number; // epoch ms
 };
 

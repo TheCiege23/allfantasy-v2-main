@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { randomInviteCode } from '@/lib/draft/pick-order'
 
 export const dynamic = 'force-dynamic'
@@ -56,7 +57,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ univer
   const token = randomInviteCode()
   await prisma.zombieUniverse.update({
     where: { id: universeId },
-    data: { settings: { ...settings, inviteToken: token } },
+    data: { settings: toPrismaJsonInput({ ...settings, inviteToken: token }) },
   })
   return NextResponse.json({
     universeId: result.universe.id,
@@ -77,7 +78,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ univ
   delete settings.inviteToken
   await prisma.zombieUniverse.update({
     where: { id: universeId },
-    data: { settings },
+    data: { settings: toPrismaJsonInput(settings) },
   })
   return NextResponse.json({ ok: true, revoked: true })
 }

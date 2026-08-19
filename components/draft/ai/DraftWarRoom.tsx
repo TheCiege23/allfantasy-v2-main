@@ -199,7 +199,7 @@ export function DraftWarRoom({
       >
         <div className="flex items-center gap-2">
           <Brain className="h-4 w-4 text-cyan-300" />
-          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-100/90">War Room</span>
+          <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-100/90">AF Legacy</span>
           {data?.fallback ? (
             <span className="rounded border border-white/15 bg-white/5 px-1.5 py-0.5 text-[9px] text-white/55">Rules + AI</span>
           ) : (
@@ -518,7 +518,7 @@ export function DraftWarRoom({
           )}
 
           {!loading && !data && !error ? (
-            <p className="py-2 text-center text-[11px] text-white/45">War Room activates when the draft board is live.</p>
+            <p className="py-2 text-center text-[11px] text-white/45">AF Legacy activates when the draft board is live.</p>
           ) : null}
         </div>
       )}

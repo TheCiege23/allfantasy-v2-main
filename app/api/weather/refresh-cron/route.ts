@@ -25,6 +25,12 @@ function resolveVenueCoords(venue: string | null): { lat: number; lng: number } 
   return null
 }
 
+// This branch added its own cron GET here; #284 landed an identical one further down
+// (kept), so both would have exported `GET` from the same module. Git auto-merged this
+// without a conflict because the two sit in different places — the duplicate export only
+// shows up at build time. Dropped this copy; main's is the shipped version and avoids the
+// build bug by not writing the literal `0 */3 * * *`, whose `*/` closes a block comment.
+
 export async function POST(request: NextRequest) {
   if (!requireCronAuth(request, 'CRON_SECRET')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -79,4 +85,13 @@ export async function POST(request: NextRequest) {
 
   console.info(`[weather/refresh-cron] refreshed ${refreshed} cache entries`)
   return NextResponse.json({ ok: true, refreshed })
+}
+
+/**
+ * Vercel Cron issues a GET, but this route only exported POST — so every scheduled run since
+ * it was added returned 405 and refreshed nothing. Measured in production 2026-07-19.
+ * Delegates to POST, which already gates on `requireCronAuth`; no auth behaviour changes.
+ */
+export async function GET(request: NextRequest) {
+  return POST(request)
 }

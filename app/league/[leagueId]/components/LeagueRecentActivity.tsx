@@ -18,7 +18,7 @@ function sortActivityLines(lines: LeagueActivityLine[]): LeagueActivityLine[] {
 
 function transactionPill(item: LeagueActivityItem): { label: string; className: string } {
   if (item.type === 'trade') {
-    return { label: 'TRADE', className: 'border-cyan-500/35 bg-cyan-500/15 text-cyan-100' }
+    return { label: 'TRADE', className: 'border-[#ff3d81]/35 bg-[#ff3d81]/15 text-[#ffd7e5]' }
   }
   if (item.badge === 'FREE AGENCY' || item.badge.toUpperCase().includes('FREE')) {
     return { label: 'FREE AGENT', className: 'border-sky-500/35 bg-sky-500/10 text-sky-100/95' }
@@ -27,7 +27,7 @@ function transactionPill(item: LeagueActivityItem): { label: string; className: 
   const amt = bid ? bid[1] : '0'
   return {
     label: `WAIVERED $${amt}`,
-    className: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-100/90',
+    className: 'border-[#ff3d81]/30 bg-[#ff3d81]/10 text-[#ffd7e5]/90',
   }
 }
 
@@ -80,7 +80,7 @@ export function LeagueRecentActivity({ leagueId }: { leagueId: string }) {
         <h2 className="text-[14px] font-bold text-white sm:text-[15px]">Recent Activity</h2>
         <Link
           href={`/league/${encodeURIComponent(leagueId)}?view=trades`}
-          className="text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-400/95 transition hover:text-cyan-300"
+          className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#ff3d81]/95 transition hover:text-[#ff9ec0]"
           data-testid="league-recent-activity-view-all"
         >
           View all

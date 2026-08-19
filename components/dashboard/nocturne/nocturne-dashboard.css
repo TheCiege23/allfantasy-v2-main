@@ -1,0 +1,285 @@
+/*
+ * Nocturne dashboard — scoped design system for the logged-in dashboard.
+ *
+ * BROADCAST DECK RETHEME: the token set below now matches the league page's
+ * Broadcast Deck look (ground #0b0e2a, panel #12163e, border #262c6a, ink ramp
+ * #f0f2ff → #5d64a3, pink→orange gradient #ff3d81→#ff8a3d for active/CTA,
+ * heavy italic uppercase kickers) so /dashboard and /league/[id] read as one
+ * product. Class names and structure are unchanged — only the values moved —
+ * so `NocturneDashboard.tsx` needs no markup changes to pick this up.
+ *
+ * Everything is namespaced under `.nocturne-dash` so these tokens/classes never
+ * collide with the app's own theme OR with the landing page's `.nocturne` scope.
+ *
+ * Dark-theme only by design.
+ */
+
+.nocturne-dash {
+  /* ── Ground + accent (Broadcast Deck) ─────────────────────────────── */
+  --color-bg: #0b0e2a;
+  --color-surface: #12163e;
+  --color-text: #f0f2ff;
+  --color-accent: #ff3d81;
+  --color-accent-2: #ff8a3d;
+  --color-divider: #262c6a;
+
+  /* Ink ramp (deck): bright → muted indigo */
+  --color-neutral-100: #f0f2ff;
+  --color-neutral-200: #dde1fb;
+  --color-neutral-300: #c6cbf5;
+  --color-neutral-400: #aab1e6;
+  --color-neutral-500: #8b93cf;
+  --color-neutral-600: #6f77b8;
+  --color-neutral-700: #5d64a3;
+  --color-neutral-800: #262c6a;
+  --color-neutral-900: #1a1f52;
+
+  /* Accent ramp (deck pink) */
+  --color-accent-100: #ffedf4;
+  --color-accent-200: #ffd3e3;
+  --color-accent-300: #ffabc8;
+  --color-accent-400: #ff7aa8;
+  --color-accent-500: #ff3d81;
+  --color-accent-600: #dd2f6d;
+  --color-accent-700: #b02457;
+  --color-accent-800: #571b40;
+  --color-accent-900: #331129;
+
+  --color-accent-2-500: #ff8a3d;
+
+  --color-section: #12163e;
+  --color-section-glow: #262c6a;
+
+  /* Deck signature gradient — active pills + primary CTAs */
+  --deck-gradient: linear-gradient(90deg, #ff3d81, #ff8a3d);
+
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 14px;
+
+  --font-nocturne: 'Inter', system-ui, -apple-system, 'Segoe UI', Arial, sans-serif;
+
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-nocturne);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.nocturne-dash *,
+.nocturne-dash *::before,
+.nocturne-dash *::after { box-sizing: border-box; }
+
+/* Headings — deck weight (heavy), tight leading. */
+.nocturne-dash h1,
+.nocturne-dash h2,
+.nocturne-dash h3,
+.nocturne-dash h4 {
+  font-family: var(--font-nocturne);
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.nocturne-dash p { margin: 0; }
+.nocturne-dash a { color: var(--color-neutral-300); text-decoration: none; }
+.nocturne-dash a:hover { color: var(--color-neutral-100); }
+.nocturne-dash button { font-family: var(--font-nocturne); }
+.nocturne-dash img { display: block; max-width: 100%; }
+.nocturne-dash ::selection { background: color-mix(in srgb, var(--color-accent) 32%, transparent); }
+.nocturne-dash :focus { outline: none; }
+.nocturne-dash :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+
+/* ── Cards — deck panel gradient + border ──────────────────────────── */
+.nocturne-dash .afcard {
+  border: 1px solid #262c6a;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(18, 22, 62, 0.94), rgba(11, 14, 42, 0.94));
+  padding: 18px;
+}
+.nocturne-dash .afcard:hover { border-color: #3a4190; }
+
+/* ── Context tabs — active = deck gradient pill ────────────────────── */
+.nocturne-dash .aftab {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: calc(var(--radius-md) - 2px);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: var(--color-neutral-500);
+  transition: 0.15s;
+}
+.nocturne-dash .aftab.is-active {
+  background: var(--deck-gradient);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 0 18px -6px rgba(255, 61, 129, 0.65);
+}
+.nocturne-dash .aftab:not(.is-active):hover { color: var(--color-neutral-200); }
+
+/* ── Progress ring (health / grade) ───────────────────────────────── */
+.nocturne-dash .afring {
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  position: relative;
+  flex: none;
+}
+.nocturne-dash .afring::after {
+  content: "";
+  position: absolute;
+  inset: 8px;
+  border-radius: 50%;
+  background: var(--color-surface);
+}
+.nocturne-dash .afringval {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* ── Platform-source square ────────────────────────────────────────── */
+.nocturne-dash .afsrc {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  font: 700 12px ui-monospace, Menlo, monospace;
+  color: var(--color-neutral-100);
+  flex: none;
+}
+
+/* ── Icon chip button ──────────────────────────────────────────────── */
+.nocturne-dash .afchip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 30px;
+  width: 30px;
+  border: none;
+  background: none;
+  color: var(--color-neutral-500);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.nocturne-dash .afchip:hover {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+  color: var(--color-neutral-200);
+}
+
+/* ── Gated blur ────────────────────────────────────────────────────── */
+.nocturne-dash .afblur { filter: blur(5px); user-select: none; }
+
+/* ── Inputs / selects — deck well + pink focus ─────────────────────── */
+.nocturne-dash .input {
+  width: 100%;
+  min-height: 36px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  background: #0d1130;
+  border: 1px solid #262c6a;
+  border-radius: var(--radius-md);
+  outline: none;
+}
+.nocturne-dash .input:hover { border-color: #3a4190; }
+.nocturne-dash .input:focus-visible { border-color: var(--color-accent); }
+
+/* ── Segmented control ─────────────────────────────────────────────── */
+.nocturne-dash .seg {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+}
+
+/* ── Tags — deck severity-chip language ────────────────────────────── */
+.nocturne-dash .tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: calc(var(--radius-md) * 0.75);
+  white-space: nowrap;
+}
+.nocturne-dash .tag-accent { background: rgba(255, 61, 129, 0.16); color: #ff9ec0; }
+.nocturne-dash .tag-neutral { background: #262c6a; color: var(--color-neutral-200); }
+.nocturne-dash .tag-outline { border: 1px solid var(--color-accent); color: var(--color-accent); }
+/* LIVE = full canonical import with a league cockpit; HISTORY = AF-Legacy career snapshot. */
+.nocturne-dash .tag-live { background: rgba(52, 211, 153, 0.14); color: #6ee7b7; }
+.nocturne-dash .tag-history { background: rgba(93, 100, 163, 0.18); color: #9098d4; }
+
+/* ── Buttons — primary is the deck gradient CTA ────────────────────── */
+.nocturne-dash .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-nocturne);
+  font-weight: 600;
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, filter 0.15s ease;
+}
+.nocturne-dash .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.nocturne-dash .btn svg { display: block; }
+.nocturne-dash .btn-primary {
+  background: var(--deck-gradient);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 700;
+  box-shadow: 0 0 22px -10px rgba(255, 61, 129, 0.85);
+}
+.nocturne-dash .btn-primary:hover { filter: brightness(1.08); color: #fff; }
+.nocturne-dash .btn-secondary {
+  border-color: #262c6a;
+  background: rgba(18, 22, 62, 0.55);
+  color: var(--color-neutral-200);
+}
+.nocturne-dash .btn-secondary:hover { border-color: #5d64a3; background: rgba(38, 44, 106, 0.45); color: #fff; }
+.nocturne-dash .btn-block { width: 100%; }
+
+/* ── Modal backdrop ────────────────────────────────────────────────── */
+.nocturne-dash-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(11, 14, 42, 0.76);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+/* ── Section kicker — deck heavy-italic broadcast label ────────────── */
+.nocturne-dash .dash-kicker {
+  font-size: 11px;
+  font-weight: 900;
+  font-style: italic;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-accent-2);
+}

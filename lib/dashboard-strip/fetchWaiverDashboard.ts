@@ -1,9 +1,7 @@
-import Anthropic from '@anthropic-ai/sdk'
 import { prisma } from '@/lib/prisma'
 import { getTrendingPlayers } from '@/lib/sleeper-client'
 import { getLeagueRosters } from '@/lib/api-cache/SleeperCacheLayer'
 import type { WaiverDashboardResponse, WaiverDrop, WaiverLeagueRec, WaiverPickup } from '@/app/dashboard/dashboardStripApiTypes'
-import { getChimmyOfficialTimePrefix } from '@/lib/time-engine/chimmyPromptPrefix'
 import { estimateNextWaiversProcessUTC } from '@/lib/time-engine/estimateWaiverRun'
 
 const WAIVER_DASHBOARD_TTL_MS = 15 * 60 * 1000
@@ -19,59 +17,8 @@ type SleeperRoster = {
   starters?: string[]
 }
 
-async function chimmyWaiverAdvice(args: {
-  leagueName: string
-  sport: string
-  topPlayers: string
-  rosterNeeds: string
-  timeHint?: string
-}): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim()
-  if (!apiKey) {
-    return 'Add the best available player who fits your roster needs before waivers process.'
-  }
-  try {
-    const anthropic = new Anthropic({ apiKey })
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 180,
-      system: 'You are Chimmy, a fantasy sports AI assistant. Be concise.',
-      messages: [
-        {
-          role: 'user',
-          content: `${args.timeHint ? `${args.timeHint}\n\n` : ''}League: ${args.leagueName}. Sport: ${args.sport}.
-Top waiver adds available: ${args.topPlayers}.
-User roster needs: ${args.rosterNeeds}.
-In 1-2 sentences, name the best pickup and who to drop.`,
-        },
-      ],
-    })
-    const block = msg.content[0]
-    return block?.type === 'text' ? block.text.trim() : ''
-  } catch {
-    return 'Review trending adds and drop your weakest bench piece if you need a roster spot.'
-  }
-}
-
 function sleeperSportFromDb(sport: string): string {
   return sport.toLowerCase()
-}
-
-function countPositionDepth(
-  rosterPlayerIds: string[],
-  byId: Map<string, { position?: string | null }>
-): string {
-  const counts: Record<string, number> = {}
-  for (const id of rosterPlayerIds) {
-    const pos = (byId.get(id)?.position ?? '').toUpperCase().trim()
-    if (!pos) continue
-    counts[pos] = (counts[pos] ?? 0) + 1
-  }
-  const weak = Object.entries(counts)
-    .sort((a, b) => a[1] - b[1])
-    .slice(0, 3)
-    .map(([p, n]) => `${p}: ${n}`)
-  return weak.length ? weak.join(', ') : 'depth unknown'
 }
 
 /** Sleeper waiver recommendations + optional injury pulse for dashboard / Today Actions. */
@@ -82,11 +29,16 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
   })
   const sleeperUserId = profile?.sleeperUserId?.trim() || null
 
-  const waiverTimeHint = await getChimmyOfficialTimePrefix(userId)
-
   const sinceInjury = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const leagues = await prisma.league.findMany({
+    // Stable, total ordering: season and id are non-null and id is unique, so
+    // the result set cannot silently reorder between requests. Mirrors
+    // lib/dashboard/get-dashboard-league-list.ts so this set lines up with the
+    // league list the user actually sees. Deliberately not lastSyncedAt: it is
+    // nullable, and Postgres sorts NULLS FIRST on DESC, so never-synced leagues
+    // would sort to the top.
+    orderBy: [{ season: 'desc' }, { name: 'asc' }, { id: 'asc' }],
     where: {
       platform: 'sleeper',
       OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
@@ -194,13 +146,7 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
       const topPickIds = trendingIds.slice(0, 8)
 
       if (topPickIds.length === 0) {
-        rec.chimmyAdvice = await chimmyWaiverAdvice({
-          leagueName: rec.leagueName,
-          sport: prismaSport,
-          topPlayers: '(none trending)',
-          rosterNeeds: countPositionDepth(rosterIds, new Map()),
-          timeHint: waiverTimeHint,
-        })
+        rec.chimmyAdvice = ''
         recommendations.push(rec)
         continue
       }
@@ -248,8 +194,6 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
         })
       }
 
-      const topPlayers = pickups.map((p) => `${p.playerName} (${p.position})`).join('; ')
-      const rosterNeeds = countPositionDepth(rosterIds, rosterById)
 
       const nextWaiver = estimateNextWaiversProcessUTC({
         leagueTimezone: league.timezone,
@@ -261,13 +205,7 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
         ...rec,
         pickups,
         drops,
-        chimmyAdvice: await chimmyWaiverAdvice({
-          leagueName: rec.leagueName,
-          sport: prismaSport,
-          topPlayers,
-          rosterNeeds,
-          timeHint: waiverTimeHint,
-        }),
+        chimmyAdvice: '',
         waiverDeadline,
       }
 

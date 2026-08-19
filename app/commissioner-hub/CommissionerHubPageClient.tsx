@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
   Crown,
@@ -15,7 +15,6 @@ import {
   Trophy,
   ArrowRight,
   Users,
-  Calendar,
   AlertCircle,
   Zap,
   MessageSquare,
@@ -27,20 +26,64 @@ import {
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
 import CommissionerShowcasePanel from '@/components/redraft/CommissionerShowcasePanel'
+import LeaguePulseCard from '@/components/decision-os/LeaguePulseCard'
+import ManagerDnaCard from '@/components/decision-os/ManagerDnaCard'
+import DecisionRecommendationsCard from '@/components/decision-os/DecisionRecommendationsCard'
+import MissionControlCard from '@/components/decision-os/MissionControlCard'
+import LeagueAnalyticsCard from '@/components/decision-os/LeagueAnalyticsCard'
+import LeagueContextCard from '@/components/decision-os/LeagueContextCard'
+import CommissionerCommandCenterSection from '@/components/decision-os/CommissionerCommandCenterSection'
+import {
+  decisionOsToneClasses,
+  decisionOsHealthStatusToneClasses,
+} from '@/components/decision-os/DecisionOsCardPrimitives'
 import type {
   CommissionerHealthAction,
   CommissionerLeagueHealthSnapshot,
 } from '@/lib/commissioner-hub/commissionerHubHealth'
+import LeagueHealthMap from '@/components/executive-viz/LeagueHealthMap'
+import {
+  ManagerAttentionCard,
+  LeagueHealthBreakdownCard,
+  CommissionerWorkloadCard,
+  LeagueReadinessCard,
+} from '@/components/executive-viz/SupportingExecutiveViz'
+import LeagueMomentum from '@/components/executive-viz/LeagueMomentum'
+import {
+  TransactionDistributionCard,
+  LeagueEngagementCard,
+  CompetitiveBalanceCard,
+} from '@/components/executive-viz/LeagueSupportingViz'
+import TradeOpportunityMatrix from '@/components/executive-viz/TradeOpportunityMatrix'
+import {
+  MarketActivityCard,
+  TradePipelineCard,
+} from '@/components/executive-viz/TradeSupportingViz'
+import {
+  buildCommissionerLeagueHealthViewModel,
+  selectFlagshipSnapshot,
+} from '@/lib/executive-viz/commissionerLeagueHealthViewModel'
+import { buildCommissionerLeaguePulse } from '@/lib/decision-os/league-pulse'
+import { buildManagerDnaViewModel } from '@/lib/decision-os/manager-dna'
+import { buildDecisionRecommendationsViewModel } from '@/lib/decision-os/recommendations'
+import type { ManagerIntelligencePayload } from '@/lib/decision-os/dashboard-intelligence'
+import type { MissionControlSnapshot } from '@/lib/decision-os/missionControl'
+import type { LeagueAnalyticsSnapshot } from '@/lib/decision-os/leagueAnalytics'
+import { resolveTenantBrand, tenantThemeStyle, isFeatureVisible } from '@/lib/white-label'
+
+// The active licensee brand (Phase V5.0 white-label). Env-selected, resolved once — the tenant is
+// fixed per deployment, so brand strings/theme/feature gates below read from this single source.
+const BRAND = resolveTenantBrand()
 
 // ─── Copy constants (future i18n wiring) ───────────────────────────────────
 const COPY = {
   hero: {
-    badge: 'Commissioner Hub',
+    badge: BRAND.copy.commissionerHubLabel,
     trustBadge: 'No gambling. Pure fantasy.',
     headline1: 'Run better leagues.',
     headline2: 'Build your legacy.',
-    sub: 'Built for commissioners. Loved by managers. Every tool you need to create, grow, and manage your fantasy empire — all in one place.',
-    sub2: 'Draft smarter. Keep members engaged. Move entire leagues onto AllFantasy.',
+    sub: 'Built for commissioners. Loved by managers. Every tool you need to create, grow, and manage your fantasy empire - all in one place.',
+    sub2: `Draft smarter. Keep members engaged. Move entire leagues onto ${BRAND.copy.productName}.`,
     ctaCreate: 'Create a League',
     ctaImport: 'Import League',
   },
@@ -68,11 +111,11 @@ const COPY = {
   },
   migration: {
     sectionLabel: 'Migration Center',
-    sectionHint: 'Bring your leagues to AllFantasy',
+    sectionHint: `Bring your leagues to ${BRAND.copy.productName}`,
     activeLabel: 'Active',
     legacyLabel: 'Legacy',
     comingSoonLabel: 'Coming Soon',
-    importCta: 'Import →',
+    importCta: 'Import ->',
   },
   memberLeagues: {
     sectionLabel: 'Leagues I Play In',
@@ -80,7 +123,7 @@ const COPY = {
   trust: {
     heading: 'Transparent. Strategy-first. No gambling.',
     body1:
-      'AllFantasy is built for fantasy sports strategy — not sportsbook predictions or gambling. Every recommendation from our AI tools is grounded in public data and fantasy scoring logic.',
+      `${BRAND.copy.productName} is built for fantasy sports strategy - not sportsbook predictions or gambling. Every recommendation from our AI tools is grounded in public data and fantasy scoring logic.`,
     body2:
       'Chimmy gives recommendations, not guarantees. Fantasy sports involve real uncertainty. Use our tools to make smarter decisions, not to replace your own judgment.',
   },
@@ -93,18 +136,6 @@ const COPY = {
 }
 
 // ─── Types ──────────────────────────────────────────────────────────────────
-type SetupStatus = {
-  label: string
-  dotClass: string
-  badgeClass: string
-}
-
-type NextAction = {
-  label: string
-  href: string
-  variant: 'amber' | 'cyan' | 'emerald' | 'muted'
-}
-
 type QueueCard = {
   key: string
   icon: React.ComponentType<{ className?: string }>
@@ -118,73 +149,26 @@ type QueueCard = {
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-const ACTION_VARIANT_CLASSES: Record<NextAction['variant'], string> = {
-  amber:
-    'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20',
-  cyan: 'border-cyan-500/25 bg-cyan-500/[0.08] text-cyan-300 hover:bg-cyan-500/15',
-  emerald:
-    'border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-300 hover:bg-emerald-500/15',
-  muted:
-    'border-white/10 bg-white/[0.03] text-white/50 hover:bg-white/[0.06]',
-}
+// Phase V1.0: removed the color table (and the `resolveSetupStatus`/`resolveNextAction` functions that
+// used it) that only backed the "Leagues I Manage" grid, deleted this phase for being a 3rd, visually
+// distinct rendering of the same league list already shown by the League Switcher and League Health
+// Dashboard — see docs/os/VISUAL_OS_V1_AUDIT.md Finding 5.
 
 function buildLoginHref(path: string): string {
   return `/login?callbackUrl=${encodeURIComponent(path)}`
 }
 
-function resolveSetupStatus(league: UserLeague): SetupStatus {
-  const state = (league.lifecycleState ?? league.status ?? '').toLowerCase()
-  if (state === 'setup' || state === '')
-    return {
-      label: 'Needs Setup',
-      dotClass: 'bg-amber-400',
-      badgeClass: 'border-amber-500/30 bg-amber-500/10 text-amber-300',
-    }
-  if (state === 'pre_draft')
-    return {
-      label: 'Pre-Draft',
-      dotClass: 'bg-cyan-400',
-      badgeClass: 'border-cyan-500/25 bg-cyan-500/[0.08] text-cyan-300',
-    }
-  if (state === 'drafting')
-    return {
-      label: 'Drafting',
-      dotClass: 'bg-violet-400 animate-pulse',
-      badgeClass: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
-    }
-  if (state === 'in_season' || state === 'playoffs')
-    return {
-      label: state === 'playoffs' ? 'Playoffs' : 'In Season',
-      dotClass: 'bg-emerald-400',
-      badgeClass:
-        'border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-300',
-    }
-  if (state === 'completed' || state === 'offseason')
-    return {
-      label: 'Offseason',
-      dotClass: 'bg-white/25',
-      badgeClass: 'border-white/10 bg-white/[0.03] text-white/40',
-    }
-  return {
-    label: 'Active',
-    dotClass: 'bg-emerald-400',
-    badgeClass: 'border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-300',
+function disablePrefetchForAuthSensitiveHref(href: string): boolean {
+  const pathname = href.split('?')[0] ?? href
+  if (pathname === '/create-league' || pathname === '/import') return true
+  if (pathname !== '/login') return false
+  try {
+    const params = new URLSearchParams(href.split('?')[1] ?? '')
+    const callbackUrl = params.get('callbackUrl') ?? ''
+    return callbackUrl === '/create-league' || callbackUrl === '/import'
+  } catch {
+    return false
   }
-}
-
-function resolveNextAction(league: UserLeague): NextAction {
-  const state = (league.lifecycleState ?? league.status ?? '').toLowerCase()
-  if (state === 'setup' || state === '')
-    return { label: 'Complete Setup', href: `/league/${league.id}`, variant: 'amber' }
-  if (state === 'pre_draft' && !league.draftDate)
-    return { label: 'Set Draft Date', href: `/league/${league.id}`, variant: 'amber' }
-  if (state === 'pre_draft')
-    return { label: 'View Draft Room', href: `/war-room`, variant: 'cyan' }
-  if (state === 'drafting')
-    return { label: 'Enter Draft', href: `/war-room`, variant: 'emerald' }
-  if (state === 'in_season' || state === 'playoffs')
-    return { label: 'Manage League', href: `/league/${league.id}`, variant: 'emerald' }
-  return { label: 'View League', href: `/league/${league.id}`, variant: 'muted' }
 }
 
 function buildMissionQueue(commLeagues: UserLeague[]): QueueCard[] {
@@ -206,19 +190,19 @@ function buildMissionQueue(commLeagues: UserLeague[]): QueueCard[] {
       priority: needsSetup ? 0 : 1,
       cardClass:
         'border-cyan-500/30 bg-gradient-to-br from-cyan-500/[0.10] to-transparent hover:border-cyan-500/45',
-      iconClass: 'border-cyan-500/40 bg-cyan-500/20 text-cyan-300',
+      iconClass: 'border-cyan-500/40 bg-cyan-500/20 text-cyan-600',
       badge: commLeagues.length === 0 ? 'Start Here' : undefined,
     },
     {
       key: 'import',
       icon: ArrowDownToLine,
       title: 'Import League',
-      desc: 'Bring your Sleeper, ESPN, Yahoo, or MFL league to AllFantasy in under 2 minutes.',
+      desc: `Bring your Sleeper, ESPN, Yahoo, or MFL league to ${BRAND.copy.productName} in under 2 minutes.`,
       href: '/import',
       priority: 2,
       cardClass:
         'border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.07] to-transparent hover:border-emerald-500/40',
-      iconClass: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300',
+      iconClass: 'border-emerald-500/40 bg-emerald-500/15 text-emerald-600',
     },
     {
       key: 'draft',
@@ -229,7 +213,7 @@ function buildMissionQueue(commLeagues: UserLeague[]): QueueCard[] {
       priority: needsDraft ? 0 : 3,
       cardClass:
         'border-amber-500/25 bg-gradient-to-br from-amber-500/[0.07] to-transparent hover:border-amber-500/40',
-      iconClass: 'border-amber-500/35 bg-amber-500/10 text-amber-300',
+      iconClass: 'border-amber-500/35 bg-amber-500/10 text-amber-600',
       badge: needsDraft ? 'Action Needed' : undefined,
     },
     {
@@ -237,11 +221,18 @@ function buildMissionQueue(commLeagues: UserLeague[]): QueueCard[] {
       icon: Mail,
       title: 'Send Invites',
       desc: 'Recruit managers and fill your league roster with one shareable link.',
-      href: '/import',
+      /*
+       * ⚠ THIS POINTED AT /import, WHICH IS THE LEAGUE-IMPORT PAGE. A card
+       * promising "one shareable link" sent commissioners to a screen for
+       * importing a league from Sleeper or ESPN — a different job entirely.
+       * Portfolio now carries the invite link per commissioned league, so this
+       * goes somewhere that can actually produce one.
+       */
+      href: '/core/portfolio',
       priority: 4,
       cardClass:
         'border-violet-500/20 bg-gradient-to-br from-violet-500/[0.06] to-transparent hover:border-violet-500/35',
-      iconClass: 'border-violet-500/35 bg-violet-500/10 text-violet-300',
+      iconClass: 'border-violet-500/35 bg-violet-500/10 text-violet-600',
     },
     {
       key: 'ai',
@@ -252,7 +243,7 @@ function buildMissionQueue(commLeagues: UserLeague[]): QueueCard[] {
       priority: 5,
       cardClass:
         'border-violet-500/25 bg-gradient-to-br from-violet-500/[0.08] to-transparent hover:border-violet-500/40',
-      iconClass: 'border-violet-500/40 bg-violet-500/15 text-violet-300',
+      iconClass: 'border-violet-500/40 bg-violet-500/15 text-violet-600',
       badge: 'AI',
     },
     {
@@ -275,8 +266,8 @@ function buildMissionQueue(commLeagues: UserLeague[]): QueueCard[] {
       href: commLeagues[0] ? `/league/${commLeagues[0].id}` : '/dashboard',
       priority: 7,
       cardClass:
-        'border-white/[0.08] bg-gradient-to-br from-white/[0.02] to-transparent hover:border-white/[0.14]',
-      iconClass: 'border-white/10 bg-white/[0.04] text-white/50',
+        'border-subtle bg-surface-muted hover:bg-surface-hover',
+      iconClass: 'border-subtle bg-surface-hover text-muted',
     },
   ]
 
@@ -318,7 +309,7 @@ const AI_PROMPT_CARDS = [
     key: 'dispute',
     icon: MessageSquare,
     title: 'Resolve Dispute',
-    desc: 'Describe a trade dispute or rule question — Chimmy gives a fair, evidence-based ruling.',
+    desc: 'Describe a trade dispute or rule question - Chimmy gives a fair, evidence-based ruling.',
     href: '/ai-chat',
   },
   {
@@ -343,36 +334,36 @@ const MIGRATION_PLATFORMS: {
     key: 'sleeper',
     name: 'Sleeper',
     status: 'active',
-    href: '/import',
-    desc: 'Full import — rosters, history, and settings.',
+    href: '/import?provider=sleeper',
+    desc: 'Full import - rosters, history, and settings.',
   },
   {
     key: 'espn',
     name: 'ESPN',
     status: 'active',
-    href: '/import',
-    desc: 'Full import — rosters, history, and settings.',
+    href: '/import?provider=espn',
+    desc: 'Full import - rosters, history, and settings.',
   },
   {
     key: 'yahoo',
     name: 'Yahoo',
     status: 'active',
-    href: '/import',
-    desc: 'Full import — rosters, history, and settings.',
+    href: '/import?provider=yahoo',
+    desc: 'Full import - rosters, history, and settings.',
   },
   {
     key: 'mfl',
     name: 'MFL',
     status: 'active',
-    href: '/import',
-    desc: 'Full import — rosters, history, and settings.',
+    href: '/import?provider=mfl',
+    desc: 'Full import - rosters, history, and settings.',
   },
   {
     key: 'fantrax',
     name: 'Fantrax',
     status: 'legacy',
-    href: '/import',
-    desc: 'Legacy import — basic roster data only.',
+    href: '/import?provider=fantrax',
+    desc: 'Legacy import - basic roster data only.',
   },
   {
     key: 'csv',
@@ -383,18 +374,22 @@ const MIGRATION_PLATFORMS: {
   },
 ]
 
+// Phase V1.1: badge text was `text-emerald-300`/`text-amber-300` — the same light-pastel contrast
+// pattern fixed elsewhere this phase (docs/os/VISUAL_OS_V1_AUDIT.md Finding 3/4). Routed through
+// `decisionOsToneClasses` for the badge; only the small status dot keeps its own solid color, since a
+// filled dot has no text-contrast concern.
 const MIGRATION_STATUS_CLASSES: Record<string, { badge: string; dot: string }> = {
   active: {
-    badge: 'border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-300',
+    badge: decisionOsToneClasses('good'),
     dot: 'bg-emerald-400',
   },
   legacy: {
-    badge: 'border-amber-500/25 bg-amber-500/[0.08] text-amber-300',
+    badge: decisionOsToneClasses('warning'),
     dot: 'bg-amber-400',
   },
   coming_soon: {
-    badge: 'border-white/10 bg-white/[0.03] text-white/35',
-    dot: 'bg-white/20',
+    badge: decisionOsToneClasses('neutral'),
+    dot: 'bg-surface-hover',
   },
 }
 
@@ -402,54 +397,18 @@ const MIGRATION_STATUS_CLASSES: Record<string, { badge: string; dot: string }> =
 function SectionHeader({ label, hint }: { label: string; hint?: string }) {
   return (
     <div className="mb-4 flex flex-wrap items-baseline gap-2">
-      <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">{label}</p>
-      {hint && <p className="text-[11px] text-white/25">{hint}</p>}
+      <p className="text-[11px] font-bold uppercase tracking-widest text-muted">{label}</p>
+      {hint && <p className="text-[11px] text-muted">{hint}</p>}
     </div>
   )
 }
 
-function StatCard({
-  value,
-  label,
-  accentClass,
-  borderClass,
-  alert,
-}: {
-  value: number
-  label: string
-  accentClass: string
-  borderClass: string
-  alert?: boolean
-}) {
-  return (
-    <div
-      className={`flex flex-col gap-1 rounded-2xl border p-4 ${borderClass}`}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className={`text-[28px] font-black leading-none ${accentClass}`}>
-          {value}
-        </span>
-        {alert && value > 0 && (
-          <AlertCircle className="h-4 w-4 text-amber-400" aria-hidden />
-        )}
-      </div>
-      <p className="text-[11px] text-white/45">{label}</p>
-    </div>
-  )
-}
-
-const HEALTH_STATUS_CLASSES: Record<string, string> = {
-  excellent: 'border-emerald-500/25 bg-emerald-500/[0.08] text-emerald-300',
-  healthy: 'border-cyan-500/25 bg-cyan-500/[0.08] text-cyan-300',
-  watch: 'border-amber-500/25 bg-amber-500/[0.08] text-amber-300',
-  at_risk: 'border-orange-500/25 bg-orange-500/[0.08] text-orange-300',
-  critical: 'border-rose-500/30 bg-rose-500/[0.10] text-rose-300',
-}
-
-const ACTION_TONE_CLASSES: Record<CommissionerHealthAction['tone'], string> = {
-  standard: 'border-white/10 bg-white/[0.03] text-white/60 hover:border-white/20 hover:bg-white/[0.06]',
-  warning: 'border-amber-500/25 bg-amber-500/[0.08] text-amber-300 hover:bg-amber-500/[0.13]',
-  danger: 'border-rose-500/25 bg-rose-500/[0.08] text-rose-300 hover:bg-rose-500/[0.13]',
+// Phase V1.2: removed the private `HEALTH_STATUS_CLASSES` and `ACTION_TONE_CLASSES` tables that lived
+// here — consolidated onto the shared `decisionOsHealthStatusToneClasses`/`decisionOsToneClasses`
+// primitives (see `DecisionOsCardPrimitives.tsx`). `ACTION_TONE_CLASSES`'s tone domain
+// (`standard`/`warning`/`danger`) maps 1:1 onto `decisionOsToneClasses`'s `neutral`/`warning`/`danger`.
+function actionToneClasses(tone: CommissionerHealthAction['tone']): string {
+  return `${decisionOsToneClasses(tone === 'standard' ? 'neutral' : tone)} transition hover:brightness-95 motion-reduce:transition-none`
 }
 
 function sumMetric(
@@ -482,16 +441,11 @@ function MetricTile({
   value: string | number
   tone?: 'neutral' | 'good' | 'warn'
 }) {
-  const toneClass =
-    tone === 'good'
-      ? 'border-emerald-500/[0.16] bg-emerald-500/[0.04] text-emerald-300'
-      : tone === 'warn'
-        ? 'border-amber-500/[0.18] bg-amber-500/[0.05] text-amber-300'
-        : 'border-white/[0.08] bg-white/[0.02] text-white/75'
+  const toneClass = decisionOsToneClasses(tone === 'good' ? 'good' : tone === 'warn' ? 'warning' : 'neutral')
   return (
     <div className={`flex min-h-[78px] flex-col justify-between rounded-2xl border p-3 ${toneClass}`}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-white/35">{label}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{label}</p>
         <Icon className="h-3.5 w-3.5 text-current opacity-70" aria-hidden />
       </div>
       <p className="mt-2 text-[24px] font-black leading-none text-current">{value}</p>
@@ -501,8 +455,8 @@ function MetricTile({
 
 function CommissionerActionLink({ action }: { action: CommissionerHealthAction }) {
   const className = action.enabled
-    ? ACTION_TONE_CLASSES[action.tone]
-    : 'cursor-not-allowed border-white/[0.06] bg-white/[0.015] text-white/25'
+    ? actionToneClasses(action.tone)
+    : 'cursor-not-allowed border-subtle bg-surface-muted text-muted'
 
   if (!action.enabled) {
     return (
@@ -519,12 +473,112 @@ function CommissionerActionLink({ action }: { action: CommissionerHealthAction }
   return (
     <Link
       href={action.href}
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition ${className}`}
+      prefetch={disablePrefetchForAuthSensitiveHref(action.href) ? false : undefined}
+      className={`focus-ring inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-semibold transition ${className}`}
       title={action.requiresConfirmation ? 'Requires commissioner confirmation' : undefined}
     >
       <Settings className="h-3 w-3" aria-hidden />
       {action.label}
     </Link>
+  )
+}
+
+// ─── Phase V2.0 — Commissioner OS flagship (60/30/10) ──────────────────────────
+// The signature League Health Map (~60%) with three supporting KPIs and the top commissioner actions
+// (~30% / ~10%) drawn from the same real snapshot. Provider-agnostic: consumes the health view model,
+// never a raw provider payload or player-level record.
+function FlagshipKpiTile({
+  icon: Icon,
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  value: string | number
+  tone?: 'neutral' | 'good' | 'warn' | 'danger'
+}) {
+  const toneClass = decisionOsToneClasses(
+    tone === 'good' ? 'good' : tone === 'warn' ? 'warning' : tone === 'danger' ? 'danger' : 'neutral',
+  )
+  return (
+    <div className={`flex min-h-[92px] flex-col justify-between rounded-2xl border p-3.5 ${toneClass}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-wide text-muted">{label}</p>
+        <Icon className="h-4 w-4 text-current opacity-70" aria-hidden />
+      </div>
+      <p className="mt-2 text-[28px] font-black leading-none text-current">{value}</p>
+    </div>
+  )
+}
+
+function CommissionerOsFlagship({ snapshots }: { snapshots: CommissionerLeagueHealthSnapshot[] }) {
+  const flagshipSnapshot = selectFlagshipSnapshot(snapshots)
+  const viewModel = buildCommissionerLeagueHealthViewModel(flagshipSnapshot)
+  if (!viewModel || !flagshipSnapshot) return null
+
+  const needsAttention = viewModel.attention.needsAttentionCount + viewModel.attention.monitorCount
+  const openActions =
+    flagshipSnapshot.metrics.pendingWaiverClaims +
+    flagshipSnapshot.metrics.pendingTrades +
+    flagshipSnapshot.metrics.openAiAlerts +
+    flagshipSnapshot.metrics.commissionerActions
+  const topActions = flagshipSnapshot.actions.filter((action) => action.enabled).slice(0, 4)
+
+  return (
+    <section className="mb-6" data-testid="commissioner-os-flagship" aria-label="Commissioner OS flagship">
+      <div className="grid gap-4 lg:grid-cols-5">
+        {/* ~60% — the dominant signature visualization */}
+        <div className="lg:col-span-3">
+          <LeagueHealthMap viewModel={viewModel} />
+        </div>
+
+        {/* ~30% KPIs + ~10% actions rail */}
+        <div className="flex flex-col gap-3 lg:col-span-2">
+          <div className="grid grid-cols-3 gap-3">
+            <FlagshipKpiTile
+              icon={Activity}
+              label="Health"
+              value={`${viewModel.overallScore}`}
+              tone={viewModel.overallStatus === 'excellent' || viewModel.overallStatus === 'healthy' ? 'good' : viewModel.overallStatus === 'critical' ? 'danger' : 'warn'}
+            />
+            <FlagshipKpiTile
+              icon={AlertCircle}
+              label="Needs attention"
+              value={needsAttention}
+              tone={viewModel.attention.needsAttentionCount > 0 ? 'danger' : needsAttention > 0 ? 'warn' : 'good'}
+            />
+            <FlagshipKpiTile
+              icon={Zap}
+              label="Open actions"
+              value={openActions}
+              tone={openActions > 5 ? 'danger' : openActions > 0 ? 'warn' : 'good'}
+            />
+          </div>
+          <div className="rounded-2xl border border-subtle bg-surface p-3.5">
+            <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Commissioner actions</p>
+            {topActions.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-2">
+                {topActions.map((action) => (
+                  <CommissionerActionLink key={action.key} action={action} />
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-[12px] text-muted">No actions require your attention right now.</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Phase V2.1 — supporting executive graphs that explain the flagship map's operational state.
+          Lighter weight than the map (non-dominant shells) so the League Health Map stays the anchor. */}
+      <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <ManagerAttentionCard snapshot={flagshipSnapshot} />
+        <LeagueHealthBreakdownCard snapshot={flagshipSnapshot} />
+        <CommissionerWorkloadCard snapshot={flagshipSnapshot} />
+        <LeagueReadinessCard snapshot={flagshipSnapshot} />
+      </div>
+    </section>
   )
 }
 
@@ -545,9 +599,12 @@ function LeagueHealthDashboard({
 
   return (
     <section data-testid="commissioner-health-dashboard">
+      {/* Phase V2.0 — the dominant signature visualization for the most attention-needing league. */}
+      <CommissionerOsFlagship snapshots={snapshots} />
+
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <SectionHeader
-          label="League Health Dashboard"
+          label="All managed leagues"
           hint={
             demoMode
               ? 'Preview-safe commissioner risk, activity, and engagement signals'
@@ -558,57 +615,60 @@ function LeagueHealthDashboard({
           <button
             type="button"
             onClick={() => setShowAll((value) => !value)}
-            className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] font-semibold text-white/70 transition hover:border-white/20 hover:bg-white/[0.07]"
+            className="inline-flex items-center gap-1.5 rounded-full border border-subtle bg-surface-muted px-3 py-1.5 text-[11px] font-semibold text-secondary transition hover:bg-surface-hover"
           >
             {showAll ? 'Show fewer leagues' : `View all ${snapshots.length} leagues`}
           </button>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
-        <MetricTile
-          icon={Users}
-          label="Inactive Teams"
-          value={sumMetric(snapshots, 'inactiveTeams')}
-          tone={sumMetric(snapshots, 'inactiveTeams') > 0 ? 'warn' : 'good'}
-        />
-        <MetricTile
-          icon={AlertCircle}
-          label="Missed Lineups"
-          value={sumMetric(snapshots, 'missedLineups')}
-          tone={sumMetric(snapshots, 'missedLineups') > 0 ? 'warn' : 'good'}
-        />
-        <MetricTile icon={TrendingUp} label="Trade Activity" value={sumMetric(snapshots, 'tradeActivity')} />
-        <MetricTile icon={Zap} label="Waiver Activity" value={sumMetric(snapshots, 'waiverActivity')} />
-        <MetricTile
-          icon={Activity}
-          label="League Engagement"
-          value={`${averageEngagement}/100`}
-          tone={averageEngagement >= 65 ? 'good' : 'warn'}
-        />
-        <MetricTile icon={Shield} label="Commissioner Actions" value={sumMetric(snapshots, 'commissionerActions')} />
-        <MetricTile
-          icon={Target}
-          label="Projection Coverage"
-          value={`${averageProjectionCoverage}%`}
-          tone={averageProjectionCoverage >= 70 ? 'good' : 'warn'}
-        />
-      </div>
+      {/* Phase V2.1 — this cross-league aggregate strip is only shown for multi-league commissioners.
+          For a single league it fully duplicates the flagship workspace above (League Health Map + its
+          KPIs + the supporting graphs), so it's suppressed there to keep the map dominant. */}
+      {snapshots.length > 1 ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-7">
+          <MetricTile
+            icon={Users}
+            label="Inactive Teams"
+            value={sumMetric(snapshots, 'inactiveTeams')}
+            tone={sumMetric(snapshots, 'inactiveTeams') > 0 ? 'warn' : 'good'}
+          />
+          <MetricTile
+            icon={AlertCircle}
+            label="Missed Lineups"
+            value={sumMetric(snapshots, 'missedLineups')}
+            tone={sumMetric(snapshots, 'missedLineups') > 0 ? 'warn' : 'good'}
+          />
+          <MetricTile icon={TrendingUp} label="Trade Activity" value={sumMetric(snapshots, 'tradeActivity')} />
+          <MetricTile icon={Zap} label="Waiver Activity" value={sumMetric(snapshots, 'waiverActivity')} />
+          <MetricTile
+            icon={Activity}
+            label="League Engagement"
+            value={`${averageEngagement}/100`}
+            tone={averageEngagement >= 65 ? 'good' : 'warn'}
+          />
+          <MetricTile icon={Shield} label="Commissioner Actions" value={sumMetric(snapshots, 'commissionerActions')} />
+          <MetricTile
+            icon={Target}
+            label="Projection Coverage"
+            value={`${averageProjectionCoverage}%`}
+            tone={averageProjectionCoverage >= 70 ? 'good' : 'warn'}
+          />
+        </div>
+      ) : null}
 
       <div className="mt-3 grid gap-3 lg:grid-cols-2">
         {visibleSnapshots.map((snapshot) => {
-          const statusClass =
-            HEALTH_STATUS_CLASSES[snapshot.overallStatus] ??
-            'border-white/10 bg-white/[0.03] text-white/50'
+          const statusClass = decisionOsHealthStatusToneClasses(snapshot.overallStatus)
           return (
             <article
               key={snapshot.leagueId}
-              className="rounded-2xl border border-white/[0.08] bg-white/[0.025] p-4"
+              className="rounded-2xl border border-subtle bg-surface p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="truncate text-[14px] font-bold text-white/90">{snapshot.leagueName}</p>
-                  <p className="mt-0.5 text-[11px] text-white/38">
-                    {snapshot.sport} {snapshot.leagueType} · Week {snapshot.currentWeek} · {snapshot.teamCount} teams
+                  <p className="truncate text-[14px] font-bold text-primary">{snapshot.leagueName}</p>
+                  <p className="mt-0.5 text-[11px] text-muted">
+                    {snapshot.sport} {snapshot.leagueType} / Week {snapshot.currentWeek} / {snapshot.teamCount} teams
                   </p>
                 </div>
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${statusClass}`}>
@@ -617,34 +677,34 @@ function LeagueHealthDashboard({
               </div>
 
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-                <div className="rounded-xl border border-white/[0.06] bg-black/10 p-2">
-                  <p className="text-[10px] text-white/35">Lineups</p>
-                  <p className="text-[13px] font-bold text-white/80">{formatPercent(snapshot.metrics.lineupSubmissionRate)}</p>
+                <div className="rounded-xl border border-subtle bg-surface-muted p-2">
+                  <p className="text-[10px] text-muted">Lineups</p>
+                  <p className="text-[13px] font-bold text-secondary">{formatPercent(snapshot.metrics.lineupSubmissionRate)}</p>
                 </div>
-                <div className="rounded-xl border border-white/[0.06] bg-black/10 p-2">
-                  <p className="text-[10px] text-white/35">Pending Waivers</p>
-                  <p className="text-[13px] font-bold text-white/80">{snapshot.metrics.pendingWaiverClaims}</p>
+                <div className="rounded-xl border border-subtle bg-surface-muted p-2">
+                  <p className="text-[10px] text-muted">Pending Waivers</p>
+                  <p className="text-[13px] font-bold text-secondary">{snapshot.metrics.pendingWaiverClaims}</p>
                 </div>
-                <div className="rounded-xl border border-white/[0.06] bg-black/10 p-2">
-                  <p className="text-[10px] text-white/35">Pending Trades</p>
-                  <p className="text-[13px] font-bold text-white/80">{snapshot.metrics.pendingTrades}</p>
+                <div className="rounded-xl border border-subtle bg-surface-muted p-2">
+                  <p className="text-[10px] text-muted">Pending Trades</p>
+                  <p className="text-[13px] font-bold text-secondary">{snapshot.metrics.pendingTrades}</p>
                 </div>
-                <div className="rounded-xl border border-white/[0.06] bg-black/10 p-2">
-                  <p className="text-[10px] text-white/35">Open AI Alerts</p>
-                  <p className="text-[13px] font-bold text-white/80">{snapshot.metrics.openAiAlerts}</p>
+                <div className="rounded-xl border border-subtle bg-surface-muted p-2">
+                  <p className="text-[10px] text-muted">Open AI Alerts</p>
+                  <p className="text-[13px] font-bold text-secondary">{snapshot.metrics.openAiAlerts}</p>
                 </div>
-                <div className="rounded-xl border border-white/[0.06] bg-black/10 p-2">
-                  <p className="text-[10px] text-white/35">Projection Coverage</p>
-                  <p className="text-[13px] font-bold text-white/80">{snapshot.metrics.projectionCoveragePct}%</p>
+                <div className="rounded-xl border border-subtle bg-surface-muted p-2">
+                  <p className="text-[10px] text-muted">Projection Coverage</p>
+                  <p className="text-[13px] font-bold text-secondary">{snapshot.metrics.projectionCoveragePct}%</p>
                 </div>
               </div>
 
-              <p className="mt-3 text-[12px] leading-relaxed text-white/48">{snapshot.summary}</p>
+              <p className="mt-3 text-[12px] leading-relaxed text-muted">{snapshot.summary}</p>
 
               {snapshot.alerts.length > 0 && (
                 <div className="mt-3 space-y-1.5">
                   {snapshot.alerts.slice(0, 2).map((alert) => (
-                    <p key={alert} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.05] px-2.5 py-1.5 text-[11px] text-amber-200/80">
+                    <p key={alert} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.05] px-2.5 py-1.5 text-[11px] text-amber-700">
                       {alert}
                     </p>
                   ))}
@@ -652,7 +712,7 @@ function LeagueHealthDashboard({
               )}
 
               <div className="mt-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-white/35">Commissioner Actions</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-muted">Commissioner Actions</p>
                 <div className="mt-2 flex flex-wrap gap-2">
                   {snapshot.actions.map((action) => (
                     <CommissionerActionLink key={action.key} action={action} />
@@ -661,7 +721,7 @@ function LeagueHealthDashboard({
               </div>
 
               <div className="mt-4">
-                <p className="text-[10px] font-bold uppercase tracking-widest text-violet-300/60">AI Commissioner Assistant</p>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-violet-600">AI Commissioner Assistant</p>
                 <div className="mt-2 grid gap-2">
                   {snapshot.assistantQuestions.slice(0, 5).map((question) => (
                     <Link
@@ -670,10 +730,10 @@ function LeagueHealthDashboard({
                       className="group rounded-xl border border-violet-500/[0.12] bg-violet-500/[0.035] px-3 py-2 transition hover:border-violet-500/25 hover:bg-violet-500/[0.06]"
                     >
                       <div className="flex items-start gap-2">
-                        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-300/70" aria-hidden />
+                        <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0 text-violet-600" aria-hidden />
                         <div className="min-w-0">
-                          <p className="text-[11px] font-bold text-white/72 group-hover:text-white/90">{question.label}</p>
-                          <p className="mt-0.5 text-[11px] leading-snug text-white/38">{question.answer}</p>
+                          <p className="text-[11px] font-bold text-secondary group-hover:text-primary">{question.label}</p>
+                          <p className="mt-0.5 text-[11px] leading-snug text-muted">{question.answer}</p>
                         </div>
                       </div>
                     </Link>
@@ -681,7 +741,7 @@ function LeagueHealthDashboard({
                 </div>
               </div>
 
-              <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-white/25">
+              <div className="mt-3 flex items-center justify-between gap-2 text-[10px] text-muted">
                 <span>Source: {snapshot.source === 'database' ? 'Database' : 'Dashboard fallback'}</span>
                 <span>Confidence: {snapshot.dataConfidence}</span>
               </div>
@@ -691,12 +751,12 @@ function LeagueHealthDashboard({
       </div>
 
       {!showAll && snapshots.length > visibleSnapshots.length ? (
-        <p className="mt-3 text-[11px] text-white/30">
+        <p className="mt-3 text-[11px] text-muted">
           Showing {visibleSnapshots.length} of {snapshots.length} managed leagues for presentation flow.
         </p>
       ) : null}
 
-      <p className="mt-3 text-[11px] text-white/30">
+      <p className="mt-3 text-[11px] text-muted">
         Average lineup submission across managed leagues: {formatPercent(averageLineupRate)}.
       </p>
     </section>
@@ -724,12 +784,103 @@ export default function CommissionerHubPageClient({
   const managedHealthSnapshots = commissionerLeagues
     .map((league) => healthByLeagueId.get(league.id))
     .filter((snapshot): snapshot is CommissionerLeagueHealthSnapshot => Boolean(snapshot))
+  // Phase OS-B1: the Multi-League Overview (`CommissionerCommandCenterSection`) is now the default
+  // landing view — no league is auto-selected. `representativeLeagueId` (the anchor every League
+  // Focus fetch below already keys off) now comes from explicit user selection, not an automatic
+  // "first commissioner league" pick. Selecting a league from the overview's switcher, or from the
+  // "Leagues I Manage" grid further down the page, sets this and reveals League Focus; clearing it
+  // returns to the overview. This is a pure rename of the SOURCE of `representativeLeagueId` — every
+  // existing fetch/render below that already depends on it is unchanged.
+  const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null)
+  const representativeLeagueId = selectedLeagueId
+  const [managerIntelligence, setManagerIntelligence] = useState<ManagerIntelligencePayload | null>(null)
+  useEffect(() => {
+    if (!representativeLeagueId) {
+      setManagerIntelligence(null)
+      return
+    }
+    let cancelled = false
+    void fetch(`/api/decision-os/manager-intelligence?leagueId=${encodeURIComponent(representativeLeagueId)}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<ManagerIntelligencePayload>) : null))
+      .then((data) => {
+        if (!cancelled) setManagerIntelligence(data)
+      })
+      .catch(() => {
+        if (!cancelled) setManagerIntelligence(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [representativeLeagueId])
+  const leaguePulse = useMemo(
+    () =>
+      buildCommissionerLeaguePulse({
+        snapshots: managedHealthSnapshots,
+        managerDna: managerIntelligence?.managerDna ?? null,
+      }),
+    [managedHealthSnapshots, managerIntelligence]
+  )
+  const managerDna = useMemo(
+    () => buildManagerDnaViewModel({ source: managerIntelligence?.managerDna ?? null }),
+    [managerIntelligence],
+  )
+  const recommendations = useMemo(
+    () => buildDecisionRecommendationsViewModel({ source: managerIntelligence?.recommendations ?? null }),
+    [managerIntelligence],
+  )
+  const [missionControl, setMissionControl] = useState<MissionControlSnapshot | null>(null)
+  useEffect(() => {
+    if (!representativeLeagueId) {
+      setMissionControl(null)
+      return
+    }
+    let cancelled = false
+    void fetch(`/api/decision-os/mission-control?leagueId=${encodeURIComponent(representativeLeagueId)}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<MissionControlSnapshot>) : null))
+      .then((data) => {
+        if (!cancelled) setMissionControl(data)
+      })
+      .catch(() => {
+        if (!cancelled) setMissionControl(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [representativeLeagueId])
+  const [leagueAnalytics, setLeagueAnalytics] = useState<LeagueAnalyticsSnapshot | null>(null)
+  useEffect(() => {
+    if (!representativeLeagueId) {
+      setLeagueAnalytics(null)
+      return
+    }
+    let cancelled = false
+    void fetch(`/api/decision-os/league-analytics?leagueId=${encodeURIComponent(representativeLeagueId)}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+    })
+      .then((res) => (res.ok ? (res.json() as Promise<LeagueAnalyticsSnapshot>) : null))
+      .then((data) => {
+        if (!cancelled) setLeagueAnalytics(data)
+      })
+      .catch(() => {
+        if (!cancelled) setLeagueAnalytics(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [representativeLeagueId])
   const showDemoMode = demoMode || leagues.length === 0
-  const primaryHeroHref = isAuthenticated ? '/create-league' : buildLoginHref('/commissioner-hub')
+  const primaryHeroHref = isAuthenticated ? '/create-league' : buildLoginHref('/create-league')
   const primaryHeroLabel = isAuthenticated ? COPY.hero.ctaCreate : 'Sign In'
   const secondaryHeroHref = isAuthenticated ? '/import' : buildLoginHref('/import')
   const secondaryHeroLabel = isAuthenticated ? COPY.hero.ctaImport : 'Sign In to Import'
-  const emptyPrimaryHref = isAuthenticated ? '/create-league' : buildLoginHref('/commissioner-hub')
+  const emptyPrimaryHref = isAuthenticated ? '/create-league' : buildLoginHref('/create-league')
   const emptyPrimaryLabel = isAuthenticated ? COPY.empty.ctaCreate : 'Sign In'
   const emptySecondaryHref = isAuthenticated ? '/import' : buildLoginHref('/import')
   const emptySecondaryLabel = isAuthenticated ? COPY.empty.ctaImport : 'Sign In to Import'
@@ -738,29 +889,12 @@ export default function CommissionerHubPageClient({
     ? 'Create or import a league to replace the preview state with your real commissioner data.'
     : 'You can tour the commissioner workflow now, then sign in when you are ready to load leagues and personalize the hub.'
 
-  const totalManaged = commissionerLeagues.length
-  const needsSetupCount = commissionerLeagues.filter(
-    (l) =>
-      (l.lifecycleState ?? l.status ?? '').toLowerCase() === 'setup' ||
-      (l.lifecycleState ?? l.status ?? '') === '',
-  ).length
-  const missingDraftDateCount = commissionerLeagues.filter(
-    (l) =>
-      (l.lifecycleState ?? l.status ?? '').toLowerCase() === 'pre_draft' &&
-      !l.draftDate,
-  ).length
-  const activeCount = commissionerLeagues.filter((l) =>
-    ['in_season', 'playoffs', 'drafting'].includes(
-      (l.lifecycleState ?? l.status ?? '').toLowerCase(),
-    ),
-  ).length
-
   return (
-    <div className="min-h-screen" style={{ background: 'var(--bg, #060814)' }}>
+    <div className="min-h-screen bg-app text-primary" style={tenantThemeStyle(BRAND)}>
       <div className="mx-auto max-w-5xl space-y-10 px-4 py-8 sm:px-6 sm:py-12">
 
         {/* ── Hero ── */}
-        <section className="relative overflow-hidden rounded-3xl border border-amber-500/[0.15] bg-gradient-to-br from-amber-500/[0.07] via-[#050814] to-cyan-500/[0.04] p-6 sm:p-8">
+        <section className="relative overflow-hidden rounded-3xl border border-amber-500/[0.15] bg-gradient-to-br from-amber-500/[0.07] via-[color:var(--surface)] to-cyan-500/[0.04] p-6 sm:p-8">
           <div
             aria-hidden
             className="pointer-events-none absolute inset-x-0 top-0 h-48 opacity-60"
@@ -771,34 +905,38 @@ export default function CommissionerHubPageClient({
           />
           <div className="relative z-10">
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-700">
                 <Crown className="h-3 w-3" aria-hidden />
                 {COPY.hero.badge}
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-400/80">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
                 <Shield className="h-3 w-3" aria-hidden />
                 {COPY.hero.trustBadge}
               </span>
             </div>
 
-            <h1 className="text-[28px] font-black leading-tight tracking-tight text-white sm:text-[36px]">
+            <h1 className="text-[28px] font-black leading-tight tracking-tight text-primary sm:text-[36px]">
               {COPY.hero.headline1}{' '}
               <span className="bg-gradient-to-r from-amber-300 to-cyan-300 bg-clip-text text-transparent">
                 {COPY.hero.headline2}
               </span>
             </h1>
-            <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-white/60">
+            <p className="mt-3 max-w-xl text-[14px] leading-relaxed text-secondary">
               {COPY.hero.sub}
             </p>
-            <p className="mt-1.5 max-w-lg text-[13px] leading-relaxed text-white/38">
+            <p className="mt-1.5 max-w-lg text-[13px] leading-relaxed text-muted">
               {COPY.hero.sub2}
             </p>
             {showDemoMode && (
-              <div className="mt-5 max-w-2xl rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.08] px-4 py-3">
-                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-cyan-200/75">
+              // Phase V1.0: was `text-cyan-200/75`/`text-cyan-50/80` — a light-cyan palette tuned for a
+              // dark background. Verified live in light mode (the app default): near-unreadable against
+              // this card's light background. Swapped to theme-aware semantic tokens (see
+              // docs/os/VISUAL_OS_V1_AUDIT.md Finding 4).
+              <div className="mt-5 max-w-2xl rounded-2xl border border-status-info/25 bg-status-info/10 px-4 py-3">
+                <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-status-info">
                   Presentation-safe preview
                 </p>
-                <p className="mt-1 text-[12px] leading-relaxed text-cyan-50/80">
+                <p className="mt-1 text-[12px] leading-relaxed text-secondary">
                   The hub now falls back to stable commissioner preview data when leagues, draft state, waiver state,
                   roster data, or NFL foundation reads are still empty.
                 </p>
@@ -808,14 +946,16 @@ export default function CommissionerHubPageClient({
             <div className="mt-6 flex flex-wrap gap-2.5">
               <Link
                 href={primaryHeroHref}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-5 py-2.5 text-[14px] font-bold text-black shadow-[0_0_20px_rgba(245,158,11,0.25)] transition hover:from-amber-300 hover:to-amber-400 active:opacity-90"
+                prefetch={disablePrefetchForAuthSensitiveHref(primaryHeroHref) ? false : undefined}
+                className="focus-ring inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 px-5 py-2.5 text-[14px] font-bold text-content-inverse shadow-[0_0_20px_rgba(245,158,11,0.25)] transition hover:from-amber-300 hover:to-amber-400 active:opacity-90"
               >
                 <Plus className="h-4 w-4" aria-hidden />
                 {primaryHeroLabel}
               </Link>
               <Link
                 href={secondaryHeroHref}
-                className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/[0.04] px-5 py-2.5 text-[14px] font-semibold text-white/90 transition hover:border-white/35 hover:bg-white/[0.06]"
+                prefetch={disablePrefetchForAuthSensitiveHref(secondaryHeroHref) ? false : undefined}
+                className="focus-ring inline-flex items-center gap-2 rounded-xl border border-subtle bg-surface-muted px-5 py-2.5 text-[14px] font-semibold text-primary transition hover:bg-surface-hover"
               >
                 <ArrowDownToLine className="h-4 w-4" aria-hidden />
                 {secondaryHeroLabel}
@@ -824,52 +964,18 @@ export default function CommissionerHubPageClient({
           </div>
         </section>
 
-        {/* ── League Operations Summary ── */}
-        {totalManaged > 0 && (
-          <section>
-            <SectionHeader label={COPY.ops.sectionLabel} />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <StatCard
-                value={totalManaged}
-                label={COPY.ops.totalManaged}
-                accentClass="text-amber-300"
-                borderClass="border-amber-500/[0.14] bg-amber-500/[0.04]"
-              />
-              <StatCard
-                value={needsSetupCount}
-                label={COPY.ops.needsSetup}
-                accentClass={needsSetupCount > 0 ? 'text-amber-400' : 'text-white/40'}
-                borderClass={
-                  needsSetupCount > 0
-                    ? 'border-amber-500/20 bg-amber-500/[0.05]'
-                    : 'border-white/[0.07] bg-white/[0.02]'
-                }
-                alert={needsSetupCount > 0}
-              />
-              <StatCard
-                value={missingDraftDateCount}
-                label={COPY.ops.missingDraft}
-                accentClass={missingDraftDateCount > 0 ? 'text-amber-400' : 'text-white/40'}
-                borderClass={
-                  missingDraftDateCount > 0
-                    ? 'border-amber-500/20 bg-amber-500/[0.05]'
-                    : 'border-white/[0.07] bg-white/[0.02]'
-                }
-                alert={missingDraftDateCount > 0}
-              />
-              <StatCard
-                value={activeCount}
-                label={COPY.ops.active}
-                accentClass={activeCount > 0 ? 'text-emerald-400' : 'text-white/40'}
-                borderClass={
-                  activeCount > 0
-                    ? 'border-emerald-500/[0.14] bg-emerald-500/[0.03]'
-                    : 'border-white/[0.07] bg-white/[0.02]'
-                }
-              />
-            </div>
-          </section>
-        )}
+        {/* ── Multi-League Overview (Phase OS-B1) — the default landing view; selecting a league
+             below reveals League Focus further down the page, unchanged from before this phase. ── */}
+        <CommissionerCommandCenterSection
+          commissionerLeagues={commissionerLeagues}
+          demoMode={showDemoMode}
+          onSelectLeague={setSelectedLeagueId}
+        />
+
+        {/* Phase V1.0: the "League Operations Summary" stat row (Leagues Managed / Needs Setup /
+             Missing Draft Date / Active Now) was removed — it fully duplicated
+             CommissionerCommandCenterOverview's own stat chips directly above, a redundancy flagged
+             but left unfixed since OS-B6/OS-B7. See docs/os/VISUAL_OS_V1_AUDIT.md Finding 6. */}
 
         <CommissionerShowcasePanel
           leagues={leagues}
@@ -877,117 +983,91 @@ export default function CommissionerHubPageClient({
           demoMode={showDemoMode}
         />
 
-        <LeagueHealthDashboard snapshots={managedHealthSnapshots} demoMode={showDemoMode} />
+        <LeaguePulseCard pulse={leaguePulse} variant="commissioner" />
 
-        {/* ── League Setup Health ── */}
-        {commissionerLeagues.length > 0 && (
-          <section>
-            <div className="mb-4 flex items-center gap-2">
-              <Crown className="h-4 w-4 text-amber-400" aria-hidden />
-              <p className="text-[11px] font-bold uppercase tracking-widest text-amber-400/80">
-                Leagues I Manage
-                <span className="ml-2 rounded-full border border-amber-500/25 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-300/80">
-                  {commissionerLeagues.length}
-                </span>
-              </p>
-              <Link
-                href="/create-league"
-                className="ml-auto flex items-center gap-1 text-[11px] font-semibold text-amber-400/60 transition hover:text-amber-300"
-              >
-                <Plus className="h-3 w-3" aria-hidden />
-                New league
-              </Link>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {commissionerLeagues.map((league) => {
-                const status = resolveSetupStatus(league)
-                const nextAction = resolveNextAction(league)
-                return (
-                  <div
-                    key={league.id}
-                    className="flex flex-col gap-3 rounded-2xl border border-amber-500/[0.12] bg-amber-500/[0.04] p-4"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[14px] font-bold text-white/90">
-                          {league.name}
-                        </p>
-                        <p className="mt-0.5 text-[11px] text-white/40">
-                          {league.sport}
-                          {league.teamCount ? ` · ${league.teamCount}-team` : ''}
-                          {league.scoring ? ` · ${league.scoring}` : ''}
-                        </p>
-                      </div>
-                      <span
-                        className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold ${status.badgeClass}`}
-                      >
-                        <span className={`h-1.5 w-1.5 rounded-full ${status.dotClass}`} aria-hidden />
-                        {status.label}
-                      </span>
-                    </div>
+        {/* ── League Focus (Phase OS-B1: now gated behind an explicit league selection instead of
+             an automatic "first commissioner league" default — every card/fetch below is byte-for-
+             byte unchanged from before this phase, only the trigger for showing them changed). ── */}
+        {representativeLeagueId && (
+          <section aria-label="League Focus">
+            <button
+              type="button"
+              onClick={() => setSelectedLeagueId(null)}
+              data-testid="league-focus-back-to-overview"
+              className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-subtle bg-surface-muted px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-secondary transition hover:text-primary"
+            >
+              ← All leagues
+            </button>
 
-                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-white/35">
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3 w-3" aria-hidden />
-                        {league.teamCount ?? '—'} {COPY.health.membersLabel}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3" aria-hidden />
-                        {league.draftDate
-                          ? new Date(league.draftDate).toLocaleDateString(undefined, {
-                              month: 'short',
-                              day: 'numeric',
-                            })
-                          : COPY.health.noDraftDate}
-                      </span>
-                      {league.season && (
-                        <span className="flex items-center gap-1">
-                          <Activity className="h-3 w-3" aria-hidden />
-                          {league.season}
-                        </span>
-                      )}
-                    </div>
+            {/* Phase V2.3 — League OS Executive Analytics Workspace. Speaks about the league itself:
+                the League Momentum flagship (dominant) over supporting graphs, all from the existing
+                `leagueAnalytics` snapshot (+ the already-loaded fairnessScore for Competitive Balance).
+                Sits above the commissioner-specific guidance below. */}
+            <section className="mb-5 space-y-4" data-testid="league-os-workspace" aria-label="League overview">
+              <LeagueMomentum snapshot={leagueAnalytics} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <TransactionDistributionCard snapshot={leagueAnalytics} />
+                <LeagueEngagementCard snapshot={leagueAnalytics} />
+                <CompetitiveBalanceCard healthSnapshot={healthByLeagueId.get(representativeLeagueId) ?? null} />
+              </div>
+            </section>
 
-                    <div className="flex items-center gap-2">
-                      <Link
-                        href={nextAction.href}
-                        className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition ${ACTION_VARIANT_CLASSES[nextAction.variant]}`}
-                      >
-                        {nextAction.label}
-                        <ArrowRight className="h-3 w-3" aria-hidden />
-                      </Link>
-                      <Link
-                        href={`/league/${league.id}`}
-                        className="ml-auto text-[11px] text-white/30 transition hover:text-white/55"
-                      >
-                        {COPY.health.viewLeague}
-                        <ChevronRight className="inline h-3 w-3" aria-hidden />
-                      </Link>
-                    </div>
-                  </div>
-                )
-              })}
+            {/* Phase V2.4 — Trade OS Executive Analytics Workspace. Represents the trade MARKET (not a
+                player calculator): the Trade Opportunity Matrix (dominant) over Market Activity + Trade
+                Pipeline, all from the already-fetched `leagueAnalytics` (trade count/trend) + the
+                trade-category recommendations in `managerIntelligence`. */}
+            <section className="mb-5 space-y-4" data-testid="trade-os-workspace" aria-label="Trade market overview">
+              <TradeOpportunityMatrix
+                recommendations={managerIntelligence?.recommendations?.recommendations ?? null}
+                analytics={leagueAnalytics}
+              />
+              <div className="grid gap-4 md:grid-cols-2">
+                <MarketActivityCard analytics={leagueAnalytics} />
+                <TradePipelineCard recommendations={managerIntelligence?.recommendations?.recommendations ?? null} />
+              </div>
+            </section>
+
+            <section className="grid gap-4 xl:grid-cols-2" aria-label="Commissioner guidance">
+              <ManagerDnaCard profile={managerDna} variant="commissioner" compact />
+              <DecisionRecommendationsCard model={recommendations} variant="commissioner" compact />
+            </section>
+
+            <div className="mt-4 space-y-4">
+              <MissionControlCard snapshot={missionControl} variant="commissioner" compact />
+
+              <LeagueAnalyticsCard snapshot={leagueAnalytics} variant="commissioner" />
+
+              <LeagueContextCard leagueId={representativeLeagueId} canManage variant="commissioner" />
             </div>
           </section>
         )}
 
+        <LeagueHealthDashboard snapshots={managedHealthSnapshots} demoMode={showDemoMode} />
+
+        {/* Phase V1.0: the "Leagues I Manage" grid (its own 3rd, visually distinct rendering of the
+             same league list already shown by the League Switcher inside the Multi-League Overview and
+             by League Health Dashboard below) was removed — see docs/os/VISUAL_OS_V1_AUDIT.md Finding 5.
+             `resolveSetupStatus`/`resolveNextAction` (its only callers) were removed with it. */}
+
         {/* ── Empty state ── */}
         {leagues.length === 0 && (
-          <section className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-8 text-center">
+          <section className="rounded-2xl border border-subtle bg-surface-muted p-8 text-center">
             <Crown className="mx-auto mb-3 h-8 w-8 text-amber-400/40" aria-hidden />
-            <p className="text-[14px] font-semibold text-white/60">{emptyHeading}</p>
-            <p className="mt-1 text-[12px] text-white/35">{emptySub}</p>
+            <p className="text-[14px] font-semibold text-secondary">{emptyHeading}</p>
+            <p className="mt-1 text-[12px] text-muted">{emptySub}</p>
             <div className="mt-4 flex justify-center gap-3">
               <Link
                 href={emptyPrimaryHref}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[13px] font-semibold text-amber-300 transition hover:bg-amber-500/20"
+                prefetch={disablePrefetchForAuthSensitiveHref(emptyPrimaryHref) ? false : undefined}
+                className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-2 text-[13px] font-semibold text-amber-700 transition hover:bg-amber-500/20"
               >
                 <Plus className="h-3.5 w-3.5" aria-hidden />
                 {emptyPrimaryLabel}
               </Link>
               <Link
                 href={emptySecondaryHref}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-4 py-2 text-[13px] font-semibold text-white/70 transition hover:border-white/25 hover:bg-white/[0.04]"
+                prefetch={disablePrefetchForAuthSensitiveHref(emptySecondaryHref) ? false : undefined}
+                className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-subtle bg-surface-muted px-4 py-2 text-[13px] font-semibold text-secondary transition hover:bg-surface-hover"
               >
                 <ArrowDownToLine className="h-3.5 w-3.5" aria-hidden />
                 {emptySecondaryLabel}
@@ -1006,6 +1086,7 @@ export default function CommissionerHubPageClient({
                 <Link
                   key={card.key}
                   href={isAuthenticated ? card.href : buildLoginHref(card.href)}
+                  prefetch={disablePrefetchForAuthSensitiveHref(isAuthenticated ? card.href : buildLoginHref(card.href)) ? false : undefined}
                   className={`group relative flex flex-col gap-3 rounded-2xl border px-4 py-4 transition-all ${card.cardClass}`}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -1015,19 +1096,19 @@ export default function CommissionerHubPageClient({
                       <Icon className="h-4 w-4" aria-hidden />
                     </span>
                     {card.badge && (
-                      <span className="rounded-full border border-white/15 bg-white/[0.06] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/50">
+                      <span className="rounded-full border border-subtle bg-surface-hover px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">
                         {card.badge}
                       </span>
                     )}
                   </div>
                   <div>
-                    <p className="text-[14px] font-bold text-white/90 group-hover:text-white">
+                    <p className="text-[14px] font-bold text-primary group-hover:text-primary">
                       {card.title}
                     </p>
-                    <p className="mt-1 text-[12px] leading-snug text-white/45">{card.desc}</p>
+                    <p className="mt-1 text-[12px] leading-snug text-muted">{card.desc}</p>
                   </div>
                   <ArrowRight
-                    className="h-4 w-4 text-white/20 transition group-hover:text-white/50"
+                    className="h-4 w-4 text-muted transition group-hover:text-secondary"
                     aria-hidden
                   />
                 </Link>
@@ -1036,7 +1117,8 @@ export default function CommissionerHubPageClient({
           </div>
         </section>
 
-        {/* ── Commissioner AI Prompt Cards ── */}
+        {/* ── Commissioner AI Prompt Cards (white-label optional section) ── */}
+        {isFeatureVisible(BRAND, 'aiPrompts') && (
         <section>
           <SectionHeader label={COPY.ai.sectionLabel} hint={COPY.ai.sectionHint} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1046,25 +1128,30 @@ export default function CommissionerHubPageClient({
                 <Link
                   key={card.key}
                   href={isAuthenticated ? card.href : buildLoginHref(card.href)}
+                  prefetch={disablePrefetchForAuthSensitiveHref(isAuthenticated ? card.href : buildLoginHref(card.href)) ? false : undefined}
                   className="group flex flex-col gap-2.5 rounded-2xl border border-violet-500/[0.14] bg-gradient-to-br from-violet-500/[0.06] to-transparent px-4 py-4 transition-all hover:border-violet-500/25 hover:from-violet-500/[0.09]"
                 >
                   <div className="flex items-start justify-between gap-2">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-300">
+                    {/* Phase V1.1: icon chip text was `text-violet-300` — a light pastel meant for a
+                        dark background, the same contrast bug class fixed on Commissioner Hub's hero
+                        and Platform Readiness Snapshot in Phase V1.0 (docs/os/VISUAL_OS_V1_AUDIT.md
+                        Finding 3/4). Swapped to a saturated, readable `-600` shade. */}
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-600">
                       <Icon className="h-3.5 w-3.5" aria-hidden />
                     </span>
                     {card.badge && (
-                      <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white/35">
+                      <span className="rounded-full border border-subtle bg-surface-muted px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-muted">
                         {card.badge}
                       </span>
                     )}
                   </div>
                   <div>
-                    <p className="text-[13px] font-bold text-white/85 group-hover:text-white">
+                    <p className="text-[13px] font-bold text-primary group-hover:text-primary">
                       {card.title}
                     </p>
-                    <p className="mt-0.5 text-[11px] leading-snug text-white/40">{card.desc}</p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted">{card.desc}</p>
                   </div>
-                  <div className="flex items-center gap-1 text-[11px] font-semibold text-violet-400/60 group-hover:text-violet-300">
+                  <div className="flex items-center gap-1 text-[11px] font-semibold text-violet-600 group-hover:text-violet-700">
                     <Sparkles className="h-3 w-3" aria-hidden />
                     Ask Chimmy
                   </div>
@@ -1073,8 +1160,10 @@ export default function CommissionerHubPageClient({
             })}
           </div>
         </section>
+        )}
 
-        {/* ── Migration Center ── */}
+        {/* ── Migration Center (white-label optional section) ── */}
+        {isFeatureVisible(BRAND, 'migrationCenter') && (
         <section>
           <SectionHeader label={COPY.migration.sectionLabel} hint={COPY.migration.sectionHint} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -1090,7 +1179,7 @@ export default function CommissionerHubPageClient({
               const inner = (
                 <>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[14px] font-bold text-white/85">{platform.name}</p>
+                    <p className="text-[14px] font-bold text-primary">{platform.name}</p>
                     <span
                       className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${styles.badge}`}
                     >
@@ -1098,9 +1187,9 @@ export default function CommissionerHubPageClient({
                       {statusLabel}
                     </span>
                   </div>
-                  <p className="text-[11px] text-white/38">{platform.desc}</p>
+                  <p className="text-[11px] text-muted">{platform.desc}</p>
                   {platform.status !== 'coming_soon' && (
-                    <p className="text-[11px] font-semibold text-emerald-400/70 transition group-hover:text-emerald-300">
+                    <p className="text-[11px] font-semibold text-status-success transition group-hover:text-status-success">
                       {COPY.migration.importCta}
                     </p>
                   )}
@@ -1111,14 +1200,15 @@ export default function CommissionerHubPageClient({
                 <Link
                   key={platform.key}
                   href={isAuthenticated ? platform.href : buildLoginHref(platform.href)}
-                  className="group flex flex-col gap-2 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-4 transition hover:border-emerald-500/20 hover:bg-emerald-500/[0.03]"
+                  prefetch={disablePrefetchForAuthSensitiveHref(isAuthenticated ? platform.href : buildLoginHref(platform.href)) ? false : undefined}
+                  className="group flex flex-col gap-2 rounded-2xl border border-subtle bg-surface-muted px-4 py-4 transition hover:border-emerald-500/20 hover:bg-emerald-500/[0.03]"
                 >
                   {inner}
                 </Link>
               ) : (
                 <div
                   key={platform.key}
-                  className="flex flex-col gap-2 rounded-2xl border border-white/[0.05] bg-white/[0.01] px-4 py-4 opacity-60"
+                  className="flex flex-col gap-2 rounded-2xl border border-subtle bg-surface-muted px-4 py-4 opacity-60"
                 >
                   {inner}
                 </div>
@@ -1126,15 +1216,16 @@ export default function CommissionerHubPageClient({
             })}
           </div>
         </section>
+        )}
 
         {/* ── Leagues I Play In ── */}
         {memberLeagues.length > 0 && (
           <section>
             <div className="mb-4 flex items-center gap-2">
-              <Trophy className="h-4 w-4 text-cyan-400" aria-hidden />
-              <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-400/70">
+              <Trophy className="h-4 w-4 text-status-info" aria-hidden />
+              <p className="text-[11px] font-bold uppercase tracking-widest text-status-info">
                 {COPY.memberLeagues.sectionLabel}
-                <span className="ml-2 rounded-full border border-white/15 bg-white/[0.05] px-1.5 py-0.5 text-[9px] font-bold text-white/45">
+                <span className="ml-2 rounded-full border border-subtle bg-surface-muted px-1.5 py-0.5 text-[9px] font-bold text-muted">
                   {memberLeagues.length}
                 </span>
               </p>
@@ -1144,22 +1235,22 @@ export default function CommissionerHubPageClient({
                 <Link
                   key={league.id}
                   href={`/league/${league.id}`}
-                  className="group flex items-center gap-3 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 transition hover:border-cyan-500/20 hover:bg-white/[0.04]"
+                  className="group flex items-center gap-3 rounded-2xl border border-subtle bg-surface-muted p-4 transition hover:border-status-info/20 hover:bg-surface-hover"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04]">
-                    <Trophy className="h-4 w-4 text-cyan-400/50" aria-hidden />
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-subtle bg-surface-muted">
+                    <Trophy className="h-4 w-4 text-status-info" aria-hidden />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[14px] font-semibold text-white/80 group-hover:text-white/95">
+                    <p className="truncate text-[14px] font-semibold text-secondary group-hover:text-primary">
                       {league.name}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-white/35">
+                    <p className="mt-0.5 text-[11px] text-muted">
                       {league.sport}
-                      {league.teamCount ? ` · ${league.teamCount}-team` : ''}
+                      {league.teamCount ? ` / ${league.teamCount}-team` : ''}
                     </p>
                   </div>
                   <ChevronRight
-                    className="h-4 w-4 shrink-0 text-white/20 group-hover:text-white/45"
+                    className="h-4 w-4 shrink-0 text-muted group-hover:text-muted"
                     aria-hidden
                   />
                 </Link>
@@ -1169,13 +1260,13 @@ export default function CommissionerHubPageClient({
         )}
 
         {/* ── Trust Block ── */}
-        <section className="rounded-2xl border border-emerald-500/[0.12] bg-emerald-500/[0.03] p-5">
+        <section className="rounded-2xl border border-status-success/20 bg-status-success/[0.03] p-5">
           <div className="flex items-start gap-3">
-            <Shield className="mt-0.5 h-5 w-5 shrink-0 text-emerald-400/70" aria-hidden />
+            <Shield className="mt-0.5 h-5 w-5 shrink-0 text-status-success" aria-hidden />
             <div>
-              <p className="text-[13px] font-bold text-emerald-300/80">{COPY.trust.heading}</p>
-              <p className="mt-1 text-[12px] leading-relaxed text-white/40">{COPY.trust.body1}</p>
-              <p className="mt-2 text-[12px] leading-relaxed text-white/30">{COPY.trust.body2}</p>
+              <p className="text-[13px] font-bold text-status-success">{COPY.trust.heading}</p>
+              <p className="mt-1 text-[12px] leading-relaxed text-muted">{COPY.trust.body1}</p>
+              <p className="mt-2 text-[12px] leading-relaxed text-muted">{COPY.trust.body2}</p>
             </div>
           </div>
         </section>

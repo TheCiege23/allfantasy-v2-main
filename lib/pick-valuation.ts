@@ -67,9 +67,14 @@ export function pickValue(
 }
 
 export function computeClassStrength(players: any[]): number {
+  // Unscored prospects are EXCLUDED, not counted as 50. Defaulting them to
+  // average let a class of players we know nothing about report "average
+  // strength", which is a claim; averaging only the scored ones at least
+  // describes the players we can actually see.
   const topProspects = players
     .filter((p: any) => p.projectedDraftRound === 1)
-    .map((p: any) => p.draftProjectionScore ?? 50)
+    .map((p: any) => p.draftProjectionScore)
+    .filter((s: unknown): s is number => typeof s === 'number' && Number.isFinite(s))
 
   if (topProspects.length === 0) return 50
 
@@ -83,8 +88,11 @@ export function computeClassDepthByPosition(players: any[]): { qbDepth: number; 
 
   for (const p of players) {
     const pos = (p.position || '').toUpperCase()
-    if (byPos[pos as keyof typeof byPos]) {
-      byPos[pos as keyof typeof byPos].push(p.draftProjectionScore ?? 50)
+    const score = p.draftProjectionScore
+    // Same rule as computeClassStrength: an unscored player contributes
+    // nothing rather than contributing a phantom average.
+    if (byPos[pos as keyof typeof byPos] && typeof score === 'number' && Number.isFinite(score)) {
+      byPos[pos as keyof typeof byPos].push(score)
     }
   }
 

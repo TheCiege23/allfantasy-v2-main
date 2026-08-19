@@ -14,6 +14,7 @@ import type { CreateLeagueErrorResponse, CreateLeagueSuccessResponse } from '@/l
 import { resolveAppUserIdForLeagueCreate } from '@/lib/redraft-creation/resolve-app-user-for-league'
 import { executeCanonicalLeagueCreation } from '@/lib/league-creation/canonical/executeCanonicalLeagueCreation'
 import { normalizeConceptToFormat } from '@/lib/league-creation/canonical/normalizeConcept'
+import { checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import {
   getAllowedDraftTypesFromCatalog,
   getAllowedScoringPresetsFromCatalog,
@@ -24,6 +25,11 @@ import {
 import { normalizeDraftTypeForEngineValidation } from '@/lib/draft-types/draftTypeRegistry'
 import { buildFantasyLeagueLeadMetaEvent } from '@/lib/meta-funnel-events'
 import { trackMetaServerEvent } from '@/lib/meta-capi'
+import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
+import {
+  findPremiumCreateSettingKeys,
+  hasAfCommissionerCreateEntitlement,
+} from '@/lib/league-creation/canonical/premiumCreateSettingsGate'
 
 const LOG_PREFIX = '[create-league-canonical]'
 
@@ -73,6 +79,23 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
 
   const catalog = await getLeagueCreateOptionsCatalog()
   const normalizedConcept = normalizeConceptToFormat(validated.data.concept)
+
+  // Defence in depth: `validateCreatePayload` already rejects retired concepts,
+  // but this handler is the boundary for POST /api/leagues, so it refuses them
+  // independently rather than trusting an upstream check. No write has happened
+  // at this point — the transaction starts below.
+  const retiredConcept = checkRetiredConcept(normalizedConcept?.formatId)
+  if (retiredConcept) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: retiredConcept.message,
+        errors: [{ path: 'concept', message: retiredConcept.message, code: retiredConcept.code }],
+      },
+      { status: 400 }
+    )
+  }
+
   const catalogConcept = normalizedConcept?.aliasTags.includes('idp')
     ? 'idp'
     : normalizedConcept?.formatId ?? validated.data.concept
@@ -140,6 +163,30 @@ export async function postCreateLeague(req: Request): Promise<NextResponse<Creat
       },
       { status: 403 }
     )
+  }
+
+  const premiumCreateKeys = findPremiumCreateSettingKeys(validated.data.conceptSetup)
+  if (premiumCreateKeys.length > 0) {
+    const entitlement = await new EntitlementResolver().resolveSnapshot(
+      resolvedUser.appUserId,
+      session.user.email,
+    )
+
+    if (!hasAfCommissionerCreateEntitlement(entitlement)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'AF Commissioner is required for advanced setup',
+          errors: [
+            {
+              path: 'conceptSetup.advancedSetup',
+              message: 'Upgrade to AF Commissioner before saving premium advanced setup.',
+            },
+          ],
+        },
+        { status: 403 },
+      )
+    }
   }
 
   const exec = await executeCanonicalLeagueCreation({

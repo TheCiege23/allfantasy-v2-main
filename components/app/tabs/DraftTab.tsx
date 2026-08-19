@@ -403,7 +403,7 @@ export default function DraftTab({ leagueId }: LeagueTabProps) {
               </div>
               <SmartDataView data={analysis || data} />
             </div>
-            <LegacyAIPanel leagueId={leagueId} endpoint="draft-war-room" title="Legacy Draft War Room" />
+            <LegacyAIPanel leagueId={leagueId} endpoint="draft-war-room" title="AF Legacy Draft (League)" />
           </div>
         </div>
       </div>

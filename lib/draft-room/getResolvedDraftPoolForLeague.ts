@@ -55,7 +55,7 @@ import {
   loadSportsPlayerRecordMapsForDraftPool,
   lookupSportsPlayerRecordAugmentDetailed,
 } from '@/lib/draft-room/sportsPlayerRecordDraftEnrichment'
-import { logPlayerMismatchEventVoid } from '@/lib/player-identity/playerMismatchLogger'
+import { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 import { isFreeAgentTeam as isNormalizedFreeAgentTeam } from '@/lib/player-identity/playerIdentityResolution'
 
 const DEFAULT_LIMIT = 300
@@ -840,6 +840,8 @@ export async function getResolvedDraftPoolForLeague(
   const injuryByPlayerId = new Map<string, InjuryLookupRow>()
   const injuryByNameTeam = new Map<string, InjuryLookupRow>()
   const injuryByName = new Map<string, InjuryLookupRow>()
+  /** Names held by more than one distinct athlete — never bind these by name alone. */
+  const injuryNameCollisions = new Set<string>()
   const injuryRecentCutoff = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000)
   const inferredWeek = sport === 'NFL' ? inferCurrentNflWeek() : null
   try {
@@ -897,9 +899,18 @@ export async function getResolvedDraftPoolForLeague(
         injuryByNameTeam.set(nameTeam, injuryRow)
       }
 
+      // Slice 15 (wrong-row joins): "first wins" silently bound one athlete's
+      // injury to a same-named other (QB Josh Allen vs LB Josh Allen). Track
+      // collisions so the name-ONLY fallback below can refuse them; the
+      // name+team tier above is unaffected because it is already verified.
       const nameOnly = injuryNameKey(injuryRow.playerName)
-      if (nameOnly && !injuryByName.has(nameOnly)) {
-        injuryByName.set(nameOnly, injuryRow)
+      if (nameOnly) {
+        const existing = injuryByName.get(nameOnly)
+        if (!existing) {
+          injuryByName.set(nameOnly, injuryRow)
+        } else if ((existing.team || '') !== (injuryRow.team || '')) {
+          injuryNameCollisions.add(nameOnly)
+        }
       }
     }
   } catch (error) {
@@ -1433,6 +1444,9 @@ export async function getResolvedDraftPoolForLeague(
     perfRookie()
   }
 
+  /** Accumulates identity mismatches in memory for one batched write below — never per player. */
+  const mismatchCollector = new PlayerMismatchCollector()
+
   const perfSprMaps = perfStart('11b. sportsPlayerRecord maps (cross-sport stats/images)')
   const sprRecordMaps = await loadSportsPlayerRecordMapsForDraftPool(
     leagueId,
@@ -1442,6 +1456,7 @@ export async function getResolvedDraftPoolForLeague(
       position: String(r.position ?? r.pos ?? ''),
       team: r.team ?? r.teamAbbr ?? null,
     })),
+    mismatchCollector,
   )
   perfSprMaps()
 
@@ -1488,7 +1503,7 @@ export async function getResolvedDraftPoolForLeague(
       String(row.playerId ?? row.id ?? row.sleeperId ?? '').trim() || null
 
     if (!sprAug) {
-      logPlayerMismatchEventVoid({
+      mismatchCollector.record({
         leagueId,
         sport: String(sport),
         poolPlayerId: poolPlayerIdForLog,
@@ -1508,7 +1523,7 @@ export async function getResolvedDraftPoolForLeague(
       })
     } else {
       if (sprMeta.strictHitAfterIdMiss) {
-        logPlayerMismatchEventVoid({
+        mismatchCollector.record({
           leagueId,
           sport: String(sport),
           poolPlayerId: poolPlayerIdForLog,
@@ -1532,7 +1547,7 @@ export async function getResolvedDraftPoolForLeague(
         String(team).trim() !== '' &&
         !isNormalizedFreeAgentTeam(team)
       ) {
-        logPlayerMismatchEventVoid({
+        mismatchCollector.record({
           leagueId,
           sport: String(sport),
           poolPlayerId: poolPlayerIdForLog,
@@ -1687,7 +1702,13 @@ export async function getResolvedDraftPoolForLeague(
       dbInjuryHit = byNameTeam ?? null
     }
     if (!dbInjuryHit) {
-      dbInjuryHit = injuryByName.get(injuryNameKey(name)) ?? null
+      // Name-only is the last resort and is REFUSED when that name is shared by
+      // more than one athlete. A missing injury badge is a gap; the wrong
+      // player's injury badge on a draft board is a false statement.
+      const nameKey = injuryNameKey(name)
+      dbInjuryHit = nameKey && !injuryNameCollisions.has(nameKey)
+        ? injuryByName.get(nameKey) ?? null
+        : null
     }
 
     const resolvedRawInjuryStatus =
@@ -1827,6 +1848,16 @@ export async function getResolvedDraftPoolForLeague(
           : {}),
     } as unknown as RawRow
   })
+
+  /**
+   * One batched write for every mismatch seen above. Previously this path issued one un-awaited
+   * `create()` per player from inside the map — a single league produced 512,840 inserts in a day.
+   * `flush()` never throws (diagnostics must not fail a draft resolve) and logs its own failures,
+   * so the result is intentionally unused here.
+   */
+  const perfMismatchFlush = perfStart('11c. player identity mismatch rollup')
+  await mismatchCollector.flush()
+  perfMismatchFlush()
 
   resolveConflictingExternalIds(enrichedList as DraftPoolRawRow[])
 

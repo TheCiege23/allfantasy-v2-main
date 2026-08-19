@@ -1,0 +1,309 @@
+/*
+ * AF Core — screen 2, the league-selected dashboard.
+ * Scoped under `.af-core` via the shell; see af-core.css for why.
+ */
+
+.af-lh {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 1080px;
+}
+
+/* ── League identity ─────────────────────────────────────────────────── */
+
+.af-lh-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.af-lh-name {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.af-lh-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-lh-platform {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.af-lh-back {
+  margin-left: auto;
+  text-decoration: none;
+}
+
+.af-lh-elsewhere {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+
+.af-lh-section {
+  padding: 14px;
+}
+
+.af-lh-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.af-lh-section-title {
+  margin: 0;
+}
+
+.af-lh-section-help {
+  margin-left: auto;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.af-lh-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.af-lh-card-headline {
+  font-weight: 800;
+  font-size: 14px;
+  color: var(--text);
+}
+.af-lh-card-detail {
+  margin: 5px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/*
+ * Unavailable state.
+ *
+ * Deliberately NOT a skeleton or a greyed-out figure: a dimmed "71%" still reads
+ * as a win probability. This says there is no reading and why, in words.
+ */
+.af-unavailable {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px dashed var(--line2);
+  background: var(--surface2);
+}
+.af-unavailable-mark {
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  color: var(--faint);
+  font-weight: 800;
+}
+.af-unavailable-text {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Season timeline ─────────────────────────────────────────────────── */
+
+.af-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.af-timeline-stage {
+  flex: 1 1 0;
+  min-width: 116px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 10px 10px 0;
+  border-top: 2px solid var(--line2);
+  position: relative;
+}
+
+.af-timeline-stage[data-state='past'] {
+  border-top-color: var(--line2);
+  opacity: 0.55;
+}
+.af-timeline-stage[data-state='now'] {
+  border-top-color: var(--accent);
+}
+.af-timeline-stage[data-state='future'] {
+  border-top-color: var(--line);
+}
+
+.af-timeline-dot {
+  position: absolute;
+  top: -5px;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--line2);
+}
+.af-timeline-stage[data-state='now'] .af-timeline-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+
+.af-timeline-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-timeline-stage[data-state='now'] .af-timeline-label {
+  color: var(--text);
+}
+.af-timeline-when {
+  color: var(--faint);
+}
+.af-timeline-stage[data-state='now'] .af-timeline-when {
+  color: var(--accent);
+}
+
+/* ── Standings ───────────────────────────────────────────────────────── */
+
+.af-standings {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-standings-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text2);
+}
+.af-standings-row[data-you='true'] {
+  background: var(--accent-soft);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.af-standings-rank {
+  width: 20px;
+  color: var(--faint);
+  font-size: 11px;
+}
+.af-standings-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-standings-you {
+  color: var(--accent);
+}
+.af-standings-record {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Buzz ────────────────────────────────────────────────────────────── */
+
+.af-buzz {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.af-buzz-row {
+  display: flex;
+  gap: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-buzz-actor {
+  font-weight: 800;
+  color: var(--text2);
+}
+
+/* ── Read-only reminder ──────────────────────────────────────────────── */
+
+.af-lh-readonly-note {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-lh-back {
+    margin-left: 0;
+  }
+  .af-lh-section-help {
+    margin-left: 0;
+  }
+}
+
+/* ── 3b shell: the league-scoped state of /dashboard ──────────────────────
+ *
+ * Wrapper added by app/dashboard/page.tsx when `?league=` resolves. It exists
+ * so this screen gets a page background and a max width of its own — rendering
+ * outside AfCoreShell means nothing else provides them, and a bare screen on the
+ * browser's default white was the visible symptom.
+ */
+.af-core.af-lh-shell {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px 22px 60px;
+}
+
+.af-core.af-lh-shell .af-lh {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+@media (max-width: 860px) {
+  .af-core.af-lh-shell {
+    padding: 16px;
+  }
+}

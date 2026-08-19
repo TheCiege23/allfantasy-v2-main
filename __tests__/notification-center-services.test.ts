@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   getNotificationDestination,
   getNotificationsEndpoint,
+  getNotificationsReadAllEndpoint,
   getNotificationReadEndpoint,
   getTopBarUtilities,
   getUnreadBadgeCount,
@@ -122,6 +123,12 @@ describe("notification center services", () => {
     expect(getNotificationReadEndpoint("a/b c")).toBe("/api/shared/notifications/a%2Fb%20c/read")
     expect(getNotificationsEndpoint(0)).toBe("/api/shared/notifications?limit=1")
     expect(getNotificationsEndpoint(250)).toBe("/api/shared/notifications?limit=100")
+    expect(getNotificationsEndpoint(25, { leagueId: "league-1" })).toBe(
+      "/api/shared/notifications?limit=25&leagueId=league-1"
+    )
     expect(NOTIFICATIONS_READ_ALL_ENDPOINT).toBe("/api/shared/notifications/read-all")
+    expect(getNotificationsReadAllEndpoint({ leagueId: "league/1" })).toBe(
+      "/api/shared/notifications/read-all?leagueId=league%2F1"
+    )
   })
 })

@@ -2,9 +2,11 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { Clock, Crown, DollarSign, ShieldCheck } from 'lucide-react'
 import type { UserLeague } from '../../types'
+import { resolveLeagueLogoSrc, leagueInitials } from '@/lib/dashboard/league-logo-src'
+import { shouldFetchLeagueScopedData } from '@/lib/dashboard/league-card-fetch-policy'
+import { useImageLoadFailed } from '@/hooks/useImageLoadFailed'
 import { WarRoomCard } from './WarRoomCard'
 import { ChampionshipGauge } from './ChampionshipGauge'
 import { useActivityFeed } from '@/hooks/useActivityFeed'
@@ -97,6 +99,60 @@ function formatDraftCountdown(
   return t('dashboard.warroom.myLeagueCard.draftCountdownSoon')
 }
 
+type MatchupCellState =
+  | { kind: 'value'; text: string; tone: 'win' | 'loss' | 'neutral' }
+  | { kind: 'preseason' }
+  | { kind: 'pendingWeek1' }
+  | { kind: 'loading' }
+  | { kind: 'unavailable' }
+
+function resolveOpponentCell(
+  opponentName: string | undefined,
+  hasMatchups: boolean,
+  fetchAttempted: boolean,
+): MatchupCellState {
+  if (opponentName) return { kind: 'value', text: opponentName, tone: 'neutral' }
+  if (!hasMatchups) return { kind: 'preseason' }
+  if (!fetchAttempted) return { kind: 'loading' }
+  return { kind: 'unavailable' }
+}
+
+function resolveResultCell(
+  lastResult: { won: boolean; score: string } | null | undefined,
+  hasMatchups: boolean,
+  isFirstWeek: boolean,
+  fetchAttempted: boolean,
+): MatchupCellState {
+  if (lastResult) return { kind: 'value', text: `${lastResult.won ? 'W' : 'L'} ${lastResult.score}`, tone: lastResult.won ? 'win' : 'loss' }
+  if (!hasMatchups) return { kind: 'preseason' }
+  if (isFirstWeek) return { kind: 'pendingWeek1' }
+  if (!fetchAttempted) return { kind: 'loading' }
+  return { kind: 'unavailable' }
+}
+
+/** Renders a My Leagues card matchup cell (opponent/result) — one honest state per real cause,
+ *  never the same bare dash for "not started yet" and "should have data but doesn't". */
+function matchupCellDisplay(
+  state: MatchupCellState,
+  t: (key: string) => string,
+): { text: string; className: string } {
+  switch (state.kind) {
+    case 'value':
+      return {
+        text: state.text,
+        className: state.tone === 'win' ? 'text-emerald-300' : state.tone === 'loss' ? 'text-white/60' : 'text-white/85',
+      }
+    case 'preseason':
+      return { text: t('dashboard.warroom.myLeagueCard.preseasonNotice'), className: 'font-normal text-white/40' }
+    case 'pendingWeek1':
+      return { text: t('dashboard.warroom.myLeagueCard.resultPendingWeek1'), className: 'font-normal text-white/40' }
+    case 'loading':
+      return { text: t('dashboard.warroom.myLeagueCard.matchupLoading'), className: 'font-normal text-white/35' }
+    case 'unavailable':
+      return { text: t('dashboard.warroom.myLeagueCard.matchupUnavailable'), className: 'font-normal text-amber-300/70' }
+  }
+}
+
 function healthTone(status: HealthStatus): { color: string; labelKey: string } {
   switch (status) {
     case 'excellent':
@@ -128,12 +184,43 @@ export function MyLeagueCard({
   const [myTeam, setMyTeam] = useState<MyTeamSummary | null>(null)
   const [forecastRows, setForecastRows] = useState<ForecastRow[] | null>(null)
   const [matchupRows, setMatchupRows] = useState<MatchupRow[] | null>(null)
-  const { items: activityItems } = useActivityFeed({ limit: 20, leagueId: league.id })
+  /** True once the matchups fetch has settled (success or failure) — distinguishes "still
+   *  loading" / "genuinely no data" from "haven't started fetching because preseason". */
+  const [matchupFetchAttempted, setMatchupFetchAttempted] = useState(false)
+  /**
+   * AF Legacy board rows carry a `LegacyLeague` id and no row in the `leagues` table
+   * (`hasUnifiedRecord: false`). The DB-backed per-league fetches below all resolve the league out
+   * of `leagues`, so for those rows they are dead on arrival — `/api/league/detail` 404s by
+   * construction. Skipping them leaves the card in exactly the state the failed fetches did.
+   *
+   * Not a micro-optimization: these are per-card, and useActivityFeed additionally polls every 90s
+   * for the lifetime of the mount. A real account with 543 legacy leagues therefore made ~2,000
+   * requests per dashboard load and then held ~6 req/s indefinitely while merely sitting open —
+   * enough to exhaust Postgres and surface as 53200 out-of-memory across unrelated routes.
+   *
+   * useLeagueHealth stays on: its route computes from the POST body and never reads the DB.
+   * The predicate itself lives in lib/dashboard/league-card-fetch-policy.ts (pure + unit-tested,
+   * per the lib/league/leagueTabSync.ts pattern) and carries the full reasoning.
+   */
+  const hasUnifiedRecord = shouldFetchLeagueScopedData(league)
+  const { items: activityItems } = useActivityFeed({
+    limit: 20,
+    leagueId: league.id,
+    enabled: hasUnifiedRecord,
+  })
   const health = useLeagueHealth(league)
 
   const commissionerNotice = activityItems.find((i) => i.type === 'announcement') ?? null
 
   useEffect(() => {
+    if (!hasUnifiedRecord) {
+      // Legacy rows reach the matchups branch too (25 of one real account's 543 are `in_season`),
+      // where the fetch 404'd and its `.then` still ran setMatchupFetchAttempted(true). Reproduce
+      // that here so resolveOpponentCell/resolveResultCell render exactly as before — skipping the
+      // request must not also change the cell copy from "no data" back to "loading".
+      setMatchupFetchAttempted(true)
+      return
+    }
     let cancelled = false
 
     void fetch(`/api/league/detail?leagueId=${encodeURIComponent(league.id)}`, { cache: 'no-store' })
@@ -186,16 +273,19 @@ export function MyLeagueCard({
       void fetch(`/api/leagues/${encodeURIComponent(league.id)}/matchups`, { cache: 'no-store' })
         .then((r) => (r.ok ? r.json() : null))
         .then((data: { matchups?: MatchupRow[] } | null) => {
-          if (cancelled || !data?.matchups?.length) return
-          setMatchupRows(data.matchups)
+          if (cancelled) return
+          if (data?.matchups?.length) setMatchupRows(data.matchups)
+          setMatchupFetchAttempted(true)
         })
-        .catch(() => {})
+        .catch(() => {
+          if (!cancelled) setMatchupFetchAttempted(true)
+        })
     }
 
     return () => {
       cancelled = true
     }
-  }, [league.id, league.season, league.currentWeek, league.lifecycleState, league.status, userId])
+  }, [hasUnifiedRecord, league.id, league.season, league.currentWeek, league.lifecycleState, league.status, userId])
 
   const forecast = useMemo(
     () => (myTeam ? (forecastRows?.find((r) => r.teamId === myTeam.externalId) ?? null) : null),
@@ -223,6 +313,23 @@ export function MyLeagueCard({
   const tone = health ? healthTone(health.status) : null
   const stage = stageKey(league)
   const accent = sportAccent(league.sport)
+  const logoSrc = resolveLeagueLogoSrc(league.logoUrl, league.avatarUrl)
+  /** SSR-safe: a logo that 404s before hydration is caught too, not just one that fails after. */
+  const { ref: logoRef, failed: logoFailed, onError: onLogoError } = useImageLoadFailed(logoSrc)
+  const hasMatchups = rawStage(league) === 'in_season' || rawStage(league) === 'playoffs'
+  const isFirstWeek = (league.currentWeek ?? 1) <= 1
+  const rankText =
+    typeof myTeam?.currentRank === 'number'
+      ? tInterpolate('dashboard.warroom.myLeagueCard.rankLabel', { rank: myTeam.currentRank })
+      : t('dashboard.warroom.myLeagueCard.rankPending')
+  const opponentCell = matchupCellDisplay(
+    resolveOpponentCell(matchupInfo?.opponentName, hasMatchups, matchupFetchAttempted),
+    t,
+  )
+  const resultCell = matchupCellDisplay(
+    resolveResultCell(matchupInfo?.lastResult, hasMatchups, isFirstWeek, matchupFetchAttempted),
+    t,
+  )
   const draftCountdown =
     rawStage(league) === 'pre_draft' && league.draftDate
       ? formatDraftCountdown(league.draftDate, t, tInterpolate)
@@ -257,22 +364,35 @@ export function MyLeagueCard({
           className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-white/[0.06]"
           style={{ boxShadow: `0 0 0 1px ${accent}40` }}
         >
-          {league.logoUrl || league.avatarUrl ? (
-            <Image
-              src={league.logoUrl || league.avatarUrl || ''}
-              alt={league.name}
+          {logoSrc && !logoFailed ? (
+            // Plain <img>, not next/image: logoUrl is unvalidated free text, and next/image throws
+            // (killing the card) on a malformed src or any host outside next.config.js's allowlist.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              ref={logoRef}
+              src={logoSrc}
+              alt=""
               width={44}
               height={44}
               className="h-full w-full object-cover"
+              onError={onLogoError}
             />
           ) : (
-            <span className="text-[11px] font-bold text-white/40">{league.sport}</span>
+            // Initials identify the specific league; a sport badge reads identically for every
+            // league in that sport. Also covers a logo that 404s, which the old markup could not.
+            <span className="text-[13px] font-bold" style={{ color: accent }} aria-hidden>
+              {leagueInitials(league.name)}
+            </span>
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
+          <div className="flex min-w-0 items-center gap-1.5">
             {league.isCommissioner ? <Crown className="h-3 w-3 shrink-0 text-amber-400" aria-hidden /> : null}
-            <Link href={`/league/${league.id}`} className="truncate text-[14px] font-bold text-white hover:text-cyan-200">
+            <Link
+              href={`/league/${league.id}`}
+              title={league.name}
+              className="min-w-0 flex-1 truncate text-[14px] font-bold text-white hover:text-cyan-200"
+            >
               {league.name}
             </Link>
           </div>
@@ -282,7 +402,7 @@ export function MyLeagueCard({
                 <span ref={winsCountUp.ref} className="text-[13px] font-bold text-white/80">
                   {winsCountUp.value}
                 </span>
-                {`-${myTeam?.losses}${myTeam?.ties ? `-${myTeam.ties}` : ''} · ${tInterpolate('dashboard.warroom.myLeagueCard.rankLabel', { rank: myTeam?.currentRank ?? '—' })}`}
+                {`-${myTeam?.losses}${myTeam?.ties ? `-${myTeam.ties}` : ''} · ${rankText}`}
               </span>
             ) : (
               <span>{league.sport}</span>
@@ -324,17 +444,11 @@ export function MyLeagueCard({
       <div className="mt-3.5 grid grid-cols-2 gap-2.5 text-[11px]">
         <div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
           <p className="text-white/35">{t('dashboard.warroom.myLeagueCard.nextOpponent')}</p>
-          <p className="mt-0.5 truncate font-semibold text-white/85">{matchupInfo?.opponentName ?? '—'}</p>
+          <p className={`mt-0.5 truncate font-semibold ${opponentCell.className}`}>{opponentCell.text}</p>
         </div>
         <div className="rounded-lg bg-white/[0.03] px-2.5 py-2">
           <p className="text-white/35">{t('dashboard.warroom.myLeagueCard.lastResult')}</p>
-          <p
-            className={`mt-0.5 font-semibold ${
-              matchupInfo?.lastResult ? (matchupInfo.lastResult.won ? 'text-emerald-300' : 'text-white/60') : 'text-white/60'
-            }`}
-          >
-            {matchupInfo?.lastResult ? `${matchupInfo.lastResult.won ? 'W' : 'L'} ${matchupInfo.lastResult.score}` : '—'}
-          </p>
+          <p className={`mt-0.5 font-semibold ${resultCell.className}`}>{resultCell.text}</p>
         </div>
       </div>
 

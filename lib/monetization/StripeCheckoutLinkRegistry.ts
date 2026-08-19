@@ -54,16 +54,6 @@ const STRIPE_CHECKOUT_LINK_REGISTRY: readonly StripeCheckoutLinkRegistryEntry[] 
     checkoutLinkEnvVar: "STRIPE_CHECKOUT_LINK_AF_WAR_ROOM_YEARLY",
   },
   {
-    sku: "af_all_access_monthly",
-    purchaseType: "subscription",
-    checkoutLinkEnvVar: "STRIPE_CHECKOUT_LINK_AF_ALL_ACCESS_MONTHLY",
-  },
-  {
-    sku: "af_all_access_yearly",
-    purchaseType: "subscription",
-    checkoutLinkEnvVar: "STRIPE_CHECKOUT_LINK_AF_ALL_ACCESS_YEARLY",
-  },
-  {
     sku: "af_supreme_monthly",
     purchaseType: "subscription",
     checkoutLinkEnvVar: "STRIPE_CHECKOUT_LINK_AF_SUPREME_MONTHLY",

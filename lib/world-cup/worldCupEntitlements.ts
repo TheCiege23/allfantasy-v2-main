@@ -10,8 +10,8 @@ export type WorldCupEntitlementInput = {
   allFantasyTestAccess?: boolean | null
 }
 
-const COMMISSIONER_PLANS: SubscriptionPlanId[] = ["commissioner", "all_access", "supreme"]
-const AI_PLANS: SubscriptionPlanId[] = ["pro", "all_access", "supreme"]
+const COMMISSIONER_PLANS: SubscriptionPlanId[] = ["commissioner", "supreme"]
+const AI_PLANS: SubscriptionPlanId[] = ["pro", "supreme"]
 
 function hasPlan(input: WorldCupEntitlementInput, plans: SubscriptionPlanId[]) {
   const owned = input.plans ?? []
@@ -19,7 +19,7 @@ function hasPlan(input: WorldCupEntitlementInput, plans: SubscriptionPlanId[]) {
 }
 
 export function hasWorldCupAllAccess(input: WorldCupEntitlementInput) {
-  return Boolean(input.isAdmin || input.allFantasyTestAccess || hasPlan(input, ["all_access", "supreme"]))
+  return Boolean(input.isAdmin || input.allFantasyTestAccess || hasPlan(input, ["supreme"]))
 }
 
 export function canUseWorldCupCommissionerTools(input: WorldCupEntitlementInput) {

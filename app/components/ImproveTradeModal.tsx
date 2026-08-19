@@ -6,6 +6,7 @@ import { X, Sparkles, Copy, AlertCircle, Loader2, RefreshCw, Plus, Check, Search
 import { toast } from 'sonner'
 import { gtagEvent } from '@/lib/gtag'
 import { FEEDBACK_REASONS } from '@/lib/feedback-reasons'
+import { useEntitlements } from '@/hooks/useEntitlements'
 
 type Suggestion = {
   title: string
@@ -52,6 +53,10 @@ export default function ImproveTradeModal({
     superflex: false,
   })
 
+  // Never nag an already-paying subscriber to "Upgrade to Pro" for a feature their plan already
+  // includes — this free-tier cap only applies to non-Pro/Supreme accounts.
+  const entitlements = useEntitlements()
+  const alreadyHasPro = entitlements.hasPro || entitlements.hasSupreme
   const MAX_MORE_CLICKS = 3
   const RESET_AFTER_HOURS = 24
   const [moreCount, setMoreCount] = useState(0)
@@ -271,7 +276,7 @@ export default function ImproveTradeModal({
   }, [generateSuggestions])
 
   const generateMore = useCallback(() => {
-    if (moreCount >= MAX_MORE_CLICKS) {
+    if (moreCount >= MAX_MORE_CLICKS && !alreadyHasPro) {
       gtagEvent('improve_trade_generate_more_limit_hit', {
         league_size: leagueSize,
         is_dynasty: isDynasty,
@@ -328,7 +333,7 @@ export default function ImproveTradeModal({
       localStorage.setItem('improve_more_timestamp', now.toString())
       setLastResetTime(now)
     }
-  }, [generateSuggestions, moreCount, suggestions.length, leagueSize, isDynasty, scoring, lastResetTime])
+  }, [generateSuggestions, moreCount, suggestions.length, leagueSize, isDynasty, scoring, lastResetTime, alreadyHasPro])
 
   const cancelRequest = () => {
     abortRef.current?.abort()

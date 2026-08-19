@@ -22,6 +22,37 @@ import { LeagueShellClient } from './LeagueShellClient'
 
 export const dynamic = 'force-dynamic'
 
+/**
+ * SEO / link previews: league pages are auth-gated, but titles still matter —
+ * they drive the browser tab, share-sheet previews, and history entries on
+ * mobile (most users hit the league dashboard from a phone). Kept lean: one
+ * indexed-safe title + description, no private data beyond the league name.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ leagueId: string }> | { leagueId: string }
+}) {
+  const { leagueId } = params instanceof Promise ? await params : params
+  try {
+    const league = await prisma.league.findFirst({
+      where: { id: leagueId },
+      select: { name: true, sport: true, season: true },
+    })
+    if (!league) return { title: 'League | AllFantasy' }
+    const title = `${league.name ?? 'League'} | AllFantasy`
+    const description = `${league.name ?? 'League'} — ${(league.sport ?? 'NFL').toUpperCase()}${league.season ? ` · ${league.season} season` : ''} fantasy league dashboard on AllFantasy: matchups, standings, waivers, trades, and Decision OS intelligence.`
+    return {
+      title,
+      description,
+      openGraph: { title, description, siteName: 'AllFantasy' },
+      twitter: { card: 'summary' as const, title, description },
+    }
+  } catch {
+    return { title: 'League | AllFantasy' }
+  }
+}
+
 // LeagueShellClient is imported directly — it owns the dynamic() call inside a client component.
 // This keeps next/dynamic with ssr:false inside a proper 'use client' boundary.
 const _unused = {

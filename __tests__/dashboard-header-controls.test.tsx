@@ -26,13 +26,13 @@ vi.mock('@/hooks/useEntitlements', () => ({
     hasCommissioner: false,
     hasPro: false,
     hasWarRoom: false,
-    hasAllAccess: false,
     hasSupreme: false,
   }),
 }))
 
+const tokenBalanceMock = vi.fn(() => ({ balance: 0, loading: false, isAdminBypassAccount: false }))
 vi.mock('@/hooks/useTokenBalance', () => ({
-  useTokenBalance: () => ({ balance: 0, loading: false }),
+  useTokenBalance: () => tokenBalanceMock(),
 }))
 
 describe('DashboardHeaderControls (Phase 3.8D rail rehome)', () => {
@@ -56,5 +56,22 @@ describe('DashboardHeaderControls (Phase 3.8D rail rehome)', () => {
     // Sign out routes through next-auth.
     fireEvent.click(screen.getByTestId('dashboard-header-user-menu-signout'))
     expect(signOutMock).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('DashboardHeaderControls — token balance badge (visual bug-fix pass 1d)', () => {
+  it('comma-formats a real balance for a normal account', () => {
+    tokenBalanceMock.mockReturnValue({ balance: 2500, loading: false, isAdminBypassAccount: false })
+    render(<DashboardHeaderControls userName="Real User" onImport={vi.fn()} />)
+    expect(screen.getByText('· 2,500')).toBeTruthy()
+  })
+
+  it('never shows the raw dev-admin balance (e.g. 1,000,000,000) — shows a distinct Admin marker instead', () => {
+    tokenBalanceMock.mockReturnValue({ balance: 1_000_000_000, loading: false, isAdminBypassAccount: true })
+    render(<DashboardHeaderControls userName="Owner Dev Account" onImport={vi.fn()} />)
+
+    expect(screen.queryByText(/1,000,000,000/)).toBeNull()
+    const marker = screen.getByText('· Admin')
+    expect(marker.getAttribute('title')).toMatch(/synthetic balance/i)
   })
 })

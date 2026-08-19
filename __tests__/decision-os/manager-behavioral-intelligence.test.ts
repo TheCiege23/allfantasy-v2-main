@@ -178,9 +178,13 @@ describe('missing events — graceful zero state', () => {
     expect(intel.participationTier).toBe('inactive')
   })
 
-  it('retentionRisk is critical', () => {
-    expect(intel.retentionRisk).toBe('critical')
+  // Phase 36: this fixture has an empty `events` array — i.e. the LEAGUE itself has zero
+  // recorded activity for any manager, not just this one. That is a data-coverage gap,
+  // not confirmed disengagement, so this must be insufficient_data, not critical.
+  it('retentionRisk is insufficient_data (league-wide zero events, not confirmed inactivity)', () => {
+    expect(intel.retentionRisk).toBe('insufficient_data')
     expect(intel.retentionRiskReasons.length).toBeGreaterThan(0)
+    expect(intel.retentionRiskReasons[0]).not.toContain('has never taken any recorded action')
   })
 
   it('daysSinceLastActivity is null, isInactive is true', () => {
@@ -604,12 +608,29 @@ describe('manager inactivity signals', () => {
 // ── Retention risk ────────────────────────────────────────────────────────────
 
 describe('retention risk', () => {
-  it('no events → critical', () => {
+  it('no events anywhere in the league → insufficient_data, not critical (Phase 36)', () => {
     const intel = deriveManagerBehavioralIntelligence(makeFacts(), [], NOW)
+    expect(intel.retentionRisk).toBe('insufficient_data')
+    expect(intel.retentionRiskReasons[0]).toContain('cannot be assessed')
+  })
+
+  // Phase 36: real, relative evidence — OTHER managers in this league DO have recorded
+  // activity, but this manager has none. This is genuine negative evidence, not a data gap.
+  it('no events for this manager, but the league has real activity from others → critical', () => {
+    const otherManagerEvent = makeLineupSavedEvent('other-manager', '2026-06-20T10:00:00Z')
+    const intel = deriveManagerBehavioralIntelligence(makeFacts(), [otherManagerEvent], NOW)
     expect(intel.retentionRisk).toBe('critical')
     expect(intel.retentionRiskReasons).toContain(
       'Manager has never taken any recorded action in the league',
     )
+  })
+
+  it('is deterministic: identical inputs always produce the same retention risk', () => {
+    const otherManagerEvent = makeLineupSavedEvent('other-manager', '2026-06-20T10:00:00Z')
+    const run1 = deriveManagerBehavioralIntelligence(makeFacts(), [otherManagerEvent], NOW)
+    const run2 = deriveManagerBehavioralIntelligence(makeFacts(), [otherManagerEvent], NOW)
+    expect(run1.retentionRisk).toBe(run2.retentionRisk)
+    expect(run1.retentionRiskReasons).toEqual(run2.retentionRiskReasons)
   })
 
   it('events but no lineup saves → high risk', () => {

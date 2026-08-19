@@ -54,7 +54,7 @@ export function RosterManager({
               {validation.ok ? 'Lineup legal' : `${validation.errorCount} lineup issue${validation.errorCount === 1 ? '' : 's'}`}
             </span>
           ) : null}
-          <span className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2 py-1 text-[10px] font-semibold text-cyan-100">
+          <span className="rounded-full border border-[#ff9ec0]/20 bg-[#ff9ec0]/10 px-2 py-1 text-[10px] font-semibold text-[#ffd7e5]">
             {scored}/{players.length} scored
           </span>
         </div>

@@ -1,12 +1,13 @@
 import { prisma } from './prisma';
 import { Prisma } from '@prisma/client';
-import { 
-  fetchFantasyCalcValues, 
-  findPlayerBySleeperId, 
+import {
+  fetchFantasyCalcValues,
+  findPlayerBySleeperId,
   findPlayerByName,
   getPickValue,
-  FantasyCalcPlayer 
+  FantasyCalcPlayer
 } from './fantasycalc';
+import { resolveCurrentTradeLearningSeason } from './trade-engine/season-resolver';
 
 interface TradePlayer {
   id: string;
@@ -294,7 +295,8 @@ interface ExtendedAnalysisResult {
   playersReceivedWithValues?: Array<{ name: string; position: string; value: number }>;
 }
 
-export async function aggregateTradeLearningInsights(season: number = 2025): Promise<void> {
+export async function aggregateTradeLearningInsights(season?: number): Promise<void> {
+  season = season ?? await resolveCurrentTradeLearningSeason();
   const analyzedTrades = await prisma.leagueTrade.findMany({
     where: {
       analyzed: true,
@@ -503,7 +505,8 @@ export async function aggregateTradeLearningInsights(season: number = 2025): Pro
   console.log(`Aggregated insights from ${analyzedTrades.length} trades, ${uniqueUsers} users`);
 }
 
-export async function getLearningContextForAI(season: number = 2025): Promise<string> {
+export async function getLearningContextForAI(season?: number): Promise<string> {
+  season = season ?? await resolveCurrentTradeLearningSeason();
   const stats = await prisma.tradeLearningStats.findUnique({
     where: { season },
   });
@@ -552,11 +555,14 @@ export async function getLearningContextForAI(season: number = 2025): Promise<st
 export async function runBackgroundTradeAnalysis(): Promise<{ processed: number; aggregated: boolean; calibrated: boolean; driftDetected: boolean }> {
   try {
     const result = await processUnanalyzedTrades(100);
-    
+
     let calibrated = false
     let driftDetected = false
     if (result.processed > 0) {
-      await aggregateTradeLearningInsights(2025);
+      // Resolved once so every step of this background cycle (insights,
+      // calibration, drift, outcome backfill) operates on the same season.
+      const season = await resolveCurrentTradeLearningSeason();
+      await aggregateTradeLearningInsights(season);
 
       if (result.affectedLeagues.length > 0) {
         try {
@@ -572,7 +578,7 @@ export async function runBackgroundTradeAnalysis(): Promise<{ processed: number;
 
       try {
         const { runFullCalibration } = await import('./trade-engine/accept-calibration')
-        const calResult = await runFullCalibration(2025)
+        const calResult = await runFullCalibration(season)
         calibrated = calResult.intercept.adjusted || calResult.feedback.adjusted
       } catch (calErr) {
         console.error('[TradeAnalysis] Calibration error:', calErr)
@@ -580,7 +586,7 @@ export async function runBackgroundTradeAnalysis(): Promise<{ processed: number;
 
       try {
         const { runDriftDetection } = await import('./trade-engine/drift-detection')
-        const driftReport = await runDriftDetection(2025)
+        const driftReport = await runDriftDetection(season)
         driftDetected = driftReport.overallSeverity !== 'ok'
       } catch (driftErr) {
         console.error('[TradeAnalysis] Drift detection error:', driftErr)
@@ -588,7 +594,7 @@ export async function runBackgroundTradeAnalysis(): Promise<{ processed: number;
 
       try {
         const { logAcceptedTradesAsOutcomes } = await import('./trade-engine/trade-event-logger')
-        const outcomeCount = await logAcceptedTradesAsOutcomes(2025)
+        const outcomeCount = await logAcceptedTradesAsOutcomes(season)
         if (outcomeCount > 0) {
           console.log(`[TradeAnalysis] Backfilled ${outcomeCount} trade outcome events`)
         }

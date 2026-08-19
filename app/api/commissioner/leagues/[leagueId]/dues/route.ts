@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 
 export const dynamic = 'force-dynamic'
@@ -111,7 +112,7 @@ export async function PUT(
 
   await prisma.league.update({
     where: { id: leagueId },
-    data: { settings: { ...currentSettings, dues_tracker: updated } },
+    data: { settings: toPrismaJsonInput({ ...currentSettings, dues_tracker: updated }) },
   })
 
   // Notify league chat of dues changes

@@ -1,6 +1,10 @@
 import type { UserLeague } from '@/app/dashboard/types'
 import { prisma } from '@/lib/prisma'
 import { monitorLeagueHealth, type OverallStatus } from '@/lib/league-health/league-health-engine'
+import { shouldRunCommissionerHealthShadow, shouldRunCommissionerHealthLive, runCommissionerHealthShadow } from '@/lib/decision-os/commissioner-health/shadow'
+import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
+import { toCommissionerHealthCard, type CommissionerHealthCard } from '@/lib/decision-os/commissioner-health/healthCardAdapter'
+import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { getCanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/nflDataCoverage'
 import type { CanonicalNflDataCoverage } from '@/lib/nfl-data-foundation/types'
@@ -83,6 +87,11 @@ export type CommissionerLeagueHealthSnapshot = {
   actions: CommissionerHealthAction[]
   assistantQuestions: CommissionerAssistantQuestion[]
   nflDataCoverage?: CanonicalNflDataCoverage | null
+  decisionOsShadow?: {
+    decisionId: string
+    parityPassed: boolean | null
+    card: CommissionerHealthCard
+  } | null
 }
 
 type CountMap = Map<string, number>
@@ -678,6 +687,7 @@ export async function getCommissionerHubHealthForUser(
 
   const now = new Date()
   const sevenDaysAgo = new Date(now.getTime() - WEEK_MS)
+  const shadowFilters = getDecisionShadowScopeFilters()
   const fallbackById = new Map(
     commissionerLeagues.map((league) => [
       league.id,
@@ -700,6 +710,7 @@ export async function getCommissionerHubHealthForUser(
       chatMessagesLast7Days,
       commissionerActions,
       openAiAlerts,
+      shadowProfile,
     ] = await Promise.all([
       (prisma as any).league.findMany({
         where: { id: { in: leagueIds } },
@@ -763,6 +774,12 @@ export async function getCommissionerHubHealthForUser(
         leagueId: { in: leagueIds },
         status: 'open',
       }),
+      shadowFilters.hasUsernameFilter
+        ? prisma.userProfile.findUnique({
+            where: { userId },
+            select: { sleeperUsername: true },
+          })
+        : Promise.resolve(null),
     ])
 
     const dbById = new Map<string, LeagueHealthRow>(
@@ -780,7 +797,7 @@ export async function getCommissionerHubHealthForUser(
       }),
     )
 
-    return leagueIds.map((leagueId) => {
+    const snapshots = leagueIds.map((leagueId) => {
       const dbLeague = dbById.get(leagueId)
       if (!dbLeague) return fallbackById.get(leagueId)!
 
@@ -802,6 +819,77 @@ export async function getCommissionerHubHealthForUser(
         },
       })
     })
+
+    // Decision OS Slice 4 — commissioner.league.health shadow/live runner. Assessment only;
+    // never executes commissioner actions, never mutates league state, never throws to the hub.
+    // Stage 0 (SHADOW only): runs beside one scope-matched database-source league, logs parity.
+    // Stage 1 (LIVE): populates decisionOsShadow on all database-source leagues unconditionally.
+    const isLive = shouldRunCommissionerHealthLive(process.env)
+    const liveStart = Date.now()
+    let enrichedCount = 0
+
+    if (isLive) {
+      await Promise.all(
+        snapshots.map(async (snapshot, i) => {
+          if (!snapshot || snapshot.source !== 'database') return
+          try {
+            const shadow = await runCommissionerHealthShadow({ userId, snapshot })
+            if (shadow.ran && shadow.result) {
+              snapshots[i] = {
+                ...snapshot,
+                decisionOsShadow: {
+                  decisionId: shadow.result.decision.decision_id,
+                  parityPassed: shadow.result.parity?.passed ?? null,
+                  card: toCommissionerHealthCard(shadow.result.decision),
+                },
+              }
+              enrichedCount++
+            }
+          } catch {
+            // live path must never affect the Commissioner Hub
+          }
+        }),
+      )
+      const totalDbSource = snapshots.filter((s) => s?.source === 'database').length
+      emitLiveTelemetry('commissioner.league.health', {
+        enriched: enrichedCount > 0,
+        enriched_count: enrichedCount,
+        total_db_source: totalDbSource,
+        latency_ms: Date.now() - liveStart,
+      })
+    } else {
+      const shadowTargetIndex = snapshots.findIndex((snapshot) =>
+        snapshot &&
+        snapshot.source === 'database' &&
+        shouldRunCommissionerHealthShadow(process.env, {
+          username: shadowProfile?.sleeperUsername ?? null,
+          leagueId: snapshot.leagueId,
+        }),
+      )
+
+      if (shadowTargetIndex >= 0) {
+        const target = snapshots[shadowTargetIndex]
+        if (target) {
+          try {
+            const shadow = await runCommissionerHealthShadow({ userId, snapshot: target })
+            if (shadow.ran && shadow.result) {
+              snapshots[shadowTargetIndex] = {
+                ...target,
+                decisionOsShadow: {
+                  decisionId: shadow.result.decision.decision_id,
+                  parityPassed: shadow.result.parity?.passed ?? null,
+                  card: toCommissionerHealthCard(shadow.result.decision),
+                },
+              }
+            }
+          } catch {
+            // shadow must never affect the Commissioner Hub
+          }
+        }
+      }
+    }
+
+    return snapshots
   } catch (err) {
     console.error('[commissioner-hub-health] failed to load health dashboard', err)
     return leagueIds.map((leagueId) => fallbackById.get(leagueId)!).filter(Boolean)

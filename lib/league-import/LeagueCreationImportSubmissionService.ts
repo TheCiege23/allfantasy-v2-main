@@ -10,6 +10,26 @@ export interface CommissionerAttestation {
   statement?: string;
 }
 
+/**
+ * Commissioner Import Attestation UI phase — the wire shape sent to the
+ * server, always stamped with the CURRENT request's own `provider`/
+ * `sourceInput` (never caller-supplied) so a stale attestation object from a
+ * previous league/provider selection can never be silently reused — see
+ * `attestationMatchesThisRequest` in `commissionerGate.ts`, which rejects a
+ * mismatch server-side.
+ */
+function toWireAttestation(
+  provider: ImportProvider,
+  sourceInput: string,
+  attestation: CommissionerAttestation
+): CommissionerAttestation & { confirmedProvider: ImportProvider; confirmedSourceLeagueId: string } {
+  return {
+    ...attestation,
+    confirmedProvider: provider,
+    confirmedSourceLeagueId: sourceInput.trim(),
+  };
+}
+
 export interface FetchPreviewResult {
   ok: boolean;
   data?: unknown;
@@ -25,6 +45,13 @@ export interface SubmitImportResult {
   error?: string;
   status?: number;
   requiresAttestation?: boolean;
+}
+
+export interface DiscoverProviderLeaguesResult {
+  ok: boolean;
+  data?: unknown;
+  error?: string;
+  status?: number;
 }
 
 function getImportApiErrorMessage(
@@ -64,7 +91,7 @@ export async function fetchImportPreview(
       body: JSON.stringify({
         provider,
         sourceId: trimmed,
-        ...(attestation?.accepted ? { attestation } : {}),
+        ...(attestation?.accepted ? { attestation: toWireAttestation(provider, trimmed, attestation) } : {}),
       }),
     });
     const data = await res.json();
@@ -102,30 +129,15 @@ export async function submitImportCreation(
   }
 
   try {
-    const request =
-      provider === 'sleeper'
-        ? {
-            url: '/api/league/create',
-            body: {
-              platform: 'sleeper',
-              createFromSleeperImport: true,
-              sleeperLeagueId: trimmed,
-            },
-          }
-        : {
-            url: '/api/leagues/import/commit',
-            body: {
-              provider,
-              sourceId: trimmed,
-              ...(attestation?.accepted ? { attestation } : {}),
-              ...(options?.force ? { force: true } : {}),
-            },
-          };
-
-    const res = await fetch(request.url, {
+    const res = await fetch('/api/leagues/import/commit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(request.body),
+      body: JSON.stringify({
+        provider,
+        sourceId: trimmed,
+        ...(attestation?.accepted ? { attestation: toWireAttestation(provider, trimmed, attestation) } : {}),
+        ...(options?.force ? { force: true } : {}),
+      }),
     });
     const data = await res.json();
     if (!res.ok) {
@@ -134,6 +146,48 @@ export async function submitImportCreation(
         error: getImportApiErrorMessage(data, 'Failed to create league'),
         status: res.status,
         requiresAttestation: Boolean((data as { requiresAttestation?: boolean })?.requiresAttestation),
+      };
+    }
+    return { ok: true, data };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'Network error';
+    return { ok: false, error: message };
+  }
+}
+
+export async function discoverProviderLeagues(
+  provider: ImportProvider,
+  accountIdentifier: string,
+  options?: { season?: string; sport?: string }
+): Promise<DiscoverProviderLeaguesResult> {
+  if (!isImportProviderAvailable(provider)) {
+    return { ok: false, error: `Import from ${provider} is not yet available.` };
+  }
+
+  const trimmed = accountIdentifier?.trim();
+  // Yahoo reads the CONNECTED Yahoo account (OAuth) and Sleeper falls back to
+  // the caller's own linked Sleeper account — neither needs an identifier.
+  if (!trimmed && provider !== 'yahoo' && provider !== 'sleeper') {
+    return { ok: false, error: 'Account identifier is required.' };
+  }
+
+  try {
+    const res = await fetch('/api/leagues/import/discover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        provider,
+        ...(trimmed ? { accountIdentifier: trimmed } : {}),
+        ...(options?.season ? { season: options.season } : {}),
+        ...(options?.sport ? { sport: options.sport } : {}),
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: getImportApiErrorMessage(data, 'Failed to discover leagues'),
+        status: res.status,
       };
     }
     return { ok: true, data };

@@ -134,7 +134,7 @@ const TOOL_CONFIGS: (AIToolCardConfig & { id: ToolId })[] = [
   },
   {
     id: 'warRoom',
-    title: 'AF War Room',
+    title: 'AF Legacy',
     subtitle: 'Season strategy command center',
     icon: <Shield className="h-[18px] w-[18px]" />,
     accent: 'rose',

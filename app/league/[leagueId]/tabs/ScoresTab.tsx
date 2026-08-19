@@ -223,7 +223,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
           <select
             value={week}
             onChange={(e) => setWeek(Number(e.target.value))}
-            className="min-w-[180px] appearance-none rounded-full border border-white/[0.1] bg-[#07071a] py-2 pl-4 pr-10 text-[13px] font-medium text-white/90 shadow-inner focus:border-cyan-500/35 focus:outline-none focus:ring-1 focus:ring-cyan-500/25"
+            className="min-w-[180px] appearance-none rounded-full border border-white/[0.1] bg-[#07071a] py-2 pl-4 pr-10 text-[13px] font-medium text-white/90 shadow-inner focus:border-[#ff3d81]/35 focus:outline-none focus:ring-1 focus:ring-[#ff3d81]/25"
             data-testid="scores-week-select"
           >
             {weekOptions.map((w) => (
@@ -271,7 +271,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
               onClick={() => setScoresNav('leaders')}
               className={`relative flex items-center gap-2 rounded-xl py-2.5 pl-3 pr-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] transition md:w-full ${
                 scoresNav === 'leaders'
-                  ? 'bg-white/[0.06] text-white shadow-inner ring-1 ring-white/[0.08] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-cyan-400'
+                  ? 'bg-white/[0.06] text-white shadow-inner ring-1 ring-white/[0.08] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-[#ff3d81]'
                   : 'text-white/45 hover:bg-white/[0.04] hover:text-white/70'
               }`}
               data-testid="scores-nav-leaders"
@@ -287,7 +287,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                 onClick={() => setScoresNav('matchups')}
                 className={`relative rounded-xl py-2.5 pl-3 pr-3 text-left text-[11px] font-bold uppercase tracking-[0.12em] transition md:w-full ${
                   scoresNav === 'matchups'
-                    ? 'bg-white/[0.06] text-white shadow-inner ring-1 ring-white/[0.08] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-cyan-400'
+                    ? 'bg-white/[0.06] text-white shadow-inner ring-1 ring-white/[0.08] before:absolute before:left-0 before:top-2 before:bottom-2 before:w-1 before:rounded-r before:bg-[#ff3d81]'
                     : 'text-white/45 hover:bg-white/[0.04] hover:text-white/70'
                 }`}
                 data-testid="scores-nav-matchups"
@@ -313,7 +313,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                         onClick={() => setPos(p)}
                         className={`rounded-full px-3 py-1.5 text-[11px] font-semibold transition ${
                           active
-                            ? 'bg-cyan-500/25 text-cyan-100 ring-1 ring-cyan-500/35'
+                            ? 'bg-[#ff3d81]/25 text-[#ffd7e5] ring-1 ring-[#ff3d81]/35'
                             : 'bg-white/[0.04] text-white/55 hover:bg-white/[0.07] hover:text-white/80'
                         }`}
                         data-testid={`scores-pos-${p.toLowerCase()}`}
@@ -340,7 +340,7 @@ export function ScoresTab({ league, sport, idpLeagueUi = false }: ScoresTabProps
                           ? 'bg-rose-500/15 text-rose-200 ring-1 ring-rose-400/30'
                           : status.tone === 'final'
                             ? 'bg-white/[0.05] text-white/60 ring-1 ring-white/[0.08]'
-                            : 'bg-cyan-500/10 text-cyan-100/85 ring-1 ring-cyan-500/25'
+                            : 'bg-[#ff3d81]/10 text-[#ffd7e5]/85 ring-1 ring-[#ff3d81]/25'
                       const homeWin = g.completed && g.homeScore > g.awayScore
                       const awayWin = g.completed && g.awayScore > g.homeScore
                       return (

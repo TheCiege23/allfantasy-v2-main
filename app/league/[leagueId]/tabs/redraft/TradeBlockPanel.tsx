@@ -142,7 +142,7 @@ export function TradeBlockPanel({
                           className="rounded border border-white/20 px-1.5 py-0.5 text-[10px] text-white/80">Mark interest</button>
                         <button type="button" data-testid={`block-build-${i.rosterId}`}
                           onClick={() => onBuildProposal(i.rosterId)}
-                          className="rounded bg-cyan-500/85 px-1.5 py-0.5 text-[10px] font-semibold text-black">Build proposal</button>
+                          className="rounded bg-[#ff3d81]/85 px-1.5 py-0.5 text-[10px] font-semibold text-black">Build proposal</button>
                       </div>
                     </div>
                     {i.note ? <p className="mt-0.5 text-[10px] text-white/55">“{i.note}”</p> : null}

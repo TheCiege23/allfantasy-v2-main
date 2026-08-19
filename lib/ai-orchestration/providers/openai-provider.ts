@@ -3,7 +3,7 @@
  * Wraps openai-client; keys server-side only. Uses provider-config for availability.
  */
 
-import type { IProviderClient } from '../provider-interface'
+import type { IProviderClient, ProviderChatOptions } from '../provider-interface'
 import type { ProviderChatRequest, ProviderChatResult } from '../types'
 import { openaiChatJson, openaiChatText, parseJsonContentFromChatCompletion } from '@/lib/openai-client'
 import { isOpenAIAvailable } from '@/lib/provider-config'
@@ -31,7 +31,7 @@ export function createOpenAIProvider(): IProviderClient {
     async healthCheck(): Promise<boolean> {
       return isOpenAIAvailable()
     },
-    async chat(request: ProviderChatRequest): Promise<ProviderChatResult> {
+    async chat(request: ProviderChatRequest, opts?: ProviderChatOptions): Promise<ProviderChatResult> {
       const requestedModel = request.model?.trim() || undefined
       const fallbackModel = requestedModel ?? DEFAULT_MODEL
       try {
@@ -41,6 +41,7 @@ export function createOpenAIProvider(): IProviderClient {
             model: requestedModel,
             temperature: request.temperature ?? 0.4,
             maxTokens: request.maxTokens ?? 1200,
+            signal: opts?.signal,
           })
           if (!result.ok) {
             return buildProviderFailure({
@@ -72,6 +73,7 @@ export function createOpenAIProvider(): IProviderClient {
           model: requestedModel,
           temperature: request.temperature ?? 0.5,
           maxTokens: request.maxTokens ?? 1500,
+          signal: opts?.signal,
         })
         if (!result.ok) {
           return buildProviderFailure({

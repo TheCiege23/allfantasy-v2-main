@@ -1,0 +1,27 @@
+name: No-AI copy guard
+
+on:
+  pull_request:
+    # No `branches:` filter on purpose. Filtering PR runs to base
+    # main/master silently skipped every stacked PR (a PR based on
+    # another branch), so those merged with no real check coverage.
+  push:
+    branches: [main, master]
+
+jobs:
+  no-ai-copy-guard:
+    name: No bare "AI" labels in dashboard customer copy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify dashboard customer copy says Chimmy, never bare AI
+        run: npm run test:no-ai-copy

@@ -7,9 +7,17 @@ import {
   type MetaEventName,
 } from "@/lib/meta-events"
 
+// Meta pixel IDs are always numeric. Guard against placeholder/misconfigured values
+// (e.g. a literal "your-meta-pixel-id" left in an env file) so we don't repeatedly
+// call the Graph API with an ID that can never resolve.
+function resolveConfiguredPixelId(value: string | undefined): string | null {
+  const trimmed = value?.trim()
+  return trimmed && /^\d+$/.test(trimmed) ? trimmed : null
+}
+
 const PIXEL_ID =
-  process.env.META_PIXEL_ID ||
-  process.env.NEXT_PUBLIC_META_PIXEL_ID ||
+  resolveConfiguredPixelId(process.env.META_PIXEL_ID) ||
+  resolveConfiguredPixelId(process.env.NEXT_PUBLIC_META_PIXEL_ID) ||
   DEFAULT_META_PIXEL_ID
 
 function sha256(input: string): string {

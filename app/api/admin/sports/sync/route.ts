@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireAdminOrBearer } from "@/lib/adminAuth"
+import { logAdminAudit, resolveAdminAuditActor } from "@/lib/admin-audit"
 import { runAdminSportsSync } from "@/lib/admin-dashboard/AdminSportsSyncService"
 import { getAdminPerSportDataReliabilityRows } from "@/lib/admin-dashboard/AdminProviderHealthService"
 import {
@@ -7,6 +8,7 @@ import {
   getSportImportMatrix,
 } from "@/lib/admin-dashboard/SportImportMatrixService"
 import { getPlayerGameLogHealthDashboard } from "@/lib/sports-os/PlayerGameLogImportService"
+import { getSportsP0PipelineHealth } from "@/lib/admin-dashboard/SportsP0PipelineHealthService"
 
 export const dynamic = "force-dynamic"
 
@@ -19,9 +21,10 @@ export async function GET(request: NextRequest) {
   const gate = await requireAdminOrBearer(request)
   if (!gate.ok) return gate.res
 
-  const [rows, playerGameLogHealth] = await Promise.all([
+  const [rows, playerGameLogHealth, p0PipelineHealth] = await Promise.all([
     getAdminPerSportDataReliabilityRows(),
     getPlayerGameLogHealthDashboard(),
+    getSportsP0PipelineHealth(),
   ])
   return NextResponse.json({
     ok: true,
@@ -29,6 +32,7 @@ export async function GET(request: NextRequest) {
     importMatrix: getSportImportMatrix(rows),
     aiToolAvailability: getDashboardAiToolAvailability(rows),
     playerGameLogHealth,
+    p0PipelineHealth,
     controls: {
       endpoint: "/api/admin/sports/sync",
       methods: ["GET status", "POST sync"],
@@ -83,6 +87,28 @@ export async function POST(request: NextRequest) {
       limit: body.limit,
       dryRun: body.dryRun === true,
     })
+
+    // Writes provider data into canonical sports tables. dryRun is recorded rather
+    // than skipped — knowing an operator probed a sync is itself useful, and the
+    // volume here is low (unlike email previews).
+    await logAdminAudit({
+      adminUserId: resolveAdminAuditActor(gate.user),
+      action: "admin_sports_sync",
+      targetType: "sports_sync",
+      targetId: body.type ?? "all",
+      details: {
+        type: body.type ?? null,
+        sports: body.sports ?? null,
+        season: parseSeason(body.season),
+        leagueId: body.leagueId ?? null,
+        seasonId: body.seasonId ?? null,
+        playerIdCount: Array.isArray(body.playerIds) ? body.playerIds.length : 0,
+        limit: body.limit ?? null,
+        dryRun: body.dryRun === true,
+        succeeded: result.ok,
+      },
+    })
+
     return NextResponse.json(result, { status: result.ok ? 200 : 429 })
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

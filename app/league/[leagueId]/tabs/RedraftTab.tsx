@@ -4,18 +4,30 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRedraftStream } from '@/lib/hooks/useRedraftStream'
 import { MatchupView } from './redraft/MatchupView'
 import { RosterManager } from './redraft/RosterManager'
+import { ScheduleView } from './redraft/ScheduleView'
 import { StandingsView } from './redraft/StandingsView'
 import { TradeCenter } from './redraft/TradeCenter'
 import { WaiverCenter } from './redraft/WaiverCenter'
 import { IDPWaiverSection } from '@/app/idp/components/IDPWaiverSection'
 import {
+  LeagueDashboardPremiumShells,
+  MatchupPremiumShells,
+  TeamPagePremiumShells,
+  TradePremiumShells,
+  WaiverPremiumShells,
+} from '@/components/redraft-premium'
+import {
+  fetchRedraftLiveScoring,
   fetchRedraftMatchups,
   fetchRedraftRoster,
+  fetchRedraftSchedule,
   fetchRedraftSeason,
   fetchRedraftStandings,
+  type RedraftLiveScoringClient,
   type RedraftMatchupClient,
   type RedraftRosterClient,
   type RedraftRosterRow,
+  type RedraftScheduleClient,
   type RedraftSeasonClient,
 } from '@/lib/redraft/client'
 
@@ -23,6 +35,8 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
   const [season, setSeason] = useState<RedraftSeasonClient | null>(null)
   const [standings, setStandings] = useState<RedraftRosterRow[]>([])
   const [matchups, setMatchups] = useState<RedraftMatchupClient[]>([])
+  const [liveScoring, setLiveScoring] = useState<RedraftLiveScoringClient | null>(null)
+  const [schedule, setSchedule] = useState<RedraftScheduleClient | null>(null)
   const [selectedRosterId, setSelectedRosterId] = useState<string | null>(null)
   const [selectedRoster, setSelectedRoster] = useState<RedraftRosterClient | null>(null)
   const [loading, setLoading] = useState(true)
@@ -64,25 +78,47 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     let cancelled = false
     ;(async () => {
       try {
-        const [rows, weeklyMatchups] = await Promise.all([
+        const [rows, weeklyMatchups, scoring] = await Promise.all([
           fetchRedraftStandings(seasonId),
           fetchRedraftMatchups(seasonId, currentWeek),
+          fetchRedraftLiveScoring({ leagueId, seasonId, week: currentWeek }),
         ])
         if (!cancelled) {
           setStandings(rows)
           setMatchups(weeklyMatchups)
+          setLiveScoring(scoring)
         }
       } catch {
         if (!cancelled) {
           setStandings([])
           setMatchups([])
+          setLiveScoring(null)
         }
       }
     })()
     return () => {
       cancelled = true
     }
-  }, [seasonId, currentWeek])
+  }, [leagueId, seasonId, currentWeek])
+
+  useEffect(() => {
+    if (!seasonId) {
+      setSchedule(null)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const nextSchedule = await fetchRedraftSchedule(leagueId, seasonId)
+        if (!cancelled) setSchedule(nextSchedule)
+      } catch {
+        if (!cancelled) setSchedule(null)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [leagueId, seasonId])
 
   useEffect(() => {
     if (!selectedRosterId) {
@@ -112,13 +148,23 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
     )
   }, [matchups, selectedRosterId])
 
+  const visibleLiveMatchup = useMemo(() => {
+    const liveMatchups = liveScoring?.matchups ?? []
+    if (!selectedRosterId) return liveMatchups[0] ?? null
+    return (
+      liveMatchups.find((m) => m.homeRosterId === selectedRosterId || m.awayRosterId === selectedRosterId) ??
+      liveMatchups[0] ??
+      null
+    )
+  }, [liveScoring, selectedRosterId])
+
   return (
     <div className="space-y-4 px-4 py-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-[15px] font-bold text-white">Redraft</h2>
+          <h2 className="text-[15px] font-bold text-white">Season Hub</h2>
           <p className="text-[11px] text-white/45">
-            NFL redraft scoring uses cached weekly stats, PlayerWeeklyScore, and league matchup records.
+            Track matchups, rosters, waivers, trades, standings, and playoffs from one place.
           </p>
         </div>
         {season?.rosters?.length ? (
@@ -141,42 +187,93 @@ export function RedraftTab({ leagueId, idpLeagueUi = false }: { leagueId: string
 
       {loading ? (
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-[12px] text-white/50">
-          Loading redraft season...
+          Getting your NFL redraft season ready...
         </div>
       ) : error ? (
         <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 p-4 text-[12px] text-rose-100">
-          {error}
+          We could not load this redraft season. Refresh and try again. {error}
         </div>
       ) : !season ? (
         <div className="rounded-xl border border-amber-300/25 bg-amber-400/10 p-4 text-[12px] text-amber-100">
-          No active redraft season is connected to this league yet.
+          Draft results have not been finalized into a redraft season yet. Once the draft is complete, rosters, schedule, waivers, trades, and standings will appear here.
         </div>
       ) : null}
 
-      <MatchupView matchup={visibleMatchup} selectedRosterId={selectedRosterId} sport={sport} />
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <RosterManager roster={selectedRoster} week={currentWeek} />
-        <div className="space-y-3">
-          <WaiverCenter
-            seasonId={seasonId}
+      {loading || error || !season ? null : (
+        <>
+          <LeagueDashboardPremiumShells
             leagueId={leagueId}
-            rosterId={selectedRosterId}
+            teamId={selectedRosterId}
+            week={currentWeek}
+            season={season.season}
+            compact
+          />
+
+          <MatchupView
+            matchup={visibleMatchup}
+            liveMatchup={visibleLiveMatchup}
+            selectedRosterId={selectedRosterId}
             sport={sport}
           />
-          {idpLeagueUi ? <IDPWaiverSection leagueId={leagueId} week={currentWeek} /> : null}
-        </div>
-      </div>
 
-      <TradeCenter
-        leagueId={leagueId}
-        seasonId={seasonId}
-        standings={standings}
-        currentWeek={currentWeek}
-        myRosterId={selectedRosterId}
-      />
+          <MatchupPremiumShells
+            leagueId={leagueId}
+            teamId={selectedRosterId}
+            matchupId={visibleMatchup?.id ?? null}
+            week={currentWeek}
+            season={season.season}
+            compact
+          />
 
-      <StandingsView rows={standings} seasonId={seasonId} />
+          <ScheduleView schedule={schedule} />
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-3">
+              <RosterManager roster={selectedRoster} week={currentWeek} />
+              <TeamPagePremiumShells
+                leagueId={leagueId}
+                teamId={selectedRosterId}
+                week={currentWeek}
+                season={season.season}
+                compact
+              />
+            </div>
+            <div className="space-y-3">
+              <WaiverCenter
+                seasonId={seasonId}
+                leagueId={leagueId}
+                rosterId={selectedRosterId}
+                sport={sport}
+              />
+              <WaiverPremiumShells
+                leagueId={leagueId}
+                teamId={selectedRosterId}
+                week={currentWeek}
+                season={season.season}
+                compact
+              />
+              {idpLeagueUi ? <IDPWaiverSection leagueId={leagueId} week={currentWeek} /> : null}
+            </div>
+          </div>
+
+          <TradeCenter
+            leagueId={leagueId}
+            seasonId={seasonId}
+            standings={standings}
+            currentWeek={currentWeek}
+            myRosterId={selectedRosterId}
+          />
+          <TradePremiumShells
+            leagueId={leagueId}
+            teamId={selectedRosterId}
+            week={currentWeek}
+            season={season.season}
+            compact
+          />
+
+          <StandingsView rows={standings} seasonId={seasonId} />
+        </>
+      )}
     </div>
   )
 }

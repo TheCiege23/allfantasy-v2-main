@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { toPrismaJsonInput } from '@/lib/prisma-json';
 import { getConnectedTargets } from './ConnectedSocialAccountResolver';
 import type { SocialPlatform } from './types';
 import { SUPPORTED_PLATFORMS } from './types';
@@ -66,7 +67,7 @@ async function createPublishLog(input: {
       assetId: input.assetId,
       platform: input.platform,
       status: input.status,
-      responseMetadata: input.responseMetadata,
+      responseMetadata: toPrismaJsonInput(input.responseMetadata),
     },
   });
   return log.id;

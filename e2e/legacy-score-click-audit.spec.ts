@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { signInAs } from "./helpers/session-cookie"
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -146,6 +147,11 @@ test.describe("@legacy-score full click audit", () => {
         }),
       })
     })
+
+    // This test starts on the ungated harness but then follows the breakdown
+    // link onto /app/league/*, which is session-gated — without a session that
+    // navigation 307s to /login and the breakdown assertions fail as missing text.
+    await signInAs(page, { id: "e2e-legacy-user" })
 
     await page.goto(`/e2e/legacy-score?leagueId=${leagueId}`)
     await expect(page.getByRole("heading", { name: /e2e legacy score harness/i })).toBeVisible()

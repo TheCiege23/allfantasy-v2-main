@@ -203,15 +203,20 @@ function whyThisMatters(card: DashboardIntelligenceCard): string | null {
 
 function Skeleton() {
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
-      {[0, 1, 2, 3].map((i) => (
-        <UISkeleton
-          key={i}
-          className="h-[68px] rounded-xl"
-          style={{ animationDelay: `${i * 100}ms` }}
-          aria-hidden
-        />
-      ))}
+    <div role="status" aria-live="polite" className="space-y-2">
+      <p className="text-[11px] font-semibold text-white/55">
+        Checking grounded league signals...
+      </p>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {[0, 1, 2, 3].map((i) => (
+          <UISkeleton
+            key={i}
+            className="h-[68px] rounded-xl"
+            style={{ animationDelay: `${i * 100}ms` }}
+            aria-hidden
+          />
+        ))}
+      </div>
     </div>
   )
 }
@@ -854,7 +859,7 @@ function DashboardIntelligenceRailInner({
             />
           ) : null}
           {state.status === 'loading'
-            ? 'Refreshing…'
+            ? 'Refreshing...'
             : softRefreshing
             ? 'Updating'
             : 'Refresh'}
@@ -888,7 +893,9 @@ function DashboardIntelligenceRailInner({
       ) : null}
 
       {state.status === 'error' ? (
-        <p className="text-[12px] text-white/50">Intelligence temporarily unavailable.</p>
+        <p className="text-[12px] text-white/50">
+          Intelligence temporarily unavailable. No new card is shown without grounded data.
+        </p>
       ) : null}
 
       <DashboardIntelligenceDebugPanel

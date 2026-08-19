@@ -59,6 +59,7 @@ export type GifSearchResult = {
   id: string
   url: string
   previewUrl?: string
+  title?: string
   provider: "klipy" | "tenor" | "giphy"
 }
 
@@ -119,7 +120,8 @@ function normalizeKlipyResults(payload: unknown): GifSearchResult[] {
         readLegacyUrl(legacy, "webp") ||
         url
 
-      normalized.push({ id, url, previewUrl: preview, provider: "klipy" })
+      const title = typeof obj.title === "string" ? obj.title : ""
+      normalized.push({ id, url, previewUrl: preview, title, provider: "klipy" })
   }
   return normalized
 }
@@ -138,7 +140,8 @@ function normalizeTenorResults(payload: unknown): GifSearchResult[] {
     const url = typeof gif?.url === "string" ? gif.url : ""
     const previewUrl = typeof tiny?.url === "string" ? tiny.url : url
     if (!id || !url) continue
-    normalized.push({ id, url, previewUrl, provider: "tenor" })
+    const title = typeof obj.title === "string" ? obj.title : ""
+    normalized.push({ id, url, previewUrl, title, provider: "tenor" })
   }
   return normalized
 }
@@ -157,7 +160,8 @@ function normalizeGiphyResults(payload: unknown): GifSearchResult[] {
     const url = typeof original?.url === "string" ? original.url : ""
     const previewUrl = typeof preview?.url === "string" ? preview.url : url
     if (!id || !url) continue
-    normalized.push({ id, url, previewUrl, provider: "giphy" })
+    const title = typeof obj.title === "string" ? obj.title : ""
+    normalized.push({ id, url, previewUrl, title, provider: "giphy" })
   }
   return normalized
 }

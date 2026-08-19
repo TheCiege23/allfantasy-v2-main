@@ -7,6 +7,7 @@ import {
   RANK_XP_PER_IMPORT_WIN,
   RANK_XP_PER_PLAYOFF_APPEARANCE,
 } from '@/lib/rank/rank-xp-constants'
+import { getNativeLeagueRankRows } from '@/lib/rank/deriveNativeLeagueRows'
 
 export {
   RANK_XP_LEAGUE_SIZE_MULTIPLIER,
@@ -143,6 +144,16 @@ export async function calculateAndSaveRank(userId: string): Promise<CalculateRan
           leagueSize: ll.teamCount ?? 12,
         })
       }
+    }
+
+    // ── Source 3: Native AllFantasy leagues (franchise_seasons) ────────
+    // Credits finalized native-league seasons the user owned a team in, using
+    // the canonical per-franchise season snapshot. Keyed like the other sources
+    // so it merges/dedupes into the same XP math. Imported/legacy stay authoritative.
+    const nativeRows = await getNativeLeagueRankRows(userId).catch(() => [])
+    for (const nr of nativeRows) {
+      if (rows.has(nr.key)) continue
+      rows.set(nr.key, nr)
     }
 
     // ── Compute XP from merged rows ──────────────────────────────

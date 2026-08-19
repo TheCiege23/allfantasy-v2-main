@@ -16,6 +16,7 @@ import {
   type ProviderStatus,
 } from "@/lib/connected-accounts"
 import { ConnectedIdentityRenderer } from "@/components/connected-accounts/ConnectedIdentityRenderer"
+import { EspnCookieConnection } from "@/components/settings/EspnCookieConnection"
 import type { SettingsProfile } from "./settings-types"
 
 const IMPORT_PLATFORM_IDS = ["yahoo", "espn", "mfl", "fleaflicker", "fantrax"] as const
@@ -431,18 +432,21 @@ export function ConnectedAccountsSettingsSection({
             </div>
           </li>
           {IMPORT_PLATFORM_IDS.map((id) => (
-            <li key={id} className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{t(`settings.connected.platform.${id}`)}</span>
-                <p className="text-xs" style={{ color: "var(--muted)" }}>{t(`settings.connected.hint.${id}`)}</p>
+            <li key={id} className="flex flex-col gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="text-sm font-medium" style={{ color: "var(--text)" }}>{t(`settings.connected.platform.${id}`)}</span>
+                  <p className="text-xs" style={{ color: "var(--muted)" }}>{t(`settings.connected.hint.${id}`)}</p>
+                </div>
+                <Link
+                  href="/import"
+                  className="shrink-0 rounded-lg border px-3 py-2 text-xs font-medium"
+                  style={{ borderColor: "var(--border)", color: "var(--text)" }}
+                >
+                  {t("settings.connected.openImport")}
+                </Link>
               </div>
-              <Link
-                href="/import"
-                className="shrink-0 rounded-lg border px-3 py-2 text-xs font-medium"
-                style={{ borderColor: "var(--border)", color: "var(--text)" }}
-              >
-                {t("settings.connected.openImport")}
-              </Link>
+              {id === "espn" && <EspnCookieConnection />}
             </li>
           ))}
         </ul>

@@ -31,6 +31,9 @@ export interface LockedFeatureCardProps {
   onTokenClick?: () => void
   entitlementStatus?: 'active' | 'grace' | 'past_due' | 'expired' | 'none'
   className?: string
+  /** Viewer has no account at all (guest tier) — swap the CTA to "Sign up free" instead of "Upgrade". */
+  isGuestLocked?: boolean
+  signUpHref?: string
 }
 
 export function LockedFeatureCard({
@@ -46,8 +49,10 @@ export function LockedFeatureCard({
   onTokenClick,
   entitlementStatus = 'none',
   className = '',
+  isGuestLocked = false,
+  signUpHref = '/signup',
 }: LockedFeatureCardProps) {
-  const showTokenFallback = tokenCost != null && tokenCost > 0
+  const showTokenFallback = !isGuestLocked && tokenCost != null && tokenCost > 0
   const tokenLabel =
     tokenCtaLabel
     ?? `Or use ${tokenCost} token${tokenCost !== 1 ? 's' : ''} for one-time use`
@@ -83,8 +88,11 @@ export function LockedFeatureCard({
         <h3 className="text-lg font-semibold text-white">{featureName} is locked</h3>
       </div>
       <p className="mt-2 text-sm text-white/70">
-        This feature requires {requiredPlan}. Subscribe to unlock it.
-        {showTokenFallback ? ' You can also use tokens for a one-time unlock where available.' : ''}
+        {isGuestLocked
+          ? `Sign up free to create your AllFantasy account, then upgrade to ${requiredPlan} to unlock this.`
+          : `This feature requires ${requiredPlan}. Subscribe to unlock it.${
+              showTokenFallback ? ' You can also use tokens for a one-time unlock where available.' : ''
+            }`}
       </p>
       {statusMessage ? (
         <p
@@ -95,7 +103,23 @@ export function LockedFeatureCard({
         </p>
       ) : null}
       <div className="mt-4 flex flex-col gap-2">
-        {onUpgradeClick ? (
+        {isGuestLocked ? (
+          <Link
+            href={signUpHref}
+            onClick={() => {
+              trackLockedFeatureConversionClick({
+                surface: 'locked_feature_card',
+                ctaType: 'upgrade',
+                featureId: featureId ?? featureName,
+                requiredPlan,
+              })
+            }}
+            className="flex items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 py-3 text-sm font-medium text-white hover:bg-cyan-500 active:scale-[0.98] transition-premium focus-ring touch-manipulation"
+            data-testid="locked-feature-signup-link"
+          >
+            Sign up free
+          </Link>
+        ) : onUpgradeClick ? (
           <button
             type="button"
             onClick={() => {

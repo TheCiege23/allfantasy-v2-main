@@ -147,6 +147,11 @@ export const MflAdapter: ILeagueImportAdapter<MflImportPayload> = {
         rosterSize,
         scoring: scoringFormat,
         isDynasty,
+        // Same fix as Sleeper/ESPN/Yahoo: `League.status` has no DB default, so a
+        // missing value here leaves imported leagues invisible on Dashboard. MFL's
+        // real signal is coarser (season-year comparison, not a live in-season
+        // flag) but still real, not fabricated — `raw.league.isFinished`.
+        status: raw.league.isFinished ? 'complete' : 'in_season',
         playoff_team_count: raw.league.playoffTeamCount ?? undefined,
         regular_season_length: raw.league.regularSeasonLength ?? undefined,
         schedule_unit: 'week',

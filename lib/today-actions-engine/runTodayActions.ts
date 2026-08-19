@@ -12,6 +12,9 @@ import { getPrimaryLeagueForUser } from './primaryLeagueForUser'
 import { computeWaiverTimingForLeague } from './waiverTimingFromLeague'
 import type { TodayActionsEngineResponse, TodayActionsSignalHealth } from './types'
 import { prisma } from '@/lib/prisma'
+import { shouldRunLineupLive, runLineupShadowForSummary } from '@/lib/decision-os/lineup/shadow'
+import { toTodayLineupCard } from '@/lib/decision-os/lineup/todayCardAdapter'
+import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
 
 type SignalStatus = 'ok' | 'failed'
 
@@ -132,6 +135,37 @@ export async function runTodayActions(userId: string): Promise<TodayActionsEngin
   const lineup = await attachChimmyAdviceToLineupSummary(lineupRaw, userId)
   const actions = lineup.actions ?? []
 
+  // Decision OS Slice 1 (manager.lineup.set) Stage 1 LIVE — same pattern as /api/today/lineup-actions:
+  // fed the pre-Chimmy deterministic summary (never the AI-enriched one), evaluation only, never sets
+  // a lineup, never affects any field above. Absent (null) whenever the flag is off or no result.
+  let decisionOs: TodayActionsEngineResponse['decisionOs'] = null
+  if (shouldRunLineupLive(process.env)) {
+    const liveStart = Date.now()
+    try {
+      const results = await runLineupShadowForSummary(userId, lineupRaw, { maxLeagues: 1 })
+      const first = results[0]
+      if (first?.ran && first.result) {
+        const { decision } = first.result
+        decisionOs = {
+          decisionId: decision.decision_id,
+          card: toTodayLineupCard(decision),
+          confidence: decision.confidence,
+          leagueId: first.leagueId,
+        }
+        emitLiveTelemetry(
+          'lineup.set',
+          { enriched: true, latency_ms: Date.now() - liveStart, leagueId: first.leagueId, source: first.source, callSite: 'today-actions-engine' },
+          decision.decision_id,
+        )
+      } else {
+        emitLiveTelemetry('lineup.set', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart, callSite: 'today-actions-engine' })
+      }
+    } catch {
+      emitLiveTelemetry('lineup.set', { enriched: false, reason: 'exception', latency_ms: Date.now() - liveStart, callSite: 'today-actions-engine' })
+      // live path must never fail the today-actions engine
+    }
+  }
+
   const lineupInjuryDecisionsToReview = actions.filter(
     (a) => INJURY_REASONS.has(a.reasonType) && a.severity !== 'info',
   ).length
@@ -240,5 +274,6 @@ export async function runTodayActions(userId: string): Promise<TodayActionsEngin
         warRoomStatus === 'failed',
       failureDetails,
     },
+    decisionOs,
   }
 }

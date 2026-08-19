@@ -6,12 +6,12 @@
 export type NflRookiePolicyPlayerLike = {
   isRookie?: boolean
   rookie?: boolean
-  yearsExp?: number | null
-  experience?: number | null
-  draftYear?: number | null
-  nflDraftYear?: number | null
-  display?: { metadata?: Record<string, unknown> } | null
-  metadata?: Record<string, unknown>
+  yearsExp?: unknown
+  experience?: unknown
+  draftYear?: unknown
+  nflDraftYear?: unknown
+  display?: { metadata?: unknown } | null
+  metadata?: unknown
   [key: string]: unknown
 }
 

@@ -12,6 +12,11 @@ const KNOWN_STATUSES: HealthStatus[] = ['excellent', 'healthy', 'watch', 'at_ris
  * Shared fetch for /api/league-health — used by MyLeagueCard (every league) and
  * CommissionerHub (commissioned leagues only) so the POST-body assembly and status
  * normalization only lives in one place.
+ *
+ * Deliberately NOT gated on `hasUnifiedRecord` like MyLeagueCard's other fetches: this route's
+ * non-`decision_os` branch is `monitorLeagueHealth(parsed.data)` — a pure function over the POST
+ * body that never touches the DB — so it returns a real status for AF Legacy rows too and adds no
+ * database load.
  */
 export function useLeagueHealth(league: UserLeague): { status: HealthStatus } | null {
   const [health, setHealth] = useState<{ status: HealthStatus } | null>(null)

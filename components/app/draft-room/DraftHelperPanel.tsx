@@ -241,7 +241,7 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
           testIdPrefix="draft-prep-monetization"
         />
         <InContextMonetizationCard
-          title="War Room strategy build access"
+          title="AF Legacy strategy build access"
           featureId="draft_strategy_build"
           tokenRuleCodes={['ai_draft_helper_session_recommendation']}
           testIdPrefix="draft-helper-monetization"
@@ -553,7 +553,7 @@ export function DraftHelperPanel(props: DraftHelperPanelProps) {
                   Your ranked copilot recommendation loads when it is your pick — it follows the live board and your roster needs.
                 </p>
                 <p className="text-[11px] text-white/42">
-                  Between picks, use War Room (below) for redraft lookahead; it tracks scarcity and positional runs as picks land.
+                  Between picks, use AF Legacy (below) for redraft lookahead; it tracks scarcity and positional runs as picks land.
                 </p>
               </>
             ) : (

@@ -69,10 +69,10 @@ export async function POST(req: Request) {
 
     const teams = await prisma.leagueTeam.findMany({
       where: { leagueId },
-      select: { platformUserId: true, claimedByUserId: true },
+      select: { id: true, platformUserId: true, claimedByUserId: true },
     })
-    const sleeperUserId =
-      teams.find((t) => t.claimedByUserId === targetUserId)?.platformUserId ?? null
+    const myLeagueTeam = teams.find((t) => t.claimedByUserId === targetUserId) ?? null
+    const sleeperUserId = myLeagueTeam?.platformUserId ?? null
     if (!sleeperUserId) {
       return NextResponse.json({ error: 'No Sleeper user linked to this manager' }, { status: 400 })
     }
@@ -105,6 +105,42 @@ export async function POST(req: Request) {
     const myR = bundle.rosters.find((x) => x.roster_id === myRid)
     const oppR = bundle.rosters.find((x) => x.roster_id === opp?.roster_id)
 
+    // HONESTY PASS (slice 12): win probability used to be asked of the LLM from
+    // a snapshot containing only player NAMES and partial points — the model
+    // invented a percentage and we rendered it as an analysis. Win probability
+    // is a simulation output, not a language output. Read the real one from
+    // MatchupSimulationResult; when it doesn't exist, say so instead of
+    // guessing.
+    const simulation = myLeagueTeam
+      ? await prisma.matchupSimulationResult
+          .findFirst({
+            where: {
+              leagueId,
+              weekOrPeriod: week,
+              OR: [{ teamAId: myLeagueTeam.id }, { teamBId: myLeagueTeam.id }],
+            },
+            orderBy: { createdAt: 'desc' },
+            select: {
+              teamAId: true,
+              expectedScoreA: true,
+              expectedScoreB: true,
+              winProbabilityA: true,
+              winProbabilityB: true,
+            },
+          })
+          .catch(() => null)
+      : null
+    const isTeamA = simulation?.teamAId === myLeagueTeam?.id
+    const deterministicWinProbability = simulation
+      ? Math.round((isTeamA ? simulation.winProbabilityA : simulation.winProbabilityB) * 100)
+      : null
+    const deterministicExpectedScores = simulation
+      ? {
+          mine: isTeamA ? simulation.expectedScoreA : simulation.expectedScoreB,
+          opponent: isTeamA ? simulation.expectedScoreB : simulation.expectedScoreA,
+        }
+      : null
+
     const snapshot = {
       week,
       myTeam: myTeam?.metadata?.team_name || myTeam?.display_name || 'My team',
@@ -113,11 +149,19 @@ export async function POST(req: Request) {
       oppProjectedLineup: rosterLineup(oppR),
       myPointsSoFar: mine?.points,
       oppPointsSoFar: opp?.points,
+      // Deterministic facts (may be null) — the model must not restate these as its own estimate.
+      simulatedWinProbability: deterministicWinProbability,
+      simulatedExpectedScores: deterministicExpectedScores,
     }
 
-    const system = `You are Chimmy, AllFantasy's matchup strategist. Using the snapshot (points may be partial if mid-week), estimate outlook and lineup tweaks. Respond with ONLY valid JSON (no markdown):
-{"winProbability":number,"keyMatchups":string[],"lineupRecommendation":string}
-winProbability is 0-100 for the requesting manager. keyMatchups are short bullets (e.g. positional edges).`
+    const system = `You are Chimmy, AllFantasy's matchup strategist. Using the snapshot (points may be partial if mid-week), describe the matchup and suggest lineup tweaks. Respond with ONLY valid JSON (no markdown):
+{"keyMatchups":string[],"lineupRecommendation":string}
+keyMatchups are short bullets (e.g. positional edges).
+CRITICAL: Do NOT output a win probability, odds, or any percentage chance of winning. ${
+      deterministicWinProbability != null
+        ? `The simulated win probability is ${deterministicWinProbability}% — you may reference that exact figure, but never invent a different one.`
+        : 'No simulation exists for this matchup, so no win probability is available. Do not estimate one; discuss matchup edges qualitatively instead.'
+    }`
 
     const userPayload = `League: ${String(bundle.league.name ?? '')} (${bundle.sport})\n${JSON.stringify(snapshot, null, 2)}`
 
@@ -156,7 +200,8 @@ winProbability is 0-100 for the requesting manager. keyMatchups are short bullet
         },
       })
       const smokeResult = {
-        winProbability: 50,
+        winProbability: null,
+        winProbabilitySource: 'unavailable' as const,
         keyMatchups: [smoke.text],
         lineupRecommendation: 'Smoke-mode placeholder recommendation generated from deterministic input hash.',
         meta: smoke.json,
@@ -184,6 +229,19 @@ winProbability is 0-100 for the requesting manager. keyMatchups are short bullet
 
     const raw = await callClaudeJson({ system, user: userPayload, userId: sessionUserId })
 
+    // Honesty pass: the deterministic simulation is authoritative for
+    // winProbability. Any model-produced value is discarded — never merged,
+    // never used as a fallback. `winProbabilitySource` makes the provenance
+    // explicit to every consumer.
+    const modelOutput = (raw ?? {}) as Record<string, unknown>
+    delete modelOutput.winProbability
+    const result = {
+      ...modelOutput,
+      winProbability: deterministicWinProbability,
+      winProbabilitySource: deterministicWinProbability != null ? 'simulation' : 'unavailable',
+      expectedScores: deterministicExpectedScores,
+    }
+
     // Write to AiResult cache (fire-and-forget).
     writeAiResultCache({
       resultKey,
@@ -193,11 +251,11 @@ winProbability is 0-100 for the requesting manager. keyMatchups are short bullet
       scopeId: leagueId,
       provider: 'anthropic',
       inputJson: { leagueId, userId: targetUserId, sport: bundle.sport, week },
-      resultJson: raw,
+      resultJson: result,
       ttlMs: MATCHUP_PREVIEW_TTL_MS,
     }).catch(() => undefined)
 
-    return NextResponse.json(raw)
+    return NextResponse.json(result)
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Matchup preview failed'
     console.error('[api/ai/matchup-preview]', e)

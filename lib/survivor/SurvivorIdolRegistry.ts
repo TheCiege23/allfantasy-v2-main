@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { getSurvivorConfig } from './SurvivorLeagueConfig'
 import { appendSurvivorAudit } from './SurvivorAuditLog'
 import { DEFAULT_IDOL_POWER_POOL } from './constants'
@@ -247,11 +248,11 @@ export async function applyIdolPower(
       idolId,
       eventType: 'used',
       fromRosterId: rosterId,
-      metadata: {
+      metadata: toPrismaJsonInput({
         ...(context ?? {}),
         powerType: idol.powerType,
         appliedEffect: effectResult.effect ?? null,
-      },
+      }),
     },
   })
   await appendSurvivorAudit(leagueId, config.configId, 'idol_used', {

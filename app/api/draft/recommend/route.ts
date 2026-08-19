@@ -13,6 +13,10 @@ import { buildDraftExecutionMetadata } from '@/lib/draft-automation-policy'
 import { buildDraftRecommendationContext } from '@/lib/ai/SportAwareRecommendationService'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
+import { shouldRunShadow } from '@/lib/decision-os/core/shadow'
+import { emitShadowParity } from '@/lib/decision-os/core/parity'
+import { evaluateDraftShadow } from '@/lib/shared-services/draft'
+import { getCurrentUserRosterIdForLeague } from '@/lib/live-draft-engine/auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -79,6 +83,14 @@ export async function POST(req: NextRequest) {
     team: p.team ?? null,
     adp: p.adp ?? p.rank ?? null,
     byeWeek: p.byeWeek ?? null,
+    // Draft VORP slice: real projections from the client pool when present
+    // (draft room pool rows carry projectedPoints). Never invented.
+    projectedPoints:
+      typeof p.projectedPoints === 'number' && Number.isFinite(p.projectedPoints)
+        ? p.projectedPoints
+        : typeof p.projPts === 'number' && Number.isFinite(p.projPts)
+          ? p.projPts
+          : null,
   }))
 
   try {
@@ -121,6 +133,44 @@ export async function POST(req: NextRequest) {
 
     const aiUsed = Boolean(result.aiExplanationUsed)
     const fallbackToDeterministic = includeAIExplanation && !aiUsed
+
+    // Slice 10 — Draft OS shadow: the FIRST production caller of
+    // lib/shared-services/draft (previously test-only scaffolding). Gated by
+    // DECISION_OS_DRAFT_SHADOW (default OFF); fire-and-forget with its own
+    // error isolation — can never affect the live recommendation response.
+    // Emits `manager.draft.pick` parity: shared-service top pick vs the live
+    // engine's top pick, the sample stream for eventual Draft OS convergence.
+    const shadowLeagueId = typeof body.leagueId === 'string' ? body.leagueId : null
+    if (shadowLeagueId && shouldRunShadow('DECISION_OS_DRAFT_SHADOW')) {
+      const liveTop = result.recommendation.recommendation?.player?.name ?? null
+      const liveConfidence = result.recommendation.recommendation?.confidence ?? null
+      const userId = session.user.id
+      void (async () => {
+        try {
+          const rosterId = await getCurrentUserRosterIdForLeague(shadowLeagueId, userId)
+          if (!rosterId) {
+            emitShadowParity('manager.draft.pick', { shadow: true, ran: false, reason: 'no_user_roster' })
+            return
+          }
+          const evaluation = await evaluateDraftShadow({ leagueId: shadowLeagueId, rosterId, mode })
+          const shadowTop = evaluation.topCandidate?.playerName ?? null
+          emitShadowParity('manager.draft.pick', {
+            shadow: true,
+            ran: true,
+            reason: 'shared_service_compare',
+            sameTopPlayer:
+              shadowTop && liveTop ? shadowTop.trim().toLowerCase() === liveTop.trim().toLowerCase() : null,
+            shadowTop,
+            liveTop,
+            shadowConfidence: evaluation.confidence,
+            liveConfidence,
+            uncertaintyCount: evaluation.uncertainty.length,
+          })
+        } catch {
+          emitShadowParity('manager.draft.pick', { shadow: true, ran: false, reason: 'shadow_error' })
+        }
+      })()
+    }
 
     return NextResponse.json({
       ok: true,

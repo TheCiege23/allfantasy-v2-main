@@ -131,7 +131,11 @@ export default function DramaEventDetailPage() {
           <ArrowLeft className="h-4 w-4" /> Back to league
         </Link>
         <Link
-          href={`/league/${leagueId}/drama`}
+          // The timeline lives under /app/league, not /league — the unprefixed
+          // path 404s. `Back to league` above is right to omit /app, because
+          // /league/<id> DOES exist (and /app/league/<id> redirects to it), which
+          // is why one missing prefix here looked consistent with its neighbour.
+          href={`/app/league/${leagueId}/drama`}
           className="inline-flex items-center gap-1 text-sm text-amber-200 hover:underline"
         >
           Open drama timeline

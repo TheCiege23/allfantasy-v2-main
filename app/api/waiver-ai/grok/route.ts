@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { rateLimit, getClientIp } from '@/lib/rate-limit';
 import { prisma } from '@/lib/prisma';
+import { assertLeagueMember } from '@/lib/league-access';
 import OpenAI from 'openai';
 import { executeSerperWebSearch, executeSerperNewsSearch } from '@/lib/serper';
 import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader';
@@ -262,9 +263,16 @@ export async function POST(req: NextRequest) {
     let leagueSettings = '';
     let resolvedSport: string = (body.sport as string) || 'NFL';
 
-    const sleeperUserId = body.sleeperUserId || body.platformUserId;
+    if (leagueId) {
+      if (!userId) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+      try {
+        await assertLeagueMember(leagueId, userId);
+      } catch {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
 
-    if (leagueId && (userId || sleeperUserId)) {
       const league = await (prisma as any).league.findUnique({
         where: { id: leagueId },
         include: { rosters: true },
@@ -275,8 +283,9 @@ export async function POST(req: NextRequest) {
       }
 
       resolvedSport = (league.sport as string) || 'NFL';
-      const lookupId = sleeperUserId || userId;
-      const userRoster = league.rosters.find((r: any) => r.platformUserId === lookupId);
+      // Identity is always the authenticated session's own userId — never a client-supplied
+      // sleeperUserId/platformUserId, which would let one account read another team's roster.
+      const userRoster = league.rosters.find((r: any) => r.platformUserId === userId);
       if (!userRoster) {
         return NextResponse.json({ error: 'Roster not found for this user in this league' }, { status: 400 });
       }

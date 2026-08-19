@@ -13,6 +13,7 @@ import type {
 const SIGN_IN_PROVIDER_IDS: SignInProviderId[] = [
   "google",
   "apple",
+  "spotify",
   "facebook",
   "instagram",
   "x",
@@ -22,6 +23,7 @@ const SIGN_IN_PROVIDER_IDS: SignInProviderId[] = [
 const SIGN_IN_PROVIDER_NAMES: Record<SignInProviderId, string> = {
   google: "Google",
   apple: "Apple",
+  spotify: "Spotify",
   facebook: "Facebook",
   instagram: "Instagram",
   x: "X (Twitter)",
@@ -46,6 +48,7 @@ function isProviderConfigured(providerId: SignInProviderId): boolean {
     case "apple":
       return !!(process.env.APPLE_CLIENT_ID && process.env.APPLE_CLIENT_SECRET)
     case "facebook":
+    case "spotify":
     case "instagram":
     case "x":
     case "tiktok":
@@ -204,7 +207,7 @@ export async function saveUserSettings(
       const notificationSettingsValue =
         payload.notificationSettings === null
           ? Prisma.JsonNull
-          : payload.notificationSettings
+          : (payload.notificationSettings as Prisma.InputJsonValue)
       await prisma.userProfile.upsert({
         where: { userId },
         update: { notificationPreferences: notificationSettingsValue },

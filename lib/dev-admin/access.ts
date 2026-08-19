@@ -3,7 +3,7 @@ import { isAdminEmailAllowed } from "@/lib/adminAuth"
 import { isAllFantasyTestEmail } from "@/lib/auth/admin"
 import { getTokenSpendRuleMatrixEntry, type TokenPricingTier } from "@/lib/tokens/pricing-matrix"
 
-const DEV_ADMIN_PLANS: readonly SubscriptionPlanId[] = ["all_access"]
+const DEV_ADMIN_PLANS: readonly SubscriptionPlanId[] = ["supreme"]
 const DEV_ADMIN_STATUS: EntitlementStatus = "active"
 const DEV_ADMIN_BALANCE = 1_000_000_000
 

@@ -111,7 +111,7 @@ export default function OverviewInsights({
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500/20 to-cyan-500/20 flex items-center justify-center text-lg">
             <span role="img" aria-label="robot">&#x1F916;</span>
           </div>
-          <div className="text-sm font-semibold text-white/80">AI Insight</div>
+          <div className="text-sm font-semibold text-white/80">Chimmy Insight</div>
         </div>
         <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-[9px] text-emerald-300/70 font-medium flex items-center gap-1">
           <span className="w-1 h-1 rounded-full bg-emerald-400/80" />

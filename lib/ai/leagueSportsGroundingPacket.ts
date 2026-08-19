@@ -19,6 +19,7 @@ import { loadFantasyProviderHealth } from "@/lib/fantasy-data/providerHealth"
 import type { FantasyDataEvidenceSnapshot } from "@/lib/fantasy-data/fantasyDataEvidence"
 import type { FantasyFreshnessReport } from "@/lib/fantasy-data/fantasyFreshness"
 import type { FantasyProviderHealthReport } from "@/lib/fantasy-data/providerHealth"
+import { listInjuryFacts } from "@/lib/injuries/injuryReadPort"
 
 // ─── League grounding sub-types ───────────────────────────────────────────────
 
@@ -657,14 +658,25 @@ async function loadFantasyData(sport: string, season: number): Promise<LeagueGro
     const [playerCount, adpCount, injuryCount, scheduleCount, topInjuries] = await Promise.all([
       (prisma as any).sportsPlayerRecord.count({ where: { sport } }).catch(() => 0) as Promise<number>,
       (prisma as any).adpDataRecord.count({ where: { sport } }).catch(() => 0) as Promise<number>,
-      (prisma as any).injuryReportRecord.count({ where: { sport } }).catch(() => 0) as Promise<number>,
+      // Injury freshness comes from the canonical port. injury_report_records was
+      // orphaned when the cron moved to sports_injuries and froze at 2026-04-28,
+      // so both this count and the list below described a dead table while the
+      // packet reported hasInjuryData: true.
+      listInjuryFacts({ sport, limit: 200 })
+        .then((l) => (l.facts ?? []).filter((f) => !f.stale).length)
+        .catch(() => 0) as Promise<number>,
       (prisma as any).sportsGame.count({ where: { sport, season } }).catch(() => 0) as Promise<number>,
-      (prisma as any).injuryReportRecord.findMany({
-        where: { sport, status: { in: ["Out", "Doubtful", "Questionable"] } },
-        select: { playerName: true, team: true, status: true },
-        orderBy: { reportDate: "desc" },
-        take: 20,
-      }).catch(() => []) as Promise<Array<Record<string, unknown>>>,
+      listInjuryFacts({
+        sport,
+        statuses: ["Out", "Doubtful", "Questionable"],
+        limit: 20,
+      })
+        .then((l) =>
+          (l.facts ?? [])
+            .filter((f) => !f.stale)
+            .map((f) => ({ playerName: f.playerName, team: f.team, status: f.status }))
+        )
+        .catch(() => []) as Promise<Array<Record<string, unknown>>>,
     ])
 
     return {

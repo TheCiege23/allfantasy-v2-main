@@ -5,6 +5,8 @@
  */
 
 export type LanguageCode = 'en' | 'es' | 'zh' | 'fil' | 'vi' | 'fr' | 'ar'
+export type LanguageSupportStatus = 'production-ready' | 'partial' | 'beta' | 'future-only'
+export type TextDirection = 'ltr' | 'rtl'
 
 export const LANG_STORAGE_KEY = 'af_lang'
 export const LANG_COOKIE_KEY = 'af_lang'
@@ -12,6 +14,9 @@ export const LANG_COOKIE_KEY = 'af_lang'
 export const DEFAULT_LANG: LanguageCode = 'en'
 
 export const SUPPORTED_LANGUAGES: LanguageCode[] = ['en', 'es', 'zh', 'fil', 'vi', 'fr', 'ar']
+export const PRODUCTION_LANGUAGE_CODES: LanguageCode[] = ['en']
+export const BETA_LANGUAGE_CODES: LanguageCode[] = ['zh', 'fil', 'vi']
+export const FUTURE_LANGUAGE_CODES: LanguageCode[] = ['fr', 'ar']
 
 export const LANGUAGE_DISPLAY_NAMES: Record<LanguageCode, string> = {
   en: 'English',
@@ -23,8 +28,59 @@ export const LANGUAGE_DISPLAY_NAMES: Record<LanguageCode, string> = {
   ar: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629',
 }
 
+export const LANGUAGE_SUPPORT_STATUS: Record<LanguageCode, LanguageSupportStatus> = {
+  en: 'production-ready',
+  es: 'partial',
+  zh: 'beta',
+  fil: 'beta',
+  vi: 'beta',
+  fr: 'future-only',
+  ar: 'future-only',
+}
+
+export const LANGUAGE_TEXT_DIRECTION: Record<LanguageCode, TextDirection> = {
+  en: 'ltr',
+  es: 'ltr',
+  zh: 'ltr',
+  fil: 'ltr',
+  vi: 'ltr',
+  fr: 'ltr',
+  ar: 'rtl',
+}
+
+export const LANGUAGE_INTL_LOCALE: Record<LanguageCode, string> = {
+  en: 'en-US',
+  es: 'es',
+  zh: 'zh-CN',
+  fil: 'fil-PH',
+  vi: 'vi-VN',
+  fr: 'fr-FR',
+  ar: 'ar',
+}
+
 export function getLanguageDisplayName(code: LanguageCode): string {
   return LANGUAGE_DISPLAY_NAMES[code] ?? code
+}
+
+export function getLanguageSupportStatus(code: LanguageCode): LanguageSupportStatus {
+  return LANGUAGE_SUPPORT_STATUS[code] ?? 'future-only'
+}
+
+export function getLanguageTextDirection(code: LanguageCode): TextDirection {
+  return LANGUAGE_TEXT_DIRECTION[code] ?? 'ltr'
+}
+
+export function getIntlLocale(code: string | null | undefined): string {
+  return LANGUAGE_INTL_LOCALE[resolveLanguage(code)]
+}
+
+export function getLanguageOptionLabel(code: LanguageCode): string {
+  const name = getLanguageDisplayName(code)
+  const status = getLanguageSupportStatus(code)
+  if (status === 'beta') return `${name} (Beta)`
+  if (status === 'future-only') return `${name} (Coming Soon)`
+  if (status === 'partial') return `${name} (Partial)`
+  return name
 }
 
 export function resolveLanguage(value: string | null | undefined): LanguageCode {

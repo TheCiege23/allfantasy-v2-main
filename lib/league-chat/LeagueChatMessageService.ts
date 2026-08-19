@@ -30,6 +30,7 @@ export async function getRepliesForMessage(parentMessageId: string) {
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import type { PlatformChatMessage } from '@/types/platform-shared'
 
 const includeUser = {
@@ -177,7 +178,7 @@ export async function createLeagueChatMessage(
       message,
       type: options.type ?? 'text',
       imageUrl: options.imageUrl ?? null,
-      metadata: options.metadata ?? undefined,
+      metadata: toPrismaNullableJsonInput(options.metadata),
       source,
       discordMessageId: options.discordMessageId ?? null,
       sourceDiscord: options.sourceDiscord ?? false,
@@ -253,9 +254,11 @@ export async function updateLeagueChatMessage(
   messageId: string,
   updates: { message?: string; metadata?: Record<string, unknown> }
 ): Promise<{ id: string } | null> {
-  const data: { message?: string; metadata?: Record<string, unknown> } = {}
+  const data: { message?: string; metadata?: ReturnType<typeof toPrismaNullableJsonInput> } = {}
   if (typeof updates.message === 'string') data.message = updates.message
-  if (updates.metadata && typeof updates.metadata === 'object') data.metadata = updates.metadata
+  if (updates.metadata && typeof updates.metadata === 'object') {
+    data.metadata = toPrismaNullableJsonInput(updates.metadata)
+  }
   if (!Object.keys(data).length) return null
   try {
     const row = await prisma.leagueChatMessage.update({

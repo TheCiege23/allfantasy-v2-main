@@ -36,7 +36,14 @@ export default function RosterLegacyReport({ leagueId }: { leagueId?: string }) 
           body: JSON.stringify(body),
         });
 
-        if (!res.ok) throw new Error(await res.text());
+        // Never surface the raw response body ({"error":"Unauthorized"}) to the user.
+        if (!res.ok) {
+          throw new Error(
+            res.status === 401
+              ? 'Sign in to generate your Roster Legacy Report.'
+              : 'Failed to generate legacy report'
+          );
+        }
 
         const data = await res.json();
         setInsights(data.insights || []);

@@ -25,7 +25,7 @@ export default function ChimmyFloatingActionButton({
       onClick={onClick}
       aria-label={label}
       title={label}
-      className={`relative flex h-13 w-13 items-center justify-center rounded-full bg-indigo-600 shadow-xl hover:bg-indigo-500 active:scale-95 transition-all duration-150 ${positionClass} ${className}`}
+      className={`flex h-13 w-13 items-center justify-center rounded-full bg-indigo-600 shadow-xl hover:bg-indigo-500 active:scale-95 transition-all duration-150 ${positionClass} ${className}`}
     >
       <Sparkles className="h-6 w-6 text-white" />
       {hasNotification && (

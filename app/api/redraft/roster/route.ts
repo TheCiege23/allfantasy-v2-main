@@ -12,11 +12,18 @@ import {
   type RedraftLineupPlayer,
   type RedraftLineupValidationResult,
 } from '@/lib/redraft/lineupValidation'
+import { hydrateRedraftLineupLocks } from '@/lib/redraft/lineupLock'
+import { resolveRedraftRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 import {
   getCanonicalNflPlayerByNameTeam,
   getCanonicalNflPlayerContext,
 } from '@/lib/nfl-data-foundation'
+import { getNormalizedPlayerData } from '@/lib/player-data/getNormalizedPlayerData'
+import { serializeUnifiedPlayerForApi } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { getTeamLogo } from '@/lib/players/getTeamLogo'
 import { resolveRedraftRosterLookup } from '@/lib/redraft/redraftRosterIdentity'
+import { recordRedraftRosterMoveHistory } from '@/lib/redraft/rosterMoveHistory'
+import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -103,6 +110,7 @@ function buildLineupValidation(args: {
   players: RedraftLineupPlayer[]
   previousPlayers?: RedraftLineupPlayer[]
   extraIssues?: Parameters<typeof validateRedraftLineup>[0]['extraIssues']
+  rosterConfig?: Parameters<typeof validateRedraftLineup>[0]['rosterConfig']
 }): RedraftLineupValidationResult {
   return validateRedraftLineup(args)
 }
@@ -115,10 +123,14 @@ export async function GET(req: NextRequest) {
   const rosterId = req.nextUrl.searchParams?.get('rosterId')?.trim()
   const seasonId = req.nextUrl.searchParams?.get('seasonId')?.trim()
   const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
-  const week = Number(req.nextUrl.searchParams?.get('week') ?? '1')
   if (!rosterId && !seasonId && !leagueId) {
     return NextResponse.json({ error: 'rosterId, seasonId, or leagueId required' }, { status: 400 })
   }
+  const parsedWeek = parseOptionalRedraftPositiveInteger(req.nextUrl.searchParams?.get('week'), 'week')
+  if (!parsedWeek.ok) {
+    return NextResponse.json({ error: parsedWeek.error }, { status: 400 })
+  }
+  const week = parsedWeek.value ?? 1
 
   const lookup = await resolveRedraftRosterLookup({
     userId,
@@ -136,6 +148,26 @@ export async function GET(req: NextRequest) {
     include: { players: true, season: true },
   })) as RedraftRosterRouteRow | null
   if (!roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // Derive lineup locks from the real game schedule (G1): each player is locked
+  // once their game has kicked off, per the commissioner lock mode. Validation
+  // downstream rejects moving a locked player.
+  const leagueForLock = await prisma.league.findUnique({
+    where: { id: roster.leagueId },
+    select: { settings: true },
+  })
+  const lockHydrated = await hydrateRedraftLineupLocks(prisma, {
+    sport: roster.season.sport,
+    season: roster.season.season,
+    week,
+    rosterId: roster.id,
+    leagueSettings: leagueForLock?.settings ?? null,
+    players: roster.players,
+  })
+  roster.players = lockHydrated.players as RosterPlayerRow[]
+  // G10: resolve the commissioner roster config so lineup validation honors the
+  // league's configured slots (FLEX/SF/K/IDP/counts) + bench/IR/taxi limits.
+  const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
 
   const playerIds = roster.players.map((p) => p.playerId)
   const sports = Array.from(new Set(roster.players.map((p) => p.sport).filter(Boolean)))
@@ -337,24 +369,66 @@ export async function GET(req: NextRequest) {
             player.playerId,
             week,
             weeklyScore.stats as Record<string, number>,
+            player.position,
           ),
         },
       }
     }),
   )
   const players = await hydrateCurrentInjuryStatuses(scoredPlayers, roster.season.season, week)
+  const unifiedRosterRows = await getNormalizedPlayerData({
+    surface: 'roster',
+    leagueId: lookup.season.leagueId,
+    userId,
+    playerIds: players.map((player) => player.playerId).filter(Boolean),
+    limit: Math.max(players.length, 1),
+  }).catch(() => [])
+  const unifiedRoster = unifiedRosterRows.map(serializeUnifiedPlayerForApi)
+  const unifiedById = new Map(unifiedRoster.map((row) => [row.id, row]))
+  const hydratedPlayers = players.map((player) => {
+    const unified = unifiedById.get(player.playerId)
+    const canonical = unified?.nflRedraft ?? null
+    const canonicalProjection = canonical?.currentProjection ?? null
+    const teamLogoUrl = canonical?.media.teamLogo.url ?? unified?.teamLogoUrl ?? getTeamLogo(player.team, player.sport)
+    const headshotUrl = canonical?.media.headshot.url ?? unified?.headshotUrl ?? null
+    return {
+      ...player,
+      playerName: canonical?.displayName ?? player.playerName,
+      position: canonical?.fantasyPosition ?? player.position,
+      team: canonical?.teamAbbr ?? player.team,
+      injuryStatus: canonical?.injury.designation ?? unified?.injuryStatus ?? player.injuryStatus,
+      providerInjuryLabel: canonical?.injury.designation ?? unified?.injuryStatus ?? null,
+      activeStatus: canonical?.activeStatus ?? null,
+      weeklyProjection: canonicalProjection?.weeklyProjectedPoints ?? player.weeklyProjection,
+      restOfSeasonProjection: canonicalProjection?.restOfSeasonProjectedPoints ?? player.restOfSeasonProjection,
+      floorProjection: canonicalProjection?.floor ?? player.floorProjection,
+      ceilingProjection: canonicalProjection?.ceiling ?? player.ceilingProjection,
+      projectionSource: canonicalProjection?.source ?? player.projectionSource,
+      adp: canonical?.adp ?? unified?.adp ?? null,
+      rank: canonical?.rank ?? null,
+      positionalRank: canonical?.positionalRank ?? null,
+      playerDataLastUpdatedAt: canonical?.lastUpdatedAt ?? null,
+      playerDataWarnings: canonical?.dataFreshness.staleWarnings ?? [],
+      canonicalNflRedraft: canonical,
+      headshotUrl,
+      imageUrl: unified?.imageUrl ?? headshotUrl,
+      teamLogoUrl,
+    }
+  })
   const lineupValidation = buildLineupValidation({
     sport: roster.season.sport,
     week,
-    players,
+    players: hydratedPlayers,
+    rosterConfig,
   })
 
   return NextResponse.json({
     roster: {
       ...roster,
-      players,
+      players: hydratedPlayers,
       lineupValidation,
     },
+    unifiedRoster,
     week,
     ...(process.env.NODE_ENV === 'development'
       ? {
@@ -439,7 +513,22 @@ export async function PATCH(req: NextRequest) {
   if (!roster) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const week = Math.max(1, Math.floor(Number(body.week ?? roster.season.currentWeek ?? 1) || 1))
-  const currentPlayers = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
+  const injuryHydrated = await hydrateCurrentInjuryStatuses(roster.players, roster.season.season, week)
+  // Enforce lineup locks (G1): stamp derived isLocked from the schedule BEFORE
+  // applying moves, so a player whose game has kicked off cannot be moved.
+  const leagueForLock = await prisma.league.findUnique({
+    where: { id: roster.leagueId },
+    select: { settings: true },
+  })
+  const { players: currentPlayers } = await hydrateRedraftLineupLocks(prisma, {
+    sport: roster.season.sport,
+    season: roster.season.season,
+    week,
+    rosterId: roster.id,
+    leagueSettings: leagueForLock?.settings ?? null,
+    players: injuryHydrated,
+  })
+  const rosterConfig = resolveRedraftRosterConfig(roster.season.sport, leagueForLock?.settings ?? null)
   const applied = applyRedraftLineupMoves(currentPlayers, body.moves)
   const lineupValidation = buildLineupValidation({
     sport: roster.season.sport,
@@ -447,6 +536,7 @@ export async function PATCH(req: NextRequest) {
     players: applied.players,
     previousPlayers: currentPlayers,
     extraIssues: applied.issues,
+    rosterConfig,
   })
 
   if (!lineupValidation.ok) {
@@ -468,6 +558,31 @@ export async function PATCH(req: NextRequest) {
     ),
   )
 
+  // Phase 2H: best-effort lineup-history write for Decision OS Phase 6 DNA
+  // (docs/DECISION_OS_MANAGER_DNA_PHASE2G_VOLUME_AND_LINEUP_HISTORY_SCOPE.md §2).
+  // Deliberately NOT awaited-and-allowed-to-throw like the analogous Af-table
+  // writer (lib/roster-lineup-engine/lineupService.ts) — a real lineup save
+  // that already succeeded must never fail the response because history
+  // logging failed.
+  try {
+    const slotMap = (players: { playerId: string; slotType: string }[]) =>
+      Object.fromEntries(players.map((p) => [p.playerId, p.slotType]))
+    await recordRedraftRosterMoveHistory({
+      leagueId: roster.leagueId,
+      rosterId: roster.id,
+      seasonId: targetLookup.season.id,
+      season: roster.season.season,
+      week,
+      actorUserId: userId,
+      source: 'user',
+      beforeSlotAssignments: slotMap(currentPlayers),
+      afterSlotAssignments: slotMap(applied.players),
+      metadata: { week, season: roster.season.season },
+    })
+  } catch {
+    // Swallow — see comment above.
+  }
+
   const updated = (await prisma.redraftRoster.findFirst({
     where: { id: roster.id },
     include: { players: true, season: true },
@@ -477,7 +592,7 @@ export async function PATCH(req: NextRequest) {
     ? await hydrateCurrentInjuryStatuses(updated.players, updated.season.season, week)
     : []
   const updatedValidation = updated
-    ? buildLineupValidation({ sport: updated.season.sport, week, players: updatedPlayers })
+    ? buildLineupValidation({ sport: updated.season.sport, week, players: updatedPlayers, rosterConfig })
     : lineupValidation
 
   return NextResponse.json({

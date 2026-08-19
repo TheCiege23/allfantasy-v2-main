@@ -53,23 +53,36 @@ export interface SideTotals {
 }
 
 export interface TradeGrade {
-  /** A+ … F */
-  grade: string
+  /**
+   * A+ … F, or `null` when the inputs could not support a grade at all
+   * (honesty pass): no side carried any resolvable value, so evenness is
+   * undefined rather than perfect. Consumers must render the
+   * `insufficientData` state instead of a letter.
+   */
+  grade: string | null
   /** sideA.total − sideB.total (positive = sideA receives more) */
   valueDifference: number
-  /** 0–100, 100 = perfectly even */
-  fairnessScore: number
+  /** 0–100, 100 = perfectly even. `null` when insufficientData. */
+  fairnessScore: number | null
   /** 0–100, data completeness of the inputs */
   confidenceScore: number
+  /**
+   * True when NO asset on either side resolved to a real value. Previously
+   * this produced total=0 on both sides → fairnessScore 100 → "A+ / within
+   * normal market range" for a trade the engine knew nothing about.
+   */
+  insufficientData: boolean
   /** Deterministic, templated explanation lines (never AI-generated). */
   bullets: string[]
 }
 
 export interface CommissionerReview {
-  fairnessScore: number
+  /** Null when the grade could not be computed (insufficientData). */
+  fairnessScore: number | null
   lopsided: boolean
   reviewRecommended: boolean
-  similarValueRange: { low: number; high: number }
+  /** Null when there was no resolvable value to build a range from. */
+  similarValueRange: { low: number; high: number } | null
 }
 
 export interface TradeValueSnapshot {

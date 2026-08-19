@@ -26,11 +26,11 @@ export type PlayerRankLite = {
   careerTierName: string
   careerLevel: number
   careerXp: string
-  aiReportGrade: string
-  aiScore: number
+  aiReportGrade: string | null
+  aiScore: number | null
   aiInsight: string
-  winRate: number
-  playoffRate: number
+  winRate: number | null
+  playoffRate: number | null
   championshipCount: number
   seasonsPlayed: number
   totalWins?: number
@@ -145,12 +145,23 @@ export function AfRankingsXpBreakdown({ id }: { id?: string }) {
 export function AfRankingsAiPanel({ rank }: { rank: PlayerRankLite }) {
   const strengths: string[] = []
   const gaps: string[] = []
-  if (rank.winRate >= 52) strengths.push(`Strong ${rank.winRate.toFixed(0)}% career win rate`)
-  else if (rank.totalWins != null && rank.totalLosses != null && rank.totalWins + rank.totalLosses > 0)
+  // A null rate means no games on record, which is NOT a low rate. Reading it as
+  // a number would both crash on .toFixed and, once defaulted, describe someone
+  // who has never played as a poor performer.
+  if (rank.winRate != null && rank.winRate >= 52)
+    strengths.push(`Strong ${rank.winRate.toFixed(0)}% career win rate`)
+  else if (
+    rank.winRate != null &&
+    rank.totalWins != null &&
+    rank.totalLosses != null &&
+    rank.totalWins + rank.totalLosses > 0
+  )
     gaps.push('Push win rate with smarter starts and trades')
 
-  if (rank.playoffRate >= 45) strengths.push(`Playoff rate ${rank.playoffRate.toFixed(0)}% — consistent contention`)
-  else if (rank.seasonsPlayed > 0) gaps.push('More playoff seasons will accelerate XP')
+  if (rank.playoffRate != null && rank.playoffRate >= 45)
+    strengths.push(`Playoff rate ${rank.playoffRate.toFixed(0)}% — consistent contention`)
+  else if (rank.playoffRate != null && rank.seasonsPlayed > 0)
+    gaps.push('More playoff seasons will accelerate XP')
 
   if (rank.championshipCount > 0) strengths.push(`${rank.championshipCount} title(s) on record`)
   else if (rank.seasonsPlayed > 2) gaps.push('Titles and deep runs are the fastest way to jump tiers')
@@ -402,7 +413,7 @@ export function AfRankingsHeroPremium({ rank, username }: { rank: PlayerRankLite
             </div>
           </div>
           <div className="flex justify-center lg:shrink-0">
-            <AIGradeRing grade={rank.aiReportGrade} score={rank.aiScore} theme={theme} />
+            <AIGradeRing grade={rank.aiReportGrade ?? '—'} score={rank.aiScore} theme={theme} />
           </div>
         </div>
       </div>

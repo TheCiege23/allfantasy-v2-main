@@ -7,6 +7,10 @@ import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
 import { resolveLeagueSport } from '@/lib/ai-learning-system/resolveLeagueSport'
 import { captureRedraftTradeValueSnapshot } from '@/lib/trade-value/captureSnapshot'
 import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMarketEvents'
+import { shouldRunTradeShadow, shouldRunTradeLive, runTradeShadowForProposal } from '@/lib/decision-os/trade/shadow'
+import { toTradeCard, type TradeCard } from '@/lib/decision-os/trade/tradeCardAdapter'
+import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
+import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
 
 export const dynamic = 'force-dynamic'
 
@@ -153,7 +157,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const created = await prisma.$transaction(async (tx) => {
+  const created = await prisma.$transaction(async (tx: any) => {
     const proposal = await tx.redraftTradeProposal.create({
       data: {
         id: crypto.randomUUID(),
@@ -248,5 +252,71 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ proposal: created, valueSnapshot: snapshotRow })
+  // Decision OS Slice 3 — trade shadow/live runner. Evaluation only; never executes or mutates trades.
+  // Stage 0 (SHADOW only): scope-filtered, logs parity, result discarded.
+  // Stage 1 (LIVE): unconditional when a snapshot exists, decisionOs appended to response.
+  const isLive = shouldRunTradeLive(process.env)
+  const liveStart = Date.now()
+  const shadowArgs = created?.id && snapshotRow
+    ? {
+        userId,
+        leagueId,
+        seasonId,
+        proposal: { proposalId: created.id, proposerRosterId, receiverRosterId, status: created.status ?? 'pending', vetoMode },
+        assets: assets.map((a) => ({
+          fromRosterId: a.fromRosterId!,
+          toRosterId: a.toRosterId!,
+          assetType: a.assetType!,
+          playerId: a.playerId ?? null,
+          playerName: a.playerName ?? null,
+          faabAmount: a.assetType === 'faab' ? Number((a.metadata as Record<string, unknown>)?.amount ?? 0) || null : null,
+        })),
+        snapshotPayload: (snapshotRow as { payload?: unknown }).payload,
+        snapshotConfidenceScore: (snapshotRow as { confidenceScore?: number | null }).confidenceScore ?? null,
+      }
+    : null
+
+  let decisionOs: { decisionId: string; card: TradeCard; completeness: number; uncertaintySources: string[] } | null = null
+
+  if (isLive && shadowArgs) {
+    try {
+      const liveResult = await runTradeShadowForProposal(shadowArgs)
+      if (liveResult.ran && liveResult.result) {
+        const { decision } = liveResult.result
+        decisionOs = {
+          decisionId: decision.decision_id,
+          card: toTradeCard(decision),
+          completeness: decision.data_completeness,
+          uncertaintySources: decision.uncertainty_sources,
+        }
+        emitLiveTelemetry('trade.value', { enriched: true, latency_ms: Date.now() - liveStart, leagueId }, decision.decision_id)
+      } else {
+        emitLiveTelemetry('trade.value', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart, leagueId })
+      }
+    } catch {
+      emitLiveTelemetry('trade.value', { enriched: false, reason: 'exception', latency_ms: Date.now() - liveStart, leagueId })
+      // live path must never fail the trade route
+    }
+  } else if (!isLive && shadowArgs) {
+    const shadowFilters = getDecisionShadowScopeFilters()
+    const shadowProfile = shadowFilters.hasUsernameFilter
+      ? await prisma.userProfile.findUnique({
+          where: { userId },
+          select: { sleeperUsername: true },
+        })
+      : null
+
+    if (shouldRunTradeShadow(process.env, {
+      username: shadowProfile?.sleeperUsername ?? null,
+      leagueId,
+    })) {
+      try {
+        await runTradeShadowForProposal(shadowArgs)
+      } catch {
+        // shadow must never affect the legacy response
+      }
+    }
+  }
+
+  return NextResponse.json({ proposal: created, valueSnapshot: snapshotRow, ...(decisionOs ? { decisionOs } : {}) })
 }

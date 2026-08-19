@@ -34,15 +34,15 @@ describe("EntitlementResolver", () => {
     })
   })
 
-  it("maps all_access plan and inherits other feature groups", async () => {
+  it("maps supreme plan and inherits other feature groups", async () => {
     userSubscriptionFindManyMock.mockResolvedValueOnce([
       {
         status: "active",
         currentPeriodEnd: new Date("2099-01-01T00:00:00.000Z"),
         gracePeriodEnd: null,
         expiresAt: null,
-        sku: "af_all_access_monthly",
-        plan: { code: "af_all_access" },
+        sku: "af_supreme_monthly",
+        plan: { code: "af_supreme" },
       },
     ])
     const { EntitlementResolver } = await import("@/lib/subscription/EntitlementResolver")
@@ -50,7 +50,7 @@ describe("EntitlementResolver", () => {
     const snapshot = await resolver.resolveSnapshot("u1")
 
     expect(snapshot.status).toBe("active")
-    expect(snapshot.plans).toContain("all_access")
+    expect(snapshot.plans).toContain("supreme")
     expect(resolver.hasFeatureAccess(snapshot, "trade_analyzer")).toBe(true)
     expect(resolver.hasFeatureAccess(snapshot, "commissioner_automation")).toBe(true)
     expect(resolver.hasFeatureAccess(snapshot, "draft_strategy_build")).toBe(true)
@@ -76,7 +76,7 @@ describe("EntitlementResolver", () => {
     expect(resolved.message).toContain("expired")
   })
 
-  it("returns all-access entitlement for configured dev admins", async () => {
+  it("returns supreme entitlement for configured dev admins", async () => {
     process.env.DEV_ADMIN_USER_IDS = "dev-user-1"
 
     const { EntitlementResolver } = await import("@/lib/subscription/EntitlementResolver")
@@ -84,7 +84,7 @@ describe("EntitlementResolver", () => {
     const snapshot = await resolver.resolveSnapshot("dev-user-1")
 
     expect(snapshot).toMatchObject({
-      plans: ["all_access"],
+      plans: ["supreme"],
       status: "active",
       currentPeriodEnd: null,
       gracePeriodEnd: null,
@@ -92,13 +92,13 @@ describe("EntitlementResolver", () => {
     expect(userSubscriptionFindManyMock).not.toHaveBeenCalled()
   })
 
-  it("returns all-access entitlement for the configured owner email", async () => {
+  it("returns supreme entitlement for the configured owner email", async () => {
     const { EntitlementResolver } = await import("@/lib/subscription/EntitlementResolver")
     const resolver = new EntitlementResolver()
     const snapshot = await resolver.resolveSnapshot("normal-id", "CJABAR.HENSON@GMAIL.COM")
 
     expect(snapshot).toMatchObject({
-      plans: ["all_access"],
+      plans: ["supreme"],
       status: "active",
       currentPeriodEnd: null,
       gracePeriodEnd: null,

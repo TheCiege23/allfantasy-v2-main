@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { computeLegacyRankPreview } from '@/lib/ranking/computeLegacyRank'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 function safeNum(v: unknown, fallback = 0): number {
   const n = Number(v)
@@ -18,10 +19,23 @@ function round2(n: number): number {
 }
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/profile", tool: "LegacyProfile" })(async (request: NextRequest) => {
-  const raw = request.nextUrl.searchParams?.get('sleeper_username')?.trim()
-  if (!raw) return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
+  /*
+   * Guest-usable: this is the one legacy route the guest dashboard (/dashboard/universal)
+   * reads after `guest-import`, and guests have no NextAuth session — `guest-import`
+   * creates LegacyUser rows with no AppUser. The signed `af_guest_session` JWT carries its
+   * own legacyUserId + sleeperUsername, so accepting it is a real binding, not a claim.
+   *
+   * The `?sleeper_username=` query param is no longer trusted to select data; it is only
+   * compared against the caller's own identity so a stale client 403s loudly.
+   */
+  const gate = await requireLegacySleeperIdentity(request, {
+    allowGuest: true,
+    requestedUsername: request.nextUrl.searchParams?.get('sleeper_username')?.trim() ?? null,
+    rateLimit: { action: 'profile', maxRequests: 30, windowMs: 60_000 },
+  })
+  if (!gate.ok) return gate.response
 
-  const uname = raw.toLowerCase()
+  const uname = gate.identity.sleeperUsername.toLowerCase()
 
   const legacyUser = await prisma.legacyUser.findFirst({
     where: { sleeperUsername: uname },

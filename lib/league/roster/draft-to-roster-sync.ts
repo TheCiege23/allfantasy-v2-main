@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import {
   finalizeRosterAssignments,
+  hasExistingLineup,
   type FinalizeRosterAssignmentsSummary,
 } from '@/lib/live-draft-engine/RosterAssignmentService'
 import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
@@ -36,20 +37,6 @@ export type DraftToRosterSyncError = {
   message: string
 }
 
-function hasExistingLineup(playerData: unknown): boolean {
-  if (!playerData || typeof playerData !== 'object') return false
-  const data = playerData as Record<string, unknown>
-  const starters = data.starters
-  if (Array.isArray(starters) && starters.some((s) => typeof s === 'string' && s.trim().length > 0)) {
-    return true
-  }
-  const sections = data.lineup_sections
-  if (sections && typeof sections === 'object' && !Array.isArray(sections)) {
-    const starterList = (sections as Record<string, unknown>).starters
-    if (Array.isArray(starterList) && starterList.length > 0) return true
-  }
-  return false
-}
 
 async function isFullyMaterializedForSession(params: {
   leagueId: string

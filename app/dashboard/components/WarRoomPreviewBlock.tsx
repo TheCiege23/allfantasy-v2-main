@@ -19,7 +19,7 @@ export function WarRoomPreviewBlock() {
         <span className="flex h-8 w-8 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.10] shadow-[0_0_22px_-10px_rgba(34,211,238,0.95)]">
           <Swords className="h-4 w-4 text-cyan-100" />
         </span>
-        <p className="text-[12px] font-black uppercase tracking-[0.18em] text-cyan-100/78">AF War Room</p>
+        <p className="text-[12px] font-black uppercase tracking-[0.18em] text-cyan-100/78">AF Legacy</p>
         <span className="ml-auto rounded-full border border-amber-300/35 bg-amber-300/[0.10] px-2.5 py-1 text-[9px] font-black uppercase tracking-wide text-amber-100">
           NFL Active
         </span>
@@ -54,7 +54,7 @@ export function WarRoomPreviewBlock() {
         className="inline-flex min-h-11 items-center gap-2 rounded-2xl border border-cyan-200/35 bg-gradient-to-r from-cyan-300 to-cyan-100 px-4 py-2.5 text-[13px] font-black text-slate-950 shadow-[0_8px_24px_-12px_rgba(34,211,238,0.95)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_30px_-14px_rgba(34,211,238,1)] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70"
       >
         <Swords className="h-3.5 w-3.5" />
-        Open War Room
+        Open AF Legacy
       </Link>
     </section>
   )

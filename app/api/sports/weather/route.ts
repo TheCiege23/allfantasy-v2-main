@@ -4,6 +4,7 @@ import {
   getVenueForTeam,
   isTeamDome,
 } from '@/lib/openweathermap';
+import { resolveNflRedraftCanonicalWeather } from '@/lib/nfl-provider/nflRedraftProviderCertification';
 import {
   getCachedGameWeather,
   getCachedWeatherByCity,
@@ -54,22 +55,31 @@ export const GET = withApiUsage({ endpoint: "/api/sports/weather", tool: "Sports
       }
 
       const isDome = isTeamDome(normalized);
-
-      const gameWeather = await getCachedGameWeather({ homeTeam: normalized });
-      if (!gameWeather) {
-        return NextResponse.json(
-          { error: 'Failed to fetch weather for venue' },
-          { status: 502 }
-        );
-      }
+      const canonical = await resolveNflRedraftCanonicalWeather({ team: normalized });
+      const weather = canonical.weather
+        ? {
+            condition: canonical.weather.condition ?? null,
+            temp: canonical.weather.temperatureF ?? null,
+            windSpeed: canonical.weather.windSpeedMph ?? null,
+            precipitationType: canonical.weather.precipitationType ?? null,
+            unavailable: canonical.weather.unavailable === true,
+          }
+        : null;
 
       return NextResponse.json({
         team: normalized,
-        venue,
+        venue: typeof canonical.venue?.name === 'string' ? canonical.venue.name : venue,
         isDome,
-        weather: gameWeather.weather,
-        meta: gameWeather.meta,
-        source: isDome ? 'dome' : (gameWeather.meta.cacheHit ? 'weather-cache' : 'openweathermap'),
+        weather,
+        meta: {
+          canonical: true,
+          provider: canonical.source,
+          freshnessStatus: canonical.freshnessStatus,
+          fallbackUsed: canonical.fallbackUsed,
+          cacheUsed: canonical.cacheUsed,
+          unavailable: canonical.unavailable,
+        },
+        source: isDome ? 'dome' : canonical.source,
       });
     }
 

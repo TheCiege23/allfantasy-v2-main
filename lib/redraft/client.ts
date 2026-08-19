@@ -1,3 +1,10 @@
+import type { CanonicalScheduleRuntimeState } from '@/lib/schedule-runtime/canonicalScheduleRuntime'
+import type { NflRedraftPlayoffRuntimeState } from '@/lib/playoff-runtime/canonicalNflRedraftPlayoffRuntime'
+import type { NflRedraftLiveScoringRuntimeState } from '@/lib/scoring-runtime/canonicalNflRedraftScoringRuntime'
+import type { NflRedraftTradeRuntimeState } from '@/lib/trade-runtime/canonicalNflRedraftTradeRuntime'
+import type { NflRedraftWaiverRuntimeState } from '@/lib/waiver-runtime/canonicalNflRedraftWaiverRuntime'
+import type { NflRedraftCanonicalPlayer } from '@/lib/player-data/nflRedraftCanonicalPlayer'
+
 export type RedraftRosterRow = {
   id: string
   teamName: string | null
@@ -37,7 +44,12 @@ export type RedraftRosterPlayerClient = {
   slotType: string
   isLocked?: boolean | null
   injuryStatus: string | null
+  providerInjuryLabel?: string | null
+  activeStatus?: string | null
   byeWeek?: number | null
+  headshotUrl?: string | null
+  imageUrl?: string | null
+  teamLogoUrl?: string | null
   weeklyProjection?: number | null
   restOfSeasonProjection?: number | null
   floorProjection?: number | null
@@ -45,6 +57,12 @@ export type RedraftRosterPlayerClient = {
   projectionConfidenceScore?: number | null
   projectionConfidenceLevel?: 'high' | 'medium' | 'low' | 'none' | null
   projectionSource?: string | null
+  adp?: number | null
+  rank?: number | null
+  positionalRank?: number | null
+  playerDataLastUpdatedAt?: string | null
+  playerDataWarnings?: string[]
+  canonicalNflRedraft?: NflRedraftCanonicalPlayer | null
   weeklyScore: RedraftWeeklyScore | null
 }
 
@@ -81,6 +99,12 @@ export type RedraftMatchupClient = {
   awayRoster: RedraftRosterRow | null
   lineupSnapshots?: unknown
 }
+
+export type RedraftScheduleClient = CanonicalScheduleRuntimeState
+export type RedraftPlayoffRuntimeClient = NflRedraftPlayoffRuntimeState
+export type RedraftLiveScoringClient = NflRedraftLiveScoringRuntimeState
+export type RedraftTradeRuntimeClient = NflRedraftTradeRuntimeState
+export type RedraftWaiverRuntimeClient = NflRedraftWaiverRuntimeState
 
 export type RedraftWaiverClaimClient = {
   id: string
@@ -382,6 +406,43 @@ export async function fetchRedraftMatchups(seasonId: string, week: number): Prom
   return body.matchups ?? []
 }
 
+export async function fetchRedraftSchedule(leagueId: string, seasonId?: string | null): Promise<RedraftScheduleClient | null> {
+  const qs = new URLSearchParams(seasonId ? { seasonId } : { leagueId })
+  const res = await fetch(`/api/redraft/schedule?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ schedule?: RedraftScheduleClient }>(res)
+  return body.schedule ?? null
+}
+
+export async function fetchRedraftLiveScoring(params: {
+  leagueId: string
+  seasonId?: string | null
+  week?: number | null
+}): Promise<RedraftLiveScoringClient | null> {
+  const qs = new URLSearchParams(params.seasonId ? { seasonId: params.seasonId } : { leagueId: params.leagueId })
+  if (params.week != null) qs.set('week', String(params.week))
+  const res = await fetch(`/api/redraft/live-scoring?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ scoring?: RedraftLiveScoringClient }>(res)
+  return body.scoring ?? null
+}
+
+export async function fetchRedraftPlayoffRuntime(params: {
+  leagueId?: string | null
+  seasonId?: string | null
+  week?: number | null
+}): Promise<RedraftPlayoffRuntimeClient | null> {
+  const qs = new URLSearchParams(params.seasonId ? { seasonId: params.seasonId } : { leagueId: params.leagueId ?? '' })
+  if (params.week != null) qs.set('week', String(params.week))
+  const res = await fetch(`/api/redraft/playoff-runtime?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ playoffs?: RedraftPlayoffRuntimeClient }>(res)
+  return body.playoffs ?? null
+}
+
 export async function fetchRedraftRoster(rosterId: string, week: number): Promise<RedraftRosterClient | null> {
   const qs = new URLSearchParams({ rosterId, week: String(week) })
   const res = await fetch(`/api/redraft/roster?${qs.toString()}`, {
@@ -401,6 +462,40 @@ export async function fetchRedraftWaiverClaims(
   })
   const body = await parseJson<{ claims?: RedraftWaiverClaimClient[] }>(res)
   return body.claims ?? []
+}
+
+export async function fetchRedraftWaiverRuntime(params: {
+  leagueId: string
+  seasonId?: string | null
+  rosterId?: string | null
+  week?: number | null
+  scope?: 'mine' | 'league'
+  includeFreeAgents?: boolean
+}): Promise<RedraftWaiverRuntimeClient | null> {
+  const qs = new URLSearchParams(params.seasonId ? { seasonId: params.seasonId } : { leagueId: params.leagueId })
+  if (params.rosterId) qs.set('rosterId', params.rosterId)
+  if (params.week != null) qs.set('week', String(params.week))
+  if (params.scope) qs.set('scope', params.scope)
+  if (params.includeFreeAgents) qs.set('includeFreeAgents', '1')
+  const res = await fetch(`/api/redraft/waiver-runtime?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ waivers?: RedraftWaiverRuntimeClient }>(res)
+  return body.waivers ?? null
+}
+
+export async function fetchRedraftTradeRuntime(params: {
+  leagueId: string
+  seasonId?: string | null
+  week?: number | null
+}): Promise<RedraftTradeRuntimeClient | null> {
+  const qs = new URLSearchParams(params.seasonId ? { seasonId: params.seasonId } : { leagueId: params.leagueId })
+  if (params.week != null) qs.set('week', String(params.week))
+  const res = await fetch(`/api/redraft/trade-runtime?${qs.toString()}`, {
+    credentials: 'include',
+  })
+  const body = await parseJson<{ trades?: RedraftTradeRuntimeClient }>(res)
+  return body.trades ?? null
 }
 
 export async function listTradeProposals(params: {
@@ -523,5 +618,22 @@ export async function generatePlayoffs(payload: {
   })
   return parseJson<{
     summary?: { playoffTeams: number; bracketSize: number; byes: number; rounds: number }
+  }>(res)
+}
+
+export async function advancePlayoffRound(payload: { seasonId: string; week: number }) {
+  const res = await fetch('/api/redraft/playoffs/advance', {
+    method: 'POST',
+    credentials: 'include',
+    headers: jsonHeaders,
+    body: JSON.stringify(payload),
+  })
+  return parseJson<{
+    seasonId: string
+    week: number
+    advanced: number
+    skipped: number
+    blocked: Array<{ matchupId: string; reason: string }>
+    status: string
   }>(res)
 }

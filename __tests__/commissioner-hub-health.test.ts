@@ -165,4 +165,42 @@ describe('commissioner hub health builder', () => {
     expect(snapshot.dataConfidence).toBe('low')
     expect(snapshot.metrics.inactiveTeams).toBe(0)
   })
+
+  it('builds healthy metrics from imported Sleeper canonical roster rows', () => {
+    const snapshot = buildCommissionerHealthSnapshot({
+      now: NOW,
+      league: {
+        id: 'league-imported',
+        name: 'Imported Sleeper League',
+        sport: 'NFL',
+        leagueType: 'redraft',
+        leagueSize: 1,
+        starters: { QB: 1, RB: 1 },
+        rosters: [
+          {
+            id: 'roster-imported',
+            platformUserId: 'sleep-123',
+            updatedAt: NOW,
+            playerData: {
+              players: ['p1', 'p2', 'p3', 'p4'],
+              starters: ['p1', 'p2'],
+              reserve: ['p3'],
+              taxi: ['p4'],
+              import: {
+                provider: 'sleeper',
+                sourceLeagueId: '12345',
+                sourceManagerId: 'sleep-123',
+              },
+            },
+          },
+        ],
+      },
+    })
+
+    expect(snapshot.source).toBe('database')
+    expect(snapshot.dataConfidence).toBe('high')
+    expect(snapshot.teamCount).toBe(1)
+    expect(snapshot.metrics.activeManagers).toBe(1)
+    expect(snapshot.metrics.missedLineups).toBe(0)
+  })
 })

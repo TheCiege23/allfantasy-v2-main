@@ -62,7 +62,7 @@ async function main() {
   const existingGrant = await prisma.adminSubscriptionGrant.findFirst({
     where: {
       userId: user.id,
-      tier: "all_access",
+      tier: "supreme",
       revokedAt: null,
       expiresAt: { gt: new Date() },
     },
@@ -73,16 +73,16 @@ async function main() {
     await prisma.adminSubscriptionGrant.create({
       data: {
         userId: user.id,
-        tier: "all_access",
+        tier: "supreme",
         expiresAt: new Date("2099-12-31T23:59:59.000Z"),
         grantedByAdminId: "system",
         grantedByEmail: "system@allfantasy.internal",
-        reason: "AllFantasy owner/test account all-access verification grant.",
+        reason: "AllFantasy owner/test account supreme verification grant.",
       },
     })
   }
 
-  console.log(`Granted all-access test profile flags and subscription grant to ${user.username} <${user.email}>.`)
+  console.log(`Granted supreme test profile flags and subscription grant to ${user.username} <${user.email}>.`)
 }
 
 main()

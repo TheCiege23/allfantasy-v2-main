@@ -210,7 +210,7 @@ export function PreferencesSettingsSection({
         <button
           type="submit"
           disabled={saving}
-          className="rounded-xl bg-gradient-to-r from-cyan-500/90 to-violet-600/90 px-4 py-2 text-sm font-semibold text-white shadow-lg disabled:opacity-60"
+          className="rounded-xl bg-gradient-to-r from-violet-500/90 to-purple-600/90 px-4 py-2 text-sm font-semibold text-white shadow-lg disabled:opacity-60"
         >
           {saving ? t("settings.actions.saving") : t("settings.preferences.save")}
         </button>

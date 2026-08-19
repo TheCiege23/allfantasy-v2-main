@@ -3,6 +3,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { toPrismaJsonInput, toPrismaNullableJsonInput } from "@/lib/prisma-json";
 import { buildGraphNodes } from "./GraphNodeBuilder";
 import { buildGraphEdges } from "./GraphEdgeBuilder";
 import type { GraphNodeBuilderInput } from "./GraphNodeBuilder";
@@ -77,7 +78,7 @@ export async function buildAndPersistSnapshot(
           leagueId: n.leagueId,
           season: n.season,
           sport: n.sport ?? undefined,
-          metadata: n.metadata ?? undefined,
+          metadata: toPrismaNullableJsonInput(n.metadata),
         })),
         skipDuplicates: true,
       });
@@ -92,7 +93,7 @@ export async function buildAndPersistSnapshot(
           weight: e.weight,
           season: e.season,
           sport: e.sport ?? undefined,
-          metadata: e.metadata ?? undefined,
+          metadata: toPrismaNullableJsonInput(e.metadata),
         })),
         skipDuplicates: true,
       });
@@ -107,12 +108,12 @@ export async function buildAndPersistSnapshot(
         graphVersion,
         nodeCount: nodes.length,
         edgeCount: edges.length,
-        summary: {
+        summary: toPrismaJsonInput({
           generatedFrom: "LeagueIntelligenceGraph",
           seasonScope: season ?? "all",
           includeTrades,
           includeRivalries,
-        } as object,
+        }),
         generatedAt: new Date(),
       },
       create: {
@@ -121,12 +122,12 @@ export async function buildAndPersistSnapshot(
         graphVersion,
         nodeCount: nodes.length,
         edgeCount: edges.length,
-        summary: {
+        summary: toPrismaJsonInput({
           generatedFrom: "LeagueIntelligenceGraph",
           seasonScope: season ?? "all",
           includeTrades,
           includeRivalries,
-        } as object,
+        }),
       },
     });
   });

@@ -8,6 +8,8 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedIntelligenceIntegrationService } from '@/lib/fantasy-os/sports-runtime/intelligenceIntegration'
 import {
   validateToolRequest,
   requestContractToUnified,
@@ -307,6 +309,18 @@ export async function POST(req: Request) {
     }
   }
 
+  // Gated, informational certified factual grounding for Chimmy. Attached alongside the response — it NEVER
+  // feeds runUnifiedOrchestration and NEVER alters conversational logic, coaching style, or recommendation
+  // models. NFL only; wrapped so it can never fail the route. Injuries/projections/stats stay unavailable.
+  let sportsContext
+  if (isSportsDataEnabled('intelligence') && String(contract.sport ?? 'NFL').toUpperCase() === 'NFL') {
+    try {
+      sportsContext = await new CertifiedIntelligenceIntegrationService().describeManagerSportsContext({ season: String(new Date().getFullYear()), week: '1' })
+    } catch {
+      sportsContext = undefined
+    }
+  }
+
   return NextResponse.json({
     ...responseWithTrace,
     debugTrace: {
@@ -314,5 +328,6 @@ export async function POST(req: Request) {
       conversationId,
       ...(zombieChimmyActionId ? { zombieChimmyActionId } : {}),
     },
+    ...(sportsContext ? { sportsContext } : {}),
   })
 }

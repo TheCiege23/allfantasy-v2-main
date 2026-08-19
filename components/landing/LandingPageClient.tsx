@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { useOptionalSession } from '@/components/auth/useOptionalSession'
 import { Shield } from 'lucide-react'
 import LanguageToggle from '@/components/i18n/LanguageToggle'
+import { ThemeModeSelect } from '@/components/theme/ThemeModeSelect'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
 import { loginUrlWithIntent, signupUrlWithIntent } from '@/lib/auth/auth-intent-resolver'
 import { trackLandingCtaClick } from '@/lib/landing-analytics'
@@ -88,7 +89,8 @@ export default function LandingPageClient({
           </Link>
 
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="hidden md:flex">
+            <div className="hidden items-center gap-2 md:flex">
+              <ThemeModeSelect size="sm" />
               <LanguageToggle />
             </div>
             <Link
@@ -219,7 +221,8 @@ export default function LandingPageClient({
               <Link href="/admin" className="text-sm transition-colors [color:var(--muted)] hover:[color:var(--text)]">{copy.footer.admin}</Link>
             </nav>
           </div>
-          <div className="mt-4 flex md:hidden">
+          <div className="mt-4 flex flex-wrap items-center gap-2 md:hidden">
+            <ThemeModeSelect size="sm" />
             <LanguageToggle />
           </div>
           <p className="mt-4 max-w-3xl text-[11px] leading-5" style={{ color: 'var(--muted2)' }}>

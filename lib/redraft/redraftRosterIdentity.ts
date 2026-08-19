@@ -223,12 +223,37 @@ async function maybeRepairRedraftRosterOwner(args: {
   }
 }
 
-export async function resolveRedraftRosterLookup(args: {
+export type RedraftRosterLookupArgs = {
   userId: string
   requestedRosterId?: string | null
   seasonId?: string | null
   leagueId?: string | null
-}): Promise<RedraftRosterLookupResult> {
+}
+
+/**
+ * Internal: the owner-repair the write-capable resolver would apply to the resolved roster, captured
+ * by the read-only core so the write wrapper can act on it WITHOUT the core itself ever writing.
+ * Null when there is no resolved roster to repair.
+ */
+type RedraftRosterRepairContext = {
+  roster: MinimalRedraftRoster
+  seasonId: string
+  team: MinimalLeagueTeam | null
+  genericRoster: MinimalGenericRoster | null
+  /** `resolvedBy` to use IF (and only if) a repair actually writes. Undefined = keep base resolvedBy. */
+  resolvedByOnRepair?: string
+}
+
+/**
+ * Pure read-only resolution core. Performs ONLY lookups (no writes, no owner repair, no mutation) and
+ * returns the resolved `RedraftRosterLookupResult` (with `repairedOwnerId: null`) alongside the
+ * repair context the write-capable wrapper may later act on. Shared by both public entry points so the
+ * read-only and write-capable paths resolve identity identically.
+ */
+async function resolveRedraftRosterLookupCore(args: RedraftRosterLookupArgs): Promise<{
+  result: RedraftRosterLookupResult
+  repairContext: RedraftRosterRepairContext | null
+}> {
   const requestedRosterId = trimmed(args.requestedRosterId)
   const explicitSeasonId = trimmed(args.seasonId)
   const explicitLeagueId = trimmed(args.leagueId)
@@ -240,7 +265,7 @@ export async function resolveRedraftRosterLookup(args: {
       })
     : null
 
-  let exactRedraftRoster = requestedRosterId
+  const exactRedraftRoster = requestedRosterId
     ? await prisma.redraftRoster.findFirst({
         where: { id: requestedRosterId },
         select: {
@@ -267,7 +292,7 @@ export async function resolveRedraftRosterLookup(args: {
     requestedGenericRoster?.leagueId ??
     null
 
-  let requestedTeam = await findLeagueTeamByOpaqueRef({
+  const requestedTeam = await findLeagueTeamByOpaqueRef({
     opaqueRosterId: requestedRosterId,
     leagueId: inferredLeagueId,
   })
@@ -287,34 +312,39 @@ export async function resolveRedraftRosterLookup(args: {
   inferredLeagueId = explicitLeagueId ?? season?.leagueId ?? inferredLeagueId
 
   if (exactRedraftRoster && (!season || exactRedraftRoster.seasonId === season.id)) {
-    const repaired = await maybeRepairRedraftRosterOwner({
-      roster: exactRedraftRoster,
-      seasonId: exactRedraftRoster.seasonId,
-      team: requestedTeam,
-      genericRoster: requestedGenericRoster,
-    })
     return {
-      season: season ?? { id: repaired.roster.seasonId, leagueId: repaired.roster.leagueId },
-      roster: repaired.roster,
-      resolvedBy: 'requested_redraft_roster_id',
-      repairedOwnerId: repaired.repairedOwnerId,
-      ownerIdCandidates: [],
-      requestedOwnerIdCandidates: [],
-      requestedRosterId,
-      inferredLeagueId,
+      result: {
+        season: season ?? { id: exactRedraftRoster.seasonId, leagueId: exactRedraftRoster.leagueId },
+        roster: exactRedraftRoster,
+        resolvedBy: 'requested_redraft_roster_id',
+        repairedOwnerId: null,
+        ownerIdCandidates: [],
+        requestedOwnerIdCandidates: [],
+        requestedRosterId,
+        inferredLeagueId,
+      },
+      repairContext: {
+        roster: exactRedraftRoster,
+        seasonId: exactRedraftRoster.seasonId,
+        team: requestedTeam,
+        genericRoster: requestedGenericRoster,
+      },
     }
   }
 
   if (!season) {
     return {
-      season: null,
-      roster: null,
-      resolvedBy: null,
-      repairedOwnerId: null,
-      ownerIdCandidates: [],
-      requestedOwnerIdCandidates: [],
-      requestedRosterId,
-      inferredLeagueId,
+      result: {
+        season: null,
+        roster: null,
+        resolvedBy: null,
+        repairedOwnerId: null,
+        ownerIdCandidates: [],
+        requestedOwnerIdCandidates: [],
+        requestedRosterId,
+        inferredLeagueId,
+      },
+      repairContext: null,
     }
   }
 
@@ -343,21 +373,23 @@ export async function resolveRedraftRosterLookup(args: {
     })
 
     if (requestedMappedRoster) {
-      const repaired = await maybeRepairRedraftRosterOwner({
-        roster: requestedMappedRoster,
-        seasonId: season.id,
-        team: requestedTeam,
-        genericRoster: requestedGenericRoster,
-      })
       return {
-        season,
-        roster: repaired.roster,
-        resolvedBy: 'requested_identity_map',
-        repairedOwnerId: repaired.repairedOwnerId,
-        ownerIdCandidates: [],
-        requestedOwnerIdCandidates,
-        requestedRosterId,
-        inferredLeagueId,
+        result: {
+          season,
+          roster: requestedMappedRoster,
+          resolvedBy: 'requested_identity_map',
+          repairedOwnerId: null,
+          ownerIdCandidates: [],
+          requestedOwnerIdCandidates,
+          requestedRosterId,
+          inferredLeagueId,
+        },
+        repairContext: {
+          roster: requestedMappedRoster,
+          seasonId: season.id,
+          team: requestedTeam,
+          genericRoster: requestedGenericRoster,
+        },
       }
     }
   }
@@ -406,14 +438,17 @@ export async function resolveRedraftRosterLookup(args: {
 
   if (ownerIdCandidates.length === 0) {
     return {
-      season,
-      roster: null,
-      resolvedBy: null,
-      repairedOwnerId: null,
-      ownerIdCandidates,
-      requestedOwnerIdCandidates,
-      requestedRosterId,
-      inferredLeagueId,
+      result: {
+        season,
+        roster: null,
+        resolvedBy: null,
+        repairedOwnerId: null,
+        ownerIdCandidates,
+        requestedOwnerIdCandidates,
+        requestedRosterId,
+        inferredLeagueId,
+      },
+      repairContext: null,
     }
   }
 
@@ -435,32 +470,82 @@ export async function resolveRedraftRosterLookup(args: {
 
   if (!viewerRoster) {
     return {
+      result: {
+        season,
+        roster: null,
+        resolvedBy: null,
+        repairedOwnerId: null,
+        ownerIdCandidates,
+        requestedOwnerIdCandidates,
+        requestedRosterId,
+        inferredLeagueId,
+      },
+      repairContext: null,
+    }
+  }
+
+  return {
+    result: {
       season,
-      roster: null,
-      resolvedBy: null,
+      roster: viewerRoster,
+      resolvedBy: 'viewer_owner_candidates',
       repairedOwnerId: null,
       ownerIdCandidates,
       requestedOwnerIdCandidates,
       requestedRosterId,
       inferredLeagueId,
-    }
+    },
+    repairContext: {
+      roster: viewerRoster,
+      seasonId: season.id,
+      team: viewerTeam,
+      genericRoster: viewerGenericRoster,
+      resolvedByOnRepair: 'viewer_owner_repaired',
+    },
   }
+}
+
+/**
+ * READ-ONLY identity/roster resolver. Performs lookups ONLY — never writes, never repairs an owner,
+ * never mutates, syncs, or backfills. Returns the resolved roster exactly as stored (`repairedOwnerId`
+ * is always null). This is the seam Decision OS / Canonical World bridge work must call; it cannot
+ * violate the shadow read-only invariant. See {@link resolveRedraftRosterLookup} for the legacy
+ * write-capable variant.
+ */
+export async function resolveRedraftRosterLookupReadOnly(
+  args: RedraftRosterLookupArgs,
+): Promise<RedraftRosterLookupResult> {
+  const { result } = await resolveRedraftRosterLookupCore(args)
+  return result
+}
+
+/**
+ * WRITE-CAPABLE legacy resolver. Resolves identity via the read-only core, then applies the existing
+ * owner-repair side effect (`prisma.redraftRoster.update` via {@link maybeRepairRedraftRosterOwner})
+ * to preserve current production behavior for the legacy routes that depend on it (keeper/context,
+ * redraft/roster). Decision OS bridge code MUST NOT call this — use
+ * {@link resolveRedraftRosterLookupReadOnly} instead.
+ */
+export async function resolveRedraftRosterLookup(
+  args: RedraftRosterLookupArgs,
+): Promise<RedraftRosterLookupResult> {
+  const { result, repairContext } = await resolveRedraftRosterLookupCore(args)
+  if (!repairContext) return result
 
   const repaired = await maybeRepairRedraftRosterOwner({
-    roster: viewerRoster,
-    seasonId: season.id,
-    team: viewerTeam,
-    genericRoster: viewerGenericRoster,
+    roster: repairContext.roster,
+    seasonId: repairContext.seasonId,
+    team: repairContext.team,
+    genericRoster: repairContext.genericRoster,
   })
 
   return {
-    season,
+    ...result,
     roster: repaired.roster,
-    resolvedBy: repaired.repairedOwnerId ? 'viewer_owner_repaired' : 'viewer_owner_candidates',
     repairedOwnerId: repaired.repairedOwnerId,
-    ownerIdCandidates,
-    requestedOwnerIdCandidates,
-    requestedRosterId,
-    inferredLeagueId,
+    resolvedBy:
+      repaired.repairedOwnerId && repairContext.resolvedByOnRepair
+        ? repairContext.resolvedByOnRepair
+        : result.resolvedBy,
   }
 }

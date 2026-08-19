@@ -1,0 +1,21 @@
+# Canonical Week Advancement Report
+
+## Real code found (direct audit)
+
+`lib/redraft/resolveRedraftCurrentWeek.ts` (24 lines) is a **pure read/derivation function** — no DB access, no side effects, just `Math.max(1, seasonCurrentWeek) ?? Math.max(1, legacySettingsWeek) ?? 1`. The actual stored mutable state is `RedraftSeason.currentWeek` (`prisma/schema.prisma:8026`), and there is exactly one real, authoritative mutation entry point: `advanceNflRedraftScheduleWeek()` (`lib/schedule-runtime/resolveNflRedraftScheduleRuntime.ts:308-371+`). Its sole caller is `app/api/redraft/schedule/route.ts`, commissioner-gated (`assertLeagueCommissioner`). No cron route calls it — advancement is single-path and manual/commissioner-triggered, not automatic or multi-site.
+
+**Completeness gate exists but is overridable**: `planCanonicalScheduleWeekTransition` (`lib/schedule-runtime/canonicalScheduleRuntime.ts:782-788`) blocks `complete_week`/`advance_week` when the current week has incomplete matchups, *unless* the caller supplies `commissionerOverride` — a client-controlled flag passed straight through from the request body.
+
+**Event emission is not persisted anywhere.** `transition.events` are built as in-memory objects only (`buildScheduleRuntimeEvent`/`toCanonicalLeagueRuntimeEvent`) and returned in the API JSON response for the caller to display — there is no `getPlatformEvents()`/`EVENT.*` call on this path, and grepping `lib/events/catalog.ts` for a week-advancement event type (`WEEK_ADVANCED`, `SCHEDULE_WEEK`, etc.) found none. This is not "contract-ready but unconsumed" — no canonical event type for week advancement exists in the catalog at all.
+
+## Real defect found and fixed this phase
+
+The state write itself (`prisma.redraftSeason.update({where: {id}}, ...)`) was a bare, unconditioned update with no guard on the prior state the transition was computed from — a read-then-write pattern structurally identical to the FAAB settlement race physically reproduced and fixed earlier this same phase (see `TRADE_CONCURRENCY_PHYSICAL_MATRIX.md`). Two concurrent invocations could both read the same starting `currentWeek`/`status`, both pass the completeness check, and the second write would silently clobber the first's intended transition with no error, no detection, and no distinguishing event.
+
+**Fix**: converted the bare `update` to a conditional `updateMany` guarded on the exact `currentWeek`/`status` values the transition was computed from (`lib/schedule-runtime/resolveNflRedraftScheduleRuntime.ts`). If the guard's `where` clause matches zero rows (state changed underneath the caller), the function now returns a truthful `{ok: false, code: 'CONCURRENT_MODIFICATION'}` instead of silently overwriting.
+
+**Evidence basis, stated honestly**: this fix was made on **direct call-graph evidence**, not a physically reproduced concurrent-execution race — one of the three evidence types this phase's brief explicitly accepts ("physical database execution, failing tests, or direct call-graph evidence"). Given severe time constraints this phase, a dedicated concurrent-invocation test (mirroring the FAAB test's `Promise.all` pattern against real fixture season data) was not run. A source-contract test (`__tests__/redraft/week-advancement-concurrency-guard-contract.test.ts`) verifies the guard is present in source; it does not substitute for physical proof. This is disclosed, not overstated.
+
+## Verdict
+
+**REAL BUT NOT ATOMIC, now hardened against the one concurrency gap found by audit.** Remaining real gaps, not fixed this phase: the `commissionerOverride` bypass of the completeness gate is client-controlled with no server-side re-verification; no canonical event type exists for week advancement at all (a real, disclosed absence, not a wiring gap); the standings update (`updateStandings`, called after the guarded season-state write) is a separate, non-transactionally-coupled call — if it fails after the season state already advanced, the week state and standings could diverge. None of these three were fixed this phase (each is either a larger design question — a new event type, a policy decision about override authority — or a second, separate transactional-coupling fix outside this phase's remaining time budget).

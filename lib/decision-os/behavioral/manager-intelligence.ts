@@ -27,7 +27,7 @@ export type ParticipationTier = 'elite' | 'active' | 'moderate' | 'passive' | 'i
 // ── Retention risk ────────────────────────────────────────────────────────────
 
 /** Estimated likelihood this manager will disengage or ghost the league. */
-export type ManagerRetentionRisk = 'low' | 'medium' | 'high' | 'critical'
+export type ManagerRetentionRisk = 'low' | 'medium' | 'high' | 'critical' | 'insufficient_data'
 
 // ── Engagement level ──────────────────────────────────────────────────────────
 
@@ -222,8 +222,20 @@ function computeRetentionRisk(
   facts: ManagerBehavioralFacts,
   daysSinceLastActivity: number | null,
   participationTier: ParticipationTier,
+  leagueEventCount: number,
 ): { risk: ManagerRetentionRisk; reasons: string[] } {
   if (facts.eventCount === 0) {
+    // Phase 36 honesty rule: league-wide zero events is a DATA-COVERAGE gap, not
+    // confirmed disengagement — every manager in an un-ingested league would
+    // otherwise read "critical", fabricating an alarm out of an empty table.
+    if (leagueEventCount === 0) {
+      return {
+        risk: 'insufficient_data',
+        reasons: [
+          'Retention risk cannot be assessed — no activity events have been recorded for this league yet',
+        ],
+      }
+    }
     return {
       risk: 'critical',
       reasons: ['Manager has never taken any recorded action in the league'],
@@ -444,6 +456,7 @@ export function deriveManagerBehavioralIntelligence(
     facts,
     daysSinceLastActivity,
     participationTier,
+    events.length,
   )
 
   // ── Nudges ────────────────────────────────────────────────────────────────

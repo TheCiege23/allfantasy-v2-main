@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissioner } from '@/lib/zombie/commissionerNotificationService'
 import { queueAnimation } from '@/lib/zombie/animationEngine'
 
@@ -372,7 +373,7 @@ export async function postWeeklyUpdate(leagueId: string, week: number, draft: Zo
         userId: lg.userId,
         message: body.slice(0, 100_000),
         type: 'host_announcement',
-        metadata: meta,
+        metadata: toPrismaJsonInput(meta),
       },
     })
   }

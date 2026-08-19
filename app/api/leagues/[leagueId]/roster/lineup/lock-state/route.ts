@@ -6,6 +6,8 @@ import {
   resolveFullLineupLockContext,
   loadLeagueWeekContext,
 } from '@/lib/roster-lineup-engine/lineupLockService'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
 
 function weekFromLeagueSettings(settings: unknown): number {
   if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return 1
@@ -69,10 +71,23 @@ export async function GET(
     lifecycleState: league.lifecycleState,
   })
 
+  // Additive, gated certified sports evidence. The authoritative `lock` above is UNCHANGED; this only adds
+  // canonical game/schedule evidence. Wrapped so an evidence failure never turns a safe result into an error.
+  let certifiedSportsEvidence: unknown
+  if (isSportsDataEnabled('lineup') && String(league.sport ?? 'NFL').toUpperCase() === 'NFL') {
+    try {
+      const svc = new CertifiedLineupIntegrationService()
+      certifiedSportsEvidence = await svc.getScheduleEvidenceForPlayers({ season: String(season), week: String(editingWeek), players: extractPlayerRefs(roster.playerData) })
+    } catch {
+      certifiedSportsEvidence = { available: false, note: 'certified sports evidence unavailable' }
+    }
+  }
+
   return NextResponse.json({
     season,
     leagueWeek,
     editingWeek,
     lock: lockCtx,
+    ...(certifiedSportsEvidence ? { certifiedSportsEvidence } : {}),
   })
 }

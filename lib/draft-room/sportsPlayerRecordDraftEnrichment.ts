@@ -21,7 +21,7 @@ import {
   resolvePlayerIdentityConfidence,
   type IdentityMatchType,
 } from '@/lib/player-identity/playerIdentityResolution'
-import { logPlayerMismatchEventVoid } from '@/lib/player-identity/playerMismatchLogger'
+import type { PlayerMismatchCollector } from '@/lib/player-identity/playerMismatchLogger'
 
 export type SportsPlayerRecordDraftAugment = {
   fantasyPointsPerGame: number | null
@@ -131,6 +131,8 @@ export async function loadSportsPlayerRecordMapsForDraftPool(
   leagueId: string | undefined,
   sport: LeagueSport,
   rows: Array<{ name: string; position: string; team?: string | null }>,
+  /** Optional: accumulates identity mismatches in memory. The caller owns flushing it. */
+  mismatchCollector?: PlayerMismatchCollector,
 ): Promise<SportsPlayerRecordDraftMaps> {
   const byRecordId = new Map<string, SportsPlayerRecordDraftAugment>()
   const strict = new Map<string, SportsPlayerRecordDraftAugment>()
@@ -201,7 +203,7 @@ export async function loadSportsPlayerRecordMapsForDraftPool(
   for (const [looseKey, bucket] of looseGroups) {
     if (bucket.size !== 1) {
       if (bucket.size > 1) {
-        logPlayerMismatchEventVoid({
+        mismatchCollector?.record({
           leagueId: leagueId ?? null,
           sport: sportStr,
           reason: 'AMBIGUOUS_LOOSE_MATCH_SKIPPED',

@@ -111,6 +111,30 @@ export function WarRoomPanel({
   const [loadingIntel, setLoadingIntel] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const handleDraftRoomLinkClick = useCallback(
+    async (event: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+      if (!dashboardEmbed) return
+      const intent = parseLeagueDraftNavigationIntent(href)
+      if (!intent) return
+      event.preventDefault()
+      if (intent.kind === 'dispersal') {
+        postOpenDraftOverlayMessage({
+          leagueId: intent.leagueId,
+          dispersalDraftId: intent.dispersalDraftId,
+          source: 'war-room',
+        })
+        return
+      }
+      await openDraftFromEmbeddedLeague({
+        leagueId: intent.leagueId,
+        draftId: sessionId ?? undefined,
+        dashboardEmbed,
+        source: 'war-room',
+      })
+    },
+    [dashboardEmbed, sessionId],
+  )
+
   useEffect(() => {
     if (draftSessionIdProp) setSessionId(draftSessionIdProp)
   }, [draftSessionIdProp])
@@ -315,7 +339,7 @@ export function WarRoomPanel({
                       <>
                         <p className="text-[11px] text-white/55">
                           {draftCopilotEmptyMessage ??
-                            'Live Chimmy recommendations and alternates run in the draft room. Open the room to sync the full copilot, or use the War Room engine below with demo or connected board data.'}
+                            'Live Chimmy recommendations and alternates run in the draft room. Open the room to sync the full copilot, or use the AF Legacy engine below with demo or connected board data.'}
                         </p>
                         {companionDraft?.draftRoomHref ? (
                           <Link
@@ -366,7 +390,7 @@ export function WarRoomPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">War Room AI</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-cyan-200/70">AF Legacy AI</p>
           <p className="text-[11px] text-white/45">
             Live pick engine · tiers · scarcity · stacks · contingencies · take vs wait
             {useDemoBoard && !brainInput?.available?.length ? (

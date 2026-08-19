@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import type { IdpSettingsAuditAction } from './types'
 
 export interface IdpAuditEntry {
@@ -23,9 +24,9 @@ export async function writeIdpSettingsAudit(entry: IdpAuditEntry): Promise<void>
       configId: entry.configId,
       actorId: entry.actorId ?? undefined,
       action: entry.action,
-      before: entry.before ?? undefined,
-      after: entry.after ?? undefined,
-      metadata: entry.metadata ?? undefined,
+      before: toPrismaNullableJsonInput(entry.before),
+      after: toPrismaNullableJsonInput(entry.after),
+      metadata: toPrismaNullableJsonInput(entry.metadata),
     },
   })
 }

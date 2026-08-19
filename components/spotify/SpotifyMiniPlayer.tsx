@@ -19,6 +19,19 @@ export function SpotifyMiniPlayer() {
   const [playback, setPlayback] = useState<PlaybackState | null>(null)
   const [muted, setMuted] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  /*
+   * ⚠ A CONNECTED SPOTIFY ACCOUNT IS NOT NECESSARILY A PLAYABLE ONE, AND THE
+   * WIDGET USED TO ASSUME IT WAS. Measured in production: all 8 connected
+   * accounts hold `scope: user-read-email` and nothing else, because they
+   * authorized before the playback scopes were added. Spotify grants scopes at
+   * authorization time, so the widened list fixed NEW connections and left every
+   * existing one silently unable to start audio — the player rendered, looked
+   * connected, and produced nothing.
+   *
+   * /api/spotify/token now reports the gap. Showing it beats a dead player.
+   */
+  const [playbackBlock, setPlaybackBlock] = useState<string | null>(null)
+  const [needsReauth, setNeedsReauth] = useState(false)
   const playerRef = useRef<Spotify.Player | null>(null)
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -32,6 +45,21 @@ export function SpotifyMiniPlayer() {
     } catch {
       return null
     }
+  }, [])
+
+  // Can this connection actually play? Scope gap vs Premium are different
+  // problems with different remedies, so the server distinguishes them.
+  useEffect(() => {
+    let active = true
+    fetch('/api/spotify/token', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!active || !d) return
+        if (d.playbackMessage) setPlaybackBlock(d.playbackMessage as string)
+        if (d.needsReauthorization) setNeedsReauth(true)
+      })
+      .catch(() => {})
+    return () => { active = false }
   }, [])
 
   // Check if user has Spotify connected
@@ -104,6 +132,39 @@ export function SpotifyMiniPlayer() {
     intervalRef.current = setInterval(() => void refreshToken(), 50 * 60 * 1000)
     return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
   }, [token, refreshToken])
+
+  /*
+   * ⚠ SHOWN BEFORE THE READY GUARD, ON PURPOSE. When the grant lacks playback
+   * scopes the Web Playback SDK never reaches `ready`, so the old guard returned
+   * null and the user got NOTHING — no player, no error, no explanation. Silence
+   * is the worst of the three: it reads as "the feature is broken" rather than
+   * "one click fixes this".
+   */
+  if (playbackBlock && !dismissed) {
+    return (
+      <div className="fixed bottom-0 inset-x-0 z-50 border-t border-white/10 bg-[#0a1220]/95 backdrop-blur-md">
+        <div className="mx-auto flex max-w-screen-xl items-center gap-3 px-4 py-2">
+          <span className="text-xs text-white/70">{playbackBlock}</span>
+          {needsReauth && (
+            <a
+              href="/api/auth/spotify"
+              className="rounded-full bg-[#1DB954] px-3 py-1 text-xs font-semibold text-black"
+            >
+              Reconnect Spotify
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            aria-label="Dismiss"
+            className="ml-auto text-white/50 hover:text-white/80"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (!token || !ready || dismissed) return null
 

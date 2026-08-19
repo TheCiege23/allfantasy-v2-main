@@ -3,6 +3,7 @@
  * Read/write MLB roster config. Dual-writes to League.settings + LeagueRosterConfig.
  */
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveMlbRosterTemplate, calculateMlbRosterSize } from './MlbRosterTemplates'
 
 const PREFIX = 'mlb_roster_'
@@ -32,12 +33,12 @@ export async function getLeagueMlbRosterConfig(leagueId: string): Promise<League
 export async function saveLeagueMlbRosterConfig(leagueId: string, config: { templateKey: string; slots: Record<string, number>; isCustom?: boolean; userId?: string }): Promise<void> {
   const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { settings: true } })
   const cs = (league?.settings as Record<string, unknown>) ?? {}
-  await prisma.league.update({ where: { id: leagueId }, data: { settings: { ...cs, [`${PREFIX}config`]: { templateKey: config.templateKey, templateLabel: config.templateKey, slots: config.slots, isCustom: config.isCustom ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null } } } })
+  await prisma.league.update({ where: { id: leagueId }, data: { settings: toPrismaJsonInput({ ...cs, [`${PREFIX}config`]: { templateKey: config.templateKey, templateLabel: config.templateKey, slots: config.slots, isCustom: config.isCustom ?? false, lastUpdatedAt: new Date().toISOString(), lastUpdatedBy: config.userId ?? null } }) } })
   try {
     const overrides = { customSlots: config.slots, customTemplateKey: config.templateKey, isCustom: config.isCustom ?? false, updatedAt: new Date().toISOString() }
     const existing = await prisma.leagueRosterConfig.findUnique({ where: { leagueId } })
-    if (existing) { await prisma.leagueRosterConfig.update({ where: { leagueId }, data: { overrides: overrides as unknown as Record<string, unknown> } }) }
-    else { await prisma.leagueRosterConfig.create({ data: { leagueId, templateId: `custom-MLB-${leagueId}`, overrides: overrides as unknown as Record<string, unknown> } }) }
+    if (existing) { await prisma.leagueRosterConfig.update({ where: { leagueId }, data: { overrides: toPrismaJsonInput(overrides) } }) }
+    else { await prisma.leagueRosterConfig.create({ data: { leagueId, templateId: `custom-MLB-${leagueId}`, overrides: toPrismaJsonInput(overrides) } }) }
   } catch { /* non-fatal */ }
 }
 

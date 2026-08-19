@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 /**
  * Save or update mock draft results (e.g. after completion or pause).
@@ -34,8 +35,8 @@ export async function POST(req: NextRequest) {
         const updated = await prisma.mockDraft.update({
           where: { id: draftId },
           data: {
-            results,
-            ...(metadata != null && { metadata: metadata as object }),
+            results: toPrismaJsonInput(results),
+            ...(metadata != null && { metadata: toPrismaJsonInput(metadata) }),
           },
           select: { id: true, updatedAt: true },
         })
@@ -51,9 +52,14 @@ export async function POST(req: NextRequest) {
         leagueId: leagueId || undefined,
         userId: session.user.id,
         rounds,
-        results,
-        proposals: body.proposals ?? [],
-        metadata: metadata ?? (body.sport ? { sport: body.sport, leagueType: body.leagueType, draftType: body.draftType, aiEnabled: body.aiEnabled } : undefined),
+        results: toPrismaJsonInput(results),
+        proposals: toPrismaJsonInput(body.proposals ?? []),
+        metadata:
+          metadata != null
+            ? toPrismaJsonInput(metadata)
+            : body.sport
+              ? toPrismaJsonInput({ sport: body.sport, leagueType: body.leagueType, draftType: body.draftType, aiEnabled: body.aiEnabled })
+              : undefined,
       },
       select: { id: true, createdAt: true },
     })

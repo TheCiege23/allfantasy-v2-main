@@ -291,7 +291,7 @@ export function TradeCenterModal({
       <button
         type="button"
         onClick={onClose}
-        className="rounded-lg bg-cyan-500/80 px-4 py-1.5 text-[12px] font-semibold text-black"
+        className="rounded-lg bg-[#ff3d81]/80 px-4 py-1.5 text-[12px] font-semibold text-black"
       >
         Done
       </button>
@@ -326,7 +326,7 @@ export function TradeCenterModal({
             (step === 'partner' && (!receiverRosterId || receiverRosterId === proposerRosterId)) ||
             (step === 'assets' && (!mineHasAssets || !theirsHasAssets))
           }
-          className="rounded-lg bg-cyan-500/85 px-4 py-1.5 text-[12px] font-semibold text-black disabled:opacity-40"
+          className="rounded-lg bg-[#ff3d81]/85 px-4 py-1.5 text-[12px] font-semibold text-black disabled:opacity-40"
         >
           Next
         </button>
@@ -366,7 +366,7 @@ export function TradeCenterModal({
                   onClick={() => setReceiverRosterId(r.id)}
                   className={[
                     'flex items-center gap-3 rounded-xl border p-3 text-left transition',
-                    sel ? 'border-cyan-300/70 bg-cyan-400/10' : 'border-white/10 bg-white/[0.03] hover:border-white/25',
+                    sel ? 'border-[#ff9ec0]/70 bg-[#ff3d81]/10' : 'border-white/10 bg-white/[0.03] hover:border-white/25',
                   ].join(' ')}
                 >
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-white/10 text-[12px] font-bold text-white">
@@ -465,7 +465,7 @@ export function TradeCenterModal({
               <div className="flex items-center justify-between gap-3">
                 <p className="text-[12px] font-semibold text-white">Trade Value</p>
                 <span
-                  className="rounded-md border border-cyan-300/40 bg-cyan-400/10 px-2 py-0.5 text-[13px] font-bold text-cyan-100"
+                  className="rounded-md border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-2 py-0.5 text-[13px] font-bold text-[#ffd7e5]"
                   data-testid="trade-value-grade"
                 >
                   {valuePreview.grade.grade}

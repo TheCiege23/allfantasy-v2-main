@@ -48,17 +48,7 @@ export function LanguageProviderClient({
 }: {
   children: React.ReactNode;
 }) {
-  const [language, setLanguageState] = useState<Language>(() => {
-    if (typeof document !== "undefined" && document.documentElement.dataset.lang) {
-      return resolveLanguage(document.documentElement.dataset.lang);
-    }
-    if (typeof window !== "undefined") {
-      try {
-        return resolveLanguage(window.localStorage.getItem(LANG_STORAGE_KEY));
-      } catch {}
-    }
-    return DEFAULT_LANG;
-  });
+  const [language, setLanguageState] = useState<Language>(DEFAULT_LANG);
   const [messages, setMessages] = useState<Record<string, string>>(() => {
     return translations[language] || translations.en;
   });
@@ -71,7 +61,8 @@ export function LanguageProviderClient({
   useEffect(() => {
     if (typeof window === "undefined") return;
     const stored = window.localStorage.getItem(LANG_STORAGE_KEY);
-    const resolved = resolveLanguage(stored);
+    const bootstrapped = document.documentElement.dataset.lang;
+    const resolved = resolveLanguage(stored || bootstrapped);
     setLanguageState(resolved);
   }, []);
 

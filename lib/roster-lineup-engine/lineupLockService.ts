@@ -7,6 +7,7 @@ import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster
 import { resolveConceptRosterLineupRules } from './conceptRosterRules'
 import type { LineupLockContext } from './types'
 import { prisma } from '@/lib/prisma'
+import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 
 export type LineupLockResolveArgs = {
   leagueId: string
@@ -113,14 +114,14 @@ export async function upsertAfLineupLockState(input: {
       lockedPlayerIds: input.lockedPlayerIds,
       policy: input.policy,
       reason: input.reason ?? null,
-      metadata: input.metadata ?? undefined,
+      metadata: toPrismaNullableJsonInput(input.metadata),
     },
     update: {
       globalLocked: input.globalLocked,
       lockedPlayerIds: input.lockedPlayerIds,
       policy: input.policy,
       reason: input.reason ?? null,
-      metadata: input.metadata ?? undefined,
+      metadata: toPrismaNullableJsonInput(input.metadata),
       computedAt: new Date(),
     },
   })

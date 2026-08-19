@@ -49,7 +49,7 @@ const AI_FEATURES: AIFeature[] = [
   },
   {
     icon: '\u{1F3AF}',
-    title: 'Draft War Room',
+    title: 'AF Legacy Draft',
     description: 'Real-time draft recommendations, value-based rankings, and trade-up/down strategies',
     route: '/af-legacy',
     tabId: 'mock-draft',

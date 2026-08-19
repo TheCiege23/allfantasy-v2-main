@@ -137,13 +137,131 @@ export type AdminCommandCenterMetrics = {
   usersSearch: AdminUserSearchRow[]
   activeWorldCupPools: AdminActivePoolRow[]
   recentUsers: AdminRecentUserRow[]
+  waitlist: AdminWaitlistSummary
   recentSubscriptions: AdminRecentSubscriptionRow[]
   recentPayments: AdminRecentPaymentRow[]
   recentTokenActivity: AdminRecentTokenActivityRow[]
 }
 
+/**
+ * The early-access waitlist, surfaced for the first time.
+ *
+ * ⚠ THE LIST WAS NEVER LOST — IT WAS NEVER SHOWN. `EarlyAccessSignup` has been
+ * collecting since April and nothing in the admin panel read it, so the only way
+ * to know it existed was to query the database. That is why this exists.
+ *
+ * ⚠ `confirmedAt` IS NOT DECORATION. A signup that never confirmed is a weaker
+ * consent signal than one that did, and it is the single most important field if
+ * this list is ever emailed. It is reported as its own count rather than folded
+ * into the total, so nobody reads "146 signups" as "146 people who opted in".
+ *
+ * ⚠ NO EMAIL ADDRESSES IN THE AGGREGATE COUNTS. The rows carry addresses because
+ * an operator needs to see who signed up, but every count below is derived
+ * server-side — the page never has to hold the full list to render a number.
+ */
+export type AdminWaitlistRow = {
+  email: string
+  name: string | null
+  createdAt: string
+  confirmed: boolean
+  source: string | null
+  utmSource: string | null
+  utmCampaign: string | null
+}
+
+export type AdminWaitlistSummary = {
+  total: number
+  confirmed: number
+  unconfirmed: number
+  /** Oldest and newest signup, so the age of the list is visible at a glance. */
+  firstAt: string | null
+  lastAt: string | null
+  /** Signups in the last 30 days — is this list alive or dormant? */
+  last30Days: number
+  bySource: Array<{ source: string; count: number }>
+  byUtmSource: Array<{ source: string; count: number }>
+  byMonth: Array<{ month: string; count: number }>
+  recent: AdminWaitlistRow[]
+}
+
 const ACTIVE_SUBSCRIPTION_STATUSES = ["active", "trialing", "past_due"]
 const FAILED_OR_CANCELED_STATUSES = ["failed", "canceled", "cancelled", "incomplete", "unpaid"]
+
+/**
+ * Read the waitlist and summarise it.
+ *
+ * Counts are grouped in the database rather than by pulling every row and
+ * counting in JS — the list is small today, and a page that degrades as the
+ * waitlist grows is the wrong shape for the one screen meant to watch it grow.
+ */
+async function loadWaitlist(): Promise<AdminWaitlistSummary> {
+  const empty: AdminWaitlistSummary = {
+    total: 0, confirmed: 0, unconfirmed: 0, firstAt: null, lastAt: null,
+    last30Days: 0, bySource: [], byUtmSource: [], byMonth: [], recent: [],
+  }
+  try {
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000)
+    const [total, confirmed, last30Days, first, last, sources, utms, recent] = await Promise.all([
+      prisma.earlyAccessSignup.count(),
+      prisma.earlyAccessSignup.count({ where: { confirmedAt: { not: null } } }),
+      prisma.earlyAccessSignup.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+      prisma.earlyAccessSignup.findFirst({ orderBy: { createdAt: "asc" }, select: { createdAt: true } }),
+      prisma.earlyAccessSignup.findFirst({ orderBy: { createdAt: "desc" }, select: { createdAt: true } }),
+      prisma.earlyAccessSignup.groupBy({ by: ["source"], _count: { _all: true } }),
+      prisma.earlyAccessSignup.groupBy({ by: ["utmSource"], _count: { _all: true } }),
+      prisma.earlyAccessSignup.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        select: {
+          email: true, name: true, createdAt: true, confirmedAt: true,
+          source: true, utmSource: true, utmCampaign: true,
+        },
+      }),
+    ])
+
+    /*
+     * Months come from the same rows the table renders rather than a second
+     * query — 146 dates is nothing, and it keeps the histogram and the list
+     * provably consistent.
+     */
+    const all = await prisma.earlyAccessSignup.findMany({ select: { createdAt: true } })
+    const monthCounts = new Map<string, number>()
+    for (const r of all) {
+      const key = r.createdAt.toISOString().slice(0, 7)
+      monthCounts.set(key, (monthCounts.get(key) ?? 0) + 1)
+    }
+
+    const rank = (rows: Array<{ _count: { _all: number } }>, key: (r: never) => string | null) =>
+      rows
+        .map((r) => ({ source: key(r as never) ?? "(none)", count: r._count._all }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 8)
+
+    return {
+      total,
+      confirmed,
+      unconfirmed: total - confirmed,
+      firstAt: first?.createdAt.toISOString() ?? null,
+      lastAt: last?.createdAt.toISOString() ?? null,
+      last30Days,
+      bySource: rank(sources, (r: { source: string | null }) => r.source),
+      byUtmSource: rank(utms, (r: { utmSource: string | null }) => r.utmSource),
+      byMonth: [...monthCounts.entries()].sort().map(([month, count]) => ({ month, count })),
+      recent: recent.map((r) => ({
+        email: r.email,
+        name: r.name,
+        createdAt: r.createdAt.toISOString(),
+        confirmed: r.confirmedAt != null,
+        source: r.source,
+        utmSource: r.utmSource,
+        utmCampaign: r.utmCampaign,
+      })),
+    }
+  } catch {
+    // The admin page must render even if this one table is unavailable.
+    return empty
+  }
+}
 
 function metric(label: string, value: MetricValue, note?: string): AdminMetric {
   return { label, value, tracked: true, note }
@@ -474,6 +592,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     subscriptionsCreated7h,
     tokenGranted7h,
     tokenSpent7h,
+    firstLoginSignal,
   ] = await Promise.all([
     prisma.appUser.count(),
     prisma.appUser.count({ where: { createdAt: { gte: today } } }),
@@ -611,9 +730,16 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       },
     }).catch(() => 0),
     // ── Login / session metrics ───────────────────────────────────────────────
+    // NOTE: these counts deliberately do NOT come from AuthSession. That model has
+    // no createdAt column (id/sessionToken/userId/expires only), so the previous
+    // `authSession.count({ where: { createdAt } })` threw
+    // PrismaClientValidationError on every call and the `.catch(() => 0)` rendered
+    // it as a confident bold "0" on a live site. IdentitySignal is the real
+    // login-event source and does have createdAt — see recordIdentitySignal()
+    // wired into authOptions.events.signIn.
     prisma.authSession.count({ where: { expires: { gt: new Date() } } }).catch(() => 0),
-    prisma.authSession.count({ where: { createdAt: { gte: today } } }).catch(() => 0),
-    prisma.authSession.count({ where: { createdAt: { gte: sevenDaysAgo } } }).catch(() => 0),
+    prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: today } } }).catch(() => 0),
+    prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenDaysAgo } } }).catch(() => 0),
     // ── Subscription velocity ────────────────────────────────────────────────
     prisma.userSubscription.count({ where: { createdAt: { gte: today } } }),
     prisma.userSubscription.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
@@ -643,7 +769,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     prisma.sponsorCouponRedemption.count({ where: { status: "redeemed" } }).catch(() => 0),
     // ── 7-hour rolling window ────────────────────────────────────────────────
     prisma.appUser.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
-    prisma.authSession.count({ where: { createdAt: { gte: sevenHoursAgo } } }).catch(() => 0),
+    prisma.identitySignal.count({ where: { context: "login", createdAt: { gte: sevenHoursAgo } } }).catch(() => 0),
     prisma.worldCupBracketChallenge.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
     prisma.worldCupBracketEntry.count({ where: { createdAt: { gte: sevenHoursAgo } } }),
     prisma.bracketPayment.aggregate({
@@ -659,7 +785,35 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       where: { tokenDelta: { lt: 0 }, createdAt: { gte: sevenHoursAgo } },
       _sum: { tokenDelta: true },
     }),
+    // Oldest captured login signal. Distinguishes "genuinely zero logins" from
+    // "login tracking has not recorded anything yet", so the cards below can say
+    // which one it is instead of showing a bold 0 for both.
+    prisma.identitySignal
+      .findFirst({
+        where: { context: "login" },
+        orderBy: { createdAt: "asc" },
+        select: { createdAt: true },
+      })
+      .catch(() => null),
   ])
+
+  /*
+   * Fetched separately rather than as a 77th entry in the Promise.all above.
+   * That array is positional — the destructure and the array must stay in
+   * lockstep — and adding to it is exactly where an off-by-one silently assigns
+   * the wrong table to the wrong field. One extra round trip is cheaper than
+   * that class of bug.
+   */
+  const waitlist = await loadWaitlist()
+
+  // Login counts are only meaningful once IdentitySignal has captured at least one
+  // login. Before that, a "0" would be indistinguishable from the old silent-zero
+  // bug, so report it as untracked instead of as data.
+  const loginTrackingStartedAt = firstLoginSignal?.createdAt ?? null
+  const loginMetric = (label: string, value: number, note: string): AdminMetric =>
+    loginTrackingStartedAt
+      ? metric(label, value, `${note} · tracked since ${loginTrackingStartedAt.toISOString().slice(0, 10)}`)
+      : notTracked(label, "No login signals captured yet — sign in once to start tracking")
 
   const cycleCounts = subscriptions.reduce(
     (acc, sub) => {
@@ -691,8 +845,8 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     morning: [
       metric("Signups last 7h", accounts7h, "Rolling 7-hour window"),
       metric("Signups today", accountsToday, "UTC day"),
-      metric("Logins last 7h", loginSessions7h, "New auth sessions last 7h"),
-      metric("Logins today", loginSessionsToday, "New auth sessions today"),
+      loginMetric("Logins last 7h", loginSessions7h, "Rolling 7-hour window"),
+      loginMetric("Logins today", loginSessionsToday, "UTC day"),
       metric("Active sessions now", activeSessionsNow),
       metric("Active subscribers", activeSubscriptionUserCount),
       metric("Pools last 7h", wcPools7h, "WC pools created last 7h"),
@@ -713,9 +867,9 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
       metric("Created today", accountsToday, "UTC day"),
       metric("Created 7 days", accounts7Days),
       metric("Created 30 days", accounts30Days),
-      metric("Logins last 7h", loginSessions7h, "New auth sessions last 7h"),
-      metric("Logins today", loginSessionsToday, "New auth sessions UTC day"),
-      metric("Logins 7 days", loginSessions7Days, "New auth sessions"),
+      loginMetric("Logins last 7h", loginSessions7h, "Rolling 7-hour window"),
+      loginMetric("Logins today", loginSessionsToday, "UTC day"),
+      loginMetric("Logins 7 days", loginSessions7Days, "Rolling 7 days"),
       metric("Active sessions now", activeSessionsNow, "Sessions where expires > now()"),
       metric("Free users", Math.max(0, totalAccounts - activeSubscriptionUserCount), "Derived from active subscriptions"),
       metric("Pro/subscribed users", activeSubscriptionUserCount),
@@ -842,6 +996,7 @@ export async function getAdminCommandCenterMetrics(searchQuery = ""): Promise<Ad
     usersSearch,
     activeWorldCupPools,
     recentUsers,
+    waitlist,
     recentSubscriptions,
     recentPayments,
     recentTokenActivity,

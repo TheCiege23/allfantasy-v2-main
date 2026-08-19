@@ -28,6 +28,9 @@ function state(overrides: Partial<CreateLeagueV2State>): CreateLeagueV2State {
     scoringPresetId: 'fb_half_ppr',
     teamCount: 12,
     draftType: 'snake',
+    draftDate: '2026-08-30',
+    draftTime: '20:00',
+    privacy: 'private',
     survivorTribeCount: 2,
     name: 'Unit Test League',
     nameTouched: true,
@@ -78,7 +81,13 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
     })
     expect(body).not.toHaveProperty('userId')
     expect(body).not.toHaveProperty('commissionerId')
-    expect(body.conceptSetup).toBeUndefined()
+    expect(body.conceptSetup).toMatchObject({
+      visibility: 'private',
+      isPublic: false,
+      draftDate: '2026-08-30',
+      draftTime: '20:00',
+      draftTimezone: 'America/New_York',
+    })
   })
 
   it('uses concept idp when IDP card is selected', async () => {
@@ -138,7 +147,12 @@ describe('submitCreateLeagueV2 → /api/leagues', () => {
 
     const body = lastFetchBody()
     expect(body.concept).toBe('survivor')
-    expect(body.conceptSetup).toEqual({ survivorTribeCount: 4 })
+    expect(body.conceptSetup).toMatchObject({
+      survivorTribeCount: 4,
+      visibility: 'private',
+      draftDate: '2026-08-30',
+      draftTime: '20:00',
+    })
   })
 
   it('sends soccerPipeline for SOCCER', async () => {

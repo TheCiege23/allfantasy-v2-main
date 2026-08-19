@@ -59,14 +59,16 @@ function resolveCheckoutPurchaseType(session: Stripe.Checkout.Session): string |
 
 function resolveCheckoutContext(
   session: Stripe.Checkout.Session
-): { userId: string; sku: MonetizationSku } | null {
+): { userId: string; sku: MonetizationSku; couponCode?: string | null } | null {
   const metadata = (session.metadata ?? {}) as Record<string, string | undefined>
   const metadataUserId = metadata.userId?.trim()
   const metadataSku = metadata.sku?.trim().toLowerCase()
+  const metadataCouponCode = metadata.couponCode?.trim() || metadata.coupon_code?.trim() || null
   if (metadataUserId && metadataSku) {
     return {
       userId: metadataUserId,
       sku: metadataSku as MonetizationSku,
+      couponCode: metadataCouponCode,
     }
   }
 
@@ -75,6 +77,7 @@ function resolveCheckoutContext(
   return {
     userId: fromClientReference.userId,
     sku: fromClientReference.sku,
+    couponCode: fromClientReference.couponCode,
   }
 }
 

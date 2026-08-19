@@ -89,6 +89,25 @@ export interface SleeperDraftPickRaw {
   }
 }
 
+/**
+ * Block F — Sleeper `/v1/league/{leagueId}/traded_picks` row shape.
+ *
+ * Sleeper's field semantics (verified against real leagues during the fidelity audit):
+ *   - `roster_id`: the ORIGINAL owner's roster_id (identity of the "home" team's pick).
+ *   - `owner_id`: the CURRENT owner's roster_id (the roster that holds the pick right now).
+ *   - `previous_owner_id`: the most recent prior owner before the current one.
+ *
+ * These are all Sleeper integer roster IDs (1..total_rosters), NOT user IDs.
+ * `season` is a string like "2026".
+ */
+export interface SleeperTradedPickRaw {
+  round: number
+  season: string
+  roster_id: number
+  owner_id: number
+  previous_owner_id?: number
+}
+
 /** Payload passed to Sleeper adapter (assembled from API or legacy transfer). */
 export interface SleeperImportPayload {
   league: SleeperLeagueRaw
@@ -97,6 +116,8 @@ export interface SleeperImportPayload {
   matchupsByWeek?: { week: number; matchups: SleeperMatchupRaw[] }[]
   transactions?: SleeperTransactionRaw[]
   draftPicks?: SleeperDraftPickRaw[]
+  /** Block F — future traded draft picks (Sleeper `/league/{id}/traded_picks`). */
+  tradedPicks?: SleeperTradedPickRaw[]
   playerMap?: Record<string, { name: string; position: string; team: string }>
   previousSeasons?: Array<{ season: string; league: SleeperLeagueRaw }>
   /**

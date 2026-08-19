@@ -26,7 +26,7 @@ function firstParam(value: string | string[] | undefined): string {
   return value ?? ''
 }
 
-export default async function MockDraftPage({ searchParams }: MockDraftPageProps = {}) {
+export default async function MockDraftPage({ searchParams }: MockDraftPageProps) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.id) redirect('/login?callbackUrl=/mock-draft')
   const enabled = await isMockDraftsEnabled()

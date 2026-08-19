@@ -50,6 +50,10 @@ function findOriginal(pool: RedraftWarRoomPlayer[], player: RecommendationPlayer
   return pool.find((row) => playerKey(row) === key) ?? null
 }
 
+function toWarRoomPlayer(player: RecommendationPlayer): RedraftWarRoomPlayer {
+  return { ...player }
+}
+
 function isOut(status: string | null | undefined): boolean {
   const value = String(status ?? '').toLowerCase()
   return value.includes('out') || value.includes('ir') || value.includes('suspend')
@@ -94,7 +98,7 @@ export function buildRedraftWarRoomSuggestions(input: RedraftWarRoomSuggestionIn
   })
 
   const bestPick = recommendation.recommendation
-    ? findOriginal(legalPool, recommendation.recommendation.player) ?? recommendation.recommendation.player
+    ? findOriginal(legalPool, recommendation.recommendation.player) ?? toWarRoomPlayer(recommendation.recommendation.player)
     : null
   const alternatives = recommendation.alternatives
     .map((alt) => findOriginal(legalPool, alt.player))

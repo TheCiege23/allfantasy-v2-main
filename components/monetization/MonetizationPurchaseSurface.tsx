@@ -9,9 +9,11 @@ import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget";
 import { resolveCheckoutUrl } from "@/lib/monetization/checkout-client";
 import { trackMetaBrowserEvent } from "@/lib/meta-client";
 import { MonetizationComplianceNotice } from "@/components/monetization/MonetizationComplianceNotice";
+import { LockedFeatureBanner } from "@/components/monetization/LockedFeatureBanner";
+import { CheckoutOutcomePanel } from "@/components/monetization/CheckoutOutcomePanel";
 import { AFProPlanSpotlight } from "@/components/monetization/AFProPlanSpotlight";
 import { AFWarRoomPlanSpotlight } from "@/components/monetization/AFWarRoomPlanSpotlight";
-import { AFAllAccessBundleSpotlight } from "@/components/monetization/AFAllAccessBundleSpotlight";
+import { AFSupremeBundleSpotlight } from "@/components/monetization/AFSupremeBundleSpotlight";
 import {
   resolvePlanTierFromSku,
   trackMonetizationPageVisited,
@@ -29,7 +31,6 @@ import { trackCouponApplied } from "@/lib/promotions/couponAnalytics";
 export type PlanFamily =
   | "af_pro"
   | "af_commissioner"
-  | "af_all_access"
   | "af_war_room"
   | "af_supreme";
 
@@ -109,7 +110,6 @@ function writeCatalogCache(payload: CatalogPayload): void {
 const PLAN_FAMILY_ORDER: PlanFamily[] = [
   "af_pro",
   "af_commissioner",
-  "af_all_access",
   "af_war_room",
   "af_supreme",
 ];
@@ -117,13 +117,12 @@ const PLAN_FAMILY_ORDER: PlanFamily[] = [
 const PLAN_FAMILY_LABELS: Record<PlanFamily, string> = {
   af_pro: "AF Pro",
   af_commissioner: "AF Commissioner",
-  af_all_access: "AF All-Access",
-  af_war_room: "AF War Room",
+  af_war_room: "AF Legacy",
   af_supreme: "AF Supreme",
 };
 
 const PRICING_CONVERSION_BULLETS: readonly string[] = [
-  "Chimmy AI for waivers, trades, and matchup breakdowns",
+  "Chimmy for waivers, trades, and matchup breakdowns",
   "Commissioner-grade controls and league automation",
   "Stripe checkout for subscriptions — league dues & payouts on FanCred",
 ];
@@ -137,7 +136,8 @@ export function normalizePlanFamilyInput(input: string | null | undefined): Plan
   const value = input.trim().toLowerCase();
   if (value === "af_pro" || value === "pro") return "af_pro";
   if (value === "af_commissioner" || value === "commissioner") return "af_commissioner";
-  if (value === "af_all_access" || value === "all_access") return "af_all_access";
+  // Legacy "all-access" deep links now resolve to the surviving AF Supreme bundle.
+  if (value === "af_all_access" || value === "all_access") return "af_supreme";
   if (value === "af_war_room" || value === "war_room") return "af_war_room";
   if (value === "af_supreme" || value === "supreme") return "af_supreme";
   return null;
@@ -318,6 +318,21 @@ export default function MonetizationPurchaseSurface({
       </div>
 
       <div className="relative mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+        {/*
+          ⚠ BOTH OF THESE SIT ABOVE THE HERO BECAUSE THEY ARE ANSWERS TO QUESTIONS
+          THE USER ARRIVED WITH. Someone returning from Stripe wants to know whether
+          they were charged; someone bounced off a lock wants to know whether they
+          lost their work. Neither should have to scroll past a marketing headline
+          to find out, and both render nothing in the ordinary case.
+        */}
+        <div className="mb-6 flex flex-col gap-4 empty:mb-0">
+          <CheckoutOutcomePanel
+            phase={postPurchaseSync.state.phase}
+            onRetry={postPurchaseSync.retrySync}
+          />
+          <LockedFeatureBanner />
+        </div>
+
         {conversionHero ? (
           <>
             <header className="mb-8 flex flex-col gap-4 border-b border-white/[0.08] pb-8 sm:flex-row sm:items-center sm:justify-between">
@@ -344,7 +359,7 @@ export default function MonetizationPurchaseSurface({
                     style={{ letterSpacing: '0.04em' }}
                     data-testid="pricing-cta-signup"
                   >
-                    Unlock Full AI Access — Sign Up Free
+                    Unlock Full Access — Sign Up Free
                   </Link>
                 <Link
                   href={`/login?next=${encodeURIComponent(pagePath)}`}
@@ -362,7 +377,7 @@ export default function MonetizationPurchaseSurface({
                 <ul className="max-w-2xl space-y-4 text-base text-white/90">
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
-                    <span><span className="font-semibold text-cyan-100">Win More:</span> Get advanced AI-driven trade, waiver, and draft insights tailored to your league.</span>
+                    <span><span className="font-semibold text-cyan-100">Win More:</span> Get advanced trade, waiver, and draft insights tailored to your league.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
@@ -370,7 +385,7 @@ export default function MonetizationPurchaseSurface({
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
-                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> One subscription for the full Pro + Commissioner + War Room stack — best value for serious players.</span>
+                    <span><span className="font-semibold text-cyan-100">AF Supreme:</span> One subscription for the full Pro + Commissioner + AF Legacy stack — best value for serious players.</span>
                   </li>
                   <li className="flex items-start gap-3">
                     <span className="mt-1 flex h-6 w-6 items-center justify-center rounded-full bg-cyan-500/30 text-cyan-200"><Check className="h-4 w-4" /></span>
@@ -495,13 +510,13 @@ export default function MonetizationPurchaseSurface({
           <AFWarRoomPlanSpotlight className="mb-4" />
         ) : null}
         {focusPlanFamily === "af_supreme" ? (
-          <AFAllAccessBundleSpotlight className="mb-4" />
+          <AFSupremeBundleSpotlight className="mb-4" />
         ) : null}
 
         <section className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5" data-testid="monetization-plan-explanations">
           <h2 className="text-xs font-semibold uppercase tracking-[0.16em] text-cyan-300/80">What each plan includes</h2>
           <p className="mt-1 text-[11px] text-white/50">
-            Subscriptions unlock product areas; many AI actions still use tokens so usage stays fair at scale.
+            Subscriptions unlock product areas; many actions still use tokens so usage stays fair at scale.
           </p>
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {PLAN_FAMILY_ORDER.map((family) => (
@@ -524,7 +539,7 @@ export default function MonetizationPurchaseSurface({
             ))}
           </div>
           <p className="mt-4 text-xs leading-relaxed text-white/55" data-testid="pricing-token-model-copy">
-            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for heavy AI features. Costs vary by
+            <span className="font-medium text-white/70">Tokens:</span> pay-per-use credits for heavy-use features. Costs vary by
             action; subscribers may get discounts on eligible rules.
           </p>
         </section>
@@ -657,7 +672,7 @@ export default function MonetizationPurchaseSurface({
                           </div>
                           {monthly.tokenAmount != null && monthly.tokenAmount > 0 ? (
                             <p className="mt-1 text-[11px] font-medium text-cyan-100/85">
-                              Includes {monthly.tokenAmount.toLocaleString()} AI tokens each month
+                              Includes {monthly.tokenAmount.toLocaleString()} tokens each month
                             </p>
                           ) : null}
                           <button
@@ -695,7 +710,7 @@ export default function MonetizationPurchaseSurface({
                           </div>
                           {yearly.tokenAmount != null && yearly.tokenAmount > 0 ? (
                             <p className="mt-1 text-[11px] font-medium text-cyan-100/85">
-                              Includes {yearly.tokenAmount.toLocaleString()} AI tokens each year
+                              Includes {yearly.tokenAmount.toLocaleString()} tokens each year
                             </p>
                           ) : null}
                           <button
@@ -725,9 +740,9 @@ export default function MonetizationPurchaseSurface({
             </div>
 
             <section className="mt-8 rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4 sm:p-5">
-              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/75">AI token packs</h2>
+              <h2 className="text-sm font-semibold uppercase tracking-[0.14em] text-white/75">Token packs</h2>
               <p className="mt-1 max-w-3xl text-xs leading-relaxed text-white/55">
-                Top up when you need more AI runs. Checkout is powered by{" "}
+                Top up whenever you need more tokens. Checkout is powered by{" "}
                 <a
                   href="https://stripe.com"
                   target="_blank"
@@ -750,7 +765,7 @@ export default function MonetizationPurchaseSurface({
                     </p>
                     {pack.tokenAmount != null && pack.tokenAmount > 0 ? (
                       <p className="mt-2 text-[11px] font-medium text-cyan-200/90">
-                        {pack.tokenAmount.toLocaleString()} AI tokens included
+                        {pack.tokenAmount.toLocaleString()} tokens included
                       </p>
                     ) : null}
                     <div className="mt-3 text-xl font-bold tabular-nums text-cyan-300">{formatUsd(pack.amountUsd)}</div>

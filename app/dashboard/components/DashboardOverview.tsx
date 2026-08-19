@@ -28,9 +28,15 @@ import { emptyLineupActionSummary } from '@/lib/lineup-actions/emptySummary'
 import { useFantasyContext, type PrimaryContext } from '@/hooks/useFantasyContext'
 import { consumeDashboardRankRefreshPending } from '@/lib/import/dashboardRankRefresh'
 import { LegacySnapshotCard } from './LegacySnapshotCard'
+import { LegacyToolsetGrid } from './LegacyToolsetGrid'
 import { CareerProgressionStrip } from './CareerProgressionStrip'
-import { Crown } from 'lucide-react'
+import { Crown, Plus } from 'lucide-react'
 import { ActionCenter, countActionItems } from './warroom/ActionCenter'
+import { CommandCenterDeck } from './CommandCenterDeck'
+import { CareerCardDeck } from './CareerCardDeck'
+import { DecisionInbox } from './DecisionInbox'
+import { CommissionerLeaderboard } from './CommissionerLeaderboard'
+import { DraftSeasonHQ } from './DraftSeasonHQ'
 import { TodayTimeline } from './warroom/TodayTimeline'
 import { MyLeagueCard, rawStage } from './warroom/MyLeagueCard'
 import { LeagueActivityFeed } from './warroom/LeagueActivityFeed'
@@ -47,6 +53,7 @@ import { InjuryImpactPanel } from './warroom/InjuryImpactPanel'
 import { PlatformPulseCard } from './warroom/PlatformPulseCard'
 import { SectionHeading, CONTEXT_ACCENT } from './warroom/SectionHeading'
 import { buildPlatformPulse } from '@/lib/platform-pulse'
+import { scopeBySelectedLeague } from '@/lib/dashboard/scope-by-selected-league'
 import type { CommissionerLeagueHealthSnapshot } from '@/lib/commissioner-hub/commissionerHubHealth'
 
 const ONBOARDING_KEY = 'af-onboarding-v1'
@@ -137,6 +144,8 @@ export function DashboardOverview({
   const [lineupModalOpen, setLineupModalOpen] = useState(false)
   const [quickCreateOpen, setQuickCreateOpen] = useState(false)
   const [lineupData, setLineupData] = useState<LineupCheckPayload | null>(null)
+  /** Decision OS Slice 1 (manager.lineup.set) Stage 1 LIVE enrichment, when active — null otherwise. */
+  const [lineupDecisionOs, setLineupDecisionOs] = useState<TodayActionsEngineResponse['decisionOs']>(null)
   /** First `/api/lineup-check` bootstrap finished (avoids misleading preview counts). */
   const [lineupReady, setLineupReady] = useState(false)
   const [lineupLoading, setLineupLoading] = useState(false)
@@ -204,6 +213,7 @@ export function DashboardOverview({
         if (cancelled) return
         if (data) {
           setLineupData(data.lineup)
+          setLineupDecisionOs(data.decisionOs ?? null)
           setWaiverData(data.waivers)
           setTradeData(data.trades)
           setTodayCounts(data.counts)
@@ -215,6 +225,7 @@ export function DashboardOverview({
           stripFetchedAt.current = Date.now()
         } else {
           setLineupData(emptyLineupActionSummary())
+          setLineupDecisionOs(null)
           setWaiverData({ totalLeagues: 0, recommendations: [] })
           setTradeData({ totalPending: 0, trades: [] })
           setTodayCounts(null)
@@ -230,6 +241,7 @@ export function DashboardOverview({
       .catch(() => {
         if (cancelled) return
         setLineupData(emptyLineupActionSummary())
+        setLineupDecisionOs(null)
         setWaiverData({ totalLeagues: 0, recommendations: [] })
         setTradeData({ totalPending: 0, trades: [] })
         setTodayCounts(null)
@@ -413,6 +425,7 @@ export function DashboardOverview({
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('today-actions'))))
       .then((data: TodayActionsEngineResponse) => {
         setLineupData(data.lineup)
+        setLineupDecisionOs(data.decisionOs ?? null)
         setWaiverData(data.waivers)
         setTradeData(data.trades)
         setTodayCounts(data.counts)
@@ -538,6 +551,19 @@ export function DashboardOverview({
 
   const pendingTradeChipCount = tradeData?.totalPending ?? 0
 
+  /** D7 fix — `lineupData.actions` and `tradeData.trades` each span every league; Team/Commissioner
+   *  Focus must scope them to the selected league before feeding them to any per-league surface
+   *  (Recommendations, Today's Agenda, Weekly Game Plan, the hero urgent count). Global Command
+   *  Center passes selectedLeague=null, so it still sees every league's items unchanged. */
+  const leagueScopedLineupActions = useMemo(
+    () => scopeBySelectedLeague(lineupData?.actions ?? [], selectedLeague?.id ?? null),
+    [lineupData, selectedLeague],
+  )
+  const leagueScopedPendingTrades = useMemo(
+    () => scopeBySelectedLeague(tradeData?.trades ?? [], selectedLeague?.id ?? null),
+    [tradeData, selectedLeague],
+  )
+
   /** Leagues in pre_draft with a real, future draftDate — purely client-side, no new fetch. */
   const upcomingDrafts = useMemo(() => {
     const now = Date.now()
@@ -547,8 +573,8 @@ export function DashboardOverview({
   }, [leagues])
 
   const urgentTodayCount = useMemo(
-    () => countActionItems(lineupData?.actions ?? [], waiverChipCount, pendingTradeChipCount, warRoomDecisionsToReview),
-    [lineupData, waiverChipCount, pendingTradeChipCount, warRoomDecisionsToReview],
+    () => countActionItems(leagueScopedLineupActions, waiverChipCount, pendingTradeChipCount, warRoomDecisionsToReview),
+    [leagueScopedLineupActions, waiverChipCount, pendingTradeChipCount, warRoomDecisionsToReview],
   )
 
   /** Dashboard V2 Phase 3.6 — Platform Pulse. A pure aggregation over intelligence already in
@@ -594,7 +620,7 @@ export function DashboardOverview({
     <section key="agenda" className="space-y-3">
       <SectionHeading accent={contextAccent}>{t('dashboard.warroom.today.title')}</SectionHeading>
       <ActionCenter
-        lineupActions={lineupData?.actions ?? []}
+        lineupActions={leagueScopedLineupActions}
         waiverPickupSuggestions={waiverChipCount}
         pendingTradeCount={pendingTradeChipCount}
         warRoomDecisionsToReview={warRoomDecisionsToReview}
@@ -602,9 +628,10 @@ export function DashboardOverview({
         onWaiverClick={handleWaiverClick}
         onTradesClick={handleTradeClick}
         onWarRoomClick={handleWarRoomToolClick}
+        decisionOsLineup={lineupDecisionOs}
       />
       <TodayTimeline
-        lineupActions={lineupData?.actions ?? []}
+        lineupActions={leagueScopedLineupActions}
         waiverTiming={todayWaiverTiming}
         autoSwapsLast24h={todayAutoProtection?.autoSwapsLast24h ?? 0}
         pendingTradeCount={pendingTradeChipCount}
@@ -614,19 +641,43 @@ export function DashboardOverview({
     </section>
   )
 
+  // Dashboard visual bug-fix pass (My Leagues width follow-up) — this grid is keyed to viewport
+  // breakpoints (sm/lg/xl), same as LegacyToolsetGrid.tsx, so it needs to render full-width rather
+  // than confined to the secondary column (~1/3 of viewport) the way AF Legacy Toolset did before
+  // its own fix. Rendered as its own full-width block below; column count widened to match.
   const myLeaguesSection = leaguesLoading ? (
     <section key="myLeagues" className="space-y-2.5">
       <SectionHeading accent={contextAccent} icon={Crown}>{t('dashboard.warroom.myLeagues.title')}</SectionHeading>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {[0, 1].map((i) => (
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
           <div key={i} className="warroom-card h-[168px] animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.02]" />
         ))}
       </div>
     </section>
   ) : myLeaguesList.length > 0 ? (
     <section key="myLeagues" className="space-y-2.5">
-      <SectionHeading accent={contextAccent} icon={Crown}>{t('dashboard.warroom.myLeagues.title')}</SectionHeading>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <SectionHeading
+        accent={contextAccent}
+        icon={Crown}
+        trailing={
+          // The only other openers of ConnectPlatformsModal live inside the Get Started checklist,
+          // which is replaced by a one-line "all set" once onboarding completes — so the platform
+          // picker became permanently unreachable for exactly the established multi-league manager
+          // most likely to want it. This entry point sits beside the league list and never expires.
+          <button
+            type="button"
+            onClick={() => setPlatformModalOpen(true)}
+            data-testid="my-leagues-import-platform"
+            className="warroom-pressable inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/[0.03] px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-white/55 hover:border-white/20 hover:bg-white/[0.06] hover:text-white/80"
+          >
+            <Plus className="h-3 w-3" aria-hidden />
+            {t('dashboard.warroom.myLeagues.importPlatform')}
+          </button>
+        }
+      >
+        {t('dashboard.warroom.myLeagues.title')}
+      </SectionHeading>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {myLeaguesList.map((l) => (
           <MyLeagueCard
             key={l.id}
@@ -658,7 +709,7 @@ export function DashboardOverview({
     ) : null
 
   const weeklyGamePlanSection = (
-    <CoachNotes key="weeklyGamePlan" lineupActions={lineupData?.actions ?? []} pendingTrades={tradeData?.trades ?? []} />
+    <CoachNotes key="weeklyGamePlan" lineupActions={leagueScopedLineupActions} pendingTrades={leagueScopedPendingTrades} />
   )
 
   const rankingsLegacySection = (
@@ -691,11 +742,13 @@ export function DashboardOverview({
 
   const leagueBuzzSection = <LeagueActivityFeed key="leagueBuzz" />
 
+  const legacyToolsetSection = <LegacyToolsetGrid key="legacyToolset" />
+
   /** Phase 3.1 — Recommendation Timeline (Decision OS "Recommend + Explain" centerpiece). Surfaces
    *  the real AI lineup/start-sit/waiver/matchup signals with their confidence, expected gain, and
    *  inline reasoning. Self-gates when there are no recommendations. */
   const recommendationsSection = (
-    <RecommendationTimeline key="recommendations" actions={lineupData?.actions ?? []} />
+    <RecommendationTimeline key="recommendations" actions={leagueScopedLineupActions} />
   )
 
   /** Phase 3.6 — Platform Pulse: the cross-context intelligence briefing, placed first in every
@@ -764,11 +817,11 @@ export function DashboardOverview({
   const layoutByContext: Record<PrimaryContext, { primary: ReactNode[]; secondary: ReactNode[] }> = {
     global: {
       primary: [platformPulseSection, recommendationsSection, todaysAgendaSection, weeklyGamePlanSection],
-      secondary: [myLeaguesSection, commissionerHubSection, rankingsLegacySection, leagueBuzzSection],
+      secondary: [commissionerHubSection],
     },
     commissioner: {
       primary: [platformPulseSection, commissionerHQSection, todaysAgendaSection, weeklyGamePlanSection],
-      secondary: [myLeaguesSection, rankingsLegacySection, leagueBuzzSection],
+      secondary: [],
     },
     team: {
       primary: [
@@ -781,7 +834,7 @@ export function DashboardOverview({
         todaysAgendaSection,
         teamWaiverSection,
       ],
-      secondary: [teamSeasonJourneySection, rankingsLegacySection, leagueBuzzSection],
+      secondary: [teamSeasonJourneySection],
     },
   }
   const layout = layoutByContext[context]
@@ -805,9 +858,7 @@ export function DashboardOverview({
           commissionerHealth={
             selectedLeague ? initialCommissionerHealthSnapshots?.find((s) => s.leagueId === selectedLeague.id) ?? null : null
           }
-          teamLineupDecisions={
-            selectedLeague ? (lineupData?.actions ?? []).filter((a) => a.leagueId === selectedLeague.id).length : 0
-          }
+          teamLineupDecisions={selectedLeague ? leagueScopedLineupActions.length : 0}
           waiverPriority={
             selectedLeague && waiverData
               ? waiverData.recommendations
@@ -817,14 +868,72 @@ export function DashboardOverview({
           }
         />
 
+        {/* 1b. COMMAND CENTER DECK — cross-league brain: urgency-ranked feed,
+            week-at-a-glance win probabilities, portfolio value. One payload
+            aggregated from every OS engine (Decision OS, LeagueContext, trade
+            engine, draft intel, matchup model, market values, Legacy H2H) —
+            the same payload that grounds Chimmy's dashboard-level chat. */}
+        <CommandCenterDeck userId={userId} />
+
+        {/* 1b-ii. DRAFT SEASON HQ — seasonal: cross-league draft countdowns,
+            live cockpit links, post-draft report cards. Auto-hides off-season. */}
+        <DraftSeasonHQ leagues={leagues} />
+
+        {/* 1b-iii. DECISION INBOX — one-tap accept/reject for AF-native trades
+            awaiting the viewer, via the existing per-trade engine endpoints. */}
+        <DecisionInbox />
+
+        {/* 1b-iv. LEAGUE HEALTH LEADERBOARD — commissioner-only: all owned
+            leagues pulse-scanned, with friendly deduped chat nudges. */}
+        <CommissionerLeaderboard />
+
+        {/* 1c. MANAGER CAREER CARD — aggregated Legacy identity (history chains,
+            graded trades, graded drafts, records book) with one-tap sharing. */}
+        <CareerCardDeck />
+
         {/* 2-7. Command-center grid — Dashboard V2 Phase 3.8A. Same components/engines; a
             primary decision column (~2/3) beside a secondary context/portfolio column (~1/3) on
             wide screens, collapsing to a single stack below `xl`. Phase 3.8D moves this directly
             under the hero (ahead of the setup checklist) so the hero flows straight into Platform
-            Pulse; the onboarding checklist now sits below the intelligence. */}
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-3 xl:items-start">
-          <div className="space-y-5 xl:col-span-2">{layout.primary}</div>
-          <div className="space-y-5">{layout.secondary}</div>
+            Pulse; the onboarding checklist now sits below the intelligence.
+
+            Commissioner Focus's secondary column is empty (Rankings & Legacy moved to its own
+            full-width block below, and nothing else fills it here) — rendering the 2/3+1/3 split
+            in that case would just leave a dead empty column. Collapse to a single full-width
+            primary column instead whenever secondary has nothing in it. */}
+        {layout.secondary.length > 0 ? (
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-3 xl:items-start">
+            <div className="space-y-5 xl:col-span-2">{layout.primary}</div>
+            <div className="space-y-5">{layout.secondary}</div>
+          </div>
+        ) : (
+          <div className="space-y-5">{layout.primary}</div>
+        )}
+
+        {/* My Leagues — same fix as AF Legacy Toolset below: this grid's own internal columns
+            (sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4) are keyed to viewport breakpoints, so
+            confining it to the 1/3-width secondary column left ~170px per card, not enough room
+            for icon + name + status badge together. Full-width, and only shown in the contexts
+            that showed it in the secondary column before (not "team", which is already scoped to
+            one league). */}
+        {context !== 'team' ? <div className="space-y-5">{myLeaguesSection}</div> : null}
+
+        {/* Rankings & Legacy — full-width for a different reason than the grids above: this isn't
+            about needing more columns (it's exactly 2 cards, sm:grid-cols-2 is already right), it's
+            that RankingsCard's own internal sm:flex-row (level info beside the AIGradeRing) needs
+            real width to lay out side-by-side without clipping. Confined to the 1/3-width secondary
+            column, the ring and the 4-up stat row beneath it were being squeezed by a breakpoint
+            keyed to viewport width, not to the column's actual width. */}
+        <div className="space-y-5">{rankingsLegacySection}</div>
+
+        {/* AF Legacy Toolset + League Buzz — full-width, below the primary/secondary grid rather
+            than inside the 1/3-width secondary column. LegacyToolsetGrid's own internal grid
+            (sm:grid-cols-2 lg:grid-cols-3) is keyed to viewport breakpoints, so confining it to a
+            narrow column left it squeezed while xl:items-start (columns don't stretch to match
+            height) opened dead space to its left whenever the primary column ran shorter. */}
+        <div className="space-y-5">
+          {legacyToolsetSection}
+          {leagueBuzzSection}
         </div>
 
         {allDone ? (

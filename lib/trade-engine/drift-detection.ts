@@ -1,6 +1,7 @@
 import { prisma } from '../prisma'
 import { Prisma } from '@prisma/client'
 import { fetchFantasyCalcValues, FantasyCalcPlayer } from '../fantasycalc'
+import { resolveCurrentTradeLearningSeason } from './season-resolver'
 
 export type DriftSeverity = 'ok' | 'info' | 'warn' | 'critical'
 
@@ -607,12 +608,14 @@ async function computeInputDrift(
 }
 
 export async function runDriftDetection(
-  season: number = 2025,
+  season?: number,
 ): Promise<DriftReport> {
   console.log('[DriftDetection] Starting drift detection cycle...')
 
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
+
   const stats = await prisma.tradeLearningStats.findUnique({
-    where: { season },
+    where: { season: resolvedSeason },
   })
 
   const rawStats = stats as Record<string, unknown> | null
@@ -622,7 +625,7 @@ export async function runDriftDetection(
   const trades = await prisma.leagueTrade.findMany({
     where: {
       analyzed: true,
-      season,
+      season: resolvedSeason,
       valueGiven: { not: null },
       valueReceived: { not: null },
     },
@@ -676,7 +679,7 @@ export async function runDriftDetection(
 
   const report: DriftReport = {
     timestamp: new Date().toISOString(),
-    season,
+    season: resolvedSeason,
     overallSeverity,
     calibration: calibrationResult.metrics,
     rankOrder: rankResult.metrics,
@@ -688,7 +691,7 @@ export async function runDriftDetection(
 
   await prisma.$executeRaw`
     INSERT INTO "TradeLearningStats" (id, season, "driftReport", "lastUpdated", "createdAt")
-    VALUES (gen_random_uuid()::text, ${season}, ${JSON.stringify(report)}::jsonb, NOW(), NOW())
+    VALUES (gen_random_uuid()::text, ${resolvedSeason}, ${JSON.stringify(report)}::jsonb, NOW(), NOW())
     ON CONFLICT (season) DO UPDATE SET "driftReport" = ${JSON.stringify(report)}::jsonb, "lastUpdated" = NOW()
   `
 

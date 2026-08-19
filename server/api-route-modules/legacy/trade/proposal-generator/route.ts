@@ -377,6 +377,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
     } catch {}
 
     let opponentAddendum = '';
+    let opponentTendencyData: any = null;
     try {
       const targetRId = typeof parsed.data.targetRosterId === 'string'
         ? parseInt(parsed.data.targetRosterId)
@@ -385,9 +386,58 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/proposal-generat
         const opponentProfile = await getCachedOpponentProfile(parsed.data.leagueId, targetRId);
         if (opponentProfile && opponentProfile.confidence >= 0.15) {
           opponentAddendum = formatOpponentForPrompt(opponentProfile);
+          opponentTendencyData = {
+            tendencies: opponentProfile.tendencies,
+            tradeLikelihood: opponentProfile.tradeLikelihood,
+            pitchAngles: opponentProfile.pitchAngles,
+            confidence: opponentProfile.confidence,
+            tradeCount: opponentProfile.tradeCount,
+            seasonsCovered: opponentProfile.seasonsCovered,
+          };
         }
       }
     } catch {}
+
+    // Deterministic acceptance model — the single source of truth for "how likely is this
+    // accepted", computed from real trade math BEFORE the LLM call. The LLM is given these
+    // exact numbers and told to quote them, never estimate its own — previously it generated
+    // a second, unreconciled "acceptance" % that could (and did) disagree with this one.
+    const acceptanceByLabel = new Map<string, { score: number; factors: any; summary: string; optimizations: any }>()
+    for (const p of proposals) {
+      const acceptanceInput: TradeAcceptanceInput = {
+        fairnessScore: p.fairnessScore,
+        valueDelta: p.delta,
+        myTotal: p.myTotal,
+        theirTotal: p.theirTotal,
+        proposedAssets: p.myOffer.map((a: any) => ({
+          type: a.type,
+          name: a.name,
+          pos: a.pos,
+          value: a.value,
+          pickYear: a.pickYear,
+          pickRound: a.pickRound,
+        })),
+        opponentTendencies: opponentTendencyData?.tendencies || null,
+        opponentTradeCount: opponentTendencyData?.tradeCount ?? undefined,
+        opponentSeasonsCovered: opponentTendencyData?.seasonsCovered ?? undefined,
+        targetRecord: targetTeam.record || null,
+        myRecord: myTeam.record || null,
+        leagueSize: 12,
+        format,
+      };
+      const acceptance = computeTradeAcceptance(acceptanceInput);
+      const optimizations = suggestOptimizations(acceptance, acceptanceInput);
+      acceptanceByLabel.set(p.label, {
+        score: acceptance.score,
+        factors: acceptance.factors,
+        summary: acceptance.summary,
+        optimizations,
+      })
+    }
+
+    const acceptanceForPrompt = proposals
+      .map(p => `${p.label}: computed acceptance likelihood is ${acceptanceByLabel.get(p.label)?.score ?? '?'}%.`)
+      .join('\n')
 
     try {
       const aiResponse = await openaiChatJson({
@@ -417,9 +467,13 @@ ${targetRosterSummary}
 PROPOSALS:
 ${proposalSummaries}
 
+ACCEPTANCE LIKELIHOOD (already computed from real trade math — this is the ONLY acceptance
+number that exists; do not estimate your own, do not include an "acceptance" field. If you
+reference likelihood anywhere in theirPitch or tradePitch, quote this exact figure):
+${acceptanceForPrompt}
+
 For each proposal (Slight Edge, Fair & Balanced, Overpay), provide:
-- "acceptance": how likely ${targetTeam.displayName} accepts (percentage 0-100). Be realistic — lopsided trades should have LOW acceptance.
-- "theirPitch": why this trade appeals to ${targetTeam.displayName} (2-3 sentences). Be honest about value gaps.
+- "theirPitch": why this trade appeals to ${targetTeam.displayName} (2-3 sentences). Be honest about value gaps. If you mention acceptance likelihood, use the exact computed number above — never estimate your own.
 - "yourAdvantage": what ${username} gains strategically (1-2 sentences)
 - "tradePitch": a message ${username} could send to propose this trade (1-2 sentences, casual tone)
 - "fairnessNote": a brief honest assessment of the trade's fairness (1 sentence)
@@ -427,9 +481,9 @@ For each proposal (Slight Edge, Fair & Balanced, Overpay), provide:
 Respond in JSON format:
 {
   "proposals": {
-    "slightEdge": { "acceptance": number, "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string },
-    "even": { "acceptance": number, "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string },
-    "overpay": { "acceptance": number, "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string }
+    "slightEdge": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string },
+    "even": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string },
+    "overpay": { "theirPitch": string, "yourAdvantage": string, "tradePitch": string, "fairnessNote": string }
   }
 }`
         }],
@@ -483,7 +537,7 @@ Respond in JSON format:
         theirTotal: p.theirTotal,
         delta: p.delta,
         fairnessScore: p.fairnessScore,
-        acceptance: ai.acceptance ?? null,
+        acceptanceModel: acceptanceByLabel.get(p.label) ?? null,
         theirPitch: ai.theirPitch ?? null,
         yourAdvantage: ai.yourAdvantage ?? null,
         tradePitch: ai.tradePitch ?? null,
@@ -491,72 +545,10 @@ Respond in JSON format:
       }
     }).filter(Boolean)
 
-    let opponentTendencyData: any = null;
-    try {
-      const targetRId = typeof parsed.data.targetRosterId === 'string'
-        ? parseInt(parsed.data.targetRosterId)
-        : parsed.data.targetRosterId;
-      if (targetRId && parsed.data.leagueId) {
-        const profile = await getCachedOpponentProfile(parsed.data.leagueId, targetRId);
-        if (profile && profile.confidence >= 0.15) {
-          opponentTendencyData = {
-            tendencies: profile.tendencies,
-            tradeLikelihood: profile.tradeLikelihood,
-            pitchAngles: profile.pitchAngles,
-            confidence: profile.confidence,
-            tradeCount: profile.tradeCount,
-            seasonsCovered: profile.seasonsCovered,
-          };
-        }
-      }
-    } catch {}
-
-    const acceptanceResults = finalProposals.map(p => {
-      if (!p) return null;
-      const acceptanceInput: TradeAcceptanceInput = {
-        fairnessScore: p.fairnessScore,
-        valueDelta: p.delta,
-        myTotal: p.myTotal,
-        theirTotal: p.theirTotal,
-        proposedAssets: p.myOffer.map((a: any) => ({
-          type: a.type,
-          name: a.name,
-          pos: a.pos,
-          value: a.value,
-          pickYear: a.pickYear,
-          pickRound: a.pickRound,
-        })),
-        opponentTendencies: opponentTendencyData?.tendencies || null,
-        opponentTradeCount: opponentTendencyData?.tradeCount ?? undefined,
-        opponentSeasonsCovered: opponentTendencyData?.seasonsCovered ?? undefined,
-        targetRecord: targetTeam.record || null,
-        myRecord: myTeam.record || null,
-        leagueSize: 12,
-        format,
-      };
-      const acceptance = computeTradeAcceptance(acceptanceInput);
-      const optimizations = suggestOptimizations(acceptance, acceptanceInput);
-      return { acceptance, optimizations };
-    });
-
-    const enrichedProposals = finalProposals.map((p, i) => {
-      if (!p) return null;
-      const ar = acceptanceResults[i];
-      return {
-        ...p,
-        acceptanceModel: ar ? {
-          score: ar.acceptance.score,
-          factors: ar.acceptance.factors,
-          summary: ar.acceptance.summary,
-          optimizations: ar.optimizations,
-        } : null,
-      };
-    }).filter(Boolean);
-
-    const bestAcceptanceIdx = enrichedProposals.reduce((best, cur, idx) => {
+    const bestAcceptanceIdx = finalProposals.reduce((best, cur, idx) => {
       if (!cur || !cur.acceptanceModel) return best;
       if (best === -1) return idx;
-      const bestScore = enrichedProposals[best]?.acceptanceModel?.score ?? 0;
+      const bestScore = finalProposals[best]?.acceptanceModel?.score ?? 0;
       return cur.acceptanceModel.score > bestScore ? idx : best;
     }, -1);
 
@@ -604,7 +596,7 @@ Respond in JSON format:
       confidenceRisk: crResult,
     })
 
-    for (const proposal of enrichedProposals) {
+    for (const proposal of finalProposals) {
       if (!proposal) continue
       logTradeOfferEvent({
         leagueId: parsed.data.leagueId,
@@ -623,7 +615,7 @@ Respond in JSON format:
 
     return NextResponse.json({
       success: true,
-      proposals: enrichedProposals,
+      proposals: finalProposals,
       desiredTotal,
       bestAcceptanceIndex: bestAcceptanceIdx >= 0 ? bestAcceptanceIdx : null,
       opponentTendencies: opponentTendencyData,

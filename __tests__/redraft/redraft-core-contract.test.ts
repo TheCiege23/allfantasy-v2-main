@@ -38,11 +38,11 @@ describe('redraft core contract hardening', () => {
 
     expect(plan.eligible).toBe(true)
     expect(plan.settingsChanged).toBe(true)
-    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 1, WR: 2, TE: 1, DEF: 1 })
+    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 2, TE: 1, FLX: 1, K: 1, DEF: 1 })
     expect(plan.nextSettings.scoring_preset_id).toBe('fb_full_ppr')
     expect(plan.draftSession.shouldCreate).toBe(false)
     expect(plan.draftSession.shouldUpdate).toBe(true)
-    expect(plan.draftSession.data.rounds).toBe(12)
+    expect(plan.draftSession.data.rounds).toBe(15)
     expect(plan.draftSession.data.slotOrder).toHaveLength(12)
   })
 
@@ -63,7 +63,7 @@ describe('redraft core contract hardening', () => {
       teams: [{ ownerName: 'Done' }],
     })
 
-    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 3, TE: 1, FLX: 1, DEF: 1 })
+    expect(plan.nextSettings.starter_slots).toEqual({ QB: 1, RB: 2, WR: 3, TE: 1, FLX: 1, DEF: 1, K: 1 })
     expect(plan.nextSettings.scoring_preset_id).toBe('custom_college_power')
     expect(plan.draftSession.shouldCreate).toBe(false)
     expect(plan.draftSession.shouldUpdate).toBe(false)

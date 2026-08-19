@@ -8,6 +8,7 @@ import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
 import { getComprehensiveLearningContext } from '@/lib/comprehensive-trade-learning'
 import { getPreAnalysisStatus } from '@/lib/trade-pre-analysis'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { runTradeEngine, runAssistOrchestrator } from '@/lib/trade-engine'
 import { applyOtbTagsToAssetsByRosterId } from '@/lib/trade-engine/otb-persistence'
 import { writeSnapshot } from '@/lib/trade-engine/snapshot-store'
@@ -279,12 +280,16 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/league-analyze",
   try {
     const body = await req.json()
     const leagueId = safeStr(body.league_id)
-    const sleeperUsernameRaw = safeStr(body.sleeper_username)
-    const sleeperUsername = sleeperUsernameRaw.toLowerCase()
     const sportRaw = safeStr(body.sport || 'nfl').toLowerCase()
 
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: safeStr(body.sleeper_username) || null,
+      rateLimit: { action: 'trade_league_analyze', maxRequests: 10, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeperUsername = gate.identity.sleeperUsername.toLowerCase()
+
     if (!leagueId) return NextResponse.json({ error: 'Missing league_id' }, { status: 400 })
-    if (!sleeperUsername) return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
 
     const sport: Sport = sportRaw === 'nba' ? 'nba' : 'nfl'
 

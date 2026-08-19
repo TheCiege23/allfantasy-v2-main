@@ -22,6 +22,7 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["draft","recommendation-refresh"], load: () => import('@/server/api-route-modules/legacy/draft/recommendation-refresh/route') },
   { pattern: ["feedback","upload"], load: () => import('@/server/api-route-modules/legacy/feedback/upload/route') },
   { pattern: ["import","status"], load: () => import('@/server/api-route-modules/legacy/import/status/route') },
+  { pattern: ["guest-import"], load: () => import('@/server/api-route-modules/legacy/guest-import/route') },
   { pattern: ["market","refresh"], load: () => import('@/server/api-route-modules/legacy/market/refresh/route') },
   { pattern: ["portfolio","history"], load: () => import('@/server/api-route-modules/legacy/portfolio/history/route') },
   { pattern: ["rank","dispute"], load: () => import('@/server/api-route-modules/legacy/rank/dispute/route') },

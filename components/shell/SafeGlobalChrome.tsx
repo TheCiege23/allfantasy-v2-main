@@ -4,6 +4,7 @@ import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import Script from "next/script"
 import { AuthRouteGlobalChrome } from "@/components/auth/AuthRouteGlobalChrome"
+import AgeConfirmationPrompt from "@/components/legal/AgeConfirmationPrompt"
 import { shouldRegisterServiceWorker } from "@/lib/pwa/shouldRegisterServiceWorker"
 
 const AUTH_ROUTE_PREFIXES = ["/login", "/signup", "/signin", "/auth"]
@@ -183,6 +184,14 @@ export function SafeGlobalChrome({
           crossOrigin="anonymous"
         />
       ) : null}
+
+      {/*
+        Mounted here rather than in the root layout so it inherits this component's route
+        bailouts: it must never appear on /login, /signup or /auth/* — asking someone to
+        confirm their age on top of the signup form they are already filling in would be
+        both confusing and redundant. It self-hides for signed-out visitors.
+      */}
+      {isAuthPath(pathname) ? null : <AgeConfirmationPrompt />}
 
       <AuthRouteGlobalChrome />
     </>

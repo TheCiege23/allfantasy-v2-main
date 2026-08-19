@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { requireAdminOrBearer } from '@/lib/adminAuth'
+import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
 import { updateC2CMatchupScores } from '@/lib/c2c/scoringEngine'
 import { syncWeeklyScores } from '@/lib/survivor/gameStateMachine'
@@ -107,6 +108,12 @@ async function runLegacyAutomationBridge() {
   }
 }
 
+// This branch added its own cron GET here. #284 landed an equivalent one further down
+// (kept), so both would have exported `GET` from the same module. Dropped this copy rather
+// than main's: main's is the shipped, reviewed version, and it sidesteps the build bug
+// entirely by writing "every 5 minutes" in prose instead of the literal `*/5 * * * *`,
+// whose `*/` closes a block comment early.
+
 export async function POST(request: Request) {
   const gate = await requireAdminOrBearer(request)
   if (!gate.ok) return gate.res
@@ -149,4 +156,27 @@ export async function POST(request: Request) {
     const status = message.includes('not found') ? 404 : 500
     return NextResponse.json({ ok: false, error: message }, { status })
   }
+}
+
+/**
+ * Vercel Cron issues a GET (scheduled every 5 minutes in vercel.json), but this route only
+ * exported POST.
+ * Measured in production 2026-07-19: 288 invocations in 24h, all 405 — no score sync ever ran
+ * on schedule.
+ *
+ * POST keeps its existing `requireAdminOrBearer` gate untouched. GET is gated on
+ * `requireCronAuth` (what Vercel's scheduler presents, and already a superset of the admin
+ * secrets), and runs the no-body path POST takes when called without a leagueId/seasonId —
+ * which is exactly what a scheduled invocation does.
+ */
+export async function GET(request: Request) {
+  // Name CRON_SECRET explicitly, matching #289. `requireCronAuth` resolves
+  // `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`, and LEAGUE_CRON_SECRET IS set
+  // in prod — so a bare call compares Vercel's `Bearer $CRON_SECRET` against the wrong
+  // variable and 401s. #289 fixed the 13 routes under app/api/cron/; this one lives under
+  // app/api/redraft/ and was missed, so it would still have 401'd after this merge.
+  if (!requireCronAuth(request as unknown as NextRequest, 'CRON_SECRET')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+  return NextResponse.json(await runLegacyAutomationBridge())
 }

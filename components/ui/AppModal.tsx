@@ -87,7 +87,7 @@ export function AppModal({
             if (!dismissible) e.preventDefault()
           }}
           className={cn(
-            "fixed left-1/2 top-1/2 z-[90] flex max-h-[90dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0a1628] text-white shadow-2xl outline-none",
+            "fixed left-1/2 top-1/2 z-[90] flex max-h-[90dvh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-subtle bg-surface text-primary shadow-popover outline-none",
             "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
             SIZE_CLASS[size],
             className,
@@ -97,13 +97,13 @@ export function AppModal({
           {hideHeader ? (
             <DialogPrimitive.Title className="sr-only">{title ?? "Dialog"}</DialogPrimitive.Title>
           ) : (
-            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-white/10 px-5 py-4">
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-subtle px-5 py-4">
               <div className="min-w-0">
-                <DialogPrimitive.Title className="truncate text-[17px] font-semibold text-white">
+                <DialogPrimitive.Title className="truncate text-[17px] font-semibold text-primary">
                   {title}
                 </DialogPrimitive.Title>
                 {description ? (
-                  <DialogPrimitive.Description className="mt-0.5 text-xs text-white/55">
+                  <DialogPrimitive.Description className="mt-0.5 text-xs text-muted">
                     {description}
                   </DialogPrimitive.Description>
                 ) : null}
@@ -115,7 +115,7 @@ export function AppModal({
                   onClick={onClose}
                   aria-label="Close"
                   data-testid="app-modal-close"
-                  className="rounded-lg p-1.5 text-white/70 transition hover:bg-white/10 hover:text-white"
+                  className="rounded-lg p-1.5 text-muted transition hover:bg-surface-hover hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus/40"
                 >
                   <X className="h-4.5 w-4.5" />
                 </button>
@@ -128,7 +128,7 @@ export function AppModal({
             {children}
           </div>
 
-          {footer ? <div className="shrink-0 border-t border-white/10 px-5 py-3">{footer}</div> : null}
+          {footer ? <div className="shrink-0 border-t border-subtle px-5 py-3">{footer}</div> : null}
         </DialogPrimitive.Content>
       </DialogPortal>
     </DialogPrimitive.Root>

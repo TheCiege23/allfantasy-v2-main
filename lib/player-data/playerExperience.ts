@@ -106,9 +106,12 @@ export type ResolvePlayerExperienceInput = {
 
 function looseEntryBag(entry?: NormalizedDraftEntry): Record<string, unknown> {
   if (!entry) return {}
-  const top = entry as Record<string, unknown>
-  const dm = entry.display?.metadata as Record<string, unknown> | undefined
-  return { ...top, ...(dm ?? {}) }
+  const top = entry as unknown as Record<string, unknown>
+  const dm =
+    entry.display?.metadata && typeof entry.display.metadata === 'object'
+      ? (entry.display.metadata as unknown as Record<string, unknown>)
+      : {}
+  return { ...top, ...dm }
 }
 
 export function resolvePlayerExperience(input: ResolvePlayerExperienceInput): PlayerExperienceResult {

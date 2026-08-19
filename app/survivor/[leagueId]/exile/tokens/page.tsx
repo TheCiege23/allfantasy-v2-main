@@ -13,12 +13,9 @@ export default function SurvivorExileTokensPage() {
   const pct = Math.min(100, cap > 0 ? Math.round((bal / cap) * 100) : 0)
   const arc = 264 * (pct / 100)
 
-  const events = [
-    { icon: '+1', label: 'Exile challenge winner', week: 3, tone: 'text-emerald-300' as const },
-    { icon: '+2', label: 'Stat hunt correct', week: 4, tone: 'text-emerald-300' as const },
-    { icon: '-2', label: 'Token stolen', week: 5, tone: 'text-red-300' as const },
-    { icon: 'RST', label: 'Boss won — reset risk', week: 6, tone: 'text-white/40' as const },
-  ]
+  // No per-event token ledger is wired into SurvivorUiContext yet — show an honest empty state
+  // rather than the same 4 fabricated events for every league (matches the chimmy tab's pattern).
+  const events: { icon: string; label: string; week: number; tone: string }[] = []
 
   return (
     <div className="px-3 pb-28 pt-4 md:px-6 md:pb-10">
@@ -53,17 +50,23 @@ export default function SurvivorExileTokensPage() {
 
       <section className="mx-auto mt-10 max-w-lg survivor-panel p-4">
         <h2 className="text-[11px] font-bold uppercase tracking-wider text-white/45">Recent events</h2>
-        <ul className="mt-3 space-y-2">
-          {events.map((e, i) => (
-            <li key={i} className="flex items-start gap-3 rounded-lg border border-white/[0.05] bg-black/20 px-3 py-2 text-[12px]">
-              <span className={`font-mono text-[11px] ${e.tone}`}>{e.icon}</span>
-              <div>
-                <p className="text-white/80">{e.label}</p>
-                <p className="text-[10px] text-white/35">Week {e.week}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {events.length > 0 ? (
+          <ul className="mt-3 space-y-2">
+            {events.map((e, i) => (
+              <li key={i} className="flex items-start gap-3 rounded-lg border border-white/[0.05] bg-black/20 px-3 py-2 text-[12px]">
+                <span className={`font-mono text-[11px] ${e.tone}`}>{e.icon}</span>
+                <div>
+                  <p className="text-white/80">{e.label}</p>
+                  <p className="text-[10px] text-white/35">Week {e.week}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 text-[12px] text-white/35" data-testid="exile-tokens-events-empty">
+            No token events recorded yet.
+          </p>
+        )}
       </section>
 
       <section className="mx-auto mt-6 max-w-lg rounded-xl border border-red-500/20 bg-red-500/5 p-4 text-[12px] text-red-100/90">

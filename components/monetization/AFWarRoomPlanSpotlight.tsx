@@ -17,7 +17,7 @@ const AF_WAR_ROOM_FEATURES = [
 
 const DIFFERENTIATION = [
   {
-    title: 'AF War Room',
+    title: 'AF Legacy',
     icon: Telescope,
     copy: 'Premium draft and long-horizon strategy tier for individual managers.',
     tone: 'border-violet-400/35 bg-violet-500/10 text-violet-100',
@@ -25,7 +25,7 @@ const DIFFERENTIATION = [
   {
     title: 'AF Pro',
     icon: Crown,
-    copy: 'Player-specific AI tier for trades, waivers, matchups, and lineup decisions.',
+    copy: 'Player-specific tier for trades, waivers, matchups, and lineup decisions.',
     tone: 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100',
   },
   {
@@ -43,7 +43,7 @@ export function AFWarRoomPlanSpotlight({ className = '' }: { className?: string 
       data-testid="af-war-room-spotlight"
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-semibold text-white">Why AF War Room</h2>
+        <h2 className="text-sm font-semibold text-white">Why AF Legacy</h2>
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/upgrade?plan=war_room"
@@ -58,7 +58,7 @@ export function AFWarRoomPlanSpotlight({ className = '' }: { className?: string 
             data-testid="af-war-room-upgrade-link"
           >
             <Telescope className="h-3.5 w-3.5" />
-            Upgrade to AF War Room
+            Upgrade to AF Legacy
           </Link>
           <Link
             href="/tokens?ruleCode=ai_war_room_multi_step_planning"
@@ -79,12 +79,12 @@ export function AFWarRoomPlanSpotlight({ className = '' }: { className?: string 
       </div>
 
       <p className="mt-1 text-xs text-white/65">
-        AF War Room is the premium strategy and drafting tier. Use subscription access or tokens where policy allows.
+        AF Legacy is the premium strategy and drafting tier. Use subscription access or tokens where policy allows.
       </p>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">
         <article className="rounded-lg border border-white/10 bg-black/25 p-3">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-violet-200/90">AF War Room includes</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-violet-200/90">AF Legacy includes</p>
           <ul className="mt-2 space-y-1.5 text-xs text-white/85">
             {AF_WAR_ROOM_FEATURES.map((item) => (
               <li key={item} className="flex items-start gap-1.5" data-testid="af-war-room-feature-item">

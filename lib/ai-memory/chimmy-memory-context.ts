@@ -75,7 +75,7 @@ Use this to personalize responses and avoid repeating yourself.
   }
 
   if (conversationId) {
-    const recentChat = await getRecentChatHistory(conversationId, 12)
+    const recentChat = await getRecentChatHistory(conversationId, 12, userId)
     if (recentChat.length > 0) {
       sections.push(`
 ## RECENT CHAT (for context)

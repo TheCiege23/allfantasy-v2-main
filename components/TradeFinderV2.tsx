@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Search, ChevronDown, ChevronUp, Copy, MessageCircle, ArrowRight, ArrowLeft, Zap, RefreshCw, AlertTriangle, Users, TrendingUp, Shield, X, Layers, BarChart3, Info, Send, RotateCcw, Target, UserCheck, Handshake } from 'lucide-react'
 import { Card, Button, Pill, cx, EmptyState, LoadingSpinner, Divider } from '@/components/ui/legacy-ui'
+import { FeatureGate } from '@/components/subscription/FeatureGate'
 import AIBottomSheet from '@/components/mobile/AIBottomSheet'
 import { ConfidencePill, ConfidenceBreakdownModal, RiskFlags } from '@/components/ai'
 import type { Confidence, ConfidenceBreakdown } from '@/components/ai'
@@ -1150,17 +1151,19 @@ export default function TradeFinderV2({
             </div>
 
             {selectedLeague && (
-              <Button
-                onClick={runFinder}
-                loading={loading}
-                disabled={!selectedLeague || loading}
-                fullWidth
-                variant="primary"
-                size="default"
-              >
-                <Search className="w-4 h-4" />
-                <span>{loading ? 'Scanning league...' : response ? 'Re-scan' : 'Find Trades'}</span>
-              </Button>
+              <FeatureGate featureId="legacy_trade_finder" featureNameOverride="Trade Review">
+                <Button
+                  onClick={runFinder}
+                  loading={loading}
+                  disabled={!selectedLeague || loading}
+                  fullWidth
+                  variant="primary"
+                  size="default"
+                >
+                  <Search className="w-4 h-4" />
+                  <span>{loading ? 'Scanning league...' : response ? 'Re-scan' : 'Find Trades'}</span>
+                </Button>
+              </FeatureGate>
             )}
           </>
         )}
@@ -1196,17 +1199,19 @@ export default function TradeFinderV2({
             )}
 
             {selectedLeague && (
-              <Button
-                onClick={runMatchmaking}
-                loading={mmLoading}
-                disabled={!selectedLeague || mmLoading || (mmGoal === 'target_player' && !mmTargetPlayer.trim())}
-                fullWidth
-                variant="primary"
-                size="default"
-              >
-                <Handshake className="w-4 h-4" />
-                <span>{mmLoading ? 'Finding partners...' : mmResponse ? 'Re-scan' : 'Find Best Partners'}</span>
-              </Button>
+              <FeatureGate featureId="legacy_trade_finder" featureNameOverride="Trade Review">
+                <Button
+                  onClick={runMatchmaking}
+                  loading={mmLoading}
+                  disabled={!selectedLeague || mmLoading || (mmGoal === 'target_player' && !mmTargetPlayer.trim())}
+                  fullWidth
+                  variant="primary"
+                  size="default"
+                >
+                  <Handshake className="w-4 h-4" />
+                  <span>{mmLoading ? 'Finding partners...' : mmResponse ? 'Re-scan' : 'Find Best Partners'}</span>
+                </Button>
+              </FeatureGate>
             )}
           </>
         )}

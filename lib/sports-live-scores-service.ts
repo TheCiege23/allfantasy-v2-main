@@ -357,8 +357,23 @@ function rollingInsightsScheduleTokenCandidates(): Array<{ name: string; value: 
   ].filter((candidate) => candidate.value)
 }
 
+/**
+ * Both spellings exist in the wild — README documents them as interchangeable —
+ * but they carry DIFFERENT semantics: `ROLLING_INSIGHTS_REST_BASE` is the host
+ * root (see lib/sports-data/playerAssetsService.ts) while
+ * `ROLLING_INSIGHTS_REST_BASE_URL` already includes `/api/v1`. Reading only the
+ * latter meant a deployment configured with the FORMER was silently ignored and
+ * fell through to the default — the same class of failure as the ClearSports
+ * base-URL override pointing at a host that no longer resolves. Accept either
+ * and normalize, matching scripts/force-ri-sport-ingest-pg.mjs.
+ */
 function rollingInsightsScheduleBaseUrl(): string {
-  return (process.env.ROLLING_INSIGHTS_REST_BASE_URL || DEFAULT_ROLLING_INSIGHTS_REST_BASE_URL).replace(/\/+$/, '')
+  const raw =
+    process.env.ROLLING_INSIGHTS_REST_BASE_URL?.trim() ||
+    process.env.ROLLING_INSIGHTS_REST_BASE?.trim() ||
+    DEFAULT_ROLLING_INSIGHTS_REST_BASE_URL
+  const trimmed = raw.replace(/\/+$/, '')
+  return /\/api\/v\d+$/.test(trimmed) ? trimmed : `${trimmed}/api/v1`
 }
 
 export function buildRollingInsightsScheduleSeasonUrl(input: {
@@ -618,7 +633,12 @@ async function readCachedLiveScoreRows(options: {
   return prisma.sportsGame.findMany({
     where: {
       sport: options.sport,
-      source: { in: ['rolling_insights', 'espn_live'] },
+      // `api_sports` is written every 2 minutes by the import-scores cron and is both the
+      // freshest and most-complete source in production (335/335 rows carry score+status+start,
+      // newest 2026-07-21; vs rolling_insights 497/3010 with scores, newest 2026-05-19). It was
+      // omitted only because this filter (2026-04-14) predates the api_sports cron (2026-06-09)
+      // — an oversight, not a data-quality exclusion. `thesportsdb`/`e2e` stay out: null scores.
+      source: { in: ['rolling_insights', 'espn_live', 'api_sports'] },
       ...(team
         ? {
             OR: [

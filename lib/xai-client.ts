@@ -101,8 +101,10 @@ export async function xaiChatJson(opts: {
   responseFormat?: { type: "text" | "json_object" }
   seed?: number
   skipCache?: boolean
+  /** Cancels the underlying fetch. A signalled call bypasses the cache. */
+  signal?: AbortSignal
 }) : Promise<XaiChatJsonResult> {
-  if (opts.skipCache) return _xaiChatJsonUncached(opts)
+  if (opts.skipCache || opts.signal) return _xaiChatJsonUncached(opts)
   const key = cacheKey('xai-chat', opts.messages, opts.model, opts.temperature)
   return cachedFetch(key, 1800, () => _xaiChatJsonUncached(opts))
 }
@@ -120,6 +122,7 @@ async function _xaiChatJsonUncached(opts: {
   frequencyPenalty?: number
   responseFormat?: { type: "text" | "json_object" }
   seed?: number
+  signal?: AbortSignal
 }) : Promise<XaiChatJsonResult> {
   const runtime = getXaiRuntimeConfig()
   if (!runtime.ok) {
@@ -153,6 +156,7 @@ async function _xaiChatJsonUncached(opts: {
       Authorization: `Bearer ${runtime.apiKey}`,
     },
     body: JSON.stringify(body),
+    signal: opts.signal,
   })
 
   const text = await res.text().catch(() => "")

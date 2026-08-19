@@ -4,6 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { authOptions } from '@/lib/auth';
 import { requireVerifiedUser } from '@/lib/auth-guard';
 import { prisma } from '@/lib/prisma';
+import { toPrismaJsonInput } from '@/lib/prisma-json';
 import { buildLeagueInviteUrl } from '@/lib/viral-loop';
 import { resolveEffectiveLeagueVariant } from '@/lib/league-creation/LeagueVariantResolver';
 import { isSportEnabled } from '@/lib/feature-toggle';
@@ -690,7 +691,7 @@ export async function POST(req: Request) {
         await prisma.league.update({
           where: { id: leagueAfter.id },
           data: {
-            settings: conceptMergedLeagueSettings,
+            settings: toPrismaJsonInput(conceptMergedLeagueSettings),
           },
         });
       }

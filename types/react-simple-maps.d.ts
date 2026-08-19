@@ -58,9 +58,24 @@ declare module 'react-simple-maps' {
     onClick?: () => void;
   }
 
+  interface SphereProps {
+    id?: string;
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
+  }
+
+  interface GraticuleProps {
+    fill?: string;
+    stroke?: string;
+    strokeWidth?: number;
+  }
+
   export const ComposableMap: ComponentType<ComposableMapProps>;
   export const ZoomableGroup: ComponentType<ZoomableGroupProps>;
   export const Geographies: ComponentType<GeographiesProps>;
   export const Geography: ComponentType<GeographyProps>;
   export const Marker: ComponentType<MarkerProps>;
+  export const Sphere: ComponentType<SphereProps>;
+  export const Graticule: ComponentType<GraticuleProps>;
 }

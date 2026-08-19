@@ -12,6 +12,8 @@ import type { LeagueTradeBlockPanelItem } from '@/components/league/types'
 import { ZombieTradePolicyCard } from '@/components/zombie/ZombieTradePolicyCard'
 import { openChimmyWithPrompt } from '@/lib/dashboard/open-chimmy-with-prompt'
 import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { ProposeTradeModal } from './ProposeTradeModal'
+import { LeagueSurfaceState } from '@/components/league/LeagueSurfaceState'
 
 export type TradesTabProps = {
   league: UserLeague
@@ -57,7 +59,7 @@ function positionAccent(pos: string): { border: string; label: string } {
   if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return { border: 'border-indigo-400/65', label: 'text-indigo-300/90' }
   if (p === 'K') return { border: 'border-yellow-400/55', label: 'text-yellow-200/85' }
   if (p === 'DEF' || p === 'DST') return { border: 'border-slate-400/60', label: 'text-slate-300/90' }
-  return { border: 'border-cyan-400/50', label: 'text-cyan-300/85' }
+  return { border: 'border-[#ff3d81]/50', label: 'text-[#ff9ec0]/85' }
 }
 
 export function TradesTab({ league, teams }: TradesTabProps) {
@@ -66,9 +68,15 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [activeCount, setActiveCount] = useState(0)
+  /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
+  const [providerPending, setProviderPending] = useState(0)
+  const [providerUrl, setProviderUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [watch, setWatch] = useState<Set<string>>(() => readWatchSet(league.id))
+  const [proposeOpen, setProposeOpen] = useState(false)
+  const [actionBusyId, setActionBusyId] = useState<string | null>(null)
+  const [actionErr, setActionErr] = useState<string | null>(null)
 
   const persistWatch = useCallback(
     (next: Set<string>) => {
@@ -103,23 +111,31 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         tradeBlock?: LeagueTradeBlockPanelItem[]
         activeTrades?: LeagueTradeHistoryItem[]
         activeCount?: number
+        providerPendingCount?: number
+        providerLeagueUrl?: string
         error?: string
       } | null
       if (!res.ok) {
-        setErr(typeof data?.error === 'string' ? data.error : 'Could not load trades.')
+        setErr('Could not load trades.')
         setTradeBlock([])
         setActiveTrades([])
         setActiveCount(0)
+        setProviderPending(0)
+        setProviderUrl(null)
         return
       }
       setTradeBlock(Array.isArray(data?.tradeBlock) ? data.tradeBlock : [])
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
       setActiveCount(typeof data?.activeCount === 'number' ? data.activeCount : 0)
+      setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
+      setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
     } catch {
       setErr('Could not load trades.')
       setTradeBlock([])
       setActiveTrades([])
       setActiveCount(0)
+      setProviderPending(0)
+      setProviderUrl(null)
     } finally {
       setLoading(false)
     }
@@ -131,6 +147,16 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
   const badgeCount = activeCount > 0 ? activeCount : activeTrades.length
 
+  const reviewTrades = useMemo(
+    () =>
+      activeTrades.filter(
+        (t) =>
+          (t.viewerIsReceiver && t.status === 'pending') ||
+          (t.viewerIsCommissioner && t.status === 'awaiting_commissioner'),
+      ),
+    [activeTrades],
+  )
+
   // Phase 4: carry the active league context so the trade flow opens directly for THIS league
   // instead of showing the global league picker.
   const tradeFinderHref = useMemo(
@@ -140,6 +166,54 @@ export function TradesTab({ league, teams }: TradesTabProps) {
 
   const isZombie = String(league.leagueVariant ?? '').toLowerCase() === 'zombie'
   const nflRedraftTradesShell = isNflRedraftCoreDashboardFromUserLeague(league)
+
+  const runTradeAction = useCallback(
+    async (tradeId: string, path: 'accept' | 'reject' | 'cancel') => {
+      setActionBusyId(tradeId)
+      setActionErr(null)
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/trades/${encodeURIComponent(tradeId)}/${path}`, {
+          method: 'POST',
+        })
+        await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setActionErr(`We could not ${path} this trade. Nothing was changed. Try again.`)
+          return
+        }
+        await load()
+      } catch {
+        setActionErr(`Failed to ${path} trade.`)
+      } finally {
+        setActionBusyId(null)
+      }
+    },
+    [league.id, load],
+  )
+
+  const runCommissionerDecision = useCallback(
+    async (tradeId: string, decision: 'approve' | 'reject') => {
+      setActionBusyId(tradeId)
+      setActionErr(null)
+      try {
+        const res = await fetch(`/api/leagues/${encodeURIComponent(league.id)}/trades/${encodeURIComponent(tradeId)}/commissioner`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ decision }),
+        })
+        await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setActionErr('We could not save that commissioner decision. Nothing was changed. Try again.')
+          return
+        }
+        await load()
+      } catch {
+        setActionErr('Failed to record commissioner decision.')
+      } finally {
+        setActionBusyId(null)
+      }
+    },
+    [league.id, load],
+  )
 
   return (
     <div className="flex min-h-0 flex-1 flex-col p-4 md:p-5">
@@ -159,6 +233,14 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           >
             AI trade analysis
           </button>
+          <button
+            type="button"
+            onClick={() => setProposeOpen(true)}
+            className="rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#ffd7e5] hover:bg-[#ff3d81]/20"
+            data-testid="trades-tab-propose-trade-header"
+          >
+            Propose a Trade
+          </button>
         </div>
       ) : null}
       {isZombie ? <ZombieTradePolicyCard leagueId={league.id} /> : null}
@@ -168,11 +250,39 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <div className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-4 py-3">
             <div className="flex items-center gap-2">
               <h2 className="text-[13px] font-bold tracking-tight text-white">Active Trades</h2>
-              <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-cyan-500/20 px-1.5 text-[11px] font-bold text-cyan-300">
+              <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-[#ff3d81]/20 px-1.5 text-[11px] font-bold text-[#ff9ec0]">
                 {loading ? '—' : badgeCount}
               </span>
             </div>
           </div>
+
+          {/* Pending trades proposed ON Sleeper are surfaced read-only: the
+              provider's public API has no write endpoint, so AllFantasy can
+              show and analyze them but the manager must respond in Sleeper. */}
+          {!loading && providerPending > 0 ? (
+            <div className="mx-4 mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2">
+              <div className="text-[11px] font-semibold text-amber-200">
+                {providerPending} pending {providerPending === 1 ? 'trade' : 'trades'} from Sleeper
+              </div>
+              <p className="mt-0.5 text-[11px] leading-snug text-amber-100/70">
+                Shown here for analysis. Accept or reject them in Sleeper —
+                AllFantasy can&apos;t respond on your behalf.
+                {providerUrl ? (
+                  <>
+                    {' '}
+                    <a
+                      href={providerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-amber-200 underline hover:text-amber-100"
+                    >
+                      Open in Sleeper
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            </div>
+          ) : null}
 
           <div className="flex gap-2 px-4 pt-3">
             <button
@@ -201,6 +311,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
             </button>
           </div>
 
+          {actionErr ? <p className="px-4 pt-2 text-[12px] text-rose-300">{actionErr}</p> : null}
+
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-6 pt-4">
             {loading ? (
               <div className="flex flex-col items-center gap-3 py-12">
@@ -208,36 +320,119 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                 <div className="h-3 w-40 rounded bg-white/10" />
               </div>
             ) : err ? (
-              <p className="py-10 text-center text-sm text-amber-300/90">{err}</p>
-            ) : panelMode === 'review' ? (
-              <div className="flex flex-col items-center py-10 text-center">
-                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04]">
-                  <Search className="h-9 w-9 text-white/25" strokeWidth={1.5} />
+              <LeagueSurfaceState
+                kind="error"
+                title="Trades unavailable"
+                description="We could not load this league's trades. Existing offers were not changed."
+                actionLabel="Retry trades"
+                onAction={() => void load()}
+                compact
+                testId="league-trades-error"
+              />
+            ) : (panelMode === 'review' ? reviewTrades : activeTrades).length === 0 ? (
+              panelMode === 'review' ? (
+                <div className="flex flex-col items-center py-10 text-center">
+                  <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-2xl border border-white/[0.08] bg-white/[0.04]">
+                    <Search className="h-9 w-9 text-white/25" strokeWidth={1.5} />
+                  </div>
+                  <p className="text-sm text-white/45">No trades awaiting your review.</p>
+                  <p className="mt-2 max-w-xs text-xs text-white/30">
+                    When a partner sends a trade that needs your action, it will show here.
+                  </p>
                 </div>
-                <p className="text-sm text-white/45">No trades awaiting your review.</p>
-                <p className="mt-2 max-w-xs text-xs text-white/30">
-                  When a partner sends a trade that needs your action, it will show here.
-                </p>
-              </div>
-            ) : activeTrades.length === 0 ? (
-              <div className="flex flex-col items-center py-8 text-center">
-                <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.06] to-transparent">
-                  <Headphones className="h-12 w-12 text-white/22" strokeWidth={1.25} />
+              ) : (
+                <div className="flex flex-col items-center py-8 text-center">
+                  <div className="mb-5 flex h-24 w-24 items-center justify-center rounded-2xl border border-white/[0.08] bg-gradient-to-b from-white/[0.06] to-transparent">
+                    <Headphones className="h-12 w-12 text-white/22" strokeWidth={1.25} />
+                  </div>
+                  <p className="text-sm text-white/45">No active trades yet…</p>
+                  {nflRedraftTradesShell ? (
+                    <button
+                      type="button"
+                      onClick={() => setProposeOpen(true)}
+                      className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-[#ff3d81] transition hover:text-[#ff9ec0]"
+                      data-testid="trades-tab-propose-trade"
+                    >
+                      Propose a trade
+                    </button>
+                  ) : (
+                    <Link
+                      href={tradeFinderHref}
+                      className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-[#ff3d81] transition hover:text-[#ff9ec0]"
+                      data-testid="trades-tab-propose-trade"
+                    >
+                      Propose a trade
+                    </Link>
+                  )}
                 </div>
-                <p className="text-sm text-white/45">No active trades yet…</p>
-                <Link
-                  href={tradeFinderHref}
-                  className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-400 transition hover:text-cyan-300"
-                  data-testid="trades-tab-propose-trade"
-                >
-                  Propose a trade
-                </Link>
-              </div>
+              )
             ) : (
               <ul className="space-y-3">
-                {activeTrades.map((t) => (
+                {(panelMode === 'review' ? reviewTrades : activeTrades).map((t) => (
                   <li key={t.id}>
                     <ActiveTradeCard trade={t} />
+                    {nflRedraftTradesShell && t.status ? (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                        <span className="rounded border border-white/10 px-2 py-0.5 text-[10px] uppercase text-white/45">
+                          {t.status.replace('_', ' ')}
+                        </span>
+                        {t.viewerIsReceiver && t.status === 'pending' ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={actionBusyId === t.id}
+                              onClick={() => void runTradeAction(t.id, 'accept')}
+                              className="rounded-lg border border-emerald-400/40 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 disabled:opacity-50"
+                              data-testid="trade-action-accept"
+                            >
+                              Accept
+                            </button>
+                            <button
+                              type="button"
+                              disabled={actionBusyId === t.id}
+                              onClick={() => void runTradeAction(t.id, 'reject')}
+                              className="rounded-lg border border-rose-400/40 px-2.5 py-1 text-[11px] font-semibold text-rose-300 disabled:opacity-50"
+                              data-testid="trade-action-reject"
+                            >
+                              Reject
+                            </button>
+                          </>
+                        ) : null}
+                        {t.viewerIsProposer && t.status === 'pending' ? (
+                          <button
+                            type="button"
+                            disabled={actionBusyId === t.id}
+                            onClick={() => void runTradeAction(t.id, 'cancel')}
+                            className="rounded-lg border border-white/20 px-2.5 py-1 text-[11px] font-semibold text-white/70 disabled:opacity-50"
+                            data-testid="trade-action-cancel"
+                          >
+                            Cancel
+                          </button>
+                        ) : null}
+                        {t.viewerIsCommissioner && t.status === 'awaiting_commissioner' ? (
+                          <>
+                            <button
+                              type="button"
+                              disabled={actionBusyId === t.id}
+                              onClick={() => void runCommissionerDecision(t.id, 'approve')}
+                              className="rounded-lg border border-emerald-400/40 px-2.5 py-1 text-[11px] font-semibold text-emerald-300 disabled:opacity-50"
+                              data-testid="trade-action-commissioner-approve"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              type="button"
+                              disabled={actionBusyId === t.id}
+                              onClick={() => void runCommissionerDecision(t.id, 'reject')}
+                              className="rounded-lg border border-rose-400/40 px-2.5 py-1 text-[11px] font-semibold text-rose-300 disabled:opacity-50"
+                              data-testid="trade-action-commissioner-veto"
+                            >
+                              Veto
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
@@ -307,7 +502,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                       <p className="mt-2 truncate text-[12px] font-bold leading-tight text-white">
                         {shortDisplayName(item.name)}
                       </p>
-                      <p className="mt-auto truncate pt-2 text-[10px] text-cyan-200/45">{item.ownerName}</p>
+                      <p className="mt-auto truncate pt-2 text-[10px] text-[#ffb8d1]/45">{item.ownerName}</p>
                     </div>
                   )
                 })}
@@ -316,6 +511,16 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           </div>
         </section>
       </div>
+
+      {nflRedraftTradesShell ? (
+        <ProposeTradeModal
+          open={proposeOpen}
+          onClose={() => setProposeOpen(false)}
+          leagueId={league.id}
+          teams={teams}
+          onSubmitted={() => void load()}
+        />
+      ) : null}
     </div>
   )
 }

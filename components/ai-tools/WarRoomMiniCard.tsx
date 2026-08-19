@@ -72,7 +72,7 @@ export function WarRoomMiniCard({
       const json = (await res.json()) as WarRoomCommandCenterResult | { ok: false; error?: string }
       if (!res.ok || !json.ok) {
         setData(null)
-        setError((json as { error?: string }).error || 'Could not load War Room')
+        setError((json as { error?: string }).error || 'Could not load AF Legacy')
         return
       }
       setData(json)
@@ -99,7 +99,7 @@ export function WarRoomMiniCard({
             <Shield className="h-4 w-4 text-cyan-100" />
           </div>
           <div>
-            <p className="text-[14px] font-black text-white">AF War Room</p>
+            <p className="text-[14px] font-black text-white">AF Legacy</p>
             <p className="text-[11px] text-cyan-100/45">Season strategy command center</p>
           </div>
         </div>
@@ -122,7 +122,7 @@ export function WarRoomMiniCard({
             <Shield className="h-4 w-4 text-cyan-100" />
           </div>
           <div>
-            <p className="text-[14px] font-black leading-none text-white">AF War Room</p>
+            <p className="text-[14px] font-black leading-none text-white">AF Legacy</p>
             <p className="mt-1 text-[11px] leading-none text-cyan-100/45">Season strategy command center</p>
           </div>
         </div>
@@ -131,7 +131,7 @@ export function WarRoomMiniCard({
           onClick={() => void load()}
           disabled={loading}
           className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-white/[0.05] text-white/65 transition hover:border-cyan-300/30 hover:bg-cyan-300/[0.08] hover:text-white disabled:opacity-50"
-          aria-label="Refresh War Room"
+          aria-label="Refresh AF Legacy"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
         </button>
@@ -173,7 +173,7 @@ export function WarRoomMiniCard({
             <p className="mt-2 text-[10px] text-[#5c6480]">Updated {new Date(data.computedAt).toLocaleString()}</p>
           </>
         ) : (
-          <p className="text-[12px] text-[#8b93ab]">Select a league to load War Room.</p>
+          <p className="text-[12px] text-[#8b93ab]">Select a league to load AF Legacy.</p>
         )}
       </div>
 
@@ -183,7 +183,7 @@ export function WarRoomMiniCard({
         className="mt-3 flex min-h-11 w-full items-center justify-center gap-1 rounded-2xl border border-cyan-200/35 bg-gradient-to-r from-cyan-300 to-cyan-100 py-2.5 text-[12px] font-black text-slate-950 shadow-[0_8px_24px_-12px_rgba(34,211,238,0.95)] transition hover:-translate-y-0.5 active:scale-[0.98]"
         data-testid="war-room-mini-open-full"
       >
-        Open War Room
+        Open AF Legacy
         <ChevronRight className="h-4 w-4" />
       </button>
     </div>

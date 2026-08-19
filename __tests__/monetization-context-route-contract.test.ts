@@ -28,7 +28,7 @@ vi.mock("@/lib/subscription/feature-access", () => ({
   getRequiredPlanForFeature: vi.fn(() => "pro"),
   isSubscriptionFeatureId: vi.fn(() => true),
   resolveBundleInheritance: vi.fn(() => ({
-    hasAllAccess: false,
+    hasSupreme: false,
     inheritedPlanIds: [],
     effectivePlanIds: [],
   })),

@@ -2,9 +2,9 @@
  * NFL redraft core dashboard — tab-bar regression lock.
  *
  * The NFL redraft shell leads with the core tabs:
- *   Home / Roster / Matchups / Players / Waivers / Trades / War Room / League,
- * plus a commissioner-only Settings tab. The exported NFL_REDRAFT_CORE_TAB_IDS
- * pins that visible order.
+ *   Home / Draft / Roster / Matchups / Schedule / Players / Waivers / Trades /
+ *   Standings / League Chat, plus commissioner-only Commissioner + Settings tabs.
+ * The exported NFL_REDRAFT_CORE_TAB_IDS pins that visible order.
  *
  * History, AI Coaching, Redraft, Trend, and Finance must NOT appear in the
  * primary tab bar for these leagues. Settings is also reachable via the
@@ -38,13 +38,16 @@ describe('NFL redraft core — exported tab ID list', () => {
   it('NFL_REDRAFT_CORE_TAB_IDS is exactly the visible redraft tabs in order', () => {
     expect([...NFL_REDRAFT_CORE_TAB_IDS]).toEqual([
       'home',
+      'draft',
       'roster',
       'matchups',
+      'schedule',
       'players',
       'waivers',
       'trades',
-      'war_room',
-      'league',
+      'standings',
+      'league_chat',
+      'commissioner',
     ])
   })
 })
@@ -70,7 +73,7 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
   it('declares the core tabs in the canonical Phase 1 order', () => {
     // Order matters — the tab bar reads left-to-right.
     const orderRegex =
-      /\{\s*id:\s*'home'[^}]*\}[\s\S]*?\{\s*id:\s*'roster'[^}]*\}[\s\S]*?\{\s*id:\s*'matchups'[^}]*\}[\s\S]*?\{\s*id:\s*'players'[^}]*\}[\s\S]*?\{\s*id:\s*'waivers'[^}]*\}[\s\S]*?\{\s*id:\s*'trades'[^}]*\}[\s\S]*?\{\s*id:\s*'war_room'[^}]*\}[\s\S]*?\{\s*id:\s*'league'[^}]*\}/
+      /\{\s*id:\s*'home'[^}]*\}[\s\S]*?\{\s*id:\s*'draft'[^}]*\}[\s\S]*?\{\s*id:\s*'roster'[^}]*\}[\s\S]*?\{\s*id:\s*'matchups'[^}]*\}[\s\S]*?\{\s*id:\s*'schedule'[^}]*\}[\s\S]*?\{\s*id:\s*'players'[^}]*\}[\s\S]*?\{\s*id:\s*'waivers'[^}]*\}[\s\S]*?\{\s*id:\s*'trades'[^}]*\}[\s\S]*?\{\s*id:\s*'standings'[^}]*\}[\s\S]*?\{\s*id:\s*'league_chat'[^}]*\}/
     expect(branch).toMatch(orderRegex)
   })
 
@@ -80,8 +83,8 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
 
   it('does NOT inject hidden generic tabs into the nflRedraftCore branch', () => {
     // Each forbidden id, when present in the branch, would surface as a
-    // primary tab — defeating the compact redraft shell. War Room is intentionally
-    // present because Redraft AF War Room Phase 1 mounts there.
+    // primary tab — defeating the compact redraft shell. (War Room / AF Legacy
+    // now lives in the draft-room dock, not the league tab bar.)
     const forbidden = ['history', 'ai_coaching', 'redraft', 'trend', 'finance']
     for (const id of forbidden) {
       const re = new RegExp(`id:\\s*'${id}'`)
@@ -104,7 +107,7 @@ describe('NFL redraft core — LeagueShell tabDefs branch', () => {
     // branch's return, the redraft bar would inherit it — regression guard.
     // (The redraft branch has its own commissioner-gated settings push, so use
     // the LAST occurrence to locate the generic append.)
-    const genericSettingsIdx = src.lastIndexOf("{ id: 'settings', label: '⚙ Settings' }")
+    const genericSettingsIdx = src.lastIndexOf("{ id: 'settings', label: 'Settings' }")
     expect(genericSettingsIdx).toBeGreaterThan(branchEnd)
   })
 })
@@ -116,7 +119,7 @@ describe('NFL redraft core — deep-link blocker', () => {
     // The normalizer maps `?view=...` and `?tab=...` to a tab id. For the
     // redraft shell, settings has no tab — the early return below stops
     // setActiveTab('settings') from ever firing.
-    expect(src).toMatch(/if \(key === 'settings' && nflRedraftCore\) return/)
+    expect(src).toMatch(/if \(target === 'settings' && nflRedraftCore\) return/)
   })
 
   it('only fires setActiveTab when the resolved target id is in tabDefs', () => {

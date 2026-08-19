@@ -31,7 +31,7 @@ type TokenPreviewContext = {
 type MonetizationContextResponse = {
   entitlement: EntitlementSnapshot
   bundleInheritance?: {
-    hasAllAccess: boolean
+    hasSupreme: boolean
     inheritedPlanIds: string[]
     effectivePlanIds: string[]
   }

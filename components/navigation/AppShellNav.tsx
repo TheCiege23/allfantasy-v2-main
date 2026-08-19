@@ -23,15 +23,16 @@ type AppShellNavProps = {
 }
 
 const PRODUCT_TABS = [
-  { href: "/war-room", label: "War Room" },
+  { href: "/war-room", label: "AF Legacy" },
   { href: "/discover/leagues", label: "Leagues" },
   { href: "/ai/tools", label: "Intelligence Hub" },
 ] as const
 
 const GLOBAL_TABS = [
   { href: "/dashboard", label: "Home" },
-  { href: "/war-room", label: "War Room" },
+  { href: "/war-room", label: "AF Legacy" },
   { href: "/discover/leagues", label: "Leagues" },
+  { href: "/player-command-center", label: "My Players" },
   { href: "/ai/tools", label: "Intelligence Hub" },
   { href: "/af-rankings", label: "Rankings" },
   { href: "/profile", label: "Profile" },
@@ -95,7 +96,7 @@ export default function AppShellNav({
                   style={{ background: "var(--accent-cyan-strong)", color: "var(--on-accent-bg)" }}
                 >
                   <Swords className="h-3.5 w-3.5" />
-                  War Room
+                  AF Legacy
                 </Link>
                 <Link
                   href="/wallet/deposit"

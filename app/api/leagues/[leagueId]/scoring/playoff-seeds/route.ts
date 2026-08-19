@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { computePlayoffSeeds } from '@/server/services/playoffEngine'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
@@ -18,14 +19,14 @@ export async function GET(
   const leagueId = params.leagueId
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { id: true, season: true, userId: true, teams: { select: { platformUserId: true } } },
+    select: { id: true, season: true },
   })
   if (!league) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const memberIds = new Set(
-    league.teams.map((t) => t.platformUserId).filter((x): x is string => Boolean(x)),
-  )
-  if (league.userId !== session.user.id && !memberIds.has(session.user.id)) {
+  // Canonical membership predicate. Was gating on the nullable `LeagueTeam.platformUserId`,
+  // which 403'd real members of imported leagues (their membership lives in `Roster`).
+  const access = await resolveLeagueAccess(leagueId, session.user.id)
+  if (!access?.isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

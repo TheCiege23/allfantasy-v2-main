@@ -2,14 +2,20 @@ import { prisma } from '../prisma'
 import { Prisma } from '@prisma/client'
 import { invalidateCalibrationCache } from './accept-calibration'
 import { computeAndStoreIsotonicMap, type IsotonicMap } from './isotonic-calibrator'
+import { resolveCurrentTradeLearningSeason } from './season-resolver'
 
-const DEFAULT_B0 = -1.10
-const MIN_RECALIBRATION_SAMPLE = 30
-const MIN_SEGMENT_SAMPLE = 50
-const MAX_B0_SHIFT = 0.60
-const SHADOW_MATURITY_DAYS = 7
-const MAX_SHADOW_DIVERGENCE = 0.40
-const CURRENT_SEASON = 2025
+// Exported (values unchanged) so diagnostics tooling can reference the real
+// thresholds instead of duplicating magic numbers. See lib/trade-engine/diagnostics.ts.
+export const DEFAULT_B0 = -1.10
+export const MIN_RECALIBRATION_SAMPLE = 30
+export const MIN_SEGMENT_SAMPLE = 50
+export const MAX_B0_SHIFT = 0.60
+export const SHADOW_MATURITY_DAYS = 7
+export const MAX_SHADOW_DIVERGENCE = 0.40
+// Mirrors the cadence guard inside runWeeklyRecalibration() itself
+// (daysSinceRecal < 6.5) — exported so diagnostics can report the same
+// "would it run right now" answer without re-implementing the check.
+export const RECALIBRATION_CADENCE_DAYS = 6.5
 
 export interface ShadowB0Metrics {
   computedB0: number
@@ -86,14 +92,25 @@ function reconstructAcceptProbSimple(
   return Math.max(0.02, Math.min(0.95, sigmoid(z)))
 }
 
-function computeObservedAcceptRate(
+/**
+ * Binary-labels a TradeOutcomeEvent.outcome for acceptance-rate calibration.
+ * Real values are the Prisma `TradeOutcome` enum (ACCEPTED | REJECTED | EXPIRED |
+ * COUNTERED | UNKNOWN, schema.prisma) — uppercase, never 'accepted'/'completed'.
+ * Only ACCEPTED/REJECTED/EXPIRED carry a real accept/reject signal, matching the
+ * same convention already used by lib/trade-engine/model-metrics-etl.ts and
+ * lib/rankings-engine/{weekly-weight-learning,adaptive-weight-learning}.ts.
+ * COUNTERED/UNKNOWN are excluded rather than counted as non-accepted, since
+ * they don't indicate whether the trade would have been accepted or not.
+ */
+export function computeObservedAcceptRate(
   outcomes: Array<{ outcome: string }>,
 ): number | null {
-  if (outcomes.length === 0) return null
-  const accepted = outcomes.filter(o =>
-    o.outcome === 'accepted' || o.outcome === 'completed',
-  ).length
-  return accepted / outcomes.length
+  const labeled = outcomes.filter(
+    o => o.outcome === 'ACCEPTED' || o.outcome === 'REJECTED' || o.outcome === 'EXPIRED',
+  )
+  if (labeled.length === 0) return null
+  const accepted = labeled.filter(o => o.outcome === 'ACCEPTED').length
+  return accepted / labeled.length
 }
 
 function logOddsCorrection(observed: number, predicted: number): number {
@@ -105,11 +122,12 @@ function logOddsCorrection(observed: number, predicted: number): number {
 }
 
 export async function computeShadowB0(
-  season: number = CURRENT_SEASON,
+  season?: number,
 ): Promise<ShadowB0Metrics | null> {
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
   const outcomes = await prisma.tradeOutcomeEvent.findMany({
     where: {
-      season,
+      season: resolvedSeason,
       offerEventId: { not: null },
     },
     select: { offerEventId: true, outcome: true },
@@ -136,7 +154,7 @@ export async function computeShadowB0(
   const offerMap = new Map(offers.map(o => [o.id, o]))
 
   const stats = await prisma.tradeLearningStats.findUnique({
-    where: { season },
+    where: { season: resolvedSeason },
     select: { calibratedB0: true },
   })
 
@@ -164,7 +182,7 @@ export async function computeShadowB0(
     const trades = await prisma.leagueTrade.findMany({
       where: {
         analyzed: true,
-        season,
+        season: resolvedSeason,
         valueGiven: { not: null },
         valueReceived: { not: null },
       },
@@ -212,10 +230,11 @@ export async function computeShadowB0(
 }
 
 export async function promoteShadowB0(
-  season: number = CURRENT_SEASON,
+  season?: number,
 ): Promise<{ promoted: boolean; newB0: number | null; reason: string }> {
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
   const stats = await prisma.tradeLearningStats.findUnique({
-    where: { season },
+    where: { season: resolvedSeason },
   })
 
   if (!stats) {
@@ -265,7 +284,7 @@ export async function promoteShadowB0(
   }
 
   await prisma.tradeLearningStats.update({
-    where: { season },
+    where: { season: resolvedSeason },
     data: {
       calibratedB0: shadowB0,
       calibrationSampleSize: shadowMetrics.sampleSize,
@@ -287,11 +306,12 @@ export async function promoteShadowB0(
 }
 
 export async function computeSegmentB0s(
-  season: number = CURRENT_SEASON,
+  season?: number,
 ): Promise<SegmentB0Entry[]> {
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
   const outcomes = await prisma.tradeOutcomeEvent.findMany({
     where: {
-      season,
+      season: resolvedSeason,
       offerEventId: { not: null },
     },
     select: { offerEventId: true, outcome: true },
@@ -353,7 +373,7 @@ export async function computeSegmentB0s(
   }
 
   const stats = await prisma.tradeLearningStats.findUnique({
-    where: { season },
+    where: { season: resolvedSeason },
     select: { calibratedB0: true },
   })
   const globalB0 = (stats?.calibratedB0 as number) ?? DEFAULT_B0
@@ -393,18 +413,24 @@ export async function computeSegmentB0s(
 }
 
 export async function runWeeklyRecalibration(
-  season: number = CURRENT_SEASON,
+  season?: number,
 ): Promise<RecalibrationResult> {
   console.log('[AutoRecal] Starting weekly recalibration...')
 
+  // Resolved once, here, and threaded explicitly through every downstream
+  // call below — guarantees the entire weekly cycle (promotion, shadow
+  // computation, segments, isotonic) operates on exactly one season value,
+  // even though resolveCurrentTradeLearningSeason() is itself cached.
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
+
   const stats = await prisma.tradeLearningStats.findUnique({
-    where: { season },
+    where: { season: resolvedSeason },
   })
 
   const lastRecal = stats?.lastRecalibrationAt
   if (lastRecal) {
     const daysSinceRecal = (Date.now() - new Date(lastRecal).getTime()) / (1000 * 60 * 60 * 24)
-    if (daysSinceRecal < 6.5) {
+    if (daysSinceRecal < RECALIBRATION_CADENCE_DAYS) {
       console.log(`[AutoRecal] Only ${daysSinceRecal.toFixed(1)} days since last recalibration. Skipping (weekly cadence).`)
       return {
         shadow: { computed: false, shadowB0: null, metrics: null, promoted: false, promotedB0: null },
@@ -418,7 +444,7 @@ export async function runWeeklyRecalibration(
   let promotedB0: number | null = null
 
   if (stats?.shadowB0 != null && stats.shadowB0ComputedAt) {
-    const promoResult = await promoteShadowB0(season)
+    const promoResult = await promoteShadowB0(resolvedSeason)
     promoted = promoResult.promoted
     promotedB0 = promoResult.newB0
     if (!promoted) {
@@ -426,13 +452,13 @@ export async function runWeeklyRecalibration(
     }
   }
 
-  const shadowMetrics = await computeShadowB0(season)
+  const shadowMetrics = await computeShadowB0(resolvedSeason)
 
   if (shadowMetrics) {
     await prisma.tradeLearningStats.upsert({
-      where: { season },
+      where: { season: resolvedSeason },
       create: {
-        season,
+        season: resolvedSeason,
         shadowB0: shadowMetrics.computedB0,
         shadowB0SampleSize: shadowMetrics.sampleSize,
         shadowB0ComputedAt: new Date(),
@@ -449,7 +475,7 @@ export async function runWeeklyRecalibration(
     })
   }
 
-  const segmentEntries = await computeSegmentB0s(season)
+  const segmentEntries = await computeSegmentB0s(resolvedSeason)
 
   if (segmentEntries.length > 0) {
     const segmentMap: SegmentB0Map = {
@@ -458,9 +484,9 @@ export async function runWeeklyRecalibration(
     }
 
     await prisma.tradeLearningStats.upsert({
-      where: { season },
+      where: { season: resolvedSeason },
       create: {
-        season,
+        season: resolvedSeason,
         segmentB0s: segmentMap as any,
         lastRecalibrationAt: new Date(),
       },
@@ -471,7 +497,7 @@ export async function runWeeklyRecalibration(
     })
   }
 
-  const isotonicMap = await computeAndStoreIsotonicMap(season)
+  const isotonicMap = await computeAndStoreIsotonicMap(resolvedSeason)
 
   if (isotonicMap) {
     invalidateCalibrationCache()
@@ -499,4 +525,46 @@ export async function runWeeklyRecalibration(
       eceAfter: isotonicMap?.eceCalibratedEstimate ?? null,
     },
   }
+}
+
+/**
+ * Operational kill switch for weekly recalibration, per
+ * docs/TRADE_LEARNING_CALIBRATED_B0_OWNERSHIP_ADR.md and
+ * docs/DECISION_OS_CLOSED_LOOP_LEARNING_AUDIT.md §7 Step 0. Mirrors the
+ * DECISION_OS_*_LIVE convention (lib/decision-os/{lineup,waiver,trade,
+ * commissioner-health}/shadow.ts): disabled unless explicitly set to "true".
+ * Defaults to disabled — this must not run in production until explicitly
+ * enabled by an operator.
+ */
+export function isWeeklyRecalibrationEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return String(env['TRADE_ENGINE_WEEKLY_RECALIBRATION_ENABLED'] ?? '').trim().toLowerCase() === 'true'
+}
+
+/**
+ * Controlled background entry point for runWeeklyRecalibration(). No-ops
+ * cleanly (zero Prisma calls) when the flag is off. This is the only place
+ * runWeeklyRecalibration() is invoked from outside its own module and tests.
+ */
+export async function runScheduledWeeklyRecalibration(
+  env: NodeJS.ProcessEnv = process.env,
+  season?: number,
+): Promise<{ ran: boolean; reason?: string; result?: RecalibrationResult }> {
+  const enabled = isWeeklyRecalibrationEnabled(env)
+  console.log(`[TradeLearningScheduler] invoked (flag=${enabled ? 'enabled' : 'disabled'})`)
+
+  if (!enabled) {
+    const reason = 'disabled (TRADE_ENGINE_WEEKLY_RECALIBRATION_ENABLED is not "true")'
+    console.log(`[TradeLearningScheduler] skipped: ${reason}`)
+    return { ran: false, reason }
+  }
+
+  const result = season !== undefined ? await runWeeklyRecalibration(season) : await runWeeklyRecalibration()
+
+  console.log(
+    `[TradeLearningScheduler] complete — shadowComputed=${result.shadow.computed}, ` +
+      `promoted=${result.shadow.promoted}${result.shadow.promoted ? ` (newB0=${result.shadow.promotedB0})` : ''}, ` +
+      `segments=${result.segments.segmentCount}, isotonic=${result.isotonic.computed}`,
+  )
+
+  return { ran: true, result }
 }

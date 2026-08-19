@@ -206,7 +206,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
               disabled={d}
               onClick={() => setChallengesSystemRun((v) => !v)}
               className={`rounded-full px-4 py-1.5 text-xs font-medium ${
-                challengesSystemRun ? 'bg-cyan-500/25 text-cyan-100' : 'bg-white/10 text-white/60'
+                challengesSystemRun ? 'bg-[#ff3d81]/25 text-[#ffd7e5]' : 'bg-white/10 text-white/60'
               }`}
               data-testid="survivor-challenges-system-toggle"
             >
@@ -221,7 +221,7 @@ export function SurvivorSetupPanel({ leagueId, canEdit }: SurvivorSettingsPanelP
           type="button"
           onClick={() => save()}
           disabled={d || saving || loading}
-          className="rounded-xl border border-cyan-500/40 bg-cyan-950/40 px-5 py-2 text-sm text-cyan-100 hover:bg-cyan-950/60 disabled:opacity-40"
+          className="rounded-xl border border-[#ff3d81]/40 bg-cyan-950/40 px-5 py-2 text-sm text-[#ffd7e5] hover:bg-cyan-950/60 disabled:opacity-40"
           data-testid="survivor-setup-save"
         >
           {saving ? 'Saving…' : 'Save'}

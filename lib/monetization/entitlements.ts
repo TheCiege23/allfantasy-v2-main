@@ -17,6 +17,20 @@ export type EntitlementDef = {
 }
 
 export const ENTITLEMENTS = {
+  manager_psychology: {
+    key: 'manager_psychology',
+    label: 'Manager Psychology',
+    description:
+      'How the other managers in your league draft and trade, built only from behaviour actually recorded in that league. Your own profile is always free.',
+    // Pro and War Room both stand on their own here, and Supreme inherits both.
+    // War Room is not a superset of Pro, so naming Pro alone would have locked
+    // out every War Room subscriber for a feature that is squarely draft- and
+    // trade-room intelligence.
+    requiredPlan: ['af_pro', 'af_war_room', 'af_supreme'],
+    upgradeUrl: '/pricing',
+    upgradeLabel: 'Unlock Manager Psychology',
+    highlightParam: 'manager_psychology',
+  },
   commissioner_ai_tools: {
     key: 'commissioner_ai_tools',
     label: 'Commissioner AI Tools',
@@ -273,7 +287,7 @@ export const ENTITLEMENTS = {
     description: 'Multi-year dynasty value projections with confidence scoring.',
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF War Room',
+    upgradeLabel: 'Get AF Legacy',
     highlightParam: 'dynasty_projections',
   },
   war_room_devy_rankings: {
@@ -282,7 +296,7 @@ export const ENTITLEMENTS = {
     description: 'AI-generated college player rankings with campus scoring and pro projection scores.',
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF War Room',
+    upgradeLabel: 'Get AF Legacy',
   },
   war_room_draft_strategy: {
     key: 'war_room_draft_strategy',
@@ -290,7 +304,7 @@ export const ENTITLEMENTS = {
     description: 'Real-time draft board advice with tier-break alerts and positional scarcity callouts.',
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF War Room',
+    upgradeLabel: 'Get AF Legacy',
     highlightParam: 'draft_strategy',
   },
   war_room_pipeline_analysis: {
@@ -299,7 +313,7 @@ export const ENTITLEMENTS = {
     description: "AI assessment of your dynasty roster's campus/taxi/active pipeline health.",
     requiredPlan: ['af_war_room', 'af_supreme'],
     upgradeUrl: '/war-room',
-    upgradeLabel: 'Get AF War Room',
+    upgradeLabel: 'Get AF Legacy',
   },
 } as const satisfies Record<string, EntitlementDef>
 

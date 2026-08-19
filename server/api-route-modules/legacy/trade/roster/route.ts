@@ -2,6 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeTeamAbbrev, normalizePosition } from '@/lib/team-abbrev'
 import { getLeagueRosters, getLeagueUsers, getPlayersBySport } from '@/lib/sleeper-client'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,6 +88,23 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trade/roster", tool: "L
     if (!leagueId) return NextResponse.json({ error: 'Missing league_id' }, { status: 400 })
     if (!sleeperUsername && !sleeperUserId) return NextResponse.json({ error: 'Missing sleeper_username or sleeper_user_id' }, { status: 400 })
 
+    /*
+     * Authorization here is LEAGUE MEMBERSHIP, not self-only — deliberately different from
+     * the rest of this sweep.
+     *
+     * Reading a league-mate's roster is the trade analyzer's core function: the page fetches
+     * side A and side B of a proposed trade in one go. Passing `requestedUsername` to the gate
+     * would 403 side B and break the feature outright. The actual vulnerability was that ANY
+     * caller — with no identity at all — could name any league and any member and read that
+     * roster. So: require an identity, then require that identity to be IN the league; within
+     * a league you may look at anyone.
+     *
+     * No `requestedUsername` for the same reason. The target is checked by membership below,
+     * not by matching the caller.
+     */
+    const gate = await requireLegacySleeperIdentity(req, { allowGuest: true })
+    if (!gate.ok) return gate.response
+
     const sport: Sport = sportRaw === 'nba' ? 'nba' : 'nfl'
 
     const users = await getLeagueUsers(leagueId) as unknown as SleeperUser[]
@@ -94,6 +112,22 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trade/roster", tool: "L
       return NextResponse.json(
         { error: 'Failed to load league users from Sleeper' },
         { status: 502 }
+      )
+    }
+
+    // Membership check, against the same roster of league users already fetched above — no
+    // extra Sleeper call. Matches on username or display_name because Sleeper exposes both
+    // and imported identities can carry either.
+    const callerName = normalizeName(gate.identity.sleeperUsername)
+    const callerIsMember = users.some(
+      (u) => normalizeName(u.username) === callerName || normalizeName(u.display_name) === callerName
+    )
+    if (!callerIsMember) {
+      // Same 403 whether the league exists and you are not in it, or the id is nonsense —
+      // otherwise this distinguishes real league ids for an attacker.
+      return NextResponse.json(
+        { error: 'You can only view rosters in leagues you belong to.' },
+        { status: 403 }
       )
     }
 

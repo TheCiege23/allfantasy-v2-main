@@ -56,6 +56,7 @@ export function ActionCenter({
   onWaiverClick,
   onTradesClick,
   onWarRoomClick,
+  decisionOsLineup,
 }: {
   lineupActions: LineupActionItem[]
   waiverPickupSuggestions: number
@@ -65,6 +66,13 @@ export function ActionCenter({
   onWaiverClick: () => void
   onTradesClick: () => void
   onWarRoomClick: () => void
+  /**
+   * Decision OS Slice 1 (`manager.lineup.set`) Stage 1 LIVE enrichment for the primary league, when
+   * active. Confidence-only — the actual action rows above are unchanged either way (Decision OS
+   * wraps the same legacy lineup summary by design, so it would render identically). This badge is
+   * the only visible confirmation that the enrichment pipeline ran for this session.
+   */
+  decisionOsLineup?: { confidence: number } | null
 }) {
   const { t, tInterpolate } = useLanguage()
 
@@ -153,10 +161,16 @@ export function ActionCenter({
 
   return (
     <WarRoomCard className="overflow-hidden" accentBorder="rgba(255,255,255,0.08)">
-      <div className="border-b border-white/[0.06] px-4 py-2.5">
+      <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-2.5">
         <p className="text-[11px] font-bold uppercase tracking-widest text-white/40">
           {t('dashboard.warroom.actionCenter.title')}
         </p>
+        {decisionOsLineup ? (
+          <span className="flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 text-[9px] font-bold text-emerald-300/90">
+            <CheckCircle2 className="h-3 w-3" aria-hidden />
+            {tInterpolate('dashboard.warroom.recs.confidence', { pct: Math.round(decisionOsLineup.confidence) })}
+          </span>
+        ) : null}
       </div>
       <ul>
         {rows.map((row) => {

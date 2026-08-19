@@ -4,6 +4,7 @@
 
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { getPlatformEvents, EVENT } from '@/lib/events'
 import { logAction } from '@/server/services/auditService'
 import {
   type ApplyPostDraftLifecycleResult,
@@ -645,6 +646,18 @@ export async function startDraftSession(leagueId: string): Promise<StartDraftSes
     })
   }
 
+  // G15.2b — best-effort emit (never throws). Past the pre_draft guard above, so the
+  // draft is committing to start; deterministic key → exactly one event per session.
+  // Draft is concept-agnostic here, so leagueConcept is left unset (not assumed).
+  await getPlatformEvents().emit(EVENT.DRAFT_STARTED, {
+    leagueId,
+    actor: { type: 'commissioner' },
+    source: 'service:draft',
+    subjects: [{ kind: 'draft', id: session.id }],
+    idempotencyKey: `draft.started:${session.id}`,
+    payload: { draftId: session.id },
+  })
+
   if (session.draftType === 'auction') {
     const { initializeAuctionForSession } = await import('./auction/AuctionEngine')
     await initializeAuctionForSession(leagueId)
@@ -737,7 +750,7 @@ export async function resumeDraftSession(leagueId: string): Promise<boolean> {
     // already expired when the draft was paused, so restore the full configured clock.
     const hasUsableRemaining =
       typeof session.pausedRemainingSeconds === 'number' && session.pausedRemainingSeconds > 0
-    const sec = hasUsableRemaining ? session.pausedRemainingSeconds : (effectiveStored ?? 0)
+    const sec = hasUsableRemaining ? Number(session.pausedRemainingSeconds) : (effectiveStored ?? 0)
     const timerEndAt =
       effectiveStored != null && effectiveStored > 0
         ? new Date(Date.now() + sec * 1000)
@@ -1097,7 +1110,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
 
     /** Idempotent: board already finalized in DB — outer callers may heal artifacts. */
     if (session.status === 'completed') {
-      return { ok: true as const, transitioned: false as const, lifecycle: null }
+      return { ok: true as const, transitioned: false as const, lifecycle: null, sessionId: session.id }
     }
 
     const totalPicks = session.rounds * session.teamCount
@@ -1124,7 +1137,7 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
     })
 
     const lifecycle = await applyPostDraftLifecycleInTransaction(tx as Prisma.TransactionClient, leagueId)
-    return { ok: true as const, transitioned: true as const, lifecycle }
+    return { ok: true as const, transitioned: true as const, lifecycle, sessionId: session.id }
   })
 
   if (!outcome.ok) return false
@@ -1153,6 +1166,21 @@ export async function completeDraftSession(leagueId: string): Promise<boolean> {
   }
 
   if (outcome.transitioned) {
+    // G12: emit DRAFT_COMPLETED for ALL league types. Previously only Redraft leagues
+    // emitted this event (from syncCompletedDraftToRedraftSeason). SEASON_ACTIVATED is
+    // still emitted from the Redraft path for the season-specific payload.
+    const draftId = outcome.sessionId
+    getPlatformEvents().emit(EVENT.DRAFT_COMPLETED, {
+      leagueId,
+      idempotencyKey: `draft.completed:${draftId}`,
+      source: 'engine:draft-complete',
+      subjects: [{ kind: 'draft', id: draftId }],
+      payload: { draftId },
+    }).catch(() => {})
+
+    // G12-3 FINDING: survivor bootstrap is hardcoded here. Self-gates via isSurvivorLeague()
+    // so non-survivor leagues pay only a fast DB read. Future work: subscribe to DRAFT_COMPLETED
+    // on the event bus instead (remove this direct call once subscriber wiring is in place).
     import('@/lib/survivor/SurvivorDraftBootstrapService').then((m) => m.runSurvivorPostDraftBootstrap(leagueId)).catch(() => {})
     prisma.league.findUnique({ where: { id: leagueId }, select: { userId: true } }).then((league) => {
       if (league?.userId) {

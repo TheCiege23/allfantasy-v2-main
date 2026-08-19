@@ -4,6 +4,7 @@
 
 import { randomUUID } from 'crypto'
 import type { LeagueSport, Prisma, SoccerPipelineVariant } from '@prisma/client'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { buildInitialLeagueSettings } from '@/lib/sport-defaults/LeagueDefaultSettingsService'
 import { getDraftDefaults, getWaiverDefaults } from '@/lib/sport-defaults/SportDefaultsRegistry'
 import { toSportType } from '@/lib/sport-defaults/sport-type-utils'
@@ -229,11 +230,11 @@ export async function createRedraftLeagueInTransaction(
       draftTimerSecondsDefault: timerSeconds,
       isPublic: false,
       allowInviteLinks: true,
-      settingsJson: {
+      settingsJson: toPrismaJsonInput({
         tradeReviewMode: body.tradeReviewMode,
         tradeSettings: mergedSettings.tradeSettings,
         playoffSettings: mergedSettings.playoffSettings,
-      },
+      }),
     },
   })
 

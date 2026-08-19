@@ -74,13 +74,13 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
     <div className="space-y-4">
       {saving ? <p className="text-[11px] font-semibold text-cyan-300/80">Saving…</p> : null}
       <p className="text-[12px] text-white/45">
-        Control which AI assists are enabled for managers. Premium tools may require an AF Commissioner
-        subscription.
+        Control League Helper settings. Premium controls require AF Commissioner or AF
+        Supreme.
       </p>
 
       <Row
-        label="Chimmy league assistant"
-        hint="In-chat setup, explanations, and league-aware help."
+        label="League helper"
+        hint="In-chat setup, rule help, and league-aware guidance."
         checked={chimmy}
         disabled={!canEdit}
         onChange={(v) => {
@@ -89,7 +89,7 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="AI waiver suggestions"
+        label="Waiver watchlist"
         hint="Surfaces add/drop ideas grounded in league context."
         checked={waiver}
         disabled={!canEdit}
@@ -100,8 +100,8 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="AI trade evaluation"
-        hint="Deterministic-first trade analysis with explanations."
+        label="Trade health"
+        hint="Deterministic-first trade review with clear explanations."
         checked={trade}
         disabled={!canEdit}
         locked={premiumLocked}
@@ -111,8 +111,8 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="AI lineup coaching"
-        hint="Start/sit style guidance for weekly lineups."
+        label="Manager engagement"
+        hint="Start/sit style guidance and weekly participation signals."
         checked={lineup}
         disabled={!canEdit}
         locked={premiumLocked}
@@ -122,8 +122,8 @@ export function AISettingsTab({ ctx, canEdit, hasAfCommissionerSub }: LeagueSett
         }}
       />
       <Row
-        label="AI draft recs"
-        hint="Queue and board suggestions during drafts."
+        label="Draft readiness"
+        hint="Queue, board, and setup suggestions during drafts."
         checked={draftRecs}
         disabled={!canEdit}
         locked={premiumLocked}

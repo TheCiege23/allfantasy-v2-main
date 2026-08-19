@@ -39,6 +39,7 @@ export function FloatingCommunications({
   onOpen,
   onClose,
   unreadCount = 0,
+  hideLauncher = false,
   userId,
   userName,
   userImage,
@@ -58,6 +59,13 @@ export function FloatingCommunications({
    * never pass a fabricated or placeholder value.
    */
   unreadCount?: number
+  /**
+   * Suppress this component's own launcher button when the host renders its own entry
+   * point (the Nocturne dashboard supplies a design-matched bubble). The panel itself is
+   * unchanged — only the default button is withheld. Defaults to false so existing
+   * consumers keep the built-in launcher.
+   */
+  hideLauncher?: boolean
   userId: string
   userName: string
   userImage: string | null
@@ -83,7 +91,7 @@ export function FloatingCommunications({
       {/* Floating entry point — desktop/tablet. Mobile keeps the existing topbar chat button (rewired
           to the same panel), so mobile isn't given a second overlapping control. Bottom-right, above
           the safe area, sits over empty gutter so it never blocks dashboard content. */}
-      {!open ? (
+      {!open && !hideLauncher ? (
         <button
           type="button"
           onClick={onOpen}

@@ -10,7 +10,7 @@ import {
   type MonetizationSku,
 } from "@/lib/monetization/catalog"
 import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
-import { buildStripeCheckoutDestinationForSku } from "@/lib/monetization/StripeCheckoutLinkRegistry"
+import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheckoutSession"
 import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo"
 import { buildSubscriptionMetaEvent } from "@/lib/monetization/meta"
 import { trackMetaServerEvent } from "@/lib/meta-capi"
@@ -96,14 +96,16 @@ export async function POST(req: Request) {
     }
 
     const returnPath = resolveSafeReturnPath(body?.returnPath, "/pricing")
-    const destination = buildStripeCheckoutDestinationForSku({
+    // Canonical checkout: charge is derived from the catalog price id
+    // (STRIPE_PRICE_AF_*), guaranteeing charged == displayed catalog price.
+    const checkout = await buildStripeCheckoutSessionForSku({
       sku: item.sku,
       userId: session.user.id,
       userEmail: session.user.email ?? null,
       returnPath,
       couponCode: resolvedCouponCode,
     })
-    if (!destination || destination.purchaseType !== "subscription") {
+    if (!checkout || checkout.purchaseType !== "subscription") {
       return NextResponse.json(
         {
           error:
@@ -130,7 +132,7 @@ export async function POST(req: Request) {
     })
 
     return NextResponse.json({
-      url: destination.url,
+      url: checkout.url,
       sku: item.sku,
       purchaseType: "subscription",
       metaEvent,

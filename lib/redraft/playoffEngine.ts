@@ -1,6 +1,7 @@
 import type { RedraftRoster } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { tryGetSportConfig } from '@/lib/sportConfig'
+import { getPlatformEvents, EVENT } from '@/lib/events'
 import type { PlayoffStructure } from './types'
 
 /** Bracket shape defaults from centralized sport config (commissioner can override). */
@@ -159,7 +160,10 @@ export async function advancePlayoffWinners(
         where: { id: matchup.id },
         data: {
           winnerRosterId,
-          status: matchup.status === 'bye' ? 'bye' : 'complete',
+          // DB CHECK allows scheduled/in_progress/final/bye/cancelled — a
+          // resolved matchup is 'final' (matches the regular-season convention).
+          // 'complete' violated the constraint and crashed playoff advancement.
+          status: matchup.status === 'bye' ? 'bye' : 'final',
         },
       })
     }
@@ -222,10 +226,12 @@ export async function advancePlayoffWinners(
     return { ...base, advanced, skipped, blocked, status: 'ok' }
   }
 
-  // Mark the active round complete
+  // Mark the active round complete. DB CHECK allows pending/active/completed/
+  // cancelled — 'complete' (no -ed) violated the constraint and crashed playoff
+  // round advancement.
   await prisma.redraftPlayoffRound.update({
     where: { id: activeRound.id },
-    data: { status: 'complete' },
+    data: { status: 'completed' },
   })
 
   // Find the next pending round
@@ -359,8 +365,8 @@ export async function finalizeRedraftSeasonChampion(
 
   const finalRound = rounds[0]!
 
-  // The final round must be complete
-  if (finalRound.status !== 'complete') {
+  // The final round must be complete (DB stores 'completed', not 'complete').
+  if (finalRound.status !== 'completed') {
     return { ...base, alreadyFinalized: false, status: 'final_round_incomplete', championRosterId: null, championUserId: null, championTeamName: null, runnerUpRosterId: null }
   }
 
@@ -425,6 +431,32 @@ export async function finalizeRedraftSeasonChampion(
       where: { id: season.leagueId },
       data: { lifecycleState: 'completed' },
     })
+  })
+
+  // G15.2 — publish (best-effort, post-commit; never throws, never affects the result).
+  // Reached only on first finalize (re-finalize returns early above), so the
+  // deterministic idempotency keys yield exactly one event per season.
+  const events = getPlatformEvents()
+  await events.emit(EVENT.CHAMPION_CROWNED, {
+    leagueId: season.leagueId,
+    seasonId,
+    actor: { type: 'system', id: recordedByUserId },
+    idempotencyKey: `champion.crowned:${seasonId}`,
+    source: 'engine:playoff',
+    subjects: [
+      { kind: 'season', id: seasonId },
+      { kind: 'roster', id: championRosterId },
+    ],
+    payload: { seasonId, championRosterId, championUserId: championUserId ?? undefined },
+  })
+  await events.emit(EVENT.SEASON_COMPLETED, {
+    leagueId: season.leagueId,
+    seasonId,
+    actor: { type: 'system', id: recordedByUserId },
+    idempotencyKey: `season.completed:${seasonId}`,
+    source: 'engine:playoff',
+    subjects: [{ kind: 'season', id: seasonId }],
+    payload: { seasonId },
   })
 
   return {

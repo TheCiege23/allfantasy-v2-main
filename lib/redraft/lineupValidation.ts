@@ -1,4 +1,5 @@
 import { getRedraftSportConfig } from '@/lib/redraft/sportConfig'
+import type { ResolvedRosterConfig } from '@/lib/redraft/rosterConfigResolver'
 
 export type RedraftLineupIssueSeverity = 'error' | 'warning'
 
@@ -58,7 +59,7 @@ const INJURY_ERROR_STATUSES = new Set([
 ])
 const INJURY_WARNING_STATUSES = new Set(['QUESTIONABLE', 'Q', 'DOUBTFUL', 'D'])
 
-function normalizeToken(input: string | null | undefined): string {
+export function normalizeToken(input: string | null | undefined): string {
   const value = String(input ?? '').trim().toUpperCase().replace(/\s+/g, '_')
   if (value === 'D/ST' || value === 'DST' || value === 'DEFENSE') return 'DEF'
   if (value === 'FLEX') return 'FLX'
@@ -96,18 +97,18 @@ function allowedPositionsForSlot(sport: string, slotType: string): string[] {
   return [slot]
 }
 
-function isStarterSlot(sport: string, slotType: string): boolean {
-  return starterCapacityBySlot(sport).has(normalizeToken(slotType))
+function isStarterSlot(slotType: string, capacities: Map<string, number>): boolean {
+  return capacities.has(normalizeToken(slotType))
 }
 
 function isNonStarterSlot(slotType: string): boolean {
   return NON_STARTER_SLOTS.has(normalizeToken(slotType))
 }
 
-function isPlayerEligibleForSlot(sport: string, player: RedraftLineupPlayer): boolean {
+function isPlayerEligibleForSlot(sport: string, player: RedraftLineupPlayer, capacities: Map<string, number>): boolean {
   const slot = normalizeToken(player.slotType)
   const position = normalizeToken(player.position)
-  if (!slot || !position || !isStarterSlot(sport, slot)) return true
+  if (!slot || !position || !isStarterSlot(slot, capacities)) return true
   return allowedPositionsForSlot(sport, slot).includes(position)
 }
 
@@ -178,13 +179,19 @@ export function validateRedraftLineup(args: {
   players: RedraftLineupPlayer[]
   previousPlayers?: RedraftLineupPlayer[]
   extraIssues?: RedraftLineupValidationIssue[]
+  /**
+   * Commissioner roster config (G10). When provided, starter slot set + capacities
+   * and bench/IR/taxi limits come from the league's settings; when omitted, the
+   * static sport-config defaults are used (backward-compatible).
+   */
+  rosterConfig?: ResolvedRosterConfig
 }): RedraftLineupValidationResult {
   const sport = args.sport
   const week = Math.max(1, Math.floor(Number(args.week) || 1))
   const issues: RedraftLineupValidationIssue[] = [...(args.extraIssues ?? [])]
   const players = activePlayers(args.players)
   const previousByPlayerId = new Map(activePlayers(args.previousPlayers ?? []).map((player) => [player.playerId, player]))
-  const capacities = starterCapacityBySlot(sport)
+  const capacities = args.rosterConfig?.starterCapacities ?? starterCapacityBySlot(sport)
   const starterCounts = new Map<string, number>()
   const startedPositionCounts = new Map<string, number>()
   const seen = new Set<string>()
@@ -217,7 +224,7 @@ export function validateRedraftLineup(args: {
       )
     }
 
-    if (!isStarterSlot(sport, slot)) {
+    if (!isStarterSlot(slot, capacities)) {
       if (!isNonStarterSlot(slot)) {
         issues.push(
           issue({
@@ -236,7 +243,7 @@ export function validateRedraftLineup(args: {
     const position = normalizeToken(player.position)
     if (position) startedPositionCounts.set(position, (startedPositionCounts.get(position) ?? 0) + 1)
 
-    if (!isPlayerEligibleForSlot(sport, player)) {
+    if (!isPlayerEligibleForSlot(sport, player, capacities)) {
       issues.push(
         issue({
           code: 'starter_position_ineligible',
@@ -321,6 +328,39 @@ export function validateRedraftLineup(args: {
           slotType: position,
         }),
       )
+    }
+  }
+
+  // Bench / IR / taxi limits + max roster size — only when the commissioner roster
+  // config is known (G10). Counts active players by slot category against limits.
+  const rc = args.rosterConfig
+  if (rc) {
+    let bench = 0
+    let ir = 0
+    let taxi = 0
+    for (const player of players) {
+      const slot = normalizeToken(player.slotType)
+      if (slot === 'BENCH') bench += 1
+      else if (slot === 'IR' || slot === 'RESERVE') ir += 1
+      else if (slot === 'TAXI' || slot === 'DEVY') taxi += 1
+    }
+    if (bench > rc.benchSlots) {
+      issues.push(issue({ code: 'bench_slot_overflow', message: `Bench has ${bench} players but only ${rc.benchSlots} bench slot${rc.benchSlots === 1 ? '' : 's'} are allowed.`, slotType: 'BENCH' }))
+    }
+    if (ir > rc.irSlots) {
+      issues.push(issue({ code: 'ir_slot_overflow', message: `IR has ${ir} players but only ${rc.irSlots} IR slot${rc.irSlots === 1 ? '' : 's'} are allowed.`, slotType: 'IR' }))
+    }
+    if (taxi > rc.taxiSlots) {
+      issues.push(
+        issue({
+          code: rc.taxiSlots === 0 ? 'taxi_not_enabled' : 'taxi_slot_overflow',
+          message: rc.taxiSlots === 0 ? 'Taxi squad is not enabled for this league.' : `Taxi has ${taxi} players but only ${rc.taxiSlots} taxi slot${rc.taxiSlots === 1 ? '' : 's'} are allowed.`,
+          slotType: 'TAXI',
+        }),
+      )
+    }
+    if (players.length > rc.maxRosterSize) {
+      issues.push(issue({ code: 'roster_over_max', message: `Roster has ${players.length} players but the league max is ${rc.maxRosterSize}.` }))
     }
   }
 

@@ -79,7 +79,7 @@ export async function executeImmediateAddDrop(
     })
 
     return {
-      ok: true,
+      ok: true as const,
       transaction: {
         id: txnRow.id,
         addPlayerId: txnRow.addPlayerId,

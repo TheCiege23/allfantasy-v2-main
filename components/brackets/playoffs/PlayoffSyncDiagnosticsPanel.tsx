@@ -43,7 +43,6 @@ function safeDiagnostics(value: unknown) {
     completedProviderSeries: (record.diagnostics as any)?.completedProviderSeries,
     completedSeriesWithWinner: (record.diagnostics as any)?.completedSeriesWithWinner,
     completedSeriesWithoutWinner: (record.diagnostics as any)?.completedSeriesWithoutWinner,
-    winnersUpdated: record.winnersUpdated,
     resultsOnlyStrippedWinners: (record.diagnostics as any)?.resultsOnlyStrippedWinners,
     resultPersistenceExamples: (record.diagnostics as any)?.resultPersistenceExamples,
     finalScoreSupplementProvider: (record.diagnostics as any)?.finalScoreSupplementProvider,

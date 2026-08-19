@@ -303,7 +303,14 @@ export const POST = withApiUsage({ endpoint: "/api/ai/chat", tool: "AiChat" })(a
     }
 
     const { context_scope, message, conversation_history } = parseResult.data
-    const sleeperUsername = context_scope.sleeper_username?.trim()?.toLowerCase()
+    // Identity is always derived from the authenticated session's own linked LegacyUser, never
+    // from the client-supplied context_scope.sleeper_username — trusting that field let one
+    // account pull another user's legacy career context into their own Chimmy conversation.
+    const sessionAppUser = await prisma.appUser.findUnique({
+      where: { id: userId },
+      select: { legacyUser: { select: { sleeperUsername: true } } },
+    })
+    const sleeperUsername = sessionAppUser?.legacyUser?.sleeperUsername?.trim()?.toLowerCase()
     const resolvedSport = resolveSportForAI(body as Record<string, unknown>)
     const leagueId =
       (typeof (body as Record<string, unknown>).league_id === 'string'

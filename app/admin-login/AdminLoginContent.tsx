@@ -14,6 +14,14 @@ function sanitizeNext(raw: string | null | undefined): string {
   return raw
 }
 
+/**
+ * Admin sign-in (magic link). Authored for the app's LIGHT mode: the global
+ * `html[data-mode="light"] .mode-readable` layer force-clamps every `text-white*` class to the
+ * dark `--text` token with !important, so a dark-background design renders dark-on-dark and is
+ * unreadable. This page therefore uses the app's own design tokens (`--text`, `--muted`,
+ * `--border`, `--accent`) and hex/arbitrary color classes the clamp does not target, so all
+ * contrast is deterministic and meets WCAG AA. See __tests__/admin-login-accessibility.test.tsx.
+ */
 export default function AdminLoginContent() {
   const searchParams = useSearchParams()
   const next = sanitizeNext(searchParams?.get('next'))
@@ -61,16 +69,31 @@ export default function AdminLoginContent() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#0a0f1a] px-4 py-10 text-white">
+    <main className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-[#EEF1F7] px-4 py-10 text-[color:var(--text)]">
+      {/*
+        Two scoped, higher-specificity rules (this page only):
+        1. The app clamps ALL input placeholders to --muted2 (≈3.3:1) with !important in light mode —
+           restore an AA placeholder (≈5.8:1) for this field.
+        2. @tailwindcss/forms + Tailwind's ring utilities leave the focused field with no visible
+           indicator here (empty ring shadow, transparent outline). Force a solid accent outline
+           (var(--accent) #2563EB ≈ 5.2:1 on white) so keyboard focus is always visible.
+      */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html:
+            'html[data-mode="light"] input.af-admin-email::placeholder{color:rgba(2,6,23,0.62)!important}' +
+            '.af-admin-focus:focus{outline:2px solid var(--accent,#2563EB)!important;outline-offset:2px!important}',
+        }}
+      />
       <div className="w-full max-w-md">
-        <div className="mb-6 flex items-center justify-center gap-2 text-[13px] uppercase tracking-[0.2em] text-white/50">
-          <Shield className="h-4 w-4 text-violet-400" />
+        <div className="mb-6 flex items-center justify-center gap-2 text-[13px] uppercase tracking-[0.2em] text-[color:var(--muted)]">
+          <Shield className="h-4 w-4 text-[color:var(--accent)]" />
           <span>AllFantasy Admin</span>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-2xl backdrop-blur">
-          <h1 className="text-[20px] font-bold text-white">Admin sign in</h1>
-          <p className="mt-1 text-[13px] leading-snug text-white/55">
+        <div className="rounded-2xl border border-[color:var(--border)] bg-[#ffffff] p-6 shadow-xl shadow-slate-900/5">
+          <h1 className="text-[20px] font-bold text-[color:var(--text)]">Admin sign in</h1>
+          <p className="mt-1 text-[13px] leading-snug text-[color:var(--muted)]">
             Enter your admin email. If you&rsquo;re on the allowlist, we&rsquo;ll send a one-time magic link
             that expires in 10 minutes.
           </p>
@@ -78,9 +101,9 @@ export default function AdminLoginContent() {
           {banner ? (
             <div
               role="alert"
-              className="mt-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100"
+              className="mt-4 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[12px] text-amber-900"
             >
-              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
               <span>{banner}</span>
             </div>
           ) : null}
@@ -88,15 +111,15 @@ export default function AdminLoginContent() {
           {state === 'sent' ? (
             <div
               role="status"
-              className="mt-5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-3 text-[13px] text-emerald-100"
+              className="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-3 text-[13px] text-emerald-900"
             >
               <div className="flex items-center gap-2 font-semibold">
-                <CheckCircle2 className="h-4 w-4" />
+                <CheckCircle2 className="h-4 w-4 text-emerald-700" />
                 Check your email
               </div>
-              <p className="mt-1 text-[12px] text-emerald-100/80">
-                If <span className="font-mono">{email}</span> is on the admin allowlist, a magic link is on
-                the way. It expires in 10 minutes. You can close this tab after clicking the link.
+              <p className="mt-1 break-words text-[12px] text-emerald-900">
+                If <span className="break-all font-mono">{email}</span> is on the admin allowlist, a magic
+                link is on the way. It expires in 10 minutes. You can close this tab after clicking the link.
               </p>
               <button
                 type="button"
@@ -104,7 +127,7 @@ export default function AdminLoginContent() {
                   setState('idle')
                   setErrorMsg(null)
                 }}
-                className="mt-3 text-[11px] font-semibold uppercase tracking-wide text-emerald-200 underline underline-offset-4 hover:text-emerald-100"
+                className="af-admin-focus mt-3 inline-flex min-h-[44px] items-center rounded-sm text-[11px] font-semibold uppercase tracking-wide text-emerald-800 underline underline-offset-4 hover:text-emerald-900"
               >
                 Send to a different email
               </button>
@@ -112,7 +135,7 @@ export default function AdminLoginContent() {
           ) : (
             <form onSubmit={handleSubmit} className="mt-5 space-y-3">
               <label className="block">
-                <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-white/55">
+                <span className="mb-1 block text-[11px] font-bold uppercase tracking-wide text-[color:var(--text)]">
                   Admin email
                 </span>
                 <input
@@ -124,16 +147,16 @@ export default function AdminLoginContent() {
                   onChange={(e) => setEmail(e.target.value)}
                   disabled={state === 'submitting'}
                   placeholder="you@allfantasy.ai"
-                  className="w-full rounded-lg border border-white/10 bg-[#121725] px-3 py-2.5 text-[14px] text-white placeholder:text-white/30 outline-none focus:border-violet-500/50 disabled:opacity-60"
+                  className="af-admin-email af-admin-focus min-h-[44px] w-full rounded-lg border border-[#64748b] bg-[#ffffff] px-3 py-2.5 text-[14px] text-[color:var(--text)] focus:border-[color:var(--accent)] disabled:opacity-60"
                 />
               </label>
 
               {state === 'error' && errorMsg ? (
                 <div
                   role="alert"
-                  className="flex items-start gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-[12px] text-rose-100"
+                  className="flex items-start gap-2 rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-[12px] text-rose-800"
                 >
-                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" />
+                  <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-rose-700" />
                   <span>{errorMsg}</span>
                 </div>
               ) : null}
@@ -141,7 +164,7 @@ export default function AdminLoginContent() {
               <button
                 type="submit"
                 disabled={state === 'submitting'}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-4 py-2.5 text-[13px] font-semibold text-white shadow-lg shadow-violet-500/25 transition hover:from-violet-400 hover:to-purple-500 disabled:cursor-not-allowed disabled:opacity-60"
+                className="af-admin-focus inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#4338ca] to-[#6d28d9] px-4 py-2.5 text-[13px] font-semibold text-[#ffffff] shadow-sm transition hover:from-[#3730a3] hover:to-[#5b21b6] disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {state === 'submitting' ? (
                   <>
@@ -153,17 +176,20 @@ export default function AdminLoginContent() {
               </button>
 
               {next !== '/admin' ? (
-                <p className="text-center text-[10px] text-white/40">
-                  After sign-in, you&rsquo;ll be sent to <span className="font-mono">{next}</span>
+                <p className="text-center text-[11px] text-[color:var(--muted)]">
+                  After sign-in, you&rsquo;ll be sent to <span className="break-all font-mono">{next}</span>
                 </p>
               ) : null}
             </form>
           )}
         </div>
 
-        <p className="mt-6 text-center text-[11px] text-white/40">
+        <p className="mt-6 text-center text-[11px] text-[color:var(--muted)]">
           Not an admin?{' '}
-          <Link href="/login" className="font-semibold text-white/70 underline underline-offset-4 hover:text-white">
+          <Link
+            href="/login"
+            className="af-admin-focus inline-flex min-h-[44px] items-center rounded-sm font-semibold text-[color:var(--accent)] underline underline-offset-4 hover:opacity-80"
+          >
             Regular sign in
           </Link>
         </p>

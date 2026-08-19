@@ -23,6 +23,9 @@ import type {
   RawRosterMoveRow,
   RawDraftSessionRow,
   RawDraftPickRow,
+  RawRedraftTradeRow,
+  RawRedraftRosterPlayerRow,
+  RawRedraftRosterMoveRow,
 } from './port'
 
 // ── Waiver mappers ────────────────────────────────────────────────────────────
@@ -409,4 +412,246 @@ export function mapDraftRowsToEvents(
     events.push(mapDraftPickToEvent(pick))
   }
   return events
+}
+
+// ── Phase 2E: Redraft trade mappers ──────────────────────────────────────────
+//
+// Structurally mirror the AfLeagueTrade mappers above. RedraftTradeProposal
+// resolves BOTH sides' owner via a roster join (see port.ts), so — unlike the
+// AfLeagueTrade mapper, which has to leave managerId null on accepted/rejected
+// events because the receiver's userId isn't stored there — these can honestly
+// set a real, confirmed managerId on every event this domain supports.
+
+/** Map a RedraftTradeProposal row to a `trade_created` event. */
+export function mapRedraftTradeToCreatedEvent(row: RawRedraftTradeRow): BehavioralEvent {
+  const vetoMode: 'commissioner' | 'league_vote' | 'no_veto' | null =
+    row.vetoMode === 'commissioner'
+      ? 'commissioner'
+      : row.vetoMode === 'league_vote'
+        ? 'league_vote'
+        : row.vetoMode === 'no_veto'
+          ? 'no_veto'
+          : null
+
+  const completeness = computeEventCompleteness({
+    hasManagerId: true,
+    timestampConfidence: 'exact',
+    hasProvider: false,
+    missingMetadataFieldCount: 0,
+  })
+
+  return {
+    eventId: `redraft_trade_created_${row.id}`,
+    eventType: 'trade_created',
+    occurredAt: row.createdAt.toISOString(),
+    recordedAt: row.createdAt.toISOString(),
+    leagueId: row.leagueId,
+    managerId: row.proposerOwnerId,
+    source: 'api',
+    provenance: makeSystemProvenance(['RedraftTradeProposal', 'RedraftTradeAsset']),
+    completeness,
+    uncertainty: makeMinUncertainty(),
+    metadata: {
+      proposalId: row.id,
+      proposerRosterId: row.proposerRosterId,
+      receiverRosterId: row.receiverRosterId,
+      assetCount: row.itemCount,
+      vetoMode,
+      expiresAt: row.expiresAt?.toISOString() ?? null,
+    },
+  }
+}
+
+/** Map a RedraftTradeProposal row to a `trade_accepted` event, or null if not accepted. */
+export function mapRedraftTradeToAcceptedEvent(row: RawRedraftTradeRow): BehavioralEvent | null {
+  if (!row.acceptedAt) return null
+
+  const completeness = computeEventCompleteness({
+    hasManagerId: true,
+    timestampConfidence: 'exact',
+    hasProvider: false,
+    missingMetadataFieldCount: 0,
+  })
+
+  return {
+    eventId: `redraft_trade_accepted_${row.id}`,
+    eventType: 'trade_accepted',
+    occurredAt: row.acceptedAt.toISOString(),
+    recordedAt: row.acceptedAt.toISOString(),
+    leagueId: row.leagueId,
+    managerId: row.receiverOwnerId,
+    source: 'api',
+    provenance: makeSystemProvenance(['RedraftTradeProposal']),
+    completeness,
+    uncertainty: makeMinUncertainty(),
+    metadata: {
+      proposalId: row.id,
+      acceptorRosterId: row.receiverRosterId,
+      assetCount: row.itemCount,
+    },
+  }
+}
+
+/** Map a RedraftTradeProposal row to a `trade_rejected` event, or null if not rejected. */
+export function mapRedraftTradeToRejectedEvent(row: RawRedraftTradeRow): BehavioralEvent | null {
+  if (!row.rejectedAt) return null
+
+  const completeness = computeEventCompleteness({
+    hasManagerId: true,
+    timestampConfidence: 'exact',
+    hasProvider: false,
+    missingMetadataFieldCount: 0,
+  })
+
+  return {
+    eventId: `redraft_trade_rejected_${row.id}`,
+    eventType: 'trade_rejected',
+    occurredAt: row.rejectedAt.toISOString(),
+    recordedAt: row.rejectedAt.toISOString(),
+    leagueId: row.leagueId,
+    managerId: row.receiverOwnerId,
+    source: 'api',
+    provenance: makeSystemProvenance(['RedraftTradeProposal']),
+    completeness,
+    uncertainty: makeMinUncertainty(),
+    metadata: {
+      proposalId: row.id,
+      rejectorRosterId: row.receiverRosterId,
+      rejectionReason: null,
+    },
+  }
+}
+
+/**
+ * Map all events from a single RedraftTradeProposal row.
+ * Always emits `trade_created`. Conditionally emits `trade_accepted` or `trade_rejected`.
+ */
+export function mapRedraftTradeToEvents(row: RawRedraftTradeRow): BehavioralEvent[] {
+  const events: BehavioralEvent[] = [mapRedraftTradeToCreatedEvent(row)]
+  const accepted = mapRedraftTradeToAcceptedEvent(row)
+  if (accepted) events.push(accepted)
+  const rejected = mapRedraftTradeToRejectedEvent(row)
+  if (rejected) events.push(rejected)
+  return events
+}
+
+/** Map a batch of RedraftTradeProposal rows to BehavioralEvent[]. */
+export function mapRedraftTradesToEvents(rows: RawRedraftTradeRow[]): BehavioralEvent[] {
+  return rows.flatMap(mapRedraftTradeToEvents)
+}
+
+// ── Phase 2E: Redraft roster-composition mapper ──────────────────────────────
+
+/**
+ * Map a RedraftRosterPlayer row to a `lineup_saved` event, honestly
+ * representing a real roster-composition change rather than a literal
+ * start/bench swap — the redraft schema has no persisted slot-change history
+ * (RedraftRosterPlayer.slotType is overwritten in place with no timestamp; see
+ * app/api/redraft/roster/route.ts's lineup-save handler), so this is the same
+ * "honest zeros for unknown slot-level detail" approximation
+ * `mapRosterMoveToLineupSavedEvent` already uses for AfRosterMoveHistory —
+ * not a new invention, the same existing convention applied to a new source.
+ *
+ * Only `acquisitionType === 'free_agent'` rows map here. 'waiver' rows are
+ * already covered by the WaiverClaim mapper, 'trade' rows by the
+ * RedraftTradeProposal mapper above, and 'drafted' rows by the draft mapper —
+ * mapping those here too would double-count the same real-world action.
+ * Returns null for any other acquisitionType.
+ */
+export function mapRedraftRosterPlayerToLineupSavedEvent(
+  row: RawRedraftRosterPlayerRow,
+): BehavioralEvent | null {
+  if (row.acquisitionType !== 'free_agent') return null
+
+  // week/season are genuinely unknown here (RedraftRosterPlayer has no such
+  // columns) — stay null rather than guess, per the never-fabricate invariant.
+  const completeness = computeEventCompleteness({
+    hasManagerId: true,
+    timestampConfidence: 'exact',
+    hasProvider: false,
+    missingMetadataFieldCount: 3, // week, season, slot-level detail all unknown
+  })
+
+  return {
+    eventId: `redraft_roster_move_${row.id}`,
+    eventType: 'lineup_saved',
+    occurredAt: row.addedAt.toISOString(),
+    recordedAt: row.addedAt.toISOString(),
+    leagueId: row.leagueId,
+    managerId: row.ownerUserId,
+    source: 'api',
+    provenance: makeSystemProvenance(['RedraftRosterPlayer']),
+    completeness,
+    uncertainty: makeMinUncertainty(),
+    metadata: {
+      week: null,
+      season: null,
+      leagueType: 'redraft',
+      slotChanges: 0,
+      startedPlayerIds: [],
+      benchedPlayerIds: [],
+    },
+  }
+}
+
+/**
+ * Map a batch of RedraftRosterPlayer rows to BehavioralEvent[].
+ * Rows whose acquisitionType isn't 'free_agent' are silently skipped (see
+ * `mapRedraftRosterPlayerToLineupSavedEvent`'s doc comment for why).
+ */
+export function mapRedraftRosterPlayersToEvents(rows: RawRedraftRosterPlayerRow[]): BehavioralEvent[] {
+  const events: BehavioralEvent[] = []
+  for (const row of rows) {
+    const event = mapRedraftRosterPlayerToLineupSavedEvent(row)
+    if (event) events.push(event)
+  }
+  return events
+}
+
+// ── Phase 2H: Redraft lineup-save history mapper ─────────────────────────────
+
+/**
+ * Map a RedraftRosterMoveHistory row to a `lineup_saved` event with a REAL
+ * week/season — unlike `mapRedraftRosterPlayerToLineupSavedEvent` above,
+ * which honestly has to leave week/season null (RedraftRosterPlayer has no
+ * such columns). This is the source docs/DECISION_OS_MANAGER_DNA_PHASE2G_VOLUME_AND_LINEUP_HISTORY_SCOPE.md
+ * scoped specifically to unlock lib/decision-os/phase6/patterns/patterns.ts's
+ * lineup-based pattern detectors (which explicitly skip week=null events).
+ * Slot-level detail (slotChanges, startedPlayerIds, benchedPlayerIds) is
+ * still not stored per-event here — honest zeros/empty arrays, same
+ * convention as every other lineup_saved mapper in this file.
+ */
+export function mapRedraftRosterMoveToLineupSavedEvent(row: RawRedraftRosterMoveRow): BehavioralEvent {
+  const completeness = computeEventCompleteness({
+    hasManagerId: row.actorUserId != null,
+    timestampConfidence: 'exact',
+    hasProvider: false,
+    missingMetadataFieldCount: 1, // slot-level detail unavailable
+  })
+
+  return {
+    eventId: `redraft_roster_move_history_${row.id}`,
+    eventType: 'lineup_saved',
+    occurredAt: row.createdAt.toISOString(),
+    recordedAt: row.createdAt.toISOString(),
+    leagueId: row.leagueId,
+    managerId: row.actorUserId,
+    source: 'api',
+    provenance: makeSystemProvenance(['RedraftRosterMoveHistory']),
+    completeness,
+    uncertainty: makeMinUncertainty(),
+    metadata: {
+      week: row.week,
+      season: row.season,
+      leagueType: 'redraft',
+      slotChanges: 0,
+      startedPlayerIds: [],
+      benchedPlayerIds: [],
+    },
+  }
+}
+
+/** Map a batch of RedraftRosterMoveHistory rows to BehavioralEvent[]. */
+export function mapRedraftRosterMovesToEvents(rows: RawRedraftRosterMoveRow[]): BehavioralEvent[] {
+  return rows.map(mapRedraftRosterMoveToLineupSavedEvent)
 }

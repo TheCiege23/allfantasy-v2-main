@@ -322,10 +322,10 @@ export async function getFantasyValueSnapshot(
   const resolvedName = rowString(record, "name") ?? rowString(player, "name") ?? rowString(identity, "canonicalName") ?? playerName ?? "Unknown player"
   const resolvedTeam = rowString(record, "team") ?? rowString(player, "team") ?? rowString(identity, "currentTeam")
   const resolvedPosition = rowString(record, "position") ?? rowString(player, "position") ?? rowString(identity, "position")
-  const playerOrNameWhere = [
+  const playerOrNameWhere: Array<{ playerId: string } | { playerName: { equals: string; mode: "insensitive" } }> = [
     resolvedPlayerId ? { playerId: resolvedPlayerId } : null,
     { playerName: { equals: resolvedName, mode: "insensitive" } },
-  ].filter((item): item is Record<string, unknown> => Boolean(item))
+  ].filter((item): item is { playerId: string } | { playerName: { equals: string; mode: "insensitive" } } => Boolean(item))
 
   const [seasonStats, injuryReport, sportsInjury, sportsNews, playerNews] = await Promise.all([
     safeFindFirst("playerSeasonStats", {

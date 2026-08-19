@@ -39,10 +39,10 @@ describe('LeagueShell — af-pre-draft-fix-action listener', () => {
   /**
    * Slice the Slice-H useEffect block precisely so unrelated `useEffect(`
    * hooks elsewhere in the file don't pollute the regex window. The block
-   * starts at the documenting comment "Slice H — listen for" and ends at
+   * starts at the documenting comment "Slice H - listen for" and ends at
    * the next `useEffect` / function boundary.
    */
-  const sliceStart = src.indexOf('Slice H — listen for')
+  const sliceStart = src.indexOf('Slice H - listen for')
   const sliceEndNeedle = '}, [league.id, openLeagueSettingsModal])'
   const sliceEnd = sliceStart >= 0 ? src.indexOf(sliceEndNeedle, sliceStart) : -1
   const sliceBody =

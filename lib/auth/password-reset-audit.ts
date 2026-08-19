@@ -4,15 +4,20 @@ type PasswordResetAuditOutcome =
   | "rate_limited"
   | "invalid_sms_phone"
   | "sms_profile_not_found"
+  | "sms_lookup_failed"
+  | "sms_token_write_failed"
   | "sms_provider_missing"
   | "sms_sent"
   | "sms_send_failed"
   | "empty_email"
   | "email_user_not_found"
+  | "email_lookup_failed"
   | "email_token_created"
+  | "email_token_write_failed"
   | "email_provider_missing"
   | "email_send_failed"
   | "email_sent"
+  | "unexpected_error"
 
 function maskEmail(email: string | null | undefined): string | null {
   if (!email) return null

@@ -1,0 +1,23 @@
+{
+  "manifest_version": 3,
+  "name": "AllFantasy — Connect ESPN",
+  "short_name": "AllFantasy Connect",
+  "version": "1.0.0",
+  "description": "Connect your private ESPN fantasy leagues to AllFantasy in one click.",
+  "permissions": ["cookies"],
+  "host_permissions": [
+    "*://*.espn.com/*",
+    "https://www.allfantasy.ai/*",
+    "https://allfantasy.ai/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Connect ESPN to AllFantasy"
+  },
+  "externally_connectable": {
+    "matches": ["https://www.allfantasy.ai/*", "https://allfantasy.ai/*"]
+  }
+}

@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 import {
   buildDevAdminRefundLedgerEntry,
@@ -703,30 +704,33 @@ export class TokenSpendService {
         where: { userId: input.userId },
         update: {},
         create: { userId: input.userId },
-        select: { id: true, balance: true },
+        select: { id: true, balance: true, reservedBalance: true },
       })
 
-      if (Number(balanceRow.balance || 0) < tokenCost) {
-        throw new TokenInsufficientBalanceError(tokenCost, Number(balanceRow.balance || 0))
+      // Spendable EXCLUDES currently-held reservations, so an ordinary spend can never consume reserved tokens.
+      const spendable = Number(balanceRow.balance || 0) - Number(balanceRow.reservedBalance || 0)
+      if (spendable < tokenCost) {
+        throw new TokenInsufficientBalanceError(tokenCost, Math.max(0, spendable))
       }
 
-      const updateResult = await tx.userTokenBalance.updateMany({
-        where: {
-          id: balanceRow.id,
-          balance: { gte: tokenCost },
-        },
-        data: {
-          balance: { decrement: tokenCost },
-          lifetimeSpent: { increment: tokenCost },
-        },
-      })
+      // Atomic conditional spend guarded on spendable = balance - reserved_balance (correct under READ
+      // COMMITTED via EvalPlanQual). A reservation racing this spend cannot cause an overspend.
+      const affected = await tx.$executeRaw(Prisma.sql`
+        UPDATE "user_token_balances"
+        SET "balance" = "balance" - ${tokenCost},
+            "lifetimeSpent" = "lifetimeSpent" + ${tokenCost},
+            "updatedAt" = ${new Date()}
+        WHERE "id" = ${balanceRow.id} AND ("balance" - "reserved_balance") >= ${tokenCost}`)
 
-      if (Number(updateResult.count || 0) !== 1) {
+      if (Number(affected) !== 1) {
         const latest = await tx.userTokenBalance.findUnique({
           where: { id: balanceRow.id },
-          select: { balance: true },
+          select: { balance: true, reservedBalance: true },
         })
-        throw new TokenInsufficientBalanceError(tokenCost, Number(latest?.balance || 0))
+        throw new TokenInsufficientBalanceError(
+          tokenCost,
+          Math.max(0, Number(latest?.balance || 0) - Number(latest?.reservedBalance || 0)),
+        )
       }
 
       const updated = await tx.userTokenBalance.findUnique({

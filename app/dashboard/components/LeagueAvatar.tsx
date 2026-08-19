@@ -1,46 +1,27 @@
 'use client'
 
-import { useState } from 'react'
 import type { UserLeague } from '../types'
 import { LeagueTypeIcon } from './LeagueTypeIcon'
-
-function sleeperAvatarSrc(avatarUrl: string | null | undefined): string | null {
-  const u = avatarUrl?.trim()
-  if (!u) return null
-  if (u.startsWith('http://') || u.startsWith('https://') || u.startsWith('/')) return u
-  return `https://sleepercdn.com/avatars/${u}`
-}
+import { resolveLeagueLogoSrc } from '@/lib/dashboard/league-logo-src'
+import { useImageLoadFailed } from '@/hooks/useImageLoadFailed'
 
 export function LeagueAvatar({ league, size = 32 }: { league: UserLeague; size?: number }) {
-  const customLogo = league.logoUrl?.trim()
-  const sleeperUrl = sleeperAvatarSrc(league.avatarUrl ?? null)
-  const [imgError, setImgError] = useState(false)
+  const src = resolveLeagueLogoSrc(league.logoUrl, league.avatarUrl)
+  const { ref, failed, onError } = useImageLoadFailed(src)
 
-  if (customLogo) {
-    const src =
-      customLogo.startsWith('http://') ||
-      customLogo.startsWith('https://') ||
-      customLogo.startsWith('/')
-        ? customLogo
-        : `/${customLogo.replace(/^\/+/, '')}`
+  // Previously the custom-logo branch returned early with no onError at all, so a 404 on a
+  // commissioner-set logoUrl rendered a broken-image glyph with no way to fall through. Both
+  // sources now share one resolver and one failure path — and the hook also catches a failure
+  // that lands before hydration, which a bare onError misses on any server-rendered page.
+  if (src && !failed) {
     return (
       <img
+        ref={ref}
         src={src}
         alt={league.name}
         className="flex-shrink-0 rounded-[8px] object-cover"
         style={{ width: size, height: size }}
-      />
-    )
-  }
-
-  if (sleeperUrl && !imgError) {
-    return (
-      <img
-        src={sleeperUrl}
-        alt={league.name}
-        className="flex-shrink-0 rounded-[8px] object-cover"
-        style={{ width: size, height: size }}
-        onError={() => setImgError(true)}
+        onError={onError}
       />
     )
   }

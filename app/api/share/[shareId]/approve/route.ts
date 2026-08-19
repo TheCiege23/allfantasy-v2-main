@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { toPrismaJsonInput } from '@/lib/prisma-json';
 import {
   autoPublishApprovedShare,
   getSharePublishLogs,
@@ -39,7 +40,7 @@ export async function POST(
 
   await prisma.shareableMoment.update({
     where: { id: shareId },
-    data: { metadata: nextMeta },
+    data: { metadata: toPrismaJsonInput(nextMeta) },
   });
 
   const autoPublishResults = approved

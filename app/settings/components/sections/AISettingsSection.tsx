@@ -95,7 +95,7 @@ export function AISettingsSection() {
             className={clsx(
               'rounded-lg px-3 py-1 text-[11px] font-bold',
               tier === 'af_commissioner' ? 'bg-purple-500/15 text-purple-300' :
-              tier === 'af_pro' ? 'bg-cyan-500/15 text-cyan-300' :
+              tier === 'af_pro' ? 'bg-violet-500/15 text-violet-300' :
               'bg-white/10 text-white/50',
             )}
           >
@@ -114,7 +114,7 @@ export function AISettingsSection() {
 
       {/* AI Pro Features */}
       <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)', background: 'var(--panel2)' }}>
-        <p className="mb-1 text-sm font-semibold text-cyan-300">AF Pro Features</p>
+        <p className="mb-1 text-sm font-semibold text-violet-300">AF Pro Features</p>
         <p className="mb-4 text-xs" style={{ color: 'var(--muted)' }}>Personal AI tools for your teams</p>
 
         {categories.map((cat) => {
@@ -211,7 +211,7 @@ function AIToggleRow({
           disabled={!hasAccess}
           className="peer sr-only"
         />
-        <div className="peer h-5 w-9 rounded-full bg-white/10 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white/40 after:transition-all peer-checked:bg-cyan-500/50 peer-checked:after:translate-x-full peer-checked:after:bg-cyan-200 peer-disabled:cursor-not-allowed peer-disabled:opacity-40" />
+        <div className="peer h-5 w-9 rounded-full bg-white/10 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white/40 after:transition-all peer-checked:bg-violet-500/50 peer-checked:after:translate-x-full peer-checked:after:bg-violet-200 peer-disabled:cursor-not-allowed peer-disabled:opacity-40" />
       </label>
     </div>
   )

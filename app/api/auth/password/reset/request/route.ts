@@ -70,10 +70,29 @@ export async function POST(req: Request) {
       })
       return NextResponse.json({ ok: true }, { status: 200 })
     }
-    const profile = await (prisma as any).userProfile.findUnique({
-      where: { phone },
-      select: { userId: true },
-    }).catch(() => null)
+    let profile: { userId: string } | null = null
+    let profileLookupError: unknown = null
+    try {
+      profile = await (prisma as any).userProfile.findUnique({
+        where: { phone },
+        select: { userId: true },
+      })
+    } catch (error) {
+      profileLookupError = error
+    }
+
+    if (profileLookupError) {
+      console.error("[pw-reset] sms profile lookup failed:", profileLookupError)
+      void logPasswordResetAudit({
+        outcome: "sms_lookup_failed",
+        type: "sms",
+        phone,
+        ip,
+        detail: { error: profileLookupError instanceof Error ? profileLookupError.message : String(profileLookupError) },
+      })
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
+
     if (!profile) {
       void logPasswordResetAudit({
         outcome: "sms_profile_not_found",
@@ -92,9 +111,22 @@ export async function POST(req: Request) {
       where: { userId: profile.userId },
     }).catch(() => {})
 
-    await (prisma as any).passwordResetToken.create({
-      data: { userId: profile.userId, tokenHash, expiresAt },
-    })
+    try {
+      await (prisma as any).passwordResetToken.create({
+        data: { userId: profile.userId, tokenHash, expiresAt },
+      })
+    } catch (error) {
+      console.error("[pw-reset] sms token write failed:", error)
+      void logPasswordResetAudit({
+        outcome: "sms_token_write_failed",
+        type: "sms",
+        userId: profile.userId,
+        phone,
+        ip,
+        detail: { error: error instanceof Error ? error.message : String(error) },
+      })
+      return NextResponse.json({ ok: true }, { status: 200 })
+    }
 
     try {
       const { getTwilioClient } = await import("@/lib/twilio-client")
@@ -146,10 +178,30 @@ export async function POST(req: Request) {
   }
 
   // Look up user in app_users (credentials-based auth — not Supabase Auth)
-  const user = await (prisma as any).appUser.findUnique({
-    where: { email },
-    select: { id: true },
-  }).catch(() => null)
+  let user: { id: string } | null = null
+  let userLookupError: unknown = null
+  try {
+    user = await (prisma as any).appUser.findUnique({
+      where: { email },
+      select: { id: true },
+    })
+  } catch (error) {
+    userLookupError = error
+  }
+
+  if (userLookupError) {
+    // A real DB error (e.g. bad/rotated connection string) must NOT be
+    // reported as "user not found" — that masks outages as missing accounts.
+    console.error("[pw-reset] user lookup failed:", userLookupError)
+    void logPasswordResetAudit({
+      outcome: "email_lookup_failed",
+      type: "email",
+      email,
+      ip,
+      detail: { error: userLookupError instanceof Error ? userLookupError.message : String(userLookupError) },
+    })
+    return NextResponse.json({ ok: true }, { status: 200 })
+  }
 
   if (!user) {
     // Don't reveal whether the email exists
@@ -170,9 +222,23 @@ export async function POST(req: Request) {
     where: { userId: user.id },
   }).catch(() => {})
 
-  const tokenRecord = await (prisma as any).passwordResetToken.create({
-    data: { userId: user.id, tokenHash, expiresAt },
-  })
+  let tokenRecord: { id: string }
+  try {
+    tokenRecord = await (prisma as any).passwordResetToken.create({
+      data: { userId: user.id, tokenHash, expiresAt },
+    })
+  } catch (error) {
+    console.error("[pw-reset] token write failed:", error)
+    void logPasswordResetAudit({
+      outcome: "email_token_write_failed",
+      type: "email",
+      userId: user.id,
+      email,
+      ip,
+      detail: { error: error instanceof Error ? error.message : String(error) },
+    })
+    return NextResponse.json({ ok: true }, { status: 200 })
+  }
 
   const resendApiKey = process.env.RESEND_API_KEY?.trim() || ""
   if (!resendApiKey) {
@@ -278,6 +344,12 @@ export async function POST(req: Request) {
   return NextResponse.json({ ok: true }, { status: 200 })
   } catch (err) {
     console.error("[password/reset/request] unexpected:", err)
+    void logPasswordResetAudit({
+      outcome: "unexpected_error",
+      type: "email",
+      ip: getClientIp(req),
+      detail: { error: err instanceof Error ? err.message : String(err) },
+    })
     return NextResponse.json({ ok: true }, { status: 200 })
   }
 }

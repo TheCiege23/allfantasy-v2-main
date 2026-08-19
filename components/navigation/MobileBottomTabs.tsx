@@ -14,7 +14,7 @@ type BottomTab = {
 const MOBILE_BOTTOM_TABS: BottomTab[] = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/discover/leagues", label: "Leagues", icon: Users },
-  { href: "/war-room", label: "War Room", icon: Swords },
+  { href: "/war-room", label: "AF Legacy", icon: Swords },
   { href: "/ai-chat", label: "Chimmy", icon: Sparkles },
   { href: "/profile", label: "Profile", icon: User },
 ]
@@ -55,11 +55,11 @@ export default function MobileBottomTabs() {
           const active =
             item.label === "Leagues"
               ? isNavItemActive(currentPath, item.href) || LEAGUES_ACTIVE_PREFIXES.some((p) => currentPath.startsWith(p))
-              : item.label === "War Room"
+              : item.label === "AF Legacy"
               ? isNavItemActive(currentPath, item.href) || WAR_ROOM_ACTIVE_PREFIXES.some((p) => currentPath.startsWith(p))
               : isNavItemActive(currentPath, item.href)
           const Icon = item.icon
-          const isWarRoom = item.label === "War Room"
+          const isWarRoom = item.label === "AF Legacy"
           return (
             <Link
               key={item.href}

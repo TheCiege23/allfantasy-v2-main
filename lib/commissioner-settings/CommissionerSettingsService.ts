@@ -6,6 +6,7 @@
 import { prisma } from "@/lib/prisma"
 import type { LeagueSettingsPatch, LeagueConfigurationView } from "./types"
 import { invalidateLeagueDraftCaches } from "@/lib/league/invalidateLeagueDraftCaches"
+import { getPlatformEvents, EVENT } from "@/lib/events"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import type { LeagueSport } from "@prisma/client"
 
@@ -106,5 +107,14 @@ export async function updateLeagueSettings(
   if (rosterOrTemplateTouched) {
     invalidateLeagueDraftCaches(leagueId)
   }
+  // G15.2b — best-effort emit (never throws). Only fires when settings actually changed
+  // (the no-op early return above does not reach here).
+  await getPlatformEvents().emit(EVENT.SETTINGS_CHANGED, {
+    leagueId,
+    actor: { type: 'commissioner' },
+    source: 'service:commissioner-settings',
+    subjects: [{ kind: 'league', id: leagueId }],
+    payload: { leagueId, changedKeys: Object.keys(updates) },
+  })
   return getLeagueConfiguration(leagueId)
 }

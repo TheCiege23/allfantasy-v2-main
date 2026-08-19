@@ -25,6 +25,82 @@
   --warn: #F59E0B;
   --bad: #EF4444;
 
+  /* G22 design foundation tokens: semantic layer every shared component should target. */
+  --surface-app: var(--bg);
+  --surface-card: var(--panel);
+  --surface-card-soft: var(--panel2);
+  --surface-overlay: var(--overlay);
+  --surface-inset: rgba(2,6,23,0.04);
+  --surface-hover: rgba(2,6,23,0.06);
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --text-tertiary: var(--muted2);
+  --text-inverse: #ffffff;
+  --border-subtle: var(--border);
+  --border-strong: rgba(2,6,23,0.18);
+  --color-primary: #2563eb;
+  --color-primary-strong: #1d4ed8;
+  --color-primary-soft: rgba(37,99,235,0.10);
+  --color-secondary: #7c3aed;
+  --color-secondary-soft: rgba(124,58,237,0.10);
+  --color-accent: #0891b2;
+  --color-accent-soft: rgba(8,145,178,0.10);
+  --color-success: #047857;
+  --color-success-soft: rgba(4,120,87,0.10);
+  --color-warning: #b45309;
+  --color-warning-soft: rgba(180,83,9,0.12);
+  --color-danger: #dc2626;
+  --color-danger-soft: rgba(220,38,38,0.10);
+  --color-info: #0e7490;
+  --color-info-soft: rgba(14,116,144,0.10);
+  --color-decision: #7c3aed;
+  --color-decision-soft: rgba(124,58,237,0.10);
+  --color-commissioner: #0f766e;
+  --color-commissioner-soft: rgba(15,118,110,0.10);
+
+  /* Phase 2 mockup token bridge (_design-mocks/*.html) — reuses the existing brand palette above
+     rather than a second, parallel accent system. The mockups are dark-only; these light-mode
+     values are this reconciliation's own derivation, not pixel-matched against a light mockup
+     (none exists) — verify visually once real Phase 2 surfaces render. --panel-2/--border-2/--faint
+     are genuinely new (no existing app equivalent); --bg/--panel/--border/--text/--muted already
+     exist above unchanged. */
+  --panel-2: #F8FAFC;
+  --border-2: rgba(2,6,23,0.16);
+  --faint: rgba(2,6,23,0.38);
+  --purple: var(--color-secondary);
+  --purple-2: #6d28d9;
+  --cyan: var(--color-accent);
+  --blue: var(--color-primary);
+  --green: var(--color-success);
+  --red: var(--color-danger);
+  --amber: var(--color-warning);
+  --orange: #c2410c;
+  --s-cyan: #0e7490;
+  --s-purple: #6d28d9;
+  --s-amber: #92400e;
+  --s-green: #065f46;
+
+  --shadow-card: 0 18px 56px -42px rgba(2,6,23,0.35);
+  --shadow-popover: 0 24px 72px -40px rgba(2,6,23,0.40);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-primary) 28%, transparent);
+  --font-size-caption: 0.75rem;
+  --font-size-body-sm: 0.875rem;
+  --font-size-body: 1rem;
+  --font-size-title-sm: 1.125rem;
+  --font-size-title: 1.375rem;
+  --font-size-display: clamp(2rem, 4vw, 4rem);
+  --line-tight: 1.15;
+  --line-body: 1.55;
+  --line-relaxed: 1.7;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
   --accent-cyan: #0891b2;
   --accent-cyan-strong: #0e7490;
   --accent-emerald: #047857;
@@ -258,6 +334,161 @@
   color: var(--muted2);
 }
 
+.af-surface {
+  background: var(--surface-app);
+  color: var(--text-primary);
+}
+
+.af-card {
+  background: var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.card-premium {
+  background:
+    radial-gradient(circle at 10% 0%, color-mix(in srgb, var(--color-primary) 9%, transparent), transparent 34%),
+    var(--surface-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+}
+
+.af-card-soft {
+  background: var(--surface-card-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+}
+
+.glass-panel {
+  background: color-mix(in srgb, var(--surface-card) 78%, transparent);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(18px);
+}
+
+.af-control {
+  background: var(--surface-card-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+  min-height: 44px;
+}
+
+/* Phase V1.2: same real bug as `.af-focus-ring` below (see its comment) — `box-shadow: var(--focus-ring)`
+   silently failed in light mode. Fixed the same way. Zero current usages of `.af-control` in the
+   codebase, so this is a latent-bug fix, not a behavior change to anything live. */
+.af-control:focus-visible {
+  border-color: var(--color-primary);
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset, 2px);
+}
+
+.af-muted {
+  color: var(--text-secondary);
+}
+
+.af-tertiary {
+  color: var(--text-tertiary);
+}
+
+.af-badge {
+  align-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: var(--font-size-caption);
+  font-weight: 700;
+  gap: var(--space-1);
+  line-height: 1;
+  min-height: 24px;
+  padding: 0 var(--space-2);
+}
+
+.badge-neutral {
+  background: var(--surface-card-soft);
+  border-color: var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.badge-success {
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-success) 28%, var(--border-subtle));
+  color: var(--color-success);
+}
+
+.badge-warning {
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-warning) 30%, var(--border-subtle));
+  color: var(--color-warning);
+}
+
+.badge-danger {
+  background: color-mix(in srgb, var(--color-danger) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-danger) 30%, var(--border-subtle));
+  color: var(--color-danger);
+}
+
+.badge-info {
+  background: color-mix(in srgb, var(--color-info) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-info) 30%, var(--border-subtle));
+  color: var(--color-info);
+}
+
+.badge-decision {
+  background: color-mix(in srgb, var(--color-decision) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-decision) 30%, var(--border-subtle));
+  color: var(--color-decision);
+}
+
+.badge-commissioner {
+  background: color-mix(in srgb, var(--color-commissioner) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-commissioner) 30%, var(--border-subtle));
+  color: var(--color-commissioner);
+}
+
+.af-button-primary {
+  background: var(--color-primary);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 88%, var(--border-subtle));
+  border-radius: 12px;
+  color: var(--text-inverse);
+  box-shadow: 0 12px 30px -22px var(--color-primary);
+}
+
+.af-button-primary:hover {
+  background: var(--color-primary-strong);
+}
+
+.af-button-secondary {
+  background: var(--surface-card-soft);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  color: var(--text-primary);
+}
+
+.af-button-secondary:hover {
+  background: var(--surface-hover);
+}
+
+/* Phase V1.2: was `box-shadow: var(--focus-ring)` — real bug, verified live. A second, later `:root`
+   block (below) redefines `--focus-ring` to an outline-shorthand value (`2px solid rgba(...)`), which is
+   invalid syntax for `box-shadow` and silently computes to `none`. That later value is the one that
+   actually wins in the app's default light theme (both blocks are bare `:root`, same specificity, later
+   source wins) — confirmed by creating a real focused element and reading its computed `box-shadow`
+   (`"none"`). Fixed by matching `outline`, the value shape `--focus-ring` is actually defined as today.
+   `.focus-ring:focus-visible` (a separate, already-adopted class, 20+ existing usages) already used this
+   correct shape and was never affected. */
+.af-focus-ring:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-ring-offset, 2px);
+}
+
 .af-dashboard-topbar {
   /* Dashboard V2 Phase 3.9A — the dashboard is a deliberately dark "command center"
      (its body/cards are fixed-dark in every app theme). Re-scope the dark-mode design
@@ -304,21 +535,24 @@
      the Dashboard V2 command-center pattern). Re-scope the dark-mode design
      tokens so text/border/panel values inside this class resolve to their dark
      values in every app theme, preventing washed-out labels in the "Claro"
-     light theme. Same pattern as `.af-dashboard-topbar` (Phase 3.9A). */
-  --bg: #020617;
-  --panel: #0a0a0a;
-  --panel2: #141414;
-  --border: rgba(255, 255, 255, 0.1);
-  --text: rgba(255, 255, 255, 0.92);
-  --muted: rgba(255, 255, 255, 0.68);
-  --muted2: rgba(255, 255, 255, 0.48);
-  --accent: #22d3ee;
-  --accent-cyan: #67e8f9;
-  --accent-cyan-strong: #22d3ee;
+     light theme. Same pattern as `.af-dashboard-topbar` (Phase 3.9A).
+     Aug 2026: retuned to the Broadcast Deck palette (same tokens as the
+     Nocturne dashboard) — #0b0e2a ground, #12163e surfaces, #262c6a borders,
+     pink→orange gradient accents. */
+  --bg: #0b0e2a;
+  --panel: #12163e;
+  --panel2: #171c4d;
+  --border: #262c6a;
+  --text: #f0f2ff;
+  --muted: #c6cbf5;
+  --muted2: #8a91c9;
+  --accent: #ff3d81;
+  --accent-cyan: #ff3d81;
+  --accent-cyan-strong: #ff8a3d;
   --accent-emerald: #6ee7b7;
   --accent-emerald-strong: #34d399;
   --subtle-bg: rgba(255, 255, 255, 0.1);
-  --badge-text-cyan: #a5f3fc;
+  --badge-text-cyan: #ff9ec0;
   --badge-text-emerald: #a7f3d0;
   color-scheme: dark;
 }
@@ -585,6 +819,60 @@ html[data-mode="dark"] {
   --muted2: rgba(255,255,255,0.48);
   --accent: #7C3AED;
 
+  /* Phase 2 mockup token bridge — real values from _design-mocks/*.html's own dark :root (the
+     mockups' only rendered mode). --bg/--panel/--border/--text/--muted above are the app's existing
+     tokens, unchanged; --panel-2/--border-2/--faint are genuinely new. */
+  --panel-2: rgba(255,255,255,0.05);
+  --border-2: rgba(255,255,255,0.12);
+  --faint: rgba(255,255,255,0.38);
+  --purple: #8b5cf6;
+  --purple-2: #7c3aed;
+  --cyan: #22d3ee;
+  --blue: #2b8fff;
+  --green: #34d399;
+  --red: #f87171;
+  --amber: #fbbf24;
+  --orange: #fb923c;
+  --s-cyan: #0891b2;
+  --s-purple: #8b5cf6;
+  --s-amber: #d97706;
+  --s-green: #059669;
+
+  --surface-app: var(--bg);
+  --surface-card: var(--panel);
+  --surface-card-soft: var(--panel2);
+  --surface-overlay: var(--overlay);
+  --surface-inset: rgba(255,255,255,0.04);
+  --surface-hover: rgba(255,255,255,0.07);
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --text-tertiary: var(--muted2);
+  --text-inverse: #020617;
+  --border-subtle: var(--border);
+  --border-strong: rgba(255,255,255,0.20);
+  --color-primary: #67e8f9;
+  --color-primary-strong: #22d3ee;
+  --color-primary-soft: rgba(103,232,249,0.14);
+  --color-secondary: #c084fc;
+  --color-secondary-soft: rgba(192,132,252,0.14);
+  --color-accent: #22d3ee;
+  --color-accent-soft: rgba(34,211,238,0.14);
+  --color-success: #6ee7b7;
+  --color-success-soft: rgba(110,231,183,0.14);
+  --color-warning: #fcd34d;
+  --color-warning-soft: rgba(252,211,77,0.14);
+  --color-danger: #fca5a5;
+  --color-danger-soft: rgba(252,165,165,0.14);
+  --color-info: #67e8f9;
+  --color-info-soft: rgba(103,232,249,0.14);
+  --color-decision: #c084fc;
+  --color-decision-soft: rgba(192,132,252,0.14);
+  --color-commissioner: #5eead4;
+  --color-commissioner-soft: rgba(94,234,212,0.14);
+  --shadow-card: 0 20px 70px -44px rgba(0,0,0,0.85);
+  --shadow-popover: 0 28px 90px -44px rgba(0,0,0,0.88);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-primary) 34%, transparent);
+
   --accent-cyan: #67e8f9;
   --accent-cyan-strong: #22d3ee;
   --accent-emerald: #6ee7b7;
@@ -622,6 +910,41 @@ html[data-mode="legacy"] {
   --muted: rgba(255,255,255,0.67);
   --muted2: rgba(255,255,255,0.50);
   --accent: #10B981;
+
+  --surface-app: var(--bg);
+  --surface-card: var(--panel);
+  --surface-card-soft: var(--panel2);
+  --surface-overlay: var(--overlay);
+  --surface-inset: rgba(255,255,255,0.05);
+  --surface-hover: rgba(255,255,255,0.08);
+  --text-primary: var(--text);
+  --text-secondary: var(--muted);
+  --text-tertiary: var(--muted2);
+  --text-inverse: #110B1E;
+  --border-subtle: var(--border);
+  --border-strong: rgba(139,92,246,0.30);
+  --color-primary: #5eead4;
+  --color-primary-strong: #14b8a6;
+  --color-primary-soft: rgba(94,234,212,0.14);
+  --color-secondary: #a78bfa;
+  --color-secondary-soft: rgba(167,139,250,0.14);
+  --color-accent: #5eead4;
+  --color-accent-soft: rgba(94,234,212,0.14);
+  --color-success: #6ee7b7;
+  --color-success-soft: rgba(110,231,183,0.14);
+  --color-warning: #fcd34d;
+  --color-warning-soft: rgba(252,211,77,0.14);
+  --color-danger: #fca5a5;
+  --color-danger-soft: rgba(252,165,165,0.14);
+  --color-info: #5eead4;
+  --color-info-soft: rgba(94,234,212,0.14);
+  --color-decision: #a78bfa;
+  --color-decision-soft: rgba(167,139,250,0.14);
+  --color-commissioner: #5eead4;
+  --color-commissioner-soft: rgba(94,234,212,0.14);
+  --shadow-card: 0 20px 70px -44px rgba(0,0,0,0.82);
+  --shadow-popover: 0 28px 90px -44px rgba(0,0,0,0.88);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--color-primary) 34%, transparent);
 
   --accent-cyan: #5eead4;
   --accent-cyan-strong: #14b8a6;

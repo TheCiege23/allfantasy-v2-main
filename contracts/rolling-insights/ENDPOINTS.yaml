@@ -1,0 +1,495 @@
+--- # ============================================================================
+# Rolling Insights DataFeeds — API Contract
+# NORMATIVE. Do not probe the live API to rediscover any of this.
+# Source: vendor Notion docs + official agent-skill repo (production branch)
+# Captured: 2026-08-16
+# ============================================================================
+
+meta:
+  vendor: Rolling Insights (Rolling Wave Consulting Inc., Calgary, Alberta, Canada)
+  base_url: https://rest.datafeeds.rolling-insights.com/api/v1
+  base_url_env: ROLLING_INSIGHTS_BASE_URL
+  contract_version: 1.0.0
+  captured_at: 2026-08-16
+  skill_repo: github.com/Rolling-Insights/sports-datafeeds-by-rolling-insights-skill
+  skill_repo_branch: production   # NOT main
+  governing_law: Alberta, Canada
+
+  # Vendor self-describes as an UNOFFICIAL, MEDIUM-LATENCY provider that collects
+  # from public sources. Not an official league feed. Fine for fantasy; NOT
+  # suitable for regulated sports-betting data requirements.
+  data_classification: unofficial_medium_latency
+  sla: none   # ToS explicitly disclaims data accuracy and all performance warranties
+
+# ============================================================================
+auth:
+  mechanism: query_parameter
+  param_name: RSC_token          # exact casing; case-sensitive
+  env_var: RSC_TOKEN
+  header_alternative: none       # there is NO Bearer/Authorization option
+  https_required: true           # vendor: "Never use http://"
+
+  security_rules:
+    - RSC_token MUST be redacted in every log, error message, and trace.
+    - RSC_token MUST NOT reach any browser/client. Server-side only.
+    - Rotate at accounts.rolling-insights.com on suspected exposure.
+    - Never echo full request URLs.
+
+# ============================================================================
+transport:
+  # -------------------------------------------------------------------------
+  # ⚠️ THE 304 RULE — most important operational detail in this contract
+  # -------------------------------------------------------------------------
+  # 304 is NOT a "nothing changed" success signal. The vendor's own guidance:
+  #   "Treat 304 as a cache problem, not a success."
+  # It originates from intermediary caching, not a designed conditional-GET
+  # protocol. There is NO reliable ETag / update-marker contract.
+  # DO NOT build change detection on 304. Poll with cache-busting and diff
+  # payloads yourself.
+  # -------------------------------------------------------------------------
+  required_live_headers:
+    Accept: application/json
+    Cache-Control: "no-cache, no-store"
+    Pragma: no-cache
+
+  cache_buster:
+    param: "_"
+    value: epoch_milliseconds     # ms precision REQUIRED for sub-second polling
+    applies_to: ALL endpoints      # vendor scripts add it universally, not just /live
+    note: >
+      Seconds-precision busters will NOT defeat caching on sub-second polls.
+      Use int(time.time() * 1000).
+
+  status_codes:
+    200: Valid JSON response.
+    304: Cache/validation artifact. Retry ONCE with a fresh cache-buster. Not success.
+    404: Bad request, wrong path, or unsupported sport/endpoint combination.
+    other: Invalid dates often surface as plain-text (non-JSON) error bodies.
+
+  rate_limit:
+    documented_hard_limit: none
+    vendor_recommendation_seconds: 5   # "at least a 5-10 second delay between calls"
+    our_gameday_cadence_seconds: 35    # well above the floor; see INTEGRATION.md
+    note: Vendor markets "no hidden rate limits". No documented 429.
+
+  stat_corrections:
+    reprocess_window_hours: 12   # corrections re-run for ~12h AFTER game ends
+    implication: Final stats are NOT immutable at the whistle. Reconcile pass required.
+
+# ============================================================================
+envelope:
+  # Standard shape:
+  #   { "data": { "<KEY>": [ ... ] } }
+  wrapper_key: data
+  value_type: array               # array even for single-game game_id queries
+
+  key_resolution:
+    default: "<SPORT_CODE>"       # data.NFL, data.NBA, data.MLB, data.NHL, ...
+    SOCCER: "<LEAGUE_CODE>"       # ⚠️ data.EPL / data.LALIGA / data.SERIEA
+
+  # ⚠️ HIGHEST-RISK PARSING TRAP IN THE API
+  soccer_trap: >
+    You request the path segment SOCCER with ?league=EPL, but the response is keyed
+    data.EPL — NOT data.SOCCER. A parser that keys off the request path will silently
+    return empty for all soccer.
+
+  parsing_rules:
+    - Inspect `data` first, then resolve the sport/league key.
+    - Verify the value is an array before indexing.
+    - Map only fields that exist. Expect nulls, empty arrays, reduced detail.
+    - Do NOT force one schema across sports.
+    - Parse defensively PER ENDPOINT, not per sport (field names differ by endpoint).
+
+  known_inconsistencies:
+    - id: request_vs_response_id_casing
+      detail: "Request param is `game_id` (lowercase). Response field is `game_ID`."
+      also: "player_ID, team_ID, tournament_ID in responses."
+    - id: team_name_field_varies_by_endpoint
+      detail: >
+        NBA /schedule shows home_team / away_team as plain strings.
+        NBA /live shows full_box.home_team.name as a nested object.
+        Vendor docs elsewhere reference home_team_name / away_team_name.
+        All three may be real on different endpoints. Handle per-endpoint.
+    - id: status_vs_game_status
+      detail: >
+        Vendor prose says use `game_status` as primary live-state string for NBA,
+        but every JSON example uses `status`. SUPPORT BOTH.
+
+# ============================================================================
+sports:
+  # SPORT codes are CASE-SENSITIVE, no spaces, no underscores.
+  codes: [NHL, NBA, NFL, MLB, NCAABB, NCAAFB, SOCCER, DARTS, PGA]
+
+  normalization:
+    # Normalize user input BEFORE building a URL.
+    "NCAA FB":  NCAAFB
+    "NCAA_FB":  NCAAFB
+    "NCAAF":    NCAAFB
+    "CFB":      NCAAFB
+    "NCAA BB":  NCAABB
+    "NCAA_BB":  NCAABB
+    "NCAAB":    NCAABB
+    "EPL":      { sport: SOCCER, league: EPL }
+    "LALIGA":   { sport: SOCCER, league: LALIGA }
+    "SERIEA":   { sport: SOCCER, league: SERIEA }
+
+  soccer_leagues: [EPL, LALIGA, SERIEA]
+  soccer_league_param_required: true
+
+  # ⚠️ NOT COVERED by this vendor — do not plan features around these:
+  not_covered: [BUNDESLIGA, LIGUE1, CHAMPIONS_LEAGUE, UEFA, MLS]
+
+# ============================================================================
+# ENDPOINT × SPORT SUPPORT MATRIX
+# "false" = not documented by vendor. Vendor instructs agents NOT to call these.
+# NOTE: undocumented != guaranteed 404. See GAPS.md before hard-coding absence.
+# ============================================================================
+support_matrix:
+  schedule:        { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: true,  DARTS: true,  PGA: true  }
+  schedule_week:   { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: true,  DARTS: true,  PGA: true  }
+  schedule_season: { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: true,  DARTS: true,  PGA: true  }
+  live:            { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: true,  DARTS: true,  PGA: true  }
+  play_by_play:    { MLB: true,  NFL: true,  NBA: true,  NHL: false, NCAABB: false, NCAAFB: false, SOCCER: false, DARTS: false, PGA: false }
+  team_info:       { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: true,  DARTS: false, PGA: false }
+  team_stats:      { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: true,  DARTS: false, PGA: false }
+  player_info:     { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: true,  DARTS: true,  PGA: true  }
+  player_stats:    { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: true,  NCAAFB: true,  SOCCER: false, DARTS: true,  PGA: true  }
+  injuries:        { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: false, NCAAFB: false, SOCCER: false, DARTS: false, PGA: false }
+  depth_charts:    { MLB: true,  NFL: true,  NBA: true,  NHL: true,  NCAABB: false, NCAAFB: false, SOCCER: false, DARTS: false, PGA: false }
+  events:          { DARTS: true }   # DARTS only
+  field:           { PGA: true }     # PGA only
+
+# Consequences that materially affect product scope:
+support_consequences:
+  - >
+    NCAAFB has NO play-by-play. College-football big-play alerts must be derived by
+    diffing the /live box score, which detects only the FIRST big play per player per
+    game (see INTEGRATION.md §5). For complete CFB play-level data, use
+    CollegeFootballData ($5-30/mo, commercial use explicitly permitted).
+  - >
+    NCAAFB and NCAABB have NO injuries endpoint. College injury data must come from
+    another source or be omitted with an explicit "not available" flag.
+  - NHL has NO play-by-play. Same box-score-diff limitation as NCAAFB.
+  - SOCCER has NO player season stats and NO injuries.
+  - There are NO odds and NO projection endpoints for any sport.
+  - >
+    Fantasy points appear as FIELDS inside football payloads (DK_fantasy_points,
+    DK_fantasy_points_per_game). There is no fantasy endpoint. These are DraftKings
+    scoring only — useless for custom league settings. Score from raw stats instead.
+
+# ============================================================================
+endpoints:
+
+  schedule:
+    method: GET
+    path: /schedule/{date}/{SPORT}
+    path_params:
+      date:  { format: "YYYY-MM-DD" }
+      SPORT: { enum_ref: sports.codes }
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+      game_id:   { required: false }
+      league:    { required_for: [SOCCER] }
+    purpose: Event discovery, game IDs, start times, basic status.
+    use_first: true   # Call this before /live or /play-by-play if you lack a game_id.
+
+  schedule_week:
+    method: GET
+    path: /schedule-week/{date}/{SPORT}
+    path_params:
+      date: { format: "YYYY-MM-DD" }
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+      league:    { required_for: [SOCCER] }
+
+  schedule_season:
+    method: GET
+    path: /schedule-season/{season}/{SPORT}
+    path_params:
+      season: { format: "YYYY", note: "Year the season STARTED. Bare year, not a date." }
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+      league:    { required_for: [SOCCER] }
+
+  live:
+    method: GET
+    path: /live/{date}/{SPORT}
+    path_params:
+      date: { format: "YYYY-MM-DD" }
+    query_params:
+      RSC_token: { required: true }
+      _:         { required: true, value: epoch_ms, note: "cache buster" }
+      team_id:   { required: false }
+      game_id:   { required: false }
+      league:    { required_for: [SOCCER] }
+    required_headers: [Cache-Control, Pragma]
+    purpose: Live scores, current box state, player box lines.
+    notes:
+      - This is the PRIMARY game-day endpoint. Player-level box stats live here.
+      - Returns started AND finished events for the given date.
+      - 304 => retry once with fresh buster.
+
+  play_by_play:
+    method: GET
+    path: /play-by-play/{SPORT}
+    supported_sports: [MLB, NBA, NFL]
+    query_params:
+      RSC_token: { required: true }
+      game_id:   { required: true }
+      _:         { required: false, value: epoch_ms }
+    notes:
+      - Parse as an EVENT SEQUENCE, not a box score.
+      - Requires game_id from /schedule or /live first.
+      - Do NOT substitute /live if asked whether PBP exists for an unsupported sport.
+
+  team_info:
+    method: GET
+    path: /team-info/{SPORT}
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+      league:    { required_for: [SOCCER] }
+      relegated: { required: false, applies_to: [SOCCER], enum: [TRUE, FALSE] }
+
+  team_stats:
+    method: GET
+    path: /team-stats/{season}/{SPORT}
+    path_params:
+      season: { format: "YYYY", note: "Year season started." }
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+      league:    { required_for: [SOCCER] }
+    seasonless_variant: /team-stats/{SPORT}   # only where vendor docs show it
+
+  player_info:
+    method: GET
+    path: /player-info/{SPORT}
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+      player_id: { required: false }
+      league:    { required_for: [SOCCER] }
+
+  player_stats:
+    method: GET
+    path: /player-stats/{season}/{SPORT}
+    path_params:
+      season: { format: "YYYY", note: "Year season started." }
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+      player_id: { required: false }
+    seasonless_variant: /player-stats/{SPORT}
+    seasonless_default_sports: [PGA, DARTS]   # PGA is the only documented default
+
+  injuries:
+    method: GET
+    path: /injuries/{SPORT}
+    supported_sports: [MLB, NFL, NBA, NHL]
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+
+  depth_charts:
+    method: GET
+    path: /depth-charts/{SPORT}
+    supported_sports: [MLB, NFL, NBA, NHL]
+    query_params:
+      RSC_token: { required: true }
+      team_id:   { required: false }
+
+  events:
+    method: GET
+    path: /events/{date}/{SPORT}
+    supported_sports: [DARTS]
+    query_params:
+      RSC_token: { required: true }
+      event_id:  { required: false }
+
+  field:
+    method: GET
+    path: /field/{SPORT}
+    supported_sports: [PGA]
+    query_params:
+      RSC_token: { required: true }
+      game_id:   { required: true, format: "YYYY_N" }
+
+# ============================================================================
+identifiers:
+  game_id:
+    MLB:    { format: "YYYYMMDD-{n}-{n}", examples: ["20250724-9-8"] }
+    NBA:    { format: "YYYYMMDD-{n}-{n}", examples: ["20260412-1-2", "20260516-14-13"] }
+    NFL:    { format: "YYYYMMDD-{n}-{n}", examples: ["20251009-32-21", "20230811-11-26"] }
+    PGA:    { format: "YYYY_N",           examples: ["2026_1", "2026_19"] }
+    DARTS:  { param: event_id, format: opaque, examples: ["202304PL10"] }
+    NHL:    { format: unknown }   # see GAPS.md
+    NCAAFB: { format: unknown }   # see GAPS.md
+    NCAABB: { format: unknown }   # see GAPS.md
+    SOCCER: { format: unknown }   # see GAPS.md
+    # ⚠️ The two numeric segments are team IDs, but which is home vs away is
+    # NOT documented. One weak sample suggests {home}-{away}. VERIFY before relying.
+    home_away_order: unverified
+
+  season_arg:
+    rule: Always the year the season STARTED.
+    examples:
+      - "2025-26 NHL/NBA season -> 2025"
+      - "2024-25 EPL season     -> 2024"
+      - "2025 MLB season        -> 2025"
+
+# ============================================================================
+# FIELD DICTIONARIES
+# NFL is well documented. Others are NOT — see GAPS.md.
+# ============================================================================
+fields:
+  NFL:
+    source: vendor Notion NFL doc
+    confidence: high
+    live_player:
+      identity: [player, player_id, status, position, position_category]
+      passing:  [completions, passing_attempts, passing_yards, passing_touchdowns,
+                 passing_interceptions, passer_rating]
+      rushing:  [rushing_attempts, rushing_yards, rushing_touchdowns, rushing_long]
+      misc:     [fumbles_lost, forced_fumbles]
+      fantasy:  [DK_fantasy_points]   # DraftKings scoring ONLY — do not use
+    live_team:
+      identity: [abbrv, mascot, record, division_name]
+      scoring:  [score, offense_touchdowns, passing_touchdowns, rushing_touchdowns,
+                 special_teams_touchdowns]
+      offense:  [total_plays, total_yards, passing_yards, rushing_yards, first_downs,
+                 turnovers, snap_count]
+      defense:  [sacks, safeties, defense_touchdowns, defense_interceptions,
+                 defense_fumble_recoveries, forced_fumbles,
+                 total_passing_yards_allowed, total_rushing_yards_allowed,
+                 points_against_defense_special_teams]
+      special_teams: [kick_return_touchdowns, punt_return_touchdowns,
+                      blocked_kick_touchdowns, blocked_punt_touchdowns,
+                      interception_touchdowns, fumble_return_touchdowns,
+                      field_goal_return_touchdowns, blocked_kicks, blocked_punts,
+                      kicks_blocked, punts_blocked]
+      two_point: [two_point_conversion_attempts, two_point_conversion_succeeded,
+                  two_point_conversion_returns]
+      penalties: ["penalties.total", "penalties.yards"]
+    game_state:
+      status:      [scheduled, delayed, postponed, suspended, canceled, inprogress, final, completed]
+      season_type: [Preseason, "Regular Season", "WILD CARD", "DIV RD", "CONF CHAMP", "SUPER BOWL"]
+      event_name:  [null, "Wild Card", "Divisional Round", "Championship", "Super Bowl"]
+      round:       [null, 1, 2, 3, 4]
+      game_status: ["<game time>", "<Time Quarter>", Final, "Final OT"]
+    injuries:
+      fields: [player, player_id, injury, date_injured, returns]
+      returns_values: ["Week To Week", "Out For Season"]
+      note: >
+        No practice-participation granularity (DNP/Limited/Full). For the official
+        Wed/Thu/Fri practice grid, parse NFL.com injury reports separately.
+
+  NBA:
+    confidence: low   # partial hints only
+    live: [game_ID, status, game_status, home_team_name, away_team_name,
+           "full_box.home_team.score", "full_box.away_team.score", game_time, clock]
+
+  MLB:
+    confidence: low
+    schedule: [game_ID, season_type, season, game_time, home_team, away_team,
+               "home_pitcher.player", "away_pitcher.player"]
+    play_by_play: [game_ID, "innings[].inning", "innings[].half",
+                   "innings[].events[].seq", "innings[].events[].type",
+                   "innings[].events[].batter", "innings[].events[].description",
+                   "innings[].events[].score_home", "innings[].events[].score_away",
+                   "innings[].events[].leverage_index"]
+
+  SOCCER:
+    confidence: very_low
+    team_stats: [team_ID, name, played, wins, draws, losses, points]
+    live: unknown   # see GAPS.md
+
+  NHL:    { confidence: none, live: unknown }   # see GAPS.md
+  NCAAFB: { confidence: none, live: unknown }   # see GAPS.md
+  NCAABB: { confidence: none, live: unknown }   # see GAPS.md
+
+# ============================================================================
+commercial:
+  commercial_use_permitted: true
+  verbatim_grant: >
+    "This licence includes the right to use the DataFeeds data outputs for internal
+    and commercial purposes." (ToS §12, PAID SERVICES)
+
+  restrictions:
+    - Do not resell/redistribute API ACCESS. Using data outputs in your product is fine.
+    - >
+      ⚠️ "may not access or use the Paid Services to build or support or assist a third
+      party in ... products or services competitive to ours." Rolling Insights sells
+      SportWise, a consumer fantasy analytics product. A competing fantasy analytics
+      product could arguably fall under this clause. GET WRITTEN CONFIRMATION before
+      committing. This is the single largest legal unknown.
+    - Licence is REVOCABLE and terminates on non-payment.
+    - Data provided "as is". Vendor does NOT warrant accuracy or absence of errors.
+    - Liability capped at 12 months of fees paid. No SLA.
+
+  pricing_monthly:
+    # Tiers are CUMULATIVE (Live includes Post + Pre) and ADDITIVE PER SPORT.
+    NFL:    { pre_game: 100, post_game: 350, live_feed: 600 }
+    NBA:    { pre_game: 100, post_game: 350, live_feed: 600 }
+    MLB:    { pre_game: 100, post_game: 350, live_feed: 600 }
+    SOCCER: { pre_game: 100, post_game: 350, live_feed: 600 }
+    DARTS:  { pre_game: 100, post_game: 350, live_feed: 600 }
+    NHL:    { pre_game: 100, post_game: 300, live_feed: 400 }
+    NCAAFB: { pre_game: 100, post_game: 300, live_feed: 400 }
+    NCAABB: { pre_game: 100, post_game: 300, live_feed: 400 }
+    PGA:    { pre_game: 100, post_game: 300, live_feed: 400 }
+
+  cost_scenarios:
+    # ⚠️ Additive per sport. This is the budget headline.
+    nfl_only_live:              600
+    nfl_ncaafb_live:            1000
+    all_six_requested_live:     3200   # NFL+NBA+NHL+MLB+NCAAFB+NCAABB
+    all_six_plus_soccer_live:   3800
+  billing:
+    contracts: none  # month-to-month
+    trial: "30 days, fully functional, no credit card"
+    spread: Billed monthly across 12 months including offseason.
+    terms: Net 30, 1%/mo on overdue, non-refundable by default.
+
+  discount_program:
+    name: Breakaway Accelerator
+    url: https://rolling-insights.com/breakaway-accelerator/
+    from_monthly: 60
+    note: >
+      ⚠️ HIGHEST-LEVERAGE ACTION. $60/mo vs $3,800/mo list is decisive for an
+      MVP. One-year program. Apply before paying list price.
+
+# ============================================================================
+open_questions:
+  # Append here rather than probing. Mirrored in GAPS.md.
+  - id: soccer_live_fields
+    question: What fields does /live return for SOCCER? Response key is data.{LEAGUE}.
+    blocking: soccer live scoring
+  - id: nhl_ncaa_live_fields
+    question: Field names for NHL / NCAAFB / NCAABB live payloads.
+    blocking: multi-sport scoring engine
+  - id: game_id_formats
+    question: game_id format for NHL, NCAAFB, NCAABB, SOCCER.
+    blocking: per-game polling
+  - id: home_away_order
+    question: In "YYYYMMDD-{n}-{n}", is the first number home or away?
+    blocking: matchup display correctness
+  - id: ncaa_injuries_real_404
+    question: >
+      Are NCAAFB/NCAABB injuries genuinely absent, or merely undocumented?
+      Vendor instructs agents not to call them — that's policy, not a 404 guarantee.
+    blocking: college injury feature scope
+  - id: rs_data_type_header
+    question: >
+      Notion docs mention RS-DATA-TYPE response header (LIVE-DATA, INJURY-REPORTS).
+      The skill repo documents NO custom response headers. Does it exist?
+    blocking: nothing (do not depend on it)
+  - id: competitive_clause
+    question: Does a commercial fantasy analytics product trigger the ToS "competitive to ours" clause?
+    blocking: LEGAL — resolve before launch
+  - id: live_latency
+    question: Actual observed latency behind broadcast. Vendor says "medium-latency", unquantified.
+    blocking: UX expectations for big-play alerts

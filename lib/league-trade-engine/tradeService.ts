@@ -18,6 +18,7 @@ import type { CreateLeagueTradeInput, TradeAssetInput } from '@/lib/league-trade
 import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTransactionGates'
 import { ENGAGEMENT } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
+import { captureLiveTradeOffer, captureLiveTradeOutcome } from '@/lib/league-trade-engine/tradeLearningCapture'
 
 async function fanout(leagueId: string, input: {
   eventType: string
@@ -141,6 +142,18 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
     afterState: { status: 'pending' },
   })
 
+  // Trade Learning Phase 8 live capture (docs/TRADE_LEARNING_CAPTURE_ARCHITECTURE_ADR.md):
+  // logs this real proposal's acceptance-probability prediction. Fails safe —
+  // never throws, never blocks trade creation.
+  await captureLiveTradeOffer({
+    tradeId: trade.id,
+    leagueId: input.leagueId,
+    proposerRosterId: input.proposerRosterId,
+    receiverRosterId: input.receiverRosterId,
+    items: input.assets,
+    league,
+  })
+
   if (input.parentTradeId && parent) {
     await prisma.afLeagueTrade.update({
       where: { id: parent.id },
@@ -153,6 +166,7 @@ export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { curr
       actorUserId: input.proposedByUserId,
       reason: 'counter_offer',
     })
+    await captureLiveTradeOutcome({ tradeId: parent.id, leagueId: input.leagueId, status: 'countered' })
   }
 
   await fanout(input.leagueId, {
@@ -349,6 +363,11 @@ export async function finalizeAfLeagueTradeProcessing(input: { tradeId: string; 
     })
   })
 
+  // Trade Learning Phase 8 live capture — outside the transaction per the
+  // ADR's behavior-preservation strategy (a capture failure must never roll
+  // back an already-successful trade). Fails safe, never throws.
+  await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: trade.leagueId, status: 'processed' })
+
   recordProductEvent(ENGAGEMENT.TRADE_PROCESSED, {
     userId: input.actorUserId,
     meta: { leagueId: trade.leagueId, tradeId: trade.id, itemCount: trade.items.length },
@@ -391,6 +410,7 @@ export async function commissionerAfTradeDecision(input: {
       actorUserId: input.userId,
       reason: 'commissioner_reject',
     })
+    await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
     return
   }
 
@@ -422,6 +442,7 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
     actorUserId: input.userId,
     reason: 'rejected',
   })
+  await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
 }
 
 export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {
@@ -447,6 +468,7 @@ export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: st
     toStatus: 'cancelled',
     actorUserId: input.userId,
   })
+  await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'cancelled' })
 }
 
 export async function castAfTradeVetoVote(input: {
@@ -500,6 +522,7 @@ export async function castAfTradeVetoVote(input: {
       actorUserId: input.userId,
       reason: 'veto_threshold',
     })
+    await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'vetoed' })
   }
 }
 

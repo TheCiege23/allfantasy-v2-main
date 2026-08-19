@@ -62,7 +62,7 @@ export default function WarRoomMetaWidget(props: {
   if (loading) {
     return (
       <div className={shell}>
-        <h3 className={titleCls}>War Room meta</h3>
+        <h3 className={titleCls}>AF Legacy meta</h3>
         <p className={embed ? "mt-2 text-xs text-white/45" : "mt-2 text-xs text-slate-500"}>Loading…</p>
       </div>
     )
@@ -70,7 +70,7 @@ export default function WarRoomMetaWidget(props: {
   if (error) {
     return (
       <div className={shell}>
-        <h3 className={titleCls}>War Room meta</h3>
+        <h3 className={titleCls}>AF Legacy meta</h3>
         <p className={embed ? "mt-2 text-xs text-rose-400/90" : "mt-2 text-xs text-red-500"}>{error}</p>
       </div>
     )
@@ -78,7 +78,7 @@ export default function WarRoomMetaWidget(props: {
 
   return (
     <div className={shell} data-variant={variant}>
-      <h3 className={titleCls}>War Room meta</h3>
+      <h3 className={titleCls}>AF Legacy meta</h3>
       <p className={subCls}>Live insights for drafts</p>
       <div className="mt-3 space-y-3">
         <div>

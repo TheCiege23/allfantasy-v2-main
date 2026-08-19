@@ -576,7 +576,7 @@ export function LeagueSettingsPanel({
             >
               <div className="flex flex-wrap items-center gap-2">
                 <p className="text-[11px] text-amber-400/90">
-                  AF Commissioner subscription unlocks AI keeper recommendations (server-gated).
+                  AF Commissioner unlocks keeper Commissioner Intelligence recommendations (server-gated).
                 </p>
                 <SubscriptionGateBadge
                   featureId="commissioner_ai_tools"

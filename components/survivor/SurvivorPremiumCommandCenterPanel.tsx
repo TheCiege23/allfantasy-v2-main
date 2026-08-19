@@ -114,7 +114,7 @@ export function SurvivorPremiumCommandCenterPanel({
         <p className="text-sm leading-relaxed text-white/55">
           Player lens unlocks with <span className="text-emerald-200/90">AF Pro</span>. Host automation and fairness
           tools unlock with <span className="text-amber-100/90">AF Commissioner</span>. Full combined story + controls
-          unlock with <span className="text-violet-200/90">AF Supreme</span> (All-Access bundle or Pro + Commissioner
+          unlock with <span className="text-violet-200/90">AF Supreme</span> (Pro + Commissioner + Legacy
           class access).
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -165,7 +165,7 @@ export function SurvivorPremiumCommandCenterPanel({
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <WarRoomPanel title="Player AI · token costs" subtitle="1 / 2 / 3 AF Tokens — requires AF Pro (or Supreme).">
+        <WarRoomPanel title="Player actions · token costs" subtitle="1 / 2 / 3 AF Tokens — requires AF Pro (or Supreme).">
           <ul className="max-h-64 space-y-2 overflow-y-auto pr-1 text-[12px] text-white/65">
             {playerActions.map((a) => (
               <li
@@ -178,7 +178,7 @@ export function SurvivorPremiumCommandCenterPanel({
             ))}
           </ul>
         </WarRoomPanel>
-        <WarRoomPanel title="Host / commissioner AI · token costs" subtitle="Requires AF Commissioner (or Supreme).">
+        <WarRoomPanel title="Host / commissioner actions · token costs" subtitle="Requires AF Commissioner (or Supreme).">
           <ul className="max-h-64 space-y-2 overflow-y-auto pr-1 text-[12px] text-white/65">
             {hostActions.map((a) => (
               <li

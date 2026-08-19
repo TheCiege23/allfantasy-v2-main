@@ -1,6 +1,7 @@
 import type { LeagueSport } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { RetiredConceptError, checkRetiredConcept } from '@/lib/league-creation/retiredConcepts'
 import { runPostCreateInitialization } from '@/lib/league-defaults-orchestrator/LeagueDefaultsOrchestrator'
 import { TOURNAMENT_LEAGUE_VARIANT } from '@/lib/tournament-mode/constants'
 import { getRoundTemplate } from '@/lib/tournament/roundTemplates'
@@ -186,6 +187,14 @@ export async function createTournamentShell(
   commissionerId: string,
   config: TournamentConfig,
 ): Promise<{ id: string }> {
+  // Tournament Mode is retired from active creation (2026-07-23). Guarded at the
+  // service so every caller is closed at once. Existing shells are untouched —
+  // this function only creates.
+  const retired = checkRetiredConcept('tournament')
+  if (retired) {
+    throw new RetiredConceptError(retired.code, retired.message)
+  }
+
   validateStructure(config)
   const sport = normalizeToSupportedSport(config.sport) as LeagueSport
   const templates = getRoundTemplate(config.maxParticipants, sport, config.openingWeekStart)

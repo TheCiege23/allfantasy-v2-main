@@ -38,7 +38,19 @@ const ROLLING_INSIGHTS_CLIENT_SECRET_KEYS = ['ROLLING_INSIGHTS_CLIENT_SECRET'] a
 const ROLLING_INSIGHTS_CLIENT_ID2_KEYS = ['ROLLING_INSIGHTS_CLIENT_ID2'] as const
 const ROLLING_INSIGHTS_CLIENT_SECRET2_KEYS = ['ROLLING_INSIGHTS_CLIENT_SECRET2'] as const
 const ROLLING_INSIGHTS_BASE_URL_KEYS = ['ROLLING_INSIGHTS_BASE_URL', 'ROLLING_INSIGHTS_API_BASE'] as const
-const DEFAULT_ROLLING_INSIGHTS_BASE_URL = 'https://datafeeds.rolling-insights.com'
+/**
+ * Probed 2026-08-10: `https://datafeeds.rolling-insights.com` (the previous
+ * default) 404s on EVERY path and every path ordering. The live DataFeeds REST
+ * host is `rest.datafeeds.rolling-insights.com` under `/api/v1`, authenticated
+ * with `?RSC_token=`.
+ *
+ * The api-chain provider survived the wrong default only because
+ * `buildRestBaseCandidates()` appends `DEFAULT_RI_REST_BASES`, which already
+ * carried the correct host — so this was a latent trap that made the config
+ * lie rather than an active outage. It still governs the api_key branch and is
+ * what anyone reading provider config would believe, so it is corrected here.
+ */
+const DEFAULT_ROLLING_INSIGHTS_BASE_URL = 'https://rest.datafeeds.rolling-insights.com/api/v1'
 
 interface ResolvedEnvValue {
   value: string

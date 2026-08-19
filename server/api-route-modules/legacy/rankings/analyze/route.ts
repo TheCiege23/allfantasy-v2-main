@@ -3,7 +3,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getOrCreateAiResult } from '@/lib/ai/ai-result-cache'
+import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
 import { writeSnapshot } from '@/lib/trade-engine/snapshot-store'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 import { logUserEventByUsername } from '@/lib/user-events'
 import {
   getAllPlayers,
@@ -88,11 +90,22 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/analyze", too
   try {
     const body = await request.json().catch(() => ({}))
     const sleeperUser = body?.sleeperUser as { username?: string; userId?: string } | undefined
-    const sleeper_username = String(sleeperUser?.username || body?.sleeper_username || '').trim()
     const league_id = String(body?.leagueId || body?.league_id || '').trim()
 
-    if (!sleeper_username || !league_id) {
-      return NextResponse.json({ error: 'Missing sleeper_username or league_id' }, { status: 400 })
+    /*
+     * This route accepted the username from EITHER `body.sleeperUser.username` or
+     * `body.sleeper_username`. Both are caller-controlled, so both are only compared now —
+     * the first one present is what gets checked against the caller's own link.
+     */
+    const gate = await requireLegacySleeperIdentity(request, {
+      requestedUsername: String(sleeperUser?.username || body?.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'rankings_analyze', maxRequests: 10, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeper_username = gate.identity.sleeperUsername
+
+    if (!league_id) {
+      return NextResponse.json({ error: 'Missing league_id' }, { status: 400 })
     }
 
     logUserEventByUsername(sleeper_username, 'rankings_analysis_started', { league_id })
@@ -207,7 +220,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/analyze", too
       console.log('Could not fetch players data')
     }
 
-    const fantasyCalcValues = await getFantasyCalcValues()
+    const fantasyCalcValues = await getFantasyCalcValues(leagueData)
 
     const teamRankings: TeamRanking[] = rosters
       .filter((roster) => !!roster.owner_id)
@@ -537,8 +550,30 @@ function buildPreseasonFallbackResponse({
   })
 }
 
-async function getFantasyCalcValues(): Promise<Map<string, number>> {
-  return new Map<string, number>()
+async function getFantasyCalcValues(league: any): Promise<Map<string, number>> {
+  const rosterPositions: string[] = Array.isArray(league?.roster_positions) ? league.roster_positions : []
+  const isSF =
+    league?.settings?.superflex_enabled === 1 ||
+    rosterPositions.filter((p: string) => p === 'SUPER_FLEX' || p === 'QB').length >= 2
+  const numTeams = Number(league?.total_rosters) || 12
+
+  const values = new Map<string, number>()
+  try {
+    const fcPlayers = await fetchFantasyCalcValues({
+      isDynasty: true,
+      numQbs: isSF ? 2 : 1,
+      numTeams,
+      ppr: 1,
+    })
+    for (const fc of fcPlayers) {
+      const name = fc?.player?.name
+      if (!name || typeof fc.value !== 'number' || !Number.isFinite(fc.value)) continue
+      values.set(name.toLowerCase(), fc.value)
+    }
+  } catch (err) {
+    console.error('[legacy/rankings/analyze] FantasyCalc fetch failed, falling back to position+age valuation:', err)
+  }
+  return values
 }
 
 function calculatePositionalValuesWithPlayers(

@@ -10,8 +10,11 @@ const ERROR_MESSAGES: Record<string, string> = {
   Configuration: "There is a problem with the server configuration.",
   AccessDenied: "You do not have permission to sign in.",
   Verification: "The sign-in link has expired or has already been used.",
+  // Fires when the PROVIDER rejects the callback, not only on a missing cookie — naming
+  // the browser sent users to clear cookies for a failure on our side. Kept in step with
+  // the same string in app/login/LoginContent.tsx.
   OAuthCallback:
-    "Social sign-in couldn't complete — your session may have expired or the browser blocked the sign-in cookie. Please try again.",
+    "Social sign-in couldn't complete. Please try again — if it keeps failing, sign in with your email and password instead.",
   OAuthAccountNotLinked:
     "This social account is already linked to a different AllFantasy account. Sign in with your original method and connect the social account from your account settings.",
   SOCIAL_ACCOUNT_LINK_FAILED:
@@ -24,6 +27,8 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Discord did not share a verified email address. Please verify your email on Discord, then try signing in again.",
   SOCIAL_PROVIDER_EMAIL_MISSING:
     "That sign-in method didn't share an email address, so we can't create a new AllFantasy account from it. If you already have an account, sign in with your email and password first, then connect this method from Settings.",
+  SOCIAL_EMAIL_UNVERIFIED:
+    "That sign-in method's email isn't verified, so we can't safely connect it to an existing AllFantasy account. Verify your email with that provider, or sign in with your original method first and connect this one from Settings.",
   Default: "An error occurred during sign in.",
 }
 

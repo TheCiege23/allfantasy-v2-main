@@ -1,0 +1,57 @@
+/* Tools launcher. Authored on var(--token). */
+.af-tl { display: flex; flex-direction: column; gap: 26px; }
+
+.af-tl-head { display: flex; flex-direction: column; gap: 6px; }
+.af-tl-title {
+  margin: 0;
+  font: 900 26px/1.15 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.af-tl-sub { margin: 0; font-size: 13px; color: var(--muted); max-width: 62ch; }
+
+.af-tl-group { display: flex; flex-direction: column; gap: 10px; }
+
+.af-tl-heading {
+  margin: 0;
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-tl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+
+.af-tl-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 15px 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  text-decoration: none;
+  color: inherit;
+}
+.af-tl-card:hover { border-color: var(--accent); }
+.af-tl-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.af-tl-card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+/* Signals that the destination leaves the core shell, before the click rather
+   than after it. */
+.af-tl-out { font-size: 11px; color: var(--faint); }
+
+.af-tl-card-desc { font-size: 12.5px; line-height: 1.45; color: var(--muted); }

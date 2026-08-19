@@ -1,0 +1,270 @@
+/*
+ * AF Core — screen 9, War Room · live draft.
+ * Scoped under `.af-core` via the shell; see af-core.css for why.
+ */
+
+.af-wr {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1180px;
+}
+
+/* ── Status bar ──────────────────────────────────────────────────────── */
+
+.af-wr-status {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+}
+
+.af-wr-status-text {
+  min-width: 0;
+  flex: 1 1 320px;
+}
+
+.af-wr-title {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.af-wr-progress {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  text-transform: capitalize;
+}
+
+.af-wr-clock-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: auto;
+}
+
+.af-wr-clock-label {
+  color: var(--faint);
+}
+.af-wr-clock-label[data-yours='true'] {
+  color: var(--bad);
+}
+
+.af-wr-clock {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.af-wr-clock[data-state='running'] {
+  color: var(--text);
+}
+/* Under 30s is the moment the pick is actually at risk. */
+.af-wr-clock[data-state='urgent'] {
+  color: var(--bad);
+}
+.af-wr-clock[data-state='paused'] {
+  color: var(--warn);
+  font-size: 20px;
+}
+.af-wr-clock[data-state='none'] {
+  color: var(--faint);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+/* A draft with no clock says so plainly rather than showing 0:00, which reads
+   as "time has run out". */
+.af-wr-clock-off {
+  max-width: 260px;
+  text-align: right;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+
+.af-wr-section {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-wr-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-wr-legend {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-wr-legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+}
+
+.af-wr-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+
+/* ── Board ───────────────────────────────────────────────────────────── */
+
+/*
+ * The board is wide by nature — 12 teams across. It scrolls INSIDE its own
+ * container so the page never scrolls sideways, which is the handoff's rule for
+ * wide content.
+ */
+.af-wr-board-scroll {
+  overflow-x: auto;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.af-wr-board {
+  border-collapse: separate;
+  border-spacing: 4px;
+  min-width: 100%;
+}
+
+.af-wr-board-corner {
+  width: 34px;
+  text-align: left;
+  color: var(--faint);
+}
+
+.af-wr-board-head {
+  min-width: 112px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  text-align: left;
+  vertical-align: bottom;
+}
+.af-wr-board-head[data-yours='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+
+.af-wr-board-team {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 118px;
+}
+.af-wr-board-head[data-yours='true'] .af-wr-board-team {
+  color: var(--accent);
+}
+
+.af-wr-board-round {
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--faint);
+  text-align: left;
+  vertical-align: middle;
+  padding-right: 4px;
+}
+
+.af-wr-cell {
+  min-width: 112px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  vertical-align: top;
+}
+.af-wr-cell[data-yours='true'] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.af-wr-cell[data-empty='true'] {
+  background: transparent;
+  border-style: dashed;
+}
+
+.af-wr-cell-label {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--faint);
+}
+
+.af-wr-cell-name {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 118px;
+}
+
+.af-wr-cell-pos {
+  display: inline-block;
+  margin-top: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.af-wr-cell-empty {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.af-wr-unavailable {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-wr-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-wr-clock-wrap {
+    margin-left: 0;
+    align-items: flex-start;
+  }
+  .af-wr-clock-off {
+    text-align: left;
+  }
+  .af-wr-legend {
+    margin-left: 0;
+  }
+}

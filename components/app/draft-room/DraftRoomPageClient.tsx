@@ -496,13 +496,13 @@ export function DraftRoomPageClient({
   const entitlements = useEntitlements()
   const tokenBalance = useTokenBalance()
   const hasAiSubscription =
-    entitlements.hasPro || entitlements.hasSupreme || entitlements.hasCommissioner || entitlements.hasAllAccess
+    entitlements.hasPro || entitlements.hasSupreme || entitlements.hasCommissioner
   /**
    * Token-balance fallback: free-tier users who've bought AF token packs still
    * get to use AI features, spending one token per request. Gate is true when
    * EITHER a qualifying subscription is active OR balance > 0.
    */
-  const hasAiAccess = hasAiSubscription || tokenBalance.balance > 0
+  const hasAiAccess = hasAiSubscription || (tokenBalance.balance != null && tokenBalance.balance > 0)
   const resolvedOrphanAiProviderAvailable =
     (session as { orphanAiProviderAvailable?: boolean } | null)?.orphanAiProviderAvailable ??
     orphanAiProviderAvailableState ??
@@ -523,9 +523,6 @@ export function DraftRoomPageClient({
     draftPool === null && poolReadiness?.ready === false
       ? 'Preparing player pool...'
       : 'Loading player pool...'
-  const startDraftBlocked =
-    draftRoomState.canStart &&
-    (poolReadiness?.ready === false || poolFetching || !draftPool || draftPool.entries.length === 0)
   const effectiveDraftSport = draftPool?.sport ?? sport
 
   const draftedNames = useMemo(
@@ -927,6 +924,13 @@ export function DraftRoomPageClient({
   )
 
   const canDraft = draftRoomState.canDraft
+
+  // Relocated below draftRoomState: this render-time const reads draftRoomState.canStart,
+  // so it must be evaluated after the useMemo above to avoid a temporal-dead-zone crash
+  // ("Cannot access 'draftRoomState' before initialization"). Consumers are far below.
+  const startDraftBlocked =
+    draftRoomState.canStart &&
+    (poolReadiness?.ready === false || poolFetching || !draftPool || draftPool.entries.length === 0)
 
   useEffect(() => {
     if (!session) return
@@ -1715,6 +1719,8 @@ export function DraftRoomPageClient({
       team: p.team ?? null,
       adp: draftUISettings?.aiAdpEnabled && p.aiAdp != null ? p.aiAdp : p.adp,
       byeWeek: p.byeWeek ?? null,
+      // Draft VORP slice: real pool projection when the row carries one.
+      projectedPoints: p.nflDraftProjectionSplits?.projectedPoints ?? null,
     }))
     if (available.length === 0) {
       setLiveBrainEnvelope(null)
@@ -2799,6 +2805,11 @@ export function DraftRoomPageClient({
     [queue, session?.picks, handleQueueSave],
   )
 
+  const handleClearQueue = useCallback(() => {
+    setQueue([])
+    void handleQueueSave([])
+  }, [handleQueueSave])
+
   const handleReorderQueue = useCallback(
     (fromIndex: number, toIndex: number) => {
       const drafted = new Set(session?.picks?.map((p) => normalizeDraftedPlayerName(p.playerName)) ?? [])
@@ -3148,7 +3159,7 @@ export function DraftRoomPageClient({
       const tip =
         warRoomData.strategyTip?.trim() ||
         warRoomData.reasoning?.[0]?.trim() ||
-        'Open the helper panel for full War Room context.'
+        'Open the helper panel for full AF Legacy context.'
       if (!base.some((m) => m.id === prepId) && !injected.some((m) => m.id === prepId)) {
         const poolRow = players.find(
           (p) =>
@@ -3431,7 +3442,7 @@ export function DraftRoomPageClient({
       let headline = 'Draft context'
       if (isTopRec) headline = 'Copilot recommendation'
       else if (altMatch) headline = 'Copilot alternative'
-      else if (wr?.bestPick && keyOf(wr.bestPick.name, wr.bestPick.position) === pk) headline = 'War Room focus'
+      else if (wr?.bestPick && keyOf(wr.bestPick.name, wr.bestPick.position) === pk) headline = 'AF Legacy focus'
 
       return { headline, bullets: filtered, stance }
     },
@@ -3467,6 +3478,8 @@ export function DraftRoomPageClient({
             position: p.position,
             team: p.team ?? null,
             adp: draftUISettings?.aiAdpEnabled && p.aiAdp != null ? p.aiAdp : p.adp,
+            // Draft VORP slice: real pool projection when the row carries one.
+            projectedPoints: p.nflDraftProjectionSplits?.projectedPoints ?? null,
           }))
         if (available.length === 0) {
           setWarRoomData(null)
@@ -3810,7 +3823,7 @@ export function DraftRoomPageClient({
           >
             <span>
               <span className="block text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/80">Draft intelligence</span>
-              <span className="block text-[11px] text-white/72">Open Copilot, War Room, and AI context</span>
+              <span className="block text-[11px] text-white/72">Open Copilot, AF Legacy, and AI context</span>
             </span>
             {draftHelperBadgeCount > 0 ? (
               <span className="rounded-full border border-cyan-300/35 bg-cyan-500/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">
@@ -3837,6 +3850,7 @@ export function DraftRoomPageClient({
           playerMetaById={queuePlayerMetaById}
           canDraft={canDraft}
           onRemove={handleRemoveFromQueue}
+          onClear={handleClearQueue}
           onReorder={handleReorderQueue}
           onDraftFromQueue={canDraft && queueFiltered.length > 0 ? handleDraftFromQueue : undefined}
           onAiReorder={handleAiReorderQueue}
@@ -3873,6 +3887,7 @@ export function DraftRoomPageClient({
       queueFiltered,
       draftHelperBadgeCount,
       handleRemoveFromQueue,
+      handleClearQueue,
       handleReorderQueue,
       handleDraftFromQueue,
       handleAiReorderQueue,
@@ -4560,7 +4575,7 @@ export function DraftRoomPageClient({
                         : 'text-white/55 hover:bg-white/5'
                     }`}
                   >
-                    War Room
+                    AF Legacy
                   </button>
                   {isCommissioner ? (
                     <button
@@ -4596,7 +4611,7 @@ export function DraftRoomPageClient({
                       }`}
                       data-testid="draft-bottom-ai-panel"
                     >
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-200/90">War Room</p>
+                      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-violet-200/90">AF Legacy</p>
                       {entitlements.loading ? (
                         <div className="mt-2 rounded-lg border border-white/12 bg-black/25 p-3">
                           <p className="text-white/55">Checking access…</p>
@@ -4606,9 +4621,9 @@ export function DraftRoomPageClient({
                           className="mt-2 rounded-lg border border-amber-400/25 bg-amber-500/10 p-3"
                           data-testid="draft-bottom-ai-locked"
                         >
-                          <p className="text-sm font-semibold text-amber-100">AI recommendations locked</p>
+                          <p className="text-sm font-semibold text-amber-100">Recommendations locked</p>
                           <p className="mt-1 text-[11px] text-white/65">
-                            Subscribe (Pro, Commissioner, All-Access, or Supreme) for unlimited AI picks — or top up tokens to pay per-use.
+                            Subscribe (Pro, Commissioner, Supreme, or Legacy) for unlimited picks — or top up tokens to pay per-use.
                           </p>
                           <div className="mt-2 flex flex-wrap gap-2">
                             <a
@@ -5060,7 +5075,7 @@ export function DraftRoomPageClient({
         the popup body now, so power users still have one-click access to
         starter balance / positional mix / AI guidance, but the layout reclaims
         that left column for the player table. */}
-    <WarRoomPopup hasNewIntel={warRoomHasNewIntel} triggerLabel="War Room">
+    <WarRoomPopup hasNewIntel={warRoomHasNewIntel} triggerLabel="AF Legacy Draft Room">
       <DraftTeamPanel {...draftTeamPanelProps} redraftStarterHints={redraftStarterHints} />
     </WarRoomPopup>
     <DraftRoomSettingsModal

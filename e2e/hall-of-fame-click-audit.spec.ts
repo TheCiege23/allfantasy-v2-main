@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { signInAs } from "./helpers/session-cookie"
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -229,6 +230,11 @@ test.describe("@hall-of-fame full click audit", () => {
     }
     await page.route(`**/api/leagues/${leagueId}/hall-of-fame`, hallOfFameRouteHandler)
     await page.route(`**/api/leagues/${leagueId}/hall-of-fame?**`, hallOfFameRouteHandler)
+
+    // The entry-detail leg of this test lands on /app/league/*, which is
+    // session-gated; anonymously it 307s to /login and the detail assertions
+    // fail as missing buttons rather than as a redirect.
+    await signInAs(page, { id: "e2e-hof-user" })
 
     await page.goto(`/e2e/hall-of-fame?leagueId=${leagueId}`)
     await expect(page.getByRole("heading", { name: /e2e hall of fame harness/i })).toBeVisible()

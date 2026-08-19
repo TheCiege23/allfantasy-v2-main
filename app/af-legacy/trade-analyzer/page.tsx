@@ -118,7 +118,7 @@ function Pill({ children, tone }: { children: React.ReactNode; tone?: 'cyan' | '
 function CooldownPill({ remaining, retryAfterSec, label }: { remaining: number | null; retryAfterSec: number | null; label?: string }) {
   return (
     <>
-      {remaining != null && <Pill>{label || 'AI runs'} left: {remaining}</Pill>}
+      {remaining != null && <Pill>{label || 'Chimmy runs'} left: {remaining}</Pill>}
       {retryAfterSec != null && retryAfterSec > 0 && <Pill>Cooldown: {retryAfterSec}s</Pill>}
     </>
   )
@@ -1417,7 +1417,7 @@ export default function LegacyTradeAnalyzerPage() {
                 Trade Analyzer
               </h1>
               <p className="mt-0.5 sm:mt-1 text-xs sm:text-sm text-white/60 truncate">
-                NFL (with IDP) + NBA trade evaluation with AI synthesis
+                NFL (with IDP) + NBA trade evaluation, powered by Chimmy
               </p>
             </div>
           </div>
@@ -1447,7 +1447,7 @@ export default function LegacyTradeAnalyzerPage() {
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500/30 to-orange-400/20 flex items-center justify-center text-xl">🎯</div>
               <div>
                 <h3 className="text-xl font-bold text-white">What's Your Trade Goal?</h3>
-                <p className="text-xs text-white/50">Select a goal to help the AI understand your strategy</p>
+                <p className="text-xs text-white/50">Select a goal to help Chimmy understand your strategy</p>
               </div>
             </div>
 
@@ -1508,7 +1508,7 @@ export default function LegacyTradeAnalyzerPage() {
                 <Input
                   value={goalComment}
                   onChange={setGoalComment}
-                  placeholder="If the presets don't fit, tell the AI the narrative you want (ex: 'I need RB depth but refuse to move my 2026 1st')"
+                  placeholder="If the presets don't fit, tell Chimmy the narrative you want (ex: 'I need RB depth but refuse to move my 2026 1st')"
                 />
               </div>
             )}
@@ -2018,7 +2018,7 @@ export default function LegacyTradeAnalyzerPage() {
             <div className="flex flex-col gap-3 sm:gap-4 mb-4">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-lg sm:text-xl font-bold text-cyan-300">Analyze</h3>
-                <CooldownPill remaining={tradeRemaining} retryAfterSec={tradeRetryAfterSec} label="AI runs" />
+                <CooldownPill remaining={tradeRemaining} retryAfterSec={tradeRetryAfterSec} label="Chimmy runs" />
               </div>
 
               <div className="flex flex-wrap gap-2">
@@ -2456,7 +2456,7 @@ export default function LegacyTradeAnalyzerPage() {
                 <Card>
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="text-xl font-bold text-cyan-300">Negotiation Assistant</h3>
-                    <Pill tone="cyan">AI-powered</Pill>
+                    <Pill tone="cyan">Chimmy-powered</Pill>
                   </div>
                   <p className="text-sm text-white/60 mb-4">
                     Ready-to-send messages, counter-offers, and sweeteners tailored to this trade.

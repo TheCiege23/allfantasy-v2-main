@@ -4,13 +4,18 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import AppleProvider from "next-auth/providers/apple";
 import SpotifyProvider from "next-auth/providers/spotify";
+import { SPOTIFY_SCOPES } from "@/lib/spotify/scopes";
 import FacebookProvider from "next-auth/providers/facebook";
 import DiscordProvider from "next-auth/providers/discord";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSignup";
 import { resolveUnifiedAuthIdentity } from "@/lib/auth/AuthIdentityResolver";
 import { linkSocialAccountToAppUser } from "@/lib/auth/SocialAccountLinkingService";
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
+import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken";
+import { claimGuestTrialForUser } from "@/lib/legacy/claimGuestTrialForUser";
+import { isInviteOnlyEnabled } from "@/lib/beta-invite/betaAdmissionService";
 import { lookupSleeperUser } from "@/lib/sleeper/user-lookup";
 import { getTierFromXP, getXPRemainingToNextTier } from "@/lib/xp-progression/TierResolver";
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret";
@@ -62,6 +67,43 @@ function resolveOAuthEmailFromCallback(
       ? profile.email.trim()
       : undefined;
   return fromUser ?? fromProfile;
+}
+
+/**
+ * Whether the OAuth provider itself asserts this email is verified. This gates
+ * whether an OAuth sign-in is allowed to link to an EXISTING AppUser by email
+ * match — an unverified claim must never take over another account.
+ *
+ * Provider signal shapes differ:
+ * - Google: raw userinfo includes boolean `email_verified`.
+ * - Apple: the decoded id_token claim `email_verified` is often the STRING
+ *   "true"/"false" rather than a boolean.
+ * - Discord: raw `/users/@me` response includes boolean `verified`.
+ * - Spotify: the Web API exposes no verification flag at all. Spotify itself
+ *   requires a verified email before its own signup completes, so a returned
+ *   email is treated as verified-by-platform-design (this mirrors the
+ *   provider's existing explicit `allowDangerousEmailAccountLinking: true`).
+ * - Facebook: the Graph API only returns `email` once Facebook considers it
+ *   confirmed — presence of the field already implies verification.
+ */
+function resolveOAuthEmailVerifiedFromCallback(
+  provider: "google" | "apple" | "spotify" | "facebook" | "discord",
+  profile?: Profile | null
+): boolean {
+  const raw = profile as Record<string, unknown> | null | undefined;
+  switch (provider) {
+    case "google":
+      return raw?.email_verified === true;
+    case "apple":
+      return raw?.email_verified === true || raw?.email_verified === "true";
+    case "discord":
+      return raw?.verified === true;
+    case "spotify":
+    case "facebook":
+      return true;
+    default:
+      return false;
+  }
 }
 
 function getDevAuthProfile() {
@@ -223,6 +265,17 @@ const providers: NextAuthOptions["providers"] = [
       });
 
       if (!user) {
+        // ── P0-1 BETA-GATE (Sleeper-username new-account path) ───────────────────────
+        // A Sleeper-username account has only a SYNTHETIC email, and P0-1 invites are
+        // strictly EMAIL-BOUND (no token-only admission — an invite is not a transferable
+        // access code). There is therefore no way to admit a NEW Sleeper account under the
+        // closed beta, so it is blocked: the user must sign up with a real email or a social
+        // account (both email-matched) first. Existing Sleeper accounts hit the `else`
+        // branch above and sign in normally without ever needing an invite.
+        if (isInviteOnlyEnabled()) {
+          throw new Error("BETA_INVITE_REQUIRED");
+        }
+
         user = await prisma.appUser.create({
           data: {
             email: `${sleeperUserId}@sleeper.allfantasy.ai`,
@@ -230,6 +283,16 @@ const providers: NextAuthOptions["providers"] = [
             displayName,
             avatarUrl,
           },
+        });
+        // New Sleeper-auth account (create branch only; the `else` below is an
+        // update of an existing account, which must stay silent). The email is a
+        // synthetic non-inbox address — included but clearly labeled by method.
+        // Fire-and-forget.
+        void notifyOwnerOfNewSignup({
+          email: user.email,
+          method: "sleeper",
+          userId: user.id,
+          username: user.username,
         });
       } else {
         const needsUpdate =
@@ -273,6 +336,12 @@ if (isDevAuthBypassEnabled()) {
           id: user.id,
           email: user.email,
           name: user.displayName || user.username || user.email,
+          // Must be returned for the jwt callback to stamp `token.username` (it reads
+          // `user.username` off this object). Without it the username gate in middleware.ts
+          // sees a null username and redirects every dev-bypass session to /choose-username,
+          // making the bypass unable to reach any gated page. Mirrors the `credentials`
+          // provider, which has always returned this field.
+          username: user.username,
           image: user.avatarUrl,
         };
       },
@@ -314,6 +383,17 @@ if (spotifyClientId && spotifyClientSecret) {
       clientId: spotifyClientId,
       clientSecret: spotifyClientSecret,
       allowDangerousEmailAccountLinking: true,
+      // next-auth's default is `scope=user-read-email` alone, which is NOT enough for its
+      // own userinfo step: that calls GET /v1/me, which requires `user-read-private` and
+      // answers 403 without it — the token exchange succeeds and the callback then fails
+      // with OAuthCallbackError. Requesting the shared list fixes sign-in and, because the
+      // access token is persisted on AuthAccount, hands /api/spotify/token a token that
+      // already carries playback scope — so signing in with Spotify connects the music
+      // widget in the same step instead of requiring a second authorization.
+      authorization: {
+        url: "https://accounts.spotify.com/authorize",
+        params: { scope: SPOTIFY_SCOPES },
+      },
     })
   );
 }
@@ -483,6 +563,7 @@ export const authOptions: NextAuthOptions = {
             providerAccountId: account.providerAccountId,
             type: account.type,
             email: oauthEmail ?? user.email,
+            emailVerified: resolveOAuthEmailVerifiedFromCallback(provider, profile),
             name: user.name,
             image: user.image,
             refreshToken: account.refresh_token,
@@ -512,6 +593,18 @@ export const authOptions: NextAuthOptions = {
             return await runSocialLink();
           } catch (err) {
             console.error("[google-signin] FATAL:", err);
+            const errMsg = err instanceof Error ? err.message : "";
+            // P0-1 BETA-GATE: a new OAuth account was refused for lack of valid closed-beta
+            // admission. Send the user back to signup with an honest reason (no token here).
+            if (errMsg.startsWith("BETA_INVITE_")) {
+              return `/signup?beta=1&betaError=${encodeURIComponent(errMsg.slice("BETA_INVITE_".length))}`;
+            }
+            if (errMsg === "SOCIAL_EMAIL_UNVERIFIED") {
+              return "/auth/error?error=SOCIAL_EMAIL_UNVERIFIED";
+            }
+            console.error(
+              `[social-link] SOCIAL_ACCOUNT_LINK_FAILED provider=google message=${errMsg || String(err)}`
+            );
             return "/auth/error?error=SOCIAL_ACCOUNT_LINK_FAILED";
           }
         }
@@ -535,6 +628,12 @@ export const authOptions: NextAuthOptions = {
             if (errMsg === "FACEBOOK_EMAIL_MISSING") {
               return "/auth/error?error=FACEBOOK_EMAIL_MISSING";
             }
+            if (errMsg === "SOCIAL_EMAIL_UNVERIFIED") {
+              return "/auth/error?error=SOCIAL_EMAIL_UNVERIFIED";
+            }
+            console.error(
+              `[social-link] SOCIAL_ACCOUNT_LINK_FAILED provider=facebook message=${errMsg || String(err)}`
+            );
             return "/auth/error?error=SOCIAL_ACCOUNT_LINK_FAILED";
           }
         }
@@ -548,6 +647,12 @@ export const authOptions: NextAuthOptions = {
             if (errMsg === "DISCORD_EMAIL_MISSING") {
               return "/auth/error?error=DISCORD_EMAIL_MISSING";
             }
+            if (errMsg === "SOCIAL_EMAIL_UNVERIFIED") {
+              return "/auth/error?error=SOCIAL_EMAIL_UNVERIFIED";
+            }
+            console.error(
+              `[social-link] SOCIAL_ACCOUNT_LINK_FAILED provider=discord message=${errMsg || String(err)}`
+            );
             return "/auth/error?error=SOCIAL_ACCOUNT_LINK_FAILED";
           }
         }
@@ -555,7 +660,7 @@ export const authOptions: NextAuthOptions = {
         try {
           return await runSocialLink();
         } catch (error) {
-          console.error("[auth] social account linking error:", error);
+          console.error(`[auth] social account linking error provider=${account.provider}:`, error);
           // linkSocialAccountToAppUser() already refuses to create a NEW AppUser
           // without an email (SOCIAL_PROVIDER_EMAIL_MISSING) — this only maps that
           // to a clearer message. It does NOT add a new early guard: Apple only
@@ -563,9 +668,19 @@ export const authOptions: NextAuthOptions = {
           // -> reject" check here (before the existing-account lookup) would break
           // legitimate repeat Apple sign-ins for already-linked accounts.
           const errMsg = error instanceof Error ? error.message : "";
+          // P0-1 BETA-GATE (Apple/Spotify/other): new-account admission refused.
+          if (errMsg.startsWith("BETA_INVITE_")) {
+            return `/signup?beta=1&betaError=${encodeURIComponent(errMsg.slice("BETA_INVITE_".length))}`;
+          }
           if (errMsg === "SOCIAL_PROVIDER_EMAIL_MISSING") {
             return "/auth/error?error=SOCIAL_PROVIDER_EMAIL_MISSING";
           }
+          if (errMsg === "SOCIAL_EMAIL_UNVERIFIED") {
+            return "/auth/error?error=SOCIAL_EMAIL_UNVERIFIED";
+          }
+          console.error(
+            `[social-link] SOCIAL_ACCOUNT_LINK_FAILED provider=${account.provider} message=${errMsg || String(error)}`
+          );
           return "/auth/error?error=SOCIAL_ACCOUNT_LINK_FAILED";
         }
       }
@@ -694,6 +809,65 @@ export const authOptions: NextAuthOptions = {
         });
       } catch (error) {
         console.error("[auth] signIn event error:", error);
+      }
+
+      // AF_GATE0 §3.5 — universal guest→account trial migration. Runs on EVERY
+      // sign-in path (OAuth/social AND credentials), so a visitor who did the
+      // no-login Sleeper import and then signs up with Google (not just email +
+      // password) keeps 100% of their imported leagues/history. Idempotent and
+      // best-effort — an absent guest cookie is the common no-op; never blocks login.
+      // `next/headers` is imported dynamically so this module never pulls it into
+      // any non-request server context that might import `authOptions`.
+      try {
+        const { cookies } = await import("next/headers");
+        const guestToken = (await cookies()).get(GUEST_SESSION_COOKIE_NAME)?.value;
+        if (guestToken) {
+          await claimGuestTrialForUser(user.id, guestToken);
+        }
+      } catch (claimErr) {
+        console.warn("[auth] guest trial claim (signIn event) failed (non-blocking):", claimErr);
+      }
+
+      // Capture a "login" IdentitySignal. Two consumers:
+      //  1. DuplicateManagerRiskService — correlating shared IP/device across accounts.
+      //  2. The admin Command Center login metrics, which previously counted
+      //     AuthSession.createdAt — a column that does not exist, so every login
+      //     card silently rendered 0. IdentitySignal is the real event source.
+      // Only "league_join" was ever recorded before this, so no login was captured
+      // anywhere in the real auth flow.
+      // Deliberately its OWN try/catch: sharing the block above would mean a guest
+      // -claim throw silently skips login capture entirely. IP/UA are HMAC-hashed by
+      // the recorder — raw values are never stored. Best-effort; never blocks sign-in.
+      try {
+        const { headers } = await import("next/headers");
+        const h = await headers();
+        const { recordIdentitySignal } = await import("@/lib/identity/IdentitySignalRecorder");
+        await recordIdentitySignal({
+          userId: user.id,
+          ip: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
+          userAgent: h.get("user-agent"),
+          context: "login",
+        });
+      } catch (signalErr) {
+        console.warn("[auth] identity signal capture (signIn event) failed (non-blocking):", signalErr);
+      }
+
+      // Join the anonymous pre-auth campaign journey to this account. The attribution
+      // cookies are set server-side in middleware and are SameSite=Lax specifically so
+      // they survive the OAuth provider's cross-site redirect back to us — this is the
+      // one moment where the anonymous journey and the real user id are both in hand.
+      // Its own try/catch, matching the blocks above: a failure here must not skip
+      // anything else, and must never block sign-in.
+      try {
+        const { cookies } = await import("next/headers");
+        const cookieStore = await cookies();
+        const { linkAttributionToUser } = await import("@/lib/analytics/linkAttributionToUser");
+        await linkAttributionToUser({
+          userId: user.id,
+          getCookie: (name) => cookieStore.get(name)?.value,
+        });
+      } catch (attributionErr) {
+        console.warn("[auth] attribution link (signIn event) failed (non-blocking):", attributionErr);
       }
     },
   },

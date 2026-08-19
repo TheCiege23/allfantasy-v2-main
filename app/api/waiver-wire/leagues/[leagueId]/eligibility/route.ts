@@ -6,6 +6,10 @@ import { assertWaiverClaimEligibility } from "@/lib/waiver-wire/transaction-elig
 import { getEffectiveLeagueWaiverSettings } from "@/lib/waiver-wire"
 import { getLeagueRole } from "@/lib/league/permissions"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedWaiverIntegrationService, type CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/waiverIntegration'
+import { extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 /**
  * POST — validate a waiver claim before submit (popup copy, mobile, AI tools).
@@ -61,12 +65,36 @@ export async function POST(
       claimMetadata,
     })
     const settings = await getEffectiveLeagueWaiverSettings(leagueId)
+
+    // Gated, informational certified SCHEDULE evidence only (kickoff/status/lock/freshness/identity) for the
+    // add/drop players. Never blocks eligibility and never mutates. Injuries/projections/availability/rankings
+    // are NOT provided by the certified schedule plane and are surfaced as explicitly `unavailable`. Wrapped so
+    // it can never fail the preview.
+    let sportsSchedule: CertifiedScheduleDescription | undefined
+    if (isSportsDataEnabled('waiver')) {
+      try {
+        const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+        if (league && String(league.sport ?? 'NFL').toUpperCase() === 'NFL') {
+          const dropId = body.dropPlayerId ?? body.drop_player_id ?? null
+          const refs = extractPlayerRefs([String(addPlayerId), ...(dropId ? [String(dropId)] : [])])
+          sportsSchedule = await new CertifiedWaiverIntegrationService().describeWaiverScheduleContext({
+            season: String(league.season ?? new Date().getFullYear()),
+            week: String(weekFromLeagueSettingsForLineup(league.settings)),
+            players: refs,
+          })
+        }
+      } catch {
+        sportsSchedule = undefined
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       normalizedWaiverType: settings.normalizedWaiverType,
       faabMinBid: settings.faabMinBid,
       allowZeroFaabBid: settings.allowZeroFaabBid,
       maxDropsPerWeek: settings.maxDropsPerWeek,
+      ...(sportsSchedule ? { sportsSchedule } : {}),
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : "Not eligible"

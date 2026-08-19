@@ -43,6 +43,13 @@ async function run(_req: NextRequest) {
     }
   }
 
+  // NOTE: devy intel enrichment deliberately does NOT run here. This whole
+  // route tree (app/api/devy) is excluded from the production build by
+  // scripts/vercel-next-build.cjs to stay under Vercel's 2048-route cap, so
+  // this handler 404s in production and is not a vercel.json cron target.
+  // Enrichment runs from /api/cron/import-players, which is both built and
+  // scheduled.
+
   return NextResponse.json({
     ok: true,
     leaguesChecked: leagues.length,

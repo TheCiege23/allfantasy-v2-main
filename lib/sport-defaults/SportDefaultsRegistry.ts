@@ -580,13 +580,13 @@ export function getRosterDefaults(sportType: SportType, formatType?: string): Ro
     starter_slots['DL'] = 1
     starter_slots['LB'] = 1
     starter_slots['DB'] = 1
-    starter_slots['IDP'] = 1
+    starter_slots['IDP_FLEX'] = 1
     const flex_definitions = [
       ...base.flex_definitions,
       { slotName: 'DL', allowedPositions: ['DE', 'DT'] },
       { slotName: 'LB', allowedPositions: ['LB', 'ILB', 'OLB'] },
       { slotName: 'DB', allowedPositions: ['CB', 'S'] },
-      { slotName: 'IDP', allowedPositions: ['DE', 'DT', 'DL', 'LB', 'ILB', 'OLB', 'CB', 'S', 'DB'] },
+      { slotName: 'IDP_FLEX', allowedPositions: ['DE', 'DT', 'DL', 'LB', 'ILB', 'OLB', 'CB', 'S', 'DB'] },
     ]
     return { ...base, starter_slots, flex_definitions }
   }

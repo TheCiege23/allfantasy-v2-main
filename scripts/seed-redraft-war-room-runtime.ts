@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const prisma = new PrismaClient()
 
@@ -23,7 +24,7 @@ export const REDRAFT_WAR_ROOM_RUNTIME_SEED = {
 const now = new Date()
 const nextMonth = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
 
-const memberPlayers = [
+export const memberPlayers = [
   { playerId: 'rwr-member-qb-1', playerName: 'Runtime Seed QB', position: 'QB', team: 'BUF', slotType: 'QB', byeWeek: 7, projection: 19.6, actual: 18.1 },
   { playerId: 'rwr-member-rb-1', playerName: 'Runtime Seed RB1', position: 'RB', team: 'ATL', slotType: 'RB', byeWeek: 5, projection: 15.2, actual: 14.4 },
   { playerId: 'rwr-member-rb-2', playerName: 'Runtime Seed RB2', position: 'RB', team: 'DET', slotType: 'RB', byeWeek: 9, projection: 12.8, actual: 11.9 },
@@ -37,7 +38,7 @@ const memberPlayers = [
   { playerId: 'rwr-member-te-2', playerName: 'Runtime Seed Bench TE', position: 'TE', team: 'SF', slotType: 'bench', byeWeek: 14, projection: 5.2, actual: 4.9 },
 ]
 
-const opponentPlayers = [
+export const opponentPlayers = [
   { playerId: 'rwr-opp-qb-1', playerName: 'Runtime Opponent QB', position: 'QB', team: 'PHI', slotType: 'QB', byeWeek: 9, projection: 21.2, actual: 20.5 },
   { playerId: 'rwr-opp-rb-1', playerName: 'Runtime Opponent RB1', position: 'RB', team: 'MIA', slotType: 'RB', byeWeek: 6, projection: 18.9, actual: 17.8 },
   { playerId: 'rwr-opp-rb-2', playerName: 'Runtime Opponent RB2', position: 'RB', team: 'CHI', slotType: 'RB', byeWeek: 7, projection: 11.4, actual: 10.1 },
@@ -51,6 +52,48 @@ const opponentPlayers = [
 ]
 
 const allPlayers = [...memberPlayers, ...opponentPlayers]
+
+/**
+ * Legacy `Roster.playerData` shape read by two independent consumers, both
+ * populated together by a real completed draft via
+ * `finalizeRosterAssignments`/`buildPlayerDataFromSections`
+ * (lib/roster/LineupTemplateValidation.ts):
+ *  - `getRosterPlayerIds`/`getStarterIds` (lib/waiver-wire/roster-utils.ts,
+ *    used by `/api/league/roster` -> TeamTab.tsx Roster tab) read the FLAT
+ *    `players`/`starters` keys.
+ *  - `getNormalizedLineupSections` (lib/roster/LineupTemplateValidation.ts,
+ *    used by `evaluateFullRosterLegalityAsync` -> the waiver add-drop
+ *    legality gate) reads the NESTED `lineup_sections.starters` block.
+ * This seed bypasses the draft flow, so it must build both shapes by hand —
+ * missing either one leaves a consumer seeing an empty roster despite real
+ * `RedraftRosterPlayer` rows existing (confirmed: omitting `lineup_sections`
+ * made every waiver add-drop attempt fail with "Not enough starters (0/9)").
+ */
+export function buildLegacyPlayerData(players: typeof memberPlayers) {
+  const starters = players.filter((p) => p.slotType !== 'bench')
+  const bench = players.filter((p) => p.slotType === 'bench')
+  // `lineup_sections` entries need a real player `position` (e.g. 'QB'/'RB') —
+  // `getStarterAllowedSet` checks it against the league template's allowed
+  // positions per slot. Plain string ids default to `position: 'UTIL'`
+  // (lib/roster/LineupTemplateValidation.ts's `normalizeLineupSection`),
+  // which no NFL redraft slot allows, so every add-drop failed with
+  // "Starter position UTIL is not eligible for this league template."
+  return {
+    seed: 'redraft-war-room-runtime',
+    players: players.map((p) => p.playerId),
+    starters: starters.map((p) => p.playerId),
+    reserve: [] as string[],
+    taxi: [] as string[],
+    lineup_sections: {
+      starters: starters.map((p) => ({ id: p.playerId, position: p.position })),
+      bench: bench.map((p) => ({ id: p.playerId, position: p.position })),
+      ir: [] as string[],
+      taxi: [] as string[],
+      devy: [] as string[],
+    },
+    lineup_updated_at: new Date().toISOString(),
+  }
+}
 
 /**
  * Run an optional provider-table operation, tolerating the table being absent
@@ -263,7 +306,7 @@ async function seedLeague() {
         id: REDRAFT_WAR_ROOM_RUNTIME_SEED.memberLegacyRosterId,
         leagueId: REDRAFT_WAR_ROOM_RUNTIME_SEED.leagueId,
         platformUserId: REDRAFT_WAR_ROOM_RUNTIME_SEED.memberUserId,
-        playerData: { seed: 'redraft-war-room-runtime', playerIds: memberPlayers.map((p) => p.playerId) },
+        playerData: buildLegacyPlayerData(memberPlayers),
         faabRemaining: 78,
         waiverPriority: 5,
       },
@@ -271,7 +314,7 @@ async function seedLeague() {
         id: REDRAFT_WAR_ROOM_RUNTIME_SEED.opponentLegacyRosterId,
         leagueId: REDRAFT_WAR_ROOM_RUNTIME_SEED.leagueId,
         platformUserId: REDRAFT_WAR_ROOM_RUNTIME_SEED.commissionerUserId,
-        playerData: { seed: 'redraft-war-room-runtime', playerIds: opponentPlayers.map((p) => p.playerId) },
+        playerData: buildLegacyPlayerData(opponentPlayers),
         faabRemaining: 91,
         waiverPriority: 2,
       },
@@ -529,6 +572,10 @@ export async function disconnectRedraftWarRoomRuntimeSeed() {
 }
 
 async function main() {
+  // Fail closed before the first write: these fixtures create login accounts whose password
+  // is hardcoded in this public repo, so seeding a real environment publishes credentials.
+  assertSafeSeedTarget('seed-redraft-war-room-runtime')
+
   const result = await seedRedraftWarRoomRuntime()
   console.log(JSON.stringify(result, null, 2))
 }

@@ -22,4 +22,9 @@ describe('floating dock visibility (Chimmy FAB vs draft surfaces)', () => {
   it('does not hide on generic league hub', () => {
     expect(shouldHideChimmyFloatingFab('/league/x/overview')).toBe(false)
   })
+
+  it('hides on /dashboard/universal (mounts its own real floating tabbed chat)', () => {
+    expect(shouldHideChimmyFloatingFab('/dashboard/universal')).toBe(true)
+    expect(shouldHideChimmyFloatingFab('/dashboard/universal?tab=leagues')).toBe(true)
+  })
 })

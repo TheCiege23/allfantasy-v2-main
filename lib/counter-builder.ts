@@ -24,6 +24,16 @@ export interface CounterOption {
   explanation: string
 }
 
+/**
+ * Slice 16 honesty pass: `AcceptanceFeatures` fields are now `number | null`
+ * (a missing feature is no longer silently 50). A sweetener can only adjust a
+ * feature that actually has a value — nudging `null` would re-introduce the
+ * fabricated baseline this pass removed, so missing features stay missing.
+ */
+function bump(value: number | null, delta: number): number | null {
+  return value == null ? null : value + delta
+}
+
 function addSweetenerToFeatures(
   base: AcceptanceFeatures,
   sweetenerValue: number,
@@ -32,9 +42,12 @@ function addSweetenerToFeatures(
   const valueRatio = tradeTotal > 0 ? sweetenerValue / tradeTotal : 0
   return {
     ...base,
-    fairnessScore: base.fairnessScore + valueRatio * 2,
-    dealShapeScore: base.dealShapeScore + valueRatio * 1.5,
-    volatilityDelta: Math.max(0, base.volatilityDelta - valueRatio * 0.5),
+    fairnessScore: bump(base.fairnessScore, valueRatio * 2),
+    dealShapeScore: bump(base.dealShapeScore, valueRatio * 1.5),
+    volatilityDelta:
+      base.volatilityDelta == null
+        ? null
+        : Math.max(0, base.volatilityDelta - valueRatio * 0.5),
   }
 }
 

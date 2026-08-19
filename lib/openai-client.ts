@@ -37,12 +37,15 @@ export async function openaiChatJson(args: {
   temperature?: number
   maxTokens?: number
   skipCache?: boolean
+  /** Cancels the underlying HTTP request. A signalled call bypasses the cache (a cache hit has no request to
+   *  cancel; a cancellable request must reach the network). */
+  signal?: AbortSignal
 }): Promise<
   | { ok: true; json: any; model: string; baseUrl: string }
   | { ok: false; status: number; details: string; model: string; baseUrl: string }
 > {
   const key = cacheKey('openai-json', args.messages, args.model, args.temperature)
-  if (args.skipCache) return _openaiChatJsonUncached(args)
+  if (args.skipCache || args.signal) return _openaiChatJsonUncached(args)
   return cachedFetch(key, 1800, () => _openaiChatJsonUncached(args))
 }
 
@@ -51,6 +54,7 @@ async function _openaiChatJsonUncached(args: {
   model?: string
   temperature?: number
   maxTokens?: number
+  signal?: AbortSignal
 }): Promise<
   | { ok: true; json: any; model: string; baseUrl: string }
   | { ok: false; status: number; details: string; model: string; baseUrl: string }
@@ -74,13 +78,16 @@ async function _openaiChatJsonUncached(args: {
   const client = getOpenAIClient()
 
   try {
-    const response = await client.chat.completions.create({
-      model,
-      temperature: args.temperature ?? 0.7,
-      max_completion_tokens: args.maxTokens ?? 1500,
-      messages: args.messages,
-      response_format: { type: 'json_object' },
-    })
+    const response = await client.chat.completions.create(
+      {
+        model,
+        temperature: args.temperature ?? 0.7,
+        max_completion_tokens: args.maxTokens ?? 1500,
+        messages: args.messages,
+        response_format: { type: 'json_object' },
+      },
+      { signal: args.signal },
+    )
 
     return { ok: true, json: response, model, baseUrl }
   } catch (e: any) {
@@ -96,12 +103,13 @@ export async function openaiChatText(args: {
   temperature?: number
   maxTokens?: number
   skipCache?: boolean
+  signal?: AbortSignal
 }): Promise<
   | { ok: true; text: string; model: string; baseUrl: string }
   | { ok: false; status: number; details: string; model: string; baseUrl: string }
 > {
   const key = cacheKey('openai-text', args.messages, args.model, args.temperature)
-  if (args.skipCache) return _openaiChatTextUncached(args)
+  if (args.skipCache || args.signal) return _openaiChatTextUncached(args)
   return cachedFetch(key, 1800, () => _openaiChatTextUncached(args))
 }
 
@@ -110,6 +118,7 @@ async function _openaiChatTextUncached(args: {
   model?: string
   temperature?: number
   maxTokens?: number
+  signal?: AbortSignal
 }): Promise<
   | { ok: true; text: string; model: string; baseUrl: string }
   | { ok: false; status: number; details: string; model: string; baseUrl: string }
@@ -133,12 +142,15 @@ async function _openaiChatTextUncached(args: {
   const client = getOpenAIClient()
 
   try {
-    const response = await client.chat.completions.create({
-      model,
-      temperature: args.temperature ?? 0.7,
-      max_completion_tokens: args.maxTokens ?? 1500,
-      messages: args.messages,
-    })
+    const response = await client.chat.completions.create(
+      {
+        model,
+        temperature: args.temperature ?? 0.7,
+        max_completion_tokens: args.maxTokens ?? 1500,
+        messages: args.messages,
+      },
+      { signal: args.signal },
+    )
 
     const content = response.choices?.[0]?.message?.content
     if (typeof content === 'string') {

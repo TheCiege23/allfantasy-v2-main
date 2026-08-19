@@ -10,6 +10,7 @@
  */
 
 import { prisma } from '../prisma'
+import { toPrismaJsonInput } from '../prisma-json'
 import type { ScoringAuditEntry, ScoringConfigDiff, SupportedSport } from './ScoringEngineTypes'
 
 const MAX_AUDIT_ENTRIES = 50
@@ -71,10 +72,10 @@ export async function appendScoringAuditEntry(
   await prisma.league.update({
     where: { id: leagueId },
     data: {
-      settings: {
+      settings: toPrismaJsonInput({
         ...settings,
         [key]: { ...config, auditLog: updated, version },
-      },
+      }),
     },
   })
 }

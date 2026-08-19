@@ -19,6 +19,26 @@
       }
     },
     {
+      "name": "next-dev-partner-sandbox",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "PARTNER_SANDBOX_API_ENABLED": "true"
+      }
+    },
+    {
+      "name": "next-dev-visual-qa",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "PLAYWRIGHT_E2E": "1"
+      }
+    },
+    {
       "name": "prisma-studio",
       "runtimeExecutable": "npx",
       "runtimeArgs": ["prisma", "studio"],

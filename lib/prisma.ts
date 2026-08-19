@@ -160,6 +160,8 @@ function normalizePrismaEngineForDatabaseUrl(databaseUrl: string): void {
  * its callback with the same stub. Pages that depend on real data will render
  * an empty shell at build time and SSR with real data on first request.
  */
+type ExtendedPrismaClient = PrismaClient;
+
 function createBuildPhaseStubClient(): ExtendedPrismaClient {
   const noopAsync = async () => null;
   const emptyArrayAsync = async () => [];
@@ -213,7 +215,7 @@ function createBuildPhaseStubClient(): ExtendedPrismaClient {
   return stubProxy as unknown as ExtendedPrismaClient;
 }
 
-function createPrismaClient() {
+function createPrismaClient(): ExtendedPrismaClient {
   // Build-phase short-circuit. Prevents the prerender loop from opening a real
   // socket to the noop URL when a Server Component queries the DB at build time.
   if (process.env.NEXT_PHASE === "phase-production-build") {
@@ -285,10 +287,8 @@ function createPrismaClient() {
         throw new Error("Prisma retry loop exited unexpectedly.");
       },
     },
-  });
+  }) as unknown as ExtendedPrismaClient;
 }
-
-type ExtendedPrismaClient = ReturnType<typeof createPrismaClient>;
 
 const globalForPrisma = globalThis as typeof globalThis & {
   prisma?: ExtendedPrismaClient;

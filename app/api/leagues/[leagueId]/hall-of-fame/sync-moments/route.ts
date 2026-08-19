@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { syncHistoricMomentsForLeague } from "@/lib/hall-of-fame-engine/HallOfFameService"
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export async function POST(
   req: Request,
@@ -9,6 +10,9 @@ export async function POST(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: "Missing leagueId" }, { status: 400 })
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const body = (await req.json().catch(() => ({}))) as Partial<{
       sport: string

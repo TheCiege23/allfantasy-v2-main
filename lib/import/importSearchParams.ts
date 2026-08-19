@@ -1,4 +1,4 @@
-export type LegacyPlatformTab = 'sleeper' | 'yahoo' | 'mfl' | 'fantrax' | 'espn'
+export type LegacyPlatformTab = 'sleeper' | 'yahoo' | 'mfl' | 'fantrax' | 'espn' | 'fleaflicker'
 
 /** Maps ?provider= from /import URL to a platform tab. */
 export function normalizeIncomingImportProvider(
@@ -6,6 +6,14 @@ export function normalizeIncomingImportProvider(
 ): LegacyPlatformTab | undefined {
   if (!raw) return undefined
   const x = raw.trim().toLowerCase()
-  if (x === 'sleeper' || x === 'yahoo' || x === 'mfl' || x === 'fantrax' || x === 'espn') return x
+  if (
+    x === 'sleeper' ||
+    x === 'yahoo' ||
+    x === 'mfl' ||
+    x === 'fantrax' ||
+    x === 'espn' ||
+    x === 'fleaflicker'
+  )
+    return x
   return undefined
 }

@@ -33,8 +33,14 @@ export type RankPreview = {
     tier_name: string;
   };
   yearly_projection: {
+    /** Real: an honest per-year average from actual league history. */
     baseline_year_xp: number;
     baseline_year_levels: number;
+    /**
+     * Removed (audit finding #12) — these used to be a fabricated "AI-boosted" projection
+     * built from hardcoded lift percentages with no real model behind them. Always 0 now;
+     * confirmed unused by any rendered UI. A real projection is a future feature.
+     */
     ai_low_year_xp: number;
     ai_mid_year_xp: number;
     ai_high_year_xp: number;
@@ -44,9 +50,6 @@ export type RankPreview = {
       avgPlayoffsPerYear: number;
       avgChampsPerYear: number;
       avgMultiplier: number;
-      aiWinRateLiftRange: string;
-      aiPlayoffLiftPerYear: number;
-      aiChampLiftPerYear: number;
       xp_per_level: number;
       tier_xp_thresholds: { tier: number; name: string; minLevel: number; minXp: number }[];
     };
@@ -139,33 +142,15 @@ export function computeLegacyRankPreview(input: {
         avgLeaguesPerYear * XP_SOURCES.leagueParticipation) * avgMultiplier
     );
 
-  const aiWinRateLiftLow = 0.05;
-  const aiWinRateLiftMid = 0.07;
-  const aiWinRateLiftHigh = 0.12;
-
-  const aiPlayoffLiftPerYear = 0.35;
-  const aiChampLiftPerYear = 0.10;
-
-  const aiLowYearXp = round(
-    ((avgWinsPerYear * (1 + aiWinRateLiftLow)) * XP_SOURCES.regularWin +
-      (avgPlayoffsPerYear + aiPlayoffLiftPerYear) * XP_SOURCES.playoffAppearance +
-      (avgChampsPerYear + aiChampLiftPerYear) * XP_SOURCES.championshipWin +
-      avgLeaguesPerYear * XP_SOURCES.leagueParticipation) * avgMultiplier
-  );
-
-  const aiMidYearXp = round(
-    ((avgWinsPerYear * (1 + aiWinRateLiftMid)) * XP_SOURCES.regularWin +
-      (avgPlayoffsPerYear + aiPlayoffLiftPerYear) * XP_SOURCES.playoffAppearance +
-      (avgChampsPerYear + aiChampLiftPerYear) * XP_SOURCES.championshipWin +
-      avgLeaguesPerYear * XP_SOURCES.leagueParticipation) * avgMultiplier
-  );
-
-  const aiHighYearXp = round(
-    ((avgWinsPerYear * (1 + aiWinRateLiftHigh)) * XP_SOURCES.regularWin +
-      (avgPlayoffsPerYear + aiPlayoffLiftPerYear * 1.25) * XP_SOURCES.playoffAppearance +
-      (avgChampsPerYear + aiChampLiftPerYear * 1.5) * XP_SOURCES.championshipWin +
-      avgLeaguesPerYear * XP_SOURCES.leagueParticipation) * avgMultiplier
-  );
+  // Removed (audit finding #12): this block used to project ai_low/mid/high_year_xp by
+  // applying hardcoded "AI lift" percentages (5-12% win-rate lift, 0.35 playoff lift, 0.10
+  // championship lift) that were never derived from any real model or historical data —
+  // invented numbers, not computed ones. Confirmed unused by any rendered UI. baseline_year_xp
+  // above stays: it's a real, honestly-computed per-year average from actual league history,
+  // not fabricated. A real AI-backed projection can be built later as its own feature.
+  const aiLowYearXp = 0;
+  const aiMidYearXp = 0;
+  const aiHighYearXp = 0;
 
   return {
     career: {
@@ -186,9 +171,6 @@ export function computeLegacyRankPreview(input: {
         avgPlayoffsPerYear: Number(avgPlayoffsPerYear.toFixed(2)),
         avgChampsPerYear: Number(avgChampsPerYear.toFixed(2)),
         avgMultiplier: Number(avgMultiplier.toFixed(2)),
-        aiWinRateLiftRange: "5%–12%",
-        aiPlayoffLiftPerYear,
-        aiChampLiftPerYear,
         xp_per_level: 0,
         tier_xp_thresholds: RANK_LEVELS.map((r) => ({
           tier: r.level,

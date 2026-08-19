@@ -122,7 +122,7 @@ const upgradeCards = [
   {
     id: "af-commissioner",
     title: "AF Commissioner",
-    price: "$4.99/mo",
+    price: "$14.99/mo",
     bestFor: "Best for pool creators",
     icon: Crown,
     body: "Custom scoring, bigger pools, pool announcements, invite tools, leaderboard exports, and AI commissioner recaps.",
@@ -149,7 +149,7 @@ const upgradeCards = [
     price: "$19.99/mo",
     bestFor: "Best for die-hards",
     icon: Star,
-    body: "All AI tools, priority Chimmy access, advanced analytics, league tools, War Room intel, and commissioner features — everything in one plan.",
+    body: "All AI tools, priority Chimmy access, advanced analytics, league tools, AF Legacy intel, and commissioner features — everything in one plan.",
     href: supremeHref,
     cta: "Go Supreme",
     event: "AFSupremeUpsellViewed",

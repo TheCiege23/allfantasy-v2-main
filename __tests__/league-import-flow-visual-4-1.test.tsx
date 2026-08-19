@@ -21,19 +21,21 @@ const loadingSrc = readFileSync(
 )
 
 describe('LeagueImportFlow — Phase 4.1 visual upgrade (structural)', () => {
-  it('preserves the data-testids downstream QA depends on', () => {
+  it('preserves the provider-tab data-testids downstream QA depends on', () => {
+    // Canonical-import rewire: the flagship /import Sleeper journey now uses the
+    // preview-first canonical discovery flow, not the legacy "Build My Legacy
+    // Profile" CTA — so `import-build-legacy-cta` intentionally no longer exists
+    // here (that path lives on in the /af-legacy career-history product). The
+    // provider tabs keep their testids for QA.
     for (const testid of [
       'import-tab-sleeper',
       'import-tab-yahoo',
       'import-tab-mfl',
       'import-tab-fantrax',
       'import-tab-espn',
-      'import-build-legacy-cta',
     ]) {
       expect(flowSrc, `missing data-testid=${testid}`).toContain(`data-testid={\`import-tab-\${id}\`}`)
-      // The last one (CTA) uses a literal:
     }
-    expect(flowSrc).toContain('data-testid="import-build-legacy-cta"')
   })
 
   it('applies shared Dashboard V2 motion classes (warroom-* + fade-in-stagger)', () => {
@@ -50,13 +52,17 @@ describe('LeagueImportFlow — Phase 4.1 visual upgrade (structural)', () => {
   })
 
   it('surfaces the flagship "Recommended" provider badge on Sleeper', () => {
-    expect(flowSrc).toContain('recommended: true')
+    // Tab objects are `{ id, label }` (shape locked by
+    // import-page-provider-flow.test.ts), so the badge is rendered by id rather
+    // than a `recommended: true` object flag.
     expect(flowSrc).toContain('Recommended')
+    expect(flowSrc).toContain("id === 'sleeper'")
   })
 
   it('includes the step-1 eyebrow chip anchoring the pre-import stage', () => {
+    // "Step 2 of 2" belonged to the legacy Sleeper username form, which the
+    // canonical discovery flow replaces; the step-1 eyebrow is retained.
     expect(flowSrc).toContain('Step 1 · Choose Platform')
-    expect(flowSrc).toContain('Step 2 of 2')
   })
 })
 

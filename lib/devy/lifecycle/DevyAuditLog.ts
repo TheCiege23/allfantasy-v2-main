@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 
 export type DevyLifecycleEventType =
   | 'graduation'
@@ -38,7 +39,7 @@ export async function appendDevyLifecycleEvent(input: AppendDevyEventInput): Pro
       rosterId: input.rosterId ?? null,
       devyPlayerId: input.devyPlayerId ?? null,
       proPlayerId: input.proPlayerId ?? null,
-      payload: input.payload ?? undefined,
+      payload: toPrismaNullableJsonInput(input.payload),
     },
   })
 }

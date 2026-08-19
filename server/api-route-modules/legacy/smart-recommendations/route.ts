@@ -7,15 +7,25 @@ import {
 } from '@/lib/smart-trade-recommendations'
 import { getSleeperUser, getLeagueRosters, getLeagueInfo, getAllPlayers, getLeagueUsers } from '@/lib/sleeper-client'
 import { trackLegacyToolUsage } from '@/lib/analytics-server'
-import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
+/*
+ * All three handlers took a Sleeper username straight from the caller — GET from the query
+ * string, POST and PUT by destructuring the body — and passed it to lib/smart-trade-
+ * recommendations, which reads that user's leagues, rosters and trading history. The param
+ * is named `username` rather than `sleeper_username`, which is the only reason this route
+ * escaped the first pass of the sweep; `getSleeperUser(username)` below confirms the
+ * identity space is Sleeper, so it belongs to exactly the class this file closes.
+ *
+ * allowGuest: reachable straight after a guest import, same as the rest of the surface.
+ */
 export const GET = withApiUsage({ endpoint: "/api/legacy/smart-recommendations", tool: "LegacySmartRecommendations" })(async (request: NextRequest) => {
-  const { searchParams } = new URL(request.url)
-  const username = searchParams?.get('username')
-
-  if (!username) {
-    return NextResponse.json({ error: 'Username required' }, { status: 400 })
-  }
+  const gate = await requireLegacySleeperIdentity(request, {
+    allowGuest: true,
+    requestedUsername: new URL(request.url).searchParams?.get('username'),
+  })
+  if (!gate.ok) return gate.response
+  const username = gate.identity.sleeperUsername
 
   try {
     const quickCheck = await getQuickRecommendationsForUser(username)
@@ -27,28 +37,26 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/smart-recommendations",
 })
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/smart-recommendations", tool: "LegacySmartRecommendations" })(async (request: NextRequest) => {
-  const ip = getClientIp(request)
-  const rateLimitResult = consumeRateLimit({
-    scope: 'legacy',
-    action: 'smart_recommendations',
-    ip,
-    maxRequests: 5,
-    windowMs: 60000,
-  })
-  
-  if (!rateLimitResult.success) {
-    return NextResponse.json({ 
-      error: 'Rate limited. Please wait before trying again.',
-      retryAfter: rateLimitResult.retryAfterSec 
-    }, { status: 429 })
-  }
-
   try {
     const body = await request.json()
-    const { username, leagueId, sport = 'nfl' } = body
+    const { username: claimedUsername, leagueId, sport = 'nfl' } = body
 
-    if (!username || !leagueId) {
-      return NextResponse.json({ error: 'Username and leagueId required' }, { status: 400 })
+    /*
+     * The old limiter passed `ip` with no `includeIpInKey`, which is the degenerate shape:
+     * one bucket shared by the entire platform rather than one per caller. Moving it into
+     * the gate keys it on the resolved actor, after identity, so a flood cannot drain
+     * everyone else's budget.
+     */
+    const gate = await requireLegacySleeperIdentity(request, {
+      allowGuest: true,
+      requestedUsername: claimedUsername,
+      rateLimit: { action: 'smart_recommendations', maxRequests: 5, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
+
+    if (!leagueId) {
+      return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
     }
 
     const sleeperUser = await getSleeperUser(username)
@@ -145,12 +153,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/smart-recommendations"
 
 export const PUT = withApiUsage({ endpoint: "/api/legacy/smart-recommendations", tool: "LegacySmartRecommendations" })(async (request: NextRequest) => {
   try {
-    const body = await request.json()
-    const { username } = body
-
-    if (!username) {
-      return NextResponse.json({ error: 'Username required' }, { status: 400 })
-    }
+    const body = await request.json().catch(() => ({}))
+    const gate = await requireLegacySleeperIdentity(request, {
+      allowGuest: true,
+      requestedUsername: (body as { username?: string })?.username ?? null,
+    })
+    if (!gate.ok) return gate.response
+    const username = gate.identity.sleeperUsername
 
     const profile = await analyzeUserTradingProfile(username)
     if (!profile) {

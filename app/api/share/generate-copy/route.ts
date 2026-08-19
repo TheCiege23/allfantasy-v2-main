@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { prisma } from '@/lib/prisma';
+import { toPrismaJsonInput } from '@/lib/prisma-json';
 import { ACHIEVEMENT_SHARE_TYPES } from '@/lib/social-sharing/types';
 import type { AchievementShareType, AchievementShareContext } from '@/lib/social-sharing/types';
 import { generateShareCopy, getTemplateShareCopy, isGrokShareConfigured } from '@/lib/social-sharing/GrokShareCopyService';
@@ -56,12 +57,12 @@ export async function POST(req: Request) {
         data: {
           title: copy.headline,
           summary: copy.caption,
-          metadata: {
+          metadata: toPrismaJsonInput({
             ...metadata,
             context,
             sport,
             grokCopy: copy,
-          },
+          }),
         },
       });
     }

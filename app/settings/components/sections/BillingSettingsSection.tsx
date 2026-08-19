@@ -27,24 +27,24 @@ export function BillingSettingsSection() {
             <p className="mb-1 text-xs uppercase tracking-wider" style={{ color: "var(--muted2)" }}>{t("settings.billing.currentPlan")}</p>
             {hasAnySub ? (
               <div className="flex flex-wrap items-center gap-2">
-                {ents.hasAllAccess && (
-                  <span className="rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2.5 py-0.5 text-xs font-bold text-cyan-300">
-                    AF All-Access
+                {ents.hasSupreme && (
+                  <span className="rounded-full border border-purple-400/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-bold text-purple-300">
+                    AF Supreme
                   </span>
                 )}
-                {!ents.hasAllAccess && ents.hasCommissioner && (
+                {!ents.hasSupreme && ents.hasCommissioner && (
                   <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-0.5 text-xs font-bold text-violet-300">
                     AF Commissioner
                   </span>
                 )}
-                {!ents.hasAllAccess && ents.hasPro && (
+                {!ents.hasSupreme && ents.hasPro && (
                   <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2.5 py-0.5 text-xs font-bold text-sky-300">
                     AF Pro
                   </span>
                 )}
-                {!ents.hasAllAccess && ents.hasWarRoom && (
+                {!ents.hasSupreme && ents.hasWarRoom && (
                   <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-300">
-                    AF War Room
+                    AF Legacy
                   </span>
                 )}
               </div>
@@ -89,6 +89,12 @@ export function BillingSettingsSection() {
             })}
           </div>
         )}
+
+        {ents.isAdminBypassAccount && (
+          <p className="mt-3 text-[11px] italic" style={{ color: "var(--muted2)" }} data-testid="settings-billing-bypass-notice">
+            Admin bypass — this plan is not a real Stripe subscription.
+          </p>
+        )}
       </div>
 
       {/* AI Token balance */}
@@ -120,7 +126,7 @@ export function BillingSettingsSection() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {hasAnySub ? (
+        {hasAnySub && !ents.isAdminBypassAccount ? (
           <a
             href="/api/subscription/billing-portal"
             className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-semibold transition hover:opacity-90"
@@ -142,7 +148,7 @@ export function BillingSettingsSection() {
         ) : null}
         <Link
           href="/pricing"
-          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-cyan-500 to-sky-500 px-4 py-2 text-sm font-bold text-[#030b14] transition hover:from-cyan-400 hover:to-sky-400"
+          className="inline-flex min-h-[40px] items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-500 px-4 py-2 text-sm font-bold text-[#0b0714] transition hover:from-violet-400 hover:to-purple-400"
           data-testid="settings-billing-pricing"
         >
           {hasAnySub ? t("settings.billing.changePlan") : t("settings.billing.viewPlans")}

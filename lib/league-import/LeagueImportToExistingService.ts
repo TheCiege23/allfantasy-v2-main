@@ -316,6 +316,10 @@ export async function applyImportedLeagueToExistingLeague(args: {
     updateData.isDynasty = args.normalized.league.isDynasty
     updateData.starters = leagueData.roster_positions ?? null
     updateData.leagueVariant = resolveImportedLeagueVariant(args.normalized)
+    // Phase OS-C5: same omission as the initial-import path (ImportedLeagueCommitService.ts) —
+    // `?? undefined` means Prisma skips this key entirely (leaves the existing value alone) when
+    // the provider genuinely has no status for this sync, rather than overwriting it with null.
+    updateData.status = args.normalized.league.status ?? undefined
   }
   if (apply.scoringRules) {
     updateData.scoring = args.normalized.league.scoring ?? args.normalized.scoring?.scoring_format ?? null

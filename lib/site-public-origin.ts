@@ -52,3 +52,32 @@ export function getPublicSiteHostname(): string {
     return "www.allfantasy.ai"
   }
 }
+
+/**
+ * Absolute origin for building links that must return to THIS deployment — e.g. the admin
+ * magic link. A PREVIEW deployment uses its own Vercel-assigned host so a preview-issued
+ * link returns to the preview (not production); PRODUCTION keeps the configured canonical
+ * origin exactly as before.
+ *
+ * SECURITY: derived ONLY from Vercel-set environment variables (VERCEL_ENV / VERCEL_BRANCH_URL
+ * / VERCEL_URL) and the configured site URL — NEVER from the request Host / X-Forwarded-Host
+ * header. An attacker cannot point an emailed admin link at their own host by spoofing Host.
+ */
+export function getDeploymentLinkOrigin(env: NodeJS.ProcessEnv = process.env): string {
+  // Preview: the deployment's own Vercel host. Prefer the stable branch alias
+  // (VERCEL_BRANCH_URL) over the per-deploy URL (VERCEL_URL); both are Vercel-set.
+  if (env.VERCEL_ENV === "preview") {
+    const previewHost = env.VERCEL_BRANCH_URL?.trim() || env.VERCEL_URL?.trim()
+    if (previewHost) return normalizeBaseUrl(previewHost)
+  }
+
+  // Production / everything else: the configured canonical origin — unchanged behavior.
+  const configured = env.PUBLIC_SITE_URL?.trim() || env.NEXT_PUBLIC_SITE_URL?.trim() || ""
+  if (configured) return normalizeBaseUrl(configured)
+
+  // Last resort (e.g. a non-preview Vercel build with nothing configured): the deploy host.
+  if (env.VERCEL_URL?.trim()) return normalizeBaseUrl(env.VERCEL_URL)
+
+  // Local/dev with nothing set: empty → caller falls back to a relative link.
+  return ""
+}

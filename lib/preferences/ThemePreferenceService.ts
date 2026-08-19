@@ -14,13 +14,17 @@ import { applyThemeToDocument } from "@/lib/preferences/HtmlPreferenceSync"
 
 export type ThemeMode = ThemeId
 
-export function getStoredTheme(): ThemeMode {
-  if (typeof window === "undefined") return DEFAULT_THEME
+export function getStoredThemePreference(): ThemeMode | null {
+  if (typeof window === "undefined") return null
   try {
-    const v = window.localStorage.getItem(THEME_STORAGE_KEY)
-    return normalizeStoredTheme(v)
+    const value = window.localStorage.getItem(THEME_STORAGE_KEY)
+    return value === null ? null : normalizeStoredTheme(value)
   } catch {}
-  return DEFAULT_THEME
+  return null
+}
+
+export function getStoredTheme(): ThemeMode {
+  return getStoredThemePreference() ?? DEFAULT_THEME
 }
 
 export function setStoredTheme(mode: ThemeMode): void {

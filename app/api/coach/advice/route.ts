@@ -5,8 +5,28 @@ import { assertLeagueMember } from '@/lib/league-access';
 import { logAiOutput } from '@/lib/ai/output-logger';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { getAICoachResponse, normalizeAdviceType } from '@/lib/ai-coach';
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates';
+import { CertifiedIntelligenceIntegrationService } from '@/lib/fantasy-os/sports-runtime/intelligenceIntegration';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Gated, informational-only certified sports grounding for Coach. It is attached to the response alongside the
+ * coach's own reasoning — it NEVER feeds getAICoachResponse and NEVER alters the recommendation/explanation.
+ * Off by default; wrapped so it can never fail the route. Injuries/projections/stats stay explicitly unavailable.
+ */
+async function coachSportsContext(sport: string | undefined, week: number | undefined) {
+  if (!isSportsDataEnabled('coach')) return undefined;
+  if (String(sport ?? 'NFL').toUpperCase() !== 'NFL') return undefined;
+  try {
+    return await new CertifiedIntelligenceIntegrationService().describeCoachSportsContext({
+      season: String(new Date().getFullYear()),
+      week: String(week ?? 1),
+    });
+  } catch {
+    return undefined;
+  }
+}
 
 export async function POST(req: Request) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
@@ -92,6 +112,8 @@ export async function POST(req: Request) {
       },
     });
 
+    const sportsContext = await coachSportsContext(body.sport ?? body.leagueSettings?.sport, body.week);
+
     // Backward-compatible top-level fields plus richer deterministic/AI split payload.
     return NextResponse.json({
       type: result.type,
@@ -101,6 +123,7 @@ export async function POST(req: Request) {
       tone: result.explanation.tone,
       recommendation: result.recommendation,
       explanation: result.explanation,
+      ...(sportsContext ? { sportsContext } : {}),
     });
   } catch (e) {
     console.error('[coach/advice]', e);

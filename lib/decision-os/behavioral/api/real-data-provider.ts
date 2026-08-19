@@ -45,6 +45,7 @@ import { prisma as defaultPrisma }              from '@/lib/prisma'
 import type { IntelligenceDataProvider }        from './intelligence-handlers'
 import type { ManagerBehavioralIntelligence }   from '../manager-intelligence'
 import type { LeagueBehavioralIntelligence }    from '../league-intelligence'
+import type { ImportedActivityEventRow }         from '../importedActivityToEvents'
 
 // ── Configuration (read at call time for env-override support) ────────────────
 
@@ -54,6 +55,36 @@ function lookbackDays(): number {
 
 function maxPlatformLeagues(): number {
   return Math.max(1, parseInt(process.env.INTELLIGENCE_PLATFORM_MAX_LEAGUES ?? '20', 10) || 20)
+}
+
+// ── Imported-activity loader (RC1 union — restored after the origin/main merge) ─
+
+/**
+ * Default imported-activity loader. Degrades honestly: if the `decisionOsImportedActivity`
+ * model isn't generated/migrated yet, returns [] so AF-native behavior is unchanged (never crashes).
+ *
+ * Restored during the RC1 mainline reconciliation: `dashboard-intelligence.ts` imports this symbol
+ * directly to reuse the same honest-degradation logic for its own redraft sources. Only this
+ * standalone export is reintroduced — main's provider pipeline is left intact and no other
+ * branch-era behavior is restored.
+ */
+export async function defaultLoadImportedActivityRows(leagueId: string, since?: Date): Promise<ImportedActivityEventRow[]> {
+  try {
+    const delegate = (defaultPrisma as unknown as {
+      decisionOsImportedActivity?: { findMany(args: unknown): Promise<ImportedActivityEventRow[]> }
+    })?.decisionOsImportedActivity
+    if (!delegate || typeof delegate.findMany !== 'function') return []
+    return await delegate.findMany({
+      where: {
+        OR: [{ afLeagueId: leagueId }, { providerLeagueId: leagueId }],
+        ...(since ? { occurredAt: { gte: since } } : {}),
+      },
+      orderBy: { occurredAt: 'desc' },
+    })
+  } catch {
+    // Model not generated/migrated yet, or read failed → degrade honestly; AF-native reads are unaffected.
+    return []
+  }
 }
 
 // ── Dependency interface ──────────────────────────────────────────────────────

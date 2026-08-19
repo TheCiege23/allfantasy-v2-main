@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { LeagueSport } from '@prisma/client'
 import {
@@ -157,7 +158,7 @@ export async function upsertGuillotineConfig(
       customCutoffDayOfWeek: input.customCutoffDayOfWeek ?? null,
       customCutoffTimeUtc: input.customCutoffTimeUtc ?? null,
       statCorrectionHours: input.statCorrectionHours ?? DEFAULT_STAT_CORRECTION_HOURS,
-      tiebreakerOrder: (input.tiebreakerOrder ?? DEFAULT_TIEBREAKER_ORDER) as unknown as Record<string, unknown>,
+      tiebreakerOrder: toPrismaJsonInput(input.tiebreakerOrder ?? DEFAULT_TIEBREAKER_ORDER),
       dangerMarginPoints: input.dangerMarginPoints ?? DEFAULT_DANGER_MARGIN_POINTS,
       rosterReleaseTiming: input.rosterReleaseTiming ?? RELEASE_NEXT_WAIVER,
       commissionerOverride: input.commissionerOverride ?? true,
@@ -170,7 +171,7 @@ export async function upsertGuillotineConfig(
       ...(input.customCutoffDayOfWeek !== undefined && { customCutoffDayOfWeek: input.customCutoffDayOfWeek }),
       ...(input.customCutoffTimeUtc !== undefined && { customCutoffTimeUtc: input.customCutoffTimeUtc }),
       ...(input.statCorrectionHours !== undefined && { statCorrectionHours: input.statCorrectionHours }),
-      ...(input.tiebreakerOrder !== undefined && { tiebreakerOrder: input.tiebreakerOrder as unknown as Record<string, unknown> }),
+      ...(input.tiebreakerOrder !== undefined && { tiebreakerOrder: toPrismaJsonInput(input.tiebreakerOrder) }),
       ...(input.dangerMarginPoints !== undefined && { dangerMarginPoints: input.dangerMarginPoints }),
       ...(input.rosterReleaseTiming !== undefined && { rosterReleaseTiming: input.rosterReleaseTiming }),
       ...(input.commissionerOverride !== undefined && { commissionerOverride: input.commissionerOverride }),

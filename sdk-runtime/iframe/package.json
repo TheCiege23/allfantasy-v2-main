@@ -1,0 +1,55 @@
+{
+  "name": "@allfantasy/widget-iframe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AllFantasy Widget SDK — iframe embed adapter (Phase 7.9-7.15): versioned postMessage protocol, origin/sandbox validation, host/child bootstraps, browser DOM wiring, and host/child facades. Four independent entry points so a non-React consumer never pulls in React: '.' (protocol, no DOM), './browser' (DOM wiring), './facade' (host/client facades), './react-child' (composes @allfantasy/widget-react, the one sanctioned adapter-depends-on-adapter exception). Consumes only the frozen lib/decision-os/sdk + lib/decision-os/presentation/widget-contracts contracts (PHASE_7_5_WIDGET_RUNTIME_BOUNDARY_ADR.md, D4 of PHASE_7_22_SDK_PACKAGING_ADR.md).",
+  "type": "module",
+  "types": "./dist/sdk-runtime/iframe/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk-runtime/iframe/src/index.d.ts"
+    },
+    "./browser": {
+      "types": "./dist/sdk-runtime/iframe/src/browser/index.d.ts"
+    },
+    "./facade": {
+      "types": "./dist/sdk-runtime/iframe/src/facade/index.d.ts"
+    },
+    "./react-child": {
+      "types": "./dist/sdk-runtime/iframe/src/reactChild/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.browser.json && tsc --noEmit -p tsconfig.facade.json && tsc --noEmit -p tsconfig.reactChild.json",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

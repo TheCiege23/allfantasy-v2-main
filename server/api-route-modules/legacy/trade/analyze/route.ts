@@ -9,12 +9,19 @@ import { trackLegacyToolUsage } from '@/lib/analytics-server'
 import { evaluateTrade, formatEvaluationForAI, TradeAsset as TierTradeAsset, LeagueSettings, detectIDPFromRosterPositions, detectSFFromRosterPositions } from '@/lib/dynasty-tiers'
 import { getPlayerValuesForNames, formatValuesForPrompt, FantasyCalcSettings, calculateTradeBalance, getPickValue } from '@/lib/fantasycalc'
 import { buildTradeHubIntelBlock, parseTradeIntelBlockMeta } from '@/lib/trade-engine/trade-analyzer-intel'
+import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
+import {
+  buildSurfaceParity,
+  legacyVerdictToAdvantage,
+} from '@/lib/decision-os/trade/legacyParity'
+import { buildLegacyCanonicalGrade } from '@/lib/decision-os/trade/legacyCanonicalGrade'
 import { fetchPlayerNewsFromGrok } from '@/lib/ai-gm-intelligence'
 import { buildRuntimeConstraints, formatConstraintsForPrompt, DEFAULT_TRADE_CONSTRAINTS, getPickValueWithRange, getPickRange } from '@/lib/trade-constraints'
 import { buildHistoricalTradeContext, getDataInfo } from '@/lib/historical-values'
 import { autoLogDecision } from '@/lib/decision-log'
 import { computeNewsValueAdjustments, applyNewsAdjustmentsToValueMap, formatNewsAdjustmentsForPrompt, type PlayerNewsData, type NewsValueAdjustment } from '@/lib/news-value-adjustment'
 import { computeConfidenceRisk, getHistoricalHitRate, type AssetContext } from '@/lib/analytics/confidence-risk-engine'
+import { buildTradeValuationEvidence, type TradeValuationEvidence } from '@/lib/legacy/intelligenceEvidence'
 import { getCachedDNA, formatDNAForPrompt } from '@/lib/manager-dna'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueUsers } from '@/lib/sleeper-client'
 import { lookupByNames, buildPlayerContextForAI, enrichWithValuation, type UnifiedPlayer } from '@/lib/unified-player-service'
@@ -2284,8 +2291,11 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
             },
           })
 
-          if (devyPlayer) {
-            const projection = computeDraftProjectionScore(devyPlayer)
+          const projection = devyPlayer ? computeDraftProjectionScore(devyPlayer) : null
+          // Null means not one signal backed a projection for him. Skipping the
+          // devy adjustment entirely is the honest response: the alternative is
+          // pricing a trade off a score we did not earn.
+          if (devyPlayer && projection != null) {
             ;(asset.player as any).draftProjectionScore = projection
             ;(asset.player as any).adjustedValue =
               projection * 0.8 + (devyPlayer.devyAdp ?? 50) * 0.2
@@ -2549,6 +2559,26 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
 
     const hitRate = await getHistoricalHitRate(canonicalA, 'trade', leagueId || undefined).catch(() => null)
 
+    // Honesty (Task 2): classify every valuation that entered the balance math. Players the
+    // FantasyCalc lookup missed carry the flat ~200 fallback — that must reach the response as
+    // 'fallback', in missingInputs, and as lowered confidence, never as a market observation.
+    let valuationEvidence: TradeValuationEvidence | null = null
+    if (tradeBalance) {
+      valuationEvidence = buildTradeValuationEvidence({
+        sideAPlayers: tradeBalance.breakdown.sideA.players,
+        sideBPlayers: tradeBalance.breakdown.sideB.players,
+        unknownPlayers: tradeBalance.unknownPlayers,
+        foundValuesAdjusted: getScarcityMultiplier(numTeams) !== 1.0,
+      })
+    }
+
+    // playerCoverage previously used the fantasyCalcMap SIZE as a proxy — the map can contain
+    // uninvolved players, overstating coverage. When the balance breakdown exists, use the real
+    // found-vs-involved ratio so fallback-heavy trades honestly lower confidence.
+    const honestPlayerCoverage = valuationEvidence && valuationEvidence.players.length > 0
+      ? valuationEvidence.marketBackedCount / valuationEvidence.players.length
+      : involvedNames.length > 0 ? (fantasyCalcMap?.size || 0) / involvedNames.length : 1
+
     const crResult = computeConfidenceRisk({
       category: 'trade',
       userId: canonicalA || undefined,
@@ -2557,7 +2587,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       dataCompleteness: {
         hasHistoricalData: !!historicalContext,
         dataPointCount: fantasyCalcMap?.size || 0,
-        playerCoverage: involvedNames.length > 0 ? (fantasyCalcMap?.size || 0) / involvedNames.length : 1,
+        playerCoverage: honestPlayerCoverage,
         isCommonScenario: true,
       },
       tradeContext: {
@@ -2646,6 +2676,13 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
           probability: result.probability,
           liquidityAdjusted: result.liquidityAdjusted,
           counterRequired: result.counterRequired,
+          // Slice 16 — how much of the model actually ran. Four of its six
+          // features have no producer in this codebase, so this number is
+          // built from fairness + volatility alone; consumers must be able to
+          // see that rather than treating it as a full-confidence estimate.
+          featureCoverage: result.featureCoverage,
+          missingFeatures: result.missingFeatures,
+          degraded: result.degraded,
         }
       }
 
@@ -2918,6 +2955,71 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       engineAnalysis = await runTradeAnalysis(engineReq)
     } catch {}
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Slice 13/14 — CANONICAL CONVERGENCE for the highest-traffic trade surface.
+    //
+    // Legacy's grade has always been an LLM output constrained by FantasyCalc.
+    // Here we compute the CANONICAL grade for the same trade (the
+    // buildTradeValueSnapshot → gradeTrade engine the Decision Registry names
+    // authoritative), fed from the same real FantasyCalc values legacy already
+    // loaded, via the market-value basis completed in slice 14.
+    //
+    //   • Always: record parity (canonical vs legacy) so divergence is measured.
+    //   • DECISION_OS_TRADE_LIVE_LEGACY=true: the canonical grade/verdict is
+    //     what the user sees. Default OFF — flipping is an env change.
+    //   • NEVER override on insufficientData: if the canonical engine cannot
+    //     grade, legacy's existing answer stands rather than blanking a working
+    //     surface.
+    // Fully guarded — convergence can never throw into the legacy response.
+    let canonicalGradeApplied = false
+    try {
+      const canonical = buildLegacyCanonicalGrade({
+        assetsA: assetsA as never[],
+        assetsB: assetsB as never[],
+        marketValueFor: (name: string) => {
+          const row = newsAdjustedCalcMap.get(name.toLowerCase()) as { value?: number } | undefined
+          return typeof row?.value === 'number' && Number.isFinite(row.value) ? row.value : null
+        },
+        sport: 'NFL',
+        format: format || 'dynasty',
+        currentSeason: new Date().getFullYear(),
+      })
+
+      const legacyAdvantage = legacyVerdictToAdvantage((data as { verdict?: string })?.verdict)
+      const canonicalAdvantage = canonical.verdict ? legacyVerdictToAdvantage(canonical.verdict) : null
+
+      recordTradeSurfaceShadow({
+        surface: 'legacy',
+        leagueId: leagueId || null,
+        assetsGive: assetsB.length,
+        assetsGet: assetsA.length,
+        surfaceVerdict: (data as { verdict?: string })?.verdict ?? null,
+        surfaceAnalysisMode: (data as { grade?: string })?.grade ?? 'llm_grade',
+        comparison: buildSurfaceParity({
+          surfaceAdvantage: legacyAdvantage,
+          engineAdvantage: canonicalAdvantage,
+          engineGrade: canonical.grade,
+          engineFairnessScore: canonical.fairnessScore,
+          engineConfidenceScore: canonical.confidenceScore,
+          engineValueDifference: canonical.valueDifference,
+        }),
+      })
+
+      const liveLegacy =
+        String(process.env['DECISION_OS_TRADE_LIVE_LEGACY'] ?? '').trim().toLowerCase() === 'true'
+      if (liveLegacy && !canonical.insufficientData && canonical.grade && canonical.verdict) {
+        const target = data as Record<string, unknown>
+        target.grade = canonical.grade
+        target.verdict = canonical.verdict
+        target.fairnessScore = canonical.fairnessScore
+        target.confidenceScore = canonical.confidenceScore
+        target.gradeSource = 'canonical_value_engine'
+        canonicalGradeApplied = true
+      }
+    } catch {
+      // Convergence must never break the legacy response.
+    }
+
     const leagueStatus = league?.status || ''
     const isOffseason = leagueStatus === 'complete' || leagueStatus === 'pre_draft'
     const offseasonContext = isOffseason ? {
@@ -2932,6 +3034,8 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       success: true,
       result: {
         ...data,
+        // Slice 14 — provenance: which engine produced the grade the user sees.
+        gradeSource: canonicalGradeApplied ? 'canonical_value_engine' : 'legacy_llm_fantasycalc',
         notes: finalNotes,
         _leagueSize: numTeams,
         _scarcityMultiplier: scarcityMultiplier,
@@ -2953,6 +3057,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         explanation: crResult.explanation,
       },
       ...(analyticsEnhanced ? { analytics: analyticsEnhanced } : {}),
+      ...(valuationEvidence ? { valuationEvidence } : {}),
       intelligenceAudit: providerAudit,
       ...(engineAnalysis ? { engineAnalysis, engineRequest: engineReqSaved } : {}),
       ...(offseasonContext ? { offseasonContext } : {}),

@@ -169,7 +169,7 @@ export function D6PreviewClient() {
       </div>
 
       {/* War Room as floating popup. defaultOpen=false; opens via the trigger. */}
-      <WarRoomPopup hasNewIntel triggerLabel="War Room">
+      <WarRoomPopup hasNewIntel triggerLabel="AF Legacy Draft Room">
         <div className="space-y-3 p-3 text-[12px] text-white/85">
           <div>
             <div className="text-[10px] uppercase tracking-[0.2em] text-white/45">Team</div>

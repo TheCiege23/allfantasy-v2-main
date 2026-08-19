@@ -1,0 +1,472 @@
+/*
+ * AF Core — scoped design system for the signed-in product surfaces.
+ *
+ * Ported verbatim from the design handoff `design_handoff_core_app/tokens.css`
+ * (dashboard, Player Finder, my team, matchup, trades, waivers, Draft HQ, War
+ * Room).
+ *
+ * ⚠ EVERY token is namespaced under `.af-core` on purpose, and this is not
+ * stylistic. The handoff reuses variable NAMES the app already defines globally
+ * with different VALUES — `app/globals.css` sets `--bg`, `--text`, `--muted` and
+ * `--accent` at `:root` (accent #2563EB light / #7c3aed dark), while the handoff
+ * wants `--accent:#22d3ee`. Loading the handoff at `:root` would silently
+ * repaint every existing page in the product, not just the redesigned ones.
+ * Same isolation pattern as components/auth/nocturne-auth.css and the marketing
+ * landing's nocturne.css.
+ *
+ * The handoff keys its themes off `html[data-mode="dark|light|af"]`, which is the
+ * attribute this app already stamps, so mode switching keeps working — the
+ * selectors below just pair that attribute with the `.af-core` scope.
+ *
+ * Dark is the default and is defined on the bare scope, so a surface renders
+ * correctly even before any mode attribute is applied.
+ */
+
+/*
+ * ⚠ THE HANDOFF'S TWO TYPEFACES ARE LOADED FROM app/layout.tsx, NOT FROM HERE.
+ *
+ * Every rule in this folder asks for `var(--font-archivo, 'Archivo', …)` and
+ * `var(--font-jetbrains-mono, 'JetBrains Mono', …)`, but neither variable was
+ * ever defined and nothing pulled the families in — so all of it silently
+ * resolved to the tail of the fallback chain, system-ui and generic monospace.
+ * The surface rendered in the wrong type from the day it shipped. No test could
+ * catch it: every declaration is present and valid, only the font was missing.
+ *
+ * ⚠ DO NOT "FIX" THIS BY PUTTING @import BACK AT THE TOP OF THIS FILE. That was
+ * the first attempt and it does not work, for a reason that is invisible in the
+ * source: Next concatenates this file into one route bundle with the other
+ * af-*.css files, and af-geo.css lands ahead of it. By the time the parser
+ * reaches the @import, seven style rules have already gone by, and CSS requires
+ * @import to precede every rule — so the browser drops it silently. Measured:
+ * the rule was present at line 80 of the served bundle and
+ * document.styleSheets contained no import rule at all. Bundle order is not
+ * something this file can control, so the load belongs where order is certain.
+ *
+ * The same trap applies to the @import in
+ * components/dashboard/adaptive/adaptive-dashboard.css, which is where this
+ * approach was copied from.
+ */
+
+.af-core {
+  --bg: #06070f;
+  --surface: #0d1020;
+  --surface2: #0a0c1a;
+  --rail: #0a0c1a;
+  --line: rgba(255, 255, 255, 0.07);
+  --line2: rgba(255, 255, 255, 0.13);
+  --text: #eef0fa;
+  /*
+   * ⚠ `--muted` AND `--faint` ARE RAISED ABOVE THE HANDOFF'S VALUES IN ALL THREE
+   * THEMES. Second intentional divergence from tokens.css; see the semantic-tone
+   * note for the first. Do not restore either.
+   *
+   * `--faint` FAILED WCAG 1.4.3 IN EVERY THEME, and it is not a decorative token:
+   * grepped across components/ and app/, 168 of its 170 uses are `color:` — it is
+   * the fourth text tier, and the only two exceptions are 7px dots.
+   *
+   * Measured on the worst ground each tier actually sits on (a `--chip` overlay
+   * on `--surface2`, which is where small print in a card-inside-a-card lands):
+   *
+   *              light          dark           af
+   *   --faint    2.46  ✗        2.94  ✗        3.54  ✗
+   *   --muted    4.56  ~        5.90  ✓        6.42  ✓
+   *
+   * ⚠ RAISING `--faint` ALONE WOULD HAVE DESTROYED A TIER. `--faint` needs ≈4.6
+   * to clear the floor, and light's `--muted` was sitting at 4.56 — the two would
+   * have rendered identically and the light palette would have silently dropped
+   * from four text tiers to three. So `--muted` moves up with it, and the ladder
+   * is re-cut to the same shape in every theme rather than each drifting:
+   *
+   *     text2  >  --muted 6.5  >  --faint 4.6      (≈1.4× between each)
+   *
+   * Hue and saturation are held throughout; only lightness moved. `--text` and
+   * `--text2` already cleared by a wide margin and are untouched.
+   *
+   * ⚠ CONSEQUENCE, SO IT IS NOT A SURPRISE LATER: every de-emphasised label in
+   * `.af-core` steps up one notch in weight — light-mode `--faint` now reads
+   * roughly where `--muted` used to. That is what raising a failing floor looks
+   * like; the quiet tier is still quiet, it is merely legible. 327 rules across
+   * the af-* stylesheets read these two tokens.
+   *
+   * ⚠ SCOPED TO `.af-core`. app/globals.css declares its own `--muted`/`--faint`
+   * at `:root` for non-af-core surfaces, and its `--text-secondary: var(--muted)`
+   * alias resolves against THAT one, not this. Nothing outside the af-* screens
+   * moves.
+   */
+  --text2: #c3c9e6;
+  --muted: #989fc2;
+  --faint: #7d84a8;
+  --accent: #22d3ee;
+  --accent-ink: #04050c;
+  --accent-soft: rgba(34, 211, 238, 0.12);
+  --accent-line: rgba(34, 211, 238, 0.28);
+  --good: #34d399;
+  --warn: #fbbf24;
+  --bad: #fb5b78;
+  --good-soft: rgba(52, 211, 153, 0.12);
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --bad-soft: rgba(251, 91, 120, 0.12);
+  --chip: rgba(255, 255, 255, 0.05);
+  --chip-line: rgba(255, 255, 255, 0.1);
+  --hero: radial-gradient(760px 420px at 18% 10%, rgba(34, 211, 238, 0.14), transparent 68%),
+    radial-gradient(600px 380px at 88% 30%, rgba(59, 130, 246, 0.12), transparent 70%);
+  --chimmy: linear-gradient(160deg, #141c3a, #0d1020 58%);
+  --shadow: 0 40px 120px -60px rgba(0, 0, 0, 0.9);
+
+  /* Platform marks — a connected league is always identifiable by colour. */
+  --p-sleeper-bg: #1f2a4d;
+  --p-sleeper-fg: #9fd4ff;
+  --p-espn-bg: #4a1414;
+  --p-espn-fg: #ffb4b4;
+  --p-yahoo-bg: #3a1d55;
+  --p-yahoo-fg: #dcb4ff;
+  --p-green-bg: #12352a;
+  --p-green-fg: #7ff0c4;
+  --p-gold-bg: #3a2a12;
+  --p-gold-fg: #f6c445;
+  --p-gold-soft: rgba(246, 196, 69, 0.14);
+  --tier-blue: #4d9be0;
+  --tier-blue-fg: #7fb7e8;
+  --tier-blue-soft: rgba(24, 95, 165, 0.22);
+
+  background: var(--bg);
+  color: var(--text);
+}
+
+html[data-mode='light'] .af-core {
+  --bg: #f4f6fc;
+  --surface: #ffffff;
+  --surface2: #eef1f9;
+  --rail: #ffffff;
+  --line: rgba(11, 16, 32, 0.09);
+  --line2: rgba(11, 16, 32, 0.16);
+  --text: #0b1020;
+  --text2: #333c5c;
+  /* Re-cut ladder — see the note in the base .af-core block. */
+  --muted: #484f69;
+  --faint: #5c6587;
+  /*
+   * ⚠ ALSO DARKER THAN THE HANDOFF (#0a7ea4), FOR THE SAME MEASURED REASON AS THE
+   * THREE SEMANTIC TONES BELOW — see the long note there before changing either.
+   *
+   * The handoff value fails 4.5:1 everywhere except plain --surface:
+   *
+   *     on --surface 4.63 ✓   on --bg 4.29 ✗
+   *     on --surface2 4.10 ✗   on --accent-soft 4.06 ✗
+   *
+   * `on --bg` is the one that matters most and is the easiest to miss: section
+   * headers, group labels and every "→" link sit on the PAGE ground, not on a
+   * card, and --bg is darker than --surface. So the accent text that reads
+   * acceptably inside a card fails the moment it sits between two of them.
+   *
+   * ⚠ THIS IS A VISIBLE CHANGE TO EVERY LIGHT-MODE SCREEN, and it is a smaller
+   * one than it sounds: same hue, same saturation, ~9% less lightness. It is the
+   * light palette's accent, not the brand mark — dark and AF keep #22d3ee
+   * untouched, and both already measure 8.28–11.12.
+   *
+   * -soft and -line are the same colour at their own alphas and are regenerated
+   * from the new triplet; they are not independent values.
+   */
+  --accent: #096d8e;
+  --accent-ink: #ffffff;
+  --accent-soft: rgba(9, 109, 142, 0.1);
+  --accent-line: rgba(9, 109, 142, 0.3);
+  /*
+   * ⚠ THESE THREE ARE DARKER THAN THE HANDOFF'S tokens.css, DELIBERATELY. DO NOT
+   * "RESTORE" THEM TO MATCH IT — the note further down this file records that all
+   * 39 tokens were once byte-identical to the handoff, and this is the one
+   * intentional divergence.
+   *
+   * Measured 2026-08-18 against the light grounds these actually sit on. The
+   * handoff's values fail WCAG 1.4.3 (4.5:1 for normal text) on every one of
+   * them, and the semantic tones are the worst place in the palette for that to
+   * be true: they are the signal that something needs attention, so a tone
+   * nobody can read is a warning that does not warn.
+   *
+   *                    on --surface   on its own -soft   white on it
+   *   --good #0b8f66       4.09  ✗         3.61  ✗          4.09  ✗
+   *   --warn #a86a06       4.44  ✗         3.92  ✗          4.44  ✗
+   *   --bad  #cf3355       4.93  ✓         4.26  ✗          4.93  ✓
+   *
+   * The values below are the minimum darkening (hue and saturation held, only
+   * lightness moved) that clears 4.5:1 on --surface, on --surface2, on --bg, on
+   * each tone's own -soft tint over BOTH surfaces, and for white text sitting on
+   * the tone as a solid fill. Every pairing now measures 4.52–5.94.
+   *
+   * ⚠ DARKENING IS SAFE IN BOTH DIRECTIONS HERE, WHICH IS WHY IT IS THE WHOLE
+   * FIX. Grepped first: where these tokens are a solid BACKGROUND they always
+   * carry white or --accent-ink text (.af-d2-fab-badge, .af-d34-fabdot,
+   * .af-mt-fix, .af-d34-ask[data-priority='draft']), so a darker fill raises that
+   * contrast too. Everywhere else they are a dot or a bar with no text on them.
+   *
+   * ⚠ LIGHT MODE ONLY. Dark and AF were measured at the same time and every tone
+   * clears 4.5 by a wide margin there (5.41–12.94), so those blocks are
+   * untouched — the defect is this block's, not the palette system's.
+   *
+   * The -soft pairs are the same colours at the same alpha and are regenerated
+   * from the new triplets; they are NOT independent values and must move
+   * together. (--p-gold-soft below happens to share the old --warn triplet but is
+   * a separate platform-mark token with its own --p-gold-fg, and is left alone.)
+   */
+  --good: #097352;
+  --warn: #8d5905;
+  --bad: #ba2c4b;
+  --good-soft: rgba(9, 115, 82, 0.1);
+  --warn-soft: rgba(141, 89, 5, 0.1);
+  --bad-soft: rgba(186, 44, 75, 0.1);
+  --chip: rgba(11, 16, 32, 0.045);
+  --chip-line: rgba(11, 16, 32, 0.1);
+  /* First stop is the accent glow and moves with `--accent` above; the second is
+     an independent blue and does not. A decorative wash at 10% — no text sits on
+     it — but leaving it on the old triplet is the drift this file elsewhere
+     complains about. */
+  --hero: radial-gradient(760px 420px at 18% 10%, rgba(9, 109, 142, 0.1), transparent 68%),
+    radial-gradient(600px 380px at 88% 30%, rgba(59, 130, 246, 0.09), transparent 70%);
+  --chimmy: linear-gradient(160deg, #e8f6fb, #ffffff 58%);
+  --shadow: 0 30px 80px -50px rgba(11, 16, 32, 0.4);
+  --p-sleeper-bg: #dbe8fb;
+  --p-sleeper-fg: #17518f;
+  --p-espn-bg: #fbdcdc;
+  --p-espn-fg: #a3221f;
+  --p-yahoo-bg: #eaddfa;
+  --p-yahoo-fg: #5f2f8f;
+  --p-green-bg: #d5f4e5;
+  --p-green-fg: #0b6b4a;
+  --p-gold-bg: #faedcd;
+  --p-gold-fg: #8a6208;
+  --p-gold-soft: rgba(168, 106, 6, 0.12);
+  --tier-blue: #1c6fb8;
+  --tier-blue-fg: #17518f;
+  --tier-blue-soft: rgba(24, 95, 165, 0.1);
+}
+
+/*
+ * ⚠ THIS BLOCK WAS NOT PORTED VERBATIM, DESPITE WHAT THE HEADER ABOVE CLAIMED.
+ * It was hand-typed: nine tokens carried approximated values (--text #f4f0ff
+ * against the handoff's #f4efff, --chip re-tinted purple against a plain white
+ * wash, and a --hero whose second gradient was pink rgba(236,72,153) where the
+ * handoff specifies teal rgba(94,234,212)), and twenty-one were simply absent.
+ *
+ * Absent is the worse half. A token missing here does not fail — it inherits the
+ * dark value from `.af-core` above, so AF mode rendered dark mode's semantics
+ * and platform marks while looking deliberate. Thirteen of those twenty-one
+ * genuinely differ between dark and AF in the handoff: --good/--bad and their
+ * -soft pairs, every Sleeper/ESPN/green platform mark, and the whole --tier-blue
+ * trio. The other eight are identical to dark and were inheriting correctly by
+ * coincidence; they are written out anyway so the next edit to dark cannot
+ * silently drag AF along with it.
+ *
+ * Now diffed against design_handoff_core_app/tokens.css programmatically —
+ * all 39 tokens present and byte-identical, as light and dark already were.
+ */
+html[data-mode='af'] .af-core {
+  --bg: #0d0819;
+  --surface: #170f2b;
+  --surface2: #120b22;
+  --rail: #120b22;
+  --line: rgba(167, 139, 250, 0.16);
+  --line2: rgba(167, 139, 250, 0.3);
+  --text: #f4efff;
+  --text2: #dbd0f7;
+  /* Re-cut ladder — see the note in the base .af-core block. */
+  --muted: #aa9fcc;
+  --faint: #8e84b1;
+  --accent: #a78bfa;
+  --accent-ink: #120b22;
+  --accent-soft: rgba(167, 139, 250, 0.14);
+  --accent-line: rgba(167, 139, 250, 0.36);
+  --good: #5eead4;
+  --warn: #fbbf24;
+  --bad: #fb7185;
+  --good-soft: rgba(94, 234, 212, 0.12);
+  --warn-soft: rgba(251, 191, 36, 0.12);
+  --bad-soft: rgba(251, 113, 133, 0.12);
+  --chip: rgba(255, 255, 255, 0.05);
+  --chip-line: rgba(255, 255, 255, 0.1);
+  --hero: radial-gradient(760px 420px at 18% 10%, rgba(167, 139, 250, 0.18), transparent 68%),
+    radial-gradient(600px 380px at 88% 30%, rgba(94, 234, 212, 0.1), transparent 70%);
+  --chimmy: linear-gradient(160deg, #241640, #170f2b 58%);
+  --shadow: 0 40px 120px -60px rgba(0, 0, 0, 0.9);
+  --p-sleeper-bg: #1e2450;
+  --p-sleeper-fg: #b4c8ff;
+  --p-espn-bg: #48163a;
+  --p-espn-fg: #ffb8d4;
+  --p-yahoo-bg: #3a1d55;
+  --p-yahoo-fg: #dcb4ff;
+  --p-green-bg: #123a3a;
+  --p-green-fg: #8ff0e2;
+  --p-gold-bg: #3a2a12;
+  --p-gold-fg: #f6c445;
+  --p-gold-soft: rgba(246, 196, 69, 0.14);
+  --tier-blue: #8f8bf0;
+  --tier-blue-fg: #b9b3ff;
+  --tier-blue-soft: rgba(143, 139, 240, 0.2);
+}
+
+/*
+ * ⚠ The light-mode readability clamp in globals.css `!important`-overrides
+ * `text-white*` / `bg-white` utilities under `data-mode="light"`. Author every
+ * colour in this scope on a token (`color: var(--text)`), never on a Tailwind
+ * white utility, or light mode will render dark-on-dark and no opacity tweak
+ * will fix it.
+ */
+
+/* ── Type ────────────────────────────────────────────────────────────── */
+
+.af-core {
+  font-family: var(--font-archivo, 'Archivo', system-ui, -apple-system, 'Segoe UI', sans-serif);
+}
+
+/* Quantities, statuses and small-caps labels are mono so columns of numbers
+   line up and a changing score does not reflow the row. */
+.af-core .af-num,
+.af-core .af-label {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-variant-numeric: tabular-nums;
+}
+
+.af-core .af-label {
+  font-weight: 700;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-display {
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
+/* ── Structure ───────────────────────────────────────────────────────── */
+
+.af-core .af-frame {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.af-core .af-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.af-core .af-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 10px;
+  /* The handoff specifies 44px minimum touch rows on mobile frames. */
+  min-height: 44px;
+}
+
+.af-core .af-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+/* Severity is carried by a left edge rather than a full fill, so a page of
+   issues stays readable instead of becoming a block of colour. */
+.af-core .af-issue {
+  border-left: 3px solid var(--line2);
+  background: var(--surface);
+}
+.af-core .af-issue[data-severity='bad'] {
+  border-left-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-issue[data-severity='warn'] {
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+.af-core .af-issue[data-severity='good'] {
+  border-left-color: var(--good);
+  background: var(--good-soft);
+}
+
+.af-core .af-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 13px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  border: 1px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.af-core .af-btn--ghost {
+  background: transparent;
+  color: var(--text2);
+  border-color: var(--line2);
+}
+
+/* Platform marks. `data-platform` drives both, so a league tile never has to
+   hardcode a colour. */
+.af-core .af-platform[data-platform='sleeper'] {
+  background: var(--p-sleeper-bg);
+  color: var(--p-sleeper-fg);
+}
+.af-core .af-platform[data-platform='espn'] {
+  background: var(--p-espn-bg);
+  color: var(--p-espn-fg);
+}
+.af-core .af-platform[data-platform='yahoo'] {
+  background: var(--p-yahoo-bg);
+  color: var(--p-yahoo-fg);
+}
+
+/*
+ * READ-ONLY chip.
+ *
+ * The handoff's central rule: AllFantasy never writes to a connected platform,
+ * and no screen may imply otherwise. This chip is the persistent statement of
+ * that, so it is part of the design system rather than a per-page decoration.
+ */
+.af-core .af-readonly {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--muted);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* A stale sync must announce itself rather than quietly showing old numbers. */
+.af-core .af-sync[data-stale='true'] {
+  color: var(--warn);
+}
+.af-core .af-sync[data-stale='false'] {
+  color: var(--faint);
+}
+
+/* Anything inside an hour is --bad, per the handoff's deadline rule. */
+.af-core .af-deadline[data-urgent='true'] {
+  color: var(--bad);
+  font-weight: 800;
+}

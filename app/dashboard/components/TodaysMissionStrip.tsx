@@ -55,9 +55,9 @@ export function TodaysMissionStrip({
     {
       key: 'war-room',
       icon: <Swords className="h-4 w-4" />,
-      title: 'Open War Room',
+      title: 'Open AF Legacy',
       reason: warRoomDecisions > 0 ? `${warRoomDecisions} decisions ready for review` : 'NFL draft intelligence is active',
-      urgency: 'active',
+      urgency: 'active' as const,
       badge: warRoomDecisions > 0 ? String(warRoomDecisions) : undefined,
       onClick: onWarRoomClick,
     },
@@ -66,7 +66,7 @@ export function TodaysMissionStrip({
       icon: <Sparkles className="h-4 w-4" />,
       title: 'Ask Chimmy',
       reason: 'Get personalized roster strategy and matchup outlook',
-      urgency: 'ready',
+      urgency: 'ready' as const,
       onClick: onChimmyClick,
     },
     ...(pendingTrades > 0
@@ -100,7 +100,7 @@ export function TodaysMissionStrip({
       icon: <Trophy className="h-4 w-4" />,
       title: 'View Legacy',
       reason: 'Track your AF rank, tier, and championship history',
-      urgency: 'watch',
+      urgency: 'watch' as const,
       href: '/af-rankings',
     },
   ].slice(0, 5)

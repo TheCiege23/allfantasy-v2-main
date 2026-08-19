@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic"
 /** GET /api/user/me — session user + isAdmin for client (e.g. landing header). */
 export async function GET() {
   const session = (await getServerSession(authOptions as any)) as {
-    user?: { id?: string; email?: string | null; name?: string | null }
+    user?: { id?: string; email?: string | null; name?: string | null; username?: string | null }
   } | null
 
   if (!session?.user) {

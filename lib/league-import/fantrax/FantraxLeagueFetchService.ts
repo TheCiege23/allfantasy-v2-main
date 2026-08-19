@@ -286,6 +286,7 @@ export async function fetchFantraxLeagueForImport(
   let leagueRecord:
     | (Awaited<ReturnType<typeof prisma.fantraxLeague.findUnique>> & {
         user: { id: string; fantraxUsername: string }
+        appUserId: string | null
       })
     | null = null
 
@@ -306,7 +307,15 @@ export async function fetchFantraxLeagueForImport(
     }) as any
   }
 
-  if (!leagueRecord) {
+  // Import Security Closure phase — real ownership enforcement. A snapshot
+  // ID or username|season|leagueName lookup is not authorization. Reject
+  // with the same "not found" error used for a genuinely missing snapshot
+  // (never a distinct "forbidden" message) so an unauthorized caller can't
+  // use this to probe which snapshots exist. A row with `appUserId: null`
+  // (a legacy/unattributed row from before this phase) is not importable by
+  // anyone until it is re-uploaded by its real owner — fails closed rather
+  // than fabricating ownership.
+  if (!leagueRecord || leagueRecord.appUserId !== userId) {
     throw new FantraxImportLeagueNotFoundError(
       'Fantrax league not found. Use a Fantrax legacy league ID (UUID), or username|season|leagueName.'
     )

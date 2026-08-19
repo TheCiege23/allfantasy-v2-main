@@ -184,7 +184,7 @@ export function AIToolsModal({ toolId, open, onClose, leagues, toolTitle }: AITo
                 href="/war-room"
                 className="inline-flex items-center justify-center rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[13px] font-semibold text-amber-100 hover:bg-amber-500/20"
               >
-                AF War Room details
+                AF Legacy details
               </Link>
             ) : null}
             {toolId === 'matchupPrep' ? (
@@ -262,7 +262,7 @@ function buildAskPrompt(
     case 'injury':
       return `Injury impact ${sportBit}: summarize the most important injuries for fantasy lineups and waivers this week.`
     case 'warRoom':
-      return `Draft prep and multi-year roster planning (AF War Room): what should I prioritize ${sportBit} in ${leagueLabel}?`
+      return `Draft prep and multi-year roster planning (AF Legacy): what should I prioritize ${sportBit} in ${leagueLabel}?`
     case 'matchupPrep':
       return `Matchup prep for ${leagueLabel} ${sportBit}: use only my synced league rosters, projections, and opponent data — projected edge, win chance, start/sit pivots, and risks before lineup lock.`
     case 'longTermCoach':
@@ -779,11 +779,11 @@ function WarRoomBody({ leagueName }: { leagueName: string }) {
   return (
     <div className="space-y-2 text-[13px] leading-relaxed text-white/70">
       <p>
-        AF War Room is the premium tier for draft prep, future game planning, and multi-year roster construction for{' '}
+        AF Legacy is the premium tier for draft prep, future game planning, and multi-year roster construction for{' '}
         <span className="text-white">{leagueName}</span>.
       </p>
       <p className="text-[12px] text-white/45">
-        Use Ask Chimmy for a personalized plan, or open the War Room product page to review upgrade options.
+        Use Ask Chimmy for a personalized plan, or open the AF Legacy product page to review upgrade options.
       </p>
     </div>
   )

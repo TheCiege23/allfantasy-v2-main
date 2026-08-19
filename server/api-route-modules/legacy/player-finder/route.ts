@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { getLeagueRosters, getLeagueUsers, getPlayersBySport } from '@/lib/sleeper-client'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 const openai = getOpenAIRouteClient()
 
@@ -241,13 +242,22 @@ Return JSON only:
 export const POST = withApiUsage({ endpoint: "/api/legacy/player-finder", tool: "LegacyPlayerFinder" })(async (req: NextRequest) => {
   try {
     const body = await req.json()
-    const sleeperUsername = String(body.sleeper_username || '').trim()
     const searchQuery = String(body.query || '').trim()
     const sportRaw = String(body.sport || 'nfl').trim().toLowerCase()
 
-    if (!sleeperUsername) {
-      return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
-    }
+    /*
+     * Originally hand-rolled here (PR #287) and now routed through the shared gate so this
+     * route cannot drift from the other 21. Same behaviour: session -> AppUser.legacyUser
+     * link, 409 when unlinked, 403 when the body names someone else, and a per-actor limit
+     * after the gate — one call can fan out to ~20 model completions.
+     */
+    const gate = await requireLegacySleeperIdentity(req, {
+      requestedUsername: String(body.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'player_finder', maxRequests: 10, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeperUsername = gate.identity.sleeperUsername
+
     if (!searchQuery || searchQuery.length < 2) {
       return NextResponse.json({ error: 'Search query must be at least 2 characters' }, { status: 400 })
     }

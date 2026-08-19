@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getInjuryReport } from '@/lib/data/players'
 import { prisma } from '@/lib/prisma'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { createDemoInjuries, uiKeyToDataSport } from '@/lib/startSit/shared'
 
 export const dynamic = 'force-dynamic'
@@ -124,6 +125,35 @@ export async function GET(req: Request) {
   const dataSport = uiKeyToDataSport(sport)
 
   try {
+    // Slice 18 follow-on — PRIMARY source is the canonical injury read port
+    // (live, TTL-respected, one row per player, freshest source wins). The
+    // previous primary (`getInjuryReport` → injuryReportRecord) was measured
+    // 103.8 days stale in prod on 2026-08-10, so this panel was rendering
+    // three-month-old reports as if current.
+    const factList = await listInjuryFacts({ sport: dataSport, limit: 50 }).catch(() => null)
+    const portInjuries = (factList?.facts ?? [])
+      .filter((f) => !isUnknownPlayerName(f.playerName))
+      .slice(0, 14)
+      .map((f) => {
+        const detailParts = [f.status, f.description].filter(Boolean) as string[]
+        const posTeam = [f.position, f.team].filter(Boolean).join(' ')
+        if (posTeam) detailParts.unshift(posTeam)
+        // Staleness reported, not hidden — a stale designation is a claim
+        // that can no longer be stood behind.
+        if (f.stale) detailParts.push(`reported ${Math.round(f.ageHours / 24)}d ago`)
+        return {
+          player: f.playerName,
+          source: 'Injury report DB',
+          time: new Date(f.fetchedAt).toLocaleDateString(),
+          severity: severityFromStatus(f.status),
+          text: detailParts.join(' — ').slice(0, 220),
+        }
+      })
+    if (portInjuries.length > 0) {
+      return NextResponse.json({ injuries: portInjuries })
+    }
+
+    // Fallback: legacy normalized table, then the identity-backed DB join.
     const rows = await getInjuryReport(dataSport)
     let injuries = rows.slice(0, 14).map((r) => ({
       player: r.playerName,

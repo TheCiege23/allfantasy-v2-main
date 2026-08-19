@@ -260,7 +260,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">Mock Draft Simulator</h2>
-            <p className="text-xs text-white/40">AI-powered draft predictions & scouting</p>
+            <p className="text-xs text-white/40">Chimmy-powered draft predictions & scouting</p>
           </div>
         </div>
 
@@ -494,7 +494,7 @@ export default function MockDraftBoard({ leagues, username }: Props) {
                         ))}
                         {pick.topTargets[0]?.scorecard && (
                           <div className="mt-2 pt-2 border-t border-white/5">
-                            <div className="text-[9px] text-white/25 mb-1.5">AI Factor Breakdown (Top Pick)</div>
+                            <div className="text-[9px] text-white/25 mb-1.5">Chimmy Factor Breakdown (Top Pick)</div>
                             <div className="flex gap-0.5 h-2 rounded-full overflow-hidden">
                               {[
                                 { w: pick.topTargets[0].scorecard.adpWeight, c: 'bg-blue-500', l: 'ADP' },

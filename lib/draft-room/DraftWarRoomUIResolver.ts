@@ -25,11 +25,11 @@ export function shouldShowWarRoomPanel(
  * Label for "Open War Room" depending on context (mock draft vs league draft).
  */
 export function getWarRoomPanelTitle(context: 'mock_draft' | 'league_draft'): string {
-  return context === 'mock_draft' ? 'Draft War Room' : 'Legacy Draft War Room'
+  return context === 'mock_draft' ? 'AF Legacy Draft' : 'AF Legacy Draft (League)'
 }
 
 export function getWarRoomPanelDescription(context: 'mock_draft' | 'league_draft'): string {
   return context === 'mock_draft'
     ? 'Open advanced draft planning with queue strategy and live board context.'
-    : 'Open legacy war room planning tools for deeper draft decision support.'
+    : 'Open AF Legacy planning tools for deeper draft decision support.'
 }

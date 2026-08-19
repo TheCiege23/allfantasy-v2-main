@@ -4,6 +4,7 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Loader2, Info } from 'lucide-react';
+import Link from 'next/link';
 import { getImportProviderLabel, isImportProviderAvailable } from '@/lib/league-import/provider-ui-config';
 import type { ImportProvider } from '@/lib/league-import/types';
 
@@ -29,7 +30,7 @@ const PROVIDER_INPUT_CONFIG: Record<
   espn: {
     label: 'ESPN League ID',
     placeholder: 'e.g. 12345678, 2025:12345678, or a full ESPN league URL',
-    help: 'Paste an ESPN league ID or full league URL. Public leagues work directly; private leagues require saved SWID and ESPN_S2 cookies in League Sync first.',
+    help: 'Paste an ESPN league ID or full league URL. Public leagues work directly; private leagues need SWID and espn_s2 cookies saved first — connect ESPN in Settings → Connected Accounts.',
   },
   yahoo: {
     label: 'Yahoo League Key',
@@ -100,6 +101,56 @@ export function ImportSourceInputPanel({
       </div>
       {config.help && (
         <p className="text-xs text-white/50">{config.help}</p>
+      )}
+      {provider === 'espn' && (
+        <div className="mt-1 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-3">
+          <div className="flex items-start gap-2">
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300" />
+            <div className="text-xs text-white/70">
+              <p className="font-medium text-white/85">
+                Private ESPN league? Connect it once on desktop.
+              </p>
+              <p className="mt-1 text-white/50">
+                ESPN has no public login for fantasy, so private leagues need two
+                browser cookies. Grab them from a desktop browser:
+              </p>
+              <ol className="mt-2 list-decimal space-y-1 pl-4 text-white/60">
+                <li>
+                  Go to{' '}
+                  <code className="rounded bg-white/10 px-1 py-0.5 text-cyan-200">fantasy.espn.com</code>{' '}
+                  and make sure you&apos;re signed in.
+                </li>
+                <li>Open your browser&apos;s dev tools (F12, or right-click → Inspect).</li>
+                <li>
+                  Go to the <span className="text-white/80">Application</span> tab →{' '}
+                  <span className="text-white/80">Cookies</span> →{' '}
+                  <code className="rounded bg-white/10 px-1 py-0.5 text-cyan-200">https://fantasy.espn.com</code>.
+                </li>
+                <li>
+                  Find the{' '}
+                  <code className="rounded bg-white/10 px-1 py-0.5 text-cyan-200">SWID</code> and{' '}
+                  <code className="rounded bg-white/10 px-1 py-0.5 text-cyan-200">espn_s2</code>{' '}
+                  values and copy them.
+                </li>
+                <li>
+                  Paste them into{' '}
+                  <Link
+                    href="/settings?tab=connected"
+                    className="text-cyan-300 underline underline-offset-2 hover:text-cyan-200"
+                  >
+                    Settings → Connected Accounts → ESPN
+                  </Link>
+                  , then come back and import.
+                </li>
+              </ol>
+              {/* Exact reuse of the mobile note from components/settings/EspnCookieConnection.tsx — keep the two in sync. */}
+              <p className="mt-2 text-[11px] text-white/40">
+                On mobile? Connect ESPN once on a desktop browser — it stays saved on
+                your account after that.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

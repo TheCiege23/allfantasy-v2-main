@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession }          from 'next-auth'
 import { authOptions }               from '@/lib/auth'
 import { prisma }                    from '@/lib/prisma'
+import { toPrismaJsonInput }          from '@/lib/prisma-json'
 
 // ─── TYPES ──────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ async function transferFromSleeper(
       scoring:          isDynasty ? 'dynasty' : isKeeper ? 'keeper' : 'redraft',
       starters:         rosterPos,
       rosterSize:       rosterPos.length,
-      settings:         {
+      settings:         toPrismaJsonInput({
         scoringSettings: scoring,
         rosterPositions: rosterPos,
         playoffTeams:    Number(settings.playoff_teams ?? 4),
@@ -114,7 +115,7 @@ async function transferFromSleeper(
         faabBudget:      Number(settings.waiver_budget ?? 100),
         bestBall:        Boolean(settings.best_ball),
         taxiSlots:       Number(settings.taxi_slots ?? 0),
-      },
+      }),
       status: 'active',
     }
   })
@@ -159,12 +160,12 @@ async function transferFromSleeper(
         data: {
           leagueId:      afLeague.id,
           platformUserId: ownerId,
-          playerData:    {
+          playerData:    toPrismaJsonInput({
             starters: roster.starters ?? [],
             players:  roster.players  ?? [],
             reserve:  roster.reserve  ?? [],
             taxi:     roster.taxi     ?? [],
-          },
+          }),
           faabRemaining: Number((roster.settings as Record<string,unknown>)?.waiver_budget_used ?? 0),
         }
       })
@@ -187,7 +188,7 @@ async function transferFromSleeper(
             userId,
             shareId:   null,
             rounds:    Number(draft.settings && (draft.settings as Record<string,unknown>).rounds) || 15,
-            results:   {
+            results:   toPrismaJsonInput({
               draftId,
               type:     draft.type,
               status:   draft.status,
@@ -201,7 +202,7 @@ async function transferFromSleeper(
                 // Exact metadata
                 metadata:    p.metadata,
               })),
-            },
+            }),
           }
         })
       }
@@ -223,10 +224,10 @@ async function transferFromSleeper(
       await prisma.league.update({
         where: { id: afLeague.id },
         data: {
-          settings: {
+          settings: toPrismaJsonInput({
             ...(afLeague.settings as Record<string,unknown>),
             playoffBracket: { winners: wBracket, losers: lBracket },
-          }
+          })
         }
       })
       emit({ step: 'playoffs', progress: 85, message: 'Playoff brackets imported...' })
@@ -249,10 +250,10 @@ async function transferFromSleeper(
         await prisma.league.update({
           where: { id: afLeague.id },
           data: {
-            settings: {
+            settings: toPrismaJsonInput({
               ...(afLeague.settings as Record<string,unknown>),
               tradeHistory: tradeTxns,
-            }
+            })
           }
         })
       }

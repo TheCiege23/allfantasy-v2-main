@@ -267,17 +267,66 @@ export function buildCanonicalImportBundle(normalized: NormalizedImportResult): 
       ? normalized.league.playoff_team_count
       : formatResolution.playoffDefaults?.playoff_team_count ?? 6
 
-  const { commissionerSettings, mediaSettings, visualTheme } = inferCommissionerAndMediaSlices(normalized)
+  const { commissionerSettings: baseCommissionerSettings, mediaSettings, visualTheme } =
+    inferCommissionerAndMediaSlices(normalized)
+
+  // Tier 0 (Block B) — bench = roster total minus actual starter count from the
+  // imported `roster_positions` array. Previously hardcoded to `rosterSize - 9`,
+  // which broke every SUPER_FLEX league where starters = 10.
+  //
+  // Phase 38: real, code-verified provider-shape bug fix. Sleeper's roster_positions is a
+  // flat array (one entry per slot: 'QB','RB','BN','BN',...) — the exact-match filter below
+  // was written for that shape. ESPN/Yahoo/MFL adapters instead build AGGREGATED "SLOT:count"
+  // strings (e.g. 'BE:6', 'IR:2') — confirmed via direct read of
+  // lib/league-import/adapters/{espn,yahoo,mfl}/*.ts. An exact match against 'BN'/'IR'/'TAXI'
+  // can never match a "SLOT:count" string, so every ESPN/Yahoo/MFL import silently
+  // miscounted bench slots (counting reserve slots as starters). Fixed by parsing the
+  // optional ":count" suffix (defaulting to 1 when absent, preserving Sleeper's flat-array
+  // behavior exactly) and widening the reserve-label set to the real, code-confirmed labels
+  // each provider actually emits: Sleeper (BN/IR/TAXI), ESPN (BE/IR), Yahoo
+  // (BN/BE/IR/IL/NA/DL, per YahooLeagueFetchService.ts's own YAHOO_RESERVE_POSITIONS), MFL
+  // (TAXI, appended by MflLeagueFetchService.ts).
+  const RESERVE_SLOT_LABELS = new Set(['BN', 'BE', 'IR', 'IL', 'NA', 'DL', 'TAXI'])
+  const rosterPositionsRaw = Array.isArray((normalized.league as Record<string, unknown>).roster_positions)
+    ? ((normalized.league as Record<string, unknown>).roster_positions as unknown[]).map((p) => String(p).toUpperCase())
+    : []
+  const nonBenchSlotCount = rosterPositionsRaw.reduce((sum, entry) => {
+    const [label, countRaw] = entry.split(':')
+    if (RESERVE_SLOT_LABELS.has(label)) return sum
+    const count = countRaw != null ? Number(countRaw) : 1
+    return sum + (Number.isFinite(count) && count > 0 ? count : 1)
+  }, 0)
+  const computedBenchSlots =
+    typeof normalized.league.rosterSize === 'number' && teamCount > 0
+      ? Math.max(0, normalized.league.rosterSize - (nonBenchSlotCount || 9))
+      : undefined
+
+  // Tier 0 (Block B) — respect imported taxi/reserve slot counts when the source
+  // provides them. Previously hardcoded to 4 whenever the derived-devy flag was
+  // true, which silently overrode Sleeper's real values (e.g. 6 for L1's audit).
+  const importedTaxiSlots =
+    typeof normalized.league.taxi_slots === 'number' ? normalized.league.taxi_slots : undefined
+  const importedIrSlots =
+    typeof normalized.league.reserve_slots === 'number' ? normalized.league.reserve_slots : undefined
 
   const rosterSettings: SettingsSnapshot['rosterSettings'] = {
     starterSlots: undefined,
-    benchSlots:
-      typeof normalized.league.rosterSize === 'number' && teamCount > 0
-        ? Math.max(0, normalized.league.rosterSize - 9)
-        : undefined,
-    taxiSlots: derivedFlags.devy ? 4 : undefined,
+    benchSlots: computedBenchSlots,
+    irSlots: importedIrSlots,
+    taxiSlots: importedTaxiSlots ?? (derivedFlags.devy ? 4 : undefined),
     devyCollegeSlots: derivedFlags.devy ? 2 : undefined,
   }
+
+  // Tier 0 (Block B) — fold imported tradeDeadlineWeek into commissionerSettings so
+  // the persistence layer has a single canonical source when writing the League row.
+  const importedTradeDeadlineWeek =
+    typeof normalized.league.trade_deadline_week === 'number'
+      ? normalized.league.trade_deadline_week
+      : undefined
+  const commissionerSettings =
+    importedTradeDeadlineWeek != null
+      ? { ...(baseCommissionerSettings ?? {}), tradeDeadlineWeek: importedTradeDeadlineWeek }
+      : baseCommissionerSettings
 
   const scoringRules: Record<string, unknown> = {}
   if (normalized.scoring?.rules?.length) {

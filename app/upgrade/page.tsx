@@ -23,7 +23,7 @@ export default function UpgradePage({
     <MonetizationPurchaseSurface
       pagePath="/upgrade"
       title="Upgrade Your AllFantasy Access"
-      subtitle="Unlock premium AI and planning workflows with monthly or yearly options."
+      subtitle="Unlock premium tools and planning workflows with monthly or yearly options."
       focusPlanFamily={focusPlanFamily}
     />
   );

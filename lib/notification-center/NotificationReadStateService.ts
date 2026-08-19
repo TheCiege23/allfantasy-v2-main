@@ -7,9 +7,16 @@ export const NOTIFICATIONS_ENDPOINT = "/api/shared/notifications"
 export const NOTIFICATIONS_READ_ENDPOINT = NOTIFICATIONS_ENDPOINT
 export const NOTIFICATIONS_READ_ALL_ENDPOINT = `${NOTIFICATIONS_ENDPOINT}/read-all`
 
-export function getNotificationsEndpoint(limit: number): string {
+export function getNotificationsEndpoint(limit: number, options?: { leagueId?: string | null }): string {
   const safeLimit = Math.min(Math.max(Number(limit) || 1, 1), 100)
-  return `${NOTIFICATIONS_ENDPOINT}?limit=${safeLimit}`
+  const params = new URLSearchParams({ limit: String(safeLimit) })
+  if (options?.leagueId) params.set("leagueId", options.leagueId)
+  return `${NOTIFICATIONS_ENDPOINT}?${params.toString()}`
+}
+
+export function getNotificationsReadAllEndpoint(options?: { leagueId?: string | null }): string {
+  if (!options?.leagueId) return NOTIFICATIONS_READ_ALL_ENDPOINT
+  return `${NOTIFICATIONS_READ_ALL_ENDPOINT}?leagueId=${encodeURIComponent(options.leagueId)}`
 }
 
 /** Path for PATCH single notification read: /api/shared/notifications/[notificationId]/read */

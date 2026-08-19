@@ -1214,7 +1214,7 @@ describe("PROOF-E — AI gating: free users blocked, paid users unlocked", () =>
     expect(canUseWorldCupAiTools({ hasBracketBrainAi: true })).toBe(true)
     expect(canUseWorldCupAiTools({ hasAfPro: true })).toBe(true)
     expect(canUseWorldCupAiTools({ plans: ["pro"] })).toBe(true)
-    expect(canUseWorldCupAiTools({ plans: ["all_access"] })).toBe(true)
+    expect(canUseWorldCupAiTools({ plans: ["supreme"] })).toBe(true)
     // free user stays blocked
     expect(canUseWorldCupAiTools({ hasBracketBrainAi: false })).toBe(false)
   })

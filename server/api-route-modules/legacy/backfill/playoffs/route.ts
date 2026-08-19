@@ -2,6 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getLeagueInfo, getLeagueRosters } from '@/lib/sleeper-client'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 function safeNum(v: unknown, fallback = 0): number {
   const n = Number(v)
@@ -30,10 +31,15 @@ async function runWithConcurrency<T, R>(
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/backfill/playoffs", tool: "LegacyBackfillPlayoffs" })(async (request: NextRequest) => {
   const body = await request.json().catch(() => ({}))
-  const raw = String(body?.sleeper_username ?? '').trim()
-  if (!raw) return NextResponse.json({ error: 'Missing sleeper_username' }, { status: 400 })
+  // A backfill WRITE keyed on the username — previously anyone could trigger a playoff
+  // backfill against any account by naming it.
+  const gate = await requireLegacySleeperIdentity(request, {
+    requestedUsername: String(body?.sleeper_username ?? '').trim() || null,
+    rateLimit: { action: 'backfill_playoffs', maxRequests: 5, windowMs: 60_000 },
+  })
+  if (!gate.ok) return gate.response
 
-  const uname = raw.toLowerCase()
+  const uname = gate.identity.sleeperUsername.toLowerCase()
 
   const legacyUser = await prisma.legacyUser.findFirst({
     where: { sleeperUsername: uname },

@@ -9,6 +9,7 @@ import { isDraftPickRowEmpty } from '@/lib/live-draft-engine/draftPickEmpty'
 import { buildLineupSectionsFromPicks } from '@/lib/post-draft/buildStartersFromPicks'
 import { buildPlayerDataFromSections } from '@/lib/roster/LineupTemplateValidation'
 import { getLeagueDraftTemplatePayload } from '@/lib/league/league-draft-template-payload'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 export interface AssignedPlayer {
   playerName: string
@@ -18,7 +19,7 @@ export interface AssignedPlayer {
   byeWeek?: number | null
 }
 
-function hasExistingLineup(playerData: unknown): boolean {
+export function hasExistingLineup(playerData: unknown): boolean {
   if (!playerData || typeof playerData !== 'object') return false
   const data = playerData as Record<string, unknown>
   const starters = data.starters
@@ -52,7 +53,7 @@ export async function appendPickToRosterDraftSnapshot(
   draftPicks.push(player)
   await prisma.roster.update({
     where: { id: rosterId },
-    data: { playerData: { ...data, draftPicks } },
+    data: { playerData: toPrismaJsonInput({ ...data, draftPicks }) },
   })
 }
 
@@ -156,7 +157,7 @@ export async function finalizeRosterAssignments(
 
     await prisma.roster.update({
       where: { id: rosterId },
-      data: { playerData: nextPlayerData },
+      data: { playerData: toPrismaJsonInput(nextPlayerData) },
     })
     teamsSynced += 1
   }

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 
 const SHELL_FOOTER_LINKS = [
-  { href: '/war-room', label: 'AF War Room', accent: true },
+  { href: '/war-room', label: 'AF Legacy', accent: true },
   { href: '/ai/tools', label: 'Intelligence Hub', accent: false },
   { href: '/af-rankings', label: 'Rankings', accent: false },
   { href: '/find-league', label: 'Find League', accent: false },

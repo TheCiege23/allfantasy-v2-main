@@ -1,0 +1,38 @@
+{
+  "name": "@allfantasy/widget-js",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AllFantasy Widget SDK — plain JavaScript embed adapter (Phase 7.17/7.18): `AllFantasy.createWidget({ container, config, auth, apiKey, baseUrl })`, the weakest-isolation embed target. Reuses @allfantasy/widget-react internally to render, so a host page never installs React itself — the single entry point bundles React as a real dependency (same strategy as widget-web-component, opposite of widget-react/widget-iframe, per PHASE_7_22_SDK_PACKAGING_ADR.md D6). Consumes only the frozen lib/decision-os/sdk + lib/decision-os/presentation/widget-contracts contracts (PHASE_7_5_WIDGET_RUNTIME_BOUNDARY_ADR.md).",
+  "type": "module",
+  "types": "./dist/sdk-runtime/js-embed/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk-runtime/js-embed/src/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

@@ -7,6 +7,7 @@ import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehavi
 import { listDramaEvents } from '@/lib/drama-engine/DramaQueryService'
 import { runUnifiedOrchestration } from '@/lib/ai-orchestration'
 import { buildEnvelopeForTool, formatToolResult, validateToolOutput } from '@/lib/ai-tool-layer'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -39,6 +40,9 @@ export async function POST(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     let body: { rivalryId?: string } = {}
     try {

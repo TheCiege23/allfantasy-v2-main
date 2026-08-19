@@ -7,7 +7,6 @@ import RosterLegacyReport from '@/app/components/RosterLegacyReport';
 import SyncedRosters from '@/app/components/SyncedRosters';
 import WaiverAI from '@/app/components/WaiverAI';
 import ChimmyChat from '@/app/components/ChimmyChat';
-import PersonalizedInsights from '@/app/components/PersonalizedInsights';
 import MockDraftSimulatorClient from '@/components/MockDraftSimulatorClient';
 import Link from 'next/link';
 import LegacyLeagueIdeaForm from '@/app/components/LegacyLeagueIdeaForm';
@@ -76,10 +75,8 @@ export default function LegacyOverview() {
               👑
             </div>
             <div>
-              <div className="font-bold text-2xl tracking-tight">TheCiege24</div>
-              <div className="flex items-center gap-2 text-emerald-400 text-sm">
-                <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                High Confidence
+              <div className="font-bold text-2xl tracking-tight">
+                {session?.user?.name ?? session?.user?.email ?? 'Manager'}
               </div>
             </div>
           </div>
@@ -92,16 +89,12 @@ export default function LegacyOverview() {
           ) : (
             <div className="flex items-center gap-8 text-sm">
               <div className="text-center">
-                <div className="text-3xl font-bold text-cyan-400">448</div>
-                <div className="text-xs text-slate-400">Leagues</div>
+                <div className="text-3xl font-bold text-cyan-400">{mockLoading ? '—' : mockLeagues.length}</div>
+                <div className="text-xs text-slate-400">Leagues synced</div>
               </div>
               <div className="text-center">
-                <div className="text-3xl font-bold text-emerald-400">2918-3664-63</div>
-                <div className="text-xs text-slate-400">W-L-T Record</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-purple-400">11</div>
-                <div className="text-xs text-slate-400">Ships</div>
+                <div className="text-3xl font-bold text-slate-500">—</div>
+                <div className="text-xs text-slate-400">Career record unavailable</div>
               </div>
             </div>
           )}
@@ -110,11 +103,14 @@ export default function LegacyOverview() {
 
       <div className="border-b border-white/10 bg-black/60 backdrop-blur-xl">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center gap-3 overflow-x-auto">
-          {['Sleeper', 'Yahoo', 'MFL', 'Fantrax'].map(p => (
-            <div key={p} className="px-5 py-2 bg-white/5 rounded-full text-sm font-medium flex items-center gap-2 whitespace-nowrap">
-              {p} <span className="text-xs text-emerald-400">531</span>
-            </div>
-          ))}
+          {['Sleeper', 'Yahoo', 'MFL', 'Fantrax'].map(p => {
+            const count = mockLeagues.filter((l) => l.platform.toLowerCase() === p.toLowerCase()).length
+            return (
+              <div key={p} className="px-5 py-2 bg-white/5 rounded-full text-sm font-medium flex items-center gap-2 whitespace-nowrap">
+                {p} <span className="text-xs text-emerald-400">{count}</span>
+              </div>
+            )
+          })}
           <button className="px-5 py-2 bg-white/5 hover:bg-white/10 rounded-full text-sm font-medium flex items-center gap-2 transition-colors">
             + Add
           </button>
@@ -161,111 +157,14 @@ export default function LegacyOverview() {
           <>
         {activeTab === 'overview' && (
           <>
-            <div className="mb-16">
-              <div className="inline-flex items-center gap-3 px-6 py-2 bg-white/5 border border-white/10 rounded-full text-sm">
-                🏆 Legacy Score &bull; Updated moments ago
-              </div>
-
-              <div className="mt-10 flex flex-col lg:flex-row gap-12">
-                <div className="flex-1">
-                  <div className="text-[120px] leading-none font-black tracking-[-6px] bg-gradient-to-br from-white via-cyan-100 to-purple-100 bg-clip-text text-transparent">
-                    66
-                  </div>
-                  <p className="text-3xl text-slate-300 mt-2">out of 100</p>
-                  <p className="max-w-md mt-6 text-lg text-slate-300">
-                    Your career spans 531 leagues across 7 seasons. You&apos;re a battle-tested competitor with room to grow in specialty formats.
-                  </p>
-                </div>
-
-                <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <div className="bg-slate-900/70 border border-slate-700 rounded-3xl p-6">
-                    <div className="text-emerald-400 text-sm">Win Rate</div>
-                    <div className="text-5xl font-bold mt-3">43.1%</div>
-                    <div className="text-xs text-emerald-400 mt-1">Difficulty-adjusted 55.4%</div>
-                  </div>
-
-                  <div className="bg-slate-900/70 border border-slate-700 rounded-3xl p-6">
-                    <div className="text-purple-400 text-sm">Current Tier</div>
-                    <div className="text-5xl font-bold mt-3">Captain</div>
-                    <div className="text-xs text-slate-400 mt-1">Level 569 &bull; 284,844 XP</div>
-                  </div>
-
-                  <div className="bg-slate-900/70 border border-slate-700 rounded-3xl p-6">
-                    <div className="text-amber-400 text-sm">Next Edge</div>
-                    <div className="text-xl font-medium leading-tight mt-4">
-                      Converting playoff runs into championships
-                    </div>
-                  </div>
-                </div>
-              </div>
+            <div className="mb-16 rounded-3xl border border-dashed border-white/15 bg-white/[0.03] p-8 text-center" data-testid="legacy-score-unavailable">
+              <div className="text-4xl mb-3" aria-hidden>🏆</div>
+              <h3 className="text-xl font-semibold">Legacy Score isn&apos;t available yet</h3>
+              <p className="mx-auto mt-3 max-w-lg text-slate-300">
+                A career-wide Legacy Score across your synced leagues is not calculated yet. This section will show real
+                win rate, playoff, and format-breakdown numbers once that scoring is available — never a placeholder.
+              </p>
             </div>
-
-            <div className="mb-16">
-              <h3 className="text-xl font-semibold mb-6">Career Breakdown by League Type</h3>
-              <div className="grid md:grid-cols-3 gap-6">
-                <div className="bg-gradient-to-br from-amber-900/70 to-slate-900 border border-amber-500/30 rounded-3xl p-8">
-                  <div className="flex items-center gap-4 mb-8">
-                    <div className="text-4xl">👑</div>
-                    <div>
-                      <div className="font-bold text-xl">Dynasty Career</div>
-                      <div className="text-amber-400 text-sm">372 leagues</div>
-                    </div>
-                  </div>
-                  <div className="space-y-6 text-sm">
-                    <div className="flex justify-between">
-                      <span>2401-3133-23</span>
-                      <span className="text-emerald-400">38.2% Playoff Rate</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>2.4% Ship Rate</span>
-                      <span className="text-amber-400">1.24x Difficulty</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-cyan-900/70 to-slate-900 border border-cyan-500/30 rounded-3xl p-8">
-                  <div className="flex items-center gap-4 mb-8">
-                    <div className="text-4xl">⚡</div>
-                    <div>
-                      <div className="font-bold text-xl">Redraft Career</div>
-                      <div className="text-cyan-400 text-sm">80 leagues</div>
-                    </div>
-                  </div>
-                  <div className="space-y-6 text-sm">
-                    <div className="flex justify-between">
-                      <span>517-531-40</span>
-                      <span className="text-emerald-400">37.5% Playoff Rate</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>2.5% Ship Rate</span>
-                      <span className="text-cyan-400">1.14x Difficulty</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="bg-gradient-to-br from-purple-900/70 to-slate-900 border border-purple-500/30 rounded-3xl p-8">
-                  <div className="flex items-center gap-4 mb-8">
-                    <div className="text-4xl">🌟</div>
-                    <div>
-                      <div className="font-bold text-xl">Specialty Formats</div>
-                      <div className="text-purple-400 text-sm">79 leagues</div>
-                    </div>
-                  </div>
-                  <div className="space-y-6 text-sm">
-                    <div className="flex justify-between">
-                      <span>284-409-87</span>
-                      <span className="text-emerald-400">13.9% Playoff Rate</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>1.3% Ship Rate</span>
-                      <span className="text-purple-400">1.35x Difficulty</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <PersonalizedInsights />
 
             <RosterLegacyReport />
 

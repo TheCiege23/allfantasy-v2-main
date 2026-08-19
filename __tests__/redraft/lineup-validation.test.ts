@@ -120,6 +120,21 @@ describe('redraft roster route lineup enforcement contract', () => {
     expect(routeSource).toContain('hydrateCurrentInjuryStatuses')
   })
 
+  it('Phase 2H: writes lineup-history after a successful save, wrapped so a history-write failure cannot fail the response', () => {
+    expect(routeSource).toContain('recordRedraftRosterMoveHistory')
+    // The write call must appear after the persisting transaction and be
+    // inside a try/catch (docs/DECISION_OS_MANAGER_DNA_PHASE2G_VOLUME_AND_LINEUP_HISTORY_SCOPE.md
+    // §2c: "existing roster save behavior remains unchanged" if history-writing fails).
+    const transactionIdx = routeSource.indexOf('prisma.$transaction(')
+    const historyCallIdx = routeSource.indexOf('recordRedraftRosterMoveHistory(')
+    const tryIdx = routeSource.lastIndexOf('try {', historyCallIdx)
+    const catchIdx = routeSource.indexOf('} catch', historyCallIdx)
+    expect(transactionIdx).toBeGreaterThan(-1)
+    expect(historyCallIdx).toBeGreaterThan(transactionIdx)
+    expect(tryIdx).toBeGreaterThan(-1)
+    expect(catchIdx).toBeGreaterThan(historyCallIdx)
+  })
+
   it('surfaces validation state in the redraft roster UI', () => {
     expect(rosterManagerSource).toContain('Lineup legal')
     expect(rosterManagerSource).toContain('lineup issue')

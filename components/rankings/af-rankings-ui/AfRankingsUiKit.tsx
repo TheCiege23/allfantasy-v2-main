@@ -136,7 +136,7 @@ export function AIGradeRing({
           <span className={`font-black leading-none text-white ${compact ? 'text-lg' : 'text-xl sm:text-2xl'}`}>
             {grade}
           </span>
-          <span className="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-white/35">AI</span>
+          <span className="mt-0.5 text-[8px] font-bold uppercase tracking-widest text-white/35">Grade</span>
         </div>
       </div>
       {score != null ? (
@@ -150,7 +150,7 @@ export function AIGradeRing({
       ) : null}
       <div className="flex items-center gap-1 rounded-full border border-violet-500/25 bg-violet-500/10 px-2 py-0.5 text-[9px] font-semibold text-violet-200/90">
         <Sparkles className="h-3 w-3 shrink-0 opacity-80" aria-hidden />
-        AI Grade
+        Chimmy Grade
       </div>
     </div>
   )
@@ -256,7 +256,7 @@ export function RankInsightBanner({ text }: { text: string }) {
   if (!text?.trim()) return null
   return (
     <div className="flex gap-2 rounded-xl border border-cyan-500/15 bg-cyan-500/[0.06] px-3 py-2.5">
-      <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-cyan-400/90">AI</span>
+      <span className="shrink-0 text-[10px] font-black uppercase tracking-widest text-cyan-400/90">Chimmy</span>
       <p className="text-[12px] leading-relaxed text-white/70">{text}</p>
     </div>
   )

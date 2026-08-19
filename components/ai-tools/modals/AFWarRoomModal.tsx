@@ -174,7 +174,7 @@ export function AFWarRoomModal({
       const json = (await r.json()) as WarRoomCommandCenterResult | { ok: false; error?: string }
       if (!r.ok || !json.ok) {
         setData(null)
-        setError((json as { error?: string }).error || 'War Room could not load.')
+        setError((json as { error?: string }).error || 'AF Legacy could not load.')
         return
       }
       setData(json)
@@ -203,8 +203,8 @@ export function AFWarRoomModal({
   const chimmyHref = useMemo(() => {
     const lid = typeof data?.chimmyPayload?.leagueId === 'string' ? data.chimmyPayload.leagueId : undefined
     const prompt = data?.aiSummary
-      ? `War Room summary (facts only):\n${data.aiSummary}\n\nHelp me prioritize the next roster moves.`
-      : 'War Room: what should I do first with my synced league data?'
+      ? `AF Legacy summary (facts only):\n${data.aiSummary}\n\nHelp me prioritize the next roster moves.`
+      : 'AF Legacy: what should I do first with my synced league data?'
     return getChimmyChatHrefWithPrompt(prompt, {
       source: 'war_room',
       leagueId: lid,
@@ -283,7 +283,7 @@ export function AFWarRoomModal({
     <AIToolModalShell
       open={open}
       onClose={onClose}
-      title="AF War Room"
+      title="AF Legacy"
       subtitle="Season strategy command center · AI orchestration"
       accentColor="rose"
       icon={<Shield className="h-5 w-5" />}
@@ -291,11 +291,11 @@ export function AFWarRoomModal({
       loading={loading && !data}
       error={error}
       empty={Boolean(data && !data.actions?.length && !data.aiSummary)}
-      emptyMessage="War Room returned no prioritized actions for this scope — try enabling more modules or picking a specific league."
+      emptyMessage="AF Legacy returned no prioritized actions for this scope — try enabling more modules or picking a specific league."
       headerBadge={headerBadge}
       onRefresh={() => void load()}
       refreshing={loading}
-      chimmyPrompt="War Room: synthesize my prioritized actions from live AllFantasy modules."
+      chimmyPrompt="AF Legacy: synthesize my prioritized actions from live AllFantasy modules."
       chimmyContext={data?.chimmyPayload}
     >
       <div className="space-y-3">
@@ -810,7 +810,7 @@ function WarRoomTabBody({
           className="flex items-center justify-center gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 py-2.5 text-[12px] font-semibold text-rose-100"
         >
           <MessageSquare className="h-4 w-4" />
-          Continue in Chimmy with War Room context
+          Continue in Chimmy with AF Legacy context
           <ChevronRight className="h-4 w-4" />
         </Link>
       </div>

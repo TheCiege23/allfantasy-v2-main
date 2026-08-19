@@ -91,10 +91,19 @@ export default defineConfig({
   webServer: {
     command:
       process.env.PLAYWRIGHT_DEV_COMMAND ??
-      `npx next dev -p ${PLAYWRIGHT_PORT} --hostname 127.0.0.1`,
-    port: PLAYWRIGHT_PORT,
+      `node scripts/playwright-dev-server.cjs --port ${PLAYWRIGHT_PORT}`,
+    url: `${PLAYWRIGHT_BASE_URL}/api/auth/csrf`,
     reuseExistingServer: true,
-    timeout: 120_000,
+    /**
+     * Cold-starting `next dev` on this app does not fit in 120s.
+     *
+     * The dev server must run scripts/clean-next-dev.cjs, boot Next, and compile
+     * `/api/auth/csrf` (the readiness URL) before Playwright will proceed. When
+     * that overran, the whole run aborted with "Timed out waiting 120000ms from
+     * config.webServer" and ZERO specs executed — which reads as a suite-wide
+     * failure rather than as a server that was still starting.
+     */
+    timeout: 300_000,
     env: {
       ...process.env,
       PORT: String(PLAYWRIGHT_PORT),

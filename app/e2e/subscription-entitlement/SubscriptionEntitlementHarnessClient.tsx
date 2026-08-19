@@ -148,7 +148,7 @@ export default function SubscriptionEntitlementHarnessClient() {
               Commissioner access: {hasBundleAccess(plans, 'commissioner') ? 'granted' : 'denied'}
             </div>
             <div data-testid="bundle-check-warroom">
-              War Room access: {hasBundleAccess(plans, 'war_room') ? 'granted' : 'denied'}
+              AF Legacy access: {hasBundleAccess(plans, 'war_room') ? 'granted' : 'denied'}
             </div>
           </div>
         </>

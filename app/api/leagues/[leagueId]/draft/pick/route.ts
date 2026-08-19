@@ -29,12 +29,41 @@ import { assertLeagueActionGate } from '@/server/services/leagueActionGate'
 import { ensureDraftingLifecycleForActiveSession } from '@/server/services/leagueLifecycleService'
 import { logAction } from '@/server/services/auditService'
 import { rosterConfigurationIncompleteBody } from '@/lib/league/roster-configuration-gate-error'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedDraftIntegrationService } from '@/lib/fantasy-os/sports-runtime/draftIntegration'
+import { prisma } from '@/lib/prisma'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 export const dynamic = 'force-dynamic'
 
+type DraftPickSportsDecision = { featureGateEnabled: boolean; finalDecision: 'allowed'; reason: string; freshnessStatus: string; identityStatus: string; scheduleSnapshotVersion: string | null; evaluatedAt: string }
+
+/**
+ * Gated, evidence-only certified sports context for a draft pick. Certified facts are NOT Draft legality — this
+ * NEVER blocks and NEVER touches idempotency/duplicate/ownership/clock authority (all owned by submitPick). Off
+ * by default; wrapped so it can never fail the pick. Returns undefined when the gate is off or on any error.
+ */
+async function draftPickSportsEvidence(leagueId: string, playerId: unknown, playerName: string): Promise<DraftPickSportsDecision | undefined> {
+  if (!isSportsDataEnabled('draft')) return undefined
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+    if (!league || String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') return undefined
+    const rawId = typeof playerId === 'string' && playerId.trim() ? playerId.trim() : playerName
+    const ref = { canonicalPlayerId: rawId, providerSleeperId: /^\d+$/.test(rawId) ? rawId : null }
+    const guard = await new CertifiedDraftIntegrationService().evaluateDraftPickSafety({
+      season: String(league.season ?? new Date().getFullYear()),
+      week: String(weekFromLeagueSettingsForLineup(league.settings)),
+      player: ref,
+    })
+    return { featureGateEnabled: true, finalDecision: 'allowed', reason: guard.reason, freshnessStatus: guard.freshnessStatus, identityStatus: guard.identityStatus, scheduleSnapshotVersion: guard.snapshotVersion, evaluatedAt: new Date().toISOString() }
+  } catch {
+    return undefined
+  }
+}
+
 export const POST = withTimedRoute('draft_pick', async (
   req: NextRequest,
-  ctx: { params: Promise<{ leagueId: string }> }
+  ctx: { params: Promise<Record<string, string>> }
 ) => {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
@@ -170,6 +199,22 @@ export const POST = withTimedRoute('draft_pick', async (
     )
   }
 
+  // A network retry may repeat a request after its pick already committed.
+  // Return authoritative state, but never duplicate audit, chat, notification,
+  // roster-snapshot, or league-event side effects for that committed pick.
+  if (result.idempotentReplay) {
+    const replayedSession = await buildSessionSnapshot(leagueId, new Date(), undefined, { skipRepair: true })
+    const replayedUserRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
+    return NextResponse.json({
+      ok: true,
+      idempotentReplay: true,
+      pick: result.snapshot,
+      session: replayedSession != null
+        ? { ...replayedSession, currentUserRosterId: replayedUserRosterId ?? undefined }
+        : replayedSession,
+    })
+  }
+
   void logAction({
     leagueId,
     userId,
@@ -249,6 +294,8 @@ export const POST = withTimedRoute('draft_pick', async (
 
   const updated = await buildSessionSnapshot(leagueId, new Date(), undefined, { skipRepair: true })
   const currentUserRosterId = await getCurrentUserRosterIdForLeague(leagueId, userId)
+  // Evidence-only certified sports context for the committed pick (never affects the authoritative result above).
+  const sportsDataDecision = await draftPickSportsEvidence(leagueId, body.playerId ?? body.player_id, String(playerName).trim())
   void (async () => {
     const states = await publishDraftIntelForUpcomingManagers({
       leagueId,
@@ -293,5 +340,6 @@ export const POST = withTimedRoute('draft_pick', async (
             currentUserRosterId: currentUserRosterId ?? undefined,
           }
         : updated,
+    ...(sportsDataDecision ? { sportsDataDecision } : {}),
   })
 })

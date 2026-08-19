@@ -13,6 +13,7 @@ import { resolveJoinRankGate } from '@/lib/league-join/resolveJoinRankGate'
 import { prisma } from '@/lib/prisma'
 import { assertPaidJoinAllowed, linkDuesToRoster } from '@/lib/league-finance/joinGate'
 import { claimPlaceholderRoster } from '@/lib/league-import/placeholderClaim'
+import { findExistingLeagueClaim } from '@/lib/identity/linkedAccounts'
 
 export const dynamic = 'force-dynamic'
 
@@ -89,6 +90,29 @@ export async function POST(req: NextRequest) {
     })
     if (existing) {
       return { success: true as const, leagueId: result.leagueId, alreadyMember: true as const }
+    }
+
+    // DUPLICATE-ACCOUNT GATE. The `leagueId_platformUserId` lookup above only catches this
+    // same AppUser rejoining. One human holding several AF accounts (three sign-in methods
+    // on three different emails are indistinguishable from three people) would otherwise
+    // take a second team in the same league under the other account.
+    //
+    // The only trustworthy link between those accounts is a shared platform identity — the
+    // same Sleeper account cannot belong to two humans. This is evidence-based, so it can
+    // only refuse when we HAVE evidence: a user who never imported has no identity to match
+    // on and is let through, which is a real coverage limit, not an oversight.
+    const priorClaim = await findExistingLeagueClaim(
+      { userId, leagueId: result.leagueId },
+      tx,
+    )
+    if (priorClaim?.viaOtherAccount) {
+      return {
+        success: false as const,
+        status: 409,
+        error:
+          'One of your other AllFantasy accounts already has a team in this league. Sign in with that account to manage it — a league can only be joined once per person.',
+        code: 'DUPLICATE_LEAGUE_CLAIM' as const,
+      }
     }
 
     const [league, leagueRosters, draftSession, profile] = await Promise.all([
@@ -294,8 +318,13 @@ export async function POST(req: NextRequest) {
   })
 
   if (!joinResult.success) {
+    // An explicit code from the branch wins: the duplicate-account refusal needs its own
+    // code so the client can offer "sign in with your other account" instead of rendering
+    // a generic failure. Status-derived codes stay as the fallback for the older branches.
+    const explicitCode = (joinResult as { code?: string }).code
     const code =
-      joinResult.status === 402 ? 'PAYMENT_REQUIRED' : joinResult.status === 404 ? 'LEAGUE_NOT_FOUND' : undefined
+      explicitCode ??
+      (joinResult.status === 402 ? 'PAYMENT_REQUIRED' : joinResult.status === 404 ? 'LEAGUE_NOT_FOUND' : undefined)
     return NextResponse.json(
       { error: joinResult.error, ...(code ? { code } : {}) },
       { status: joinResult.status },
@@ -303,4 +332,69 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(joinResult)
+}
+
+/**
+ * GET /api/leagues/join?leagueId= — the shareable "claim your team" invite
+ * link for a league (rides the existing /join?code=… flow this route's POST
+ * consumes). Lives on this path instead of its own route because the app sits
+ * at Vercel's 2048-route ceiling — adding any new route file fails the deploy
+ * (too_many_routes), so new endpoints must reuse existing paths.
+ *
+ * Any member (owner or claimed team) can fetch it. Imported leagues often have
+ * no invite code yet (settings.inviteCode is only minted by the create flow) —
+ * this mints one on first request using the SAME settings.inviteCode contract
+ * the join validation scans.
+ */
+export async function GET(req: NextRequest) {
+  const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
+  const userId = session?.user?.id
+  if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const leagueId = req.nextUrl.searchParams?.get('leagueId')?.trim()
+  if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+  const league = await prisma.league.findFirst({
+    where: {
+      id: leagueId,
+      OR: [{ userId }, { teams: { some: { claimedByUserId: userId } } }],
+    },
+    select: { id: true, name: true, settings: true },
+  })
+  if (!league) return NextResponse.json({ error: 'League not found' }, { status: 404 })
+
+  const { getFantasyInviteLink } = await import('@/lib/league-invite/LeagueInviteService')
+  const baseUrl = req.nextUrl.origin
+
+  let result = await getFantasyInviteLink(leagueId, baseUrl)
+  if (!result.ok && result.error === 'NO_INVITE_CODE') {
+    const alphabet = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789' // no 0/O/1/I/L lookalikes
+    const bytes = new Uint8Array(10)
+    crypto.getRandomValues(bytes)
+    let code = ''
+    for (const b of bytes) code += alphabet[b % alphabet.length]
+    const settings = (league.settings as Record<string, unknown> | null) ?? {}
+    await prisma.league.update({
+      where: { id: leagueId },
+      data: { settings: { ...settings, inviteCode: code } },
+    })
+    result = await getFantasyInviteLink(leagueId, baseUrl)
+  }
+
+  if (!result.ok) return NextResponse.json({ error: result.error }, { status: 500 })
+
+  // Claim progress — how many of the league's teams have a real AF member
+  // behind them. Powers the "N of M teams claimed" bar next to the invite link.
+  const [teamCount, claimedCount] = await Promise.all([
+    prisma.leagueTeam.count({ where: { leagueId } }).catch(() => 0),
+    prisma.leagueTeam.count({ where: { leagueId, claimedByUserId: { not: null } } }).catch(() => 0),
+  ])
+
+  return NextResponse.json({
+    leagueName: league.name,
+    inviteCode: result.inviteCode,
+    inviteLink: result.inviteLink,
+    inviteExpiresAt: result.inviteExpiresAt,
+    claim: { teamCount, claimedCount },
+  })
 }

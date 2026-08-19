@@ -58,7 +58,14 @@ export type PendingTrade = {
   proposedAt: string | null
   assetsGiven: TradeAsset[]
   assetsReceived: TradeAsset[]
-  chimmyVerdict: 'accept' | 'decline' | 'negotiate'
+  /**
+   * null when no AI verdict was computed. The home screen no longer runs a
+   * per-trade model call, so this is null on the dashboard path. Render the
+   * badge only when it is non-null -- defaulting to 'negotiate' would show a
+   * confident-looking verdict that nothing actually produced.
+   */
+  chimmyVerdict: 'accept' | 'decline' | 'negotiate' | null
+  /** Empty string when no verdict was computed. */
   chimmyReason: string
 }
 

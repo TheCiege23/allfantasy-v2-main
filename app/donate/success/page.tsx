@@ -28,14 +28,14 @@ function DonateSuccessContent() {
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-white">
       <div className="mx-auto w-full max-w-2xl px-4 py-16 sm:px-6">
         <div className="rounded-3xl border border-white/10 bg-white/5 p-8">
-          <div className="text-xs text-white/60">Payment confirmed</div>
+          <div className="text-xs text-white/60">Thanks for stopping by Stripe checkout</div>
           <h1 className="mt-3 text-2xl font-semibold">
-            {mode === "lab" ? "Bracket Lab Pass unlocked" : "Thank you for supporting"}
+            {mode === "lab" ? "Bracket Lab Pass" : "Thank you for supporting"}
           </h1>
           <p className="mt-2 text-white/70">
             {mode === "lab"
-              ? "You can now access the Lab dashboard for this tournament."
-              : "Your support helps fund performance, data costs, and new features."}
+              ? "If your payment just completed, the Lab dashboard will reflect it — this page can't independently verify a specific charge, so check the Lab dashboard directly."
+              : "Your support helps fund performance, data costs, and new features. If your payment just completed, this page can't independently verify a specific charge — contact support if anything looks off."}
           </p>
 
           <div className="mt-6 flex flex-col gap-3 sm:flex-row">

@@ -34,6 +34,13 @@ export type PersistRosterLineupInput = {
   skipLockCheck?: boolean
 }
 
+function canonicalLineupEventTypeForSource(source: PersistRosterLineupInput['source']): string {
+  if (source === 'commissioner_override') return 'commissioner.override'
+  if (source === 'import') return 'roster.updated'
+  if (source === 'system') return 'lineup.updated'
+  return 'lineup.submitted'
+}
+
 export async function persistRosterLineupWithEngine(
   input: PersistRosterLineupInput,
 ): Promise<{ ok: true } | { ok: false; error: string; status?: number }> {
@@ -172,6 +179,31 @@ export async function persistRosterLineupWithEngine(
     reason: lockCtx.reason ?? null,
     metadata: { perPlayerReasons: lockCtx.perPlayerReasons },
   })
+
+  const eventType = canonicalLineupEventTypeForSource(input.source)
+  void import('@/lib/league-events/publisher').then(({ publishLeagueFanoutEvent }) =>
+    publishLeagueFanoutEvent({
+      leagueId: input.leagueId,
+      eventType,
+      title: input.source === 'commissioner_override' ? 'Commissioner roster correction' : 'Lineup updated',
+      message:
+        input.source === 'commissioner_override'
+          ? 'A commissioner applied a roster or lineup correction.'
+          : 'A roster lineup was submitted and validated.',
+      category: 'league_announcements',
+      visibility: 'all_members',
+      actorUserId: input.actorUserId,
+      meta: {
+        rosterId: input.rosterId,
+        season: input.season,
+        week: input.week,
+        source: input.source,
+        lockedPlayerIds: lockCtx.lockedPlayerIds,
+      },
+      dedupeKey: `lineup:${input.rosterId}:${input.season}-w${input.week}:${input.source}`,
+      skipNotifications: true,
+    }).catch(() => {}),
+  ).catch(() => {})
 
   return { ok: true }
 }

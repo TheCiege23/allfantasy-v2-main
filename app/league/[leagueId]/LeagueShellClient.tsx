@@ -1,21 +1,12 @@
 'use client'
 
-import dynamic from 'next/dynamic'
-import type { LeagueShellProps } from './LeagueShell'
+import { LeagueShell, type LeagueShellProps } from './LeagueShell'
 
 /**
  * Client-boundary wrapper for the LeagueShell.
- * Keeps `next/dynamic` with `ssr: false` inside a Client Component so the
- * Server Component (page.tsx) does not hold the dynamic-import call.
+ * Keeping this boundary explicit lets the Server Component pass only serialized
+ * league data while the interactive shell mounts as a normal client tree.
  */
-const LeagueShellDynamic = dynamic(
-  () => import('./LeagueShell').then((mod) => mod.LeagueShell),
-  {
-    ssr: false,
-    loading: () => null,
-  },
-)
-
 export function LeagueShellClient(props: LeagueShellProps) {
-  return <LeagueShellDynamic {...props} />
+  return <LeagueShell {...props} />
 }

@@ -494,25 +494,54 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
   })
   if (!c) throw new Error("World Cup bracket challenge not found")
 
-  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    for (const entry of c.entries) {
-      for (const pick of entry.picks) {
-        if (!pick.match) continue
-        const r = evaluateWorldCupPick(pick, pick.match, {
-          ...(c.scoringProfile ?? {}),
-          confidenceScoringEnabled: readWorldCupConfidenceScoringEnabled(c.sourcePayload),
-        })
-        await tx.worldCupBracketPick.updateMany({
-          where: { id: pick.id },
-          data: {
-            pointsAwarded: r.pointsAwarded,
-            isCorrect: r.isCorrect,
-            lockedAt: pick.match.status === "final" ? new Date() : undefined,
-          },
+  // Group picks by identical outcome so one write covers every pick that scored the
+  // same way. The previous shape — an `await` per pick inside an interactive
+  // transaction — issued one round-trip per pick and blew past Prisma's 5s
+  // interactive-transaction budget on real challenges, aborting the whole
+  // recalculate with "Transaction not found ... refers to an old closed transaction".
+  const pickScoring = {
+    ...(c.scoringProfile ?? {}),
+    confidenceScoringEnabled: readWorldCupConfidenceScoringEnabled(c.sourcePayload),
+  }
+  const recalculatedAt = new Date()
+  const pickBuckets = new Map<
+    string,
+    { pointsAwarded: number; isCorrect: boolean | null; lock: boolean; ids: string[] }
+  >()
+  for (const entry of c.entries) {
+    for (const pick of entry.picks) {
+      if (!pick.match) continue
+      const r = evaluateWorldCupPick(pick, pick.match, pickScoring)
+      const lock = pick.match.status === "final"
+      const key = `${r.pointsAwarded}|${r.isCorrect}|${lock}`
+      const bucket = pickBuckets.get(key)
+      if (bucket) {
+        bucket.ids.push(pick.id)
+      } else {
+        pickBuckets.set(key, {
+          pointsAwarded: r.pointsAwarded,
+          isCorrect: r.isCorrect,
+          lock,
+          ids: [pick.id],
         })
       }
     }
-  })
+  }
+
+  if (pickBuckets.size > 0) {
+    await prisma.$transaction(
+      [...pickBuckets.values()].map((bucket) =>
+        prisma.worldCupBracketPick.updateMany({
+          where: { id: { in: bucket.ids } },
+          data: {
+            pointsAwarded: bucket.pointsAwarded,
+            isCorrect: bucket.isCorrect,
+            lockedAt: bucket.lock ? recalculatedAt : undefined,
+          },
+        })
+      )
+    )
+  }
 
   const fresh = await prisma.worldCupBracketChallenge.findUnique({
     where: { id: challengeId },
@@ -555,24 +584,34 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
     matches: fresh.matches,
   }).locked
 
-  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    await tx.worldCupBracketEntry.updateMany({
+  const byParticipant = new Map<string, WorldCupLeaderboardRow[]>()
+  for (const row of refreshedRows) {
+    const list = byParticipant.get(row.participantId) ?? []
+    list.push(row)
+    byParticipant.set(row.participantId, list)
+  }
+
+  // Batch form (`$transaction([...])`) rather than the interactive form: every write
+  // below is known up front, so this ships them as one round-trip instead of holding
+  // a transaction open across N awaits — same atomicity and ordering, no 5s budget.
+  const leaderboardWrites: Prisma.PrismaPromise<unknown>[] = [
+    prisma.worldCupBracketEntry.updateMany({
       where: { challengeId },
       data: { isLocked: bracketLocked },
-    })
+    }),
+  ]
 
-    for (const row of refreshedRows) {
-      const freshEntry = fresh.entries.find(
-        (entry: { id: string }) => entry.id === row.entryId
-      )
-      const entryComplete = freshEntry
-        ? isWorldCupEntryCompleteFromSelections({
-            matches: fresh.matches as DbMatch[],
-            picks: freshEntry.picks,
-            includeThirdPlace: fresh.includeThirdPlace,
-          })
-        : false
-      await tx.worldCupBracketEntry.update({
+  for (const row of refreshedRows) {
+    const freshEntry = fresh.entries.find((entry: { id: string }) => entry.id === row.entryId)
+    const entryComplete = freshEntry
+      ? isWorldCupEntryCompleteFromSelections({
+          matches: fresh.matches as DbMatch[],
+          picks: freshEntry.picks,
+          includeThirdPlace: fresh.includeThirdPlace,
+        })
+      : false
+    leaderboardWrites.push(
+      prisma.worldCupBracketEntry.update({
         where: { id: row.entryId },
         data: {
           totalScore: row.totalScore,
@@ -585,9 +624,11 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
           submittedAt: entryComplete ? freshEntry?.submittedAt ?? null : null,
         },
       })
-    }
+    )
+  }
 
-    await tx.worldCupBracketEntry.updateMany({
+  leaderboardWrites.push(
+    prisma.worldCupBracketEntry.updateMany({
       where: {
         challengeId,
         id: { notIn: [...submittedEntryIds] },
@@ -601,18 +642,12 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
         roundBreakdown: {},
       },
     })
+  )
 
-    const byParticipant = new Map<string, WorldCupLeaderboardRow[]>()
-    for (const row of refreshedRows) {
-      const list = byParticipant.get(row.participantId) ?? []
-      list.push(row)
-      byParticipant.set(row.participantId, list)
-    }
-
-    for (const p of fresh.participants) {
-      const list = byParticipant.get(p.id) ?? []
-      const best = list[0] ?? null
-      await tx.worldCupBracketParticipant.update({
+  for (const p of fresh.participants) {
+    const best = byParticipant.get(p.id)?.[0] ?? null
+    leaderboardWrites.push(
+      prisma.worldCupBracketParticipant.update({
         where: { id: p.id },
         data: {
           totalScore: best?.totalScore ?? 0,
@@ -624,8 +659,10 @@ export async function recalculateWorldCupChallenge(challengeId: string) {
           championPickName: best?.championPickName ?? null,
         },
       })
-    }
-  })
+    )
+  }
+
+  await prisma.$transaction(leaderboardWrites)
 
   void import("./worldCupBracketRecalculateHooks")
     .then((m) => m.afterWorldCupRecalculate(challengeId))

@@ -53,8 +53,13 @@ export async function POST(
     }),
     prisma.draftSession.findUnique({
       where: { leagueId },
-      select: { rounds: true, teamCount: true, slotOrder: true, status: true },
-      include: { picks: { select: { id: true } } },
+      select: {
+        rounds: true,
+        teamCount: true,
+        slotOrder: true,
+        status: true,
+        picks: { select: { id: true } },
+      },
     }),
   ])
 

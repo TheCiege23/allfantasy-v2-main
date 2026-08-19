@@ -278,6 +278,83 @@ function aggregateByLeagueType(leagues: FetchedLeague[]): {
   }
 }
 
+// Deterministic grade backing (audit finding: the letter grades and winner verdict were
+// 100% LLM-generated with no code-side verification — the same real stats could yield a
+// different grade on different runs). This computes grades from real stats using the exact
+// weights the system prompt has always claimed to use (championship 35% / win% 25% /
+// playoff 25% / consistency-longevity 15%), so the LLM's stated methodology and the actual
+// grade shown to the user are now the same thing, and repeat runs on the same data always
+// agree. The LLM is still used for verdict/trash_talk/strengths/weaknesses narrative, but
+// every field below is computed here and forced onto the LLM's output afterward.
+function scoreToGrade(score: number): string {
+  if (score >= 97) return 'A+'
+  if (score >= 93) return 'A'
+  if (score >= 90) return 'A-'
+  if (score >= 87) return 'B+'
+  if (score >= 83) return 'B'
+  if (score >= 80) return 'B-'
+  if (score >= 77) return 'C+'
+  if (score >= 73) return 'C'
+  if (score >= 70) return 'C-'
+  if (score >= 60) return 'D'
+  return 'F'
+}
+
+// Longevity/consistency proxy: leagues played, capped at 8+ for full credit. Disclosed here
+// rather than left as an unverifiable LLM judgment call.
+const LONGEVITY_FULL_CREDIT_LEAGUES = 8
+
+function computeWeightedScore(args: {
+  wins: number
+  losses: number
+  championships: number
+  playoffs: number
+  leagues: number
+}): number {
+  const { wins, losses, championships, playoffs, leagues } = args
+  if (leagues === 0) return 0
+  const winPct = wins + losses > 0 ? (wins / (wins + losses)) * 100 : 0
+  const championshipRate = (championships / leagues) * 100
+  const playoffRate = (playoffs / leagues) * 100
+  const longevityScore = Math.min(leagues / LONGEVITY_FULL_CREDIT_LEAGUES, 1) * 100
+  return championshipRate * 0.35 + winPct * 0.25 + playoffRate * 0.25 + longevityScore * 0.15
+}
+
+function computeFormatTypeScore(stats: LeagueStats): number {
+  return computeWeightedScore({
+    wins: stats.wins,
+    losses: stats.losses,
+    championships: stats.championships,
+    playoffs: stats.playoffs,
+    leagues: stats.leagues,
+  })
+}
+
+function computeScopedScore(stats: Record<string, LeagueStats>, types: string[]): number {
+  const totals = types.reduce(
+    (acc, type) => {
+      const s = stats[type]
+      if (!s) return acc
+      acc.wins += s.wins
+      acc.losses += s.losses
+      acc.championships += s.championships
+      acc.playoffs += s.playoffs
+      acc.leagues += s.leagues
+      return acc
+    },
+    { wins: 0, losses: 0, championships: 0, playoffs: 0, leagues: 0 }
+  )
+  return computeWeightedScore(totals)
+}
+
+function marginFromScoreDiff(diff: number): 'DOMINANT' | 'CLEAR' | 'SLIGHT' | 'TIE' {
+  const abs = Math.abs(diff)
+  if (abs === 0) return 'TIE'
+  if (abs >= 20) return 'DOMINANT'
+  if (abs >= 10) return 'CLEAR'
+  return 'SLIGHT'
+}
+
 function buildManagerSnapshot(
   user: { username: string; display_name: string },
   leagues: FetchedLeague[],
@@ -384,6 +461,51 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/compare", tool: "Legac
       }
     }
 
+    // Deterministic grades — computed from real stats before the LLM ever runs, using the
+    // exact weights the prompt has always claimed (championship 35% / win% 25% / playoff 25%
+    // / longevity 15%). Passed into the prompt as given facts; forced back onto the LLM's
+    // JSON after parsing so the LLM cannot silently diverge from them.
+    const overallScoreA = computeWeightedScore({
+      wins: parseInt(snapshotA.overall_record.split('-')[0], 10) || 0,
+      losses: parseInt(snapshotA.overall_record.split('-')[1], 10) || 0,
+      championships: snapshotA.championships,
+      playoffs: snapshotA.playoffs,
+      leagues: snapshotA.total_standard_leagues,
+    })
+    const overallScoreB = computeWeightedScore({
+      wins: parseInt(snapshotB.overall_record.split('-')[0], 10) || 0,
+      losses: parseInt(snapshotB.overall_record.split('-')[1], 10) || 0,
+      championships: snapshotB.championships,
+      playoffs: snapshotB.playoffs,
+      leagues: snapshotB.total_standard_leagues,
+    })
+    const overallGradeA = scoreToGrade(overallScoreA)
+    const overallGradeB = scoreToGrade(overallScoreB)
+
+    const formatGrades: Record<string, { a: string; b: string; aScore: number; bScore: number }> = {}
+    for (const type of ['redraft', 'dynasty', 'specialty'] as const) {
+      const aStats = statsA.standard[type]
+      const bStats = statsB.standard[type]
+      const aScore = aStats && aStats.leagues > 0 ? computeFormatTypeScore(aStats) : 0
+      const bScore = bStats && bStats.leagues > 0 ? computeFormatTypeScore(bStats) : 0
+      formatGrades[type] = {
+        a: aStats && aStats.leagues > 0 ? scoreToGrade(aScore) : 'N/A',
+        b: bStats && bStats.leagues > 0 ? scoreToGrade(bScore) : 'N/A',
+        aScore,
+        bScore,
+      }
+    }
+
+    // Winner/margin are scoped to ONLY the comparable formats (per the existing rule below),
+    // not the full overall score, so a manager isn't credited/penalized for formats the
+    // other doesn't play.
+    const scopedScoreA = computeScopedScore(statsA.standard, comparableFormats)
+    const scopedScoreB = computeScopedScore(statsB.standard, comparableFormats)
+    const scoreDiff = scopedScoreA - scopedScoreB
+    const deterministicWinner: 'A' | 'B' | 'TIE' | 'INCOMPARABLE' =
+      comparableFormats.length === 0 ? 'INCOMPARABLE' : scoreDiff === 0 ? 'TIE' : scoreDiff > 0 ? 'A' : 'B'
+    const deterministicMargin = comparableFormats.length === 0 ? 'INCOMPARABLE' : marginFromScoreDiff(scoreDiff)
+
     const userPrompt = `Compare these two fantasy managers FAIRLY:
 
 ## FORMAT OVERLAP ANALYSIS
@@ -400,34 +522,56 @@ ${JSON.stringify(snapshotA, null, 2)}
 MANAGER B: ${snapshotB.username}
 ${JSON.stringify(snapshotB, null, 2)}
 
-IMPORTANT: 
+## GRADES ARE ALREADY COMPUTED — DO NOT INVENT YOUR OWN
+Every grade, winner, margin, and head-to-head result below is already computed deterministically
+from the real stats above. Your JSON output MUST use these exact values for overall_grade,
+grades_by_type.*.grade, winner, winner_username, margin, and head_to_head_breakdown — they will
+be overwritten server-side regardless, so just echo them. Your real job is verdict, trash_talk,
+strengths, and weaknesses — narrative that explains and is CONSISTENT with these given grades,
+never contradicts them.
+
+- Manager A overall grade: ${overallGradeA} (score ${overallScoreA.toFixed(1)})
+- Manager B overall grade: ${overallGradeB} (score ${overallScoreB.toFixed(1)})
+- Manager A redraft grade: ${formatGrades.redraft.a}, dynasty grade: ${formatGrades.dynasty.a}, specialty grade: ${formatGrades.specialty.a}
+- Manager B redraft grade: ${formatGrades.redraft.b}, dynasty grade: ${formatGrades.dynasty.b}, specialty grade: ${formatGrades.specialty.b}
+- Winner (comparable formats only): ${deterministicWinner === 'INCOMPARABLE' ? 'INCOMPARABLE' : deterministicWinner === 'TIE' ? 'TIE' : deterministicWinner}
+- Margin: ${deterministicMargin}
+
+IMPORTANT:
 1. Only compare head-to-head in formats where BOTH managers participate
 2. If a manager doesn't play a format, mark it "N/A" - don't penalize them
 3. Overall winner MUST be based only on comparable formats
 4. If no comparable formats exist, set winner to "INCOMPARABLE" and grade each manager individually`
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: COMPARE_SYSTEM_PROMPT },
-        { role: 'user', content: userPrompt },
-      ],
-      temperature: 0.7,
-      response_format: { type: 'json_object' },
-    })
-
-    const content = completion.choices[0]?.message?.content
-    if (!content) {
-      return NextResponse.json({ error: 'AI did not return a response' }, { status: 500 })
-    }
-
-    let comparison
+    // Grades/winner/margin/head-to-head are fully deterministic (computed above) and don't
+    // depend on the LLM at all — if the narrative call fails, still return the real grades
+    // with a plain fallback narrative instead of failing the whole comparison. Matches the
+    // existing deterministic-first + LLM-narrative-fallback pattern already used by Waiver AI.
+    let comparison: any
     try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: COMPARE_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+        temperature: 0.7,
+        response_format: { type: 'json_object' },
+      })
+
+      const content = completion.choices[0]?.message?.content
+      if (!content) throw new Error('AI did not return a response')
       comparison = JSON.parse(content)
-    } catch {
-      return NextResponse.json({ error: 'Failed to parse AI response' }, { status: 500 })
+    } catch (err) {
+      console.error('Compare narrative generation failed, falling back to deterministic-only:', err)
+      comparison = {
+        manager_a: { username: snapshotA.username, strengths: [], weaknesses: [], specialty_formats_note: null },
+        manager_b: { username: snapshotB.username, strengths: [], weaknesses: [], specialty_formats_note: null },
+        verdict: 'AI narrative is temporarily unavailable — grades below are computed directly from real league history.',
+        trash_talk: null,
+      }
     }
-    
+
     // Server-side validation to enforce fair comparison rules
     // If no comparable formats, override to INCOMPARABLE
     if (comparableFormats.length === 0) {
@@ -446,18 +590,41 @@ IMPORTANT:
       // Ensure comparable_formats is set correctly
       comparison.comparable_formats = comparableFormats
       comparison.fair_comparison_possible = true
-      
-      // Set non-comparable formats to N/A in head-to-head
-      if (comparison.head_to_head_breakdown) {
-        if (!comparableFormats.includes('redraft')) {
-          comparison.head_to_head_breakdown.redraft_winner = 'N/A'
+      comparison.winner = deterministicWinner
+      comparison.winner_username = deterministicWinner === 'A' ? snapshotA.username : deterministicWinner === 'B' ? snapshotB.username : 'TIE'
+      comparison.margin = deterministicMargin
+
+      // Set head-to-head to the deterministic per-format comparison for comparable formats,
+      // N/A for non-comparable ones.
+      comparison.head_to_head_breakdown = comparison.head_to_head_breakdown || {}
+      for (const type of ['redraft', 'dynasty', 'specialty'] as const) {
+        const key = `${type}_winner` as const
+        if (!comparableFormats.includes(type)) {
+          comparison.head_to_head_breakdown[key] = 'N/A'
+          continue
         }
-        if (!comparableFormats.includes('dynasty')) {
-          comparison.head_to_head_breakdown.dynasty_winner = 'N/A'
-        }
-        if (!comparableFormats.includes('specialty')) {
-          comparison.head_to_head_breakdown.specialty_winner = 'N/A'
-        }
+        const diff = formatGrades[type].aScore - formatGrades[type].bScore
+        comparison.head_to_head_breakdown[key] = diff === 0 ? 'TIE' : diff > 0 ? 'A' : 'B'
+      }
+    }
+
+    // Deterministic grade backing — same real stats always produce the same grade, regardless
+    // of what the LLM echoed back. This is the actual fix: previously overall_grade and
+    // grades_by_type.*.grade were raw, unverified GPT-4o output with no code-side check.
+    if (comparison.manager_a) {
+      comparison.manager_a.overall_grade = overallGradeA
+      comparison.manager_a.grades_by_type = comparison.manager_a.grades_by_type || {}
+      for (const type of ['redraft', 'dynasty', 'specialty'] as const) {
+        comparison.manager_a.grades_by_type[type] = comparison.manager_a.grades_by_type[type] || {}
+        comparison.manager_a.grades_by_type[type].grade = formatGrades[type].a
+      }
+    }
+    if (comparison.manager_b) {
+      comparison.manager_b.overall_grade = overallGradeB
+      comparison.manager_b.grades_by_type = comparison.manager_b.grades_by_type || {}
+      for (const type of ['redraft', 'dynasty', 'specialty'] as const) {
+        comparison.manager_b.grades_by_type[type] = comparison.manager_b.grades_by_type[type] || {}
+        comparison.manager_b.grades_by_type[type].grade = formatGrades[type].b
       }
     }
 

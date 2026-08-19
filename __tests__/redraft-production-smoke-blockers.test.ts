@@ -80,17 +80,20 @@ describe('redraft production smoke blockers', () => {
     expect(commissionerModal).toContain('hasC2CDraftConfig')
   })
 
-  it('start and resume proceed while the player pool warms in the background', () => {
+  it('start and resume enforce pool readiness while warming the player pool in the background', () => {
     const startIdx = draftControls.indexOf("if (action === 'start')")
     const resumeIdx = draftControls.indexOf("if (action === 'resume')")
-    const startBlock = draftControls.slice(startIdx, startIdx + 700)
-    const resumeBlock = draftControls.slice(resumeIdx, resumeIdx + 900)
+    const startBlock = draftControls.slice(startIdx, startIdx + 1400)
+    const resumeBlock = draftControls.slice(resumeIdx, resumeIdx + 1400)
+    expect(startBlock).toContain('getDraftPoolReadiness(leagueId)')
     expect(startBlock).toContain('triggerDraftPoolPrewarmBackground(leagueId)')
+    expect(startBlock).toContain("code: 'POOL_NOT_READY'")
     expect(startBlock).toContain('startDraftSession(leagueId)')
-    expect(startBlock).not.toContain('POOL_NOT_READY')
+    expect(resumeBlock).toContain('getDraftPoolReadiness(leagueId)')
     expect(resumeBlock).toContain('triggerDraftPoolPrewarmBackground(leagueId)')
     expect(resumeBlock).toContain('resumeDraftSession(leagueId)')
-    expect(resumeBlock).not.toContain('POOL_NOT_READY')
+    expect(resumeBlock).not.toContain("code: 'POOL_NOT_READY'")
+    expect(resumeBlock).toContain('resume proceeding while pool warms')
     expect(commissionerHook).not.toMatch(/action === 'pause' \|\| action === 'resume' \|\| \(action === 'start'/)
   })
 
@@ -101,7 +104,7 @@ describe('redraft production smoke blockers', () => {
   })
 
   it('War Room is visible inside the draft room dock and popup', () => {
-    expect(draftRightDock).toContain("id: 'war_room', label: 'War Room'")
+    expect(draftRightDock).toContain("id: 'war_room', label: 'AF Legacy'")
     expect(draftRightDock).toContain('warRoomBody?: ReactNode')
     expect(draftRoomClient).toContain('warRoomBody=')
     expect(draftRoomClient).toContain('<DraftTeamPanel {...draftTeamPanelProps} />')

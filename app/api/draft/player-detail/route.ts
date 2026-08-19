@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 export const dynamic = 'force-dynamic'
@@ -23,6 +25,9 @@ type InjuryItem = {
   description: string | null
   date: string | null
   source: string
+  /** True when the designation is past the port's 36h claim-freshness rule —
+   *  render caveated, never plainly (a stale "Questionable" is a false statement). */
+  stale: boolean
 }
 
 /**
@@ -98,25 +103,38 @@ export async function GET(req: NextRequest) {
     category: n.category,
   }))
 
-  // Latest 5 injury entries.
-  const injuryRows = playerName
-    ? await prisma.sportsInjury.findMany({
-        where: {
-          sport,
-          OR: [{ playerId: playerIdRaw }, { playerName: { equals: playerName, mode: 'insensitive' } }],
-        },
-        orderBy: [{ date: 'desc' }],
-        take: 5,
-      }).catch(() => [])
-    : []
+  // Slice 18 follow-on — current designation via the canonical injury read
+  // port (position/team-verified name match, ambiguity REFUSED rather than
+  // guessed). The old query ordered by `date desc`, which let a stale
+  // api_sports row outrank a fresh rolling_insights one; the port's
+  // freshest-source-wins rule is the fix. One canonical current row replaces
+  // the previous list of provider duplicates.
+  const injuryResolution = playerName
+    ? await resolveInjuryFacts({
+        sport,
+        players: [
+          {
+            name: playerName,
+            position: record?.position ?? seed?.position ?? null,
+            team,
+          },
+        ],
+      }).catch(() => null)
+    : null
+  const injuryFact = injuryResolution?.byPlayer.get(normalizeMatchName(playerName)) ?? null
 
-  const injuries: InjuryItem[] = injuryRows.map((i) => ({
-    status: i.status,
-    type: i.type,
-    description: i.description,
-    date: i.date ? i.date.toISOString() : null,
-    source: i.source,
-  }))
+  const injuries: InjuryItem[] = injuryFact
+    ? [
+        {
+          status: typeof injuryFact.status === 'string' ? injuryFact.status : null,
+          type: injuryFact.type,
+          description: injuryFact.description,
+          date: injuryFact.date ? injuryFact.date.toISOString() : null,
+          source: injuryFact.source,
+          stale: injuryFact.stale,
+        },
+      ]
+    : []
 
   return NextResponse.json({
     playerId: playerIdRaw,
@@ -142,7 +160,7 @@ export async function GET(req: NextRequest) {
     sources: {
       profile: record ? record.dataSource : seed ? seed.source : null,
       news: newsRows[0]?.source ?? null,
-      injuries: injuryRows[0]?.source ?? null,
+      injuries: injuryFact?.source ?? null,
     },
   })
 }

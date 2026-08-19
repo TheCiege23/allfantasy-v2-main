@@ -128,11 +128,14 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     })
   })
 
-  it("grants 650 tokens for af_all_access_monthly plan on subscription_create", async () => {
+  it("skips grant for the retired af_all_access_monthly sku (removed from catalog)", async () => {
     const { grantMonthlyCreditsFromInvoice } = await import(
       "@/lib/subscription/webhookHandlers"
     )
 
+    // The af_all_access tier was removed from the monetization catalog. A legacy
+    // invoice still carrying this sku no longer resolves to a catalog item, so no
+    // monthly credits are granted (same path as an unknown sku).
     prismaMock.userSubscription.findFirst.mockResolvedValue({ sku: "af_all_access_monthly" })
 
     const invoice = {
@@ -142,13 +145,7 @@ describe("grantMonthlyCreditsFromInvoice", () => {
     }
     await grantMonthlyCreditsFromInvoice(invoice as any, "user_aa")
 
-    expect(grantMonthlySubscriptionCreditsMock).toHaveBeenCalledWith({
-      userId: "user_aa",
-      tokenAmount: 650,
-      planFamily: "af_all_access",
-      invoiceId: "in_aa_create",
-      billingReason: "subscription_create",
-    })
+    expect(grantMonthlySubscriptionCreditsMock).not.toHaveBeenCalled()
   })
 
   it("grants 300 tokens for af_war_room_monthly plan", async () => {

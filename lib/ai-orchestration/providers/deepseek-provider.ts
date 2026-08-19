@@ -3,7 +3,7 @@
  * Wraps deepseek-client; keys server-side only. Uses provider-config for availability.
  */
 
-import type { IProviderClient } from '../provider-interface'
+import type { IProviderClient, ProviderChatOptions } from '../provider-interface'
 import type { ProviderChatRequest, ProviderChatResult } from '../types'
 import { deepseekChat } from '@/lib/deepseek-client'
 import { isDeepSeekAvailable } from '@/lib/provider-config'
@@ -43,7 +43,7 @@ export function createDeepSeekProvider(): IProviderClient {
     async healthCheck(): Promise<boolean> {
       return isDeepSeekAvailable()
     },
-    async chat(request: ProviderChatRequest): Promise<ProviderChatResult> {
+    async chat(request: ProviderChatRequest, opts?: ProviderChatOptions): Promise<ProviderChatResult> {
       const requestedModel = request.model?.trim() || undefined
       const fallbackModel = requestedModel ?? DEFAULT_MODEL
       try {
@@ -61,6 +61,7 @@ export function createDeepSeekProvider(): IProviderClient {
           model: requestedModel,
           temperature: request.temperature ?? 0.2,
           maxTokens: request.maxTokens ?? 1000,
+          signal: opts?.signal,
         })
         if (result.error) {
           return buildProviderFailure({

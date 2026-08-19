@@ -382,11 +382,16 @@ export async function GET(request: Request) {
           careerXp: String(
             jsonSafeXp(denormEarly?.legacyCareerXp ?? denormEarly?.xpTotal),
           ),
-          aiReportGrade: 'B',
-          aiScore: 70,
-          aiInsight: 'Import your leagues to generate your AI insight.',
-          winRate: 0,
-          playoffRate: 0,
+          // Hardcoded 'B' / 70 for a user who has imported nothing. The insight
+          // beside it already said "import your leagues to unlock", so the copy
+          // admitted there was no data while the grade next to it did not.
+          aiReportGrade: null,
+          aiScore: null,
+          aiInsight: 'Import your leagues to unlock your Chimmy insight.',
+          // Null, not 0. A 0% win rate reads as a terrible record; it means we
+          // have not seen a single game.
+          winRate: null,
+          playoffRate: null,
           championshipCount: careerStats.championships,
           seasonsPlayed: careerStats.seasonsPlayed,
           totalWins: careerStats.totalWins,
@@ -473,11 +478,16 @@ export async function GET(request: Request) {
           careerTierName: lv.name,
           careerLevel: lv.level,
           careerXp: String(jsonSafeXp(denorm?.legacyCareerXp ?? denorm?.xpTotal)),
-          aiReportGrade: 'B',
-          aiScore: 70,
-          aiInsight: 'Import your leagues to generate your AI insight.',
-          winRate: 0,
-          playoffRate: 0,
+          // Hardcoded 'B' / 70 for a user who has imported nothing. The insight
+          // beside it already said "import your leagues to unlock", so the copy
+          // admitted there was no data while the grade next to it did not.
+          aiReportGrade: null,
+          aiScore: null,
+          aiInsight: 'Import your leagues to unlock your Chimmy insight.',
+          // Null, not 0. A 0% win rate reads as a terrible record; it means we
+          // have not seen a single game.
+          winRate: null,
+          playoffRate: null,
           championshipCount: careerStats.championships,
           seasonsPlayed: careerStats.seasonsPlayed,
           totalWins: careerStats.totalWins,
@@ -643,13 +653,21 @@ export async function GET(request: Request) {
     const playoffCount = leagueRecords.filter((league) => league.made_playoffs).length
     const winRate = totalGames > 0 ? (totalWins / totalGames) * 100 : 0
     const playoffRate = leagueRecords.length > 0 ? (playoffCount / leagueRecords.length) * 100 : 0
-    const aiScore = clampScore(aiReport?.rating, 70)
+    // No report means NO grade. legacy_ai_reports has 0 rows and nothing in the
+    // codebase writes it, so `clampScore(aiReport?.rating, 70)` handed every
+    // single user a score of 70 — and scoreToLetterGrade(70) is "C-", rendered on
+    // a grade ring as if it had been earned. A letter grade about someone's
+    // fantasy career, computed from a table that has never held a row.
+    //
+    // AIGradeRing already accepts a null score and renders an empty ring, so the
+    // honest value costs nothing at the UI.
+    const aiScore = aiReport?.rating != null ? clampScore(aiReport.rating, 0) : null
     const aiInsight =
       aiReport?.summary?.trim() ||
       firstInsightValue(aiReport?.insights) ||
       aiReport?.title?.trim() ||
       aiReport?.shareText?.trim() ||
-      'Import your leagues to generate your AI insight.'
+      'Import your leagues to unlock your Chimmy insight.'
 
     let careerStats: UserRankCareerStats
     if (importedLeagueRows.length > 0) {
@@ -674,11 +692,20 @@ export async function GET(request: Request) {
     }
 
     const d = denormCatchup
-    /** Sleeper `League.import_*` rows drive XP via `calculateAndSaveRank`; prefer profile XP over legacy cache. */
+    // Quarantine fix (audit finding: dormant secondary ranking engine): `calculateAndSaveRank`
+    // — the single canonical XP engine — merges Sleeper imports, legacy Sleeper history, AND
+    // native AF leagues, so `d.xpTotal` is the real total for ANY user it has run for, not
+    // just imported-league users. This used to gate on `importedLeagueRows.length > 0` first,
+    // which meant a legacy-only user (real canonical XP available, just no Sleeper import_*
+    // rows) still silently fell through to `legacyUserRankCache` — a dormant, differently-
+    // weighted engine (win=50/playoff=200/championship=500 vs the canonical win=10/
+    // playoff=30/championship=200) that can be 5-10x off. Canonical XP now wins whenever it
+    // exists; the legacy cache is a true last-resort only when calculateAndSaveRank has
+    // genuinely never run for this user.
     const careerXpBig =
-      importedLeagueRows.length > 0 && d?.xpTotal != null
+      d?.xpTotal != null
         ? BigInt(jsonSafeXp(d.xpTotal))
-        : rankCache.careerXp ?? 0n
+        : rankCache?.careerXp ?? 0n
     const xpTotalNum = Number(careerXpBig)
     const lv = getLevelFromXp(xpTotalNum)
     const tier = lv.tier
@@ -709,12 +736,17 @@ export async function GET(request: Request) {
       careerTierName: lv.name,
       careerLevel: lv.level,
       careerXp: String(jsonSafeXp(careerXpBig)),
-      aiReportGrade: scoreToLetterGrade(aiScore),
+      aiReportGrade: aiScore != null ? scoreToLetterGrade(aiScore) : null,
       aiScore,
       aiInsight,
       winRate: Math.round(winRateForDisplay * 10) / 10,
       playoffRate: Math.round(playoffRateForDisplay * 10) / 10,
-      championshipCount,
+      // Branch-aware, matching careerStats.championships used everywhere else in this file
+      // (lines 390/481) — this used to read the raw legacy-table-only `championshipCount`
+      // regardless of whether the user's real championship data actually came from Sleeper
+      // imports, so a user with both import and legacy history could see two different
+      // championship counts depending on which response branch/UI surface read them.
+      championshipCount: careerStats.championships,
       seasonsPlayed: careerStats.seasonsPlayed,
       totalWins: careerStats.totalWins,
       totalLosses: careerStats.totalLosses,
@@ -752,8 +784,13 @@ export async function GET(request: Request) {
       careerLosses: d?.careerLosses ?? careerStats.totalLosses,
       careerChampionships: d?.careerChampionships ?? careerStats.championships,
       careerPlayoffAppearances: d?.careerPlayoffAppearances ?? careerStats.playoffAppearances,
-      careerSeasonsPlayed: d?.careerSeasonsPlayed ?? careerStats.seasonsPlayed,
-      careerLeaguesPlayed: d?.careerLeaguesPlayed ?? careerStats.leaguesPlayed,
+      // Same DB-to-API un-swap as careerStatsFromProfileDenorm above: `career_leagues_played`
+      // holds the distinct-season count, `career_seasons_played` holds the league-row count.
+      // This block used to read the raw (swapped) DB fields straight through, so these two
+      // top-level response keys — the ones CareerProgressionStrip actually renders — were
+      // inverted even though the corrected values already existed in `careerStats`/`stats`.
+      careerSeasonsPlayed: d?.careerLeaguesPlayed ?? careerStats.seasonsPlayed,
+      careerLeaguesPlayed: d?.careerSeasonsPlayed ?? careerStats.leaguesPlayed,
       rankCalculatedAt: d?.rankCalculatedAt?.toISOString() ?? rankCalculatedAtIso,
     }
 

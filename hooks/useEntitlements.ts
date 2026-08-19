@@ -14,6 +14,7 @@ import type { SubscriptionFeatureId, SubscriptionPlanId } from "@/lib/subscripti
 
 type EntitlementsApiResponse = {
   entitlement?: EntitlementSnapshot
+  isAdminBypassAccount?: boolean
 }
 
 export type EntitlementsState = {
@@ -23,10 +24,16 @@ export type EntitlementsState = {
   hasCommissioner: boolean
   hasPro: boolean
   hasWarRoom: boolean
-  hasAllAccess: boolean
-  /** AF Supreme subscription (top tier; includes All-Access capability). */
+  /** AF Supreme subscription (top tier; inherits the full Pro + Commissioner + Legacy stack). */
   hasSupreme: boolean
   hasAnyPaid: boolean
+  /**
+   * True when the plans/status above are a synthetic dev-admin grant (lib/dev-admin/access.ts),
+   * not a real Stripe subscription. Mirrors useTokenBalance's isAdminBypassAccount — any surface
+   * that renders a plan badge/status off this hook must disclose this, the same way the token
+   * balance widget already discloses its own synthetic value.
+   */
+  isAdminBypassAccount: boolean
 }
 
 const INITIAL_STATE: EntitlementsState = {
@@ -36,31 +43,27 @@ const INITIAL_STATE: EntitlementsState = {
   hasCommissioner: false,
   hasPro: false,
   hasWarRoom: false,
-  hasAllAccess: false,
   hasSupreme: false,
   hasAnyPaid: false,
+  isAdminBypassAccount: false,
 }
 
-function computeFlags(snap: EntitlementSnapshot): Omit<EntitlementsState, "loading" | "error"> {
+function computeFlags(
+  snap: EntitlementSnapshot,
+  isAdminBypassAccount: boolean
+): Omit<EntitlementsState, "loading" | "error"> {
   const plans = snap.plans ?? []
   const isActive = isActiveOrGraceStatus(snap.status)
   const expanded = expandPlansWithBundle(plans as SubscriptionPlanId[])
   return {
     snapshot: snap,
     hasCommissioner:
-      isActive &&
-      (expanded.includes("commissioner") ||
-        expanded.includes("all_access") ||
-        expanded.includes("supreme")),
-    hasPro:
-      isActive &&
-      (expanded.includes("pro") || expanded.includes("all_access") || expanded.includes("supreme")),
-    hasWarRoom:
-      isActive &&
-      (expanded.includes("war_room") || expanded.includes("all_access") || expanded.includes("supreme")),
-    hasAllAccess: isActive && (plans.includes("all_access") || plans.includes("supreme")),
+      isActive && (expanded.includes("commissioner") || expanded.includes("supreme")),
+    hasPro: isActive && (expanded.includes("pro") || expanded.includes("supreme")),
+    hasWarRoom: isActive && (expanded.includes("war_room") || expanded.includes("supreme")),
     hasSupreme: isActive && plans.includes("supreme"),
     hasAnyPaid: isActive && plans.length > 0,
+    isAdminBypassAccount,
   }
 }
 
@@ -74,16 +77,18 @@ export function useEntitlements() {
       if (!res.ok) throw new Error("Failed to load entitlements")
       const data = (await res.json()) as EntitlementsApiResponse
       const snap = data.entitlement
+      const isAdminBypassAccount = Boolean(data.isAdminBypassAccount)
       if (!snap) {
         setState({
           ...INITIAL_STATE,
+          isAdminBypassAccount,
           loading: false,
           error: null,
         })
         return
       }
       setState({
-        ...computeFlags(snap),
+        ...computeFlags(snap, isAdminBypassAccount),
         loading: false,
         error: null,
       })

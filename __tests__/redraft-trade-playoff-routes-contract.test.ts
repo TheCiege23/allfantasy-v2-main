@@ -15,6 +15,10 @@ const prismaMock = {
     findUnique: vi.fn(),
     findFirst: vi.fn(),
     update: vi.fn(),
+    // G15.2b concurrency guard: the settlement $transaction atomically claims the
+    // proposal via updateMany(status: 'pending' → 'accepted'), then re-reads it.
+    updateMany: vi.fn(async () => ({ count: 1 })),
+    findUniqueOrThrow: vi.fn(async () => ({ status: 'accepted' })),
   },
   redraftTradeAsset: {
     createMany: vi.fn(),
@@ -35,6 +39,7 @@ const prismaMock = {
   },
   redraftSeason: {
     findFirst: vi.fn(),
+    findUnique: vi.fn(async () => null),
   },
   redraftRoster: {
     findFirst: vi.fn(),

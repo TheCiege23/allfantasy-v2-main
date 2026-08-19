@@ -4,12 +4,14 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueMembership } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
 import { getNormalizedLineupSections } from '@/lib/roster/LineupTemplateValidation'
 import { attachPlayerMediaBatch } from '@/lib/player-media'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { MatchupCenterPayload, MatchupGameStatus, MatchupPlayerSlot, MatchupSidePayload } from '@/lib/matchup-center/types'
 import { buildMatchupInsightsBlock } from '@/lib/matchup-center/matchupAiInsights'
+import { computeMatchupWinProbability } from '@/lib/matchup-center/winProbability'
 import { applyMatchupCommandCenterMeta } from '@/lib/matchup-center/matchupAggregation'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
 
@@ -58,14 +60,19 @@ function positionProjectionFallback(position: string): number {
   return 10
 }
 
-function resolveProjectedPoints(pts: number, statLine: unknown, position: string): number {
+function resolveProjectedPoints(
+  pts: number,
+  statLine: unknown,
+  position: string,
+): { points: number; isReal: boolean } {
   const fromLine = projectionFromStatLine(statLine)
-  if (fromLine != null) return Math.max(pts, fromLine)
-  return Math.max(pts, positionProjectionFallback(position))
+  if (fromLine != null) return { points: Math.max(pts, fromLine), isReal: true }
+  return { points: Math.max(pts, positionProjectionFallback(position)), isReal: false }
 }
 
-function slotAiInsight(pts: number, proj: number, injury: string | null): string | null {
+function slotAiInsight(pts: number, proj: number, injury: string | null, hasRealProjection: boolean): string | null {
   if (injury && /out|doubtful|ir\b|nfi\b|pup\b/i.test(injury)) return 'Injury flag — verify active status before lock.'
+  if (!hasRealProjection) return null
   if (proj - pts >= 8) return 'Ceiling game — still room to spike vs current score.'
   if (pts > proj + 5) return 'Outperforming projection — momentum is on your side.'
   return null
@@ -125,13 +132,19 @@ export async function buildMatchupCenterPayload(params: {
       settings: true,
       leagueVariant: true,
       userId: true,
-      teams: { select: { platformUserId: true } },
     },
   })
   if (!league) return { error: 'League not found', status: 404 }
 
-  const memberIds = new Set(league.teams.map((t) => t.platformUserId).filter(Boolean) as string[])
-  if (league.userId !== params.viewerUserId && !memberIds.has(params.viewerUserId)) {
+  // Membership gate — the ONE canonical predicate (lib/league-access.ts).
+  //
+  // This used to build `memberIds` from `LeagueTeam.platformUserId`, which is `String?` and, more
+  // importantly, covers a different population than `Roster`. Measured against production
+  // 2026-07-20 that gate rejected 98 of 176 real Roster-backed members (55.7%) — a live 403 for
+  // over half the members of this surface. The giveaway was three lines below: the very next query
+  // reads `Roster.platformUserId`, the NOT NULL column, for the same viewer.
+  const membership = await resolveLeagueMembership(params.leagueId, params.viewerUserId)
+  if (!membership.ok) {
     return { error: 'Forbidden', status: 403 }
   }
 
@@ -175,6 +188,7 @@ export async function buildMatchupCenterPayload(params: {
       winPct: 0,
       totalPoints: 0,
       projectedTotal: 0,
+      projectedTotalIncludesFallback: false,
       starters: [],
       remainingStarters: 0,
     }
@@ -186,6 +200,7 @@ export async function buildMatchupCenterPayload(params: {
       winPct: 0,
       totalPoints: 0,
       projectedTotal: 0,
+      projectedTotalIncludesFallback: false,
       starters: [],
       remainingStarters: 0,
     }
@@ -279,13 +294,14 @@ export async function buildMatchupCenterPayload(params: {
       opponent,
       headshotUrl: headshot,
       currentPoints: pts,
-      projectedPoints: proj,
+      projectedPoints: proj.points,
+      hasRealProjection: proj.isReal,
       injuryStatus,
       newsBlurb,
       weatherSummary,
       gameStatus: inferGameStatus(pts, weekStatus),
       gameLabel: pts > 0 ? 'Scoring' : 'Scheduled',
-      aiInsight: slotAiInsight(pts, proj, injuryStatus),
+      aiInsight: slotAiInsight(pts, proj.points, injuryStatus, proj.isReal),
     })
   }
 
@@ -307,6 +323,7 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stLeft?.wins ?? 0, stLeft?.losses ?? 0, stLeft?.ties ?? 0),
     totalPoints: tw?.totalPoints ?? leftSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: leftSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    projectedTotalIncludesFallback: leftSlots.some((s) => !s.hasRealProjection),
     starters: leftSlots,
     remainingStarters: leftSlots.filter((s) => s.gameStatus !== 'final').length,
   }
@@ -323,6 +340,7 @@ export async function buildMatchupCenterPayload(params: {
     winPct: recordWinPct(stRight?.wins ?? 0, stRight?.losses ?? 0, stRight?.ties ?? 0),
     totalPoints: oppResult?.totalPoints ?? rightSlots.reduce((s, x) => s + x.currentPoints, 0),
     projectedTotal: rightSlots.reduce((s, x) => s + x.projectedPoints, 0),
+    projectedTotalIncludesFallback: rightSlots.some((s) => !s.hasRealProjection),
     starters: rightSlots,
     remainingStarters: rightSlots.filter((s) => s.gameStatus !== 'final').length,
   }
@@ -334,9 +352,7 @@ export async function buildMatchupCenterPayload(params: {
         ? 'live'
         : 'upcoming'
 
-  const totalProj = left.projectedTotal + right.projectedTotal
-  const winProb =
-    totalProj > 0 ? Math.max(0.05, Math.min(0.95, left.projectedTotal / totalProj)) : null
+  const winProb = computeMatchupWinProbability(left, right)
 
   return applyMatchupCommandCenterMeta({
     leagueId: params.leagueId,

@@ -2,6 +2,7 @@ export async function GET() {
   const robotsTxt = `User-agent: *
 Allow: /
 Disallow: /admin
+Disallow: /api/auth/beta
 
 Sitemap: https://allfantasy.ai/sitemap.xml`
 

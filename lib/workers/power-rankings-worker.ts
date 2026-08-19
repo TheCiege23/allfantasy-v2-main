@@ -2,6 +2,7 @@ import "server-only";
 import { Job, Worker, type ConnectionOptions } from "bullmq";
 import { getRedisConnection, isRedisConfigured } from "@/lib/queues/bullmq";
 import { prisma } from "@/lib/prisma";
+import { toPrismaJsonInput } from "@/lib/prisma-json";
 
 export type PowerRankingsJobData = {
   jobType: "refresh-rankings" | "psychology" | "dynasty-roadmap";
@@ -105,7 +106,7 @@ async function updateLeagueSettings(
         prisma.league.update({
           where: { id: league.id },
           data: {
-            settings: updater(asObject(league.settings)),
+            settings: toPrismaJsonInput(updater(asObject(league.settings))),
           },
         })
       )

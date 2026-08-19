@@ -8,6 +8,11 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import { runWaiverAIService } from '@/lib/waiver-ai-engine'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
+import { shouldRunWaiverShadow, shouldRunWaiverLive, runWaiverShadowForEngine } from '@/lib/decision-os/waiver/shadow'
+import { toWaiverCard, type WaiverCard } from '@/lib/decision-os/waiver/waiverCardAdapter'
+import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
+import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
+import { prisma } from '@/lib/prisma'
 
 const SUPPORTED_SPORTS_ENUM = SUPPORTED_SPORTS as [
   (typeof SUPPORTED_SPORTS)[number],
@@ -205,6 +210,57 @@ export const POST = withApiUsage({
     if (gate.tokenSpend) tokenFallbackLedgerId = gate.tokenSpend.id
 
     const analysis = await runWaiverAIService(input)
+
+    // Decision OS Slice 2 — waiver shadow/live runner. Evaluation only; never executes a claim.
+    // Stage 0 (SHADOW only): scope-filtered, logs parity, result discarded.
+    // Stage 1 (LIVE): unconditional when leagueId present, decisionOs appended to response.
+    const isLive = shouldRunWaiverLive(process.env)
+    const liveStart = Date.now()
+    let decisionOs: { decisionId: string; card: WaiverCard; confidence: number; legal: boolean } | null = null
+
+    if (isLive && input.leagueId) {
+      try {
+        const liveResult = await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis })
+        if (liveResult.ran && liveResult.result) {
+          const { decision } = liveResult.result
+          const card = toWaiverCard(decision)
+          decisionOs = {
+            decisionId: decision.decision_id,
+            card,
+            confidence: card.confidence,
+            legal: card.legal,
+          }
+          emitLiveTelemetry('waiver.claim', { enriched: true, latency_ms: Date.now() - liveStart, leagueId: input.leagueId }, decision.decision_id)
+        } else {
+          emitLiveTelemetry('waiver.claim', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart, leagueId: input.leagueId })
+        }
+      } catch {
+        emitLiveTelemetry('waiver.claim', { enriched: false, reason: 'exception', latency_ms: Date.now() - liveStart, leagueId: input.leagueId })
+        // live path must never fail the waiver route
+      }
+    } else if (!isLive && input.leagueId) {
+      const shadowFilters = getDecisionShadowScopeFilters()
+      const shadowProfile = shadowFilters.hasUsernameFilter
+        ? await prisma.userProfile.findUnique({
+            where: { userId },
+            select: { sleeperUsername: true },
+          })
+        : null
+
+      if (
+        shouldRunWaiverShadow(process.env, {
+          username: shadowProfile?.sleeperUsername ?? null,
+          leagueId: input.leagueId,
+        })
+      ) {
+        try {
+          await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis })
+        } catch {
+          // shadow must never affect the legacy response
+        }
+      }
+    }
+
     return NextResponse.json({
       success: true,
       analysis,
@@ -216,6 +272,7 @@ export const POST = withApiUsage({
             ledgerId: gate.tokenSpend.id,
           }
         : null,
+      ...(decisionOs ? { decisionOs } : {}),
     })
   } catch (error) {
     if (tokenFallbackLedgerId && userId) {

@@ -8,16 +8,21 @@ import { TeamLogo } from '@/app/components/TeamLogo'
 import type { SlimPlayer } from '@/lib/hooks/useSleeperPlayers'
 import { useSleeperPlayers } from '@/lib/hooks/useSleeperPlayers'
 import { ProjectionDisplay } from '@/components/weather/ProjectionDisplay'
-import { placeholderBaselineProjection } from '@/components/weather/placeholderBaseline'
+import { ProjectionValue } from '@/components/league/ProjectionValue'
+import { resolveProjectionAvailability } from '@/lib/league/dataHonesty'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
+import { isNflRedraftCoreDashboardFromUserLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
 import { getNcaafBetaStatus, getNcaafBetaBannerInfo, isNcaafPlayerPoolPending } from '@/lib/league/ncaaf-beta-guard'
 import { NcaafBetaDataBanner } from '@/components/NcaafBetaDataBanner'
 import {
   fmtStat,
+  parseRollingInsightsStatsJson,
   type RollingInsightsTableStats,
 } from '@/lib/players/rolling-insights-stats-display'
 import { StartVsComparisonLauncher } from '@/components/app/player-comparison/StartVsComparisonLauncher'
 import WaiverWirePage from '@/components/waiver-wire/WaiverWirePage'
+import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
+import { displayPlayerFromUnifiedRow, type DisplayPlayerRecord } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 
 type RiBatchEntry = {
   season: string | null
@@ -37,6 +42,9 @@ export type PlayersTabProps = {
 
 type PosFilter = string
 type PlayerSubtab = 'available' | 'waivers' | 'freeAgents' | 'claims'
+type PlayerPoolRow = DisplayPlayerRecord & {
+  normalizedStats?: Record<string, unknown>
+}
 
 const NFL_FILTERS: PosFilter[] = ['ALL', 'QB', 'RB', 'WR', 'TE', 'DL', 'LB', 'DB', 'K', 'DEF', 'MORE']
 
@@ -103,7 +111,9 @@ const PLAYER_SUBTABS: Array<{ id: PlayerSubtab; label: string }> = [
 export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   const resolvedSport = normalizeToSupportedSport(sport ?? league.sport) ?? 'NFL'
   const sportU = resolvedSport.toUpperCase()
-  const { players, loading } = useSleeperPlayers(resolvedSport)
+  const normalizedPlayerSurfaceEnabled =
+    sportU === 'NFL' && isNflRedraftCoreDashboardFromUserLeague(league)
+  const { players, loading: sleeperLoading } = useSleeperPlayers(resolvedSport)
   const seasonYear = new Date().getFullYear()
   const [weekNum, setWeekNum] = useState(1)
   const [seasonSel, setSeasonSel] = useState(seasonYear)
@@ -118,6 +128,10 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   const [faLoading, setFaLoading] = useState(false)
   const [wlIds, setWlIds] = useState<Set<string>>(() => readWatchlist(league.id))
   const [riBySleeper, setRiBySleeper] = useState<Record<string, RiBatchEntry>>({})
+  const [redraftSeasonId, setRedraftSeasonId] = useState<string | null>(null)
+  const [normalizedRows, setNormalizedRows] = useState<UnifiedPlayerWireDto[]>([])
+  const [normalizedLoading, setNormalizedLoading] = useState(false)
+  const [normalizedError, setNormalizedError] = useState<string | null>(null)
   const freeAgents = activeSubtab === 'freeAgents'
   const waiverSurfaceMode = activeSubtab === 'waivers' || activeSubtab === 'claims'
 
@@ -130,6 +144,45 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   useEffect(() => {
     setWlIds(readWatchlist(league.id))
   }, [league.id])
+
+  useEffect(() => {
+    if (!normalizedPlayerSurfaceEnabled) {
+      setRedraftSeasonId(null)
+      setNormalizedRows([])
+      setNormalizedLoading(false)
+      setNormalizedError(null)
+      return
+    }
+    let cancelled = false
+    setNormalizedError(null)
+    fetch(`/api/redraft/season?leagueId=${encodeURIComponent(league.id)}`, {
+      credentials: 'include',
+      cache: 'no-store',
+    })
+      .then(async (r) => {
+        if (!r.ok) throw new Error('Could not load redraft season.')
+        return (await r.json()) as { season?: { id?: string | null } }
+      })
+      .then((data) => {
+        if (cancelled) return
+        const nextSeasonId = data.season?.id?.trim() ?? null
+        setRedraftSeasonId(nextSeasonId)
+        if (!nextSeasonId) {
+          setNormalizedRows([])
+          setNormalizedError('Redraft season is still syncing for this league.')
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setRedraftSeasonId(null)
+          setNormalizedRows([])
+          setNormalizedError('Normalized player data is unavailable right now.')
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [normalizedPlayerSurfaceEnabled, league.id])
 
   const persistWatchlist = useCallback(
     (next: Set<string>) => {
@@ -154,7 +207,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   )
 
   useEffect(() => {
-    if (!freeAgents) {
+    if (!freeAgents || normalizedPlayerSurfaceEnabled) {
       setFaRows(null)
       return
     }
@@ -186,9 +239,69 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       cancelled = true
       window.clearTimeout(t)
     }
-  }, [freeAgents, league.id, pos, playerQuery, teamQuery])
+  }, [freeAgents, normalizedPlayerSurfaceEnabled, league.id, pos, playerQuery, teamQuery])
 
-  const poolList = useMemo((): SlimPlayer[] => {
+  useEffect(() => {
+    if (!normalizedPlayerSurfaceEnabled || waiverSurfaceMode || !redraftSeasonId) {
+      if (!normalizedPlayerSurfaceEnabled) {
+        setNormalizedRows([])
+        setNormalizedLoading(false)
+      }
+      return
+    }
+    let cancelled = false
+    setNormalizedLoading(true)
+    setNormalizedError(null)
+    const t = window.setTimeout(() => {
+      const params = new URLSearchParams({
+        seasonId: redraftSeasonId,
+        limit: '400',
+      })
+      if (playerQuery.trim()) params.set('search', playerQuery.trim())
+      if (pos !== 'ALL' && pos !== 'MORE') {
+        params.set('position', pos === 'DEF' ? 'DEF' : pos)
+      }
+      fetch(`/api/redraft/players?${params.toString()}`, {
+        credentials: 'include',
+        cache: 'no-store',
+      })
+        .then(async (r) => {
+          if (!r.ok) throw new Error('Could not load players.')
+          return (await r.json()) as { players?: UnifiedPlayerWireDto[] }
+        })
+        .then((data) => {
+          if (cancelled) return
+          setNormalizedRows(Array.isArray(data.players) ? data.players : [])
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setNormalizedRows([])
+            setNormalizedError('Player data is still syncing. Refresh shortly to try again.')
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setNormalizedLoading(false)
+        })
+    }, 200)
+    return () => {
+      cancelled = true
+      window.clearTimeout(t)
+    }
+  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, redraftSeasonId, playerQuery, pos])
+
+  const normalizedPoolList = useMemo(
+    (): PlayerPoolRow[] =>
+      normalizedRows.map((row) => ({
+        ...displayPlayerFromUnifiedRow(row),
+        normalizedStats: row.normalizedStats,
+      })),
+    [normalizedRows],
+  )
+
+  const poolList = useMemo((): PlayerPoolRow[] => {
+    if (normalizedPlayerSurfaceEnabled && !waiverSurfaceMode) {
+      return normalizedPoolList
+    }
     if (freeAgents && faRows) {
       return faRows.map((r) => ({
         id: r.id,
@@ -198,7 +311,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       }))
     }
     return Object.values(players)
-  }, [freeAgents, faRows, players])
+  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, normalizedPoolList, freeAgents, faRows, players])
 
   const filtered = useMemo(() => {
     let rows = poolList.filter((p) => p.position)
@@ -223,8 +336,21 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       rows = rows.filter((p) => wlIds.has(p.id))
     }
     rows.sort((a, b) => {
-      const pa = riBySleeper[a.id]?.fantasyPointsPerGame ?? placeholderBaselineProjection(a.id)
-      const pb = riBySleeper[b.id]?.fantasyPointsPerGame ?? placeholderBaselineProjection(b.id)
+      // Honest sort: only REAL metrics rank; players with no sourced value sort last
+      // instead of being ranked by a fabricated baseline (Honesty Pack 1A).
+      const pa =
+        a.projectedPoints ??
+        a.fantasyPointsPerGame ??
+        riBySleeper[a.id]?.fantasyPointsPerGame ??
+        null
+      const pb =
+        b.projectedPoints ??
+        b.fantasyPointsPerGame ??
+        riBySleeper[b.id]?.fantasyPointsPerGame ??
+        null
+      if (pa == null && pb == null) return 0
+      if (pa == null) return 1
+      if (pb == null) return -1
       return pb - pa
     })
     return rows.slice(0, 100)
@@ -236,6 +362,10 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
   )
 
   useEffect(() => {
+    if (normalizedPlayerSurfaceEnabled && !waiverSurfaceMode) {
+      setRiBySleeper({})
+      return
+    }
     const sleeperIds = filteredIdsKey ? filteredIdsKey.split(',').filter(Boolean) : []
     if (sleeperIds.length === 0) {
       setRiBySleeper({})
@@ -266,9 +396,14 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
       cancelled = true
       window.clearTimeout(t)
     }
-  }, [filteredIdsKey, seasonSel, sportU])
+  }, [normalizedPlayerSurfaceEnabled, waiverSurfaceMode, filteredIdsKey, seasonSel, sportU])
 
-  const busy = loading || (freeAgents && faLoading)
+  const busy =
+    waiverSurfaceMode
+      ? false
+      : normalizedPlayerSurfaceEnabled
+        ? normalizedLoading
+        : sleeperLoading || (freeAgents && faLoading)
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -298,6 +433,16 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
           </p>
         </div>
       ) : null}
+      {normalizedPlayerSurfaceEnabled && normalizedError ? (
+        <div className="px-5 pt-4">
+          <div
+            className="rounded-xl border border-amber-400/35 bg-amber-500/10 px-4 py-3 text-xs text-amber-100"
+            data-testid="players-tab-normalized-warning"
+          >
+            {normalizedError}
+          </div>
+        </div>
+      ) : null}
       <div className="sticky top-0 z-10 space-y-3 border-b border-white/[0.07] bg-[#07071a] px-5 pb-3 pt-4">
         <div className="flex flex-wrap gap-1.5" data-testid="players-tab-waiver-subnav">
           {PLAYER_SUBTABS.map((tab) => (
@@ -308,7 +453,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               data-testid={`players-tab-subtab-${tab.id}`}
               className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
                 activeSubtab === tab.id
-                  ? 'border-cyan-500/60 bg-cyan-500/20 text-cyan-100'
+                  ? 'border-[#ff3d81]/60 bg-[#ff3d81]/20 text-[#ffd7e5]'
                   : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/25 hover:text-white/80'
               }`}
             >
@@ -350,7 +495,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               onClick={() => setPos(p)}
               className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                 pos === p
-                  ? 'border-cyan-500 bg-cyan-500/20 text-cyan-400'
+                  ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-[#ff3d81]'
                   : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
               }`}
               data-testid={`players-tab-pos-${p}`}
@@ -424,14 +569,14 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               onClick={toggle}
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
                 on
-                  ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200'
+                  ? 'border-[#ff3d81]/50 bg-[#ff3d81]/15 text-[#ffb8d1]'
                   : 'border-white/10 bg-transparent text-white/45 hover:border-white/20'
               }`}
               data-testid={`players-tab-toggle-${key}`}
             >
               <span
                 className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] ${
-                  on ? 'border-cyan-400 bg-cyan-500 text-black' : 'border-white/25'
+                  on ? 'border-[#ff3d81] bg-[#ff3d81] text-black' : 'border-white/25'
                 }`}
               >
                 {on ? '✓' : ''}
@@ -452,8 +597,13 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
         <p className="text-[10px] text-white/35">
           Showing top <span className="text-white/55">100</span> by projected points for this filter.{' '}
           {freeAgents ? 'Free agents are not on any roster in this league (when available).' : null}{' '}
-          Stats, injury, and season fantasy totals sync from{' '}
-          <span className="text-white/45">Rolling Insights</span> when the player is mapped.
+          {normalizedPlayerSurfaceEnabled
+            ? 'Stats, projections, images, and logos are loading from the normalized redraft player foundation.'
+            : (
+              <>
+                Stats, injury, and season fantasy totals appear from the league player feed when available.
+              </>
+            )}
         </p>
 
         <div className="rounded-xl border border-white/[0.08] bg-[#0a1228]/40 p-3">
@@ -485,7 +635,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <div className="flex py-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">
               <div className="w-8 shrink-0" />
               <div className="w-[200px] shrink-0">Player</div>
-              <div className="w-14 shrink-0 text-right text-cyan-300/90">PTS</div>
+              <div className="w-14 shrink-0 text-right text-[#ff9ec0]/90">PTS</div>
               <div className="w-[120px] shrink-0 text-center">Rushing</div>
               <div className="w-[160px] shrink-0 text-center">Receiving</div>
               <div className="min-w-0 flex-1 text-center">Passing</div>
@@ -540,14 +690,19 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             ) : (
               filtered.map((p) => {
                 const ri = riBySleeper[p.id]
-                const baseline = placeholderBaselineProjection(p.id)
-                const projPts = ri?.fantasyPointsPerGame ?? baseline
+                const normalizedStats = parseRollingInsightsStatsJson(p.normalizedStats ?? null)
+                // Honest projection: real tiers only — no fabricated baseline (Honesty Pack 1A).
+                const projPts =
+                  p.projectedPoints ??
+                  p.fantasyPointsPerGame ??
+                  ri?.fantasyPointsPerGame ??
+                  null
                 const seasonFp =
                   ri?.fantasyPointsSeason ??
                   (ri?.fantasyPointsPerGame != null && ri?.gamesPlayed != null
                     ? ri.fantasyPointsPerGame * ri.gamesPlayed
                     : null)
-                const inj = ri?.injuryStatus
+                const inj = p.injuryStatus ?? ri?.injuryStatus
                 return (
                   <div
                     key={p.id}
@@ -558,8 +713,8 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                       onClick={() => toggleWatchPlayer(p.id)}
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] transition ${
                         wlIds.has(p.id)
-                          ? 'border-cyan-500/50 bg-cyan-500/20 text-cyan-200'
-                          : 'border-white/20 text-white/60 hover:border-cyan-500/40'
+                          ? 'border-[#ff3d81]/50 bg-[#ff3d81]/20 text-[#ffb8d1]'
+                          : 'border-white/20 text-white/60 hover:border-[#ff3d81]/40'
                       }`}
                       aria-label={wlIds.has(p.id) ? 'Remove from watchlist' : 'Add to watchlist'}
                       title="Watchlist"
@@ -573,10 +728,11 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                       data-testid={`players-tab-row-${p.id}`}
                     >
                       <PlayerHeadshot
-                        sleeperId={p.id}
+                        playerId={p.id}
                         sport={resolvedSport}
                         useResolver={sportU === 'NFL'}
                         playerName={p.name}
+                        headshotUrl={p.headshotUrl ?? p.imageUrl ?? null}
                         position={p.position}
                         espnId={players[p.id]?.espn_id}
                         nbaId={players[p.id]?.nba_id}
@@ -601,7 +757,12 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                           </span>
                           {p.team && p.team !== 'FA' ? (
                             <>
-                              <TeamLogo teamAbbr={p.team} sport={resolvedSport} size={16} />
+                              <TeamLogo
+                                teamAbbr={p.team}
+                                sport={resolvedSport}
+                                logoUrl={p.teamLogoUrl ?? null}
+                                size={16}
+                              />
                               <span className="text-white/45">{p.team}</span>
                             </>
                           ) : (
@@ -611,6 +772,12 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                       </div>
                     </button>
                     <div className="w-14 shrink-0 text-right text-[11px] text-white/60">
+                      {projection && projPts == null ? (
+                        <ProjectionValue
+                          projection={{ state: 'unavailable', value: null, source: null, reason: 'provider_missing' }}
+                          className="text-[11px] text-white/35"
+                        />
+                      ) : null}
                       {projection ? (
                         <ProjectionDisplay
                           projection={projPts}
@@ -632,9 +799,9 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                         <span className="text-white/35">—</span>
                       )}
                     </div>
-                    <RushStatRow stats={ri?.stats ?? null} />
-                    <RecStatRow stats={ri?.stats ?? null} />
-                    <PassStatRow stats={ri?.stats ?? null} />
+                    <RushStatRow stats={normalizedStats ?? ri?.stats ?? null} />
+                    <RecStatRow stats={normalizedStats ?? ri?.stats ?? null} />
+                    <PassStatRow stats={normalizedStats ?? ri?.stats ?? null} />
                   </div>
                 )
               })

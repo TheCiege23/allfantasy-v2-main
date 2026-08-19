@@ -131,7 +131,7 @@ export async function fetchSleeperLeagueForImport(
   )
   if (!league?.league_id) return null
 
-  const [users, rosters, currentDraftPicks] = await Promise.all([
+  const [users, rosters, currentDraftPicks, tradedPicksRaw] = await Promise.all([
     fetchSleeperJson<SleeperImportPayload['users']>(`${SLEEPER_BASE}/league/${cleanId}/users`, {
       warnings,
       label: 'league users',
@@ -141,6 +141,13 @@ export async function fetchSleeperLeagueForImport(
       label: 'league rosters',
     }),
     fetchLeagueDraftPicks(cleanId, league.season),
+    // Block F — future traded draft picks (`/league/{id}/traded_picks`). Empty [] is
+    // a legitimate result (no picks currently traded), NOT a warning. The resilient
+    // fetcher records a warning only on 5xx/timeout after retries.
+    fetchSleeperJson<SleeperImportPayload['tradedPicks']>(
+      `${SLEEPER_BASE}/league/${cleanId}/traded_picks`,
+      { warnings, label: 'traded picks' },
+    ),
   ])
 
   // Phase 2.3 — weekly matchup + transaction fetches run in parallel (were sequential,
@@ -239,6 +246,10 @@ export async function fetchSleeperLeagueForImport(
     matchupsByWeek,
     transactions,
     draftPicks,
+    // Block F — pass through the raw traded_picks response. Null-safety: the
+    // resilient fetcher returns null on unrecoverable failures; treat that as
+    // "no traded picks known" so downstream code never explodes.
+    tradedPicks: Array.isArray(tradedPicksRaw) ? tradedPicksRaw : undefined,
     playerMap,
     previousSeasons,
     fetchWarnings: warnings.length > 0 ? warnings : undefined,

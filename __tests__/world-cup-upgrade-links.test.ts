@@ -90,9 +90,9 @@ describe("Settings page — subscription & billing section", () => {
 })
 
 describe("Chimmy route — admin cap tier resolution (Part 6)", () => {
-  it("resolveCapTier is defined in chimmy route and uses all_access → admin", () => {
+  it("resolveCapTier is defined in chimmy route and uses supreme → admin", () => {
     expect(CHIMMY_ROUTE_SRC).toContain("resolveCapTier")
-    expect(CHIMMY_ROUTE_SRC).toContain("plans.includes('all_access')")
+    expect(CHIMMY_ROUTE_SRC).toContain("plans.includes('supreme')")
     expect(CHIMMY_ROUTE_SRC).toContain("return 'admin'")
   })
 

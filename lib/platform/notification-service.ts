@@ -1,10 +1,17 @@
 import { prisma } from '@/lib/prisma'
 import type { PlatformNotification } from '@/types/platform-shared'
 
-async function getFromUnifiedTable(appUserId: string, limit: number): Promise<PlatformNotification[] | null> {
+async function getFromUnifiedTable(
+  appUserId: string,
+  limit: number,
+  options?: { leagueId?: string | null },
+): Promise<PlatformNotification[] | null> {
   try {
     const rows = await (prisma as any).platformNotification.findMany({
-      where: { userId: appUserId },
+      where: {
+        userId: appUserId,
+        ...(options?.leagueId ? { leagueId: options.leagueId } : {}),
+      },
       orderBy: { createdAt: 'desc' },
       take: limit,
     })
@@ -28,12 +35,18 @@ async function getFromUnifiedTable(appUserId: string, limit: number): Promise<Pl
   }
 }
 
-async function getFallback(appUserId: string, limit: number): Promise<PlatformNotification[]> {
+async function getFallback(
+  appUserId: string,
+  limit: number,
+  options?: { leagueId?: string | null },
+): Promise<PlatformNotification[]> {
   const [bracketFeed, tradeAlerts] = await Promise.all([
     (prisma as any).bracketFeedEvent
       .findMany({
         where: {
-          OR: [{ league: { members: { some: { userId: appUserId } } } }, { leagueId: null }],
+          ...(options?.leagueId
+            ? { leagueId: options.leagueId }
+            : { OR: [{ league: { members: { some: { userId: appUserId } } } }, { leagueId: null }] }),
         },
         orderBy: { createdAt: 'desc' },
         take: limit,
@@ -50,7 +63,10 @@ async function getFallback(appUserId: string, limit: number): Promise<PlatformNo
       .catch(() => []),
     (prisma as any).tradeNotification
       .findMany({
-        where: { userId: appUserId },
+        where: {
+          userId: appUserId,
+          ...(options?.leagueId ? { leagueId: options.leagueId } : {}),
+        },
         orderBy: { createdAt: 'desc' },
         take: limit,
         select: {
@@ -102,13 +118,17 @@ async function getFallback(appUserId: string, limit: number): Promise<PlatformNo
     .slice(0, limit)
 }
 
-export async function getPlatformNotifications(appUserId: string, limit = 40): Promise<PlatformNotification[]> {
+export async function getPlatformNotifications(
+  appUserId: string,
+  limit = 40,
+  options?: { leagueId?: string | null },
+): Promise<PlatformNotification[]> {
   const take = Math.max(1, Math.min(limit, 100))
 
-  const unified = await getFromUnifiedTable(appUserId, take)
+  const unified = await getFromUnifiedTable(appUserId, take, options)
   if (unified) return unified
 
-  return getFallback(appUserId, take)
+  return getFallback(appUserId, take, options)
 }
 
 export async function markPlatformNotificationRead(appUserId: string, notificationId: string): Promise<boolean> {
@@ -123,10 +143,17 @@ export async function markPlatformNotificationRead(appUserId: string, notificati
   }
 }
 
-export async function markAllPlatformNotificationsRead(appUserId: string): Promise<boolean> {
+export async function markAllPlatformNotificationsRead(
+  appUserId: string,
+  options?: { leagueId?: string | null },
+): Promise<boolean> {
   try {
     await (prisma as any).platformNotification.updateMany({
-      where: { userId: appUserId, readAt: null },
+      where: {
+        userId: appUserId,
+        readAt: null,
+        ...(options?.leagueId ? { leagueId: options.leagueId } : {}),
+      },
       data: { readAt: new Date() },
     })
     return true

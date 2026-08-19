@@ -7,7 +7,7 @@ const LEGACY_TABS = [
   { href: "/af-legacy?tab=transfer", label: "Imports" },
   { href: "/af-legacy?tab=player-finder", label: "Team Scan" },
   { href: "/af-legacy?tab=rankings", label: "Team Direction" },
-  { href: "/af-legacy?tab=mock-draft", label: "Draft War Room" },
+  { href: "/af-legacy?tab=mock-draft", label: "AF Legacy Draft" },
   { href: "/af-legacy?tab=trade", label: "Trade Command Center" },
   { href: "/af-legacy?tab=finder", label: "Trade Review" },
   { href: "/af-legacy?tab=strategy", label: "Renegotiation" },
@@ -15,7 +15,7 @@ const LEGACY_TABS = [
   { href: "/af-legacy?tab=waiver", label: "Waiver Engine" },
   { href: "/af-legacy?tab=compare", label: "Opponent Behavior" },
   { href: "/af-legacy?tab=share", label: "League Fairness" },
-  { href: "/af-legacy?tab=chat", label: "AI Chat" },
+  { href: "/af-legacy?tab=chat", label: "Chimmy Chat" },
 ] as const
 
 export default function AFLegacyLayout({ children }: { children: ReactNode }) {

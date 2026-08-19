@@ -2,6 +2,7 @@ import type { LineupActionSummaryPayload } from '@/lib/lineup-actions/types'
 import type { TradesDashboardResponse, WaiverDashboardResponse } from '@/app/dashboard/dashboardStripApiTypes'
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { ExpiringNativeTrade } from '@/lib/dashboard-strip/fetchExpiringNativeTrades'
+import type { LineupTodayCard } from '@/lib/decision-os/lineup/todayCardAdapter'
 
 /**
  * Per-signal health status for the Today Actions pipeline. `ok` = fetch succeeded and
@@ -78,4 +79,16 @@ export type TodayActionsEngineResponse = {
     autoSwapsLast24h: number
   }
   signalHealth: TodayActionsSignalHealth
+  /**
+   * Decision OS Slice 1 (`manager.lineup.set`) Stage 1 LIVE enrichment — present only when
+   * `DECISION_OS_LINEUP_LIVE=true` and the shadow runner produced a result for the user's first
+   * league. Purely additive: every field above is computed identically whether this is null or not.
+   * Mirrors `/api/today/lineup-actions`'s own `decisionOs` field so both surfaces stay consistent.
+   */
+  decisionOs?: {
+    decisionId: string
+    card: LineupTodayCard
+    confidence: number
+    leagueId: string
+  } | null
 }

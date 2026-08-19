@@ -3,7 +3,7 @@
  * Wraps xai-client; keys server-side only. Uses provider-config for availability. Role = grok for registry.
  */
 
-import type { IProviderClient } from '../provider-interface'
+import type { IProviderClient, ProviderChatOptions } from '../provider-interface'
 import type { ProviderChatRequest, ProviderChatResult } from '../types'
 import { xaiChatJson, parseTextFromXaiChatCompletion, parseUsage } from '@/lib/xai-client'
 import { getXaiConfigFromEnv } from '@/lib/provider-config'
@@ -34,7 +34,7 @@ export function createGrokProvider(): IProviderClient {
     async healthCheck(): Promise<boolean> {
       return isXaiAvailable()
     },
-    async chat(request: ProviderChatRequest): Promise<ProviderChatResult> {
+    async chat(request: ProviderChatRequest, opts?: ProviderChatOptions): Promise<ProviderChatResult> {
       const requestedModel = request.model?.trim() || undefined
       const fallbackModel = requestedModel ?? getModelName()
       try {
@@ -45,6 +45,7 @@ export function createGrokProvider(): IProviderClient {
           maxTokens: request.maxTokens ?? 1000,
           responseFormat:
             request.responseFormat === 'json_object' ? { type: 'json_object' } : undefined,
+          signal: opts?.signal,
         })
         if (!result.ok) {
           return buildProviderFailure({

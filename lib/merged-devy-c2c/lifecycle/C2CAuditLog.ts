@@ -3,6 +3,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 
 export type C2CLifecycleEventType =
   | 'graduation'
@@ -40,7 +41,7 @@ export async function appendC2CLifecycleEvent(input: AppendC2CEventInput): Promi
       rosterId: input.rosterId ?? null,
       devyPlayerId: input.devyPlayerId ?? null,
       proPlayerId: input.proPlayerId ?? null,
-      payload: input.payload ?? undefined,
+      payload: toPrismaNullableJsonInput(input.payload),
     },
   })
 }

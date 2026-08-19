@@ -15,9 +15,9 @@ import {
 } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'AF War Room | AI Fantasy Football Draft Tool | AllFantasy',
+  title: 'AF Legacy | AI Fantasy Football Draft Tool | AllFantasy',
   description:
-    'Use the AF War Room as your AI-powered fantasy football draft assistant with pick recommendations, tier alerts, roster strategy, and multi-sport draft previews.',
+    'Use AF Legacy as your AI-powered fantasy football draft assistant with pick recommendations, tier alerts, roster strategy, and multi-sport draft previews.',
 }
 
 const SPORT_CARDS = [
@@ -27,7 +27,7 @@ const SPORT_CARDS = [
     description:
       'Full AI draft intelligence — pick recommendations, tier cliffs, roster build strategy, and live board tracking.',
     href: '/mock-draft',
-    ctaLabel: 'Open NFL War Room',
+    ctaLabel: 'Open NFL AF Legacy',
   },
   {
     sport: 'NBA',
@@ -113,7 +113,7 @@ const FEATURES = [
     Icon: Shield,
     title: 'Commissioner Settings',
     description:
-      'Configure scoring, roster rules, and draft preferences so your War Room is calibrated to your exact league.',
+      'Configure scoring, roster rules, and draft preferences so your AF Legacy is calibrated to your exact league.',
     style: 'emerald',
   },
 ] as const
@@ -199,7 +199,7 @@ export default function WarRoomPage() {
           <div className="mb-4 flex items-center justify-center gap-3">
             <Swords className="h-8 w-8 text-cyan-400 sm:h-9 sm:w-9" />
             <h1 className="text-[32px] font-black leading-tight tracking-tight text-white sm:text-[44px]">
-              The AF War Room
+              The AF Legacy
             </h1>
           </div>
 
@@ -215,7 +215,7 @@ export default function WarRoomPage() {
               className="inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-7 py-3 text-[15px] font-bold text-black transition hover:bg-cyan-300 active:scale-[0.98] sm:w-auto"
             >
               <Swords className="h-4 w-4" />
-              Open NFL War Room
+              Open NFL AF Legacy
             </Link>
             <a
               href="#sport-modes"
@@ -237,7 +237,7 @@ export default function WarRoomPage() {
       <div className="sr-only">
         <h2>Fantasy Football Draft Tool</h2>
         <h2>AI Draft Assistant</h2>
-        <h2>Dynasty Draft War Room</h2>
+        <h2>Dynasty Draft AF Legacy</h2>
         <h2>Multi-Sport Fantasy Draft Preview</h2>
       </div>
 
@@ -302,7 +302,7 @@ export default function WarRoomPage() {
           <p className="mb-1.5 text-[11px] font-bold uppercase tracking-widest text-white/30">
             Intelligence Tools
           </p>
-          <h2 className="mb-6 text-[22px] font-black text-white">War Room Features</h2>
+          <h2 className="mb-6 text-[22px] font-black text-white">AF Legacy Features</h2>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {FEATURES.map(({ Icon, title, description, style }) => {
               const s = FEATURE_STYLE[style]
@@ -338,7 +338,7 @@ export default function WarRoomPage() {
         <section className="text-center">
           <h2 className="mb-3 text-[22px] font-black text-white">Ready to draft smarter?</h2>
           <p className="mx-auto mb-7 max-w-md text-[13px] leading-relaxed text-white/50">
-            Start with a mock draft to experience the War Room, then connect your Sleeper leagues for
+            Start with a mock draft to experience AF Legacy, then connect your Sleeper leagues for
             live draft companion mode.
           </p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
@@ -347,7 +347,7 @@ export default function WarRoomPage() {
               className="inline-flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-cyan-400 px-6 py-3 text-[14px] font-bold text-black transition hover:bg-cyan-300 sm:w-auto"
             >
               <Swords className="h-4 w-4" />
-              Open NFL War Room
+              Open NFL AF Legacy
             </Link>
             <Link
               href="/dashboard"

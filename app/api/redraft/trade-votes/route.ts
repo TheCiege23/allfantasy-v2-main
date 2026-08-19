@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
+import type { Prisma } from '@prisma/client'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { applyRedraftTradeCapTransfers, validateRedraftTradeCap } from '@/lib/idp/capEngine'
 import { settleRedraftTradeAssets } from '@/lib/redraft/tradeSettlement'
+import { getPlatformEvents, EVENT } from '@/lib/events'
 import { recordRedraftTradeMarketEvent, type RedraftMarketEventType } from '@/lib/trade-market/redraftTradeMarketEvents'
 import { enqueueCollusionScan } from '@/lib/integrity/enqueueCollusionScan'
 import { recordAfLearningEvent } from '@/lib/ai-learning-system/recordEvent'
@@ -117,18 +119,30 @@ async function finalizeAcceptedTrade(
   // the status flip. (IDP salary records were moved above; this handles the standard redraft roster.)
   let updated
   try {
-    updated = await prisma.$transaction(async (tx) => {
+    updated = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Concurrency guard: atomically claim the proposal BEFORE moving any rosters.
+      // A conditional update on status='pending' ensures only one of two racing
+      // finalizers (double-click, vote-threshold vs. commissioner-approve) settles.
+      const claimed = await tx.redraftTradeProposal.updateMany({
+        where: { id: proposal.id, status: 'pending' },
+        data: { status: 'accepted', acceptedAt: new Date(), processedAt: new Date() },
+      })
+      if (claimed.count === 0) {
+        throw new Error('PROPOSAL_ALREADY_RESOLVED')
+      }
       await settleRedraftTradeAssets(tx, {
         proposerRosterId: proposal.proposerRosterId,
         receiverRosterId: proposal.receiverRosterId,
         assets: proposal.assets ?? [],
       })
-      return tx.redraftTradeProposal.update({
-        where: { id: proposal.id },
-        data: { status: 'accepted', acceptedAt: new Date(), processedAt: new Date() },
-      })
+      return tx.redraftTradeProposal.findUniqueOrThrow({ where: { id: proposal.id } })
     })
   } catch (e) {
+    // Lost the race — another finalizer already settled this proposal. Do not
+    // record a spurious failure or re-settle.
+    if (e instanceof Error && e.message === 'PROPOSAL_ALREADY_RESOLVED') {
+      return NextResponse.json({ error: 'Proposal already resolved' }, { status: 409 })
+    }
     await failEvent()
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'Trade settlement failed' },
@@ -136,6 +150,22 @@ async function finalizeAcceptedTrade(
     )
   }
   await upsertDecision(proposal.id, 'accepted', decidedByUserId, decisionReason)
+
+  // G15.2b — best-effort emit (never throws; only the race-winning finalizer reaches here,
+  // and deterministic keys dedupe → exactly one accepted+processed event per trade).
+  {
+    const events = getPlatformEvents()
+    const ctx = {
+      leagueId: proposal.leagueId,
+      seasonId: proposal.seasonId,
+      leagueConcept: 'redraft' as const,
+      actor: { type: 'user' as const, id: decidedByUserId ?? null },
+      source: 'route:trade-votes',
+      subjects: [{ kind: 'trade', id: proposal.id }],
+    }
+    await events.emit(EVENT.TRADE_ACCEPTED, { ...ctx, idempotencyKey: `trade.accepted:${proposal.id}`, payload: { tradeId: proposal.id } })
+    await events.emit(EVENT.TRADE_PROCESSED, { ...ctx, idempotencyKey: `trade.processed:${proposal.id}`, payload: { tradeId: proposal.id } })
+  }
 
   if (proposerOwnerId && receiverOwnerId) {
     void recordTradeOutcomeForBothManagers({

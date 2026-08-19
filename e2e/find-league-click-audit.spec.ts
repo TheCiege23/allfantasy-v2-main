@@ -201,7 +201,15 @@ test.describe("@find-league click audit", () => {
       /\/join\?code=JOINABLE-ALPHA/
     )
 
-    await page.getByRole("button", { name: /show filters/i }).click()
+    // The filters toggle is `sm:hidden` — it exists only on mobile, and its label
+    // is "Filters" (it reads "Hide filters" once open), never "Show filters". At
+    // this desktop viewport the panel is already expanded, so the old
+    // unconditional click waited 30s for a control that is deliberately not
+    // rendered here. Click it only when the layout actually collapses the panel.
+    const filtersToggle = page.getByRole("button", { name: /^(filters|hide filters)$/i })
+    if (await filtersToggle.isVisible().catch(() => false)) {
+      await filtersToggle.click()
+    }
     await page.getByLabel("Sport").selectOption("NFL")
     await page.getByLabel("League type").selectOption("dynasty")
     await page.getByLabel("Draft type").selectOption("snake")
@@ -248,7 +256,12 @@ test.describe("@find-league click audit", () => {
     })
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.goto("/find-league", { waitUntil: "domcontentloaded" })
+    // RecommendedLeaguesSection is mounted by PublicLeagueDiscoveryPage
+    // (/discover/leagues), not by FindLeagueClient — /find-league never renders it,
+    // so this test was asserting a panel on a page that does not host it. The
+    // discovery spec does not cover recommendations either, which is why the gap
+    // stayed invisible.
+    await page.goto("/discover/leagues", { waitUntil: "domcontentloaded" })
 
     const recommendationSection = page.getByTestId("recommended-leagues-section")
     await expect(recommendationSection).toBeVisible()

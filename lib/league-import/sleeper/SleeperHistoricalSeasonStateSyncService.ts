@@ -24,6 +24,10 @@ export interface SleeperHistoricalSeasonStateSyncSummary {
   settingsSnapshotsPersisted?: number
   rosterSnapshotsPersisted?: number
   error?: string
+  /** Completion-gate counters (P0-D). */
+  seasonsConsidered?: number
+  seasonsSkippedAlreadyComplete?: number
+  providerCallsAvoided?: number
 }
 
 function getErrorMessage(error: unknown): string {
@@ -117,6 +121,8 @@ function toSnapshotPlayers(roster: SleeperRoster, ownerName: string | null): Sna
 export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
   leagueId: string
   maxPreviousSeasons?: number
+  /** Admin/internal-only escape hatch to force a full refetch of already-imported seasons. */
+  force?: boolean
 }): Promise<SleeperHistoricalSeasonStateSyncSummary> {
   const league = await prisma.league.findUnique({
     where: { id: args.leagueId },
@@ -168,8 +174,29 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
     let seasonsProcessed = 0
     let settingsSnapshotsPersisted = 0
     let rosterSnapshotsPersisted = 0
+    let seasonsSkippedAlreadyComplete = 0
+    let providerCallsAvoided = 0
 
     for (const seasonState of historyChain) {
+      // Completion gate (P0-D): a completed historical season's roster snapshot is stable —
+      // don't re-hit Sleeper's users/rosters endpoints for a season we already imported. Mirrors
+      // the `skipExistingSeasons` pattern in `lib/dynasty-import/backfill-orchestrator.ts`.
+      if (!args.force) {
+        const existingSnapshot = await prisma.rosterSnapshot.findFirst({
+          where: {
+            leagueId: league.id,
+            season: seasonState.season,
+            weekOrPeriod: SEASON_END_ROSTER_SNAPSHOT_PERIOD,
+          },
+          select: { snapshotId: true },
+        })
+        if (existingSnapshot) {
+          seasonsSkippedAlreadyComplete += 1
+          providerCallsAvoided += 1
+          continue
+        }
+      }
+
       const [users, rosters] = await Promise.all([
         getLeagueUsers(seasonState.externalLeagueId),
         getLeagueRosters(seasonState.externalLeagueId),
@@ -262,13 +289,20 @@ export async function syncSleeperHistoricalSeasonStateAfterImport(args: {
       seasonsProcessed += 1
     }
 
+    const allAlreadyComplete = historyChain.length > 0 && seasonsSkippedAlreadyComplete === historyChain.length
     return {
       attempted: true,
-      refreshed: true,
-      skipped: false,
+      refreshed: seasonsProcessed > 0,
+      skipped: allAlreadyComplete,
+      reason: allAlreadyComplete
+        ? 'All discovered seasons already have imported roster data; nothing to refetch.'
+        : undefined,
       seasonsProcessed,
       settingsSnapshotsPersisted,
       rosterSnapshotsPersisted,
+      seasonsConsidered: historyChain.length,
+      seasonsSkippedAlreadyComplete,
+      providerCallsAvoided,
     }
   } catch (error) {
     return {

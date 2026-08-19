@@ -3,213 +3,99 @@ import { expect, test } from "@playwright/test"
 test.describe("@dashboard unified dashboard click audit", () => {
   test.describe.configure({ timeout: 210_000, mode: "serial" })
 
-  test("audits unified dashboard cards, filters, expanders, and routing", async ({ page }) => {
-    const soccerLeagueId = "soccer-e2e-123"
-    const soccerLeagueName = "Soccer Dashboard Harness League"
-    let leagueListCalls = 0
-
-    await page.route("**/api/league/list", async (route) => {
-      leagueListCalls += 1
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          leagues: [
-            {
-              id: soccerLeagueId,
-              name: soccerLeagueName,
-              sport: "SOCCER",
-              sport_type: "SOCCER",
-              leagueVariant: "STANDARD",
-              league_variant: "STANDARD",
-              platform: "manual",
-              leagueSize: 12,
-              isDynasty: false,
-              syncStatus: "manual",
-              rosters: [],
-            },
-          ],
-        }),
-      })
-    })
-
-    await page.route("**/api/league/roster**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ roster: [], faabRemaining: null, waiverPriority: null }),
-      })
-    })
-
-    await page.route("**/api/bracket/leagues/**/standings", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ standings: [] }),
-      })
-    })
-
-    await page.route("**/api/bracket/leagues/**/chat", async (route) => {
-      if (route.request().method() === "POST") {
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            message: {
-              id: "m1",
-              message: "Test message",
-              createdAt: new Date().toISOString(),
-              user: { displayName: "Audit User", email: "audit@example.com" },
-            },
-          }),
-        })
-        return
+  test("audits current dashboard cards, CTAs, and mobile layout", async ({ page }) => {
+    await page.addInitScript(() => {
+      if (!window.localStorage.getItem("af_mode")) {
+        window.localStorage.setItem("af_mode", "light")
+        document.cookie = "af_mode=light; path=/; max-age=31536000; samesite=lax"
       }
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ messages: [] }),
-      })
     })
-
-    await page.route("**/api/content-feed**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          items: [
-            {
-              id: "a1",
-              title: "League trend update",
-              summary: "Waiver market heating up",
-              href: "/dashboard",
-              type: "feed",
-              publishedAt: new Date().toISOString(),
-            },
-          ],
-        }),
-      })
-    })
-
-    await page.route("**/api/sports/news**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          news: [
-            {
-              id: "n1",
-              title: "Injury watch",
-              source: "wire",
-              publishedAt: new Date().toISOString(),
-              url: "/fantasy-news",
-            },
-          ],
-        }),
-      })
-    })
-
-    await page.route("**/api/sports/weather**", async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          team: "KC",
-          venue: "Arrowhead",
-          isDome: false,
-          weather: { summary: "Clear", tempF: 58, windMph: 6 },
-          source: "openweathermap",
-        }),
-      })
-    })
-
-    await page.route(`**/api/leagues/${soccerLeagueId}`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          id: soccerLeagueId,
-          name: soccerLeagueName,
-          sport: "SOCCER",
-          leagueVariant: "STANDARD",
-          isDynasty: false,
-        }),
-      })
-    })
-
-    await page.route(`**/api/commissioner/leagues/${soccerLeagueId}/check**`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ isCommissioner: false }),
-      })
-    })
-
-    // Use deterministic dashboard harness for full click-audit interaction matrix.
     await page.goto("/e2e/dashboard-soccer-grouping")
+
+    await expect(page.locator("html")).toHaveAttribute("data-mode", "light")
     await expect(page.getByText(/Welcome back,/i).first()).toBeVisible()
+    await expect(page.getByText("Soccer Dashboard Harness League")).toBeVisible()
+    await expect(page.getByTestId("league-pulse-card-dashboard")).toBeVisible()
+    await expect(page.getByTestId("league-pulse-card-dashboard").getByText("League Pulse")).toBeVisible()
+    await expect(page.getByTestId("manager-dna-card-dashboard")).toBeVisible()
+    await expect(page.getByTestId("decision-recommendations-card-dashboard")).toBeVisible()
+    await expect(page.getByTestId("dashboard-connected-leagues-heading")).toBeVisible()
+    await expect(page.getByText("AI and strategy shortcuts")).toBeVisible()
+    await expect(page.getByText("Profile and account")).toBeVisible()
 
-    // Tabs + active state
-    await page.locator('[data-dashboard-tab="Home"]').click()
-    await expect(page.locator('[data-dashboard-tab="Home"][aria-pressed="true"]')).toBeVisible()
-    await page.locator('[data-dashboard-tab="My Leagues"]').click()
-    await expect(page.locator('[data-dashboard-tab="My Leagues"][aria-pressed="true"]')).toBeVisible()
-
-    // Sport filter + collapse/expand behavior
-    await page.locator('[data-sport-filter="SOCCER"]').click()
-    await expect(page.locator(`[data-dashboard-sport-group="SOCCER"]`)).toBeVisible()
-    const soccerGroup = page.locator(`[data-dashboard-sport-group="SOCCER"]`).first()
-    await soccerGroup.getByRole("button", { name: /Collapse/i }).click()
-    await expect(soccerGroup.getByRole("button", { name: /Expand/i })).toBeVisible()
-    await soccerGroup.getByRole("button", { name: /Expand/i }).click()
-
-    // Refresh leagues API wiring
-    const beforeRefreshCalls = leagueListCalls
-    await page.getByRole("button", { name: /Refresh/i }).first().click()
-    await expect.poll(() => leagueListCalls).toBeGreaterThan(beforeRefreshCalls)
-
-    // League card click
-    const leagueCard = soccerGroup.getByRole("link", { name: new RegExp(soccerLeagueName) }).first()
-    await expect(leagueCard).toHaveAttribute("href", new RegExp(`^/league/${soccerLeagueId}$`))
-    await page.goto(`/league/${soccerLeagueId}`)
-    await expect(page).toHaveURL(new RegExp(`/league/${soccerLeagueId}$`), { timeout: 20_000 })
-    await page.goto("/e2e/dashboard-soccer-grouping")
-    await expect(page).toHaveURL(/\/e2e\/dashboard-soccer-grouping/)
-
-    // Home cards and current quick-action links
-    await page.locator('[data-dashboard-tab="Home"]').click()
-    await expect(page.getByRole("link", { name: /\+ Create League/i }).first()).toHaveAttribute("href", "/create-league")
-    await expect(page.getByRole("link", { name: /📥 Import/i }).first()).toHaveAttribute("href", "/import")
-    await expect(page.getByRole("link", { name: /🔍 Find League/i }).first()).toHaveAttribute("href", "/find-league")
-    await expect(page.getByRole("link", { name: /How rankings work/i })).toHaveAttribute("href", "/rankings")
-    await expect(page.getByRole("link", { name: /My Rankings/i }).first()).toHaveAttribute("href", "/rankings")
-    await expect(page.getByRole("link", { name: /AI Tools/i }).first()).toHaveAttribute("href", "/tools-hub")
-
-    // Settings access remains available from the rebuilt header / setup panel.
-    await expect(page.locator('a[href="/settings"]').first()).toBeVisible()
-
-    // AI widget button path
-    await page.locator('[data-dashboard-tab="AI"]').click()
-    await expect(page.getByRole("heading", { name: /^AI$/ })).toBeVisible()
-    await expect(page.getByRole("link", { name: "Ask Chimmy" }).first()).toHaveAttribute(
+    await expect(page.getByRole("link", { name: /Create League/i }).first()).toHaveAttribute(
       "href",
-      /\/messages\?tab=ai.*leagueId=/
+      "/create-league",
+    )
+    await expect(page.getByRole("link", { name: /Import League/i }).first()).toHaveAttribute(
+      "href",
+      "/import?returnTo=/dashboard",
+    )
+    await expect(page.getByRole("link", { name: /Open AI Tools/i }).first()).toHaveAttribute(
+      "href",
+      "/tools-hub",
+    )
+    await expect(page.getByRole("link", { name: /Trade Finder/i }).first()).toHaveAttribute(
+      "href",
+      "/trade-finder",
+    )
+    await expect(page.getByRole("link", { name: /Waiver AI/i }).first()).toHaveAttribute(
+      "href",
+      "/waiver-ai",
+    )
+    await expect(page.getByRole("link", { name: /Season Strategy/i }).first()).toHaveAttribute(
+      "href",
+      "/season-strategy",
+    )
+    await expect(page.getByRole("link", { name: /Open profile/i }).first()).toHaveAttribute(
+      "href",
+      "/settings",
     )
 
-    // Messages composer must expose an accessible send action and append the posted chat item.
-    await page.locator('[data-dashboard-tab="Messages"]').click()
-    await expect(page.getByRole("heading", { name: /^Messages$/ })).toBeVisible()
-    await page.getByPlaceholder("Message the league").fill("Audit post body")
-    await page.getByRole("button", { name: "Send league message" }).first().click()
-    await expect(page.getByText("Test message")).toBeVisible()
+    await page.evaluate(() => {
+      window.localStorage.setItem("af_mode", "dark")
+      document.cookie = "af_mode=dark; path=/; max-age=31536000; samesite=lax"
+      document.documentElement.setAttribute("data-mode", "dark")
+    })
+    await page.reload()
+    await expect(page.locator("html")).toHaveAttribute("data-mode", "dark")
+    await expect(page.getByTestId("league-pulse-card-dashboard")).toBeVisible()
+    await expect(page.getByTestId("league-pulse-card-dashboard").getByText("Why am I seeing this?")).toBeVisible()
+    await expect(page.getByTestId("manager-dna-card-dashboard").getByText("Why am I seeing this?")).toBeVisible()
+    await expect(page.getByTestId("decision-recommendations-card-dashboard").getByText("Why am I seeing this?")).toBeVisible()
 
-    // Mobile stacked dashboard behavior
     await page.setViewportSize({ width: 390, height: 844 })
+    await page.evaluate(() => {
+      window.localStorage.setItem("af_mode", "light")
+      document.cookie = "af_mode=light; path=/; max-age=31536000; samesite=lax"
+    })
     await page.goto("/e2e/dashboard-soccer-grouping")
-    const mobileBottomNav = page.locator("div.fixed")
-    await expect(mobileBottomNav.getByRole("button", { name: "Leagues" })).toBeVisible()
-    await expect(mobileBottomNav.getByRole("button", { name: "Messages" })).toBeVisible()
-    await mobileBottomNav.getByRole("button", { name: "Tools" }).click()
-    await expect(page.getByRole("heading", { name: /^Tools$/ })).toBeVisible()
+    await expect(page.locator("html")).toHaveAttribute("data-mode", "light")
+    await expect(page.getByText(/Welcome back,/i).first()).toBeVisible()
+    await expect(page.getByText("Soccer Dashboard Harness League")).toBeVisible()
+    await expect(page.getByTestId("league-pulse-card-dashboard")).toBeVisible()
+    await expect(page.getByTestId("manager-dna-card-dashboard")).toBeVisible()
+    await expect(page.getByTestId("decision-recommendations-card-dashboard")).toBeVisible()
+    const mobileHasOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > window.innerWidth + 2,
+    )
+    expect(mobileHasOverflow).toBeFalsy()
+  })
+
+  test("audits commissioner Decision OS card framing", async ({ page }) => {
+    await page.goto("/commissioner-hub")
+
+    const pulse = page.getByTestId("league-pulse-card-commissioner")
+    const manager = page.getByTestId("manager-dna-card-commissioner")
+    const moves = page.getByTestId("decision-recommendations-card-commissioner")
+
+    await expect(pulse).toBeVisible()
+    await expect(manager).toBeVisible()
+    await expect(moves).toBeVisible()
+
+    await expect(pulse.getByText("Decision path")).toBeVisible()
+    await expect(manager.getByText("Commissioner use")).toBeVisible()
+    await expect(moves.getByText("No grounded moves are ready yet.", { exact: true })).toBeVisible()
+    await expect(page.getByText(/without grounded data|unsupported claims|limited/i).first()).toBeVisible()
   })
 })

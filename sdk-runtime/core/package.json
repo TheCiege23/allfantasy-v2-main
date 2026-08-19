@@ -1,0 +1,33 @@
+{
+  "name": "@allfantasy/widget-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AllFantasy Widget SDK — framework-agnostic runtime core: injected-dependency HTTP client, auth pre-check, lifecycle controller, error mapper, and refresh engine (Phase 7.6/7.7). No DOM, no React, no embed adapter. Consumes only the frozen lib/decision-os/sdk + lib/decision-os/presentation/widget-contracts contracts (PHASE_7_5_WIDGET_RUNTIME_BOUNDARY_ADR.md).",
+  "type": "module",
+  "types": "./dist/sdk-runtime/core/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk-runtime/core/src/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

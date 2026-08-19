@@ -3,6 +3,10 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { assertLeagueMember } from '@/lib/league/league-access'
 import { cancelAfLeagueTrade, getAfLeagueTrade } from '@/lib/league-trade-engine/tradeService'
+import { prisma } from '@/lib/prisma'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedTradeIntegrationService, extractTradePlayerRefs, type CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/tradeIntegration'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +24,27 @@ export async function GET(
 
   const trade = await getAfLeagueTrade(leagueId, tradeId)
   if (!trade) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  return NextResponse.json({ trade })
+
+  // Gated, informational certified schedule context for the traded players. Analysis surface only — it never
+  // changes valuation, fairness, recommendation, or roster reconstruction. Wrapped so it can never fail the read.
+  let sportsContext: CertifiedScheduleDescription | undefined
+  if (isSportsDataEnabled('trade')) {
+    try {
+      const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+      if (league && String(league.sport ?? 'NFL').toUpperCase() === 'NFL') {
+        const refs = extractTradePlayerRefs((trade.items ?? []).map((i) => ({ itemType: i.itemType, itemReference: i.itemReference })))
+        sportsContext = await new CertifiedTradeIntegrationService().describeTradeSportsContext({
+          season: String(league.season ?? new Date().getFullYear()),
+          week: String(weekFromLeagueSettingsForLineup(league.settings)),
+          players: refs,
+        })
+      }
+    } catch {
+      sportsContext = undefined
+    }
+  }
+
+  return NextResponse.json({ trade, ...(sportsContext ? { sportsContext } : {}) })
 }
 
 export async function DELETE(

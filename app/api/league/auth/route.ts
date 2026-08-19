@@ -3,6 +3,8 @@ import { prisma } from '@/lib/prisma';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { encrypt, decrypt } from '@/lib/league-auth-crypto';
+import { isAllowedLeagueAuthRequestOrigin } from '@/lib/extension/allowedRequestOrigin';
+import { getPublicSiteOrigin } from '@/lib/site-public-origin';
 
 const SUPPORTED_PLATFORMS = ['mfl', 'yahoo', 'espn', 'fantrax'];
 
@@ -12,6 +14,20 @@ export async function POST(req: NextRequest) {
     const userId = session?.user?.id;
     if (!userId) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    // Defense-in-depth for the ESPN one-click browser extension (see
+    // lib/extension/allowedRequestOrigin.ts): only ADDS a rejection for a cross-origin
+    // request that isn't this app or the configured extension — the manual paste form (no
+    // Origin header, or same-origin) is unaffected.
+    if (
+      !isAllowedLeagueAuthRequestOrigin({
+        originHeader: req.headers.get('origin'),
+        appOrigin: getPublicSiteOrigin(),
+        extensionId: process.env.ESPN_EXTENSION_ID,
+      })
+    ) {
+      return NextResponse.json({ error: 'Request origin not allowed' }, { status: 403 });
     }
 
     const body = await req.json();

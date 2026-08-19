@@ -63,7 +63,7 @@ describe("Token pricing matrix and subscription coexistence policy", () => {
   it("applies subscriber discount for eligible plan features", () => {
     const decision = resolveTokenChargeDecisionForEntitlement({
       entitlement: {
-        plans: ["all_access"],
+        plans: ["supreme"],
         status: "active",
         currentPeriodEnd: null,
         gracePeriodEnd: null,

@@ -25,7 +25,7 @@ export function MatchupWeekSelector({
       >
         −
       </button>
-      <div className="min-w-[72px] text-center text-sm font-bold text-cyan-200">
+      <div className="min-w-[72px] text-center text-sm font-bold text-[#ffb8d1]">
         W{week}{' '}
         <span className="text-[11px] font-medium text-white/40">· {season}</span>
       </div>

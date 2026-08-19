@@ -123,7 +123,7 @@ interface CFBDStatLine {
   receivingYards: number; receivingTDs: number; receptions: number
 }
 
-function computeDevySignal(player: any, cfbdStats?: CFBDStatLine): { signal: MarketSignal; strength: number; tags: string[]; projectedRound: number; volatility: number; cfbdStats?: CFBDStatLine } {
+function computeDevySignal(player: any, cfbdStats?: CFBDStatLine): { signal: MarketSignal; strength: number; tags: string[]; projectedRound: number | null; volatility: number; cfbdStats?: CFBDStatLine } {
   const metrics = computeAllDevyIntelMetrics(player)
   const projectedRound = metrics.projectedDraftRound
   const dps = metrics.draftProjectionScore
@@ -132,21 +132,27 @@ function computeDevySignal(player: any, cfbdStats?: CFBDStatLine): { signal: Mar
 
   let score = 0
 
-  if (dps >= 80) {
-    score += 25
-    tags.push('Elite Prospect')
-  } else if (dps >= 65) {
-    score += 15
-    tags.push('Top Prospect')
-  } else if (dps >= 50) {
-    score += 5
+  // A null projection contributes nothing. "Elite Prospect" is a claim, and an
+  // unscored player has not earned it — nor its opposite.
+  if (dps != null) {
+    if (dps >= 80) {
+      score += 25
+      tags.push('Elite Prospect')
+    } else if (dps >= 65) {
+      score += 15
+      tags.push('Top Prospect')
+    } else if (dps >= 50) {
+      score += 5
+    }
   }
 
-  if (projectedRound <= 2) {
-    score += 10
-    tags.push(`Projected Rd ${projectedRound}`)
-  } else if (projectedRound <= 4) {
-    score += 3
+  if (projectedRound != null) {
+    if (projectedRound <= 2) {
+      score += 10
+      tags.push(`Projected Rd ${projectedRound}`)
+    } else if (projectedRound <= 4) {
+      score += 3
+    }
   }
 
   if (volatility >= 60) {
@@ -433,9 +439,14 @@ export async function GET(req: Request) {
             headline: signal === 'STRONG_BUY' ? `${dp.name} is a must-stash devy target` :
                       signal === 'BUY' ? `${dp.name} draft stock rising — acquire now` :
                       `${dp.name} — monitor draft position`,
-            reasoning: statLine
-              ? `Projected Rd ${projectedRound}. ${dp.school}${dp.classYear ? ` (Yr ${dp.classYear})` : ''}. ${statLine}.`
-              : `Projected Rd ${projectedRound}. ${dp.school}${dp.classYear ? ` (Yr ${dp.classYear})` : ''}.`,
+            // Omit the round entirely when unknown; "Projected Rd null" reached users.
+            reasoning: [
+              projectedRound != null ? `Projected Rd ${projectedRound}.` : 'Draft position not yet projected.',
+              `${dp.school}${dp.classYear ? ` (Yr ${dp.classYear})` : ''}.`,
+              statLine ? `${statLine}.` : '',
+            ]
+              .filter(Boolean)
+              .join(' '),
             tags,
             updatedAt: new Date().toISOString(),
           })

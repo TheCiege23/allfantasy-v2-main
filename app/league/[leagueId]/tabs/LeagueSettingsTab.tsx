@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatInTimeZone } from 'date-fns-tz'
 import { toast } from 'sonner'
@@ -479,6 +480,21 @@ export function LeagueSettingsTab({
       <LeagueSettingsHeader isDirty={dirty} onSaveAll={() => void saveAll()} canEdit={canEdit} />
       <SettingsNav canEdit={canEdit} />
 
+      {/*
+        ⚠ THE INVITE LINK HAD EXACTLY ONE HOME AND IT WAS THE DASHBOARD WE ARE
+        RETIRING. Nothing on a league page rendered it, and Commissioner Hub's
+        "Send Invites" card pointed at /import — the league-import page, not an
+        invite surface. So a commissioner's only working route to their own invite
+        link ran through a screen scheduled for deletion. It belongs here, beside
+        the other things only a commissioner can do.
+      */}
+      {canEdit ? (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <h3 className="mb-2 text-[13px] font-semibold text-white/90">Invite managers</h3>
+          <LeagueInvitePanel leagueId={leagueId} />
+        </div>
+      ) : null}
+
       {localSubGate && !gateOptional ? (
         <SubscriptionGateModal
           isOpen={Boolean(localSubGate)}
@@ -523,7 +539,7 @@ export function LeagueSettingsTab({
                 type="button"
                 disabled={!canEdit}
                 onClick={() => void saveDraftTime()}
-                className="rounded-xl bg-cyan-500 px-3 py-2 text-[12px] font-bold text-black hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-xl bg-[#ff3d81] px-3 py-2 text-[12px] font-bold text-black hover:bg-[#ff3d81] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Save Draft Time
               </button>
@@ -597,7 +613,7 @@ export function LeagueSettingsTab({
             <div>
               <Toggle checked={Boolean(s?.aiAutoPick)} onChange={(v) => void patch({ aiAutoPick: v })} />
               {s?.aiAutoPick ? (
-                <p className="mt-1.5 text-[10px] text-cyan-400/70">✓ AI takes priority over CPU auto-pick</p>
+                <p className="mt-1.5 text-[10px] text-[#ff3d81]/70">✓ AI takes priority over CPU auto-pick</p>
               ) : null}
             </div>
           }
@@ -685,12 +701,12 @@ export function LeagueSettingsTab({
               {preset !== 'custom' && totalSecondsPick < 30 ? (
                 <p className="text-[11px] text-amber-400">⚠ Very fast clock — managers may miss picks.</p>
               ) : null}
-              <p className="text-[11px] text-cyan-400/70">Each manager will have {humanDuration(totalSecondsPick)} to make a pick.</p>
+              <p className="text-[11px] text-[#ff3d81]/70">Each manager will have {humanDuration(totalSecondsPick)} to make a pick.</p>
               <button
                 type="button"
                 disabled={!canEdit}
                 onClick={() => void savePickTimer()}
-                className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-2 py-1.5 text-[11px] font-semibold text-cyan-200 hover:bg-cyan-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-lg border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-2 py-1.5 text-[11px] font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Save pick clock
               </button>
@@ -769,7 +785,7 @@ export function LeagueSettingsTab({
                       disabled={!canEdit}
                       onClick={() => setRandomizeCount(n)}
                       className={`h-9 w-9 rounded-lg text-[13px] font-bold transition ${
-                        randomizeCount === n ? 'bg-cyan-500 text-black' : 'bg-white/[0.07] text-white hover:bg-white/[0.12]'
+                        randomizeCount === n ? 'bg-[#ff3d81] text-black' : 'bg-white/[0.07] text-white hover:bg-white/[0.12]'
                       } disabled:cursor-not-allowed disabled:opacity-40`}
                     >
                       {n}
@@ -792,7 +808,7 @@ export function LeagueSettingsTab({
                 type="button"
                 disabled={!canEdit}
                 onClick={() => void handleRandomize()}
-                className="rounded-xl bg-cyan-500 px-4 py-2 text-[13px] font-bold text-black hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-xl bg-[#ff3d81] px-4 py-2 text-[13px] font-bold text-black hover:bg-[#ff3d81] disabled:cursor-not-allowed disabled:opacity-40"
               >
                 🎲 Randomize
               </button>
@@ -816,7 +832,7 @@ export function LeagueSettingsTab({
               type="button"
               disabled={!canEdit}
               onClick={() => void loadMaxPfOrder()}
-              className="mt-3 text-[12px] text-cyan-400 underline hover:text-cyan-300 disabled:cursor-not-allowed disabled:opacity-40"
+              className="mt-3 text-[12px] text-[#ff3d81] underline hover:text-[#ff9ec0] disabled:cursor-not-allowed disabled:opacity-40"
             >
               Calculate order from last season →
             </button>
@@ -862,7 +878,7 @@ export function LeagueSettingsTab({
                     .join(' ')
                 : orphanApi.dispersalDraftGated
                   ? 'border-amber-500/20 bg-amber-500/[0.03]'
-                  : 'border-cyan-500/20 bg-cyan-500/[0.03]',
+                  : 'border-[#ff3d81]/20 bg-[#ff3d81]/[0.03]',
           ].join(' ')}
           data-testid="league-settings-dispersal-draft"
         >
@@ -934,7 +950,7 @@ export function LeagueSettingsTab({
                 </Link>
                 <Link
                   href={`/league/${leagueId}/dispersal-draft/setup`}
-                  className="rounded-xl bg-cyan-500/20 px-3 py-2 text-xs font-bold text-cyan-300 hover:bg-cyan-500/30"
+                  className="rounded-xl bg-[#ff3d81]/20 px-3 py-2 text-xs font-bold text-[#ff9ec0] hover:bg-[#ff3d81]/30"
                 >
                   Set Up Dispersal Draft →
                 </Link>
@@ -1006,7 +1022,7 @@ export function LeagueSettingsTab({
           <button
             type="button"
             onClick={() => setKeeperOpen(true)}
-            className="mt-2 rounded-xl border border-cyan-500/30 bg-transparent px-4 py-2 text-[12px] font-semibold text-cyan-400 hover:bg-cyan-500/10"
+            className="mt-2 rounded-xl border border-[#ff3d81]/30 bg-transparent px-4 py-2 text-[12px] font-semibold text-[#ff3d81] hover:bg-[#ff3d81]/10"
           >
             📋 Set Keeper / Dynasty Players
           </button>
@@ -1042,8 +1058,8 @@ export function LeagueSettingsTab({
         title="AI Features"
         description="Configure AllFantasy AI assistance for your draft."
       >
-        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-cyan-500/12 bg-cyan-500/[0.06] p-3">
-          <span className="text-[12px] font-semibold text-cyan-300">AI Scope:</span>
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-[#ff3d81]/12 bg-[#ff3d81]/[0.06] p-3">
+          <span className="text-[12px] font-semibold text-[#ff9ec0]">AI Scope:</span>
           <Select value={String(s?.aiScope ?? 'everyone')} onChange={(v) => void patch({ aiScope: v })} className="max-w-[220px]">
             <option value="everyone">Available to everyone</option>
             <option value="per_user">Optional per user</option>
@@ -1120,7 +1136,7 @@ export function LeagueSettingsTab({
               <div>
                 <p className="flex items-center gap-2 text-sm font-bold text-white">
                   ⚡ AutoCoach AI
-                  <span className="rounded-full border border-cyan-500/25 bg-cyan-500/10 px-2 py-0.5 text-[9px] font-bold text-cyan-400">
+                  <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2 py-0.5 text-[9px] font-bold text-[#ff3d81]">
                     FREE FOR LEAGUES
                   </span>
                 </p>
@@ -1135,7 +1151,7 @@ export function LeagueSettingsTab({
                 onClick={() => void handleAutoCoachLeagueToggle()}
                 className={[
                   'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
-                  league.autoCoachEnabled ?? true ? 'border-cyan-400 bg-cyan-500' : 'border-white/20 bg-white/10',
+                  league.autoCoachEnabled ?? true ? 'border-[#ff3d81] bg-[#ff3d81]' : 'border-white/20 bg-white/10',
                 ].join(' ')}
               >
                 <span
@@ -1197,7 +1213,7 @@ export function LeagueSettingsTab({
                   <div className="min-w-0">
                     <p className="truncate text-[12px] font-semibold text-white">{member.ownerName || member.teamName}</p>
                     {member.isCommissioner ? (
-                      <p className="text-[10px] text-cyan-400">Commissioner</p>
+                      <p className="text-[10px] text-[#ff3d81]">Commissioner</p>
                     ) : null}
                   </div>
                 </div>

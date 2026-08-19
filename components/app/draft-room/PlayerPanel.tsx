@@ -39,6 +39,7 @@ import {
 } from '@/lib/draft-room/draftPoolDiagnostics'
 import { formatAiAdpUnavailableBanner } from '@/lib/draft-room/adpReadinessCopy'
 import { getDraftRoomDisplayHeadshot, getDraftRoomDisplayInjury } from '@/lib/player-data/adapters/draftRoomDisplayFields'
+import { NflRedraftPremiumPlayerCardShells } from '@/components/redraft-premium'
 
 const PLAYER_ROW_ESTIMATE_HEIGHT = 56
 /** Redraft rows use slightly taller estimate (chips + stats). */
@@ -1233,6 +1234,16 @@ function PlayerPanelInner({
           }
         />
       )}
+      {selectedPlayer && leagueId ? (
+        <div className="border-b border-white/[0.06] bg-[#07101f] p-2.5" data-testid="draft-player-card-premium-shell">
+          <NflRedraftPremiumPlayerCardShells
+            leagueId={leagueId}
+            playerId={selectedPlayer.unifiedProductView?.playerId ?? selectedPlayer.playerId ?? selectedPlayer.id ?? null}
+            teamId={selectedPlayer.team}
+            compact
+          />
+        </div>
+      ) : null}
       <div
         ref={scrollRef}
         data-testid="draft-player-list-scroll"

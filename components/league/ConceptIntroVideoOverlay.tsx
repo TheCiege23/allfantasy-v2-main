@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { SkipForward, X } from 'lucide-react'
 
 type ConceptIntroVideoOverlayProps = {
@@ -17,6 +18,20 @@ export function ConceptIntroVideoOverlay({
   posterSrc = null,
   onDismiss,
 }: ConceptIntroVideoOverlayProps) {
+  const [reducedMotion, setReducedMotion] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return
+    const query = window.matchMedia('(prefers-reduced-motion: reduce)')
+    setReducedMotion(query.matches)
+
+    const update = () => setReducedMotion(query.matches)
+    query.addEventListener?.('change', update)
+    return () => {
+      query.removeEventListener?.('change', update)
+    }
+  }, [])
+
   if (!open) return null
 
   return (
@@ -53,20 +68,35 @@ export function ConceptIntroVideoOverlay({
             </button>
           </div>
         </div>
-        <video
-          src={videoSrc}
-          poster={posterSrc ?? undefined}
-          autoPlay
-          muted
-          playsInline
-          controls
-          onEnded={onDismiss}
-          onError={onDismiss}
-          className="aspect-video w-full rounded-xl border border-white/15 bg-black shadow-2xl"
-          data-testid="concept-intro-video"
-        />
+        {reducedMotion ? (
+          <div
+            className="flex aspect-video w-full items-center justify-center overflow-hidden rounded-xl border border-white/15 bg-black shadow-2xl"
+            data-testid="concept-intro-reduced-motion"
+          >
+            {posterSrc ? (
+              <img src={posterSrc} alt="" className="h-full w-full object-cover opacity-80" />
+            ) : (
+              <div className="px-6 text-center text-sm font-semibold text-white/70">
+                Intro preview is paused because reduced motion is enabled.
+              </div>
+            )}
+          </div>
+        ) : (
+          <video
+            src={videoSrc}
+            poster={posterSrc ?? undefined}
+            autoPlay
+            muted
+            playsInline
+            controls
+            onEnded={onDismiss}
+            onError={onDismiss}
+            className="aspect-video w-full rounded-xl border border-white/15 bg-black shadow-2xl"
+            data-testid="concept-intro-video"
+          />
+        )}
         <p className="pt-2 text-center text-[10px] text-white/45">
-          This intro plays once. Skip or wait for it to finish.
+          This intro plays once. Skip or replay it from League Home.
         </p>
       </div>
     </div>

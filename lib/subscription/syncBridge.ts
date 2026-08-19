@@ -18,10 +18,10 @@ export async function syncUserProfileFromSubscriptions(userId: string): Promise<
   const active = isActiveOrGraceStatus(snapshot.status)
 
   const hasCommissioner =
-    active && (expanded.includes("commissioner") || expanded.includes("all_access"))
-  const hasPro = active && (expanded.includes("pro") || expanded.includes("all_access"))
+    active && (expanded.includes("commissioner") || expanded.includes("supreme"))
+  const hasPro = active && (expanded.includes("pro") || expanded.includes("supreme"))
   const hasWarRoom =
-    active && (expanded.includes("war_room") || expanded.includes("all_access"))
+    active && (expanded.includes("war_room") || expanded.includes("supreme"))
 
   await prisma.userProfile.upsert({
     where: { userId },

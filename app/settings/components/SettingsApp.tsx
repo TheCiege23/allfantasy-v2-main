@@ -16,6 +16,8 @@ import {
   NotificationsSettingsSection,
   ConnectedAccountsSettingsSection,
   LegacyImportSettingsSection,
+  LegacyRankSettingsSection,
+  CommandCenterSettingsSection,
   LegalSettingsSection,
   AccountSettingsSection,
   BillingSettingsSection,
@@ -58,7 +60,7 @@ export default function SettingsApp({
 
   if (loading && !profile) {
     return (
-      <div className="min-h-[100dvh] bg-[#0d1117] px-4 py-8">
+      <div className="min-h-[100dvh] bg-[#161826] px-4 py-8">
         <LoadingStateRenderer label={t("settings.loading")} testId="settings-loading-state" />
       </div>
     )
@@ -66,7 +68,7 @@ export default function SettingsApp({
 
   if (!loading && !profile) {
     return (
-      <div className="min-h-[100dvh] bg-[#0d1117] px-4 py-8">
+      <div className="min-h-[100dvh] bg-[#161826] px-4 py-8">
         <ErrorStateRenderer
           title={t("settings.errorTitle")}
           message={error ?? t("settings.errorMessage")}
@@ -86,7 +88,12 @@ export default function SettingsApp({
   }
 
   return (
-    <SettingsChrome activeTab={activeTab} onTabChange={handleTabSelect}>
+    <SettingsChrome
+      activeTab={activeTab}
+      onTabChange={handleTabSelect}
+      profile={profile}
+      planLabel={planLabel}
+    >
       {error && (
         <div className="mb-4">
           <ErrorStateRenderer
@@ -120,8 +127,10 @@ export default function SettingsApp({
       {activeTab === "billing" && <BillingSettingsSection />}
       {activeTab === "referral" && <ReferralSection />}
       {activeTab === "legacy" && <LegacyImportSettingsSection />}
+      {activeTab === "rank" && <LegacyRankSettingsSection />}
+      {activeTab === "command" && <CommandCenterSettingsSection />}
       {activeTab === "legal" && <LegalSettingsSection profile={profile} />}
-      {activeTab === "ai" && <AISettingsSection />}
+      {activeTab === "chimmy" && <AISettingsSection />}
       {activeTab === "account" && (
         <AccountSettingsSection accountCreatedAt={accountCreatedAt} planLabel={planLabel} />
       )}

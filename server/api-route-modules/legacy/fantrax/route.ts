@@ -2,9 +2,15 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { parseFantraxFiles } from '@/lib/fantrax-parser'
+import { requireVerifiedUser } from '@/lib/auth-guard'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "LegacyFantrax" })(async (request: NextRequest) => {
   try {
+    const auth = await requireVerifiedUser()
+    if (!auth.ok) {
+      return auth.response
+    }
+
     const formData = await request.formData()
     const username = formData.get('username') as string
     const season = parseInt(formData.get('season') as string) || new Date().getFullYear()
@@ -58,6 +64,25 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
       })
     }
     
+    const existingLeague = await prisma.fantraxLeague.findUnique({
+      where: {
+        userId_leagueName_season: {
+          userId: user.id,
+          leagueName: result.leagueName,
+          season: season
+        }
+      },
+      select: { appUserId: true }
+    })
+
+    // Import Security Closure phase (real, this time): a snapshot already owned by a
+    // different real AllFantasy account can never be silently overwritten by re-uploading
+    // the same Fantrax username/league/season. A legacy row with appUserId: null (uploaded
+    // before this fix) can be claimed by whoever uploads it first from here on.
+    if (existingLeague && existingLeague.appUserId && existingLeague.appUserId !== auth.userId) {
+      return NextResponse.json({ error: 'This Fantrax league snapshot is already owned by a different account.' }, { status: 403 })
+    }
+
     const league = await prisma.fantraxLeague.upsert({
       where: {
         userId_leagueName_season: {
@@ -67,6 +92,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
         }
       },
       update: {
+        appUserId: auth.userId,
         sport,
         teamCount: result.teamCount,
         userTeam: result.userTeam,
@@ -88,6 +114,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
       },
       create: {
         userId: user.id,
+        appUserId: auth.userId,
         leagueName: result.leagueName,
         season,
         sport,
@@ -153,26 +180,36 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "Legac
 
 export const GET = withApiUsage({ endpoint: "/api/legacy/fantrax", tool: "LegacyFantrax" })(async (request: NextRequest) => {
   try {
+    const auth = await requireVerifiedUser()
+    if (!auth.ok) {
+      return auth.response
+    }
+
     const { searchParams } = new URL(request.url)
     const username = searchParams?.get('username')
-    
+
     if (!username) {
       return NextResponse.json({ error: 'Username is required' }, { status: 400 })
     }
-    
+
     const user = await prisma.fantraxUser.findUnique({
       where: { fantraxUsername: username },
       include: {
+        // Import Security Closure phase (real, this time): only the caller's own owned
+        // snapshots, ever — a legacy row with appUserId: null (uploaded before this fix)
+        // is not shown to anyone here, same fail-closed posture as
+        // FantraxLeagueFetchService's canonical-import read path.
         leagues: {
+          where: { appUserId: auth.userId },
           orderBy: { season: 'desc' }
         }
       }
     })
-    
+
     if (!user) {
       return NextResponse.json({ leagues: [] })
     }
-    
+
     const leagues = user.leagues.map((league: typeof user.leagues[number]) => ({
       id: league.id,
       name: league.leagueName,

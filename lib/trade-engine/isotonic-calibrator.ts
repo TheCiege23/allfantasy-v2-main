@@ -1,8 +1,8 @@
 import { prisma } from '../prisma'
+import { resolveCurrentTradeLearningSeason } from './season-resolver'
 
 const MIN_ISOTONIC_SAMPLE = 50
 const DEFAULT_BIN_COUNT = 20
-const CURRENT_SEASON = 2025
 
 export interface IsotonicBinPoint {
   x: number
@@ -187,11 +187,12 @@ export function applyIsotonicMap(rawProbability: number, points: IsotonicBinPoin
  * circular calibration.
  */
 export async function computeAndStoreIsotonicMap(
-  season: number = CURRENT_SEASON,
+  season?: number,
 ): Promise<IsotonicMap | null> {
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
   const outcomes = await prisma.tradeOutcomeEvent.findMany({
     where: {
-      season,
+      season: resolvedSeason,
       offerEventId: { not: null },
       outcome: { in: ['ACCEPTED', 'REJECTED'] },
     },
@@ -235,9 +236,9 @@ export async function computeAndStoreIsotonicMap(
   }
 
   await prisma.tradeLearningStats.upsert({
-    where: { season },
+    where: { season: resolvedSeason },
     create: {
-      season,
+      season: resolvedSeason,
       isotonicMapJson: map as any,
       isotonicComputedAt: new Date(),
       isotonicSampleSize: map.sampleSize,

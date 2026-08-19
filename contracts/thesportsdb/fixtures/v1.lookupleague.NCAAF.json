@@ -1,0 +1,73 @@
+{
+  "_probe": {
+    "name": "lookupleague.NCAAF",
+    "endpoint": "lookupleague.php",
+    "params": {
+      "id": "4479"
+    },
+    "why": "confirm R-06 idLeague 4479",
+    "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookupleague.php?id=4479",
+    "captured_at": "2026-08-17T14:43:55.541Z",
+    "season_phase": "preseason",
+    "key_tier": "paid-or-unknown",
+    "http_status": 200,
+    "api_message": null,
+    "top_level_key": "leagues",
+    "returned_null": false,
+    "row_count": 1,
+    "error": null
+  },
+  "response": {
+    "leagues": [
+      {
+        "idLeague": "4479",
+        "idAPIfootball": "2",
+        "idAPIfootballv3": null,
+        "strSport": "American Football",
+        "strLeague": "NCAA Division 1 Football",
+        "strLeagueAlternate": "NCAA Football",
+        "intDivision": "1",
+        "idCup": "0",
+        "strCurrentSeason": "2026",
+        "intFormedYear": "1869",
+        "dateFirstEvent": "1969-01-01",
+        "strGender": "Male",
+        "strCountry": "United States",
+        "strWebsite": "www.ncaa.com/sports/football/fbs",
+        "strFacebook": "www.facebook.com/NCAADIFootball/",
+        "strInstagram": "",
+        "strTwitter": "www.twitter.com/ncaafootball",
+        "strYoutube": "www.youtube.com/user/ncaa",
+        "strRSS": "https://www.ncaa.com/news/football/fbs/rss.xml",
+        "strDescriptionEN": "The NCAA Division I Football Bowl Subdivision (FBS), formerly known as Division I-A, is the highest level of college football in the United States. The FBS consists of the largest schools in the National Collegiate Athletic Association (NCAA). As of 2022, there are 10 conferences and 131 schools in FBS.\r\n\r\nCollege football is one of the most popular spectator sports throughout much of the United States, and the top schools generate tens of millions of dollars in yearly revenue. Top FBS teams draw tens of thousands of fans to games, and the ten largest American stadiums by capacity all host FBS teams or games. Starting July 1, 2021, college athletes are now able to get paid for the use of their image and likeness. Prior to this date colleges were only allowed to provide players with non-monetary compensation such as athletic scholarships that provide for tuition, housing, and books.\r\n\r\nThe College Football Playoff was created in 2014 by the premier FBS conferences and bowl games to organize matchups so that the FBS national championship is decided on the field.  Starting in 2014 the Top 4 rated teams were eligible for the playoff; for the 2024 season the number of eligible teams was expanded from 4 to 12.",
+        "strDescriptionDE": null,
+        "strDescriptionFR": null,
+        "strDescriptionIT": null,
+        "strDescriptionCN": null,
+        "strDescriptionJP": null,
+        "strDescriptionRU": null,
+        "strDescriptionES": null,
+        "strDescriptionPT": null,
+        "strDescriptionSE": null,
+        "strDescriptionNL": null,
+        "strDescriptionHU": null,
+        "strDescriptionNO": null,
+        "strDescriptionPL": null,
+        "strDescriptionIL": null,
+        "strTvRights": "US - CBS Sports\r\nUS - Fox Sports\r\nUS - ESPN\r\nUS - NBC Sports",
+        "strFanart1": "https://r2.thesportsdb.com/images/media/league/fanart/5t0q9j1559432399.jpg",
+        "strFanart2": "https://r2.thesportsdb.com/images/media/league/fanart/8qmdk21559431550.jpg",
+        "strFanart3": "https://r2.thesportsdb.com/images/media/league/fanart/l8un271559431520.jpg",
+        "strFanart4": "https://r2.thesportsdb.com/images/media/league/fanart/1w7fk81559432155.jpg",
+        "strBanner": "https://r2.thesportsdb.com/images/media/league/banner/2fqn0g1590492221.jpg",
+        "strBadge": "https://r2.thesportsdb.com/images/media/league/badge/hm3cyr1758455622.png",
+        "strLogo": "https://r2.thesportsdb.com/images/media/league/logo/erauc41590492173.png",
+        "strPoster": "https://r2.thesportsdb.com/images/media/league/poster/r9hnib1693050103.jpg",
+        "strTrophy": "https://r2.thesportsdb.com/images/media/league/trophy/jhhn5w1564430025.png",
+        "strNaming": "{strHomeTeam} vs {strAwayTeam}",
+        "strComplete": "No",
+        "strLocked": "unlocked"
+      }
+    ]
+  }
+}

@@ -82,14 +82,14 @@ export function SurvivorChatPanel({ leagueId, canEdit }: SurvivorSettingsPanelPr
               type="button"
               onClick={() => postFaq()}
               disabled={d || faqPosting}
-              className="rounded-xl border border-cyan-500/40 bg-cyan-950/40 px-4 py-2 text-xs text-cyan-100 hover:bg-cyan-950/55 disabled:opacity-40"
+              className="rounded-xl border border-[#ff3d81]/40 bg-cyan-950/40 px-4 py-2 text-xs text-[#ffd7e5] hover:bg-cyan-950/55 disabled:opacity-40"
               data-testid="survivor-post-faq"
             >
               {faqPosting ? 'Posting…' : faqSeededAt ? 'Post FAQ again' : 'Post FAQ & pin'}
             </button>
           }
         />
-        {faqMessage && <p className="text-xs text-cyan-200/90">{faqMessage}</p>}
+        {faqMessage && <p className="text-xs text-[#ffb8d1]/90">{faqMessage}</p>}
       </SettingsSection>
 
       <SettingsSection id="sv-chat-create" title="Chat permissions">

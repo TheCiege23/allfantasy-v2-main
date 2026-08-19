@@ -16,6 +16,7 @@ import type {
   LeagueDifficultyRating,
   RankingSnapshot,
 } from "@/lib/ranking/types"
+import type { ManagerReplayInsightSetV1 } from "@/lib/replay-framework/insights/managerReplayInsight"
 
 /** Generic envelope returned by every provider. */
 export type ProviderResult<T> = {
@@ -372,6 +373,23 @@ export type SportsScheduleSlice = {
 }
 
 /**
+ * Historical Replay insight slice (Phase 22 — Chimmy Historical Replay Context).
+ * Carries ONLY the user-safe `ManagerReplayInsightSetV1` contract (never the
+ * internal `DecisionReplayCorrelationSummary` — no `perTradeImpacts`,
+ * `byLineupInvolvement`, raw IDs, etc.). Observational/display-only: it is
+ * rendered into an explicitly-labelled, disclaimer-carrying prompt section and
+ * must never be transformed into a recommendation.
+ *
+ * `status`: `disabled` = feature off / no league → no section rendered;
+ * `empty` = enabled but no completed-trade history → honest empty section so
+ * Chimmy can say so plainly; `ready` = insight set present.
+ */
+export type ReplayInsightSlice = {
+  status: "disabled" | "empty" | "ready"
+  insightSet: ManagerReplayInsightSetV1 | null
+}
+
+/**
  * Reserved hook for future vector-store memory retrieval.
  * Phase 2A: always empty array. Phase 3+: top-K retrieved summaries.
  */
@@ -394,6 +412,8 @@ export type ChimmyContextBundle = {
   leagueDifficulty: LeagueDifficultyContextSlice | null
   importedHistory: ImportedHistorySlice | null
   sportsSchedule: SportsScheduleSlice | null
+  /** Historical Replay insights (Phase 22) — observational only; null when disabled/unavailable. */
+  replayInsights: ReplayInsightSlice | null
   /** Future memory retrieval hook (vector store). Phase 2A: []. */
   memoryRefs: MemoryRef[]
   /** Provenance: which providers ran, succeeded, failed, were cached. */

@@ -107,7 +107,7 @@ export async function getAdminAiCostHealth(windowHours = 24): Promise<AiCostHeal
   const since = new Date(Date.now() - windowHours * 60 * 60 * 1000)
 
   // Plan values that represent an active paid subscription (mirrors aiBillingDecision.ts)
-  const PAID_PLAN_VALUES = ["pro", "commissioner", "war_room", "all_access", "supreme"]
+  const PAID_PLAN_VALUES = ["pro", "commissioner", "war_room", "supreme"]
   const NON_LLM_PROVIDERS = ["deterministic", "policy", "cache", "unavailable"]
 
   // ── Parallel queries ────────────────────────────────────────────────────────

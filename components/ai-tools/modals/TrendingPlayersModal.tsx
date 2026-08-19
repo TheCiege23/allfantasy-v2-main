@@ -687,7 +687,7 @@ export function TrendingPlayersModal({
                 onClick={() => openDashboardAiTool({ tool: 'warRoom' })}
                 className="inline-flex items-center gap-1 rounded-lg border border-cyan-500/25 bg-cyan-500/5 px-3 py-1.5 text-[11px] text-cyan-100/90 hover:border-cyan-400/40"
               >
-                AF War Room
+                AF Legacy
                 <ExternalLink className="h-3 w-3 opacity-50" />
               </button>
             </div>

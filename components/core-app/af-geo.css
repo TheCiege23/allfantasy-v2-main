@@ -1,0 +1,29 @@
+/* Geo restriction notice. Warning-toned, not error-toned: nothing is broken and
+   the user has done nothing wrong — most of the product still works for them. */
+.af-geo {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 13px 16px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: var(--warn-soft, rgba(251, 191, 36, .12));
+  border: 1px solid var(--warn, #fbbf24);
+}
+.af-geo-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 320px; }
+.af-geo-title { margin: 0; font-size: 13.5px; font-weight: 700; color: var(--text, #eef0fa); }
+.af-geo-sub { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text2, #c3c9e6); }
+.af-geo-link {
+  flex: none;
+  padding: 8px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--chip-line, rgba(255,255,255,.1));
+  background: var(--chip, rgba(255,255,255,.05));
+  color: var(--text, #eef0fa);
+  font: 600 12px/1 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.af-geo-link:hover { border-color: var(--warn, #fbbf24); }
+.af-geo-link:focus-visible { outline: 2px solid var(--warn, #fbbf24); outline-offset: 2px; }

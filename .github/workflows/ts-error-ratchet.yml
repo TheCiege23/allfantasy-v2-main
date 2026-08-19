@@ -1,0 +1,35 @@
+name: TypeScript error ratchet
+
+# The repo carries a known, allowlisted count of pre-existing `tsc --noEmit`
+# errors (baseline in scripts/ts-error-baseline.json). Deploys tolerate them via
+# ignoreBuildErrors; this job makes sure the debt never silently GROWS, and that
+# the redraft product surface stays at zero errors.
+
+on:
+  pull_request:
+    # No `branches:` filter on purpose. Filtering PR runs to base
+    # main/master silently skipped every stacked PR (a PR based on
+    # another branch), so those merged with no real check coverage.
+  push:
+    branches: [main, master]
+
+jobs:
+  ts-error-ratchet:
+    name: No new TypeScript errors
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ratchet — fail if any file gained TypeScript errors
+        run: npm run ts:ratchet
+
+      - name: Redraft-scoped strict gate — zero errors in redraft paths
+        run: npm run ts:redraft

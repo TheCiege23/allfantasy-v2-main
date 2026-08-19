@@ -3,7 +3,8 @@ import type {
   SubscriptionFeatureId,
   SubscriptionPlanId,
 } from "@/lib/subscription/types"
-import type { SubscriptionPlanFamily } from "@/lib/monetization/catalog"
+import type { SubscriptionPlanFamily, MonetizationSubscriptionSku } from "@/lib/monetization/catalog"
+import { getMonetizationCatalogItemBySku } from "@/lib/monetization/catalog"
 import { ENTITLEMENTS } from "@/lib/monetization/entitlements"
 import {
   buildMonetizationUpgradePathForFeature,
@@ -41,8 +42,6 @@ function planFamilyToSubscriptionPlanId(
       return "commissioner"
     case "af_war_room":
       return "war_room"
-    case "af_all_access":
-      return "all_access"
     case "af_supreme":
       return "supreme"
     default:
@@ -50,16 +49,22 @@ function planFamilyToSubscriptionPlanId(
   }
 }
 
-export const ALL_ACCESS_INCLUDED_PLAN_IDS: readonly SubscriptionPlanId[] = [
+/**
+ * The plans AF Supreme includes for entitlement checks.
+ *
+ * ⚠ war_room (AF Legacy) WAS REMOVED FROM THIS LIST. Legacy now stands on its own
+ * at $9.99/mo alongside Pro and Commissioner rather than sitting above Supreme,
+ * so Supreme bundles the two general tiers and Legacy is bought separately.
+ *
+ * ⚠ THIS TAKES AN ENTITLEMENT AWAY FROM EXISTING SUPREME SUBSCRIBERS. Anyone on
+ * Supreme today has draft-room and dynasty access through this list and loses it
+ * the moment this deploys. That is a customer-communications decision, not a code
+ * one — if those accounts are to be grandfathered, it has to happen here or in the
+ * entitlement resolution, and it has to happen BEFORE this ships.
+ */
+export const SUPREME_INCLUDED_PLAN_IDS: readonly SubscriptionPlanId[] = [
   "pro",
   "commissioner",
-  "war_room",
-]
-
-/** Supreme tier includes the same product surface as All-Access for entitlement checks. */
-export const SUPREME_INCLUDED_PLAN_IDS: readonly SubscriptionPlanId[] = [
-  ...ALL_ACCESS_INCLUDED_PLAN_IDS,
-  "all_access",
 ]
 
 export function isActiveOrGraceStatus(status: EntitlementStatus): boolean {
@@ -76,6 +81,32 @@ export function getRequiredPlanForFeature(
   return planFamilyToSubscriptionPlanId(cat.requiredPlan[0])
 }
 
+/**
+ * Every plan that unlocks a feature, not just the first one listed.
+ *
+ * The catalog has always modelled `requiredPlan` as an ARRAY, and the access
+ * check read only element [0]. That was harmless for every feature shipped so
+ * far: all 32 entries are [X, 'af_supreme'], and Supreme is short-circuited
+ * separately, so the ignored entries never mattered. It stops being harmless the
+ * moment a feature is genuinely sold on two independent plans — Manager
+ * Psychology is offered on Pro and on War Room, and War Room is not a superset
+ * of Pro, so reading only [0] would silently lock out every War Room subscriber.
+ *
+ * getRequiredPlanForFeature still returns the FIRST plan, which is the one the
+ * upgrade prompts advertise; this is the set the gate actually checks.
+ */
+export function getAcceptedPlansForFeature(
+  featureId: SubscriptionFeatureId
+): SubscriptionPlanId[] {
+  const fromMatrix = getPremiumMonetizationForFeature(featureId)
+  if (fromMatrix) return [fromMatrix.requiredPlanId]
+  const cat = ENTITLEMENTS[featureId as keyof typeof ENTITLEMENTS]
+  if (!cat?.requiredPlan?.length) return []
+  return cat.requiredPlan
+    .map((family) => planFamilyToSubscriptionPlanId(family))
+    .filter((p): p is SubscriptionPlanId => p != null)
+}
+
 export function getDisplayPlanName(planId: SubscriptionPlanId): string {
   switch (planId) {
     case "pro":
@@ -83,21 +114,33 @@ export function getDisplayPlanName(planId: SubscriptionPlanId): string {
     case "commissioner":
       return "AF Commissioner"
     case "war_room":
-      return "AF War Room"
-    case "all_access":
-      return "AF All-Access Bundle"
+      return "AF Legacy"
     case "supreme":
       return "AF Supreme"
+    case "enterprise":
+      return "AF Enterprise"
   }
+}
+
+const PLAN_TO_MONTHLY_SKU: Partial<Record<SubscriptionPlanId, MonetizationSubscriptionSku>> = {
+  pro: "af_pro_monthly",
+  commissioner: "af_commissioner_monthly",
+  war_room: "af_war_room_monthly",
+  supreme: "af_supreme_monthly",
+}
+
+/** "AF Pro — $9.99/mo" — every gate that names a required tier should show the price too. */
+export function getDisplayPlanNameWithPrice(planId: SubscriptionPlanId): string {
+  const name = getDisplayPlanName(planId)
+  const sku = PLAN_TO_MONTHLY_SKU[planId]
+  if (!sku) return name
+  const item = getMonetizationCatalogItemBySku(sku)
+  if (!item) return name
+  return `${name} — $${item.amountUsd.toFixed(2)}/mo`
 }
 
 export function expandPlansWithBundle(plans: readonly SubscriptionPlanId[]): SubscriptionPlanId[] {
   const expanded = new Set<SubscriptionPlanId>(plans)
-  if (expanded.has("all_access")) {
-    for (const includedPlan of ALL_ACCESS_INCLUDED_PLAN_IDS) {
-      expanded.add(includedPlan)
-    }
-  }
   if (expanded.has("supreme")) {
     for (const includedPlan of SUPREME_INCLUDED_PLAN_IDS) {
       expanded.add(includedPlan)
@@ -107,21 +150,14 @@ export function expandPlansWithBundle(plans: readonly SubscriptionPlanId[]): Sub
 }
 
 export function resolveBundleInheritance(plans: readonly SubscriptionPlanId[]): {
-  hasAllAccess: boolean
   hasSupreme: boolean
   inheritedPlanIds: SubscriptionPlanId[]
   effectivePlanIds: SubscriptionPlanId[]
 } {
-  const hasAllAccess = plans.includes("all_access")
   const hasSupreme = plans.includes("supreme")
   return {
-    hasAllAccess,
     hasSupreme,
-    inheritedPlanIds: hasSupreme
-      ? [...SUPREME_INCLUDED_PLAN_IDS]
-      : hasAllAccess
-        ? [...ALL_ACCESS_INCLUDED_PLAN_IDS]
-        : [],
+    inheritedPlanIds: hasSupreme ? [...SUPREME_INCLUDED_PLAN_IDS] : [],
     effectivePlanIds: expandPlansWithBundle(plans),
   }
 }
@@ -133,11 +169,10 @@ export function hasFeatureAccessForPlans(
 ): boolean {
   if (!isActiveOrGraceStatus(status)) return false
   const expandedPlans = expandPlansWithBundle(plans)
-  const required = getRequiredPlanForFeature(featureId)
-  if (!required) return false
+  const accepted = getAcceptedPlansForFeature(featureId)
+  if (accepted.length === 0) return false
   return (
-    expandedPlans.includes(required) ||
-    expandedPlans.includes("all_access") ||
+    accepted.some((plan) => expandedPlans.includes(plan)) ||
     expandedPlans.includes("supreme")
   )
 }

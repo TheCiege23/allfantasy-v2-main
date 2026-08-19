@@ -147,7 +147,8 @@ test.describe('@meta global meta click audit', () => {
     // Refresh must refetch strategy + war room and recover from the injected error.
     await page.getByRole('button', { name: 'Refresh' }).click()
     await expect(page.getByRole('cell', { name: 'ZeroRB', exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'War Room meta' })).toBeVisible()
+    // Renamed by the AF Legacy rebrand — the widget is still WarRoomMetaWidget in code.
+    await expect(page.getByRole('heading', { name: 'AF Legacy meta' })).toBeVisible()
 
     // Tabs drive snapshot metaType fetches.
     await page.getByRole('button', { name: 'Draft meta' }).click()

@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma';
+import { toPrismaJsonInput } from '@/lib/prisma-json';
 import { getConnectedTargets } from '@/lib/social-clips-grok/ConnectedSocialAccountResolver';
 import { getSocialProviderForPlatform } from '@/lib/social-clips-grok/publish-providers/registry';
 import type { SocialPublishStatus } from '@/lib/social-clips-grok/publish-providers/types';
@@ -76,7 +77,7 @@ async function createPublishLog(input: {
       shareId: input.shareId,
       platform: input.platform,
       status: input.status,
-      responseMetadata: input.responseMetadata,
+      responseMetadata: toPrismaJsonInput(input.responseMetadata),
     },
   });
   return log.id;

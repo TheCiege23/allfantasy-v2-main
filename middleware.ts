@@ -3,8 +3,25 @@ import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
 import { resolveAuthSecret } from "@/lib/auth/resolve-auth-secret"
+import { requiresSessionAuth } from "@/lib/auth/session-auth-paths"
 import { isFullyBlocked, isPaidBlocked } from "@/lib/geo/restrictedStates"
 import { getPublicSiteHostname } from "@/lib/site-public-origin"
+import { GUEST_SESSION_COOKIE_NAME } from "@/lib/guest-mode/guestSessionToken"
+import { applyAttributionCapture } from "@/lib/analytics/attributionCookies"
+
+/**
+ * Once a visitor is authenticated, the no-login trial cookie (`af_guest_session`)
+ * has served its purpose: its `LegacyUser` is claimed on sign-in (AF_GATE0 §3.5),
+ * and the dashboard reads it only when there is NO authenticated user. Clear it on
+ * authenticated navigations so the trial token is invalidated (and a later logout
+ * doesn't resurrect the guest board). No-op when the cookie isn't present.
+ */
+function clearGuestTrialCookie(request: NextRequest, response: NextResponse): NextResponse {
+  if (request.cookies.get(GUEST_SESSION_COOKIE_NAME)) {
+    response.cookies.delete(GUEST_SESSION_COOKIE_NAME)
+  }
+  return response
+}
 
 /**
  * Redirect apex ↔ www for allfantasy.ai so document origin matches manifest `id` and SEO canonical.
@@ -29,14 +46,11 @@ function canonicalProductionHostRedirect(request: NextRequest): NextResponse | n
 
 /**
  * App routes that must have a valid NextAuth session (JWT).
- * Matches: /af-rankings, /dashboard/rankings (redirect), /league/*
+ * Matches: /af-rankings, /dashboard/rankings (redirect), /league/*, /app/league/*
+ * (the last with a deliberate exception for shareable news articles).
+ *
+ * The rule lives in lib/auth/session-auth-paths so it can be tested directly.
  */
-function requiresSessionAuth(pathname: string): boolean {
-  if (pathname.startsWith("/af-rankings")) return true
-  if (pathname.startsWith("/dashboard/rankings")) return true
-  if (pathname.startsWith("/league/")) return true
-  return false
-}
 
 /** Paths that skip geo logic. Includes `/api/auth` so NextAuth + OAuth callbacks are never geo-blocked. */
 const GEO_EXEMPT_PREFIXES = [
@@ -272,7 +286,18 @@ function nextWithRouteHeaders(request: NextRequest, pathname: string): NextRespo
   })
 }
 
+/**
+ * Campaign attribution is applied by the `middleware` wrapper below rather than inside
+ * `routeMiddleware`, which has ~10 distinct return points (geo redirects, host
+ * canonicalization, the username gate, `/` → `/dashboard`). Stamping cookies at a single
+ * choke point means a new redirect added later cannot silently drop attribution.
+ */
 export async function middleware(request: NextRequest) {
+  const response = await routeMiddleware(request)
+  return applyAttributionCapture(request, response)
+}
+
+async function routeMiddleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // ── Hard early-exit for all API routes ───────────────────────────────────
@@ -310,7 +335,7 @@ export async function middleware(request: NextRequest) {
       if (token?.sub) {
         const url = request.nextUrl.clone()
         url.pathname = "/dashboard"
-        return NextResponse.redirect(url)
+        return clearGuestTrialCookie(request, NextResponse.redirect(url))
       }
     }
   }
@@ -341,7 +366,7 @@ export async function middleware(request: NextRequest) {
           "callbackUrl",
           pathname + (request.nextUrl.search || "")
         )
-        return NextResponse.redirect(dest)
+        return clearGuestTrialCookie(request, NextResponse.redirect(dest))
       }
     }
   }

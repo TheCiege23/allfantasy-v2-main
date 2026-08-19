@@ -4,6 +4,7 @@ import { buildRedraftOwnerIdCandidates } from '@/lib/redraft/redraftRosterIdenti
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
+import { getPlatformEvents, EVENT } from '@/lib/events'
 
 export type RedraftDraftFinalizationSummary = {
   skipped: boolean
@@ -305,10 +306,13 @@ async function ensureScheduleForNewSeason(params: {
   })
   if (existingScheduleCount > 0) return
 
+  // RedraftRoster has no createdAt column; order by id (cuid, roughly
+  // creation-ordered) for a deterministic, schema-valid roster sequence so the
+  // round-robin schedule is reproducible across runs.
   const rosters = await prisma.redraftRoster.findMany({
     where: { seasonId: params.seasonId },
     select: { id: true },
-    orderBy: { createdAt: 'asc' },
+    orderBy: { id: 'asc' },
   })
 
   if (rosters.length < 2) return
@@ -471,6 +475,22 @@ export async function syncCompletedDraftToRedraftSeason(
       seasonId: season.id,
       error: err instanceof Error ? err.message : String(err),
     })
+  })
+
+  // G15.2 / G12: DRAFT_COMPLETED is now emitted generically from completeDraftSession
+  // (all league types). SEASON_ACTIVATED remains here — it carries the season-specific
+  // payload and is Redraft-concept-specific.
+  const events = getPlatformEvents()
+  await events.emit(EVENT.SEASON_ACTIVATED, {
+    leagueId,
+    seasonId: season.id,
+    sport: season.sport ?? null,
+    leagueConcept: 'redraft',
+    actor: { type: 'system' },
+    idempotencyKey: `season.activated:${season.id}`,
+    source: 'engine:draft-finalize',
+    subjects: [{ kind: 'season', id: season.id }],
+    payload: { seasonId: season.id, season: season.season ?? undefined },
   })
 
   return {

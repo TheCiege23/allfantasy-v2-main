@@ -1,8 +1,44 @@
 {
   "crons": [
     {
+      "path": "/api/cron/decision-os-intelligence-maintenance",
+      "schedule": "*/10 * * * *"
+    },
+    {
+      "path": "/api/cron/decision-os-activity-ingest?discover=1",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/api/cron/decision-os-snapshot-capture?discover=1",
+      "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/fantasy-os-exec-sync",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/trade-weekly-recalibration",
+      "schedule": "0 11 * * 1"
+    },
+    {
       "path": "/api/cron/import-players",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/import-season-stats",
+      "schedule": "20 6 * * *"
+    },
+    {
+      "path": "/api/cron/import-player-game-stats",
+      "schedule": "40 6 * * *"
+    },
+    {
+      "path": "/api/cron/import-nfl-team-defense",
+      "schedule": "50 6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-player-images?sport=all",
+      "schedule": "10 5 * * *"
     },
     {
       "path": "/api/cron/waivers",
@@ -10,11 +46,31 @@
     },
     {
       "path": "/api/cron/import-injuries",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/import-stat-lines",
+      "schedule": "30 7 * * *"
+    },
+    {
+      "path": "/api/cron/compute-projections",
+      "schedule": "50 7 * * *"
+    },
+    {
+      "path": "/api/cron/alert-sweep",
       "schedule": "*/15 * * * *"
     },
     {
       "path": "/api/cron/import-schedules",
       "schedule": "0 3 * * 1"
+    },
+    {
+      "path": "/api/cron/import-schedules?sport=NCAAF",
+      "schedule": "0 4 * * 1"
+    },
+    {
+      "path": "/api/cron/import-schedules?source=tsdb-only",
+      "schedule": "10 */6 * * *"
     },
     {
       "path": "/api/cron/adp-refresh",
@@ -25,84 +81,8 @@
       "schedule": "*/15 * * * *"
     },
     {
-      "path": "/api/cron/sync-playoff-brackets",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/import-images",
-      "schedule": "0 2 * * 1"
-    },
-    {
-      "path": "/api/cron/backfill-player-headshots?sport=NFL&apply=1&limit=200",
-      "schedule": "15 5 * * *"
-    },
-    {
-      "path": "/api/cron/health-check",
-      "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/cron/data-freshness",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/cron/import-sync",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/waiver-precompute",
-      "schedule": "0 6 * * 3"
-    },
-    {
-      "path": "/api/cron/gameday-preload",
-      "schedule": "0 8 * * 0"
-    },
-    {
-      "path": "/api/cron/daily-cache-refresh",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/ai-adp",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/sync-sleeper-players",
-      "schedule": "0 4 * * *"
-    },
-    {
-      "path": "/api/cron/import-college-stats",
-      "schedule": "0 3 * * 2"
-    },
-    {
-      "path": "/api/cron/import-draft-grades",
-      "schedule": "0 4 * * 2"
-    },
-    {
-      "path": "/api/cron/check-transfer-portal",
-      "schedule": "0 6 * * *"
-    },
-    {
-      "path": "/api/cron/c2c-live-scores",
-      "schedule": "*/5 10-23 * * 6"
-    },
-    {
-      "path": "/api/cron/weekly-engine",
-      "schedule": "0 9 * * 1"
-    },
-    {
-      "path": "/api/cron/score-lock",
-      "schedule": "0 7 * * 2"
-    },
-    {
-      "path": "/api/cron/waiver-processing",
-      "schedule": "0 10 * * 3"
-    },
-    {
-      "path": "/api/cron/keeper-deadline",
-      "schedule": "0 12 * * 4"
-    },
-    {
-      "path": "/api/cron/dynasty-cutdown",
-      "schedule": "0 8 * * 5"
+      "path": "/api/cron/import-news?full=1",
+      "schedule": "35 * * * *"
     },
     {
       "path": "/api/discord/poll-messages",
@@ -153,60 +133,8 @@
       "schedule": "0 9 * * 2"
     },
     {
-      "path": "/api/survivor/tribal",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/survivor/challenge",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/survivor/exile",
-      "schedule": "0 8 * * 2"
-    },
-    {
-      "path": "/api/survivor/automation",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/survivor/automation/week-start",
-      "schedule": "0 6 * * 2"
-    },
-    {
       "path": "/api/tournament/automation",
       "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/zombie/automation",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/zombie/automation",
-      "schedule": "0 9 * * 2"
-    },
-    {
-      "path": "/api/cron/zombie-weekly-update",
-      "schedule": "0 14 * * 1"
-    },
-    {
-      "path": "/api/cron/zombie-weekly-update",
-      "schedule": "0 14 * * 2"
-    },
-    {
-      "path": "/api/big-brother/cron/automation",
-      "schedule": "*/5 * * * *"
-    },
-    {
-      "path": "/api/big-brother/cron/reminders",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/big-brother/cron/stat-correction",
-      "schedule": "0 */1 * * *"
-    },
-    {
-      "path": "/api/devy/automation",
-      "schedule": "0 6 * * *"
     },
     {
       "path": "/api/idp/cap/expire-contracts",
@@ -221,36 +149,8 @@
       "schedule": "0 */3 * * *"
     },
     {
-      "path": "/api/cron/integrity-collusion",
-      "schedule": "0 */6 * * *"
-    },
-    {
-      "path": "/api/cron/integrity-tanking",
-      "schedule": "0 10 * * 2"
-    },
-    {
-      "path": "/api/cron/autocoach-pregame",
-      "schedule": "*/5 6-23 * * *"
-    },
-    {
-      "path": "/api/cron/autocoach-status-scan",
-      "schedule": "*/3 6-23 * * *"
-    },
-    {
-      "path": "/api/cron/chimmy-alerts",
-      "schedule": "*/30 * * * *"
-    },
-    {
       "path": "/api/cron/import-standings",
       "schedule": "0 */4 * * *"
-    },
-    {
-      "path": "/api/cron/import-projections",
-      "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/import-rankings",
-      "schedule": "0 5 * * *"
     },
     {
       "path": "/api/cron/import-depth-charts",
@@ -261,16 +161,28 @@
       "schedule": "*/2 * * * *"
     },
     {
-      "path": "/api/cron/import-espn-injuries",
-      "schedule": "0 */3 * * *"
-    },
-    {
       "path": "/api/cron/recompute-allfantasy-adp",
       "schedule": "0 9 * * *"
     },
     {
       "path": "/api/cron/draft-pool-prewarm",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/draft-tick",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/live-score-tick",
+      "schedule": "*/2 * * * *"
+    },
+    {
+      "path": "/api/cron/import-projections",
+      "schedule": "0 11 * * *"
+    },
+    {
+      "path": "/api/cron/legacy-import-drain",
+      "schedule": "*/1 * * * *"
     },
     {
       "path": "/api/brackets/world-cup/cron/sync?job=teams&provider=apifootball",
@@ -295,6 +207,18 @@
     {
       "path": "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn",
       "schedule": "0 16-19 * * *"
+    },
+    {
+      "path": "/api/cron/trade-grade-notify",
+      "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/weekly-awards",
+      "schedule": "0 14 * * 2"
+    },
+    {
+      "path": "/api/cron/morning-briefing",
+      "schedule": "0 12 * * *"
     }
   ]
 }

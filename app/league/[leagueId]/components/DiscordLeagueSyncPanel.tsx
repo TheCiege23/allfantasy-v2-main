@@ -127,7 +127,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
 
       {!status.discordConnected ? (
         <p className="text-[12px] text-white/50">
-          <Link href="/settings" className="text-cyan-400 underline">
+          <Link href="/settings" className="text-[#ff3d81] underline">
             Connect your Discord account
           </Link>{' '}
           in Settings first.
@@ -164,7 +164,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
             type="button"
             disabled={busy || !status.discordGuildId}
             onClick={() => void createChannel()}
-            className="rounded-lg bg-cyan-500/20 px-3 py-1.5 text-[11px] font-semibold text-cyan-300 hover:bg-cyan-500/30 disabled:opacity-50"
+            className="rounded-lg bg-[#ff3d81]/20 px-3 py-1.5 text-[11px] font-semibold text-[#ff9ec0] hover:bg-[#ff3d81]/30 disabled:opacity-50"
           >
             Create Discord channel
           </button>
@@ -181,7 +181,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
             href={status.channel.channelUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-cyan-400 underline"
+            className="text-[#ff3d81] underline"
           >
             Open in Discord ↗
           </a>
@@ -193,7 +193,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
                 checked={status.channel.syncEnabled}
                 disabled={busy}
                 onChange={(e) => void patchToggle('syncEnabled', e.target.checked)}
-                className="accent-cyan-500"
+                className="accent-[#ff3d81]"
               />
             </label>
             <label className="flex items-center justify-between gap-2">
@@ -203,7 +203,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
                 checked={status.channel.syncOutbound}
                 disabled={busy || !status.channel.syncEnabled}
                 onChange={(e) => void patchToggle('syncOutbound', e.target.checked)}
-                className="accent-cyan-500"
+                className="accent-[#ff3d81]"
               />
             </label>
             <label className="flex items-center justify-between gap-2">
@@ -213,7 +213,7 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
                 checked={status.channel.syncInbound}
                 disabled={busy || !status.channel.syncEnabled}
                 onChange={(e) => void patchToggle('syncInbound', e.target.checked)}
-                className="accent-cyan-500"
+                className="accent-[#ff3d81]"
               />
             </label>
           </div>

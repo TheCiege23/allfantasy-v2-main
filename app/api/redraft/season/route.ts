@@ -7,6 +7,7 @@ import { ensurePostDraftFinalized } from '@/lib/post-draft'
 import { generateSchedule } from '@/lib/redraft/scheduleEngine'
 import { leagueSportToConfigSport } from '@/lib/redraft/sportKey'
 import { tryGetSportConfig } from '@/lib/sportConfig'
+import { parseOptionalRedraftPositiveInteger } from '@/lib/redraft/betaRouteInput'
 
 export const dynamic = 'force-dynamic'
 
@@ -87,9 +88,16 @@ export async function POST(req: NextRequest) {
     ? leagueSportToConfigSport(body.sport)
     : leagueSportToConfigSport(String(league.sport))
   const cfg = tryGetSportConfig(sportKey)
-  const seasonYear = body.season ?? league.season
-  const totalWeeks = body.totalWeeks ?? cfg?.defaultSeasonWeeks ?? 17
-  const playoffStartWeek = body.playoffStartWeek ?? cfg?.defaultPlayoffStartWeek ?? 15
+  const parsedSeason = parseOptionalRedraftPositiveInteger(body.season, 'season')
+  if (!parsedSeason.ok) return NextResponse.json({ error: parsedSeason.error }, { status: 400 })
+  const parsedTotalWeeks = parseOptionalRedraftPositiveInteger(body.totalWeeks, 'totalWeeks')
+  if (!parsedTotalWeeks.ok) return NextResponse.json({ error: parsedTotalWeeks.error }, { status: 400 })
+  const parsedPlayoffStartWeek = parseOptionalRedraftPositiveInteger(body.playoffStartWeek, 'playoffStartWeek')
+  if (!parsedPlayoffStartWeek.ok) return NextResponse.json({ error: parsedPlayoffStartWeek.error }, { status: 400 })
+
+  const seasonYear = parsedSeason.value ?? league.season
+  const totalWeeks = parsedTotalWeeks.value ?? cfg?.defaultSeasonWeeks ?? 17
+  const playoffStartWeek = parsedPlayoffStartWeek.value ?? cfg?.defaultPlayoffStartWeek ?? 15
   const medianGame = body.medianGame ?? league.medianGame ?? false
 
   const redraft = await prisma.$transaction(async (tx) => {

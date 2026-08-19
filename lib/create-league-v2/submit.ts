@@ -15,6 +15,7 @@ import { buildPostCreateLeagueHomeHref } from '@/lib/league/post-create-navigati
 import type { LeagueTypeId } from '@/lib/league-creation-wizard/types'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import { trackMetaEventsFromResponse } from '@/lib/meta-client'
+import { getEnabledPremiumAdvancedSettings } from '@/lib/create-league-v2/simple-create'
 
 /** Execution modes must stay verbatim on the wire so persistence keeps isOffline / isAuto flags. */
 const EXECUTION_DRAFT_IDS = new Set(['offline', 'auto', 'team'])
@@ -65,7 +66,20 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
   const lt = getEffectiveLeagueType(state) as LeagueTypeId
   const concept = state.idpSelected ? 'idp' : lt
 
-  const conceptSetup: Record<string, unknown> = {}
+  const conceptSetup: Record<string, unknown> = {
+    visibility: state.privacy,
+    isPublic: state.privacy === 'public',
+    draftDate: state.draftDate,
+    draftTime: state.draftTime,
+    draftTimezone: state.timezone,
+  }
+
+  const enabledPremiumAdvancedSettings = getEnabledPremiumAdvancedSettings(state.advancedSetup)
+  if (enabledPremiumAdvancedSettings.length > 0) {
+    conceptSetup.advancedSetup = Object.fromEntries(
+      enabledPremiumAdvancedSettings.map((key) => [key, true]),
+    )
+  }
   if (lt === 'survivor') {
     conceptSetup.survivorTribeCount = state.survivorTribeCount
   }

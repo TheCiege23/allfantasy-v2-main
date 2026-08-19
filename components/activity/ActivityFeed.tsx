@@ -1,11 +1,11 @@
 "use client"
 
 import Link from "next/link"
-import { ArrowRightLeft, MessageSquare, Megaphone, UserPlus, LayoutGrid, ChevronRight, Loader2 } from "lucide-react"
+import { ArrowRightLeft, MessageSquare, Megaphone, UserPlus, LayoutGrid, ChevronRight, HeartPulse, TrendingUp, Loader2 } from "lucide-react"
 import { useActivityFeed } from "@/hooks/useActivityFeed"
-import type { ActivityFeedItem } from "@/lib/activity/placeholder"
+import type { ActivityFeedItem } from "@/lib/activity/types"
 
-export type { ActivityFeedItem } from "@/lib/activity/placeholder"
+export type { ActivityFeedItem } from "@/lib/activity/types"
 
 const TYPE_ICONS = {
   trade: ArrowRightLeft,
@@ -13,6 +13,8 @@ const TYPE_ICONS = {
   lineup: LayoutGrid,
   message: MessageSquare,
   announcement: Megaphone,
+  injury: HeartPulse,
+  standings: TrendingUp,
 }
 
 function formatTime(iso: string): string {
@@ -64,7 +66,7 @@ export default function ActivityFeed({
           </li>
         ) : (
           filtered.map((item) => {
-            const Icon = TYPE_ICONS[item.type]
+            const Icon = TYPE_ICONS[item.type] ?? Megaphone
             const initials = item.userName
               .split(" ")
               .map((s) => s[0])

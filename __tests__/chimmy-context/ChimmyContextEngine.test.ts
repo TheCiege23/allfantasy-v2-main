@@ -129,7 +129,7 @@ describe("ChimmyContextEngine", () => {
     expect(bundle.leagues).toEqual([])
     expect(bundle.activeLeague).toBeNull()
     expect(bundle.memoryRefs).toEqual([])
-    expect(bundle.meta.providers).toHaveLength(10)
+    expect(bundle.meta.providers).toHaveLength(11)
     expect(bundle.meta.providers.every((p) => p.ok)).toBe(true)
   })
 

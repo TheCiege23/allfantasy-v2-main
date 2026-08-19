@@ -547,12 +547,27 @@ export async function classifyDraftStatus(rosterYear: number): Promise<Classific
   return result
 }
 
-export async function enrichDevyIntelMetrics(): Promise<{ updated: number; errors: string[] }> {
+/**
+ * Recompute and persist devy intel metrics.
+ *
+ * `limit` drains oldest-enriched-first so a cron on a 60s budget can work
+ * through the board across runs instead of timing out on all ~1,700 players.
+ * Omit it for a full pass (scripts and one-off backfills).
+ *
+ * Safe to run only because computeAllDevyIntelMetrics now returns null for
+ * unevidenced fields — before that it would have written a manufactured
+ * recruitingComposite of 0.75 to every player lacking recruiting data.
+ */
+export async function enrichDevyIntelMetrics(
+  options?: { limit?: number },
+): Promise<{ updated: number; errors: string[] }> {
   let updated = 0
   const errors: string[] = []
 
   const players = await prisma.devyPlayer.findMany({
     where: { devyEligible: true, graduatedToNFL: false, league: 'NCAA' },
+    orderBy: { lastSyncedAt: 'asc' },
+    ...(options?.limit ? { take: options.limit } : {}),
   })
 
   for (const player of players) {

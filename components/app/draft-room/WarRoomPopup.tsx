@@ -43,7 +43,7 @@ const POPUP_OPEN_PREF_KEY = 'af:draft-warroom-popup-open'
 export function WarRoomPopup({
   children,
   hasNewIntel = false,
-  triggerLabel = 'War Room',
+  triggerLabel = 'AF Legacy Draft Room',
   defaultOpen = false,
   testIdBase = 'war-room-popup',
   triggerPosition = 'bottom-right',

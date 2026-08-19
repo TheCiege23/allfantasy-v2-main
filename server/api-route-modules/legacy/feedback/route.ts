@@ -4,6 +4,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
 import { getResendClient } from "@/lib/resend-client";
+import { getClientIp, rateLimit } from "@/lib/rate-limit";
+import { SUPPORT_WIDGET_TOOL } from "@/lib/support/support-widget";
 
 const feedbackSchema = z.object({
   feedbackType: z.string().min(1),
@@ -108,6 +110,7 @@ function getAdminNotificationEmailHtml(data: {
     confusing: "😕 UX Issue",
     wrong: "⚠️ Something Wrong",
     general: "💬 General Feedback",
+    support: "🛟 Support Message",
   }[data.feedbackType] || data.feedbackType;
 
   return `
@@ -229,6 +232,7 @@ function getConfirmationEmailHtml(feedbackType: string, tool: string) {
     confusing: "UX feedback",
     wrong: "issue report",
     general: "feedback",
+    support: "a message",
   }[feedbackType] || "feedback";
 
   return `
@@ -258,8 +262,13 @@ function getConfirmationEmailHtml(feedbackType: string, tool: string) {
     </div>
     
     <div class="message">
-      <p>Thanks for sharing ${typeLabel} about the <strong>${tool}</strong> tool. We've received it and it's been sent directly to the AllFantasy team.</p>
-      <p>If we need clarification and you opted into follow-up, we'll reach out.</p>
+      ${
+        tool === SUPPORT_WIDGET_TOOL
+          ? `<p>Thanks for reaching out — we got your message and it's been sent directly to the AllFantasy team.</p>
+      <p>We'll follow up at this address soon.</p>`
+          : `<p>Thanks for sharing ${typeLabel} about the <strong>${tool}</strong> tool. We've received it and it's been sent directly to the AllFantasy team.</p>
+      <p>If we need clarification and you opted into follow-up, we'll reach out.</p>`
+      }
       <p>We appreciate you helping us improve the platform.</p>
     </div>
     
@@ -286,6 +295,20 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/feedback", tool: "Lega
     }
 
     const data = parsed.data;
+
+    // This endpoint was previously ungated while writing a DB row, optionally calling OpenAI
+    // (real cost), and sending up to two emails — so it was usable as a spam/cost amplifier.
+    // Keyed on submitter + IP like app/api/user/contact/email/route.ts. 5 per 10 minutes is
+    // generous enough that someone legitimately sending a second message is never blocked.
+    const ip = getClientIp(request);
+    const rateLimitSubject = data.userId || data.email || "anon";
+    const rl = rateLimit(`legacy-feedback:${rateLimitSubject}:${ip}`, 5, 10 * 60 * 1000);
+    if (!rl.success) {
+      return NextResponse.json(
+        { error: "Too many messages sent. Please wait a few minutes and try again." },
+        { status: 429 }
+      );
+    }
 
     const feedback = await prisma.legacyFeedback.create({
       data: {
@@ -379,6 +402,58 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/feedback", tool: "Lega
       }
     } catch (emailErr) {
       console.error("Failed to send feedback emails:", emailErr);
+    }
+
+    // ── Support widget: a direct-contact channel, so it ALWAYS notifies ──────────────────
+    // The per-tool block above only emails on `isBugOrIssue || importance === "blocking"`, which
+    // means praise ("like") never reaches anyone. That gating is left untouched for the existing
+    // widgets; support-widget submissions instead notify unconditionally — every time, regardless
+    // of feedbackType or AI-triaged severity. That is the entire point of a direct line.
+    //
+    // Sent in its OWN try/catch: the block above shares one, so a throw while sending the user
+    // confirmation (e.g. a bad recipient) would previously skip the notification entirely.
+    //
+    // Recipients come from SUPPORT_NOTIFICATION_EMAILS, deliberately NOT ADMIN_EMAILS. The latter
+    // is a security allowlist, not a mailing list: it also grants /admin access (lib/auth/admin.ts)
+    // and token-spend / entitlement bypass (lib/tokens/TokenSpendService.ts,
+    // lib/subscription/entitlement-middleware.ts), so adding an address there just to receive
+    // support mail would silently escalate that account's privileges.
+    if (data.tool === SUPPORT_WIDGET_TOOL) {
+      const supportEmails = (process.env.SUPPORT_NOTIFICATION_EMAILS || "")
+        .split(",")
+        .map((e) => e.trim())
+        .filter(Boolean);
+
+      if (supportEmails.length === 0) {
+        // Loud, because the message is now only visible in the admin dashboard.
+        console.error(
+          "[feedback] SUPPORT_NOTIFICATION_EMAILS is not set — support message stored but NOT emailed:",
+          feedback.id
+        );
+      } else {
+        try {
+          const { client, fromEmail } = await getResendClient();
+          const shortTitle = data.feedbackText.slice(0, 60);
+          await client.emails.send({
+            from: fromEmail,
+            to: supportEmails,
+            subject: `🛟 Support message — ${shortTitle}`,
+            html: getAdminNotificationEmailHtml({
+              id: feedback.id,
+              feedbackType: data.feedbackType,
+              tool: data.tool,
+              feedbackText: data.feedbackText,
+              screenshotUrl: data.screenshotUrl || null,
+              email: data.email || null,
+              sleeperUsername: data.sleeperUsername || null,
+              pageUrl: data.pageUrl || null,
+              aiTriage,
+            }),
+          });
+        } catch (supportErr) {
+          console.error("[feedback] Failed to send support notification:", supportErr);
+        }
+      }
     }
 
     return NextResponse.json({ success: true, id: feedback.id });

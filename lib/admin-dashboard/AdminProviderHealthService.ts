@@ -171,17 +171,19 @@ function lookupRateWindow(
   id: string
 ): ProviderRateWindow | null {
   const aliases = requestAliases(id)
-  let combined: ProviderRateWindow | null = null
+  let callsMade = 0
+  let callsLimit = 0
+  let resetAt: string | null = null
+  let found = false
   for (const alias of aliases) {
     const row = rates[keyForProvider(alias)]
     if (!row) continue
-    combined = {
-      callsMade: (combined?.callsMade ?? 0) + row.callsMade,
-      callsLimit: (combined?.callsLimit ?? 0) + row.callsLimit,
-      resetAt: row.resetAt ?? combined?.resetAt ?? null,
-    }
+    found = true
+    callsMade += row.callsMade
+    callsLimit += row.callsLimit
+    resetAt = row.resetAt ?? resetAt
   }
-  return combined
+  return found ? { callsMade, callsLimit, resetAt } : null
 }
 
 function lookupSync(
@@ -1150,7 +1152,7 @@ export async function getAdminAiInteractionHealth(
           modelUsed: { not: null },
         },
         _count: { _all: true },
-        orderBy: { _count: { _all: "desc" } },
+        orderBy: { _count: { modelUsed: "desc" } },
         take: 8,
       }),
       // blocked reason breakdown
@@ -1162,7 +1164,7 @@ export async function getAdminAiInteractionHealth(
           blockedReason: { not: null },
         },
         _count: { _all: true },
-        orderBy: { _count: { _all: "desc" } },
+        orderBy: { _count: { blockedReason: "desc" } },
         take: 8,
       }),
       // last call time

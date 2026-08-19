@@ -7,7 +7,7 @@ import * as dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 dotenv.config({ path: '.env' })
 
-const BASE = 'http://rest.datafeeds.rolling-insights.com'
+const BASE = 'https://rest.datafeeds.rolling-insights.com'
 /** REST RSC_token = CLIENT_SECRET2 (not CLIENT_ID2). */
 const TOKEN = process.env.ROLLING_INSIGHTS_CLIENT_SECRET2 ?? ''
 

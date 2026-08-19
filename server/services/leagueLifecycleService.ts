@@ -479,6 +479,61 @@ export type ApplyPostDraftLifecycleResult = {
   commissionerUserId?: string
 }
 
+export type TransactionalLifecycleTransitionResult = {
+  applied: boolean
+  from: LeagueLifecycleState
+  to: LeagueLifecycleState
+}
+
+/**
+ * Generic validated lifecycle transition inside the caller's transaction. Reads
+ * the current state, checks the transition is legal, and flips `lifecycleState`
+ * atomically. Used by redraft offseason entry to move a completed league into
+ * `offseason` in the same tx that writes the season snapshot. Mirrors the lean
+ * style of applyPostDraftLifecycleInTransaction (no side-channel writes); callers
+ * emit their own domain events around it.
+ */
+export async function transitionLeagueStateInTransaction(
+  tx: Prisma.TransactionClient,
+  input: {
+    leagueId: string
+    nextState: LeagueLifecycleState
+    actorUserId?: string | null
+    source: string
+    idempotencyKey: string
+    metadata?: Record<string, unknown>
+  },
+): Promise<TransactionalLifecycleTransitionResult> {
+  const league = await tx.league.findUnique({
+    where: { id: input.leagueId },
+    select: { lifecycleState: true, lifecycleMetadata: true },
+  })
+  if (!league) throw new Error('League not found')
+
+  const current = getLeagueLifecycleState(league)
+  if (current === input.nextState) {
+    return { applied: false, from: current, to: current }
+  }
+  const allowed = validateTransition(current, input.nextState)
+  if (!allowed.ok) throw new Error(allowed.reason)
+
+  await tx.league.update({
+    where: { id: input.leagueId },
+    data: {
+      lifecycleState: input.nextState,
+      lifecycleMetadata: mergeLifecycleMetadata(league.lifecycleMetadata, {
+        lastTransitionAt: new Date().toISOString(),
+        lastTransitionFrom: current,
+        transitionSource: input.source,
+        transitionIdempotencyKey: input.idempotencyKey,
+        ...(input.metadata ?? {}),
+      }),
+    },
+  })
+
+  return { applied: true, from: current, to: input.nextState }
+}
+
 /**
  * Idempotent: if the league is already post_draft or later, no update.
  * Call inside the same transaction that marks `DraftSession` completed.

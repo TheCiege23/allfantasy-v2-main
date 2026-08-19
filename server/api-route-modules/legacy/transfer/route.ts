@@ -3,7 +3,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import {
-  getAllPlayers,
   getDraftPicks,
   getLeagueDrafts,
   getLeagueInfo,
@@ -166,14 +165,18 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/transfer", tool: "Lega
     })
 
     try {
-      const sleeperPlayers = await getAllPlayers()
+      // Phase 3: canonical read path. Was a live fetch of Sleeper's whole NFL universe to
+      // resolve the rostered ids; now a fixed 3 queries for exactly those ids. The
+      // draft-pick fallback below is unchanged and still covers ids with no canonical row.
+      const { getCanonicalPlayersBySleeperIds } = await import('@/lib/canonical/getCanonicalPlayer')
+      const canonical = await getCanonicalPlayersBySleeperIds([...allRosteredIds])
       allRosteredIds.forEach(pid => {
-        const sp = sleeperPlayers[pid]
-        if (sp) {
+        const cp = canonical.get(pid)
+        if (cp) {
           playerMap[pid] = {
-            name: sp.full_name || `${sp.first_name || ''} ${sp.last_name || ''}`.trim(),
-            position: sp.position || '',
-            team: sp.team || '',
+            name: cp.name,
+            position: cp.position || '',
+            team: cp.team || '',
           }
         }
       })

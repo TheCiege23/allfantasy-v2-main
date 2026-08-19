@@ -2,15 +2,22 @@ import type { DevyPlayer } from '@prisma/client'
 import { getPlayerAnalytics, type PlayerAnalytics } from './player-analytics'
 
 export interface DevyIntelMetrics {
-  recruitingComposite: number
+  /** Null when no recruiting evidence exists — never the bare 0.75 default. */
+  recruitingComposite: number | null
   productionIndex: number
   breakoutAge: number | null
   breakoutAgeScore: number
   athleticProfileScore: number
   draftCapitalScore: number
-  draftProjectionScore: number
-  projectedDraftRound: number
-  projectedDraftPick: number
+  /** Null when not one signal backed a projection. */
+  draftProjectionScore: number | null
+  /** Null when nothing supports an estimate. */
+  projectedDraftRound: number | null
+  projectedDraftPick: number | null
+  /** How much of the model's weight was genuinely backed by data. */
+  projectionConfidence: 'high' | 'moderate' | 'low' | null
+  projectionCoverage: number
+  projectionMissing: DevySignalKey[]
   nilImpactScore: number
   injurySeverityScore: number
   volatilityScore: number
@@ -371,15 +378,185 @@ export function computeDraftProjectionScore(player: DevyPlayer): number {
   return Math.round(Math.min(100, Math.max(0, dps)) * 100) / 100
 }
 
+
+// ──────────────────────────────────────────────────────────────────
+// Evidence layer — what we actually know about a player
+//
+// Every scorer above falls back to a plausible middle number when its input is
+// absent: computePPABoost/computeUsageBoost/computeWEPAScore return 50,
+// computeRecruitingComposite returns 0.75, estimateProjectedDraftRound always
+// returns a round. That makes a player we know nothing about indistinguishable
+// from an average one, and it is the same failure as a trade grading C off zero
+// points.
+//
+// Measured against the real seeded board: enriching with those defaults would
+// manufacture recruitingComposite for 991 of 1,718 players — every one of them
+// exactly 0.75 — and a projectedDraftRound for all 1,718, to gain 40 genuinely
+// derivable breakout ages.
+//
+// These predicates say whether a signal has any backing at all. Scores are then
+// renormalised over the signals present, so absent ones neither drag a player
+// toward average nor quietly count as evidence.
+// ──────────────────────────────────────────────────────────────────
+
+export type DevySignalKey =
+  | 'recruiting'
+  | 'production'
+  | 'breakout'
+  | 'athletic'
+  | 'draftCapital'
+  | 'ppa'
+  | 'wepa'
+  | 'teamContext'
+
+const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+
+export function hasRecruitingEvidence(player: DevyPlayer): boolean {
+  const p = player as any
+  return (
+    (num(p.recruitingComposite) && p.recruitingComposite > 0) ||
+    (num(p.recruitingStars) && p.recruitingStars > 0) ||
+    (num(p.recruitingRanking) && p.recruitingRanking > 0)
+  )
+}
+
+export function hasProductionEvidence(player: DevyPlayer): boolean {
+  const p = player as any
+  return [
+    p.passingYards, p.passingTDs, p.rushingYards, p.rushingTDs,
+    p.receivingYards, p.receivingTDs, p.receptions,
+  ].some((v) => num(v) && v > 0)
+}
+
+export function hasAthleticEvidence(player: DevyPlayer): boolean {
+  const p = player as any
+  return num(p.athleticProfileScore) || (num(p.heightInches) && num(p.weightLbs))
+}
+
+export function hasTeamContextEvidence(player: DevyPlayer): boolean {
+  const p = player as any
+  return num(p.teamSpRating) || num(p.returningProdPct)
+}
+
+/**
+ * Draft capital is derived from the projected round, which is itself derived
+ * from recruiting and production. With neither of those it rests on nothing.
+ */
+export function hasDraftCapitalEvidence(player: DevyPlayer): boolean {
+  const p = player as any
+  if (num(p.projectedDraftRound) && p.projectedDraftRound > 0) return true
+  return hasRecruitingEvidence(player) || hasProductionEvidence(player)
+}
+
+/** Composite only when something backs it — never the bare 0.75 default. */
+export function computeRecruitingCompositeOrNull(player: DevyPlayer): number | null {
+  return hasRecruitingEvidence(player) ? computeRecruitingComposite(player) : null
+}
+
+/** Projected round only when recruiting or production can support the estimate. */
+export function estimateProjectedDraftRoundOrNull(player: DevyPlayer): number | null {
+  return hasDraftCapitalEvidence(player) ? estimateProjectedDraftRound(player) : null
+}
+
+const DEVY_SIGNAL_WEIGHTS: { key: DevySignalKey; weight: number }[] = [
+  { key: 'recruiting', weight: 0.2 },
+  { key: 'production', weight: 0.25 },
+  { key: 'breakout', weight: 0.1 },
+  { key: 'athletic', weight: 0.1 },
+  { key: 'draftCapital', weight: 0.15 },
+  { key: 'ppa', weight: 0.1 },
+  { key: 'wepa', weight: 0.05 },
+  { key: 'teamContext', weight: 0.05 },
+]
+
+export type DevyProjection = {
+  /** 0-100, or null when not one signal was available. */
+  score: number | null
+  confidence: 'high' | 'moderate' | 'low' | null
+  /** Share of model weight actually backed by data, 0-1. */
+  coverage: number
+  present: DevySignalKey[]
+  missing: DevySignalKey[]
+}
+
+/**
+ * The devy-intel model, scored only on signals that exist.
+ *
+ * Richer than lib/devy-model.ts: eight signals including PPA, wEPA, usage and
+ * team context, all sourced from CFBD. Same honesty contract as devy-model's
+ * computeDraftProjection — null rather than a manufactured number.
+ */
+export function computeDevyProjection(player: DevyPlayer): DevyProjection {
+  const p = player as any
+  const breakoutAge = computeBreakoutAge(player)
+
+  const values: Partial<Record<DevySignalKey, number>> = {}
+  if (hasRecruitingEvidence(player)) values.recruiting = computeRecruitingComposite(player) * 100
+  if (hasProductionEvidence(player)) values.production = computeProductionIndex(player)
+  if (breakoutAge != null) values.breakout = breakoutAgeToScore(breakoutAge)
+  if (hasAthleticEvidence(player)) values.athletic = computeAthleticProfileScore(player)
+  if (hasDraftCapitalEvidence(player)) {
+    values.draftCapital = computeDraftCapitalScore(estimateProjectedDraftRound(player))
+  }
+  if (num(p.ppaTotal)) values.ppa = computePPABoost(player)
+  if (num(p.wepaTotal)) values.wepa = computeWEPAScore(player)
+  if (hasTeamContextEvidence(player)) values.teamContext = computeTeamContextBoost(player)
+
+  let weighted = 0
+  let presentWeight = 0
+  const present: DevySignalKey[] = []
+  const missing: DevySignalKey[] = []
+  for (const { key, weight } of DEVY_SIGNAL_WEIGHTS) {
+    const v = values[key]
+    if (v == null) {
+      missing.push(key)
+      continue
+    }
+    weighted += v * weight
+    presentWeight += weight
+    present.push(key)
+  }
+
+  // A prospect evaluation rests on what he was rated coming in, or what he has
+  // actually done. Height and weight alone are real data but not an evaluation:
+  // emitting a score off them anchors a number in the reader's mind that no
+  // scouting signal supports. Substantive evidence is required before any score.
+  const hasSubstantiveSignal = present.includes('recruiting') || present.includes('production')
+  if (presentWeight === 0 || !hasSubstantiveSignal) {
+    return { score: null, confidence: null, coverage: 0, present, missing }
+  }
+
+  let score = weighted / presentWeight
+
+  // Transfer risk is a known-status penalty, not a signal; it never counts
+  // toward coverage and only applies when the status is actually recorded.
+  if (p.transferStatus) score -= computeTransferRisk(player) * 0.3
+
+  const coverage = Math.round(presentWeight * 1000) / 1000
+  const confidence: 'high' | 'moderate' | 'low' =
+    coverage >= 0.7 ? 'high' : coverage >= 0.4 ? 'moderate' : 'low'
+
+  return {
+    score: Math.round(Math.min(100, Math.max(0, score)) * 100) / 100,
+    confidence,
+    coverage,
+    present,
+    missing,
+  }
+}
+
 export function computeAllDevyIntelMetrics(player: DevyPlayer): DevyIntelMetrics {
-  const recruiting = computeRecruitingComposite(player)
+  // Honest variants: null where nothing backs the value. The non-null helpers
+  // above are kept for callers that genuinely want a filled-in estimate.
+  const recruiting = computeRecruitingCompositeOrNull(player)
   const production = computeProductionIndex(player)
   const breakoutAge = computeBreakoutAge(player)
   const breakoutScore = breakoutAgeToScore(breakoutAge)
   const athletic = computeAthleticProfileScore(player)
-  const projectedRound = estimateProjectedDraftRound(player)
-  const projectedPick = estimateProjectedDraftPick(projectedRound)
+  const projectedRound = estimateProjectedDraftRoundOrNull(player)
+  const projectedPick = projectedRound == null ? null : estimateProjectedDraftPick(projectedRound)
   const draftCapital = computeDraftCapitalScore(projectedRound)
+  const projection = computeDevyProjection(player)
   const nil = computeNilImpactScore(player)
   const injury = computeInjurySeverityScore(player)
   const volatility = computeVolatilityScore(player)
@@ -389,17 +566,6 @@ export function computeAllDevyIntelMetrics(player: DevyPlayer): DevyIntelMetrics
   const teamCtx = computeTeamContextBoost(player)
   const transferRisk = computeTransferRisk(player)
 
-  const dps =
-    (recruiting * 100) * 0.20 +
-    production * 0.25 +
-    breakoutScore * 0.10 +
-    athletic * 0.10 +
-    draftCapital * 0.15 +
-    ppaScore * 0.10 +
-    wepaScore * 0.05 +
-    teamCtx * 0.05 -
-    transferRisk * 0.3
-
   return {
     recruitingComposite: recruiting,
     productionIndex: production,
@@ -407,9 +573,12 @@ export function computeAllDevyIntelMetrics(player: DevyPlayer): DevyIntelMetrics
     breakoutAgeScore: breakoutScore,
     athleticProfileScore: athletic,
     draftCapitalScore: draftCapital,
-    draftProjectionScore: Math.round(Math.min(100, Math.max(0, dps)) * 100) / 100,
+    draftProjectionScore: projection.score,
     projectedDraftRound: projectedRound,
     projectedDraftPick: projectedPick,
+    projectionConfidence: projection.confidence,
+    projectionCoverage: projection.coverage,
+    projectionMissing: projection.missing,
     nilImpactScore: nil,
     injurySeverityScore: injury,
     volatilityScore: volatility,
@@ -431,8 +600,12 @@ export function computeDevyFinalScore(
     totalTeams?: number
     pickNumber?: number
   }
-): DevyFinalScore {
+): DevyFinalScore | null {
   const metrics = computeAllDevyIntelMetrics(player)
+
+  // No signal backed a projection, so there is no final score to give. Callers
+  // render "unrated" rather than receive a number assembled from defaults.
+  if (metrics.draftProjectionScore == null) return null
 
   const draftProjectionComponent = metrics.draftProjectionScore * 0.40
 
@@ -458,11 +631,10 @@ export function computeDevyFinalScore(
   const positionCounts: Record<string, number> = { QB: 4, RB: 8, WR: 10, TE: 4 }
   const posSupply = positionCounts[player.position] || 6
   const scarcityRaw = Math.max(0, 100 - (posSupply / teams) * 100)
+  // An unknown round earns no early-round scarcity bonus rather than a guessed one.
   const projectedRound = metrics.projectedDraftRound
-  if (projectedRound <= 1) {
-    // top prospects scarcer
-  }
-  const scarcityComponent = Math.min(100, scarcityRaw + (projectedRound <= 2 ? 20 : 0)) * 0.10
+  const earlyRoundBonus = projectedRound != null && projectedRound <= 2 ? 20 : 0
+  const scarcityComponent = Math.min(100, scarcityRaw + earlyRoundBonus) * 0.10
 
   const volatilityComponent = (100 - metrics.volatilityScore) * 0.10
 
@@ -478,9 +650,15 @@ export function computeDevyFinalScore(
   }
 }
 
-export function computeDevyDynastyValue(player: DevyPlayer, teamDirection: 'Contender' | 'Rebuilder'): number {
+export function computeDevyDynastyValue(
+  player: DevyPlayer,
+  teamDirection: 'Contender' | 'Rebuilder',
+): number | null {
   const metrics = computeAllDevyIntelMetrics(player)
   const round = metrics.projectedDraftRound
+  // A dynasty value is a price. Without a projected round and a score there is
+  // nothing to price, and inventing one is worse than showing nothing.
+  if (round == null || metrics.draftProjectionScore == null) return null
   const rangeForRound = DYNASTY_VALUE_BY_ROUND[round] || { min: 100, max: 199 }
 
   const positionInRound = (metrics.draftProjectionScore / 100)
@@ -536,7 +714,11 @@ export function computeDevyAcceptDrivers(
     drivers.push({ driver: `Early breakout age (${breakoutAge})`, delta: 0.03, direction: 'boost' })
   }
 
-  if (metrics.projectedDraftRound <= 1) {
+  // A driver is a stated reason. Without a projected round there is no reason
+  // to state, so none is pushed.
+  if (metrics.projectedDraftRound == null) {
+    // no round-based driver
+  } else if (metrics.projectedDraftRound <= 1) {
     drivers.push({ driver: 'Projected Round 1 NFL pick', delta: 0.06, direction: 'boost' })
   } else if (metrics.projectedDraftRound <= 2) {
     drivers.push({ driver: 'Projected Day 1-2 NFL pick', delta: 0.03, direction: 'boost' })
@@ -595,15 +777,19 @@ export function computeAvailabilityPctV2(
       baseAvailability = Math.max(5, 50 - (pickNumber - adp) * 8)
     }
   } else {
-    const valuePercentile = Math.min(1, metrics.draftProjectionScore / 100)
-    baseAvailability = (1 - valuePercentile) * 80 + 10
+    // With no ADP and no projection there is nothing to infer availability
+    // from, so start neutral rather than pretending a value percentile exists.
+    const valuePercentile =
+      metrics.draftProjectionScore == null ? null : Math.min(1, metrics.draftProjectionScore / 100)
+    baseAvailability = valuePercentile == null ? 50 : (1 - valuePercentile) * 80 + 10
   }
 
   const yearsOut = Math.max(0, (player.draftEligibleYear || 2028) - new Date().getFullYear())
   if (yearsOut >= 2) baseAvailability = Math.min(95, baseAvailability + 10)
   else if (yearsOut === 0) baseAvailability = Math.max(5, baseAvailability - 15)
 
-  const positionRunPenalty = metrics.projectedDraftRound <= 1 ? 10 : 0
+  const positionRunPenalty =
+    metrics.projectedDraftRound != null && metrics.projectedDraftRound <= 1 ? 10 : 0
   baseAvailability -= positionRunPenalty
 
   return Math.round(Math.min(95, Math.max(5, baseAvailability)))

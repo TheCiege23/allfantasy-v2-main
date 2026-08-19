@@ -5,8 +5,6 @@ export type MonetizationSubscriptionSku =
   | "af_commissioner_yearly"
   | "af_war_room_monthly"
   | "af_war_room_yearly"
-  | "af_all_access_monthly"
-  | "af_all_access_yearly"
   | "af_supreme_monthly"
   | "af_supreme_yearly"
 
@@ -17,11 +15,13 @@ export type MonetizationTokenPackSku =
 
 export type MonetizationSku = MonetizationSubscriptionSku | MonetizationTokenPackSku
 
+// NOTE: internal plan family "af_war_room" is retained as the stable key; the
+// customer-facing name for this tier is "Legacy" (top all-access). Never surface
+// "war_room" or "AI" to customers.
 export type SubscriptionPlanFamily =
   | "af_pro"
   | "af_commissioner"
   | "af_war_room"
-  | "af_all_access"
   | "af_supreme"
 
 export type MonetizationCatalogItem = {
@@ -42,11 +42,19 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_pro_monthly",
     type: "subscription",
     title: "AF Pro Monthly",
-    description: "Player-specific AI features for active fantasy managers.",
+    description: "Player tools for active fantasy managers — trades, waivers, lineups, and drafts.",
     amountUsd: 9.99,
     currency: "usd",
     interval: "month",
-    tokenAmount: 250,
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_pro",
     stripePriceEnvVar: "STRIPE_PRICE_AF_PRO_MONTHLY",
   },
@@ -54,11 +62,22 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_pro_yearly",
     type: "subscription",
     title: "AF Pro Yearly",
-    description: "Player-specific AI features for active fantasy managers.",
-    amountUsd: 99.99,
+    description: "Player tools for active fantasy managers — trades, waivers, lineups, and drafts.",
+    amountUsd: 79.99,
     currency: "usd",
+    // Must match subscription-policy.ts's pro.yearlyIncludedPremiumCredits (3500). Previously 3000,
+    // which UNDER-stated the grant — the opposite direction to the other drifts, and the only one
+    // that was costing us goodwill rather than owing it.
     interval: "year",
-    tokenAmount: 3500,
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_pro",
     stripePriceEnvVar: "STRIPE_PRICE_AF_PRO_YEARLY",
   },
@@ -66,11 +85,27 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_commissioner_monthly",
     type: "subscription",
     title: "AF Commissioner Monthly",
-    description: "League-specific commissioner tools and automation controls.",
-    amountUsd: 4.99,
+    // ⚠ NOT "Everything in Pro plus …", which is what this said and which is false.
+    // Only Supreme bundles other tiers (SUPREME_INCLUDED_PLAN_IDS in
+    // lib/subscription/feature-access.ts = [pro, commissioner, war_room]).
+    // Commissioner does NOT grant Pro's player tools, so a subscriber who bought on
+    // that sentence would find the trade and waiver tools still locked.
+    description: "The tools to run your leagues — health, integrity, recaps and the Commissioner OS.",
+    amountUsd: 14.99,
     currency: "usd",
+    // Must match subscription-policy.ts's commissioner.monthlyIncludedPremiumCredits (100).
+    // Previously 500 — a 5x overpromise against what invoice.payment_succeeded actually credits.
+    // Same bug already fixed on Supreme below; this tier and Legacy were missed.
     interval: "month",
-    tokenAmount: 100,
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_commissioner",
     stripePriceEnvVar: "STRIPE_PRICE_AF_COMMISSIONER_MONTHLY",
   },
@@ -78,72 +113,116 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_commissioner_yearly",
     type: "subscription",
     title: "AF Commissioner Yearly",
-    description: "League-specific commissioner tools and automation controls.",
-    amountUsd: 49.99,
+    // ⚠ NOT "Everything in Pro plus …", which is what this said and which is false.
+    // Only Supreme bundles other tiers (SUPREME_INCLUDED_PLAN_IDS in
+    // lib/subscription/feature-access.ts = [pro, commissioner, war_room]).
+    // Commissioner does NOT grant Pro's player tools, so a subscriber who bought on
+    // that sentence would find the trade and waiver tools still locked.
+    description: "The tools to run your leagues — health, integrity, recaps and the Commissioner OS.",
+    amountUsd: 129.99,
     currency: "usd",
+    // Must match subscription-policy.ts's commissioner.yearlyIncludedPremiumCredits (1500).
+    // Previously 6000 — a 4x overpromise.
     interval: "year",
-    tokenAmount: 1500,
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_commissioner",
     stripePriceEnvVar: "STRIPE_PRICE_AF_COMMISSIONER_YEARLY",
   },
   {
     sku: "af_war_room_monthly",
     type: "subscription",
-    title: "AF War Room Monthly",
-    description: "Draft strategy and long-term planning tools for one user.",
+    title: "AF Legacy Monthly",
+    // ⚠ THIS CLAIM WAS BACKWARDS, NOT MERELY LADDER-ISH. SUPREME_INCLUDED_PLAN_IDS
+    // contains war_room, so SUPREME INCLUDES LEGACY — not the reverse. Legacy also
+    // grants 300 tokens/mo against Supreme's 1,000 while costing $10 MORE, so
+    // "everything in Supreme plus" was false in the one dimension a pricing grid
+    // shows side by side.
+    description: "The live draft room, dynasty tools, and priority access.",
     amountUsd: 9.99,
     currency: "usd",
+    // Must match subscription-policy.ts's war_room.monthlyIncludedPremiumCredits (300). Previously
+    // 3000 — a 10x overpromise, and the largest of the set. Note this tier is surfaced as
+    // "AF Legacy"; the planFamily keeps the historical war_room key.
     interval: "month",
-    tokenAmount: 300,
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_war_room",
     stripePriceEnvVar: "STRIPE_PRICE_AF_WAR_ROOM_MONTHLY",
   },
   {
     sku: "af_war_room_yearly",
     type: "subscription",
-    title: "AF War Room Yearly",
-    description: "Draft strategy and long-term planning tools for one user.",
-    amountUsd: 99.99,
+    title: "AF Legacy Yearly",
+    // ⚠ THIS CLAIM WAS BACKWARDS, NOT MERELY LADDER-ISH. SUPREME_INCLUDED_PLAN_IDS
+    // contains war_room, so SUPREME INCLUDES LEGACY — not the reverse. Legacy also
+    // grants 300 tokens/mo against Supreme's 1,000 while costing $10 MORE, so
+    // "everything in Supreme plus" was false in the one dimension a pricing grid
+    // shows side by side.
+    description: "The live draft room, dynasty tools, and priority access.",
+    amountUsd: 79.99,
     currency: "usd",
+    // Must match subscription-policy.ts's war_room.yearlyIncludedPremiumCredits (3500). Previously
+    // 36000 — a 10.3x overpromise.
     interval: "year",
-    tokenAmount: 3500,
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_war_room",
     stripePriceEnvVar: "STRIPE_PRICE_AF_WAR_ROOM_YEARLY",
-  },
-  {
-    sku: "af_all_access_monthly",
-    type: "subscription",
-    title: "AF All-Access Monthly",
-    description: "Pro + Commissioner + War Room features bundled — every AllFantasy AI and league tool.",
-    amountUsd: 19.99,
-    currency: "usd",
-    interval: "month",
-    tokenAmount: 650,
-    planFamily: "af_all_access",
-    stripePriceEnvVar: "STRIPE_PRICE_AF_ALL_ACCESS_MONTHLY",
-  },
-  {
-    sku: "af_all_access_yearly",
-    type: "subscription",
-    title: "AF All-Access Yearly",
-    description: "Pro + Commissioner + War Room features bundled — every AllFantasy AI and league tool.",
-    amountUsd: 199.99,
-    currency: "usd",
-    interval: "year",
-    tokenAmount: 8500,
-    planFamily: "af_all_access",
-    stripePriceEnvVar: "STRIPE_PRICE_AF_ALL_ACCESS_YEARLY",
   },
   {
     sku: "af_supreme_monthly",
     type: "subscription",
     title: "AF Supreme Monthly",
+    // Supreme is the ONE bundling tier, and saying so is accurate here where it is
+    // not on the others: it inherits Pro, Commissioner AND Legacy.
+    /*
+     * ⚠ NO LONGER "Pro, Commissioner and Legacy … largest token allowance". Both
+     * halves went stale the same morning: SUPREME_INCLUDED_PLAN_IDS dropped
+     * war_room, and subscriptions stopped granting tokens entirely. It survived
+     * two sweeps because the token guard required a DIGIT before "tokens" and
+     * "allowance" has none, and the Legacy guard only read planIncludes.ts. Both
+     * holes are now closed.
+     */
     description:
-      "Everything in All-Access plus the highest token allowances and platform-wide premium priority.",
+      "AF Pro and AF Commissioner in one tier, for less than buying both.",
     amountUsd: 19.99,
     currency: "usd",
     interval: "month",
-    tokenAmount: 1000,
+    // Must match lib/tokens/subscription-policy.ts's supreme.monthlyIncludedPremiumCredits — that
+    // policy value is what the invoice.payment_succeeded webhook actually grants (TokenSpendService
+    // .grantMonthlySubscriptionCredits). This field was previously 1500, overpromising vs. the 1000
+    // actually credited.
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_supreme",
     stripePriceEnvVar: "STRIPE_PRICE_AF_SUPREME_MONTHLY",
   },
@@ -151,20 +230,49 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
     sku: "af_supreme_yearly",
     type: "subscription",
     title: "AF Supreme Yearly",
+    // Supreme is the ONE bundling tier, and saying so is accurate here where it is
+    // not on the others: it inherits Pro, Commissioner AND Legacy.
+    /*
+     * ⚠ NO LONGER "Pro, Commissioner and Legacy … largest token allowance". Both
+     * halves went stale the same morning: SUPREME_INCLUDED_PLAN_IDS dropped
+     * war_room, and subscriptions stopped granting tokens entirely. It survived
+     * two sweeps because the token guard required a DIGIT before "tokens" and
+     * "allowance" has none, and the Legacy guard only read planIncludes.ts. Both
+     * holes are now closed.
+     */
     description:
-      "Everything in All-Access plus the highest token allowances and platform-wide premium priority.",
-    amountUsd: 199.99,
+      "AF Pro and AF Commissioner in one tier, for less than buying both.",
+    /*
+     * ⚠ NOT 179.99. At that price Supreme's YEARLY bundle saved only 14.3%
+     * against buying Pro + Commissioner yearly ($209.98), while its MONTHLY
+     * bundle saved 20% against buying them monthly — so committing for a year
+     * made the bundle worth LESS, which is the opposite of everything else on
+     * the page. 159.99 is 33.3% off 12x its own monthly (exactly matching Pro
+     * and Legacy) and 23.8% off buying the two tiers separately, so it beats the
+     * monthly bundle on both axes. Effective $13.33/mo.
+     */
+    amountUsd: 159.99,
     currency: "usd",
     interval: "year",
-    tokenAmount: 15000,
+    // Must match subscription-policy.ts's supreme.yearlyIncludedPremiumCredits (15000). Previously
+    // 18000, overpromising vs. what invoice.payment_succeeded actually grants.
+    /*
+     * ⚠ SUBSCRIPTIONS NO LONGER CARRY TOKENS — null, NOT 0. Tokens are the
+     * pay-per-use path for people who do not want a subscription; a subscriber
+     * has the features unlocked outright and should never need to spend them.
+     * null means "this plan does not deal in tokens"; 0 would mean "it grants
+     * you zero of them", which invites the reasonable question of why it is
+     * mentioned at all.
+     */
+    tokenAmount: null,
     planFamily: "af_supreme",
     stripePriceEnvVar: "STRIPE_PRICE_AF_SUPREME_YEARLY",
   },
   {
     sku: "af_tokens_5",
     type: "token_pack",
-    title: "AllFantasy AI Tokens (250)",
-    description: "250 AI tokens for metered premium AI actions.",
+    title: "AllFantasy Starter Tokens (250)",
+    description: "250 tokens for premium one-off actions.",
     amountUsd: 4.99,
     currency: "usd",
     interval: null,
@@ -175,8 +283,8 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
   {
     sku: "af_tokens_10",
     type: "token_pack",
-    title: "AllFantasy AI Tokens (600)",
-    description: "600 AI tokens for metered premium AI actions.",
+    title: "AllFantasy Plus Tokens (600)",
+    description: "600 tokens for premium one-off actions.",
     amountUsd: 8.99,
     currency: "usd",
     interval: null,
@@ -187,8 +295,8 @@ const CATALOG_ITEMS: readonly MonetizationCatalogItem[] = [
   {
     sku: "af_tokens_25",
     type: "token_pack",
-    title: "AllFantasy AI Tokens (1,500)",
-    description: "1,500 AI tokens for metered premium AI actions.",
+    title: "AllFantasy Pro Token Pack (1,500)",
+    description: "1,500 tokens for premium one-off actions.",
     amountUsd: 19.99,
     currency: "usd",
     interval: null,
@@ -207,6 +315,20 @@ export type MonetizationCatalog = {
   tokenPacks: MonetizationCatalogItem[]
   all: MonetizationCatalogItem[]
 }
+
+/**
+ * Prices staged ahead of their Stripe objects.
+ *
+ * ⚠ EMPTY IS THE CORRECT STEADY STATE — DO NOT DELETE THIS. It exists so a price
+ * can be agreed and committed BEFORE the Stripe Price it depends on exists,
+ * without the page ever advertising a figure checkout will not honour. The 2026-08
+ * overhaul used it exactly that way: five prices sat here while amountUsd kept
+ * showing what Stripe still billed, then moved across once the Prices were created
+ * and verify-stripe-price-parity read 11/11.
+ *
+ * The next price change should land here first, not in amountUsd.
+ */
+export const PLANNED_PRICE_USD: Partial<Record<MonetizationSku, number>> = {}
 
 export function getMonetizationCatalog(): MonetizationCatalog {
   const all = CATALOG_ITEMS.map((item) => ({ ...item }))

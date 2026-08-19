@@ -25,6 +25,7 @@ import {
   resolveScoringPresetId,
   type ScoringPresetOption,
 } from '@/lib/league-creation-preset/scoring-presets'
+import { UNIVERSAL_CREATE_TEAM_COUNTS } from '@/lib/create-league-v2/simple-create'
 
 // ── Sport filtering ─────────────────────────────────────────────────
 
@@ -84,11 +85,9 @@ export function getMaxTeamsForSport(
   return SPORT_MAX_TEAMS_STANDARD[sport] ?? 32
 }
 
-/** Even team counts from 4 up to `max`, inclusive. */
+/** Universal simple-create team counts from 2 through the sport cap, inclusive. */
 function evenTeamCountsUpTo(max: number): number[] {
-  const out: number[] = []
-  for (let n = 4; n <= max; n += 2) out.push(n)
-  return out
+  return UNIVERSAL_CREATE_TEAM_COUNTS.filter((n) => n <= max)
 }
 
 /** Fixed tournament pool sizes — user-facing tiers. */

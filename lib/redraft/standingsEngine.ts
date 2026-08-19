@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { getPlatformEvents, EVENT } from '@/lib/events'
 
 /**
  * Recompute standings from matchup scores already written from PlayerWeeklyScore.
@@ -122,6 +123,17 @@ export async function updateStandings(
       },
     })
   }
+
+  // G15.2 — publish (best-effort, never throws). Logs each standings recompute;
+  // player-level granularity is carried by competition.score.updated (wired later).
+  await getPlatformEvents().emit(EVENT.STANDINGS_UPDATED, {
+    seasonId,
+    period: { kind: 'week', index: week },
+    actor: { type: 'system' },
+    source: 'engine:standings',
+    subjects: [{ kind: 'season', id: seasonId }],
+    payload: { seasonId, changedRosterCount: rows.size },
+  })
 
   return { seasonId, week, rostersUpdated: rows.size, matchupsCounted }
 }

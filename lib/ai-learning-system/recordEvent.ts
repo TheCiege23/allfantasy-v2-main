@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 
 export type RecordAfLearningEventArgs = {
@@ -25,7 +26,7 @@ export async function recordAfLearningEvent(args: RecordAfLearningEventArgs): Pr
         leagueId: args.leagueId?.trim() || null,
         userId: args.userId?.trim() || null,
         source: (args.source ?? 'server').slice(0, 32),
-        payload: args.payload ?? undefined,
+        payload: toPrismaNullableJsonInput(args.payload),
       },
     })
   } catch (err) {

@@ -1,93 +1,77 @@
 'use client'
 
-/**
- * Create League v2 — unified concept-first flow (single scroll + live summary).
- * Wired to POST /api/leagues (canonical) + tournament create when applicable.
- */
-
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { getAccent, PAGE_BG_CLASS, ambientGlowStyle } from '@/lib/create-league-v2/theme'
+import { useRouter } from 'next/navigation'
 import {
   DEFAULT_V2_STATE,
   clearPersistedV2State,
   getDefaultBestBallSetup,
   getDefaultKeeperSetup,
+  getEffectiveLeagueType,
   loadPersistedV2State,
   persistV2State,
-  getEffectiveLeagueType,
   type CreateLeagueV2State,
 } from '@/lib/create-league-v2/state'
 import { analyzeCreateLeagueCompletion } from '@/lib/create-league-v2/form-completion'
 import { submitCreateLeagueV2, type CreateLeagueFieldErrors } from '@/lib/create-league-v2/submit'
-import { CreateLeagueUnifiedForm } from '@/components/create-league-v2/CreateLeagueUnifiedForm'
-import { CreateLeagueSummary, CreateLeagueMedia } from '@/components/create-league'
-import { PrimaryCTA, SecondaryButton } from '@/components/create-league-v2/primitives'
-import { resolveCreateLeagueHeroMedia, type HeroMediaFocus } from '@/lib/create-league-v2/media-priority'
-import { getSportHue } from '@/lib/create-league-v2/sport-hues'
-import { SPORT_MEDIA } from '@/lib/create-league-v2/theme'
-import { resolveScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
+import { CreateLeagueWizard } from '@/components/create-league-v2/CreateLeagueWizard'
 import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { setClientLeagueCreateOptionsCatalog } from '@/lib/create-league-v2/options-catalog-client'
 import type { LeagueCreateOptionsCatalog } from '@/lib/league-creation/options-catalog-seed-data'
+import { getDefaultScoringPresetId, resolveScoringPresetId } from '@/lib/league-creation-preset/scoring-presets'
 
 export interface CreateLeagueV2ClientProps {
   userId: string
 }
 
+function normalizeInitialState(state: CreateLeagueV2State): CreateLeagueV2State {
+  const leagueType = getEffectiveLeagueType(state) ?? 'redraft'
+  const scoringPresetId =
+    state.scoringPresetId ||
+    getDefaultScoringPresetId({
+      leagueType,
+      sport: state.sport,
+      idpSelected: state.idpSelected,
+    })
+
+  return {
+    ...state,
+    leagueType,
+    scoringPresetId: resolveScoringPresetId(scoringPresetId, {
+      leagueType,
+      sport: state.sport,
+      idpSelected: state.idpSelected,
+    }),
+    keeper: { ...getDefaultKeeperSetup(), ...(state.keeper ?? {}) },
+    bestBall: { ...getDefaultBestBallSetup(state.sport), ...(state.bestBall ?? {}) },
+    advancedSetup: state.advancedSetup ?? {},
+    privacy: state.privacy ?? 'private',
+    draftDate: state.draftDate ?? '',
+    draftTime: state.draftTime ?? '',
+  }
+}
+
 export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientProps) {
   const { t } = useLanguage()
   const router = useRouter()
-  const pathname = usePathname()
-  const searchParams = useSearchParams()
-  const [state, setState] = useState<CreateLeagueV2State>(DEFAULT_V2_STATE)
+  const [state, setState] = useState<CreateLeagueV2State>(() => normalizeInitialState(DEFAULT_V2_STATE))
   const [hydrated, setHydrated] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [fieldErrors, setFieldErrors] = useState<CreateLeagueFieldErrors | null>(null)
-  const [mediaFocus, setMediaFocus] = useState<HeroMediaFocus>('concept')
-
-  const modeFromUrl = useMemo<'quick' | 'advanced' | null>(() => {
-    const raw = searchParams?.get('mode')?.trim().toLowerCase() ?? ''
-    if (raw === 'quick' || raw === 'advanced') return raw
-    return null
-  }, [searchParams])
 
   useEffect(() => {
     const persisted = loadPersistedV2State()
     if (persisted) {
-      setState((s) => {
-        const nextState = {
-          ...s,
-          ...persisted,
-          leagueType: persisted.leagueType ?? null,
-          keeper: { ...getDefaultKeeperSetup(), ...(persisted.keeper ?? {}) },
-          bestBall: { ...getDefaultBestBallSetup((persisted.sport ?? s.sport) as CreateLeagueV2State['sport']), ...(persisted.bestBall ?? {}) },
-        }
-        const hydratedType = getEffectiveLeagueType(nextState)
-        if (!hydratedType) return nextState
-        return {
-          ...nextState,
-          scoringPresetId: resolveScoringPresetId(nextState.scoringPresetId, {
-            leagueType: hydratedType,
-            sport: nextState.sport,
-            idpSelected: nextState.idpSelected,
-          }),
-        }
-      })
+      setState((current) => normalizeInitialState({ ...current, ...persisted }))
     }
     setHydrated(true)
   }, [])
 
   useEffect(() => {
-    if (!hydrated || !modeFromUrl) return
-    setState((prev) => (prev.creationMode === modeFromUrl ? prev : { ...prev, creationMode: modeFromUrl }))
-  }, [hydrated, modeFromUrl])
-
-  useEffect(() => {
     if (!hydrated) return
     persistV2State(state)
-  }, [state, hydrated])
+  }, [hydrated, state])
 
   useEffect(() => {
     let active = true
@@ -102,11 +86,10 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
         setClientLeagueCreateOptionsCatalog(json.catalog)
         setState((prev) => {
           const nextTimezone = prev.timezone?.trim() ? prev.timezone : json.catalog?.defaultTimezone ?? prev.timezone
-          if (nextTimezone === prev.timezone) return prev
-          return { ...prev, timezone: nextTimezone }
+          return nextTimezone === prev.timezone ? prev : { ...prev, timezone: nextTimezone }
         })
       } catch {
-        // Keep local fallback behavior when catalog fetch fails.
+        // Local registry fallback keeps the create flow usable when options fail to load.
       }
     }
 
@@ -117,70 +100,11 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
     }
   }, [])
 
-  const effectiveType = getEffectiveLeagueType(state)
-  const accent = useMemo(() => getAccent(effectiveType ?? undefined), [effectiveType])
-
   const onChange = useCallback((patch: Partial<CreateLeagueV2State>) => {
     setSubmitError(null)
     setFieldErrors(null)
-    setState((prev) => {
-      for (const [key, value] of Object.entries(patch) as Array<[
-        keyof CreateLeagueV2State,
-        CreateLeagueV2State[keyof CreateLeagueV2State],
-      ]>) {
-        if (prev[key] !== value) {
-          return { ...prev, ...patch }
-        }
-      }
-      return prev
-    })
+    setState((prev) => ({ ...prev, ...patch }))
   }, [])
-
-  const onHeroMediaFocus = useCallback((focus: HeroMediaFocus) => {
-    setMediaFocus(focus)
-  }, [])
-
-  const setCreationMode = useCallback(
-    (mode: 'quick' | 'advanced') => {
-      onChange({ creationMode: mode })
-      const params = new URLSearchParams(searchParams?.toString() ?? '')
-      params.set('mode', mode)
-      const query = params.toString()
-      const basePath = pathname ?? '/'
-      const nextUrl = query ? `${basePath}?${query}` : basePath
-      router.replace(nextUrl, { scroll: false })
-    },
-    [onChange, pathname, router, searchParams],
-  )
-
-  useEffect(() => {
-    if (!hydrated) return
-    if (modeFromUrl === state.creationMode) return
-    const params = new URLSearchParams(searchParams?.toString() ?? '')
-    params.set('mode', state.creationMode)
-    const query = params.toString()
-    const basePath = pathname ?? '/'
-    const nextUrl = query ? `${basePath}?${query}` : basePath
-    router.replace(nextUrl, { scroll: false })
-  }, [hydrated, modeFromUrl, pathname, router, searchParams, state.creationMode])
-
-  const heroMedia = useMemo(() => {
-    const safeMediaFocus = mediaFocus ?? 'concept'
-    if (!effectiveType) {
-      const sm = SPORT_MEDIA[state.sport] ?? SPORT_MEDIA.NFL
-      return { ...sm, mediaKey: `sport:${state.sport}`, badge: t('createLeague.v2.hero.chooseConcept') }
-    }
-    return resolveCreateLeagueHeroMedia({
-      leagueType: effectiveType,
-      sport: state.sport,
-      draftType: state.draftType,
-      idpSelected: state.idpSelected,
-      draftEmphasis: false,
-      focus: safeMediaFocus,
-    })
-  }, [effectiveType, state.sport, state.draftType, state.idpSelected, mediaFocus, t])
-
-  const sportHue = getSportHue(state.sport)
 
   const completionIssues = useMemo(() => analyzeCreateLeagueCompletion(state), [state])
 
@@ -204,80 +128,18 @@ export function CreateLeagueV2Client({ userId: _userId }: CreateLeagueV2ClientPr
     } finally {
       setSubmitting(false)
     }
-  }, [state, router, t])
-
-  const canCreate = completionIssues.length === 0
-
-  const topError =
-    submitError ??
-    fieldErrors?.general ??
-    null
+  }, [router, state, t])
 
   return (
-    <div className={`${PAGE_BG_CLASS} relative`}>
-      <div
-        className={`pointer-events-none fixed inset-0 z-0 bg-gradient-to-b ${sportHue.pageGradient}`}
-        aria-hidden
-      />
-      <div
-        className="pointer-events-none fixed inset-0 z-0 transition-all duration-1000"
-        style={ambientGlowStyle(accent.hex)}
-        aria-hidden
-      />
-
-      <main className="relative z-10 mx-auto max-w-6xl px-4 pb-44 pt-6 lg:pb-36 lg:pt-10">
-        <div className="mb-8 max-w-3xl">
-          <p
-            className={`mb-1.5 text-[11px] font-bold uppercase tracking-[0.22em] ${sportHue.labelClass} transition-colors duration-500`}
-          >
-            {t('createLeague.v2.eyebrow')}
-          </p>
-          <h1 className="text-3xl font-black tracking-tight text-white sm:text-4xl">{t('createLeague.v2.title')}</h1>
-          <p className="mt-2 text-sm leading-relaxed text-white/50">
-            {state.creationMode === 'advanced'
-              ? 'Advanced Create: customize league format, rules, trades, waivers, and commissioner settings.'
-              : 'Quick Create: launch fast with only the essentials, then fine-tune later if needed.'}
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-6">
-            <CreateLeagueMedia media={heroMedia} accent={accent} />
-
-            <CreateLeagueUnifiedForm
-              state={state}
-              accent={accent}
-              onChange={onChange}
-              onSwitchToAdvanced={() => setCreationMode('advanced')}
-              onHeroMediaFocus={onHeroMediaFocus}
-              fieldErrors={fieldErrors}
-              completionIssues={completionIssues}
-            />
-
-            {topError ? (
-              <div
-                role="alert"
-                className="rounded-2xl border border-rose-400/40 bg-rose-500/10 p-4 text-sm text-rose-200"
-              >
-                {topError}
-              </div>
-            ) : null}
-          </div>
-
-          <CreateLeagueSummary state={state} accent={accent} />
-        </div>
-      </main>
-
-      <div className="fixed left-0 right-0 z-30 border-t border-cyan-500/10 bg-[#060a18]/92 px-4 py-3 shadow-[0_-8px_30px_-10px_rgba(0,0,0,0.6)] backdrop-blur-2xl [bottom:calc(5rem+env(safe-area-inset-bottom,0px))] lg:bottom-0 lg:z-20 lg:py-4">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
-          <SecondaryButton onClick={() => router.push('/dashboard')} disabled={submitting}>
-            {t('createLeague.v2.cancel')}
-          </SecondaryButton>
-          <PrimaryCTA accent={accent} onClick={handleSubmit} loading={submitting} disabled={!canCreate}>
-            {t('createLeague.v2.create')}
-          </PrimaryCTA>
-        </div>
-      </div>
-    </div>
+    <CreateLeagueWizard
+      state={state}
+      onChange={onChange}
+      completionIssues={completionIssues}
+      fieldErrors={fieldErrors}
+      submitError={submitError}
+      submitting={submitting}
+      onSubmit={handleSubmit}
+      onCancel={() => router.push('/dashboard')}
+    />
   )
 }

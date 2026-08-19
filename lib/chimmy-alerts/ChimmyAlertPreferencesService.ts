@@ -1,5 +1,6 @@
 import 'server-only'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type {
   ChimmyAlertClass,
   ChimmyAlertClassPref,
@@ -60,8 +61,8 @@ async function writeRawPrefs(
 
   await prisma.userProfile.upsert({
     where: { userId },
-    create: { userId, notificationPreferences: merged },
-    update: { notificationPreferences: merged },
+    create: { userId, notificationPreferences: toPrismaJsonInput(merged) },
+    update: { notificationPreferences: toPrismaJsonInput(merged) },
   })
 }
 

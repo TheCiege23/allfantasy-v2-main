@@ -20,6 +20,7 @@ export {
   NOTIFICATIONS_ENDPOINT,
   getNotificationsEndpoint,
   getNotificationReadEndpoint,
+  getNotificationsReadAllEndpoint,
   NOTIFICATIONS_READ_ENDPOINT,
   NOTIFICATIONS_READ_ALL_ENDPOINT,
 } from "./NotificationReadStateService"

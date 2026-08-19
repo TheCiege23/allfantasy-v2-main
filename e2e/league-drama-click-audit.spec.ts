@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInAs } from './helpers/session-cookie'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -158,6 +159,10 @@ test.describe('@drama league drama click audit', () => {
         }),
       })
     })
+
+    // /app/league/* is session-gated; without this the page 307s to /login and
+    // every assertion below fails as "element(s) not found".
+    await signInAs(page, { id: 'e2e-drama-user' })
 
     await page.goto('/app/league/league_drama_1/drama')
     await expect(page.getByRole('heading', { name: 'League Drama Timeline' })).toBeVisible()

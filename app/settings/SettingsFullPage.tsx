@@ -11,6 +11,8 @@ import { AutoCoachPreferencesPanel } from "@/components/settings/AutoCoachPrefer
 import { useEntitlement } from "@/hooks/useEntitlement"
 import { useSubscriptionGateOptional } from "@/hooks/useSubscriptionGate"
 import { SubscriptionGateModal } from "@/components/subscription/SubscriptionGateModal"
+import { getDisplayPlanName } from "@/lib/subscription/feature-access"
+import type { SubscriptionPlanId } from "@/lib/subscription/types"
 import type { AutoCoachUserPreferences } from "@/lib/autocoach/autoCoachPreferences"
 
 const CARD =
@@ -466,10 +468,16 @@ export default function SettingsFullPage() {
     if (deleteConfirm !== "DELETE") return
     setDeleteBusy(true)
     try {
-      const res = await fetch("/api/user/delete", { method: "POST" })
+      const res = await fetch("/api/user/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      })
       if (res.ok) {
         setDeleteOpen(false)
         setDeleteConfirm("")
+        // Account PII is erased + auth revoked — sign the user out and leave.
+        window.location.href = "/api/auth/signout?callbackUrl=/"
       }
     } finally {
       setDeleteBusy(false)
@@ -772,12 +780,19 @@ export default function SettingsFullPage() {
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-white/50">
             Subscription &amp; Billing
           </h2>
+          {proAutoCoachEnt.loading ? (
+            <div className="mb-3 h-10 animate-pulse rounded-lg bg-white/[0.05]" data-testid="settings-subscription-loading" />
+          ) : proAutoCoachEnt.error ? (
+            <p className="mb-3 text-sm text-red-400" data-testid="settings-subscription-error">
+              Unable to verify subscription status.
+            </p>
+          ) : (
           <div className="mb-3 flex items-center justify-between gap-2">
             <div>
               <p className="text-sm font-medium text-white/85">
                 {proAutoCoachEnt.isActiveOrGrace
                   ? proAutoCoachEnt.entitlement?.plans?.length
-                    ? `Active: ${proAutoCoachEnt.entitlement.plans.join(", ").replace(/\b\w/g, (c) => c.toUpperCase())}`
+                    ? `Active: ${proAutoCoachEnt.entitlement.plans.map((p) => getDisplayPlanName(p as SubscriptionPlanId) ?? p).join(", ")}`
                     : "Active subscription"
                   : proAutoCoachEnt.entitlement?.status === "past_due"
                   ? "Past due — update billing"
@@ -790,8 +805,14 @@ export default function SettingsFullPage() {
                   ? "Full AI features unlocked."
                   : "Upgrade to unlock Chimmy AI, bracket analysis, and commissioner tools."}
               </p>
+              {proAutoCoachEnt.isAdminBypassAccount && (
+                <p className="mt-1 text-[11px] italic text-white/40" data-testid="settings-subscription-bypass-notice">
+                  Admin bypass — not a real Stripe subscription.
+                </p>
+              )}
             </div>
           </div>
+          )}
           <div className="flex flex-col gap-2">
             <Link
               href="/pricing"

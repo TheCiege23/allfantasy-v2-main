@@ -110,7 +110,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
             data-testid={`bestball-sub-${id}`}
             onClick={() => setSub(id)}
             className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold ${
-              sub === id ? 'bg-cyan-500/20 text-cyan-200' : 'bg-white/5 text-white/50 hover:text-white/80'
+              sub === id ? 'bg-[#ff3d81]/20 text-[#ffb8d1]' : 'bg-white/5 text-white/50 hover:text-white/80'
             }`}
           >
             {id === 'lineup' ? 'Optimized Lineups' : id.charAt(0).toUpperCase() + id.slice(1)}
@@ -135,7 +135,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
             ))}
           </select>
         </label>
-        {data?.league ? <span className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-[11px] text-cyan-100">{data.league.summary}</span> : null}
+        {data?.league ? <span className="rounded-full border border-[#ff3d81]/20 bg-[#ff3d81]/10 px-2 py-1 text-[11px] text-[#ffd7e5]">{data.league.summary}</span> : null}
       </div>
 
       {loading ? <div className="rounded-xl border border-white/10 bg-[#0a1228]/60 p-4 text-sm text-white/60">Loading Best Ball data...</div> : null}
@@ -153,7 +153,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold text-cyan-200">{lineup.totalPoints.toFixed(2)}</div>
+                  <div className="text-lg font-bold text-[#ffb8d1]">{lineup.totalPoints.toFixed(2)}</div>
                   <div className="text-[11px] text-white/40">{lineup.starters.length} optimized starters</div>
                 </div>
               </div>
@@ -167,7 +167,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                         {starter.team ? ` | ${starter.team}` : ''}
                       </div>
                     </div>
-                    <div className="font-semibold text-cyan-100">{starter.points.toFixed(2)}</div>
+                    <div className="font-semibold text-[#ffd7e5]">{starter.points.toFixed(2)}</div>
                   </div>
                 ))}
               </div>
@@ -213,7 +213,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                     <div className="font-medium text-white">#{row.rank ?? '-'} {row.teamName}</div>
                     <div className="text-white/45">{row.wins}-{row.losses}-{row.ties}</div>
                   </div>
-                  <div className="font-semibold text-cyan-100">{row.pointsFor.toFixed(2)}</div>
+                  <div className="font-semibold text-[#ffd7e5]">{row.pointsFor.toFixed(2)}</div>
                 </div>
               ))}
             </div>
@@ -230,7 +230,7 @@ export function BestBallTab({ leagueId, sport }: BestBallTabProps) {
                 {(historyByRoster.get(lineup.rosterId) ?? []).map((row) => (
                   <div key={`${lineup.rosterId}-${row.week}`} className="flex items-center justify-between rounded-lg border border-white/8 bg-white/[0.03] px-3 py-2">
                     <span className="text-white/60">Week {row.week}</span>
-                    <span className="font-semibold text-cyan-100">{row.totalPoints.toFixed(2)}</span>
+                    <span className="font-semibold text-[#ffd7e5]">{row.totalPoints.toFixed(2)}</span>
                   </div>
                 ))}
               </div>

@@ -12,10 +12,15 @@ type LegacySnapshotCardProps = {
 /**
  * Phase 4.3 Rankings UI — Dashboard V2 upgrade for the LegacySnapshot dashboard
  * widget. Applies warroom-card depth + fade-in-stagger entrance, color-grammar
- * tones (Trophy amber = career achievement, Recommend emerald = XP/progress,
- * Predict blue = archetype/analysis) and an HONEST empty state that references
- * the Phase 3.1 wiring: importing a Sleeper league populates the rank domain,
- * so an unimported profile shows "Import to unlock" not just "—".
+ * tones (Trophy amber = career achievement, Recommend emerald = XP/progress)
+ * and an HONEST empty state that references the Phase 3.1 wiring: importing a
+ * Sleeper league populates the rank domain, so an unimported profile shows
+ * "Import to unlock" not just "—".
+ *
+ * A 4th "Archetype" tile previously existed here but always rendered "—" —
+ * no `managerArchetype`/`archetype` field has ever existed anywhere in the
+ * rank payload or the scoring lib (confirmed audit finding). Removed rather
+ * than left showing a permanent placeholder.
  *
  * Also surfaces a subtle "recently refreshed" indicator when a completed import
  * fired `markDashboardRankRefreshPending()` in the same session — the visible
@@ -33,13 +38,18 @@ export function LegacySnapshotCard({ rankPayload }: LegacySnapshotCardProps) {
     return
   }, [])
 
-  const rank = rankPayload?.rank ?? rankPayload?.overallRank ?? null
-  const tier = rankPayload?.tier ?? rankPayload?.tierLabel ?? rankPayload?.tierName ?? null
-  const archetype = rankPayload?.managerArchetype ?? rankPayload?.archetype ?? null
-  const xp = rankPayload?.xp ?? rankPayload?.totalXp ?? rankPayload?.xpTotal ?? null
+  // `/api/user/rank` has no top-level scalar `rank`/`overallRank` field — those never
+  // existed, so this tile always rendered "—" (or "[object Object]" once `rank` here
+  // shadowed the API's *nested* `rank` object). The real rank title lives at
+  // `levelName`/`tierName` (both `lv.name` from lib/rank/levels.ts, e.g. "Grizzled Vet"),
+  // with `rank.careerTierName` as a fallback for older cached payload shapes.
+  const rankObj = rankPayload?.rank as Record<string, unknown> | null | undefined
+  const rank = rankPayload?.levelName ?? rankPayload?.tierName ?? rankObj?.careerTierName ?? null
+  const tier = rankPayload?.tier ?? rankObj?.careerTier ?? null
+  const xp = rankPayload?.xpTotal ?? rankPayload?.xp ?? rankPayload?.totalXp ?? null
   const imported = Boolean(rankPayload?.imported)
 
-  const hasAnyValue = rank != null || tier != null || archetype != null || xp != null
+  const hasAnyValue = rank != null || tier != null || xp != null
 
   return (
     <section
@@ -72,10 +82,9 @@ export function LegacySnapshotCard({ rankPayload }: LegacySnapshotCardProps) {
         </Link>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-2">
         <StatTile label="AF Rank" value={rank != null ? String(rank) : '—'} tone="amber" testid="legacy-stat-rank" />
         <StatTile label="Tier" value={tier != null ? String(tier) : '—'} tone="neutral" size="sm" testid="legacy-stat-tier" />
-        <StatTile label="Archetype" value={archetype != null ? String(archetype) : '—'} tone="blue" size="sm" testid="legacy-stat-archetype" />
         <StatTile label="XP" value={xp != null ? String(xp) : '—'} tone="emerald" size="sm" testid="legacy-stat-xp" />
       </div>
 

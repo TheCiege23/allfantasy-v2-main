@@ -37,6 +37,13 @@ export interface UserLeague {
   keeperPhaseActive?: boolean | null
   /** Prisma `League.bestBallMode` when provided */
   bestBallMode?: boolean | null
+  /**
+   * False for AF Legacy board rows, whose `id` is a `LegacyLeague` id with no row in the `leagues`
+   * table (see getLegacyLeagueBoardItems in lib/dashboard/get-dashboard-league-list.ts). Every
+   * per-league API keys on `leagues`, so a card with this false must not call them — they can only
+   * 404. Same meaning as LeagueSyncDashboard's `hasUnifiedRecord ? 'Open League' : 'Sync & Open'`.
+   */
+  hasUnifiedRecord?: boolean | null
   /** True if the current user is commissioner (Sleeper is_owner sync) or owns a native AllFantasy league */
   isCommissioner?: boolean
   /** User relationship to this league row */

@@ -69,25 +69,25 @@ export type SettingsNavTabId =
   | 'c2c_ai'
 
 const BASE_NAV: { id: SettingsNavTabId; label: string }[] = [
-  { id: 'league', label: 'League Settings' },
-  { id: 'team', label: 'Team Settings' },
-  { id: 'roster', label: 'Roster Settings' },
-  { id: 'scoring', label: 'Scoring Settings' },
-  { id: 'draft', label: 'Draft Settings' },
-  { id: 'divisions', label: 'Division Settings' },
-  { id: 'members', label: 'Member Settings' },
-  { id: 'coowners', label: 'Co-owner Settings' },
-  { id: 'trade', label: 'Trade Settings' },
-  { id: 'waiver', label: 'Waiver Settings' },
-  { id: 'playoff', label: 'Playoff Settings' },
-  { id: 'schedule', label: 'Schedule Settings' },
-  { id: 'ai', label: 'AI Settings' },
+  { id: 'league', label: 'General' },
+  { id: 'team', label: 'Team' },
+  { id: 'roster', label: 'Roster' },
+  { id: 'scoring', label: 'Scoring' },
+  { id: 'draft', label: 'Draft' },
+  { id: 'divisions', label: 'Divisions' },
+  { id: 'members', label: 'Members' },
+  { id: 'coowners', label: 'Co-owners' },
+  { id: 'trade', label: 'Trades' },
+  { id: 'waiver', label: 'Waivers' },
+  { id: 'playoff', label: 'Playoffs' },
+  { id: 'schedule', label: 'Schedule' },
+  { id: 'ai', label: 'Commissioner Intelligence' },
   { id: 'notifications', label: 'Notifications' },
   { id: 'dues', label: 'Payments / League Dues' },
   { id: 'import_sync', label: 'Import / Sync' },
-  { id: 'advanced', label: 'Advanced Rules' },
+  { id: 'advanced', label: 'Advanced Rule Support' },
   { id: 'appearance', label: 'Appearance / Branding' },
-  { id: 'security', label: 'Security / Permissions' },
+  { id: 'security', label: 'Permissions' },
   { id: 'draft_picks', label: 'Draft Pick Settings' },
   { id: 'integrations', label: 'Integrations' },
   { id: 'commissioner', label: 'Commissioner Control' },
@@ -105,14 +105,14 @@ const ZOMBIE_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'zombie_updates', label: '📋 Weekly Updates' },
   { id: 'zombie_animations', label: '🎬 Animations' },
   { id: 'zombie_advanced', label: '⚙️ Advanced Rules' },
-  { id: 'zombie_ai', label: '🤖 AI Host' },
+  { id: 'zombie_ai', label: '🤖 League Guide' },
 ]
 
 const IDP_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'idp_roster', label: '🛡️ IDP Roster' },
   { id: 'idp_scoring', label: '📊 IDP Scoring' },
   { id: 'idp_display', label: '🎨 IDP Display' },
-  { id: 'idp_ai', label: '🤖 IDP AI' },
+  { id: 'idp_ai', label: '🤖 IDP Intelligence' },
   { id: 'idp_cap', label: '💰 IDP Cap' },
 ]
 
@@ -123,7 +123,7 @@ const DEVY_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'devy_taxi', label: '🚕 Taxi Rules' },
   { id: 'devy_drafts', label: '🎲 Drafts' },
   { id: 'devy_import', label: '📥 Import' },
-  { id: 'devy_ai', label: '🤖 AI Settings' },
+  { id: 'devy_ai', label: '🤖 League Guide' },
 ]
 
 const C2C_NAV: { id: SettingsNavTabId; label: string }[] = [
@@ -133,7 +133,7 @@ const C2C_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'c2c_taxi', label: '🚕 Taxi Rules' },
   { id: 'c2c_devy', label: '🎓 Devy Rules' },
   { id: 'c2c_drafts', label: '🎲 Drafts' },
-  { id: 'c2c_ai', label: '🤖 AI Settings' },
+  { id: 'c2c_ai', label: '🤖 League Guide' },
 ]
 
 const SURVIVOR_NAV: { id: SettingsNavTabId; label: string }[] = [
@@ -145,7 +145,7 @@ const SURVIVOR_NAV: { id: SettingsNavTabId; label: string }[] = [
   { id: 'survivor_exile', label: '🏚 Exile Island' },
   { id: 'survivor_merge', label: '🌊 Merge & Jury' },
   { id: 'survivor_chat', label: '💬 Chat & Permissions' },
-  { id: 'survivor_ai', label: '🤖 AI Host' },
+  { id: 'survivor_ai', label: '🤖 League Guide' },
   { id: 'survivor_advanced', label: '⚙️ Advanced Rules' },
 ]
 

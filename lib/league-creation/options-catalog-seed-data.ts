@@ -26,6 +26,8 @@ const ALL_SPORTS: SupportedSport[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAAF', 'NCAA
 
 const SURVIVOR_ALLOWED_SPORTS: SupportedSport[] = ['NFL', 'NCAAF']
 
+const UNIVERSAL_CREATE_TEAM_COUNTS = Array.from({ length: 31 }, (_, index) => index + 2)
+
 export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   version: 1,
   defaultTimezone: 'America/New_York',
@@ -108,13 +110,10 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
       introVideoUrl: '/league-type-survivor-intro.mp4',
       introPosterUrl: '/league-type-survivor.png',
     },
-    {
-      id: 'tournament',
-      title: 'Tournament',
-      subtitle: 'Multi-league elimination event',
-      introVideoUrl: '/league-type-tournament-intro.mp4',
-      introPosterUrl: '/league-type-tournament.png',
-    },
+    // Tournament Mode retired from active creation (2026-07-23). Removing the
+    // catalog entry takes it out of every creation selector; the server also
+    // refuses the concept (lib/league-creation/retiredConcepts.ts). Existing
+    // tournaments keep working — this list only drives NEW league creation.
     {
       id: 'big_brother',
       title: 'Big Brother',
@@ -251,13 +250,13 @@ export const LEAGUE_CREATE_OPTIONS_CATALOG_V1: LeagueCreateOptionsCatalog = {
   },
   teamCountOptionsByConceptSport: {
     redraft: {
-      NFL: [8, 10, 12, 14, 16],
-      NBA: [8, 10, 12, 14, 16],
-      MLB: [8, 10, 12, 14, 16],
-      NHL: [8, 10, 12, 14, 16],
-      NCAAF: [8, 10, 12, 14, 16],
-      NCAAB: [8, 10, 12, 14, 16],
-      SOCCER: [8, 10, 12, 14, 16],
+      NFL: UNIVERSAL_CREATE_TEAM_COUNTS,
+      NBA: UNIVERSAL_CREATE_TEAM_COUNTS,
+      MLB: UNIVERSAL_CREATE_TEAM_COUNTS,
+      NHL: UNIVERSAL_CREATE_TEAM_COUNTS,
+      NCAAF: UNIVERSAL_CREATE_TEAM_COUNTS,
+      NCAAB: UNIVERSAL_CREATE_TEAM_COUNTS,
+      SOCCER: UNIVERSAL_CREATE_TEAM_COUNTS,
     },
     dynasty: {
       NFL: [8, 10, 12, 14, 16],

@@ -5,6 +5,7 @@ import { resolvePostAuthIntentDestination } from "@/lib/auth/PostAuthIntentRoute
 import { resolveSharedSessionBootstrap } from "@/lib/auth/SharedSessionBootstrapService"
 import { resolveLanguagePreferenceSync } from "@/lib/preferences/LanguagePreferenceSyncService"
 import { resolveThemePreferenceSync } from "@/lib/preferences/ThemePreferenceSyncService"
+import { getStoredThemePreference } from "@/lib/preferences/ThemePreferenceService"
 import { resolveTimezonePreferenceSync } from "@/lib/preferences/TimezonePreferenceSyncService"
 
 describe("Unified auth integration services", () => {
@@ -109,5 +110,13 @@ describe("Unified auth integration services", () => {
     expect(bootstrap.theme).toBe("dark")
     expect(bootstrap.patchPayload.preferredLanguage).toBe("es")
     expect(bootstrap.patchPayload.themePreference).toBe("dark")
+  })
+
+  it("does not treat a missing local theme as an explicit light preference", () => {
+    window.localStorage.removeItem("af_mode")
+    expect(getStoredThemePreference()).toBeNull()
+
+    window.localStorage.setItem("af_mode", "dark")
+    expect(getStoredThemePreference()).toBe("dark")
   })
 })

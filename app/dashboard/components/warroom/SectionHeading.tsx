@@ -25,20 +25,28 @@ export interface SectionHeadingProps {
  * context a distinct accent identity. Purely presentational.
  */
 export function SectionHeading({ children, icon: Icon, accent, trailing, className }: SectionHeadingProps) {
-  const color = accent ?? 'rgba(255,255,255,0.35)'
+  // Broadcast Deck kicker: heavy italic display label + accent bar. When no
+  // per-context accent is given, the bar wears the deck's signature gradient.
+  const color = accent ?? null
   return (
     <div className={`flex items-center gap-2 ${className ?? ''}`}>
-      <span aria-hidden className="h-3.5 w-[3px] shrink-0 rounded-full" style={{ background: color }} />
-      {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" style={{ color }} aria-hidden /> : null}
-      <p className="truncate text-[11px] font-bold uppercase tracking-widest text-white/45">{children}</p>
+      <span
+        aria-hidden
+        className="h-3.5 w-[3px] shrink-0 rounded-full"
+        style={{ background: color ?? 'linear-gradient(180deg,#ff3d81,#ff8a3d)' }}
+      />
+      {Icon ? <Icon className="h-3.5 w-3.5 shrink-0" style={{ color: color ?? '#ff8a3d' }} aria-hidden /> : null}
+      <p className="truncate text-[11px] font-black uppercase italic tracking-widest text-[#c6cbf5]">{children}</p>
       {trailing ? <span className="ml-auto shrink-0">{trailing}</span> : null}
     </div>
   )
 }
 
-/** Per-context accent colors — the single source of Dashboard V2's context identity. */
+/** Per-context accent colors — aligned to the Broadcast Deck status ramp
+ *  (league page tokens): pink-gradient anchor for Global, warn amber for
+ *  Commissioner, ok green for Team. */
 export const CONTEXT_ACCENT: Record<'global' | 'commissioner' | 'team', string> = {
-  global: '#22d3ee', // cyan — cross-league command center
-  commissioner: '#fbbf24', // amber — operations / authority
-  team: '#34d399', // emerald — weekly win center
+  global: '#ff3d81', // deck signature pink — cross-league command center
+  commissioner: '#ffc53d', // deck warn — operations / authority
+  team: '#3ddc97', // deck ok — weekly win center
 }

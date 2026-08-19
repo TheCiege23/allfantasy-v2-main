@@ -78,6 +78,9 @@ export type {
   RawRosterMoveRow,
   RawDraftSessionRow,
   RawDraftPickRow,
+  RawRedraftTradeRow,
+  RawRedraftRosterPlayerRow,
+  RawRedraftRosterMoveRow,
 } from './port'
 
 export {
@@ -85,6 +88,9 @@ export {
   loadLeagueTradeRows,
   loadRosterMoveRows,
   loadDraftRows,
+  loadRedraftTradeRows,
+  loadRedraftRosterPlayerRows,
+  loadRedraftRosterMoveRows,
 } from './port'
 
 // ── Phase 5.1: Mappers (pure row → event) ────────────────────────────────────
@@ -103,6 +109,20 @@ export {
   mapLeagueTradesToEvents,
   mapRosterMovesToEvents,
   mapDraftRowsToEvents,
+} from './mappers'
+
+// ── Phase 2E: Redraft trade + roster mappers (additive; see port.ts header) ──
+
+export {
+  mapRedraftTradeToCreatedEvent,
+  mapRedraftTradeToAcceptedEvent,
+  mapRedraftTradeToRejectedEvent,
+  mapRedraftTradeToEvents,
+  mapRedraftTradesToEvents,
+  mapRedraftRosterPlayerToLineupSavedEvent,
+  mapRedraftRosterPlayersToEvents,
+  mapRedraftRosterMoveToLineupSavedEvent,
+  mapRedraftRosterMovesToEvents,
 } from './mappers'
 
 // ── Phase 5.1: Assembler (pure events → facts) ───────────────────────────────

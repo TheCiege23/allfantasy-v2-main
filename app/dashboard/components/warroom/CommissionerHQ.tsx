@@ -162,7 +162,16 @@ export function CommissionerHQ({
               scores into the section's headline visualization. */}
           <div className="mb-3 flex flex-wrap items-center justify-around gap-2 rounded-xl border border-white/[0.05] bg-black/20 px-2 py-3">
             <ChampionshipGauge percent={snapshot.healthScore} label={t('dashboard.warroom.commissionerHQ.health.overallScore')} accent={scoreAccent(snapshot.healthScore)} size={62} />
-            <ChampionshipGauge percent={snapshot.engagementScore} label={t('dashboard.warroom.commissionerHQ.health.engagementScore')} accent={scoreAccent(snapshot.engagementScore)} size={62} />
+            {/* Engagement's ring and the "Engagement" StatChip below both read snapshot.engagementScore
+                directly (one canonical source) — previously the StatChip read a separate, merely-copied
+                metrics.leagueEngagement field with no visual link between the two encodings. */}
+            <Link
+              href="/commissioner-hub"
+              title={t('dashboard.warroom.commissionerHQ.health.engagementWhy')}
+              className="rounded-xl transition hover:bg-white/[0.04]"
+            >
+              <ChampionshipGauge percent={snapshot.engagementScore} label={t('dashboard.warroom.commissionerHQ.health.engagementScore')} accent={scoreAccent(snapshot.engagementScore)} size={62} />
+            </Link>
             <ChampionshipGauge percent={snapshot.fairnessScore} label={t('dashboard.warroom.commissionerHQ.health.fairnessScore')} accent={scoreAccent(snapshot.fairnessScore)} size={62} />
             <ChampionshipGauge percent={snapshot.sustainabilityScore} label={t('dashboard.warroom.commissionerHQ.health.sustainabilityScore')} accent={scoreAccent(snapshot.sustainabilityScore)} size={62} />
           </div>
@@ -179,7 +188,7 @@ export function CommissionerHQ({
             />
             <StatChip label={t('dashboard.warroom.commissionerHQ.health.tradeActivity')} value={snapshot.metrics.tradeActivity} />
             <StatChip label={t('dashboard.warroom.commissionerHQ.health.waiverActivity')} value={snapshot.metrics.waiverActivity} />
-            <StatChip label={t('dashboard.warroom.commissionerHQ.health.engagement')} value={snapshot.metrics.leagueEngagement} />
+            <StatChip label={t('dashboard.warroom.commissionerHQ.health.engagement')} value={snapshot.engagementScore} />
           </div>
         </div>
       ) : null}

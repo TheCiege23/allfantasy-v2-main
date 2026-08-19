@@ -51,7 +51,7 @@ export function GuillotineTab({ leagueId, sport, leagueName }: GuillotineTabProp
             onClick={() => setSub(id)}
             className={`rounded-lg px-3 py-1.5 text-[12px] font-semibold transition-colors ${
               sub === id
-                ? 'bg-cyan-500/15 text-cyan-100 ring-1 ring-cyan-500/35'
+                ? 'bg-[#ff3d81]/15 text-[#ffd7e5] ring-1 ring-[#ff3d81]/35'
                 : 'bg-white/[0.05] text-white/45 hover:bg-white/10 hover:text-white/85'
             }`}
           >
@@ -65,7 +65,7 @@ export function GuillotineTab({ leagueId, sport, leagueName }: GuillotineTabProp
           <p className="text-[13px] text-white/85">Lineups, roster, and trades live in the standard league tabs.</p>
           <Link
             href={`/league/${encodeURIComponent(leagueId)}?view=team`}
-            className="mt-3 inline-flex text-sm font-semibold text-cyan-400 hover:text-cyan-300"
+            className="mt-3 inline-flex text-sm font-semibold text-[#ff3d81] hover:text-[#ff9ec0]"
             data-testid="guillotine-goto-team"
           >
             Open My Team →

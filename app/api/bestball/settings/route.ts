@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { requireCommissionerRole } from '@/lib/league/permissions'
 import { normalizeBestBallSettings } from '@/lib/bestball/rules'
 import type { LeagueSport } from '@prisma/client'
@@ -124,7 +125,7 @@ export async function PATCH(req: NextRequest) {
       bbScoringPeriod: normalizedBestBall.scoringPeriod,
       bbTiebreaker: normalizedBestBall.tieRule,
       bestBallVariant: normalizedBestBall.contestStructure === 'tournament' ? 'tournament' : 'standard',
-      settings: mergedSettings,
+      settings: toPrismaJsonInput(mergedSettings),
     },
   })
 

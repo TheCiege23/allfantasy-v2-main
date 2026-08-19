@@ -274,7 +274,31 @@ export function usePostPurchaseSync(options: UsePostPurchaseSyncOptions = {}): U
           tokens: Boolean(response?.syncEvidence?.tokens),
         }
 
-        if (syncStatus === 'synced' || syncStatus === 'no_session') {
+        // `no_session` means no Stripe checkout session id was ever provided to verify — there is
+        // no specific purchase to confirm, so this must never be shown or tracked as a success.
+        // Refresh state honestly and stop, without a success toast or purchase-tracking events.
+        if (syncStatus === 'no_session') {
+          setState({
+            phase: 'idle',
+            message: '',
+            sessionId,
+            syncEvidence: evidence,
+          })
+          clearPurchaseParams()
+          dispatchStateRefreshEvent({
+            domain: 'subscriptions',
+            reason: 'checkout_return_no_session',
+            source: 'usePostPurchaseSync',
+          })
+          dispatchStateRefreshEvent({
+            domain: 'tokens',
+            reason: 'checkout_return_no_session',
+            source: 'usePostPurchaseSync',
+          })
+          return
+        }
+
+        if (syncStatus === 'synced') {
           if (response) {
             trackMetaEventsFromResponse(response)
           }

@@ -12,6 +12,7 @@ import { ErrorBoundaryClient } from '@/components/error-handling/ErrorBoundaryCl
 import { PlayerComparisonUIProvider } from '@/components/player-comparison-ui';
 import { buildSeoMeta } from '@/lib/seo';
 import { resolveEffectiveDataMode } from '@/lib/theme';
+import { getLanguageTextDirection, resolveLanguage } from '@/lib/i18n/constants';
 import './globals.css';
 
 export const viewport = {
@@ -34,15 +35,15 @@ const railwayRuntimeEnvKeys = [
 
 export const metadata: Metadata = {
   ...buildSeoMeta({
-    title: 'AllFantasy – AI Powered Fantasy Sports Tools',
+    title: 'AllFantasy – Fantasy Sports Tools Powered by Chimmy',
     description:
-      'AllFantasy combines fantasy sports leagues, bracket challenges, and AI-powered tools to help players draft smarter, analyze trades, and dominate their leagues.',
+      'AllFantasy combines fantasy sports leagues, bracket challenges, and Chimmy-powered tools to help players draft smarter, analyze trades, and dominate their leagues.',
     canonical: 'https://allfantasy.ai/',
     keywords: [
       'fantasy sports',
       'fantasy football tools',
       'fantasy trade analyzer',
-      'AI fantasy sports',
+      'fantasy sports assistant',
       'fantasy bracket challenge',
     ],
   }),
@@ -85,7 +86,8 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const cookieLang = cookieStore.get('af_lang')?.value;
-  const htmlLang = cookieLang === 'es' ? 'es' : 'en';
+  const htmlLang = resolveLanguage(cookieLang);
+  const htmlDir = getLanguageTextDirection(htmlLang);
   const cookieMode = cookieStore.get('af_mode')?.value;
   const htmlMode = resolveEffectiveDataMode(cookieMode);
 
@@ -106,14 +108,24 @@ export default async function RootLayout({ children }: { children: React.ReactNo
     }
   }
 
-  const gaMeasurementId = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
-  const metaPixelId = process.env.NEXT_PUBLIC_META_PIXEL_ID || '';
-  const fbAppId = process.env.NEXT_PUBLIC_FB_APP_ID || '1790659191546539';
+  // Phase V1.1: `PLAYWRIGHT_E2E` already exists (see the try/catch above) as this codebase's own signal
+  // for "this is an automated, non-production run." Reusing it here — rather than inventing a new flag
+  // — to suppress third-party ad-tracking scripts (Meta Pixel, GTM/gtag, Google Ads conversion) ONLY
+  // when explicitly opted into via a dedicated `.claude/launch.json` config (`next-dev-visual-qa`).
+  // Unset in normal local dev and always unset in production, so default analytics behavior is
+  // unchanged. Root cause: these scripts fire unconditionally whenever their env vars are populated,
+  // including under `next dev`, and their volume of outbound network calls was saturating the browser
+  // automation tooling used for Visual OS screenshot capture (docs/os/VISUAL_OS_V1_FOUNDATION.md).
+  const isVisualQaMode = process.env.PLAYWRIGHT_E2E === '1';
+  const gaMeasurementId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
+  const metaPixelId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_META_PIXEL_ID || '';
+  const fbAppId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_FB_APP_ID || '1790659191546539';
   const useRailwayStylesFallback = railwayRuntimeEnvKeys.some((key) => Boolean(process.env[key]));
   return (
     <html
       lang={htmlLang}
       data-lang={htmlLang}
+      dir={htmlDir}
       data-mode={htmlMode}
       className="scroll-smooth"
       suppressHydrationWarning
@@ -125,6 +137,31 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {useRailwayStylesFallback ? (
           <link rel="stylesheet" href="/railway-styles.css" />
         ) : null}
+
+        {/*
+          The core-app design handoff's two typefaces. Every .af-core surface
+          asks for Archivo and JetBrains Mono by name, and nothing was loading
+          them, so all of it fell through to system-ui and generic monospace —
+          the display headings and the mono labels are most of that design's
+          character, and none of it was reaching a user.
+
+          Loaded here rather than from af-core.css because an @import inside a
+          route-bundled CSS file is dropped whenever another af-*.css is
+          concatenated ahead of it (measured: af-geo.css was). This is the same
+          <link> mechanism the railway-styles fallback above already uses, and
+          the one place ordering is guaranteed.
+
+          Global, but inert for every page that does not name these families:
+          the browser fetches the small stylesheet and downloads a font file
+          only when matching text is actually rendered. Weights are exactly the
+          handoff's — Archivo 400/600/700/800/900, JetBrains Mono 400/500/700/800.
+        */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:wght@400;500;700;800&display=swap"
+        />
 
         {metaPixelId ? (
           <script
@@ -193,7 +230,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               t.onload=function(){f.__afMetaFbeventsLoaded=!0};
               t.onerror=function(){f.__afMetaFbeventsLoaded=!1};
               t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window, document,'script',
+              if (s && s.parentNode) {
+                s.parentNode.insertBefore(t,s);
+              } else {
+                (b.head || b.body || b.documentElement).appendChild(t);
+              }}(window, document,'script',
               'https://connect.facebook.net/en_US/fbevents.js');
               window.__afMetaPixelId=${JSON.stringify(metaPixelId)};
               window.__afMetaPixelIds = window.__afMetaPixelIds instanceof Set
@@ -334,7 +375,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             rather than replacing it with an amber error UI.
           */}
           <ErrorBoundaryClient fallback={null}>
-            <MetaPixelPageViewTracker pixelId={metaPixelId} />
+            {isVisualQaMode ? null : <MetaPixelPageViewTracker pixelId={metaPixelId} />}
             <SafeGlobalChrome fbAppId={fbAppId} />
           </ErrorBoundaryClient>
 

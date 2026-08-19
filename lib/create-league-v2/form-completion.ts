@@ -12,6 +12,7 @@ import {
   getScoringPresetOptionsForSelection,
   getTeamCountOptions,
 } from './rules-engine'
+import { isUniversalTeamCount } from '@/lib/create-league-v2/simple-create'
 
 export type CreateLeagueCompletionIssue = {
   code: string
@@ -59,6 +60,11 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
 
   if (!(state.teamCount > 0)) {
     issues.push({ code: 'team_count_required', message: 'Choose a valid team or pool size.' })
+  } else if (lt === 'redraft' && !isUniversalTeamCount(state.teamCount)) {
+    issues.push({
+      code: 'team_count_invalid',
+      message: 'Team count must be from 2 through 32.',
+    })
   } else {
     const allowedTeams = getTeamCountOptions(state.sport, lt, state.soccerPipeline)
     if (!allowedTeams.includes(state.teamCount)) {
@@ -89,6 +95,18 @@ export function analyzeCreateLeagueCompletion(state: CreateLeagueV2State): Creat
         message: 'This draft type is not valid for the selected sport and league format.',
       })
     }
+  }
+
+  if (!state.draftDate.trim()) {
+    issues.push({ code: 'draft_date_required', message: 'Choose a draft date.' })
+  }
+
+  if (!state.draftTime.trim()) {
+    issues.push({ code: 'draft_time_required', message: 'Choose a draft time.' })
+  }
+
+  if (!state.timezone.trim()) {
+    issues.push({ code: 'timezone_required', message: 'Choose a timezone.' })
   }
 
   if (lt === 'tournament') {

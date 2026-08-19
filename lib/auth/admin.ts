@@ -43,9 +43,23 @@ export function isAllFantasyTestUsername(username: string | null | undefined): b
 }
 
 export function hasAllFantasyTestAccess(user: AllFantasyEntitlementUser | null | undefined): boolean {
+  // SECURITY: `user.name` is deliberately NOT accepted as a credential.
+  //
+  // It is a *display* name, not an identity. AppUser has no `name` column at all —
+  // session.user.name is populated from token.name (lib/auth.ts), which is set from
+  // the OAuth provider's profile name. That value is freely editable by the end user
+  // in their own Google/social account. Because STATIC_ALL_ACCESS_USERNAMES is a
+  // guessable literal, checking it against user.name meant anyone could rename their
+  // Google account to that handle, sign in, and receive full site-admin: /admin
+  // access (lib/adminAuth.ts getAppSessionAdminAccessState), token-spend bypass
+  // (lib/tokens/TokenSpendService.ts) and entitlement bypass
+  // (lib/subscription/entitlement-middleware.ts).
+  //
+  // Only provider-verified email and the app-owned unique `username` may confer
+  // access. Both legitimate paths are preserved: the founder matches on email via
+  // STATIC_ALL_ACCESS_EMAILS, and "theciege26" still matches as a real username.
   return isAllFantasyTestEmail(user?.email) ||
-    isAllFantasyTestUsername(user?.username) ||
-    isAllFantasyTestUsername(user?.name)
+    isAllFantasyTestUsername(user?.username)
 }
 
 export function resolveAdminEmail(email: string | null | undefined): boolean {

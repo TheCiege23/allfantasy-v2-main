@@ -20,7 +20,7 @@ export default function LegacyChatIntro({
       <div className="flex items-start sm:items-center gap-3 mb-4">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-500/30 to-purple-500/30 flex items-center justify-center text-xl flex-shrink-0">&#x1F4AC;</div>
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg sm:text-xl font-bold text-cyan-400">AI Fantasy Coach</h3>
+          <h3 className="text-lg sm:text-xl font-bold text-cyan-400">Chimmy, Your Fantasy Coach</h3>
           <p className="text-xs sm:text-sm mode-muted">
             {username
               ? 'Personalized to your leagues, rosters & trading style'

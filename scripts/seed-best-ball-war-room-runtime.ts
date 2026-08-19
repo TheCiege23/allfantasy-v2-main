@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const prisma = new PrismaClient()
 
@@ -234,6 +235,10 @@ export async function disconnectBestBallWarRoomRuntimeSeed() {
 }
 
 async function main() {
+  // Fail closed before the first write: these fixtures create login accounts whose password
+  // is hardcoded in this public repo, so seeding a real environment publishes credentials.
+  assertSafeSeedTarget('seed-best-ball-war-room-runtime')
+
   const result = await seedBestBallWarRoomRuntime()
   console.log(JSON.stringify(result, null, 2))
 }

@@ -118,17 +118,32 @@ export async function captureRedraftTradeValueSnapshot(input: {
     profiles: { a, b },
   })
 
+  // Honesty pass: `grade`/`fairnessScore` can now be null when NOTHING on
+  // either side resolved to a value (previously that scored a false "A+").
+  // The denormalized scalar columns are non-nullable in Prisma, so an
+  // ungradeable snapshot is written with an unmistakable sentinel and a
+  // fairness of 0 — i.e. it lands in the "flag for review" direction rather
+  // than the old silent-approval direction. `payload` remains the source of
+  // truth and carries `insufficientData: true` plus null grade/fairness.
+  // FOLLOW-UP: an additive migration making these two columns nullable would
+  // remove the sentinel entirely (see AF_TRADE_UNIFICATION_BRIEF Slice 11).
+  const ungradeable = snapshot.grade.insufficientData
   await prisma.redraftTradeValueSnapshot.create({
     data: {
       proposalId: input.proposalId,
       version: snapshot.version,
       payload: snapshot as unknown as object,
-      grade: snapshot.grade.grade,
-      fairnessScore: snapshot.grade.fairnessScore,
+      grade: snapshot.grade.grade ?? 'NOT_GRADED',
+      fairnessScore: snapshot.grade.fairnessScore ?? 0,
       confidenceScore: snapshot.grade.confidenceScore,
       valueDifference: snapshot.grade.valueDifference,
     },
   })
+  if (ungradeable) {
+    console.warn(
+      `[trade-value] proposal ${input.proposalId} could not be graded — no asset resolved to a value.`,
+    )
+  }
 
   return snapshot
 }

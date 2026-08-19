@@ -44,9 +44,9 @@ function num(v: unknown): number | null {
 
 function collectMetadataKeyHints(player: DraftRoomRookiePlayerLike): string[] {
   const out = new Set<string>()
-  const scan = (obj: Record<string, unknown> | null | undefined) => {
-    if (!obj) return
-    for (const k of Object.keys(obj)) {
+  const scan = (obj: unknown) => {
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return
+    for (const k of Object.keys(obj as Record<string, unknown>)) {
       const kl = k.toLowerCase()
       if (
         kl.includes('rookie') ||
@@ -59,15 +59,18 @@ function collectMetadataKeyHints(player: DraftRoomRookiePlayerLike): string[] {
       }
     }
   }
-  scan(player.metadata as Record<string, unknown> | undefined)
-  scan(player.display?.metadata as Record<string, unknown> | undefined)
+  scan(player.metadata)
+  scan(player.display?.metadata)
   return [...out].slice(0, 24)
 }
 
 function rowHasDraftYearSignal(player: DraftRoomRookiePlayerLike): boolean {
   if (player.draftYear != null && Number.isFinite(Number(player.draftYear))) return true
   if (player.nflDraftYear != null && Number.isFinite(Number(player.nflDraftYear))) return true
-  const dm = player.display?.metadata as Record<string, unknown> | undefined
+  const dm =
+    player.display?.metadata && typeof player.display.metadata === 'object'
+      ? (player.display.metadata as Record<string, unknown>)
+      : undefined
   if (dm && typeof dm === 'object') {
     if (num(dm.draftYear) != null || num(dm.nflDraftYear) != null) return true
   }
@@ -79,7 +82,10 @@ function rowHasExperienceZero(player: DraftRoomRookiePlayerLike): boolean {
   if (ye === 0) return true
   const ex = num(player.experience)
   if (ex === 0) return true
-  const dm = player.display?.metadata as Record<string, unknown> | undefined
+  const dm =
+    player.display?.metadata && typeof player.display.metadata === 'object'
+      ? (player.display.metadata as Record<string, unknown>)
+      : undefined
   if (dm && typeof dm === 'object') {
     const y2 = num(dm.years_exp) ?? num(dm.yearsExp) ?? num(dm.experience) ?? num(dm.exp)
     if (y2 === 0) return true
@@ -90,7 +96,10 @@ function rowHasExperienceZero(player: DraftRoomRookiePlayerLike): boolean {
 /** Prefer normalized entry + display.metadata fallbacks (DB rows sometimes only populate nested metadata). */
 export function coalesceYearsExpFromNormalizedEntry(e: NormalizedDraftEntry): number | null {
   if (e.yearsExp != null && Number.isFinite(Number(e.yearsExp))) return Number(e.yearsExp)
-  const dm = e.display?.metadata as Record<string, unknown> | undefined
+  const dm =
+    e.display?.metadata && typeof e.display.metadata === 'object'
+      ? (e.display.metadata as unknown as Record<string, unknown>)
+      : undefined
   if (!dm) return null
   for (const key of ['years_exp', 'yearsExp', 'experience', 'exp']) {
     const v = dm[key]
@@ -129,7 +138,10 @@ export function buildRookieSignalDiagnostics(
   }
 
   const sample: RookieSignalDiagnosticsSampleRow[] = players.slice(0, 10).map((p) => {
-    const dm = p.display?.metadata as Record<string, unknown> | undefined
+    const dm =
+      p.display?.metadata && typeof p.display.metadata === 'object'
+        ? (p.display.metadata as Record<string, unknown>)
+        : undefined
     return {
       playerId:
         (p.display?.playerId != null ? String(p.display.playerId) : null) ??
@@ -183,7 +195,10 @@ export function buildNcaaFootballClassFilterDiagnostics(
   let playersWithClass = 0
 
   for (const p of players) {
-    const dm = p.display?.metadata as Record<string, unknown> | undefined
+    const dm =
+      p.display?.metadata && typeof p.display.metadata === 'object'
+        ? (p.display.metadata as Record<string, unknown>)
+        : undefined
     const nested =
       dm && typeof dm.metadata === 'object' && dm.metadata
         ? (dm.metadata as Record<string, unknown>).class

@@ -20,9 +20,9 @@ export interface AIToolSeoConfig {
 
 export const AI_TOOL_PAGES = {
   'trade-analyzer': {
-    title: 'Trade Analyzer – AI-Powered Fantasy Trade Grades | AllFantasy',
+    title: 'Trade Analyzer – Smarter Fantasy Trade Grades | AllFantasy',
     description:
-      'AllFantasy trade analyzer evaluates fantasy trades with AI grades, lineup impact, and counter-offer suggestions. NFL, NBA, MLB, NHL, and more.',
+      'AllFantasy trade analyzer evaluates fantasy trades with Chimmy-powered grades, lineup impact, and counter-offer suggestions. NFL, NBA, MLB, NHL, and more.',
     headline: 'Trade Analyzer',
     body:
       'Evaluate fantasy trades with AI-powered grades and context-aware analysis. Get fairness scores, lineup impact, and smarter counter-offers so you can stop arguing in the group chat and show the receipts.',

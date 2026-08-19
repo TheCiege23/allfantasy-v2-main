@@ -126,7 +126,7 @@ export default function WaiverClaimDrawer({
           <div>
             <label className="mb-1 block text-[11px] text-white/60">FAAB bid</label>
             <div className="flex items-center gap-2">
-              <DollarSign className="h-3.5 w-3.5 text-cyan-300" />
+              <DollarSign className="h-3.5 w-3.5 text-[#ff9ec0]" />
               <input
                 type="number"
                 min={0}
@@ -138,7 +138,7 @@ export default function WaiverClaimDrawer({
                 className="w-24 rounded-lg border border-white/20 bg-black/40 px-2 py-1.5 text-xs text-white outline-none"
               />
               {faabRemaining != null && (
-                <span className="text-[11px] text-cyan-200">Remaining: {faabRemaining}</span>
+                <span className="text-[11px] text-[#ffb8d1]">Remaining: {faabRemaining}</span>
               )}
             </div>
           </div>
@@ -186,7 +186,7 @@ export default function WaiverClaimDrawer({
           onClick={handleSubmit}
           disabled={submitting || !claimValidation.valid}
           data-testid="waiver-claim-submit"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-black hover:bg-cyan-400 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#ff3d81] px-3 py-1.5 text-xs font-semibold text-black hover:bg-[#ff3d81] disabled:opacity-60"
         >
           {submitting && (
             <span className="h-3 w-3 animate-spin rounded-full border border-black/10 border-t-black" />

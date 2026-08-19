@@ -10,15 +10,15 @@ import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scop
 export type DraftRoomRookiePlayerLike = {
   isRookie?: boolean
   rookie?: boolean
-  yearsExp?: number | null
-  experience?: number | null
-  draftYear?: number | null
-  nflDraftYear?: number | null
+  yearsExp?: unknown
+  experience?: unknown
+  draftYear?: unknown
+  nflDraftYear?: unknown
   isDevy?: boolean
   classYearLabel?: string | null
-  display?: { metadata?: Record<string, unknown> } | null
+  display?: { playerId?: string | null; displayName?: string | null; metadata?: unknown } | null
   /** Loose provider keys (pool JSON) */
-  metadata?: Record<string, unknown>
+  metadata?: unknown
   [key: string]: unknown
 }
 

@@ -22,6 +22,16 @@ export interface BehaviorSignalsOutput {
   draftPickCount: number
   draftEarlyRoundRate: number
   positionPriorityConcentration: number
+  /** Share of draft picks whose position resolved, 0-100. Distinguishes a real
+   *  concentration of 0-30 from one we simply could not measure. */
+  positionSampleCoverage: number
+  /** Standing within this manager's OWN league, in units of the league's spread.
+   *  Positive = drafts earlier than his leaguemates. Absolute rates mostly
+   *  measure league draft depth, so labels must use these. */
+  draftEarlyRoundRelative: number
+  positionConcentrationRelative: number
+  /** Trade volume relative to this manager's own leaguemates, in spread units. */
+  tradeFrequencyRelative: number
   picksTradedAway: number
   picksAcquired: number
   rebuildScore: number
@@ -37,6 +47,24 @@ const MAX_LINEUP_VOLATILITY = 100
 /**
  * Resolve league platform id for trade history (Sleeper: platformLeagueId or dynasty seasons).
  */
+/**
+ * Draft and trade psychology are CUMULATIVE, not per-season.
+ *
+ * These filters used exact season equality. A dynasty league sitting in 2026
+ * carries its 420 draft picks under seasons 2021-2025, so asking for `season:
+ * 2026` matched nothing and every manager came back with draftPickCount 0 —
+ * indistinguishable, downstream, from a manager who has never drafted. How
+ * someone drafts is the accumulation of every draft they have made; the current
+ * season is an upper bound on that history, not a window into it.
+ *
+ * Roster snapshots and standings keep exact-season semantics on purpose: they
+ * describe the team as it stands now, and stretching them across years would
+ * report annual roster turnover as week-to-week lineup churn.
+ */
+function seasonThrough(season?: number | null) {
+  return season != null ? { season: { lte: season } } : {}
+}
+
 async function getPlatformLeagueIds(leagueId: string): Promise<string[]> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -120,10 +148,21 @@ export async function aggregateBehaviorSignals(
   const team = league?.teams.find(
     (t) => t.externalId === managerId || t.id === managerId || t.ownerName === username
   )
+  // LeagueTradeHistory.sleeperUsername does NOT hold a username — it holds the
+  // numeric Sleeper user id ("604531915508228096"). Teams are keyed by roster id
+  // ("9") and display name ("thisaintmyhouse"), so neither matched and the trade
+  // history fallback below returned nothing for every manager in every league.
+  // LeagueTeam.platformUserId is that id space, and it is populated for 935 of
+  // 1002 teams; adding it makes 207 of 207 manager-histories join.
   const managerCandidates = new Set<string>(
-    [managerId, username, team?.externalId, team?.id, team?.ownerName].filter(
-      (v): v is string => Boolean(v && String(v).trim().length > 0)
-    )
+    [
+      managerId,
+      username,
+      team?.externalId,
+      team?.id,
+      team?.ownerName,
+      team?.platformUserId,
+    ].filter((v): v is string => Boolean(v && String(v).trim().length > 0))
   )
 
   let tradeCount = 0
@@ -140,7 +179,7 @@ export async function aggregateBehaviorSignals(
       leagueId,
       sport: sportNorm,
       type: { in: ['trade', 'TRADE'] },
-      ...(options?.season != null ? { season: options.season } : {}),
+      ...seasonThrough(options?.season),
       OR: [
         { managerId: { in: [...managerCandidates] } },
         { rosterId: { in: [...managerCandidates] } },
@@ -168,7 +207,10 @@ export async function aggregateBehaviorSignals(
     })
     for (const history of historyRows) {
       for (const t of history.trades) {
-        if (options?.season != null && t.season !== options.season) continue
+        // Trade psychology is cumulative, like draft: a 2026 league whose trades
+        // happened in 2023 has a trade history, not an empty one. Exact-season
+        // equality here discarded every one of them.
+        if (options?.season != null && t.season > options.season) continue
         const pGiven = (t.playersGiven as any[]) ?? []
         const pReceived = (t.playersReceived as any[]) ?? []
         const dkGiven = (t.picksGiven as any[]) ?? []
@@ -191,11 +233,99 @@ export async function aggregateBehaviorSignals(
       historyRows.reduce(
         (sum, h) =>
           sum +
-          h.trades.filter((t) => (options?.season != null ? t.season === options.season : true))
+          h.trades.filter((t) => (options?.season != null ? t.season <= options.season : true))
             .length,
         0
       )
     )
+  }
+
+  // Trade volume needs the same peer treatment as draft position.
+  //
+  // Trade history is cumulative across seasons (a 2026 league whose trades
+  // happened in 2023 still traded), but the "trade-heavy" threshold was written
+  // for a single-season count. Left absolute, a long-lived league labels almost
+  // everyone heavy: 9 of 12 managers in a five-season dynasty cleared a bar of 6,
+  // which works out to barely one trade a season. Busy is a comparison, and the
+  // only fair comparison is against the people in the same league.
+  let tradeFrequencyRelative = 0
+
+  // Peer counts come from the warehouse FIRST, because that is where trades now
+  // land. SleeperTradeFactIngest pulls straight from the provider for every
+  // league, while LeagueTradeHistory only holds leagues someone ran the legacy
+  // importer against.
+  //
+  // Reading only the legacy table produced a specific and confusing failure: a
+  // manager could have 70 recorded trade actions, clear the evidence floor, and
+  // still get NO label — because the peer comparison found an empty table,
+  // returned 0 deviation, and every relative threshold silently failed. Evidence
+  // said "we watched him", the labels said nothing, and neither was wrong on its
+  // own terms.
+  const factPeers = await prisma.transactionFact
+    .groupBy({
+      by: ['managerId'],
+      where: {
+        leagueId,
+        sport: sportNorm,
+        type: { in: ['trade', 'TRADE'] },
+        ...seasonThrough(options?.season),
+      },
+      _count: { _all: true },
+    })
+    .catch(() => [] as Array<{ managerId: string | null; _count: { _all: number } }>)
+
+  const factCounts = factPeers
+    .filter((r) => r.managerId != null)
+    .map((r) => r._count._all)
+
+  // BOTH sides of the comparison must come from the same source.
+  //
+  // Using this manager's `tradeCount` — which prefers the richer LeagueTradeHistory
+  // number — against peer counts drawn from transaction facts compares two
+  // different measurements. Measured in KBFL: fact counts ran 1-7 per manager
+  // (mean 2.6) while tradeCount for the same people read 44-70, so everyone
+  // landed many spreads above their peers and 7 of 8 came back "trade-heavy".
+  // A ratio whose numerator and denominator are counted differently is not a
+  // comparison, and it produces exactly the uniform label this module already
+  // learned to distrust.
+  const ownFactCount = (() => {
+    for (const candidate of managerCandidates) {
+      const hit = factPeers.find((r) => r.managerId === candidate)
+      if (hit) return hit._count._all
+    }
+    return null
+  })()
+
+  if (factCounts.length >= 3 && ownFactCount != null) {
+    const mean = factCounts.reduce((a, v) => a + v, 0) / factCounts.length
+    const variance = factCounts.reduce((a, v) => a + (v - mean) ** 2, 0) / factCounts.length
+    const spread = Math.max(Math.sqrt(variance), 2)
+    tradeFrequencyRelative = (ownFactCount - mean) / spread
+  } else if (platformIds.length > 0) {
+    const leagueHistories = await prisma.leagueTradeHistory.findMany({
+      where: { sleeperLeagueId: { in: platformIds } },
+      select: {
+        sleeperUsername: true,
+        trades: { select: { season: true }, take: 200, orderBy: { createdAt: 'desc' } },
+      },
+    })
+    const perManager = new Map<string, number>()
+    for (const h of leagueHistories) {
+      const n = h.trades.filter(
+        (t) => options?.season == null || t.season <= options.season
+      ).length
+      perManager.set(h.sleeperUsername, (perManager.get(h.sleeperUsername) ?? 0) + n)
+    }
+    const peerCounts = [...perManager.values()]
+    if (peerCounts.length >= 3) {
+      const mean = peerCounts.reduce((a, v) => a + v, 0) / peerCounts.length
+      const variance =
+        peerCounts.reduce((a, v) => a + (v - mean) ** 2, 0) / peerCounts.length
+      // Floor the spread so a league where nobody trades cannot promote a single
+      // extra trade into a personality.
+      const spread = Math.max(Math.sqrt(variance), 2)
+      tradeFrequencyRelative = (tradeCount - mean) / spread
+    }
   }
 
   let waiverClaimCount = 0
@@ -223,36 +353,132 @@ export async function aggregateBehaviorSignals(
     })
   }
 
-  const draftFacts = await prisma.draftFact.findMany({
+  // Fetch the WHOLE league's picks, not just this manager's.
+  //
+  // Early-round share is dominated by how deep the league drafts, not by the
+  // manager. Measured on live leagues: a 44-round IDP dynasty puts every one of
+  // its 14 managers at 20-23%, while a 23-round league puts everyone at 36-51%.
+  // Judged against a fixed threshold the first league labels all 14 managers
+  // "late-round accumulator" — a fact about the league's settings wearing the
+  // costume of a personality trait, which is the same defect as grading a trade
+  // C on no data.
+  //
+  // What IS a trait is drafting earlier than your own leaguemates, so every
+  // draft claim below is relative to this league's own distribution.
+  const leagueDraftFacts = await prisma.draftFact.findMany({
     where: {
       leagueId,
       sport: sportNorm,
-      ...(options?.season != null ? { season: options.season } : {}),
-      managerId: { in: [...managerCandidates] },
+      ...seasonThrough(options?.season),
     },
-    select: { playerId: true, round: true },
+    select: { playerId: true, round: true, managerId: true },
   })
+  const draftFacts = leagueDraftFacts.filter(
+    (d) => d.managerId != null && managerCandidates.has(d.managerId)
+  )
   const draftPickCount = draftFacts.length
   const earlyRoundPickCount = draftFacts.filter((d) => d.round <= 3).length
   const draftEarlyRoundRate =
     draftPickCount > 0 ? (earlyRoundPickCount / draftPickCount) * 100 : 0
 
+  // Draft facts store the PROVIDER player id (Sleeper's "12529"), not the
+  // canonical Player uuid, so matching on `id` alone resolved 0 of 44 picks for
+  // every manager in this league. Canonical Player carries `sleeperId`, so try
+  // both key spaces before giving up.
   const positionCounts = new Map<string, number>()
+  const leaguePositionById = new Map<string, string>()
+  let resolvedPickCount = 0
   if (draftFacts.length > 0) {
-    const ids = [...new Set(draftFacts.map((d) => d.playerId))]
-    const playerRows = await prisma.player.findMany({
-      where: { id: { in: ids } },
-      select: { id: true, position: true },
-    })
-    const posById = new Map(
-      playerRows.map((p) => [p.id, (p.position ?? 'UNK').toUpperCase()])
-    )
+    const ids = [...new Set(leagueDraftFacts.map((d) => d.playerId))]
+    const [playerRows, sportsRows] = await Promise.all([
+      prisma.player.findMany({
+        where: { id: { in: ids } },
+        select: { id: true, position: true },
+      }),
+      // SportsPlayer is the table keyed by Sleeper id, which is the id space
+      // draft facts actually use.
+      prisma.sportsPlayer.findMany({
+        where: { sleeperId: { in: ids } },
+        select: { sleeperId: true, position: true },
+      }),
+    ])
+    const posById = leaguePositionById
+    for (const row of playerRows) {
+      if (row.position) posById.set(row.id, row.position.toUpperCase())
+    }
+    for (const row of sportsRows) {
+      if (row.sleeperId && row.position) posById.set(row.sleeperId, row.position.toUpperCase())
+    }
     for (const d of draftFacts) {
-      const pos = posById.get(d.playerId) ?? 'UNK'
+      // An unresolved pick is NOT a position. It used to be bucketed as 'UNK',
+      // which meant every unresolvable draft collapsed into one bucket and
+      // scored 100% positional concentration — the system reporting total
+      // positional focus precisely when it had identified nothing.
+      const pos = posById.get(d.playerId)
+      if (!pos) continue
+      resolvedPickCount += 1
       positionCounts.set(pos, (positionCounts.get(pos) ?? 0) + 1)
     }
   }
-  const positionPriorityConcentration = computePositionConcentration(positionCounts)
+  // Concentration read off a handful of resolved picks does not describe how
+  // someone drafted 44 times. Below half coverage we report nothing rather than
+  // extrapolating from the sample that happened to match.
+  const positionSampleCoverage =
+    draftFacts.length > 0 ? (resolvedPickCount / draftFacts.length) * 100 : 0
+  const positionCoverageOk =
+    draftFacts.length > 0 && resolvedPickCount >= Math.ceil(draftFacts.length / 2)
+  const positionPriorityConcentration = positionCoverageOk
+    ? computePositionConcentration(positionCounts)
+    : 0
+
+  // Where this manager sits in his OWN league's distribution, expressed in units
+  // of that league's spread. A value of 1 means "one spread-width above his
+  // leaguemates", which is a claim about the manager; the raw rate is mostly a
+  // claim about the league's settings.
+  //
+  // The spread floor keeps a league whose managers are nearly identical from
+  // promoting rounding noise into a personality: if everyone drafts alike, no
+  // one is distinctive, and the honest output is no label.
+  const MIN_SPREAD_EARLY_RATE = 5
+  const MIN_SPREAD_CONCENTRATION = 8
+  const peerStat = (values: number[], own: number, minSpread: number): number => {
+    if (values.length < 3) return 0
+    const mean = values.reduce((a, v) => a + v, 0) / values.length
+    const variance = values.reduce((a, v) => a + (v - mean) ** 2, 0) / values.length
+    const spread = Math.max(Math.sqrt(variance), minSpread)
+    return (own - mean) / spread
+  }
+
+  const byManager = new Map<string, { total: number; early: number; positions: Map<string, number>; resolved: number }>()
+  for (const d of leagueDraftFacts) {
+    if (!d.managerId) continue
+    let entry = byManager.get(d.managerId)
+    if (!entry) {
+      entry = { total: 0, early: 0, positions: new Map(), resolved: 0 }
+      byManager.set(d.managerId, entry)
+    }
+    entry.total += 1
+    if (d.round <= 3) entry.early += 1
+    const pos = leaguePositionById.get(d.playerId)
+    if (pos) {
+      entry.resolved += 1
+      entry.positions.set(pos, (entry.positions.get(pos) ?? 0) + 1)
+    }
+  }
+  const peers = [...byManager.values()].filter((e) => e.total > 0)
+  const draftEarlyRoundRelative =
+    draftPickCount > 0
+      ? peerStat(peers.map((e) => (e.early / e.total) * 100), draftEarlyRoundRate, MIN_SPREAD_EARLY_RATE)
+      : 0
+  const positionConcentrationRelative = positionCoverageOk
+    ? peerStat(
+        peers
+          .filter((e) => e.resolved >= Math.ceil(e.total / 2))
+          .map((e) => computePositionConcentration(e.positions)),
+        positionPriorityConcentration,
+        MIN_SPREAD_CONCENTRATION
+      )
+    : 0
 
   const snapshots = await prisma.rosterSnapshot.findMany({
     where: {
@@ -273,16 +499,32 @@ export async function aggregateBehaviorSignals(
   )
   const benchingPatternScore = Math.min(100, lineupChangeRate * 0.9)
 
-  const totalAcquisitions = youthCount + vetCount + draftPickCount || 1
-  const rookieRate =
-    totalAcquisitions > 0
-      ? Math.min(
-          1,
-          ((youthCount + draftPickCount * calibration.rookiePreferenceWeight) /
-            totalAcquisitions)
-        )
-      : 0
-  const vetRate = totalAcquisitions > 0 ? vetCount / totalAcquisitions : 0
+  // Rookie-vs-vet is an ACQUISITION MIX, and a mix needs two things to mix.
+  //
+  // This previously read (youth + draftPicks) / (youth + vet + draftPicks). With
+  // no acquisitions observed — the live state, since transaction_facts holds 0
+  // rows — youth and vet are both 0 and the expression collapses to
+  // draftPicks/draftPicks = 1.0. Every manager who had ever made a pick scored a
+  // perfect 100 rookie rate and was labelled "rookie-heavy": all 12 managers in
+  // this league got the identical label, which is not consensus, it is a
+  // constant wearing a measurement's clothes. It also drove 55% of the risk
+  // score, so an unobserved league produced a confident risk number too.
+  //
+  // In a rookie draft every pick is a rookie by construction, so draft picks
+  // alone cannot separate a rookie-hoarder from anyone else. Without real
+  // acquisitions there is no denominator variety and therefore no rate. Draft
+  // behaviour is still measured — through early-round rate and positional
+  // concentration, which genuinely differ between managers.
+  const observedAcquisitions = youthCount + vetCount
+  const hasAcquisitionMix = observedAcquisitions > 0
+  const totalAcquisitions = observedAcquisitions + draftPickCount || 1
+  const rookieRate = hasAcquisitionMix
+    ? Math.min(
+        1,
+        (youthCount + draftPickCount * calibration.rookiePreferenceWeight) / totalAcquisitions
+      )
+    : 0
+  const vetRate = hasAcquisitionMix ? vetCount / totalAcquisitions : 0
 
   const tradeFrequencyNorm = Math.min(tradeCount / MAX_TRADES_FOR_NORM, 1) * 100
   const waiverFocusNorm = Math.min(waiverClaimCount / MAX_WAIVER_FOR_NORM, 1) * 100
@@ -317,10 +559,13 @@ export async function aggregateBehaviorSignals(
     tradeFrequencyNorm * 0.45 + waiverFocusNorm * 0.25 + lineupChangeRate * 0.3,
     100
   )
-  const riskNorm = Math.min(
-    rookieRate * 55 + tradeTimingLateRate * 0.25 + lineupChangeRate * 0.2,
-    100
-  )
+  // Risk is only scored from the terms actually observed. Letting the rookie term
+  // contribute 0 when unmeasured would be the mirror of the bug above: it would
+  // drag risk toward 0 and make unobserved managers read "risk-averse", inventing
+  // caution from absence exactly as it used to invent aggression.
+  const riskNorm = hasAcquisitionMix
+    ? Math.min(rookieRate * 55 + tradeTimingLateRate * 0.25 + lineupChangeRate * 0.2, 100)
+    : Math.min((tradeTimingLateRate * 0.25 + lineupChangeRate * 0.2) / 0.45, 100)
 
   return {
     managerId,
@@ -338,6 +583,10 @@ export async function aggregateBehaviorSignals(
     draftPickCount,
     draftEarlyRoundRate,
     positionPriorityConcentration,
+    positionSampleCoverage,
+    draftEarlyRoundRelative,
+    positionConcentrationRelative,
+    tradeFrequencyRelative,
     picksTradedAway: picksGiven,
     picksAcquired: picksReceived,
     rebuildScore,

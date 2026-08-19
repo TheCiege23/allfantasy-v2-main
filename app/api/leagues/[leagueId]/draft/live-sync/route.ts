@@ -13,7 +13,7 @@ import { buildDraftLiveSyncPayload } from '@/lib/draft-room/buildDraftLiveSyncPa
 
 export const dynamic = 'force-dynamic'
 
-export const GET = withTimedRoute('draft_live_sync', async (req: NextRequest, ctx: { params: Promise<{ leagueId: string }> }) => {
+export const GET = withTimedRoute('draft_live_sync', async (req: NextRequest, ctx: { params: Promise<Record<string, string>> }) => {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

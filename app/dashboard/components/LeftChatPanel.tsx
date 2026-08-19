@@ -711,6 +711,10 @@ export function LeftChatPanel({
                 parentControlsNew
                 ttsVoiceId={selectedVoiceId}
                 chipContextLeagueName={activeChimmyLeague?.name ?? null}
+                activeLeagueId={activeChimmyLeagueId}
+                activeLeagueSport={activeChimmyLeague?.sport ?? null}
+                activeLeagueScoring={activeChimmyLeague?.scoring ?? null}
+                activeLeagueFormat={activeChimmyLeague?.format ?? null}
                 footerSlot={
                   leagues.length > 0 ? (
                     <ChimmyLeagueContextBar

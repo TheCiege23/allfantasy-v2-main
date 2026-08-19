@@ -23,6 +23,9 @@ import {
   type AgentCacheTier,
 } from '@/lib/agents/cache'
 import { buildCompressedSystemPrompt } from '@/lib/agents/prompt-compression'
+import { getChimmyCrossLeaguePlayerSummary } from '@/lib/shared-services/league-hub/crossLeaguePlayerPortfolio'
+import { resolveReplacementOptions } from '@/lib/shared-services/league-hub/replacementOptions'
+import { isLeagueGroundedContext, requiresLeagueGroundingFor } from '@/lib/agents/leagueGroundingGate'
 import { routeTextCall, routeStreamCall } from '@/lib/ai/providerRouter'
 import {
   buildAiCacheKey,
@@ -139,6 +142,12 @@ export interface UserContext {
   source?: string | null
   language?: string | null
   conversation?: ConversationTurn[]
+  /** G15.10 — optional, privacy-safe commissioner-intelligence grounding (read-only). */
+  commissionerGrounding?: string | null
+  /** League-intelligence grounding: synced facts from the league's own engines
+   *  (context envelope, market values, graded trades, H2H records). Additive,
+   *  read-only, same contract as commissionerGrounding. */
+  leagueIntelligenceGrounding?: string | null
   memory?: {
     tone?: 'strategic' | 'casual' | 'analytical'
     detailLevel?: 'concise' | 'standard' | 'detailed'
@@ -373,9 +382,19 @@ function buildRuntimeSystemPrompt(
       teamId: ctx.teamId ?? null,
     },
   })
+  // G15.10 — additive commissioner-intelligence grounding (read-only, privacy-safe).
+  let grounded = ctx.commissionerGrounding
+    ? `${base}\n\n## COMMISSIONER INTELLIGENCE\n${ctx.commissionerGrounding}`
+    : base
+  // League-intelligence grounding: the league's own synced engines (context
+  // envelope, market values, graded trades, H2H records). Additive; absent
+  // when no league is attached or nothing resolved in time.
+  if (ctx.leagueIntelligenceGrounding) {
+    grounded = `${grounded}\n\n## LEAGUE INTELLIGENCE (synced facts)\n${ctx.leagueIntelligenceGrounding}`
+  }
   const lang = getAiLanguageInstruction(ctx.language)
-  if (lang === 'English') return base
-  return `${base}\n\n## LANGUAGE\nRespond in ${lang}. Use natural sports-app language. Keep team, player, league, and AllFantasy feature names recognizable.`
+  if (lang === 'English') return grounded
+  return `${grounded}\n\n## LANGUAGE\nRespond in ${lang}. Use natural sports-app language. Keep team, player, league, and AllFantasy feature names recognizable.`
 }
 
 function isSimpleQuery(intent: IntentType, payload: Record<string, unknown>, userMessage: string): boolean {
@@ -1079,24 +1098,29 @@ function isPlayerMovementIntent(intent: IntentType, userMessage: string): boolea
   )
 }
 
+/**
+ * HONESTY PASS (slice 12): rules live in lib/agents/leagueGroundingGate.ts so
+ * they are unit-tested. Two holes were letting ungrounded advice through:
+ * `draft_help` was exempt, and the keyword pattern missed the most common
+ * decision verbs (add, drop, claim, pick up, keep, flex, "should I" …).
+ */
 function requiresLeagueGrounding(intent: IntentType, userMessage: string, ctx: UserContext): boolean {
-  const source = String(ctx.source ?? '').toLowerCase()
-  const message = userMessage.toLowerCase()
+  return requiresLeagueGroundingFor({
+    intent,
+    userMessage,
+    source: ctx.source ?? null,
+    teamId: ctx.teamId ?? null,
+  })
+}
 
-  if (ctx.teamId) return true
-  if (
-    ['trade_evaluation', 'waiver_wire', 'matchup_simulator', 'dynasty_legacy', 'player_comparison'].includes(
-      intent
-    )
-  ) {
-    return true
-  }
-  if (source.includes('trade') || source.includes('waiver') || source.includes('lineup')) {
-    return true
-  }
-  return /\b(trade|waiver|lineup|start|sit|bench|my team|my roster|future|next season|for my team)\b/.test(
-    message
-  )
+/**
+ * HONESTY PASS (slice 12): a structured context is only LEAGUE grounding if it
+ * carries the league block. `buildStructuredFantasyContext` returns a
+ * players-only object when the league row can't be loaded — truthy, so the old
+ * `!structuredFantasyContext` check let team-specific advice through ungrounded.
+ */
+function hasLeagueGrounding(structuredFantasyContext: StructuredFantasyContext): boolean {
+  return isLeagueGroundedContext(structuredFantasyContext as Record<string, unknown> | null)
 }
 
 function buildLeagueGroundingRequiredResponse(intent: IntentType): AgentResponse {
@@ -1251,8 +1275,23 @@ async function buildStructuredFantasyContext(
   ).catch(() => ({}))
 
   if (!ctx.leagueId) {
-    const players = await playerContextPromise
-    return Object.keys(players).length > 0 ? { players } : null
+    // Player Command Center (Slice 3): with no single-league scope, ground
+    // Chimmy in the user's CROSS-LEAGUE portfolio instead — injured/bye/
+    // overexposed/action-needed players across every connected league.
+    // Timeout-guarded and additive: on any failure this degrades to the
+    // players-only behavior that existed before this slice.
+    const [players, crossLeague] = await Promise.all([
+      playerContextPromise,
+      withTimeout(
+        getChimmyCrossLeaguePlayerSummary({ appUserId: ctx.userId }),
+        STRUCTURED_CONTEXT_TIMEOUT_MS,
+        'Cross-league summary timed out.'
+      ).catch(() => null),
+    ])
+    const sections: Record<string, unknown> = {}
+    if (Object.keys(players).length > 0) sections.players = players
+    if (crossLeague && crossLeague.connectedLeagueCount > 0) sections.crossLeague = crossLeague
+    return Object.keys(sections).length > 0 ? sections : null
   }
 
   const [league, rosters, teams] = await Promise.all([
@@ -1508,7 +1547,49 @@ async function buildStructuredFantasyContext(
           .join(', ')
       : null
 
+  // Slice 8 — deterministic replacement grounding: when the user mentions a
+  // player THEY roster in this league, attach the exact replacement options
+  // the Player Command Center serves (bench + best-unrostered with real
+  // projection deltas), so Chimmy's prose answers cite real numbers instead
+  // of improvising. Exact full-name match only — never fuzzy-guessed; any
+  // miss or timeout degrades to the pre-Slice-8 context unchanged.
+  let replacementOptions: Record<string, unknown> | null = null
+  if (playerNames.length > 0 && ctx.leagueId && userRoster) {
+    const wanted = new Set(playerNames.map((n) => n.trim().toLowerCase()).filter(Boolean))
+    let affected: { id: string; name: string } | null = null
+    for (const [id, meta] of userPlayerNameMap) {
+      const name = meta?.name?.trim()
+      if (name && wanted.has(name.toLowerCase())) {
+        affected = { id, name }
+        break
+      }
+    }
+    if (affected) {
+      const result = await withTimeout(
+        resolveReplacementOptions({
+          appUserId: ctx.userId,
+          leagueId: ctx.leagueId,
+          affectedPlayerId: affected.id,
+        }),
+        STRUCTURED_CONTEXT_TIMEOUT_MS,
+        'Replacement options timed out.'
+      ).catch(() => null)
+      if (result) {
+        replacementOptions = {
+          playerName: affected.name,
+          affectedProjection: result.affectedProjection,
+          projectionWeek: result.projectionWeek,
+          benchOptions: result.benchOptions,
+          freeAgentOptions: result.freeAgentOptions,
+          claimTarget: result.claimTarget,
+          limitation: result.limitation,
+        }
+      }
+    }
+  }
+
   return compactRecord({
+    replacementOptions,
     league: compactRecord({
       id: league.id,
       name: league.name ?? null,
@@ -1772,7 +1853,7 @@ export async function runAgentPipeline(
         : null
       if (
         requiresLeagueGrounding('quick_ask', trimmedMessage, ctx) &&
-        !structuredFantasyContext
+        !hasLeagueGrounding(structuredFantasyContext)
       ) {
         return {
           result:
@@ -1825,7 +1906,7 @@ export async function runAgentPipeline(
     }
     if (
       requiresLeagueGrounding(classification.result.intent, trimmedMessage, ctx) &&
-      !structuredFantasyContext
+      !hasLeagueGrounding(structuredFantasyContext)
     ) {
       return {
         result:
@@ -1949,7 +2030,7 @@ export async function streamAgentPipeline(
         : null
       if (
         requiresLeagueGrounding('quick_ask', trimmedMessage, ctx) &&
-        !structuredFantasyContext
+        !hasLeagueGrounding(structuredFantasyContext)
       ) {
         const blocked: AgentResponse = {
           result:
@@ -2016,7 +2097,7 @@ export async function streamAgentPipeline(
     }
     if (
       requiresLeagueGrounding(classification.result.intent, trimmedMessage, ctx) &&
-      !structuredFantasyContext
+      !hasLeagueGrounding(structuredFantasyContext)
     ) {
       const blocked: AgentResponse = {
         result:

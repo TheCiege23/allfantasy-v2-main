@@ -13,6 +13,7 @@ import type {
   LeagueSummary,
   MatchupContextSlice,
   RankingContextSlice,
+  ReplayInsightSlice,
   RosterContextSlice,
   SportsScheduleSlice,
   StandingsContextSlice,
@@ -302,6 +303,53 @@ export function renderChimmyPersonalitySection(): string {
   ].join("\n")
 }
 
+/** The exact disclaimer shown on the dashboard (Phase 20/21) — reused verbatim so the surfaces agree. */
+const REPLAY_DISCLAIMER =
+  "Historical replay observations summarize past outcomes and are not recommendations for future decisions."
+
+/**
+ * Historical Replay Summary (Phase 22) — OBSERVATIONAL ONLY.
+ *
+ * Renders the user-safe replay insight set as an explicitly-labelled, disclaimer-
+ * carrying section. It emits ONLY the section header, the fixed disclaimer, the
+ * contract's own descriptive insight strings (headline + displayValue +
+ * confidence + sample size), and a trades-analyzed line — never any imperative
+ * / recommendation language, and never a raw ID (the contract carries none).
+ * `disabled` → "" (no section); `empty` → an honest "no data yet" section so
+ * Chimmy can say so plainly; `ready` → the observational summary.
+ */
+export function renderReplayInsightSection(slice: ReplayInsightSlice | null): string {
+  if (!slice || slice.status === "disabled") return ""
+
+  const header = "## HISTORICAL REPLAY SUMMARY (observational only)"
+
+  if (slice.status === "empty" || !slice.insightSet || slice.insightSet.insights.length === 0) {
+    return [
+      header,
+      REPLAY_DISCLAIMER,
+      "- No completed historical replay data is available for this league yet.",
+    ].join("\n")
+  }
+
+  const set = slice.insightSet
+  const confidenceWord: Record<string, string> = {
+    high: "high confidence",
+    moderate: "moderate confidence",
+    low: "low confidence",
+    insufficient: "very limited data",
+  }
+  const insightLines = set.insights.map((i) => {
+    const conf = confidenceWord[i.confidence] ?? i.confidence
+    return `- ${i.headline} (${i.displayValue}, ${conf}, ${i.sampleSize} trade${i.sampleSize === 1 ? "" : "s"})`
+  })
+  const meta =
+    set.tradesWithLineupData > 0
+      ? `Based on ${set.tradesAnalyzed} completed trades (${set.tradesWithLineupData} with lineup data).`
+      : `Based on ${set.tradesAnalyzed} completed trades.`
+
+  return [header, REPLAY_DISCLAIMER, ...insightLines, meta].join("\n")
+}
+
 /** Convenience: every renderer keyed by section id. */
 export function renderAllSections(bundle: ChimmyContextBundle): Record<string, string> {
   return {
@@ -316,6 +364,7 @@ export function renderAllSections(bundle: ChimmyContextBundle): Record<string, s
     leagueDifficulty: renderLeagueDifficultySection(bundle.leagueDifficulty),
     importedHistory: renderImportedHistorySection(bundle.importedHistory),
     sportsSchedule: renderSportsScheduleSection(bundle.sportsSchedule),
+    replayInsights: renderReplayInsightSection(bundle.replayInsights),
     personality: renderChimmyPersonalitySection(),
   }
 }

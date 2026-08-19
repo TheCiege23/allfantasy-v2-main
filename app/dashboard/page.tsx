@@ -1,9 +1,9 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
-import { resolveDisplayName } from '@/lib/dashboard/resolve-display-name'
 import DashboardUnavailableState from '@/components/dashboard/DashboardUnavailableState'
 import {
   createDashboardRuntimeIssue,
@@ -12,14 +12,61 @@ import {
 } from '@/lib/dashboard/runtime-issues'
 import { isAppRouterRedirectError } from '@/lib/next/is-app-router-redirect-error'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
-import { fetchUserRankJsonForDashboardSSR } from '@/lib/dashboard/fetch-user-rank-ssr'
-import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
+import { describeAge } from '@/lib/sports-data/freshnessPolicy'
+import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
+import DashboardV2 from '@/components/core-app/screens/DashboardV2'
+import LeagueHome from '@/components/core-app/screens/LeagueHome'
+import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
+import { getCareerData } from '@/lib/core-app/career'
+import { getPortfolio } from '@/lib/core-app/portfolio'
+import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
+import { getWeekAll } from '@/lib/core-app/weekAll'
 import type { UserLeague } from './types'
-import { DashboardShell } from './DashboardShell'
 
 export const dynamic = 'force-dynamic'
 
-export default async function DashboardPage() {
+/**
+ * `/dashboard` — the signed-in home, now rendering Dashboard v2.
+ *
+ * ⚠ THE GATE, THE ERROR BOUNDARIES AND THE ACTIVATION SIGNAL ARE UNCHANGED. Only
+ * the presentation swaps. `recordDashboardActivation` still fires with the same
+ * arguments and the same not-awaited, never-throws contract — it is a funnel
+ * signal, and a cut-over that silently stopped counting activations would be
+ * invisible until someone asked why the funnel died.
+ *
+ * ⚠ WHY THIS IS NOT A REDIRECT TO /core/dashboard-v2. A redirect would make the
+ * post-sign-in home a second hop, lose the callbackUrl contract, and leave two
+ * URLs claiming to be the dashboard. The screen is a component; this route
+ * renders it.
+ *
+ * ⚠ `playedLeagues`, NOT `leagues`. Rows with `hasUnifiedRecord: false` are AF
+ * Legacy board snapshots from the career import — 543 of them on one production
+ * account against ~60 real teams. Letting them through is what produced a 604-row
+ * home and a 604-tile rail. Same filter the /core route applies, for the same
+ * reason.
+ */
+/**
+ * ⚠ `?league=` IS THE LEAGUE-SCOPED STATE OF THIS SCREEN, NOT A SECOND ROUTE.
+ * The 3b handoff offers `/dashboard?league=:id` or `/league/:id`; the query
+ * parameter is the one that costs nothing, and this repo is at Vercel's 2048
+ * route ceiling.
+ *
+ * ⚠ THIS RECONNECTS A SCREEN THE CUTOVER ORPHANED. LeagueHome and its loader
+ * already existed and were reached through DashboardShell — the Nocturne shell
+ * that /dashboard stopped rendering when it moved to DashboardV2. So selecting a
+ * league left the dashboard entirely while a working implementation sat
+ * unreferenced. It is now the same route in a different state.
+ */
+type DashboardSearchParams = { [key: string]: string | string[] | undefined }
+
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: DashboardSearchParams
+}) {
+  const rawLeague = searchParams?.league
+  const selectedLeagueId = typeof rawLeague === 'string' && rawLeague.trim() ? rawLeague.trim() : null
   const missingEnvVars = getDashboardMissingEnvVars()
   if (missingEnvVars.length > 0) {
     const issue = createDashboardRuntimeIssue(missingEnvVars)
@@ -32,16 +79,15 @@ export default async function DashboardPage() {
     )
   }
 
-  let session: {
-    user?: {
-      id?: string
-      name?: string | null
-      email?: string | null
-      image?: string | null
-    }
-  } | null
+  /*
+   * Named alias rather than `as typeof session`: inside the try, `typeof session`
+   * resolves against the narrowed `null` from the initialiser, which collapses the
+   * cast to `never` and makes every later `session?.user` an error.
+   */
+  type DashboardSession = { user?: { id?: string } } | null
+  let session: DashboardSession = null
   try {
-    session = (await getServerSession(authOptions as never)) as typeof session
+    session = (await getServerSession(authOptions as never)) as DashboardSession
   } catch (error) {
     console.error('[dashboard] getServerSession failed:', error)
     return (
@@ -52,75 +98,124 @@ export default async function DashboardPage() {
     )
   }
 
-  const sessionUser = session?.user
-  const rawUserId = typeof sessionUser?.id === 'string' ? sessionUser.id.trim() : ''
-  if (!sessionUser || !rawUserId) {
+  const rawUserId = typeof session?.user?.id === 'string' ? session.user.id.trim() : ''
+  if (!rawUserId) {
     redirect('/login?callbackUrl=/dashboard')
   }
   const userId = rawUserId
 
   try {
-    const [dbUser, userProfile, initialLeagueList, initialUserRankPayload] = await Promise.all([
-      prisma.appUser
-        .findUnique({
-          where: { id: userId },
-          select: { avatarUrl: true, emailVerified: true, username: true },
-        })
-        .catch((err: unknown) => {
-          console.error('[dashboard] appUser lookup failed:', err)
-          return null
-        }),
-      prisma.userProfile
-        .findUnique({
-          where: { userId },
-          select: { discordUserId: true, displayName: true },
-        })
-        .catch((err: unknown) => {
-          console.error('[dashboard] userProfile lookup failed:', err)
-          return null
-        }),
-      getDashboardLeagueListForUser(userId).catch((err: unknown) => {
-        console.error('[dashboard] league list prefetch failed:', err)
-        return null
-      }),
-      fetchUserRankJsonForDashboardSSR().catch((err: unknown) => {
-        console.error('[dashboard] user rank prefetch failed:', err)
-        return null
-      }),
-    ])
+    const now = new Date()
 
-    const userImage = resolveDashboardAvatarUrl(sessionUser.image, dbUser?.avatarUrl ?? undefined)
-    const userName = resolveDisplayName({
-      displayName: userProfile?.displayName,
-      username: dbUser?.username,
-      sessionName: sessionUser.name,
-      email: sessionUser.email,
+    const leagueListPayload = await getDashboardLeagueListForUser(userId).catch(
+      (err: unknown) => {
+        console.error('[dashboard] league list failed:', err)
+        return null
+      },
+    )
+    const leagues = (leagueListPayload?.leagues ?? []) as unknown as UserLeague[]
+    const playedLeagues = leagues.filter(
+      (l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false,
+    )
+
+    const dash34 = await getDash34Data(
+      userId,
+      leagues as unknown as Dash34LeagueRow[],
+      now,
+    ).catch((err: unknown) => {
+      console.error('[dashboard] dash34 failed:', err)
+      return null
     })
 
-    // Dashboard V2 Phase 2.3 — Commissioner HQ reuses the same health/recommendations/actions
-    // engine as the real /commissioner-hub page (getCommissionerHubHealthForUser), rather than
-    // a new query, so this is a snapshot-per-commissioned-league sourced identically to the
-    // deep-dive destination it links out to.
-    const initialCommissionerHealthSnapshots = initialLeagueList
-      ? await getCommissionerHubHealthForUser(
-          userId,
-          initialLeagueList.leagues as unknown as UserLeague[],
-        ).catch((err: unknown) => {
-          console.error('[dashboard] commissioner health prefetch failed:', err)
-          return null
-        })
+    const [career, portfolio, drafts, week, access] = await Promise.all([
+      getCareerData(userId).catch(() => null),
+      getPortfolio(userId).catch(() => null),
+      getDraftHqAll(
+        userId,
+        playedLeagues.map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: String(l.platform ?? ''),
+          imageUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
+        })),
+      ).catch(() => null),
+      getWeekAll(
+        userId,
+        playedLeagues.map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: String(l.platform ?? ''),
+          platformLeagueId:
+            (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+        })),
+      ).catch(() => null),
+      aiAccessResolver.resolveForUser({ userId, now }).catch(() => null),
+    ])
+
+    // Newest real sync across the leagues the user actually plays. Null on all 98
+    // today, which the bar states outright rather than showing an invented age.
+    const lastSynced = playedLeagues.reduce<Date | null>((latest, l) => {
+      const raw = (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt
+      if (!raw) return latest
+      const d = raw instanceof Date ? raw : new Date(raw)
+      if (Number.isNaN(d.getTime())) return latest
+      return latest == null || d > latest ? d : latest
+    }, null)
+    const syncAge = describeAge('roster', lastSynced, now)
+
+    const planName = access
+      ? access.hasSubscription
+        ? (access.subscription.plans[0] ?? 'Premium')
+        : access.trial.inTrial
+          ? `Trial · ${access.trial.daysRemaining}d left`
+          : 'Free'
       : null
 
+    /*
+     * Unchanged from the Nocturne cut-over, deliberately. Not awaited, never
+     * throws, idempotent per user — analytics must not be able to break the
+     * dashboard, and a null league list means "unknown", not "zero".
+     */
+    void recordDashboardActivation({
+      userId,
+      leagueCount: leagueListPayload ? leagueListPayload.leagues.length : null,
+      getCookie: (name) => cookies().get(name)?.value,
+    })
+
+    /*
+     * The league view replaces the all-leagues body, deliberately. Season
+     * timeline, Draft HQ and Commissioner Hub exist ONLY in this state — there
+     * is no single season calendar across 60 leagues, which is the rule the 3b
+     * handoff opens with and the reason the timeline was pulled off 3a.
+     *
+     * A league id that does not resolve (deleted, or not yours) falls through to
+     * the all-leagues dashboard rather than erroring: the loader returns null
+     * for both cases, and a dead link should land somewhere useful.
+     */
+    if (selectedLeagueId) {
+      const leagueHome = await getLeagueHomeData(selectedLeagueId, userId).catch(() => null)
+      if (leagueHome) {
+        const otherIssues = playedLeagues.filter((l) => l.id !== leagueHome.league.id).length
+        return (
+          <div className="af-core af-lh-shell">
+            <LeagueHome data={leagueHome} otherLeagueIssueCount={otherIssues} />
+          </div>
+        )
+      }
+    }
+
     return (
-      <DashboardShell
-        userId={userId}
-        userName={userName}
-        userImage={userImage}
-        emailVerified={Boolean(dbUser?.emailVerified)}
-        discordConnected={Boolean(userProfile?.discordUserId)}
-        initialLeagueList={initialLeagueList ?? undefined}
-        initialUserRankPayload={initialUserRankPayload ?? undefined}
-        initialCommissionerHealthSnapshots={initialCommissionerHealthSnapshots ?? undefined}
+      <DashboardV2
+        data={dash34}
+        weekLabel={dash34?.weekLabel ?? null}
+        career={career}
+        portfolio={portfolio}
+        drafts={drafts}
+        week={week}
+        nowIso={now.toISOString()}
+        planName={planName}
+        syncedLabel={syncAge.stale ? null : syncAge.label}
+        commissionerCount={playedLeagues.filter((l) => Boolean(l.isCommissioner)).length}
       />
     )
   } catch (error) {
@@ -139,12 +234,11 @@ export default async function DashboardPage() {
       )
     }
 
-    console.error('[dashboard] data load failed:', error)
-
+    console.error('[dashboard] render failed:', error)
     return (
       <DashboardUnavailableState
         title="Dashboard temporarily unavailable"
-        message="We couldn't load your dashboard. Please try again in a moment."
+        message="Something went wrong loading your leagues. Try again in a moment."
       />
     )
   }

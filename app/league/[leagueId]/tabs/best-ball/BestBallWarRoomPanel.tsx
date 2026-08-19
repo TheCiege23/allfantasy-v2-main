@@ -78,7 +78,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
         setDepth(res.depth)
         setError(null)
       })
-      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : 'Failed to load War Room.'))
+      .catch((e: unknown) => active && setError(e instanceof Error ? e.message : 'Failed to load AF Legacy.'))
       .finally(() => active && setLoading(false))
     return () => {
       active = false
@@ -134,14 +134,14 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
   if (loading) {
     return (
       <div className="flex items-center gap-2 rounded-xl border border-white/[0.08] bg-[#07071a] p-4 text-[12px] text-white/50" data-testid="best-ball-war-room-loading">
-        <Loader2 className="h-4 w-4 animate-spin text-violet-300" /> Loading Best Ball War Room…
+        <Loader2 className="h-4 w-4 animate-spin text-violet-300" /> Loading AF Legacy — Best Ball…
       </div>
     )
   }
   if (error || !context) {
     return (
       <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-[12px] text-amber-100/90" data-testid="best-ball-war-room-error">
-        {error ?? 'Best Ball War Room is unavailable for this league.'}
+        {error ?? 'AF Legacy — Best Ball is unavailable for this league.'}
       </div>
     )
   }
@@ -153,17 +153,17 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
     <section className="space-y-3 rounded-xl border border-violet-400/20 bg-[#0a0820] p-4" data-testid="best-ball-war-room-panel">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-violet-300" />
-        <h2 className="text-sm font-bold text-white">Best Ball War Room</h2>
+        <h2 className="text-sm font-bold text-white">AF Legacy — Best Ball</h2>
         <span className="rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] font-semibold text-violet-200">
           {context.sport} · {context.bestBall.mode}
         </span>
       </div>
 
       {/* Automatic lineup explanation — best ball has NO manual start/sit. */}
-      <div className="flex items-start gap-2 rounded-lg border border-cyan-400/15 bg-cyan-500/[0.05] p-3" data-testid="best-ball-war-room-auto-lineup">
-        <Zap className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300/80" />
+      <div className="flex items-start gap-2 rounded-lg border border-[#ff3d81]/15 bg-[#ff3d81]/[0.05] p-3" data-testid="best-ball-war-room-auto-lineup">
+        <Zap className="mt-0.5 h-4 w-4 shrink-0 text-[#ff9ec0]/80" />
         <p className="text-[11px] leading-relaxed text-white/70">
-          <span className="font-semibold text-cyan-100">Automatic lineup.</span> Best ball auto-selects your highest-scoring valid
+          <span className="font-semibold text-[#ffd7e5]">Automatic lineup.</span> Best ball auto-selects your highest-scoring valid
           lineup every {context.scoring.scoringPeriod} period — there is no manual start/sit. Win by drafting DEPTH, CEILING, and
           smart roster construction.
         </p>
@@ -325,7 +325,7 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
 
       {/* Ask War Room */}
       <div className="rounded-lg border border-white/[0.06] bg-[#07071a] p-3">
-        <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40"><ShieldQuestion className="h-3.5 w-3.5" /> Ask the War Room</p>
+        <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-white/40"><ShieldQuestion className="h-3.5 w-3.5" /> Ask AF Legacy</p>
         <textarea value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="e.g. What position am I weak at, and do I have enough upside?" rows={2} data-testid="best-ball-war-room-ask-input"
           className="w-full resize-none rounded-md border border-white/[0.1] bg-[#05050f] px-2 py-1.5 text-[12px] text-white/85 placeholder:text-white/30 focus:border-violet-400/40 focus:outline-none" />
         <button type="button" onClick={() => void onAsk()} disabled={askBusy || !question.trim()} data-testid="best-ball-war-room-ask-submit"

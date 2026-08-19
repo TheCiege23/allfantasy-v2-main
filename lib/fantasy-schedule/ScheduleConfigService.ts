@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import type { SportScheduleConfig, ScheduleSport } from './types'
 import { getDefaultScheduleConfig } from './types'
 
@@ -63,7 +64,7 @@ export async function updateScheduleConfigForLeague(
     }
   }
 
-  await prisma.league.update({ where: { id: leagueId }, data: { settings: updates } })
+  await prisma.league.update({ where: { id: leagueId }, data: { settings: toPrismaJsonInput(updates) } })
 }
 
 function readBool(s: Record<string, unknown>, key: string, fallback: boolean): boolean {

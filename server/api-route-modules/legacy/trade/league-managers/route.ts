@@ -1,6 +1,13 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { ensureArray, ensureNumber } from '@/lib/engine/response-guard'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
+import { listProfilesByLeague } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
+import { resolveProfileAccessForUser } from '@/lib/psychological-profiles/ProfileAccess'
+import { filterLabelsByDimension } from '@/lib/psychological-profiles/ProfileLabelResolver'
+import type { ProfileLabel } from '@/lib/psychological-profiles/types'
 import {
   getAllPlayers,
   getLeagueDrafts,
@@ -367,13 +374,29 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trade/league-managers",
     const slotCounts: Record<string, number> = {}
     rosterPositions.forEach(p => { slotCounts[p] = (slotCounts[p] || 0) + 1 })
 
+    // Manager psychology, attached to the managers this endpoint already returns.
+    //
+    // Two things this must not assume. First, `league_id` here is the SLEEPER id,
+    // while profiles are keyed by canonical League.id, so the mapping is explicit
+    // and yields nothing rather than guessing when the league was never imported.
+    // Second, the legacy auth helpers on these routes do not actually
+    // authenticate — requireAuthOrOrigin reports anonymous callers as
+    // authenticated — so the gate reads the session directly instead of trusting
+    // the surrounding wrapper.
+    const psychologyByManager = await loadLegacyManagerPsychology(leagueId)
+
+    const managersWithPsychology = managers.map((m: { rosterId?: number } & Record<string, unknown>) => {
+      const entry = psychologyByManager.get(String(m.rosterId ?? ''))
+      return entry ? { ...m, psychology: entry } : { ...m, psychology: null }
+    })
+
     const tradeDeadlineWeek = leagueData?.settings?.trade_deadline ?? 99
     const vetoVotesNeeded = leagueData?.settings?.veto_votes_needed ?? 0
 
     return NextResponse.json({ 
       success: true, 
-      managers: ensureArray(managers),
-      total: ensureNumber(managers?.length),
+      managers: ensureArray(managersWithPsychology),
+      total: ensureNumber(managersWithPsychology?.length),
       leagueSettings: {
         faabBudget: totalFaabBudget,
         sport,
@@ -424,3 +447,62 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/trade/league-managers",
   }
 })
 
+
+/**
+ * Trade psychology for the managers of a Sleeper league, keyed by roster id.
+ *
+ * Returns an empty map for anything it cannot establish — league never imported,
+ * caller not signed in, caller not entitled — because a Legacy ledger that shows
+ * confident reads on some managers and silence on others is more honest than one
+ * that fills the gaps.
+ *
+ * Trade-dimension labels only: this is the trade ledger, and how someone drafts
+ * belongs in the draft room.
+ */
+async function loadLegacyManagerPsychology(
+  sleeperLeagueId: string
+): Promise<Map<string, { labels: string[]; tradesObserved: number; confidence: string | null; shortfall: string | null }>> {
+  const empty = new Map<string, { labels: string[]; tradesObserved: number; confidence: string | null; shortfall: string | null }>()
+  try {
+    const session = (await getServerSession(authOptions as never)) as
+      | { user?: { id?: string; email?: string } }
+      | null
+    const userId = session?.user?.id
+    if (!userId) return empty
+
+    const league = await prisma.league.findFirst({
+      where: { platformLeagueId: sleeperLeagueId },
+      select: { id: true },
+    })
+    if (!league) return empty
+
+    const access = await resolveProfileAccessForUser(league.id, userId, session?.user?.email ?? null)
+    if (!access.ok) return empty
+
+    const profiles = await listProfilesByLeague(league.id, { limit: 32 })
+    const out = empty
+    for (const profile of profiles) {
+      const isSelf = access.ownManagerIds.has(profile.managerId)
+      if (!isSelf && !access.canSeeOpponents) continue
+
+      const trade = profile.evidenceSummary?.dimensions.trade
+      const labels = Array.isArray(profile.profileLabels)
+        ? filterLabelsByDimension(profile.profileLabels as ProfileLabel[], 'trade')
+        : []
+      out.set(profile.managerId, {
+        labels,
+        tradesObserved: trade?.evidenceCount ?? 0,
+        confidence: trade?.confidence ?? null,
+        shortfall:
+          trade && !trade.sufficient
+            ? trade.evidenceCount === 0
+              ? 'No trades recorded for this manager yet.'
+              : `Only ${trade.evidenceCount} trade action${trade.evidenceCount === 1 ? '' : 's'} on record — not enough to call a pattern.`
+            : null,
+      })
+    }
+    return out
+  } catch {
+    return empty
+  }
+}

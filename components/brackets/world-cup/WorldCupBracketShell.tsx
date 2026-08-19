@@ -2433,7 +2433,7 @@ export default function WorldCupBracketShell({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-black text-white">Unlock Commissioner Tools</p>
-                <p className="mt-0.5 text-[10px] text-white/50">Custom scoring, bigger pools, invite tools — $4.99/mo</p>
+                <p className="mt-0.5 text-[10px] text-white/50">Custom scoring, bigger pools, invite tools — $14.99/mo</p>
               </div>
               <Zap className="h-4 w-4 shrink-0 text-violet-300/50" />
             </Link>

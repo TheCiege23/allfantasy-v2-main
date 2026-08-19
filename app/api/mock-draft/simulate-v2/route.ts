@@ -14,6 +14,7 @@ import { runDraft } from '@/lib/mock-draft-simulator'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type { DraftPlayer, MockDraftConfig } from '@/lib/mock-draft-simulator/types'
 import { isMockDraftsEnabled } from '@/lib/feature-toggle'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 export const dynamic = 'force-dynamic'
 
@@ -124,15 +125,15 @@ export async function POST(req: Request) {
             leagueId,
             userId: session.user.id,
             rounds,
-            results: result.picks,
-            metadata: {
+            results: toPrismaJsonInput(result.picks),
+            metadata: toPrismaJsonInput({
               sport,
               draftType,
               numTeams,
               aiEnabled: true,
               simulatorV2: true,
               metaEnabled: useMeta,
-            },
+            }),
           },
         })
         draftId = saved.id

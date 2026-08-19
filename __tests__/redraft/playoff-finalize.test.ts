@@ -90,7 +90,7 @@ describe('finalizeRedraftSeasonChampion — safety guards', () => {
 
   it('returns final_round_incomplete when final round is not status=complete', () => {
     expect(engine).toContain("status: 'final_round_incomplete'")
-    expect(engine).toContain("finalRound.status !== 'complete'")
+    expect(engine).toContain("finalRound.status !== 'completed'")
   })
 
   it('returns no_winner when final matchup has no winnerRosterId', () => {

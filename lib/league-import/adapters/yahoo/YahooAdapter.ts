@@ -163,6 +163,11 @@ export const YahooAdapter: ILeagueImportAdapter<YahooImportPayload> = {
         rosterSize,
         scoring: scoringFormat,
         isDynasty,
+        // Same fix as SleeperLeagueMapper/EspnAdapter: `League.status` has no DB
+        // default, so a missing value here leaves imported leagues invisible on
+        // Dashboard. Yahoo exposes a real `is_finished` boolean directly
+        // (`YahooImportLeague.isFinished`), already fetched but never surfaced.
+        status: raw.league.isFinished ? 'complete' : 'in_season',
         playoff_team_count: raw.settings?.usesPlayoff ? undefined : 0,
         regular_season_length: regularSeasonLength,
         schedule_unit: raw.league.sport === 'NFL' ? 'week' : 'period',

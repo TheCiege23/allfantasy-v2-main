@@ -1,4 +1,5 @@
 import { createHash } from 'crypto'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
 import { recordProviderSync } from '@/lib/provider-sync-logger'
 import { normalizePosition, normalizeTeamAbbrev } from '@/lib/team-abbrev'
@@ -120,6 +121,10 @@ function parseDateOrNull(value: unknown): Date | null {
   return Number.isFinite(d.getTime()) ? d : null
 }
 
+function asJsonInput(value: Record<string, unknown>): Prisma.InputJsonValue {
+  return value as unknown as Prisma.InputJsonValue
+}
+
 function currentSeasonString(): string {
   const now = new Date()
   return String(now.getFullYear())
@@ -168,12 +173,12 @@ async function upsertCache(
   await prisma.sportsDataCache.upsert({
     where: { cacheKey: key },
     update: {
-      data: payload,
+      data: asJsonInput(payload),
       expiresAt,
     },
     create: {
       cacheKey: key,
-      data: payload,
+      data: asJsonInput(payload),
       expiresAt,
     },
   })
@@ -284,7 +289,7 @@ async function importGames(sport: SupportedSport, rows: Record<string, unknown>[
         venue: typeof row.venue === 'string' ? row.venue : (typeof row.stadium === 'string' ? row.stadium : null),
         week: parseIntOrNull(row.week),
         season: seasonInt,
-        raw: row,
+        raw: asJsonInput(row),
         fetchedAt: now,
         expiresAt,
       },
@@ -303,7 +308,7 @@ async function importGames(sport: SupportedSport, rows: Record<string, unknown>[
         venue: typeof row.venue === 'string' ? row.venue : (typeof row.stadium === 'string' ? row.stadium : null),
         week: parseIntOrNull(row.week),
         season: seasonInt,
-        raw: row,
+        raw: asJsonInput(row),
         fetchedAt: now,
         expiresAt,
       },
@@ -416,7 +421,7 @@ async function importInjuries(sport: SupportedSport, rows: Record<string, unknow
         date: parseDateOrNull(row.updated_at ?? row.date ?? row.reported_at),
         season,
         week: parseIntOrNull(row.week),
-        raw: row,
+        raw: asJsonInput(row),
         fetchedAt: now,
         expiresAt,
       },
@@ -435,7 +440,7 @@ async function importInjuries(sport: SupportedSport, rows: Record<string, unknow
         date: parseDateOrNull(row.updated_at ?? row.date ?? row.reported_at),
         season,
         week: parseIntOrNull(row.week),
-        raw: row,
+        raw: asJsonInput(row),
         fetchedAt: now,
         expiresAt,
       },
@@ -471,7 +476,7 @@ async function importTeamStats(sport: SupportedSport, rows: Record<string, unkno
       },
       update: {
         teamId: String(row.team_id ?? row.teamId ?? '') || null,
-        stats: row,
+        stats: asJsonInput(row),
         wins: parseIntOrNull(row.wins),
         losses: parseIntOrNull(row.losses),
         ties: parseIntOrNull(row.ties),
@@ -494,7 +499,7 @@ async function importTeamStats(sport: SupportedSport, rows: Record<string, unkno
         season,
         seasonType,
         source: SOURCE,
-        stats: row,
+        stats: asJsonInput(row),
         wins: parseIntOrNull(row.wins),
         losses: parseIntOrNull(row.losses),
         ties: parseIntOrNull(row.ties),
@@ -544,7 +549,7 @@ async function importPlayerStats(sport: SupportedSport, rows: Record<string, unk
         playerName,
         position: normalizePosition(String(row.position ?? row.pos ?? '')),
         team: toShortTeamLabel(String(row.team_abbr ?? row.team ?? row.team_name ?? '').trim()),
-        stats: row,
+        stats: asJsonInput(row),
         gamesPlayed: parseIntOrNull(row.games_played ?? row.gamesPlayed),
         fantasyPoints: parseFloatOrNull(row.fantasy_points ?? row.fantasyPoints),
         fantasyPointsPerGame: parseFloatOrNull(row.fantasy_points_per_game ?? row.fantasyPointsPerGame),
@@ -560,7 +565,7 @@ async function importPlayerStats(sport: SupportedSport, rows: Record<string, unk
         source: SOURCE,
         position: normalizePosition(String(row.position ?? row.pos ?? '')),
         team: toShortTeamLabel(String(row.team_abbr ?? row.team ?? row.team_name ?? '').trim()),
-        stats: row,
+        stats: asJsonInput(row),
         gamesPlayed: parseIntOrNull(row.games_played ?? row.gamesPlayed),
         fantasyPoints: parseFloatOrNull(row.fantasy_points ?? row.fantasyPoints),
         fantasyPointsPerGame: parseFloatOrNull(row.fantasy_points_per_game ?? row.fantasyPointsPerGame),

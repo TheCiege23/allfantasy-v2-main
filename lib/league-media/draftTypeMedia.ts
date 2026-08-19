@@ -90,16 +90,15 @@ export function getDraftThumbnailCandidates(id: DraftTypeId): readonly string[] 
   }
 
   if (stem) {
+    // Only `snake`/`linear`/`auction` have packaged thumbnails under
+    // /public/media/create-league/drafts/thumbnails/ (Title Case, verified on disk).
+    // Other draft types (auto, offline, mock_draft, ...) have no packaged file at
+    // any name, so guessing bare-stem filenames here only produced guaranteed 404s
+    // before falling through to `row.thumbnail` below.
     const label = DRAFT_PACKAGED_THUMB_LABEL[stem]
     if (label) {
       for (const ext of ['png', 'jpg', 'webp'] as const) {
         push(`/media/create-league/drafts/thumbnails/${label}.${ext}`)
-      }
-    }
-    const variants = [stem, stem.replace(/_/g, '-'), stem.replace(/-/g, '_')]
-    for (const k of variants) {
-      for (const ext of ['png', 'jpg', 'webp'] as const) {
-        push(`/media/create-league/drafts/thumbnails/${k}.${ext}`)
       }
     }
   }

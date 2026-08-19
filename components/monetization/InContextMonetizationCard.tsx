@@ -14,17 +14,17 @@ import {
 } from '@/lib/monetization-analytics'
 
 function planLabel(plan: string): string {
-  if (plan === 'all_access') return 'AF Supreme'
+  if (plan === 'supreme') return 'AF Supreme'
   if (plan === 'commissioner') return 'AF Commissioner'
-  if (plan === 'war_room') return 'AF War Room'
+  if (plan === 'war_room') return 'AF Legacy'
   if (plan === 'pro') return 'AF Pro'
   return plan || 'Free'
 }
 
 function resolveCurrentPlan(plans: string[]): string {
-  if (plans.includes('all_access')) return 'AF Supreme'
+  if (plans.includes('supreme')) return 'AF Supreme'
   if (plans.includes('commissioner')) return 'AF Commissioner'
-  if (plans.includes('war_room')) return 'AF War Room'
+  if (plans.includes('war_room')) return 'AF Legacy'
   if (plans.includes('pro')) return 'AF Pro'
   return 'Free'
 }
@@ -50,11 +50,11 @@ export function InContextMonetizationCard({
   const primaryRuleCode = tokenRuleCodes[0] ?? null
   const primaryPreview = primaryRuleCode ? previewsByRuleCode.get(primaryRuleCode)?.preview ?? null : null
   const includedWithPlan = Boolean(feature?.hasAccess)
-  const isAllAccessUser = Boolean(entitlement?.plans?.includes('all_access'))
+  const isSupremeUser = Boolean(entitlement?.plans?.includes('supreme'))
   const showBuyTokensCta = Boolean(!includedWithPlan && primaryPreview && !primaryPreview.canSpend)
   const showUpgradeCta = Boolean(feature && !feature.hasAccess)
-  const showAllAccessCta = Boolean(
-    showUpgradeCta && feature?.requiredPlan !== 'AF Supreme' && feature?.requiredPlan !== 'AF All-Access'
+  const showSupremeUpsellCta = Boolean(
+    showUpgradeCta && feature?.requiredPlan !== 'AF Supreme'
   )
   const currentPlanLabel = resolveCurrentPlan(entitlement?.plans ?? [])
   const didTrackPrompt = useRef(false)
@@ -125,7 +125,7 @@ export function InContextMonetizationCard({
       <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-white/65">
         <span className="inline-flex items-center gap-1" data-testid={`${testIdPrefix}-token-balance`}>
           <Coins className="h-3.5 w-3.5 text-amber-300" />
-          {tokenBalance?.balance ?? 0} tokens
+          {loading ? '...' : error || !tokenBalance ? '— tokens (unavailable)' : `${tokenBalance.balance} tokens`}
         </span>
         {feature ? (
           <span
@@ -136,7 +136,7 @@ export function InContextMonetizationCard({
           >
             <Lock className="h-3 w-3" />
             {feature.hasAccess
-              ? isAllAccessUser
+              ? isSupremeUser
                 ? 'Included with AF Supreme bundle inheritance'
                 : 'Included with your plan'
               : `${feature.requiredPlan ?? 'Premium'} required`}
@@ -180,7 +180,7 @@ export function InContextMonetizationCard({
         </p>
       ) : null}
 
-      {(showUpgradeCta || showBuyTokensCta || showAllAccessCta) && (
+      {(showUpgradeCta || showBuyTokensCta || showSupremeUpsellCta) && (
         <div className="mt-2 flex flex-wrap gap-2">
           {showUpgradeCta ? (
             <Link
@@ -227,13 +227,13 @@ export function InContextMonetizationCard({
               Buy tokens
             </Link>
           ) : null}
-          {showAllAccessCta ? (
+          {showSupremeUpsellCta ? (
             <Link
               href="/pricing?highlight=supreme"
               onClick={() => {
                 trackLockedFeatureConversionClick({
                   surface: 'in_context_monetization_card',
-                  ctaType: 'all_access',
+                  ctaType: 'supreme',
                   featureId: feature?.featureId ?? featureId ?? null,
                   requiredPlan: feature?.requiredPlan ?? null,
                 })
@@ -244,7 +244,7 @@ export function InContextMonetizationCard({
                 })
               }}
               className="rounded-lg border border-emerald-400/35 bg-emerald-500/10 px-2.5 py-1 text-[11px] text-emerald-100 hover:bg-emerald-500/20"
-              data-testid={`${testIdPrefix}-all-access-cta`}
+              data-testid={`${testIdPrefix}-supreme-cta`}
             >
               Get AF Supreme
             </Link>

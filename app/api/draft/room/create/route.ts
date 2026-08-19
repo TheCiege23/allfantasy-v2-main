@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { sessionKeyMock } from '@/lib/draft/session-key'
 import { buildMockPickOrder, randomInviteCode } from '@/lib/draft/pick-order'
 
@@ -48,7 +49,7 @@ export async function POST(req: Request) {
       inviteCode: invite,
       status: 'waiting',
       draftOrder: buildMockPickOrder(numTeams, userId),
-      settings: Object.keys(mergedSettings).length > 0 ? mergedSettings : undefined,
+      settings: Object.keys(mergedSettings).length > 0 ? toPrismaJsonInput(mergedSettings) : undefined,
     },
   })
 

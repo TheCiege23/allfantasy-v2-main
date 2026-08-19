@@ -1,0 +1,70 @@
+/* Commissioner invite panel. Shared by Portfolio rows and the league page. */
+.af-inv { display: flex; flex-direction: column; gap: 10px; }
+.af-inv[data-compact='true'] { gap: 7px; }
+
+.af-inv-progress-wrap { display: flex; flex-direction: column; gap: 5px; }
+
+.af-inv-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--text2, #c3c9e6);
+}
+.af-inv-progress-head b { color: var(--text, #eef0fa); font-weight: 700; }
+
+.af-inv-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--chip, rgba(255, 255, 255, .05));
+  border: 1px solid var(--line, rgba(255, 255, 255, .07));
+  overflow: hidden;
+}
+.af-inv-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent, #22d3ee), var(--good, #34d399));
+  transition: width .25s ease;
+}
+@media (prefers-reduced-motion: reduce) { .af-inv-bar-fill { transition: none; } }
+
+.af-inv-note { margin: 0; font-size: 11.5px; color: var(--muted, #989fc2); }
+.af-inv-note--done { color: var(--good, #34d399); }
+
+.af-inv-actions { display: flex; gap: 8px; align-items: stretch; }
+
+/* Selectable so the link is recoverable when the clipboard API is denied. */
+.af-inv-link {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line2, rgba(255, 255, 255, .13));
+  background: var(--surface2, #0a0c1a);
+  color: var(--text2, #c3c9e6);
+  font: 500 11.5px/1.3 'JetBrains Mono', ui-monospace, monospace;
+  text-overflow: ellipsis;
+}
+.af-inv-link:focus-visible { outline: 2px solid var(--accent, #22d3ee); outline-offset: 1px; }
+
+.af-inv-btn {
+  flex: none;
+  appearance: none;
+  cursor: pointer;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent, #22d3ee);
+  background: var(--accent, #22d3ee);
+  color: var(--accent-ink, #04050c);
+  font: 700 12px/1 'Archivo', system-ui, sans-serif;
+  white-space: nowrap;
+}
+.af-inv-btn:hover { filter: brightness(1.06); }
+.af-inv-btn:focus-visible { outline: 2px solid var(--accent, #22d3ee); outline-offset: 2px; }
+
+.af-inv-loading,
+.af-inv-failed { margin: 0; font-size: 11.5px; color: var(--faint, #7d84a8); }
+.af-inv-failed { color: var(--muted, #989fc2); max-width: 60ch; }
+
+@media (max-width: 560px) {
+  .af-inv-actions { flex-direction: column; }
+}

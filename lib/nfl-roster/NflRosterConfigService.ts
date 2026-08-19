@@ -5,6 +5,7 @@
  * so all downstream systems (draft, waivers, lineup validation, best ball) pick up changes.
  */
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveNflRosterTemplate, calculateRosterSize } from './NflRosterTemplates'
 
 const PREFIX = 'nfl_roster_'
@@ -78,14 +79,14 @@ export async function saveLeagueNflRosterConfig(leagueId: string, config: { temp
     if (existing) {
       await prisma.leagueRosterConfig.update({
         where: { leagueId },
-        data: { overrides: overrides as unknown as Record<string, unknown> },
+        data: { overrides: toPrismaJsonInput(overrides) },
       })
     } else {
       await prisma.leagueRosterConfig.create({
         data: {
           leagueId,
           templateId: `custom-NFL-${leagueId}`,
-          overrides: overrides as unknown as Record<string, unknown>,
+          overrides: toPrismaJsonInput(overrides),
         },
       })
     }

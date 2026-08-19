@@ -124,10 +124,147 @@ const POSITION_CANONICAL: Record<string, string> = {
   FB: 'RB',
 }
 
+/**
+ * @deprecated The map above is football-shaped ('C' → 'OL', 'G' → guard-vs-goalie ambiguity), so
+ * calling this for NBA/NCAAB/NHL/MLB silently corrupts positions. Use `normalizePositionForSport`
+ * anywhere the sport is known.
+ */
 export function normalizePosition(raw: string | null | undefined): string | null {
   if (!raw) return null
   const upper = raw.trim().toUpperCase()
   return POSITION_CANONICAL[upper] || upper
+}
+
+const FOOTBALL_SPORTS = new Set(['NFL', 'NCAAF'])
+
+/**
+ * Sport-aware position normalization. Football sports keep the historical POSITION_CANONICAL
+ * folding (C/G/T → OL, CB/S → DB, …). Every other sport passes through uppercased, because the
+ * football map actively corrupts them: 'C' is a Center in basketball/hockey/baseball (not an
+ * offensive lineman) and 'G' is a Guard in basketball / Goalie in hockey (not an offensive
+ * guard). Verified in prod: NCAAB rows were stored with position 'OL'.
+ */
+export function normalizePositionForSport(
+  sport: string | null | undefined,
+  raw: string | null | undefined
+): string | null {
+  if (!raw) return null
+  const upper = raw.trim().toUpperCase()
+  if (!upper) return null
+
+  const sportKey = (sport ?? '').trim().toUpperCase()
+  if (FOOTBALL_SPORTS.has(sportKey)) return POSITION_CANONICAL[upper] || upper
+  return upper
+}
+
+/** DB bound on SportsPlayerRecord.team / SportsGame team columns (@db.VarChar(32)). */
+export const TEAM_CODE_MAX_LENGTH = 32
+
+export type TeamCodeNormalization =
+  | 'canonical'       // matched the NFL canonical/alias table
+  | 'provider_code'   // input was already a short code-shaped identifier
+  | 'mapped'          // resolved via a caller-supplied name → code map (e.g. SportsTeam.shortName)
+  | 'derived'         // deterministic initials-based code built from the name
+  | 'truncated_fallback' // last resort: bounded slice of the raw name
+  | 'missing'         // no usable input
+
+export interface NormalizedTeamCode {
+  code: string | null
+  originalName: string | null
+  normalization: TeamCodeNormalization
+}
+
+export interface NormalizeTeamCodeInput {
+  sport: string
+  rawTeam: string | null | undefined
+  /** Optional UPPERCASED-name → short-code map (e.g. built from SportsTeam.name → shortName). */
+  teamCodeMap?: ReadonlyMap<string, string> | null
+}
+
+// Words that carry no identity when deriving a short code from an institution name.
+const TEAM_NAME_FILLER = new Set(['UNIVERSITY', 'COLLEGE', 'OF', 'THE', 'AT', 'AND', '&', 'A&M', 'A&T'])
+
+/** Looks like a provider short code already: no spaces, short, alnum-ish. */
+function isCodeShaped(upper: string): boolean {
+  return upper.length >= 2 && upper.length <= 12 && /^[A-Z0-9._&-]+$/.test(upper)
+}
+
+/** Deterministic initials-based code, e.g. "North Carolina Agricultural and Technical State University" → "NCATS". */
+function deriveTeamInitialsCode(name: string): string | null {
+  const words = name
+    .toUpperCase()
+    .replace(/[^A-Z0-9\s&-]/g, ' ')
+    .split(/[\s-]+/)
+    .filter((word) => word.length > 0 && !TEAM_NAME_FILLER.has(word))
+  if (words.length < 2) return null
+  const initials = words.map((word) => word[0]).join('')
+  return initials.length >= 2 && initials.length <= 12 ? initials : initials.slice(0, 12)
+}
+
+/**
+ * Sport-aware team-code normalization for DB-bounded team columns.
+ *
+ * Why this exists: `normalizeTeamAbbrev` above is NFL-only — for any non-NFL team it falls
+ * through to `return upper`, i.e. the RAW UNTRUNCATED input. College providers send full
+ * institution names ("North Carolina Agricultural and Technical State University", 58 chars),
+ * which overflow `SportsPlayerRecord.team @db.VarChar(32)` and crash the whole sport's import
+ * batch. The returned `code` is ALWAYS ≤ TEAM_CODE_MAX_LENGTH.
+ *
+ * Resolution order: NFL canonical table → already-code-shaped input → caller-supplied name map
+ * (SportsTeam.shortName covers 100% of NCAAF/NCAAB teams in prod) → derived initials →
+ * bounded truncation. The full display name is NOT discarded — it's echoed back as
+ * `originalName` and remains available in the unbounded source tables (SportsPlayer.team,
+ * SportsTeam.name); never render `code` where a display name is expected.
+ */
+export function normalizeTeamCode(input: NormalizeTeamCodeInput): NormalizedTeamCode {
+  const originalName = input.rawTeam?.trim() || null
+  if (!originalName) return { code: null, originalName: null, normalization: 'missing' }
+
+  const upper = originalName.toUpperCase()
+  const sportKey = input.sport.trim().toUpperCase()
+
+  // 1. NFL canonical/alias table (also safe for NCAAF inputs that are genuinely NFL-style codes).
+  if (FOOTBALL_SPORTS.has(sportKey) || sportKey === 'NFL') {
+    if (CANONICAL_TEAMS[upper]) return { code: upper, originalName, normalization: 'canonical' }
+    const alias = ALIAS_MAP[upper]
+    if (alias) return { code: alias, originalName, normalization: 'canonical' }
+  }
+  if (sportKey === 'NFL') {
+    // Full-name/mascot/city matching only applies to the NFL table.
+    const canonical = normalizeTeamAbbrev(originalName)
+    if (canonical && CANONICAL_TEAMS[canonical]) {
+      return { code: canonical, originalName, normalization: 'canonical' }
+    }
+  }
+
+  // 2. Already a short provider code.
+  if (isCodeShaped(upper)) return { code: upper, originalName, normalization: 'provider_code' }
+
+  // 3. Caller-supplied name → code map (e.g. SportsTeam.name → shortName).
+  const mapped = input.teamCodeMap?.get(upper)?.trim()
+  if (mapped && mapped.length > 0 && mapped.length <= TEAM_CODE_MAX_LENGTH) {
+    return { code: mapped.toUpperCase(), originalName, normalization: 'mapped' }
+  }
+
+  // 4. Deterministic derived initials.
+  const derived = deriveTeamInitialsCode(originalName)
+  if (derived) return { code: derived, originalName, normalization: 'derived' }
+
+  // 5. Bounded fallback so ingestion never crashes on one row.
+  return {
+    code: upper.slice(0, TEAM_CODE_MAX_LENGTH).trim(),
+    originalName,
+    normalization: 'truncated_fallback',
+  }
+}
+
+/** Final schema-boundary guard for @db.VarChar(32) team columns. */
+export function assertTeamCodeFits(code: string | null): string | null {
+  if (!code) return null
+  if (code.length > TEAM_CODE_MAX_LENGTH) {
+    throw new Error(`Normalized team code exceeds ${TEAM_CODE_MAX_LENGTH} characters: ${code}`)
+  }
+  return code
 }
 
 export function normalizePlayerName(name: string): string {

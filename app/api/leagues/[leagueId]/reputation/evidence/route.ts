@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { listEvidenceForManager } from '@/lib/reputation-engine/ManagerTrustQueryService'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,6 +15,9 @@ export async function GET(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
 
     const url = new URL(req.url)
     const managerId = url.searchParams?.get('managerId')

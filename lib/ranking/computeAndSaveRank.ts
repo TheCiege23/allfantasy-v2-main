@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { LegacyLeagueHistoryRow, LegacyTotals, RankPreview } from '@/lib/ranking/computeLegacyRank'
 import { computeLegacyRankPreview } from '@/lib/ranking/computeLegacyRank'
+import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 
 type LegacyUserRef = { id: string } | null | undefined
 
@@ -120,11 +121,6 @@ export async function computeAndSaveRank(
     leagueHistory,
   })
 
-  const totalWinsAgg = totals.wins
-  const totalLossesAgg = rosterRows.reduce((sum, roster) => sum + safeNumber(roster.losses), 0)
-  const tierLabel = `T${Math.min(25, Math.max(1, rankPreview.career.tier))}`
-  const xpBig = BigInt(Math.max(0, Math.floor(rankPreview.career.xp)))
-
   const now = new Date()
 
   await prisma.legacyUserRankCache.upsert({
@@ -160,32 +156,10 @@ export async function computeAndSaveRank(
     },
   })
 
-  await prisma.userProfile.upsert({
-    where: { userId: afUserId },
-    update: {
-      rankTier: tierLabel,
-      xpTotal: xpBig,
-      xpLevel: rankPreview.career.level,
-      careerWins: totalWinsAgg,
-      careerLosses: totalLossesAgg,
-      careerChampionships: totals.championships,
-      careerPlayoffAppearances: totals.playoffs,
-      careerSeasonsPlayed: seasonsImported,
-      careerLeaguesPlayed: rosterRows.length,
-      rankCalculatedAt: now,
-    },
-    create: {
-      userId: afUserId,
-      rankTier: tierLabel,
-      xpTotal: xpBig,
-      xpLevel: rankPreview.career.level,
-      careerWins: totalWinsAgg,
-      careerLosses: totalLossesAgg,
-      careerChampionships: totals.championships,
-      careerPlayoffAppearances: totals.playoffs,
-      careerSeasonsPlayed: seasonsImported,
-      careerLeaguesPlayed: rosterRows.length,
-      rankCalculatedAt: now,
-    },
-  })
+  // Reconciliation: user_profiles is owned by the single canonical engine
+  // (calculateAndSaveRank) — imported (all platforms) + legacy + native AF leagues,
+  // one XP scale. This engine keeps its own legacyUserRankCache (yearly projections)
+  // above but no longer writes a divergent user_profiles scale, which is what made
+  // the displayed career rank non-deterministic.
+  await calculateAndSaveRank(afUserId)
 }

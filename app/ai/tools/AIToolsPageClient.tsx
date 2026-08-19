@@ -94,7 +94,7 @@ const TOOL_GROUPS = [
     tools: [
       {
         id: 'war-room',
-        title: 'AF War Room',
+        title: 'AF Legacy',
         description: 'Full AI draft command center — tier cliffs, pick recommendations, value windows.',
         href: '/war-room',
         icon: Swords,
@@ -369,7 +369,7 @@ export default function AIToolsPageClient() {
               className="inline-flex items-center gap-1.5 rounded-xl border border-cyan-500/25 bg-cyan-500/10 px-4 py-2 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/20"
             >
               <Swords className="h-3.5 w-3.5" />
-              AF War Room
+              AF Legacy
             </Link>
             <Link
               href="/af-rankings"

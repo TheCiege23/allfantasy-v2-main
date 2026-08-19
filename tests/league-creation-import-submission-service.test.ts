@@ -116,6 +116,11 @@ describe('LeagueCreationImportSubmissionService', () => {
   })
 
   it('routes mfl create through import commit endpoint', async () => {
+    // mfl's sourceId format ("year:id") is worth its own case even though
+    // provider-ui-config.ts now marks mfl unavailable pending a credential UI
+    // (docs/redraft/G61_IMPORT_PROVIDER_AVAILABILITY_RECONCILIATION.md) — this
+    // test is about routing/serialization, not availability policy.
+    availabilitySpy = vi.spyOn(providerUiConfig, 'isImportProviderAvailable').mockReturnValue(true)
     fetchMock.mockResolvedValue(
       new Response(
         JSON.stringify({

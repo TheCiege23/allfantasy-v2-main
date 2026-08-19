@@ -134,7 +134,7 @@ export function getDraftRoomPositionGroupCounts(
     if (isKickerAlias(raw)) out.K += 1
     if (isDstAlias(raw)) out.DST += 1
     if (isFlexEligible(raw)) out.FLEX += 1
-    if (isLikelyIdpFootballPosition(raw) && !isDstAlias(raw) && pos !== 'QB' && !isFlexEligible(raw)) {
+    if (isLikelyIdpFootballPosition(raw ?? undefined) && !isDstAlias(raw) && pos !== 'QB' && !isFlexEligible(raw)) {
       out.IDP += 1
     }
     if (

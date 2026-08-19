@@ -50,10 +50,18 @@ describe('Redraft sport adapter parity', () => {
       const adapter = getSportAdapter(sport)
       const parsed = adapter.parseRawStats({})
       const configKeys = new Set(config.scoringCategories.map((c) => c.key))
+      // Team-defense (DST) categories score directly off raw team-defense stats
+      // (counting stats + points/yards-allowed tiers via `tierStatKey`), not
+      // through the per-player `SportAdapter.parseRawStats` parser — so they are
+      // intentionally absent from `parsed`. They must still exist in the config.
+      const teamDefenseKeys = new Set(
+        config.scoringCategories.filter((c) => c.group === 'team_def').map((c) => c.key),
+      )
       const adapterKeys = adapterKeyMap[sport]
 
       for (const key of adapterKeys) {
         expect(configKeys.has(key)).toBe(true)
+        if (teamDefenseKeys.has(key)) continue
         expect(Object.prototype.hasOwnProperty.call(parsed, key)).toBe(true)
         expect(typeof parsed[key]).toBe('number')
       }

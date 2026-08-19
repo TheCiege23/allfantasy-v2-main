@@ -54,5 +54,5 @@ export default function WaiverWirePage() {
     )
   }
 
-  return <WaiverWireClient leagueId={leagueId} />
+  return <WaiverWireClient leagueId={leagueId} preselectPlayerId={searchParams?.get("playerId") ?? null} />
 }

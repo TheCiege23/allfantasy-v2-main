@@ -12,6 +12,8 @@ import {
   weekFromLeagueSettingsForLineup,
 } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 import { evaluateLegalityForPersistedRoster } from '@/lib/roster-legality/loadLegalityEvaluationContext'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
 
 export const dynamic = 'force-dynamic'
 
@@ -108,6 +110,39 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
 
   const season = league.season ?? new Date().getFullYear()
 
+  // Gated, reject-only certified sports safety check — runs AFTER the authoritative roster legality + lock
+  // check above and BEFORE persistence. It can only ADD a rejection (never approve, never weaken the existing
+  // decision), and only on TRUSTWORTHY (current) certified evidence that a started player's game is already
+  // locked/final/postponed. On stale/unavailable certified data it does not block this human-confirmed manual
+  // save (the engine's own lock check below, skipLockCheck:false, remains final). Evidence is EMITTED in the
+  // response (not persisted to a new production table). Wrapped so it can never turn a safe save into an error.
+  let sportsDataDecision:
+    | { featureGateEnabled: boolean; finalDecision: 'allowed' | 'rejected'; reason: string; freshnessStatus: string; identityStatus: string; scheduleSnapshotVersion: string | null; blockedCanonicalPlayerIds: string[]; evaluatedAt: string }
+    | undefined
+  if (isSportsDataEnabled('lineup') && String(league.sport ?? 'NFL').toUpperCase() === 'NFL') {
+    try {
+      const starters = extractPlayerRefs((rosterState as Record<string, unknown>).starters)
+      const guard = await new CertifiedLineupIntegrationService().evaluateLineupPersistSafety({ season: String(season), week: String(editingWeek), starterRefs: starters })
+      sportsDataDecision = {
+        featureGateEnabled: true,
+        finalDecision: guard.block ? 'rejected' : 'allowed',
+        reason: guard.reason,
+        freshnessStatus: guard.freshnessStatus,
+        identityStatus: guard.identityStatus,
+        scheduleSnapshotVersion: guard.snapshotVersion,
+        blockedCanonicalPlayerIds: guard.blockedPlayers,
+        evaluatedAt: new Date().toISOString(),
+      }
+      if (guard.block) {
+        console.info('[lineup/ai-apply][sports-data] rejected', { leagueId, rosterId: roster.id, reason: guard.reason, snapshot: guard.snapshotVersion })
+        return NextResponse.json({ error: `Lineup blocked by certified game evidence: ${guard.reason}`, code: 'SPORTS_DATA_LOCK', sportsDataDecision }, { status: 409 })
+      }
+    } catch {
+      // Fail-open for a human-confirmed manual save: the engine's own lock check below remains authoritative.
+      sportsDataDecision = { featureGateEnabled: true, finalDecision: 'allowed', reason: 'certified sports evidence unavailable — existing authority final', freshnessStatus: 'unavailable', identityStatus: 'unresolved', scheduleSnapshotVersion: null, blockedCanonicalPlayerIds: [], evaluatedAt: new Date().toISOString() }
+    }
+  }
+
   const persisted = await persistRosterLineupWithEngine({
     leagueId,
     rosterId: roster.id,
@@ -123,5 +158,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     return NextResponse.json({ error: persisted.error }, { status: persisted.status ?? 400 })
   }
 
-  return NextResponse.json({ ok: true, rosterId: roster.id, week: editingWeek, source: 'ai_apply_lineup' })
+  return NextResponse.json({ ok: true, rosterId: roster.id, week: editingWeek, source: 'ai_apply_lineup', ...(sportsDataDecision ? { sportsDataDecision } : {}) })
 }

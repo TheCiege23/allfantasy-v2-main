@@ -9,18 +9,18 @@ import {
 
 const AF_PRO_FEATURES = [
   'Trade analyzer',
-  'AI chat',
-  'AI waivers',
+  'Chat',
+  'Waivers',
   'Player-specific planning',
-  'Matchup and player-specific AI recommendations',
-  'Player-focused AI insights',
+  'Matchup and player-specific recommendations',
+  'Player-focused insights',
 ]
 
 const DIFFERENTIATION = [
   {
     title: 'AF Pro',
     icon: Crown,
-    copy: 'Player-specific AI tier for lineup and roster decisions.',
+    copy: 'Player-specific tier for lineup and roster decisions.',
     tone: 'border-cyan-400/35 bg-cyan-500/10 text-cyan-100',
   },
   {
@@ -30,7 +30,7 @@ const DIFFERENTIATION = [
     tone: 'border-amber-400/35 bg-amber-500/10 text-amber-100',
   },
   {
-    title: 'AF War Room',
+    title: 'AF Legacy',
     icon: Telescope,
     copy: 'Draft room and long-horizon build workflows.',
     tone: 'border-violet-400/35 bg-violet-500/10 text-violet-100',
@@ -79,7 +79,7 @@ export function AFProPlanSpotlight({ className = '' }: { className?: string }) {
       </div>
 
       <p className="mt-1 text-xs text-white/65">
-        AF Pro is the player-specific AI tier. Use subscription access or tokens where policy allows.
+        AF Pro is the player-specific tier. Use subscription access or tokens where policy allows.
       </p>
 
       <div className="mt-3 grid gap-3 md:grid-cols-2">

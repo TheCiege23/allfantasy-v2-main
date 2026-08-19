@@ -335,7 +335,7 @@ export default function DraftRoom(props: DraftRoomProps) {
           const result = await onAiPick(username, fullRoster, undraftedPlayers)
           if (result) {
             onMakePick({ name: result.playerName, position: result.position, team: result.team })
-            setChatMessages(prev => [...prev, { from: '🤖 AI', text: `Auto-picked ${result.playerName}: ${result.reasoning}` }])
+            setChatMessages(prev => [...prev, { from: '🤖 Chimmy', text: `Auto-picked ${result.playerName}: ${result.reasoning}` }])
           }
         } catch {
           const fallback = undraftedPlayers[0]
@@ -364,7 +364,7 @@ export default function DraftRoom(props: DraftRoomProps) {
         const result = await onAiPick(currentPickInfo.managerName, fullRoster, undraftedPlayers)
         if (result) {
           onMakePick({ name: result.playerName, position: result.position, team: result.team })
-          setChatMessages(prev => [...prev, { from: '🤖 AI', text: `${currentPickInfo.managerName} picks ${result.playerName}: ${result.reasoning}` }])
+          setChatMessages(prev => [...prev, { from: '🤖 Chimmy', text: `${currentPickInfo.managerName} picks ${result.playerName}: ${result.reasoning}` }])
         }
       } catch {
         const fallback = undraftedPlayers[0]
@@ -1171,7 +1171,7 @@ export default function DraftRoom(props: DraftRoomProps) {
               border: aiAutoQueue ? '1px solid rgba(168,85,247,0.3)' : '1px solid transparent',
             }}
           >
-            AI Q
+            Auto Q
           </button>
         </div>
       </div>
@@ -1376,7 +1376,7 @@ export default function DraftRoom(props: DraftRoomProps) {
           <button
             onClick={async () => {
               if (!onAiDmSuggestion) return
-              setChatMessages(prev => [...prev, { from: '🤖 AI', text: 'Analyzing your picks...' }])
+              setChatMessages(prev => [...prev, { from: '🤖 Chimmy', text: 'Analyzing your picks...' }])
               const myRoster = draftPicks
                 .filter(p => p.manager === username)
                 .map(p => ({ position: p.position }))
@@ -1388,11 +1388,11 @@ export default function DraftRoom(props: DraftRoomProps) {
               const result = await onAiDmSuggestion(fullRoster, undraftedPlayers, round, pick)
               if (result) {
                 const msgs = result.suggestions.map((s: any) => ({
-                  from: '🤖 AI',
+                  from: '🤖 Chimmy',
                   text: `${s.type === 'need' ? '🎯' : s.type === 'bpa' ? '⭐' : '💰'} ${s.player} (${s.position}) - ${s.reason}`
                 }))
                 if (result.aiInsight) {
-                  msgs.push({ from: '🤖 AI', text: result.aiInsight })
+                  msgs.push({ from: '🤖 Chimmy', text: result.aiInsight })
                 }
                 setChatMessages(prev => [...prev, ...msgs])
               }
@@ -1402,7 +1402,7 @@ export default function DraftRoom(props: DraftRoomProps) {
             disabled={!isDraftStarted || draftComplete}
           >
             <Zap className="w-3 h-3 inline mr-0.5" />
-            Ask AI
+            Ask Chimmy
           </button>
         </div>
       </div>

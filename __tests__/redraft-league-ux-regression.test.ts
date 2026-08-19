@@ -18,9 +18,8 @@ describe('post-merge redraft league UX contracts', () => {
   const commissionerSettingsModal = read('app/league/[leagueId]/components/CommissionerSettingsModal.tsx')
 
   it('uses production tab labels without changing tab ids or URLs', () => {
-    expect(leagueShell).toContain("{ id: 'trades', label: 'Trade Center' }")
-    expect(leagueShell).toContain("{ id: 'league', label: isCommissioner ? 'Commissioner Hub' : 'League' }")
-    expect(leagueShell).toMatch(/if \(tab\.id === 'trades'\) return \{ \.\.\.tab, label: 'Trade Center' \}/)
+    expect(leagueShell).toContain("{ id: 'trades', label: 'Trades' }")
+    expect(leagueShell).toMatch(/if \(tab\.id === 'trades'\) return \{ \.\.\.tab, label: 'Trades' \}/)
     expect(leagueShell).toMatch(
       /if \(tab\.id === 'league' && isCommissioner\) return \{ \.\.\.tab, label: 'Commissioner Hub' \}/,
     )
@@ -54,8 +53,9 @@ describe('post-merge redraft league UX contracts', () => {
   it('uses the existing draft service and materializer before entering the draft room', () => {
     expect(draftResolver).toContain("import { getOrCreateDraftSession }")
     expect(draftResolver).toContain("import { autoMaterializeDraftForLeague }")
-    expect(draftResolver).toContain('const { session: ds } = await getOrCreateDraftSession(leagueId)')
-    expect(draftResolver).toContain("ds.status === 'pre_draft'")
+    expect(draftResolver).toContain('const { session: draftSession } = await getOrCreateDraftSession(leagueId)')
+    expect(draftResolver).toContain("draftSession.status === 'pre_draft'")
+    expect(draftResolver).toContain("updatedDraftSession.status === 'pre_draft'")
     expect(draftResolver).toContain('await autoMaterializeDraftForLeague(leagueId)')
     expect(draftResolver).not.toMatch(/rounds:\s*15/)
   })

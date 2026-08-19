@@ -37,8 +37,42 @@ import { recordEngineTelemetrySample } from '@/lib/analytics/recordAnalyticsEven
 import { ENGINE } from '@/lib/analytics/eventNames'
 import { logStructured } from '@/lib/logging/structured'
 import { getDraftPoolReadiness, triggerDraftPoolPrewarmBackground } from '@/lib/draft-room/ensureDraftPoolReady'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedDraftIntegrationService, type CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/draftIntegration'
+import { extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { prisma } from '@/lib/prisma'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Gated, informational-only certified schedule context for the draft board (already-made picks). Room/board
+ * evidence only — it NEVER affects draft order, current pick, the pool, or any pick authority. Wrapped so it can
+ * never fail the room load. Returns undefined when the gate is off, sport is non-NFL, or on any error.
+ */
+async function draftBoardSportsContext(leagueId: string, picks: unknown): Promise<CertifiedScheduleDescription | undefined> {
+  if (!isSportsDataEnabled('draft')) return undefined
+  try {
+    const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+    if (!league || String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') return undefined
+    const rows = Array.isArray(picks) ? picks : []
+    const ids = rows
+      .map((p) => {
+        const o = (p ?? {}) as Record<string, unknown>
+        return o.playerId ?? o.player_id ?? o.id ?? o.playerName ?? o.player_name
+      })
+      .filter((v): v is string | number => typeof v === 'string' || typeof v === 'number')
+    if (ids.length === 0) return undefined
+    const refs = extractPlayerRefs(ids)
+    return await new CertifiedDraftIntegrationService().describeDraftBoardSportsContext({
+      season: String(league.season ?? new Date().getFullYear()),
+      week: String(weekFromLeagueSettingsForLineup(league.settings)),
+      players: refs,
+    })
+  } catch {
+    return undefined
+  }
+}
 
 async function getSessionUserIdOrNull(): Promise<string | null> {
   try {
@@ -248,6 +282,11 @@ export async function GET(
       if (canonicalDraftStateParity) {
         responseBody.canonicalDraftStateParity = canonicalDraftStateParity
       }
+    }
+
+    const sportsContext = await draftBoardSportsContext(leagueId, (shared.snapshot as { picks?: unknown })?.picks)
+    if (sportsContext) {
+      ;(responseBody as Record<string, unknown>).sportsContext = sportsContext
     }
 
     // Sampled: track state-poll volume to detect connection storms

@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaNullableJsonInput } from '@/lib/prisma-json'
 import {
   WarehouseIngestionService,
   type WarehouseIngestionWriteClient,
@@ -221,8 +222,8 @@ async function persistMatchupSimulationOutput(
       expectedScoreB: roundTo(input.expectedScoreB, 2),
       winProbabilityA: roundTo(input.winProbabilityA, 4),
       winProbabilityB: roundTo(input.winProbabilityB, 4),
-      scoreDistributionA: input.scoreDistributionA ?? undefined,
-      scoreDistributionB: input.scoreDistributionB ?? undefined,
+      scoreDistributionA: toPrismaNullableJsonInput(input.scoreDistributionA),
+      scoreDistributionB: toPrismaNullableJsonInput(input.scoreDistributionB),
       iterations: input.iterations ?? 2000,
     },
   })

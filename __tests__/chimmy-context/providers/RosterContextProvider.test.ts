@@ -8,12 +8,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const {
   appUserFindUniqueMock,
   leagueTeamFindFirstMock,
-  rosterFindUniqueMock,
+  rosterFindFirstMock,
   weeklyScoreFindManyMock,
 } = vi.hoisted(() => ({
   appUserFindUniqueMock: vi.fn(),
   leagueTeamFindFirstMock: vi.fn(),
-  rosterFindUniqueMock: vi.fn(),
+  rosterFindFirstMock: vi.fn(),
   weeklyScoreFindManyMock: vi.fn(),
 }))
 
@@ -21,7 +21,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: {
     appUser: { findUnique: appUserFindUniqueMock },
     leagueTeam: { findFirst: leagueTeamFindFirstMock },
-    roster: { findUnique: rosterFindUniqueMock },
+    roster: { findFirst: rosterFindFirstMock },
     weeklyScore: { findMany: weeklyScoreFindManyMock },
   },
 }))
@@ -55,7 +55,7 @@ describe("RosterContextProvider", () => {
     const res = await provider.load(baseRequest({ leagueId: null }))
     expect(res.ok).toBe(true)
     expect(res.data).toBeNull()
-    expect(rosterFindUniqueMock).not.toHaveBeenCalled()
+    expect(rosterFindFirstMock).not.toHaveBeenCalled()
   })
 
   it("returns empty starters/bench when viewer has no platformUserId in this league", async () => {
@@ -73,11 +73,11 @@ describe("RosterContextProvider", () => {
       starters: [],
       bench: [],
     })
-    expect(rosterFindUniqueMock).not.toHaveBeenCalled()
+    expect(rosterFindFirstMock).not.toHaveBeenCalled()
   })
 
   it("returns empty starters/bench when the Roster row is missing", async () => {
-    rosterFindUniqueMock.mockResolvedValueOnce(null)
+    rosterFindFirstMock.mockResolvedValueOnce(null)
     const provider = new RosterContextProvider()
     const res = await provider.load(baseRequest())
     expect(res.ok).toBe(true)
@@ -86,7 +86,7 @@ describe("RosterContextProvider", () => {
   })
 
   it("projects playerData.lineup_sections into RosterPlayerLite[]", async () => {
-    rosterFindUniqueMock.mockResolvedValueOnce({
+    rosterFindFirstMock.mockResolvedValueOnce({
       playerData: {
         lineup_sections: {
           starters: [
@@ -122,7 +122,7 @@ describe("RosterContextProvider", () => {
   })
 
   it("falls back name=playerId when name is missing", async () => {
-    rosterFindUniqueMock.mockResolvedValueOnce({
+    rosterFindFirstMock.mockResolvedValueOnce({
       playerData: {
         lineup_sections: {
           starters: [{ id: "p-nameless", position: "WR" }],
@@ -138,8 +138,8 @@ describe("RosterContextProvider", () => {
     expect(res.data?.starters[0].name).toBe("p-nameless")
   })
 
-  it("returns ok:false with null data when Roster.findUnique throws synchronously", async () => {
-    rosterFindUniqueMock.mockImplementationOnce(() => {
+  it("returns ok:false with null data when Roster.findFirst throws synchronously", async () => {
+    rosterFindFirstMock.mockImplementationOnce(() => {
       throw new Error("sync boom")
     })
     const provider = new RosterContextProvider()
@@ -150,7 +150,7 @@ describe("RosterContextProvider", () => {
   })
 
   it("(Batch 4 Sub-batch C) skips WeeklyScore read when season/week missing and leaves projections null", async () => {
-    rosterFindUniqueMock.mockResolvedValueOnce({
+    rosterFindFirstMock.mockResolvedValueOnce({
       id: "roster-self",
       playerData: {
         lineup_sections: {
@@ -182,7 +182,7 @@ describe("RosterContextProvider", () => {
   })
 
   it("(Batch 4 Sub-batch C) wires WeeklyScore projections and surfaces depth + strength signals", async () => {
-    rosterFindUniqueMock.mockResolvedValueOnce({
+    rosterFindFirstMock.mockResolvedValueOnce({
       id: "roster-self",
       playerData: {
         lineup_sections: {
@@ -226,7 +226,7 @@ describe("RosterContextProvider", () => {
   })
 
   it("(Batch 4 Sub-batch C) leaves projections null when WeeklyScore read fails", async () => {
-    rosterFindUniqueMock.mockResolvedValueOnce({
+    rosterFindFirstMock.mockResolvedValueOnce({
       id: "roster-self",
       playerData: {
         lineup_sections: {

@@ -22,6 +22,8 @@ export interface DeepSeekChatOptions {
   model?: string
   temperature?: number
   maxTokens?: number
+  /** Cancels the underlying HTTP request (OpenAI-compatible SDK). A signalled call bypasses the cache. */
+  signal?: AbortSignal
 }
 
 export interface DeepSeekResult {
@@ -35,6 +37,7 @@ export async function deepseekChat(
   options: DeepSeekChatOptions
 ): Promise<DeepSeekResult> {
   const key = cacheKey('deepseek', options.prompt, options.systemPrompt, options.model)
+  if (options.signal) return _deepseekChatUncached(options) // cancellable calls bypass the cache
   return cachedFetch(key, 1800, () => _deepseekChatUncached(options))
 }
 
@@ -67,15 +70,18 @@ async function _deepseekChatUncached(
 
   try {
     const runtimeModel = model?.trim() || cfg.model || 'deepseek-chat'
-    const response = await client.chat.completions.create({
-      model: runtimeModel,
-      temperature,
-      max_tokens: maxTokens,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: prompt },
-      ],
-    })
+    const response = await client.chat.completions.create(
+      {
+        model: runtimeModel,
+        temperature,
+        max_tokens: maxTokens,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: prompt },
+        ],
+      },
+      { signal: options.signal },
+    )
 
     const content = response.choices[0]?.message?.content ?? ''
     return {

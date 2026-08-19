@@ -9,7 +9,7 @@ import {
   setStoredLanguage,
 } from "@/lib/preferences/LanguagePreferenceService"
 import {
-  getStoredTheme,
+  getStoredThemePreference,
   setStoredTheme,
 } from "@/lib/preferences/ThemePreferenceService"
 import { resolveSharedSessionBootstrap } from "@/lib/auth/SharedSessionBootstrapService"
@@ -52,7 +52,7 @@ export default function SyncProfilePreferences() {
         const bootstrap = resolveSharedSessionBootstrap({
           profile: data,
           storedLanguagePreference: getStoredLanguage(),
-          storedThemePreference: getStoredTheme(),
+          storedThemePreference: getStoredThemePreference(),
         })
 
         if (language !== bootstrap.language) {

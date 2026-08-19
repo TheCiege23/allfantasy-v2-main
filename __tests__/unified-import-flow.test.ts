@@ -9,6 +9,10 @@ describe('normalizeIncomingImportProvider', () => {
   it('maps supported providers', () => {
     expect(normalizeIncomingImportProvider('YAHOO')).toBe('yahoo')
     expect(normalizeIncomingImportProvider('sleeper')).toBe('sleeper')
+    // Fleaflicker is an intended provider (currently unavailable) — it must still
+    // normalize so a `?provider=fleaflicker` intent selects the right tab.
+    expect(normalizeIncomingImportProvider('fleaflicker')).toBe('fleaflicker')
+    expect(normalizeIncomingImportProvider('FLEAFLICKER')).toBe('fleaflicker')
     expect(normalizeIncomingImportProvider('bad')).toBeUndefined()
   })
 })

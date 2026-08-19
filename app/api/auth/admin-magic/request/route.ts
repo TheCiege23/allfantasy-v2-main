@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getResendClient } from "@/lib/resend-client";
 import { signAdminMagicToken } from "@/lib/adminSession";
 import { isAdminEmailAllowed } from "@/lib/adminAuth";
+import { getDeploymentLinkOrigin } from "@/lib/site-public-origin";
 
 function sanitizeNext(next?: string) {
   if (!next) return "/admin";
@@ -24,7 +25,10 @@ export const POST = withApiUsage({ endpoint: "/api/auth/admin-magic/request", to
     if (!isAdminEmailAllowed(email)) return safeOk;
 
     const token = signAdminMagicToken(email, next, 10 * 60);
-    const baseUrl = process.env.PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || "";
+    // Preview-aware, spoof-safe origin: on a preview deployment this is the preview's own
+    // Vercel host, so the emailed link returns to the SAME preview (not production). Never
+    // derived from the request Host header. Production is unchanged (configured canonical).
+    const baseUrl = getDeploymentLinkOrigin();
     const link = baseUrl
       ? `${baseUrl.replace(/\/$/, "")}/api/auth/admin-magic/consume?token=${encodeURIComponent(token)}`
       : `/api/auth/admin-magic/consume?token=${encodeURIComponent(token)}`;

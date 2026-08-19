@@ -4,7 +4,12 @@ import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
-import type { CanonicalImportBundle, ImportProvider, NormalizedImportResult } from './types'
+import type {
+  CanonicalImportBundle,
+  ImportProvider,
+  NormalizedImportResult,
+  NormalizedTradedPick,
+} from './types'
 
 export class ImportedLeagueConflictError extends Error {}
 
@@ -29,6 +34,144 @@ export interface PersistImportedLeagueResult {
 
 function resolveImportedLeagueSport(normalized: NormalizedImportResult): string {
   return normalizeToSupportedSport(normalized.league.sport)
+}
+
+/**
+ * Tier 0 (Block C) — extract League row columns from `normalized.league.*`
+ * (populated by the provider mapper's Tier 0 block). Only defined values are
+ * emitted, so any absent field preserves its Prisma column default. Numeric
+ * types coerce integers; boolean types accept the mapper's normalized booleans.
+ *
+ * IMPORTANT: additive by design. Callers spread this last into `leaguePayload`
+ * so any value the mapper populated wins over the defaults, but a mapper that
+ * doesn't populate a field is fully backward-compatible.
+ */
+export function buildTier0LeagueColumnPatch(
+  normalized: NormalizedImportResult,
+): Record<string, unknown> {
+  const l = normalized.league
+  const out: Record<string, unknown> = {}
+  const setIfNum = (key: string, v: unknown): void => {
+    if (typeof v === 'number' && Number.isFinite(v)) out[key] = v
+  }
+  const setIfBool = (key: string, v: unknown): void => {
+    if (typeof v === 'boolean') out[key] = v
+  }
+  const setIfStr = (key: string, v: unknown): void => {
+    if (typeof v === 'string' && v.length > 0) out[key] = v
+  }
+
+  // Waiver + trade window
+  setIfStr('waiverType', l.waiver_type)
+  setIfNum('waiverBudget', l.faab_budget ?? undefined)
+  setIfNum('waiverMinBid', l.waiver_bid_min)
+  setIfNum('tradeDeadlineWeek', l.trade_deadline_week)
+  // Sleeper `trade_review_days` in DAYS → AF `tradeReviewHours` in HOURS.
+  if (typeof l.trade_review_days === 'number' && Number.isFinite(l.trade_review_days)) {
+    out.tradeReviewHours = Math.max(0, l.trade_review_days * 24)
+  }
+  setIfBool('draftPickTrading', l.pick_trading)
+
+  // Playoffs
+  setIfNum('playoffStartWeek', l.playoff_start_week)
+  setIfNum('playoffTeams', l.playoff_teams)
+
+  // Reserve + taxi
+  setIfNum('irSlots', l.reserve_slots)
+  setIfNum('taxiSlots', l.taxi_slots)
+  setIfNum('taxiYearsLimit', l.taxi_years)
+  setIfBool('taxiAllowNonRookies', l.taxi_allow_vets)
+  setIfNum('taxiDeadlineWeek', l.taxi_deadline_week)
+  setIfNum('keeperCount', l.max_keepers)
+
+  // IR eligibility flags
+  setIfBool('irAllowCovid', l.reserve_allow_cov)
+  setIfBool('irAllowSuspended', l.reserve_allow_sus)
+  setIfBool('irAllowOut', l.reserve_allow_out)
+  setIfBool('irAllowNA', l.reserve_allow_na)
+  setIfBool('irAllowDNR', l.reserve_allow_dnr)
+  setIfBool('irAllowDoubtful', l.reserve_allow_doubtful)
+
+  return out
+}
+
+/**
+ * Block F — persist normalized future traded draft picks into `future_draft_picks`.
+ *
+ * Uses Prisma `upsert` keyed on the composite unique
+ * `(leagueId, pickSeason, round, originalRosterId)` — that unique already exists
+ * in `prisma/schema.prisma`, so a re-import updates `currentOwnerId` for an
+ * existing pick instead of creating a duplicate row (satisfies Block F scope
+ * requirement #5: "Ensure re-import/update does not duplicate picks").
+ *
+ * Schema limitation acknowledged: Sleeper's `previous_owner_id` has no dedicated
+ * column on `future_draft_picks`. It's dropped here with an inline comment; a
+ * future schema addition can wire it up from the already-normalized field on
+ * `NormalizedTradedPick` without a mapper rewrite.
+ *
+ * Exported for testability; not part of the public import API.
+ */
+export async function persistTradedPicks(
+  leagueId: string,
+  picks: NormalizedTradedPick[],
+): Promise<{ written: number; skipped: number }> {
+  if (!Array.isArray(picks) || picks.length === 0) {
+    return { written: 0, skipped: 0 }
+  }
+  let written = 0
+  let skipped = 0
+  for (const pick of picks) {
+    // Defensive: mapper already filters these, but guard the persistence layer
+    // too so a malformed row can never crash the whole loop.
+    if (
+      !pick ||
+      typeof pick.season !== 'number' ||
+      typeof pick.round !== 'number' ||
+      typeof pick.original_roster_id !== 'string' ||
+      typeof pick.current_owner_roster_id !== 'string'
+    ) {
+      skipped++
+      continue
+    }
+    try {
+      await (prisma as any).futureDraftPick.upsert({
+        where: {
+          leagueId_pickSeason_round_originalRosterId: {
+            leagueId,
+            pickSeason: pick.season,
+            round: pick.round,
+            originalRosterId: pick.original_roster_id,
+          },
+        },
+        create: {
+          leagueId,
+          pickSeason: pick.season,
+          round: pick.round,
+          originalRosterId: pick.original_roster_id,
+          currentOwnerId: pick.current_owner_roster_id,
+          // A pick appears in `/traded_picks` iff it has been moved off its
+          // original roster at least once — always `traded: true` from Sleeper.
+          traded: true,
+          // NOTE: Sleeper `previous_owner_id` (pick.previous_owner_roster_id) is
+          // dropped here — no dedicated column on `future_draft_picks`. This is
+          // a documented schema limitation, not a mapper bug.
+        },
+        update: {
+          // Only ownership can change between imports; original identity + season
+          // + round are the primary-key composite and never change.
+          currentOwnerId: pick.current_owner_roster_id,
+          traded: true,
+        },
+      })
+      written++
+    } catch {
+      // Prisma constraint violation or transient DB error: skip this row so
+      // one bad pick can't lose the other 32. Outer catch in the caller logs
+      // the surrounding context.
+      skipped++
+    }
+  }
+  return { written, skipped }
 }
 
 function resolveImportedLeagueVariant(normalized: NormalizedImportResult): string | null {
@@ -63,7 +206,9 @@ function resolveImportedLeagueVariant(normalized: NormalizedImportResult): strin
   return normalized.league.isDynasty ? 'DYNASTY_IDP' : 'IDP'
 }
 
-function buildImportedLeagueSettings(normalized: NormalizedImportResult): Record<string, unknown> {
+/** Exported for the durable read-model sync (Launch Batch 2) so a scheduled refresh writes the
+ *  IDENTICAL `League.settings` shape the initial import does — no drift between import and sync. */
+export function buildImportedLeagueSettings(normalized: NormalizedImportResult): Record<string, unknown> {
   const sportType = resolveImportedLeagueSport(normalized)
   const leagueVariant = resolveImportedLeagueVariant(normalized)
   return {
@@ -216,6 +361,13 @@ export async function persistImportedLeagueFromNormalization(
     ? mergeCanonicalBundleIntoSettings(normalized, canonicalBundle)
     : buildImportedLeagueSettings(normalized)
 
+  // Tier 0 (Block C) — passthrough for League columns whose values used to be
+  // silently dropped and replaced by Prisma defaults. Every value comes from
+  // `normalized.league.*` (populated by the provider mapper's Tier 0 block).
+  // Any `undefined` field is omitted so the existing default remains — safe for
+  // legacy providers and older payloads that don't populate the new fields.
+  const tier0LeaguePayload = buildTier0LeagueColumnPatch(normalized)
+
   const leaguePayload = {
     name: normalized.league.name,
     platform: provider,
@@ -225,6 +377,12 @@ export async function persistImportedLeagueFromNormalization(
     isDynasty: normalized.league.isDynasty,
     sport: resolvedSport,
     season: seasonYear,
+    // Phase OS-C5: previously omitted entirely — `League.status` has no DB default, so every
+    // imported league silently ended up with status: null, which `leagueListFilter.ts` then
+    // misread as "incomplete legacy import" and hid. `?? undefined` (not `?? null`) so this write
+    // stays a no-op — same as every other optional field here — when the provider genuinely
+    // didn't report a status, rather than forcing an explicit null overwrite on every update.
+    status: normalized.league.status ?? undefined,
     rosterSize: normalized.league.rosterSize ?? undefined,
     starters: (normalized.league as Record<string, unknown>).roster_positions ?? undefined,
     avatarUrl: normalized.league_branding?.avatar_url ?? undefined,
@@ -238,6 +396,7 @@ export async function persistImportedLeagueFromNormalization(
     importBatchId: normalized.source.import_batch_id ?? undefined,
     importedAt: normalized.source.imported_at ? new Date(normalized.source.imported_at) : undefined,
     ...importStatsPatch,
+    ...tier0LeaguePayload,
   }
 
   const league = existing
@@ -257,6 +416,30 @@ export async function persistImportedLeagueFromNormalization(
     await bootstrapLeagueFromImport(league.id, normalized)
   } catch (err) {
     console.warn(`[ImportedLeagueCommitService] ${provider} import bootstrap non-fatal:`, err)
+  }
+
+  // Canonical imported-league lifecycle completion — provider-agnostic,
+  // reads only the LeagueTeam rows the bootstrap above just wrote. Gives
+  // every imported league (any provider) a real RedraftSeason/RedraftRoster
+  // so Trade Decision OS and other RedraftSeason-scoped consumers work
+  // without any provider-specific branch. Idempotent; never fails the import.
+  try {
+    const { materializeRedraftSeasonForImportedLeague } = await import('@/lib/league-import/canonicalSeasonMaterialization')
+    await materializeRedraftSeasonForImportedLeague(league.id)
+  } catch (err) {
+    console.warn(`[ImportedLeagueCommitService] ${provider} canonical season materialization non-fatal:`, err)
+  }
+
+  // Block F — persist future traded draft picks into `future_draft_picks`. Runs
+  // AFTER the bootstrap so anything the bootstrap writes (league_teams etc.)
+  // is available. Non-fatal: a failure here logs a warning but never fails the
+  // import — matches the existing gap-fill pattern above.
+  if (normalized.traded_picks && normalized.traded_picks.length > 0) {
+    try {
+      await persistTradedPicks(league.id, normalized.traded_picks)
+    } catch (err) {
+      console.warn(`[ImportedLeagueCommitService] ${provider} traded-pick persist non-fatal:`, err)
+    }
   }
 
   try {

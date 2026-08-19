@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { signOut } from "next-auth/react"
 import { useLanguage } from "@/components/i18n/LanguageProviderClient"
+import { useEntitlements } from "@/hooks/useEntitlements"
 
 export function AccountSettingsSection({
   accountCreatedAt,
@@ -14,6 +15,10 @@ export function AccountSettingsSection({
   const { t, tInterpolate } = useLanguage()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState("")
+  // No caller currently passes a real planLabel prop (it's always null) — this page never queried
+  // a real plan before. Fall back to a live client-side entitlement check rather than always
+  // showing "Free" regardless of the user's actual subscription.
+  const ents = useEntitlements()
 
   const createdLabel = accountCreatedAt
     ? new Date(accountCreatedAt).toLocaleDateString(undefined, {
@@ -23,7 +28,21 @@ export function AccountSettingsSection({
       })
     : null
 
-  const planDisplay = planLabel?.trim() || t("settings.account.planFree")
+  // A fetch error must never be conflated with a verified free plan — the hook's own catch path
+  // leaves hasSupreme/etc. at their last-known (false, on a first-load failure) value rather than
+  // proving "free," so this checks ents.error explicitly instead of trusting those booleans alone.
+  const derivedPlanDisplay = ents.error
+    ? "Unable to verify"
+    : ents.hasSupreme
+      ? "AF Supreme"
+      : ents.hasCommissioner
+        ? "AF Commissioner"
+        : ents.hasPro
+          ? "AF Pro"
+          : ents.hasWarRoom
+            ? "AF Legacy"
+            : t("settings.account.planFree")
+  const planDisplay = planLabel?.trim() || (ents.loading ? "..." : derivedPlanDisplay)
 
   const deletionMailto = `mailto:support@allfantasy.ai?subject=${encodeURIComponent(
     "Account deletion request"
@@ -53,6 +72,11 @@ export function AccountSettingsSection({
             {planDisplay}
           </span>
         </div>
+        {ents.isAdminBypassAccount && (
+          <p className="text-xs italic" style={{ color: "var(--muted)" }} data-testid="settings-account-bypass-notice">
+            Admin bypass — not a real Stripe subscription.
+          </p>
+        )}
         {createdLabel && (
           <p className="text-sm" style={{ color: "var(--muted)" }}>
             {tInterpolate("settings.account.memberSince", { date: createdLabel })}

@@ -1,13 +1,13 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server';
 import { 
-  findPlayerByName,
   compareTradeValues,
   getTopPlayers,
   getTrendingPlayers,
   FantasyCalcSettings
 } from '@/lib/fantasycalc';
 import { readFantasyCalcValuesFromDb } from '@/lib/fantasycalc-db';
+import { resolveNflRedraftCanonicalFantasyValuation } from '@/lib/nfl-provider/nflRedraftProviderCertification';
 
 export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasycalc" })(async (request: NextRequest) => {
   try {
@@ -24,6 +24,35 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
     const limit = parseInt(searchParams?.get('limit') || '50');
     
     const settings: FantasyCalcSettings = { isDynasty, numQbs, numTeams, ppr };
+
+    if (action === 'player' && playerName) {
+      const canonical = await resolveNflRedraftCanonicalFantasyValuation({ playerName });
+      if (canonical.unavailable) {
+        return NextResponse.json({
+          error: 'Player valuation unavailable',
+          settings,
+          canonical: {
+            provider: canonical.source,
+            freshnessStatus: canonical.freshnessStatus,
+            fallbackUsed: canonical.fallbackUsed,
+            cacheUsed: canonical.cacheUsed,
+          },
+        }, { status: 404 });
+      }
+      return NextResponse.json({
+        player: canonical.fantasyValuation,
+        intelligence: canonical.intelligence,
+        settings,
+        source: canonical.source,
+        stale: canonical.freshnessStatus === 'stale',
+        canonical: {
+          provider: canonical.source,
+          freshnessStatus: canonical.freshnessStatus,
+          fallbackUsed: canonical.fallbackUsed,
+          cacheUsed: canonical.cacheUsed,
+        },
+      });
+    }
     
     const cached = await readFantasyCalcValuesFromDb(settings, { allowStale: true });
     const players = cached.players;
@@ -57,21 +86,6 @@ export const GET = withApiUsage({ endpoint: "/api/fantasycalc", tool: "Fantasyca
       });
     }
 
-    if (action === 'player' && playerName) {
-      const player = findPlayerByName(players, playerName);
-      if (!player) {
-        return NextResponse.json({ error: 'Player not found' }, { status: 404 });
-      }
-      return NextResponse.json({
-        player,
-        settings,
-        source: cached.stale ? 'fantasycalc-db-stale' : 'fantasycalc-db',
-        stale: cached.stale,
-        syncedAt: cached.syncedAt,
-        expiresAt: cached.expiresAt,
-      });
-    }
-    
     if (action === 'top') {
       const topPlayers = getTopPlayers(players, position || undefined, limit);
       return NextResponse.json({

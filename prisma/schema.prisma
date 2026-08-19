@@ -28,6 +28,237 @@ model EarlyAccessSignup {
   @@index([utmSource])
 }
 
+/// Market player values, snapshotted from external sources.
+///
+/// ⚠ SNAPSHOT, NEVER UPSERT-IN-PLACE. History is the asset: a year of daily rows
+/// yields trend, volatility and buy-low detection that a single current-value
+/// table can never reconstruct, and it costs almost nothing to store.
+///
+/// ⚠ `source` EXISTS FROM DAY ONE SO `INTERNAL` SLOTS IN WITHOUT A MIGRATION.
+/// Every value here is someone else's asset — FantasyCalc could close tomorrow.
+/// Capturing our own trades into this same table is how that dependency becomes a
+/// sanity check rather than a single point of failure. Five minutes now.
+model PlayerValueSnapshot {
+  id String @id @default(cuid())
+
+  /// Sleeper player id — the join key every source in use can reach.
+  sleeperId String @db.VarChar(32)
+  name      String
+  position  String? @db.VarChar(8)
+
+  /// FANTASYCALC | DYNASTYPROCESS | INTERNAL
+  source String @db.VarChar(24)
+  /// DYNASTY | REDRAFT
+  format String @db.VarChar(12)
+  /// ONE_QB | SUPERFLEX
+  qbFormat String @db.VarChar(12)
+
+  value        Int
+  overallRank  Int?
+  positionRank Int?
+  /// 30-day movement, where the source publishes it.
+  trend30d     Int?
+  /// ⚠ LIQUIDITY, AND ALMOST NOBODY SURFACES IT. A high value with near-zero trade
+  /// frequency is a thin, rarely-tested price — worth saying so on a trade screen.
+  tradeFrequency Float?
+  /// ⚠ MARKET DISAGREEMENT. High deviation means the market disagrees with itself,
+  /// which is exactly where an edge lives and a natural confidence input.
+  marketStdDev   Float?
+
+  capturedAt DateTime @default(now())
+
+  @@unique([sleeperId, source, format, qbFormat, capturedAt])
+  @@index([sleeperId, capturedAt])
+  @@index([source, capturedAt])
+}
+
+/// Measured team-season play-calling tendencies, derived from play-by-play.
+///
+/// ⚠ STORED AT TEAM-SEASON, NOT COACH, AND THAT IS DELIBERATE. No dataset records
+/// who actually calls plays — some head coaches call their own offense, some
+/// defer, some take over mid-season. Attributing a measured PROE to a named
+/// coordinator who may not have called it is worse than leaving it unattributed:
+/// the number is then pointed at the wrong human. Tendencies are measured where
+/// they are unambiguous (the team) and resolved to coaches at read time through
+/// CoachStint, with attribution confidence capped accordingly.
+///
+/// ⚠ EVERY RATE CARRIES ITS OWN SAMPLE SIZE. Coverage windows differ per field —
+/// shotgun/no-huddle from 1999, PROE from 2006, FTN charting only from 2022 — so a
+/// single row can hold a PROE backed by 1,000 plays beside a motion rate backed by
+/// none. One confidence number across both would launder the weak field's
+/// uncertainty into the strong one.
+model TeamTendencySeason {
+  id     String @id @default(cuid())
+  teamId String @db.VarChar(8)
+  season Int
+
+  /// Plays surviving the neutral-script filter — the denominator for the rates below.
+  neutralPlays Int @default(0)
+
+  /// Pass rate over expected. nflfastR `pass_oe`; NULL before 2006.
+  proe            Float?
+  proeN           Int?
+  shotgunRate     Float?
+  shotgunN        Int?
+  noHuddleRate    Float?
+  noHuddleN       Int?
+  /// Seconds per play in neutral script — pace. Lower = more plays = more fantasy points.
+  secPerPlay      Float?
+  secPerPlayN     Int?
+
+  /// FTN charting, 2022+ only. NULL for earlier seasons by coverage, not by failure.
+  playActionRate Float?
+  playActionN    Int?
+  motionRate     Float?
+  motionN        Int?
+  rpoRate        Float?
+  rpoN           Int?
+  screenRate     Float?
+  screenN        Int?
+
+  source     String   @db.VarChar(32)
+  computedAt DateTime @default(now())
+
+  @@unique([teamId, season])
+  @@index([season])
+}
+
+/// Canonical coaching identity — one row per human.
+///
+/// ⚠ NEVER KEY ON NAME. The league has repeated Shanahans, Ryans, Harbaughs and
+/// Kubiaks, and a name-keyed join silently merges a father and son into one career.
+model Coach {
+  id String @id @default(cuid())
+
+  fullName String
+  /// Lowercased, punctuation- and suffix-stripped. The fuzzy-match join key.
+  nameNormalized String
+
+  /// Disambiguates the Mike/Kyle Shanahan class of collision when known.
+  birthYear Int?
+  /// Best available external anchor.
+  pfrId           String?
+  coachingTreeId  String?
+
+  stints    CoachStint[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([nameNormalized])
+}
+
+/// Coach x team x season x role — the staff history that did not previously exist.
+model CoachStint {
+  id      String @id @default(cuid())
+  coachId String
+  coach   Coach  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  /// Franchise code, relocation-normalised (STL->LA, OAK->LV, SD->LAC).
+  teamId String @db.VarChar(8)
+  /// The code exactly as the source gave it, so a relocation mapping stays auditable.
+  teamRaw String @db.VarChar(8)
+  season Int
+
+  /// HC | OC | DC | STC | PASS_GAME_COORD | RUN_GAME_COORD | POSITION | ASSISTANT_HC | OTHER
+  role String @db.VarChar(24)
+  /// Source string verbatim — coaching titles are not standardised across the league.
+  roleRaw String?
+
+  /// ⚠ NULLABLE ON PURPOSE, AND MUST NOT DEFAULT TO false. No dataset reliably
+  /// records who actually calls plays: some head coaches call their own offense,
+  /// some defer, some take it over mid-season. `false` would assert someone is not
+  /// the play-caller, which we do not know. Only set true on sourced confirmation.
+  isPlayCaller Boolean?
+
+  /// COACHING_TREE | NFLVERSE | SPORTSDATAIO | WIKIPEDIA | MANUAL
+  source String @db.VarChar(24)
+  /// HIGH | MEDIUM | LOW
+  sourceConfidence String @db.VarChar(8)
+
+  ingestedAt DateTime @default(now())
+
+  /// ⚠ DELIBERATELY NOT UNIQUE ON (coachId, teamId, season). A coach can hold more
+  /// than one role in a season — head coach who is also de facto OC is common — and
+  /// a unique constraint here would silently drop the second role.
+  @@unique([coachId, teamId, season, role])
+  @@index([teamId, season])
+  @@index([season, role])
+}
+
+/// A business asking for a demo of Decision OS / Chimmy Intelligence, captured from
+/// the "AllFantasy for business" band on the marketing page.
+///
+/// ⚠ DELIBERATELY NOT FOLDED INTO EarlyAccessSignup, despite both being lead capture.
+/// That model's `email` is @unique and its handler returns `alreadyExists: true`
+/// WITHOUT writing anything — so a buyer who had already joined the consumer
+/// waitlist with their work address would have their demo request silently
+/// discarded. A dropped B2B lead is the single most expensive failure this form
+/// has, so `email` here is intentionally NOT unique: the same person may ask twice,
+/// and two rows are recoverable where a swallowed request is not.
+model BusinessDemoRequest {
+  id      String @id @default(cuid())
+  email   String
+  company String?
+  name    String?
+  /// Free text — what they said they want to build. Never rendered as HTML unescaped.
+  useCase String?
+
+  source      String? @default("allfantasy.ai")
+  referrer    String?
+  utmCampaign String?
+  utmContent  String?
+  utmMedium   String?
+  utmSource   String?
+  utmTerm     String?
+
+  /// `new` until someone works the lead. Not an enum: sales stages change more
+  /// often than migrations should.
+  status String @default("new")
+
+  /// When the notification email actually reached the inbox. NULL means the row
+  /// was stored but nobody has been told — the state worth alerting on, and the
+  /// reason this is a column rather than an inference from createdAt.
+  notifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([email])
+}
+
+/// Closed-beta account admission (P0-1 BETA-GATE). Distinct from InviteLink (viral,
+/// user-issued, league/referral-typed) and EarlyAccessSignup (waitlist capture): a
+/// BetaInvite is admin-issued, email-bound, single-use for ACCOUNT CREATION, and
+/// revocable. The raw token is NEVER stored — only its sha256 digest. `redeemedByUserId`
+/// is a plain column (no Prisma relation) to avoid modifying the heavily-referenced
+/// AppUser model; it is set only when account creation succeeds.
+model BetaInvite {
+  id               String    @id @default(uuid())
+  /// sha256 hex digest of the raw token. Unique so a token can be looked up without storing it.
+  tokenDigest      String    @unique
+  /// Normalized (trimmed, lowercased) invited email. REQUIRED and non-empty: every ordinary
+  /// invite is email-bound and admission must match it (no token-only / transferable codes).
+  invitedEmail     String
+  /// pending | redeemed | revoked. Explicit state, not derived from timestamps.
+  status           String    @default("pending") @db.VarChar(16)
+  /// Optional non-sensitive internal note (e.g. "wave 1 - reddit").
+  note             String?
+  /// Admin identity that issued this invite (email or user id).
+  createdByAdmin   String
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+  revokedBy        String?
+  redeemedAt       DateTime?
+  redeemedByUserId String?
+
+  @@index([invitedEmail])
+  @@index([status])
+  @@index([redeemedByUserId])
+  @@map("beta_invites")
+}
+
 model VisitorLocation {
   id          String   @id @default(cuid())
   ipAddress   String   @unique
@@ -284,8 +515,11 @@ model SportsPlayerRecord {
   @@map("sports_players")
 }
 
-/// Audit trail for draft enrichment identity failures / low-confidence joins (AI & admin review).
-/// Does not affect draft mechanics — logging only.
+/// DEPRECATED — superseded by PlayerIdentityMismatchStat; nothing writes this model anymore.
+/// Retained only so scripts/backfill-player-mismatch-stats.ts can fold the historical rows into
+/// the rollup. Drop the model and the table together once that backfill has run.
+/// Why it was replaced: it reached 2,126,004 rows / 787 MB in production (73% of the database)
+/// with zero readers, because ~97% of its rows re-logged facts already recorded.
 model PlayerIdentityMismatchLog {
   id                   String   @id @default(cuid())
   leagueId             String?  @map("league_id")
@@ -305,6 +539,40 @@ model PlayerIdentityMismatchLog {
   @@index([sport, createdAt])
   @@index([leagueId])
   @@map("player_identity_mismatch_logs")
+}
+
+/// Bounded rollup of draft enrichment identity failures / low-confidence joins.
+/// One row per distinct (league, sport, reason, player, position, team); repeat sightings bump
+/// `occurrences` instead of appending a row, so size tracks the number of real data problems
+/// rather than draft-room traffic. `last_*` columns hold the most recent KNOWN (non-null)
+/// observation of fields that vary per sighting and are not part of the key — a later sighting
+/// that omits one keeps the previous value rather than erasing it.
+/// Does not affect draft mechanics — diagnostics only.
+model PlayerIdentityMismatchStat {
+  /// sha256 of the key tuple — see mismatchFingerprint() in lib/player-identity/playerMismatchLogger.ts.
+  /// Used directly as the PK: it is the natural key, and Postgres treats NULLs in a UNIQUE
+  /// constraint as distinct, which would defeat deduping on nullable columns.
+  fingerprint              String   @id @db.VarChar(64)
+  leagueId                 String?  @map("league_id")
+  sport                    String   @db.VarChar(16)
+  reason                   String   @db.VarChar(64)
+  playerName               String?  @map("player_name") @db.VarChar(256)
+  position                 String?  @db.VarChar(64)
+  team                     String?  @db.VarChar(64)
+  occurrences              Int      @default(1)
+  lastPoolPlayerId         String?  @map("last_pool_player_id") @db.VarChar(128)
+  lastPoolExternalId       String?  @map("last_pool_external_id") @db.VarChar(128)
+  lastSportsPlayerRecordId String?  @map("last_sports_player_record_id") @db.VarChar(128)
+  lastAttemptedMatchType   String?  @map("last_attempted_match_type") @db.VarChar(32)
+  lastConfidence           Decimal? @map("last_confidence") @db.Decimal(5, 4)
+  lastDetails              Json?    @map("last_details")
+  firstSeenAt              DateTime @default(now()) @map("first_seen_at")
+  lastSeenAt               DateTime @default(now()) @map("last_seen_at")
+
+  @@index([sport, reason])
+  @@index([leagueId])
+  @@index([lastSeenAt])
+  @@map("player_identity_mismatch_stats")
 }
 
 model TeamAsset {
@@ -460,6 +728,59 @@ model AiResult {
   @@index([inputHash])
   @@index([expiresAt])
   @@map("ai_results")
+}
+
+/// Decision OS three-brain (Phase 2) — durable managed-intelligence run + result cache. Carries the
+/// single-flight lease (owner token + lease expiry), freshness/version invalidation, provider participation,
+/// idempotent token linkage, and a MINIMIZED (secret-free) request snapshot. `resultKey` is the canonical,
+/// tenant-scoped identity and the cross-instance single-flight lock. STANDALONE — not wired to live Decision
+/// OS routes or Chimmy yet (Phase 3/4). Private results are scoped by `userId` on every read.
+model DecisionIntelligenceRun {
+  id                    String    @id @default(cuid())
+  resultKey             String    @unique @map("result_key") @db.VarChar(255)
+  inputHash             String    @map("input_hash") @db.VarChar(128)
+  tool                  String    @db.VarChar(64)
+  decisionType          String    @map("decision_type") @db.VarChar(64)
+  userId                String    @map("user_id")
+  leagueId              String?   @map("league_id")
+  connectedGroupId      String?   @map("connected_group_id")
+  sport                 String?   @db.VarChar(16)
+  platform              String?   @db.VarChar(24)
+  entitlementMode       String?   @map("entitlement_mode") @db.VarChar(24)
+  status                String    @default("pending") @db.VarChar(24)
+  versionTag            String    @map("version_tag") @db.VarChar(64)
+  agreementState        String?   @map("agreement_state") @db.VarChar(32)
+  claudeState           String?   @map("claude_state") @db.VarChar(32)
+  providerParticipation Json?     @map("provider_participation")
+  resultJson            Json?     @map("result_json")
+  requestSnapshot       Json?     @map("request_snapshot")
+  failureCategory       String?   @map("failure_category") @db.VarChar(48)
+  retryable             Boolean   @default(false)
+  attemptCount          Int       @default(0) @map("attempt_count")
+  maxAttempts           Int       @default(3) @map("max_attempts")
+  ownerToken            String?   @map("owner_token") @db.VarChar(80)
+  leaseExpiresAt        DateTime? @map("lease_expires_at")
+  /// Set BEFORE an external provider request begins; cleared on confirmed settlement (success / graceful abort /
+  /// failure). If a takeover finds it non-null on an expired 'running' run, the OUTCOME IS UNKNOWN (the owner
+  /// crashed mid-request) — the run is moved to status 'unknown' which blocks automatic re-execution.
+  providerExecStartedAt DateTime? @map("provider_exec_started_at")
+  tokenLedgerId         String?   @map("token_ledger_id")
+  tokenReservationKey   String?   @map("token_reservation_key") @db.VarChar(255)
+  correlationId         String?   @map("correlation_id") @db.VarChar(64)
+  lastError             String?   @map("last_error") @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+  startedAt             DateTime? @map("started_at")
+  completedAt          DateTime? @map("completed_at")
+  expiresAt             DateTime? @map("expires_at")
+  lastAccessedAt        DateTime? @map("last_accessed_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
+
+  @@index([userId, tool])
+  @@index([leagueId])
+  @@index([status, leaseExpiresAt])
+  @@index([inputHash])
+  @@index([expiresAt])
+  @@map("decision_intelligence_runs")
 }
 
 /// Unified sync/ingestion job telemetry for DB-first observability.
@@ -692,6 +1013,7 @@ model LegacyLeague {
   isSF            Boolean              @default(false)
   isTEP           Boolean              @default(false)
   tepBonus        Float?
+  isCommissioner  Boolean              @default(false)
   user            LegacyUser           @relation(fields: [userId], references: [id], onDelete: Cascade)
   rosters         LegacyRoster[]
   seasonSummary   LegacySeasonSummary?
@@ -1632,10 +1954,18 @@ model FantraxLeague {
   isDevy        Boolean     @default(false)
   transactions  Json?
   user          FantraxUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Import Security Closure phase: the real, authenticated AllFantasy user who
+  /// uploaded this snapshot. Nullable for safe backfill of any pre-existing rows —
+  /// reads/commits fail closed (reject, not fabricate ownership) when null. This is
+  /// the actual security boundary; `userId`/`FantraxUser` remains a separate,
+  /// client-supplied "which Fantrax account" label, never trusted for authorization.
+  appUserId     String?
+  appUser       AppUser?    @relation(fields: [appUserId], references: [id], onDelete: SetNull)
 
   @@unique([userId, leagueName, season])
   @@index([userId, season])
   @@index([season])
+  @@index([appUserId])
 }
 
 model manager_trade_tendencies {
@@ -1814,6 +2144,11 @@ model TradeOfferEvent {
   leagueFormat          String?        @db.VarChar(32)
   scoringType           String?        @db.VarChar(16)
   leagueTradeId         String?
+  /// Real idempotency key for live-captured offers (AfLeagueTrade.id), distinct
+  /// from `leagueTradeId` (which points at the legacy LeagueTrade table) and from
+  /// `inputHash` (a content hash unsafe to reuse here — see
+  /// docs/TRADE_LEARNING_CAPTURE_ARCHITECTURE_ADR.md §1.3).
+  afLeagueTradeId       String?        @unique
   modelVersion          String?        @db.VarChar(32)
 
   @@index([leagueId, createdAt])
@@ -1831,6 +2166,9 @@ model TradeOutcomeEvent {
   week              Int?
   offerEventId      String?      @unique @db.VarChar(64)
   leagueTradeId     String?
+  /// Real idempotency key for live-captured outcomes (AfLeagueTrade.id) — see
+  /// docs/TRADE_LEARNING_CAPTURE_ARCHITECTURE_ADR.md §1.3/§4.
+  afLeagueTradeId   String?      @unique
   outcome           TradeOutcome
   timeToDecisionMin Int?
   outcomeMetaJson   Json?
@@ -2677,39 +3015,39 @@ model ApiUsageRollup {
 }
 
 model Player {
-  id                   String   @id
+  id                   String    @id
   name                 String
-  normalizedName       String?  @map("normalized_name")
-  canonicalSlug        String?  @map("canonical_slug")
+  normalizedName       String?   @map("normalized_name")
+  canonicalSlug        String?   @map("canonical_slug")
   sport                String
   position             String
   team                 String?
-  sportLeagueKey       String?  @map("sport_league_key")
-  currentTeamId        String?  @map("current_team_id")
-  providerIds          Json?    @map("provider_ids")
+  sportLeagueKey       String?   @map("sport_league_key")
+  currentTeamId        String?   @map("current_team_id")
+  providerIds          Json?     @map("provider_ids")
   birthYear            Int?
   birthDate            DateTime? @map("birth_date")
   height               String?
   weight               String?
   nationality          String?
-  imageUrl             String?  @map("image_url")
+  imageUrl             String?   @map("image_url")
   league               String
-  devyEligible         Boolean  @default(false)
-  graduatedToNFL       Boolean  @default(false)
+  devyEligible         Boolean   @default(false)
+  graduatedToNFL       Boolean   @default(false)
   recruitingComposite  Float?
   breakoutAge          Float?
   draftProjectionScore Float?
   projectedDraftRound  Int?
   projectedDraftPick   Int?
   devyAdp              Float?
-  redshirtStatus       Boolean  @default(false)
-  transferStatus       Boolean  @default(false)
+  redshirtStatus       Boolean   @default(false)
+  transferStatus       Boolean   @default(false)
   nilImpactScore       Float?
   injurySeverityScore  Float?
   nflDraftRound        Int?
   nflDraftPick         Int?
   nflTeam              String?
-  active               Boolean  @default(true)
+  active               Boolean   @default(true)
   injuryStatus         String?
   source               String?
   sourceUpdatedAt      DateTime? @map("source_updated_at")
@@ -2717,9 +3055,12 @@ model Player {
   expiresAt            DateTime? @map("expires_at")
   lastSeenAt           DateTime? @map("last_seen_at")
   confidence           Float?
-  rawPayload           Json?    @map("raw_payload")
-  lastSyncedAt         DateTime @updatedAt
-  createdAt            DateTime @default(now())
+  rawPayload           Json?     @map("raw_payload")
+  lastSyncedAt         DateTime  @updatedAt
+  createdAt            DateTime  @default(now())
+
+  images               PlayerImage[]
+  providerIdentities   PlayerProviderIdentity[]
 
   @@index([league])
   @@index([devyEligible])
@@ -2989,6 +3330,7 @@ model AppUser {
   bracketMemberships                       BracketLeagueMember[]
   bracketPayments                          BracketPayment[]                       @relation("BracketPayments")
   legacyImportJobs                         LegacyImportJob[]
+  fantraxLeagues                           FantraxLeague[]
   aiRecommendationLogs                     AiRecommendationLog[]
   legacyUser                               LegacyUser?                            @relation(fields: [legacyUserId], references: [id])
   accounts                                 AuthAccount[]
@@ -3089,33 +3431,33 @@ model AppUser {
 }
 
 model WorldCupTeam {
-  id                   String                       @id @default(cuid())
-  apiTeamId            Int?                         @unique @map("api_team_id")
-  fifaCode             String?                      @map("fifa_code")
-  name                 String
-  country              String
-  flagUrl              String?                      @map("flag_url")
-  logoUrl              String?                      @map("logo_url")
-  groupName            String?                      @map("group_name")
-  qualificationStatus  String                       @default("tbd") @map("qualification_status")
-  sourcePayload        Json?                        @map("source_payload")
-  createdAt            DateTime                     @default(now()) @map("created_at")
-  updatedAt            DateTime                     @updatedAt @map("updated_at")
-  slots                WorldCupBracketSlot[]
-  championParticipants WorldCupBracketParticipant[] @relation("WorldCupChampionPick")
-  championEntries      WorldCupBracketEntry[]       @relation("WorldCupEntryChampionPick")
-  homeMatches          WorldCupBracketMatch[]       @relation("WorldCupMatchHomeTeam")
-  awayMatches          WorldCupBracketMatch[]       @relation("WorldCupMatchAwayTeam")
-  winnerMatches        WorldCupBracketMatch[]       @relation("WorldCupMatchWinnerTeam")
-  officialHomeFixtures WorldCupOfficialFixture[]    @relation("WorldCupOfficialFixtureHomeTeam")
-  officialAwayFixtures WorldCupOfficialFixture[]    @relation("WorldCupOfficialFixtureAwayTeam")
-  officialWinnerFixtures WorldCupOfficialFixture[]  @relation("WorldCupOfficialFixtureWinnerTeam")
-  officialGroupStandings WorldCupOfficialGroupStanding[] @relation("WorldCupOfficialGroupStandingTeam")
-  selectedInPicks      WorldCupBracketPick[]        @relation("WorldCupPickSelectedTeam")
-  groupTeams           WorldCupGroupTeam[]
-  groupRankingPicks    WorldCupGroupRankingPick[]
-  thirdPlacePicks      WorldCupThirdPlaceAdvancerPick[]
-  players              WorldCupPlayer[]
+  id                     String                           @id @default(cuid())
+  apiTeamId              Int?                             @unique @map("api_team_id")
+  fifaCode               String?                          @map("fifa_code")
+  name                   String
+  country                String
+  flagUrl                String?                          @map("flag_url")
+  logoUrl                String?                          @map("logo_url")
+  groupName              String?                          @map("group_name")
+  qualificationStatus    String                           @default("tbd") @map("qualification_status")
+  sourcePayload          Json?                            @map("source_payload")
+  createdAt              DateTime                         @default(now()) @map("created_at")
+  updatedAt              DateTime                         @updatedAt @map("updated_at")
+  slots                  WorldCupBracketSlot[]
+  championParticipants   WorldCupBracketParticipant[]     @relation("WorldCupChampionPick")
+  championEntries        WorldCupBracketEntry[]           @relation("WorldCupEntryChampionPick")
+  homeMatches            WorldCupBracketMatch[]           @relation("WorldCupMatchHomeTeam")
+  awayMatches            WorldCupBracketMatch[]           @relation("WorldCupMatchAwayTeam")
+  winnerMatches          WorldCupBracketMatch[]           @relation("WorldCupMatchWinnerTeam")
+  officialHomeFixtures   WorldCupOfficialFixture[]        @relation("WorldCupOfficialFixtureHomeTeam")
+  officialAwayFixtures   WorldCupOfficialFixture[]        @relation("WorldCupOfficialFixtureAwayTeam")
+  officialWinnerFixtures WorldCupOfficialFixture[]        @relation("WorldCupOfficialFixtureWinnerTeam")
+  officialGroupStandings WorldCupOfficialGroupStanding[]  @relation("WorldCupOfficialGroupStandingTeam")
+  selectedInPicks        WorldCupBracketPick[]            @relation("WorldCupPickSelectedTeam")
+  groupTeams             WorldCupGroupTeam[]
+  groupRankingPicks      WorldCupGroupRankingPick[]
+  thirdPlacePicks        WorldCupThirdPlaceAdvancerPick[]
+  players                WorldCupPlayer[]
 
   @@index([qualificationStatus])
   @@index([name])
@@ -3144,7 +3486,7 @@ model WorldCupPlayer {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  team             WorldCupTeam @relation(fields: [teamId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  team WorldCupTeam @relation(fields: [teamId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([providerPlayerId, sourceProvider], name: "uniq_wc_player_provider")
   @@index([teamId])
@@ -3155,23 +3497,23 @@ model WorldCupPlayer {
 }
 
 model WorldCupBracketScoringProfile {
-  id                  String                     @id @default(cuid())
-  name                String
-  roundOf32Points     Int                        @default(10) @map("round_of_32_points")
-  roundOf16Points     Int                        @default(20) @map("round_of_16_points")
-  quarterFinalPoints  Int                        @default(40) @map("quarter_final_points")
-  semiFinalPoints     Int                        @default(80) @map("semi_final_points")
-  finalPoints         Int                        @default(160) @map("final_points")
-  championBonusPoints Int                        @default(320) @map("champion_bonus_points")
-  thirdPlacePoints    Int?                       @map("third_place_points")
-  groupExactPlacementPoints Int                  @default(5) @map("group_exact_placement_points")
-  groupQualifiedTeamPoints  Int                  @default(2) @map("group_qualified_team_points")
-  perfectGroupBonusPoints   Int                  @default(10) @map("perfect_group_bonus_points")
-  thirdPlaceAdvancerPoints  Int                  @default(5) @map("third_place_advancer_points")
-  upsetBonusEnabled   Boolean                    @default(false) @map("upset_bonus_enabled")
-  createdAt           DateTime                   @default(now()) @map("created_at")
-  updatedAt           DateTime                   @updatedAt @map("updated_at")
-  challenges          WorldCupBracketChallenge[]
+  id                        String                     @id @default(cuid())
+  name                      String
+  roundOf32Points           Int                        @default(10) @map("round_of_32_points")
+  roundOf16Points           Int                        @default(20) @map("round_of_16_points")
+  quarterFinalPoints        Int                        @default(40) @map("quarter_final_points")
+  semiFinalPoints           Int                        @default(80) @map("semi_final_points")
+  finalPoints               Int                        @default(160) @map("final_points")
+  championBonusPoints       Int                        @default(320) @map("champion_bonus_points")
+  thirdPlacePoints          Int?                       @map("third_place_points")
+  groupExactPlacementPoints Int                        @default(5) @map("group_exact_placement_points")
+  groupQualifiedTeamPoints  Int                        @default(2) @map("group_qualified_team_points")
+  perfectGroupBonusPoints   Int                        @default(10) @map("perfect_group_bonus_points")
+  thirdPlaceAdvancerPoints  Int                        @default(5) @map("third_place_advancer_points")
+  upsetBonusEnabled         Boolean                    @default(false) @map("upset_bonus_enabled")
+  createdAt                 DateTime                   @default(now()) @map("created_at")
+  updatedAt                 DateTime                   @updatedAt @map("updated_at")
+  challenges                WorldCupBracketChallenge[]
 
   @@map("world_cup_bracket_scoring_profiles")
 }
@@ -3289,32 +3631,32 @@ model WorldCupGroupTeam {
 }
 
 model WorldCupBracketEntry {
-  id               String                     @id @default(cuid())
-  challengeId      String                     @map("challenge_id")
-  participantId    String                     @map("participant_id")
-  userId           String                     @map("user_id")
-  name             String
-  championTeamId   String?                    @map("champion_team_id")
-  championTeamName String?                    @map("champion_team_name")
-  totalScore       Int                        @default(0) @map("total_score")
-  maxPossibleScore Int                        @default(0) @map("max_possible_score")
-  correctPicks     Int                        @default(0) @map("correct_picks")
-  incorrectPicks   Int                        @default(0) @map("incorrect_picks")
-  rank             Int?
-  roundBreakdown   Json                       @default("{}") @map("round_breakdown")
-  isComplete       Boolean                    @default(false) @map("is_complete")
-  isLocked         Boolean                    @default(false) @map("is_locked")
-  submittedAt      DateTime?                  @map("submitted_at")
-  createdAt        DateTime                   @default(now()) @map("created_at")
-  updatedAt        DateTime                   @updatedAt @map("updated_at")
-  challenge        WorldCupBracketChallenge   @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  participant      WorldCupBracketParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  user             AppUser                    @relation("WorldCupBracketEntryUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  championTeam     WorldCupTeam?              @relation("WorldCupEntryChampionPick", fields: [championTeamId], references: [id], onDelete: SetNull, onUpdate: Cascade)
-  picks            WorldCupBracketPick[]
-  groupRankingPicks WorldCupGroupRankingPick[]
+  id                      String                           @id @default(cuid())
+  challengeId             String                           @map("challenge_id")
+  participantId           String                           @map("participant_id")
+  userId                  String                           @map("user_id")
+  name                    String
+  championTeamId          String?                          @map("champion_team_id")
+  championTeamName        String?                          @map("champion_team_name")
+  totalScore              Int                              @default(0) @map("total_score")
+  maxPossibleScore        Int                              @default(0) @map("max_possible_score")
+  correctPicks            Int                              @default(0) @map("correct_picks")
+  incorrectPicks          Int                              @default(0) @map("incorrect_picks")
+  rank                    Int?
+  roundBreakdown          Json                             @default("{}") @map("round_breakdown")
+  isComplete              Boolean                          @default(false) @map("is_complete")
+  isLocked                Boolean                          @default(false) @map("is_locked")
+  submittedAt             DateTime?                        @map("submitted_at")
+  createdAt               DateTime                         @default(now()) @map("created_at")
+  updatedAt               DateTime                         @updatedAt @map("updated_at")
+  challenge               WorldCupBracketChallenge         @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  participant             WorldCupBracketParticipant       @relation(fields: [participantId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user                    AppUser                          @relation("WorldCupBracketEntryUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  championTeam            WorldCupTeam?                    @relation("WorldCupEntryChampionPick", fields: [championTeamId], references: [id], onDelete: SetNull, onUpdate: Cascade)
+  picks                   WorldCupBracketPick[]
+  groupRankingPicks       WorldCupGroupRankingPick[]
   thirdPlaceAdvancerPicks WorldCupThirdPlaceAdvancerPick[]
-  chatEvents       WorldCupBracketChatEvent[]
+  chatEvents              WorldCupBracketChatEvent[]
 
   @@index([challengeId])
   @@index([participantId])
@@ -3436,21 +3778,21 @@ model WorldCupBracketPick {
 }
 
 model WorldCupGroupRankingPick {
-  id             String                   @id @default(cuid())
-  challengeId    String                   @map("challenge_id")
-  entryId        String                   @map("entry_id")
-  groupId        String                   @map("group_id")
-  teamId         String                   @map("team_id")
-  predictedRank  Int                      @map("predicted_rank")
-  actualRank     Int?                     @map("actual_rank")
-  isCorrect      Boolean?                 @map("is_correct")
-  pointsAwarded  Int                      @default(0) @map("points_awarded")
-  createdAt      DateTime                 @default(now()) @map("created_at")
-  updatedAt      DateTime                 @updatedAt @map("updated_at")
-  challenge      WorldCupBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  entry          WorldCupBracketEntry     @relation(fields: [entryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  group          WorldCupGroup            @relation(fields: [groupId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  team           WorldCupTeam             @relation(fields: [teamId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id            String                   @id @default(cuid())
+  challengeId   String                   @map("challenge_id")
+  entryId       String                   @map("entry_id")
+  groupId       String                   @map("group_id")
+  teamId        String                   @map("team_id")
+  predictedRank Int                      @map("predicted_rank")
+  actualRank    Int?                     @map("actual_rank")
+  isCorrect     Boolean?                 @map("is_correct")
+  pointsAwarded Int                      @default(0) @map("points_awarded")
+  createdAt     DateTime                 @default(now()) @map("created_at")
+  updatedAt     DateTime                 @updatedAt @map("updated_at")
+  challenge     WorldCupBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  entry         WorldCupBracketEntry     @relation(fields: [entryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  group         WorldCupGroup            @relation(fields: [groupId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  team          WorldCupTeam             @relation(fields: [teamId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([entryId, groupId, predictedRank])
   @@unique([entryId, groupId, teamId])
@@ -3556,28 +3898,28 @@ model WorldCupOfficialFixture {
 }
 
 model WorldCupOfficialGroupStanding {
-  id                   String        @id @default(cuid())
-  providerName         String        @map("provider_name") @db.VarChar(32)
-  seasonYear           Int           @map("season_year")
-  tournamentKey        String        @default("fifa_world_cup") @map("tournament_key")
-  groupName            String        @map("group_name") @db.VarChar(8)
-  teamId               String        @map("team_id")
-  providerTeamId       String?       @map("provider_team_id") @db.VarChar(64)
-  teamName             String        @map("team_name")
-  actualRank           Int?          @map("actual_rank")
-  points               Int           @default(0)
-  goalDifference       Int           @default(0) @map("goal_difference")
-  goalsFor             Int           @default(0) @map("goals_for")
-  goalsAgainst         Int           @default(0) @map("goals_against")
-  played               Int           @default(0)
-  wins                 Int           @default(0)
-  draws                Int           @default(0)
-  losses               Int           @default(0)
-  isThirdPlaceAdvancer Boolean       @default(false) @map("is_third_place_advancer")
-  sourcePayload        Json?         @map("source_payload")
-  createdAt            DateTime      @default(now()) @map("created_at")
-  updatedAt            DateTime      @updatedAt @map("updated_at")
-  team                 WorldCupTeam  @relation("WorldCupOfficialGroupStandingTeam", fields: [teamId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  id                   String       @id @default(cuid())
+  providerName         String       @map("provider_name") @db.VarChar(32)
+  seasonYear           Int          @map("season_year")
+  tournamentKey        String       @default("fifa_world_cup") @map("tournament_key")
+  groupName            String       @map("group_name") @db.VarChar(8)
+  teamId               String       @map("team_id")
+  providerTeamId       String?      @map("provider_team_id") @db.VarChar(64)
+  teamName             String       @map("team_name")
+  actualRank           Int?         @map("actual_rank")
+  points               Int          @default(0)
+  goalDifference       Int          @default(0) @map("goal_difference")
+  goalsFor             Int          @default(0) @map("goals_for")
+  goalsAgainst         Int          @default(0) @map("goals_against")
+  played               Int          @default(0)
+  wins                 Int          @default(0)
+  draws                Int          @default(0)
+  losses               Int          @default(0)
+  isThirdPlaceAdvancer Boolean      @default(false) @map("is_third_place_advancer")
+  sourcePayload        Json?        @map("source_payload")
+  createdAt            DateTime     @default(now()) @map("created_at")
+  updatedAt            DateTime     @updatedAt @map("updated_at")
+  team                 WorldCupTeam @relation("WorldCupOfficialGroupStandingTeam", fields: [teamId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([providerName, seasonYear, groupName, teamId])
   @@index([seasonYear, tournamentKey])
@@ -3637,17 +3979,17 @@ model WorldCupBracketEventState {
 }
 
 model PlayoffBracketChallenge {
-  id          String                @id @default(cuid())
-  ownerUserId String                @map("owner_user_id")
+  id          String                 @id @default(cuid())
+  ownerUserId String                 @map("owner_user_id")
   name        String
   sport       String
-  seasonYear  Int                   @map("season_year")
-  status      String                @default("open")
-  isTestMode  Boolean               @default(false) @map("is_test_mode")
+  seasonYear  Int                    @map("season_year")
+  status      String                 @default("open")
+  isTestMode  Boolean                @default(false) @map("is_test_mode")
   config      Json?
-  createdAt   DateTime              @default(now()) @map("created_at")
-  updatedAt   DateTime              @updatedAt @map("updated_at")
-  owner       AppUser               @relation("PlayoffBracketChallengeOwner", fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
+  owner       AppUser                @relation("PlayoffBracketChallengeOwner", fields: [ownerUserId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   entries     PlayoffBracketEntry[]
   series      PlayoffBracketSeries[]
   picks       PlayoffBracketPick[]
@@ -3659,14 +4001,14 @@ model PlayoffBracketChallenge {
 }
 
 model PlayoffBracketEntry {
-  id          String               @id @default(cuid())
-  challengeId String               @map("challenge_id")
-  userId      String               @map("user_id")
+  id          String                  @id @default(cuid())
+  challengeId String                  @map("challenge_id")
+  userId      String                  @map("user_id")
   name        String
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  createdAt   DateTime                @default(now()) @map("created_at")
+  updatedAt   DateTime                @updatedAt @map("updated_at")
   challenge   PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  user        AppUser              @relation("PlayoffBracketEntryUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  user        AppUser                 @relation("PlayoffBracketEntryUser", fields: [userId], references: [id], onDelete: Cascade, onUpdate: Cascade)
   picks       PlayoffBracketPick[]
 
   @@index([challengeId])
@@ -3676,39 +4018,39 @@ model PlayoffBracketEntry {
 }
 
 model PlayoffBracketSeries {
-  id               String                @id @default(cuid())
-  challengeId      String                @map("challenge_id")
-  round            String
-  roundIndex       Int                   @map("round_index")
-  seriesNumber     Int                   @map("series_number")
-  conference       String
-  homeSeed         Int                   @map("home_seed")
-  awaySeed         Int                   @map("away_seed")
-  homeTeamName     String                @map("home_team_name")
-  awayTeamName     String                @map("away_team_name")
-  winnerTeamName   String?               @map("winner_team_name")
-  bestOf           Int                   @default(7) @map("best_of")
-  status           String                @default("scheduled")
-  startsAt         DateTime?             @map("starts_at")
-  homeTeamWins     Int                   @default(0) @map("home_team_wins")
-  awayTeamWins     Int                   @default(0) @map("away_team_wins")
-  seriesSummary    String?               @map("series_summary")
-  nextGameAt       DateTime?             @map("next_game_at")
-  venue            String?
-  broadcastNetwork String?               @map("broadcast_network")
-  liveHomeScore    Int?                  @map("live_home_score")
-  liveAwayScore    Int?                  @map("live_away_score")
-  liveStatus       String?               @map("live_status")
-  providerGamesJson Json?                @map("provider_games_json")
-  lastSyncedAt     DateTime?             @map("last_synced_at")
-  nextSeriesNumber Int?                  @map("next_series_number")
-  nextSeriesSlot   String?               @map("next_series_slot")
-  sourceSeriesHome Int?                  @map("source_series_home")
-  sourceSeriesAway Int?                  @map("source_series_away")
-  createdAt        DateTime              @default(now()) @map("created_at")
-  updatedAt        DateTime              @updatedAt @map("updated_at")
-  challenge        PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  picks            PlayoffBracketPick[]
+  id                String                  @id @default(cuid())
+  challengeId       String                  @map("challenge_id")
+  round             String
+  roundIndex        Int                     @map("round_index")
+  seriesNumber      Int                     @map("series_number")
+  conference        String
+  homeSeed          Int                     @map("home_seed")
+  awaySeed          Int                     @map("away_seed")
+  homeTeamName      String                  @map("home_team_name")
+  awayTeamName      String                  @map("away_team_name")
+  winnerTeamName    String?                 @map("winner_team_name")
+  bestOf            Int                     @default(7) @map("best_of")
+  status            String                  @default("scheduled")
+  startsAt          DateTime?               @map("starts_at")
+  homeTeamWins      Int                     @default(0) @map("home_team_wins")
+  awayTeamWins      Int                     @default(0) @map("away_team_wins")
+  seriesSummary     String?                 @map("series_summary")
+  nextGameAt        DateTime?               @map("next_game_at")
+  venue             String?
+  broadcastNetwork  String?                 @map("broadcast_network")
+  liveHomeScore     Int?                    @map("live_home_score")
+  liveAwayScore     Int?                    @map("live_away_score")
+  liveStatus        String?                 @map("live_status")
+  providerGamesJson Json?                   @map("provider_games_json")
+  lastSyncedAt      DateTime?               @map("last_synced_at")
+  nextSeriesNumber  Int?                    @map("next_series_number")
+  nextSeriesSlot    String?                 @map("next_series_slot")
+  sourceSeriesHome  Int?                    @map("source_series_home")
+  sourceSeriesAway  Int?                    @map("source_series_away")
+  createdAt         DateTime                @default(now()) @map("created_at")
+  updatedAt         DateTime                @updatedAt @map("updated_at")
+  challenge         PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  picks             PlayoffBracketPick[]
 
   @@unique([challengeId, seriesNumber])
   @@index([challengeId])
@@ -3718,16 +4060,16 @@ model PlayoffBracketSeries {
 }
 
 model PlayoffBracketPick {
-  id           String                @id @default(cuid())
-  challengeId  String                @map("challenge_id")
-  entryId      String                @map("entry_id")
-  seriesId     String                @map("series_id")
-  pickTeamName String                @map("pick_team_name")
-  createdAt    DateTime              @default(now()) @map("created_at")
-  updatedAt    DateTime              @updatedAt @map("updated_at")
+  id           String                  @id @default(cuid())
+  challengeId  String                  @map("challenge_id")
+  entryId      String                  @map("entry_id")
+  seriesId     String                  @map("series_id")
+  pickTeamName String                  @map("pick_team_name")
+  createdAt    DateTime                @default(now()) @map("created_at")
+  updatedAt    DateTime                @updatedAt @map("updated_at")
   challenge    PlayoffBracketChallenge @relation(fields: [challengeId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  entry        PlayoffBracketEntry   @relation(fields: [entryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
-  series       PlayoffBracketSeries  @relation(fields: [seriesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  entry        PlayoffBracketEntry     @relation(fields: [entryId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+  series       PlayoffBracketSeries    @relation(fields: [seriesId], references: [id], onDelete: Cascade, onUpdate: Cascade)
 
   @@unique([entryId, seriesId])
   @@index([challengeId])
@@ -5390,6 +5732,8 @@ model League {
   leagueApplications                    LeagueApplication[]
   leagueReputation                      LeagueReputation?
   renewals                              LeagueRenewal[]
+  tradeExecutionSnapshots               TradeExecutionSnapshot[]
+  tradeReversals                        TradeReversal[]
   memberHistories                       LeagueMemberHistory[]
   championships                         LeagueChampionship[]
   commissionerSuccessions               CommissionerSuccession[]
@@ -5505,6 +5849,7 @@ model League {
   afLeagueTrades                        AfLeagueTrade[]
   afRosterLineupAssignments             AfRosterLineupAssignment[]
   afRosterMoveHistory                   AfRosterMoveHistory[]
+  redraftRosterMoveHistory              RedraftRosterMoveHistory[]
   afLineupLockStates                    AfLineupLockState[]
   waiverRuns                            WaiverRun[]
   waiverResults                         WaiverResult[]
@@ -5751,6 +6096,56 @@ model ImportWarning {
   @@map("import_warnings")
 }
 
+/// Durable per-connection synchronization state for the Fantasy OS read-model sync
+/// (Launch Batch 2). One row per deterministic run key
+/// (`<provider>:<externalLeagueId>:<season>`) — a single external league+season the
+/// scheduled collector keeps fresh, independent of how many AllFantasy `League` rows
+/// (one per importing user) mirror it. Backs the durable runner's SyncStore + freshness.
+/// No foreign key: a run key can map to several `League` rows, so affected leagues are
+/// resolved dynamically by (platform, platformLeagueId, season). Read-only mirror —
+/// never stores credentials (Sleeper is keyless).
+model LeagueSyncState {
+  id                   String    @id @default(cuid())
+  /// Deterministic run key `<provider>:<externalLeagueId>:<season>` — also the lock key.
+  runKey               String    @unique @db.VarChar(191)
+  provider             String    @db.VarChar(32)
+  externalLeagueId     String    @db.VarChar(128)
+  season               Int
+  sport                String    @default("NFL") @db.VarChar(16)
+  /// Resolved season phase at the last run (preseason/regular_season/postseason/offseason/unknown).
+  seasonState          String?   @db.VarChar(24)
+  /// Last run status: completed | partial | failed | locked | skipped.
+  syncStatus           String?   @db.VarChar(24)
+  /// Per-scope resumable checkpoints: `{ [scope]: checkpointToken }`. Immutable completed scopes are never refetched.
+  checkpoints          Json      @default("{}")
+  /// Scopes that completed on the last run.
+  completedScopes      Json      @default("[]")
+  /// Scopes still incomplete/failed after the last run (resume targets).
+  incompleteScopes     Json      @default("[]")
+  /// Full request accounting from the last run (attempts/logical/retries/imported/unchanged/…).
+  lastRunAccounting    Json?
+  /// When the last run was attempted (advances every run, success or not).
+  lastAttemptedSyncAt  DateTime?
+  /// Certified freshness — AllFantasy's successful-collection time; advances ONLY when all required
+  /// mutable scopes complete. (This is AF execution time, NOT a provider-reported timestamp.)
+  lastSuccessfulSyncAt DateTime?
+  /// RESERVED for a genuine provider-reported source-data timestamp. Left null until one is reliably
+  /// available — Sleeper exposes no dependable per-league data mtime. Never store AF execution time here.
+  sourceDataTimestamp  DateTime?
+  /// Consecutive failed/partial runs since the last completed run (drives backoff/alerting).
+  consecutiveFailures  Int       @default(0)
+  lastError            String?   @db.Text
+  /// Id of the last SyncJobRun telemetry row for this connection.
+  lastRunId            String?   @db.VarChar(64)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([provider, externalLeagueId, season])
+  @@index([lastSuccessfulSyncAt])
+  @@index([lastAttemptedSyncAt])
+  @@map("league_sync_state")
+}
+
 model ExternalEntityMapping {
   id         String     @id @default(cuid())
   leagueId   String
@@ -5868,15 +6263,15 @@ model IdentitySignal {
 /// ordering helper. `leagueId` null = exception applies everywhere; set = a
 /// single-league exception only.
 model HouseholdException {
-  id               String    @id @default(cuid())
+  id               String   @id @default(cuid())
   appUserIdA       String
   appUserIdB       String
   leagueId         String?
   reason           String?
   approvedByUserId String?
-  createdAt        DateTime  @default(now())
-  userA            AppUser   @relation("HouseholdExceptionUserA", fields: [appUserIdA], references: [id], onDelete: Cascade)
-  userB            AppUser   @relation("HouseholdExceptionUserB", fields: [appUserIdB], references: [id], onDelete: Cascade)
+  createdAt        DateTime @default(now())
+  userA            AppUser  @relation("HouseholdExceptionUserA", fields: [appUserIdA], references: [id], onDelete: Cascade)
+  userB            AppUser  @relation("HouseholdExceptionUserB", fields: [appUserIdB], references: [id], onDelete: Cascade)
 
   @@unique([appUserIdA, appUserIdB, leagueId])
   @@index([appUserIdA])
@@ -6206,38 +6601,38 @@ model LeagueTemplate {
 /// Product-owned concept preset for sport/league-type creation defaults and AI/data-feed gating.
 /// User-created copies live in LeagueTemplate; this row is the canonical preset source.
 model ConceptPreset {
-  id                 String   @id @default(cuid())
-  presetKey          String?  @unique @map("preset_key")
-  sport              String
-  leagueType         String   @map("league_type")
-  draftTypesAllowed  String[] @default([]) @map("draft_types_allowed")
-  defaultTeamCount   Int      @map("default_team_count")
-  rosterSlots        Json     @map("roster_slots")
-  benchSlots         Int      @default(0) @map("bench_slots")
-  irSlots            Int      @default(0) @map("ir_slots")
-  taxiSlots          Int      @default(0) @map("taxi_slots")
-  scoringPreset      String   @map("scoring_preset")
-  waiverRules        Json     @map("waiver_rules")
-  tradeRules         Json     @map("trade_rules")
-  playoffRules       Json     @map("playoff_rules")
-  scheduleRules      Json     @map("schedule_rules")
-  draftRules         Json     @map("draft_rules")
-  aiEnabledFeatures  String[] @default([]) @map("ai_enabled_features")
-  requiredDataFeeds  String[] @default([]) @map("required_data_feeds")
-  readiness          String   @default("coming_soon")
-  visibility         String   @default("hidden")
-  isLaunchReady      Boolean  @default(false) @map("is_launch_ready")
-  featureFlagKey     String?  @map("feature_flag_key")
-  marketingLabel     String?  @map("marketing_label")
-  shortDescription   String?  @map("short_description")
-  commissionerWarning String? @map("commissioner_warning")
-  userFacingWarning  String?  @map("user_facing_warning")
-  unsupportedReason  String?  @map("unsupported_reason")
-  metadata           Json?
-  source             String   @default("allfantasy")
-  active             Boolean  @default(true)
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt          DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(cuid())
+  presetKey           String?  @unique @map("preset_key")
+  sport               String
+  leagueType          String   @map("league_type")
+  draftTypesAllowed   String[] @default([]) @map("draft_types_allowed")
+  defaultTeamCount    Int      @map("default_team_count")
+  rosterSlots         Json     @map("roster_slots")
+  benchSlots          Int      @default(0) @map("bench_slots")
+  irSlots             Int      @default(0) @map("ir_slots")
+  taxiSlots           Int      @default(0) @map("taxi_slots")
+  scoringPreset       String   @map("scoring_preset")
+  waiverRules         Json     @map("waiver_rules")
+  tradeRules          Json     @map("trade_rules")
+  playoffRules        Json     @map("playoff_rules")
+  scheduleRules       Json     @map("schedule_rules")
+  draftRules          Json     @map("draft_rules")
+  aiEnabledFeatures   String[] @default([]) @map("ai_enabled_features")
+  requiredDataFeeds   String[] @default([]) @map("required_data_feeds")
+  readiness           String   @default("coming_soon")
+  visibility          String   @default("hidden")
+  isLaunchReady       Boolean  @default(false) @map("is_launch_ready")
+  featureFlagKey      String?  @map("feature_flag_key")
+  marketingLabel      String?  @map("marketing_label")
+  shortDescription    String?  @map("short_description")
+  commissionerWarning String?  @map("commissioner_warning")
+  userFacingWarning   String?  @map("user_facing_warning")
+  unsupportedReason   String?  @map("unsupported_reason")
+  metadata            Json?
+  source              String   @default("allfantasy")
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   @@index([sport, leagueType])
   @@index([sport])
@@ -10596,23 +10991,32 @@ model GameSchedule {
 
 /// Multi-sport: player stats per game (normalized for fantasy calculation)
 model PlayerGameStat {
-  id                String   @id @default(cuid())
-  playerId          String   @db.VarChar(64)
-  gameId            String   @db.VarChar(64)
-  providerPlayerId  String?  @map("provider_player_id") @db.VarChar(128)
-  providerGameId    String?  @map("provider_game_id") @db.VarChar(128)
+  id                String    @id @default(cuid())
+  playerId          String    @db.VarChar(64)
+  gameId            String    @db.VarChar(64)
+  providerPlayerId  String?   @map("provider_player_id") @db.VarChar(128)
+  providerGameId    String?   @map("provider_game_id") @db.VarChar(128)
   season            Int
   weekOrRound       Int
-  statPayload       Json     @map("stat_payload")
-  normalizedStatMap Json     @map("normalized_stat_map")
-  fantasyPoints     Float    @default(0)
-  source            String?  @db.VarChar(64)
+  statPayload       Json      @map("stat_payload")
+  normalizedStatMap Json      @map("normalized_stat_map")
+  fantasyPoints     Float     @default(0)
+  source            String?   @db.VarChar(64)
   confidence        Float?
   sourceUpdatedAt   DateTime? @map("source_updated_at")
   fetchedAt         DateTime? @map("fetched_at")
   expiresAt         DateTime? @map("expires_at")
-  updatedAt         DateTime @updatedAt
-  sportType         String   @db.VarChar(12)
+  updatedAt         DateTime  @updatedAt
+  sportType         String    @db.VarChar(12)
+
+  /// Defense faced, e.g. "IND". From the provider row, not derived from a schedule join.
+  opponent String? @db.VarChar(8)
+  /// ⚠ The team AT THE TIME OF THE GAME, NOT the player's current team. A 2024 row for
+  /// Tank Bigsby carries "JAX" while his current team is "PHI"; using the current team
+  /// would attribute historical performance to a franchise he never played it for.
+  team     String? @db.VarChar(8)
+  /// Kickoff date — the source for month-of-season effects.
+  gameDate DateTime? @map("game_date") @db.Date
 
   @@unique([playerId, sportType, gameId])
   @@index([playerId, sportType, season])
@@ -10620,26 +11024,30 @@ model PlayerGameStat {
   @@index([sportType, source])
   @@index([fetchedAt])
   @@index([expiresAt])
+  /// "This player vs this defense, across seasons" — the opponent adjustment's own query.
+  @@index([playerId, sportType, opponent])
+  /// "What this defense allowed to this position" — the larger-sample signal.
+  @@index([sportType, opponent, season])
   @@map("player_game_stats")
 }
 
 /// Multi-sport: team-level game stats (optional aggregate)
 model TeamGameStat {
-  id          String   @id @default(cuid())
-  gameId      String   @db.VarChar(64)
-  teamId      String   @db.VarChar(32)
-  providerTeamId String? @map("provider_team_id") @db.VarChar(128)
-  providerGameId String? @map("provider_game_id") @db.VarChar(128)
-  season      Int
-  weekOrRound Int
-  statPayload Json     @map("stat_payload")
-  source      String?  @db.VarChar(64)
-  confidence  Float?
+  id              String    @id @default(cuid())
+  gameId          String    @db.VarChar(64)
+  teamId          String    @db.VarChar(32)
+  providerTeamId  String?   @map("provider_team_id") @db.VarChar(128)
+  providerGameId  String?   @map("provider_game_id") @db.VarChar(128)
+  season          Int
+  weekOrRound     Int
+  statPayload     Json      @map("stat_payload")
+  source          String?   @db.VarChar(64)
+  confidence      Float?
   sourceUpdatedAt DateTime? @map("source_updated_at")
-  fetchedAt   DateTime? @map("fetched_at")
-  expiresAt   DateTime? @map("expires_at")
-  updatedAt   DateTime @updatedAt
-  sportType   String   @db.VarChar(12)
+  fetchedAt       DateTime? @map("fetched_at")
+  expiresAt       DateTime? @map("expires_at")
+  updatedAt       DateTime  @updatedAt
+  sportType       String    @db.VarChar(12)
 
   @@unique([sportType, gameId, teamId])
   @@index([sportType, season, weekOrRound])
@@ -10868,6 +11276,7 @@ model AfLeagueTrade {
   statusHistory    AfLeagueTradeStatusHistory[]
   votes            AfLeagueTradeVote[]
   processingEvents AfLeagueTradeProcessingEvent[]
+  executionSnapshot TradeExecutionSnapshot?
 
   @@index([leagueId, status])
   @@index([proposerRosterId])
@@ -12043,19 +12452,57 @@ model TokenPackage {
 
 /// User-level AI token balance snapshot.
 model UserTokenBalance {
-  id                String        @id @default(uuid())
-  userId            String        @unique
-  balance           Int           @default(0)
-  lifetimePurchased Int           @default(0)
-  lifetimeSpent     Int           @default(0)
-  lifetimeRefunded  Int           @default(0)
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  id                String             @id @default(uuid())
+  userId            String             @unique
+  balance           Int                @default(0)
+  /// Sum of currently-held (pending) reservations. Spendable = balance - reservedBalance. Only `balance` is
+  /// debited on a FINALIZED consumption; a held reservation never reduces `balance`, so a failed/abandoned run
+  /// can never leave a finalized charge.
+  reservedBalance   Int                @default(0) @map("reserved_balance")
+  lifetimePurchased Int                @default(0)
+  lifetimeSpent     Int                @default(0)
+  lifetimeRefunded  Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
   entries           TokenLedger[]
-  user              AppUser       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reservations      TokenReservation[]
+  user              AppUser            @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([balance])
   @@map("user_token_balances")
+}
+
+/// True token RESERVATION lifecycle (pending → finalized/consumed | released/cancelled). A reservation holds
+/// spendable balance (via UserTokenBalance.reservedBalance) WITHOUT finalizing consumption, so concurrent runs
+/// cannot overspend and a failure/crash never yields a finalized charge. Finalization (after a persisted
+/// success) debits `balance` and writes an immutable TokenLedger SPEND entry; release restores the hold.
+/// `idempotencyKey` is the canonical run key → one reservation per billable run. Additive; extends the
+/// existing token system (no parallel ledger).
+model TokenReservation {
+  id                 String           @id @default(cuid())
+  userId             String           @map("user_id")
+  userTokenBalanceId String           @map("user_token_balance_id")
+  amount             Int
+  status             String           @default("reserved") @db.VarChar(16)
+  spendRuleCode      String?          @map("spend_rule_code") @db.VarChar(64)
+  sourceType         String?          @map("source_type") @db.VarChar(64)
+  sourceId           String?          @map("source_id") @db.VarChar(255)
+  idempotencyKey     String           @unique @map("idempotency_key") @db.VarChar(255)
+  intelligenceRunId  String?          @map("intelligence_run_id")
+  finalizedLedgerId  String?          @map("finalized_ledger_id")
+  reason             String?          @db.VarChar(128)
+  reservedAt         DateTime         @default(now()) @map("reserved_at")
+  finalizedAt        DateTime?        @map("finalized_at")
+  releasedAt         DateTime?        @map("released_at")
+  expiresAt          DateTime         @map("expires_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+  tokenBalance       UserTokenBalance @relation(fields: [userTokenBalanceId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, expiresAt])
+  @@index([intelligenceRunId])
+  @@map("token_reservations")
 }
 
 /// Centralized per-feature spend pricing for token deductions.
@@ -12833,7 +13280,10 @@ model RedraftSeason {
   league                   League                     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   redraftTradeProposals    RedraftTradeProposal[]
   redraftWaiverClaims      RedraftWaiverClaim[]
+  tradeExecutionSnapshots TradeExecutionSnapshot[]
+  tradeReversals          TradeReversal[]
 
+  @@unique([leagueId, season])
   @@index([leagueId])
   @@map("redraft_seasons")
 }
@@ -12878,6 +13328,7 @@ model RedraftRoster {
   playoffWinningMatchups   RedraftPlayoffMatchup[]    @relation("RedraftPlayoffWinnerRoster")
   playoffSeeds             RedraftPlayoffSeed[]
   players                  RedraftRosterPlayer[]
+  rosterMoveHistory        RedraftRosterMoveHistory[]
   season                   RedraftSeason              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   tradeAssetsFrom          RedraftTradeAsset[]        @relation("RedraftTradeAssetFrom")
   tradeAssetsTo            RedraftTradeAsset[]        @relation("RedraftTradeAssetTo")
@@ -12912,6 +13363,35 @@ model RedraftRosterPlayer {
   @@index([rosterId])
   @@index([playerId])
   @@map("redraft_roster_players")
+}
+
+/// Phase 2H — lineup-save history for redraft rosters, giving Phase 6 Decision
+/// OS DNA a real `week` value for lineup_saved events (see
+/// docs/DECISION_OS_MANAGER_DNA_PHASE2G_VOLUME_AND_LINEUP_HISTORY_SCOPE.md §2).
+/// Mirrors AfRosterMoveHistory's shape/hash-dedup convention exactly; no
+/// RedraftSeason relation (season is a plain Int here too, matching
+/// AfRosterMoveHistory, to avoid a field-name collision with the `season`
+/// scalar column).
+model RedraftRosterMoveHistory {
+  id          String        @id @default(cuid())
+  leagueId    String
+  rosterId    String
+  seasonId    String
+  season      Int
+  week        Int
+  actorUserId String?       @db.VarChar(128)
+  source      String        @db.VarChar(32)
+  moveSummary String?       @db.VarChar(512)
+  beforeHash  String?       @db.VarChar(64)
+  afterHash   String?       @db.VarChar(64)
+  metadata    Json?
+  createdAt   DateTime      @default(now())
+  league      League        @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  roster      RedraftRoster @relation(fields: [rosterId], references: [id], onDelete: Cascade)
+
+  @@index([leagueId, rosterId, createdAt])
+  @@index([leagueId, seasonId, week])
+  @@map("redraft_roster_move_history")
 }
 
 model RedraftMatchup {
@@ -13138,13 +13618,13 @@ model RedraftDraftEvent {
 }
 
 model RedraftTradeProposal {
-  id               String                @id
+  id               String                     @id
   leagueId         String
   seasonId         String
   proposerRosterId String
   receiverRosterId String
-  status           String                @default("pending")
-  vetoMode         String                @default("commissioner")
+  status           String                     @default("pending")
+  vetoMode         String                     @default("commissioner")
   vetoThreshold    Int?
   reason           String?
   expiresAt        DateTime?
@@ -13152,20 +13632,81 @@ model RedraftTradeProposal {
   rejectedAt       DateTime?
   cancelledAt      DateTime?
   processedAt      DateTime?
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
   assets           RedraftTradeAsset[]
   decision         RedraftTradeDecision?
-  league           League                @relation(fields: [leagueId], references: [id], onDelete: Cascade)
-  proposerRoster   RedraftRoster         @relation("RedraftTradeProposalProposer", fields: [proposerRosterId], references: [id], onDelete: Cascade)
-  receiverRoster   RedraftRoster         @relation("RedraftTradeProposalReceiver", fields: [receiverRosterId], references: [id], onDelete: Cascade)
-  season           RedraftSeason         @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  league           League                     @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  proposerRoster   RedraftRoster              @relation("RedraftTradeProposalProposer", fields: [proposerRosterId], references: [id], onDelete: Cascade)
+  receiverRoster   RedraftRoster              @relation("RedraftTradeProposalReceiver", fields: [receiverRosterId], references: [id], onDelete: Cascade)
+  season           RedraftSeason              @relation(fields: [seasonId], references: [id], onDelete: Cascade)
   votes            RedraftTradeVote[]
   valueSnapshot    RedraftTradeValueSnapshot?
+  executionSnapshot TradeExecutionSnapshot?
 
   @@index([leagueId, status])
   @@index([seasonId, createdAt])
   @@map("redraft_trade_proposals")
+}
+
+/// Immutable before/after evidence created atomically with a completed trade and its outbox event.
+model TradeExecutionSnapshot {
+  id                      String   @id @default(cuid())
+  tradeId                 String   @unique
+  tradeSource             String   @db.VarChar(32)
+  nativeTradeId           String?  @unique
+  genericTradeId          String?  @unique
+  leagueId                String
+  seasonId                String?
+  tenantId                String   @default("allfantasy")
+  organizationId          String?
+  executionIdempotencyKey String   @unique
+  eventId                 String   @unique
+  executedAt              DateTime
+  executedByActorId       String
+  executedByActorRole     String   @db.VarChar(32)
+  governance              Json
+  validations             Json
+  beforeState             Json
+  afterState              Json
+  assetSummary            Json
+  dependencies            Json     @default("{}")
+  completeness            String   @default("complete") @db.VarChar(16)
+  createdAt               DateTime @default(now())
+  league                  League   @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season                  RedraftSeason? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  nativeTrade             RedraftTradeProposal? @relation(fields: [nativeTradeId], references: [id], onDelete: SetNull)
+  genericTrade            AfLeagueTrade? @relation(fields: [genericTradeId], references: [id], onDelete: SetNull)
+  reversal                TradeReversal?
+
+  @@index([leagueId, executedAt])
+  @@index([seasonId, executedAt])
+  @@map("trade_execution_snapshots")
+}
+
+/// Immutable evidence that a completed native or generic trade was restored from its execution snapshot.
+model TradeReversal {
+  id             String   @id @default(cuid())
+  tradeId        String   @unique
+  snapshotId     String   @unique
+  leagueId       String
+  seasonId       String?
+  actorId        String
+  actorRole      String   @db.VarChar(32)
+  reason         String
+  idempotencyKey String   @unique
+  readiness      Json
+  restoredState  Json
+  eventId        String   @unique
+  noticeKey      String   @unique
+  reversedAt     DateTime
+  createdAt      DateTime @default(now())
+  snapshot       TradeExecutionSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Restrict)
+  league         League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  season         RedraftSeason? @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+
+  @@index([leagueId, reversedAt])
+  @@map("trade_reversals")
 }
 
 model RedraftTradeAsset {
@@ -13265,27 +13806,27 @@ model RedraftTradeMarketEvent {
 /// Sport/concept/provider agnostic: cadence lives in `period`, sport-specific
 /// detail in `payload`/`metadata` (JSON), entity refs in `subjects` (canonical ids).
 model DomainEvent {
-  id             String    @id @default(cuid())
-  eventId        String    @unique
+  id             String   @id @default(cuid())
+  eventId        String   @unique
   type           String
-  schemaVersion  Int       @default(1)
+  schemaVersion  Int      @default(1)
   occurredAt     DateTime
-  recordedAt     DateTime  @default(now())
+  recordedAt     DateTime @default(now())
   sport          String?
   leagueConcept  String?
-  tenantId       String    @default("allfantasy")
+  tenantId       String   @default("allfantasy")
   leagueId       String?
   seasonId       String?
-  actorType      String    @default("system")
+  actorType      String   @default("system")
   actorId        String?
-  source         String    @default("unknown")
+  source         String   @default("unknown")
   correlationId  String?
   causationId    String?
-  idempotencyKey String    @unique
-  payload        Json      @default("{}")
-  metadata       Json      @default("{}")
+  idempotencyKey String   @unique
+  payload        Json     @default("{}")
+  metadata       Json     @default("{}")
   period         Json?
-  subjects       Json      @default("[]")
+  subjects       Json     @default("[]")
 
   @@index([leagueId, occurredAt])
   @@index([seasonId, occurredAt])
@@ -14380,6 +14921,10 @@ enum TradeOfferMode {
   TRADE_HUB
   TRADE_IDEAS
   PROPOSAL_GENERATOR
+  /// Real in-app trade proposals (AfLeagueTrade), distinct from the
+  /// hypothetical-evaluation-tool modes above — see
+  /// docs/TRADE_LEARNING_CAPTURE_ARCHITECTURE_ADR.md.
+  LIVE_PROPOSAL
 }
 
 enum TradeOutcome {
@@ -14717,15 +15262,15 @@ model ChimmyIntelligenceFeedback {
 ///   - All score/percentile fields are denormalized for leaderboard / index
 ///     scans so the JSON blob is never required for ranking pages.
 model ResumeSnapshot {
-  id                  String   @id @default(cuid())
-  userId              String   @unique @db.VarChar(64)
-  computedAt          DateTime @default(now())
+  id              String    @id @default(cuid())
+  userId          String    @unique @db.VarChar(64)
+  computedAt      DateTime  @default(now())
   /// Source data freshness (max of underlying inputs). Used to decide
   /// whether a recompute is required.
-  sourceFreshAt       DateTime?
+  sourceFreshAt   DateTime?
   /// Monotonic composer version. Bumped when scoring math changes so old
   /// rows can be invalidated en masse.
-  composerVersion     Int      @default(1)
+  composerVersion Int       @default(1)
 
   /// Denormalised hot fields for leaderboards + filters.
   overallRating       Int?
@@ -14738,9 +15283,9 @@ model ResumeSnapshot {
   archetypeConfidence Decimal? @db.Decimal(6, 4)
 
   /// Explainability summary persisted for fast debug surfaces.
-  strongestCategory   String?  @db.VarChar(96)
-  weakestCategory     String?  @db.VarChar(96)
-  ratingDeltaReason   String?  @db.VarChar(160)
+  strongestCategory String? @db.VarChar(96)
+  weakestCategory   String? @db.VarChar(96)
+  ratingDeltaReason String? @db.VarChar(160)
 
   /// Credibility roll-up.
   credibilityScore    Decimal  @default(0.5) @db.Decimal(6, 4)
@@ -14748,16 +15293,16 @@ model ResumeSnapshot {
   verifiedTrophyCount Int      @default(0)
 
   /// Full composed FantasyResume (owner-view). JSON for forward-compat.
-  payload             Json
+  payload Json
 
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @default(now()) @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
-  history             ResumeSnapshotHistory[]
-  credibilityRecord   ResumeCredibility?
-  verificationFlags   ResumeVerificationFlag[]
-  archetype           ResumeArchetypeRecord?
-  visibilitySettings  ResumeVisibilitySettings? @relation("ResumeSnapshotVisibility")
+  history            ResumeSnapshotHistory[]
+  credibilityRecord  ResumeCredibility?
+  verificationFlags  ResumeVerificationFlag[]
+  archetype          ResumeArchetypeRecord?
+  visibilitySettings ResumeVisibilitySettings? @relation("ResumeSnapshotVisibility")
 
   /// Leaderboard / lookup indexes.
   @@index([overallRating])
@@ -14812,15 +15357,15 @@ model ResumeCredibility {
 /// dispute workflows to track individual rows without rewriting the whole
 /// resume payload.
 model ResumeVerificationFlag {
-  id          String   @id @default(cuid())
-  snapshotId  String
-  userId      String   @db.VarChar(64)
-  trophyId    String   @db.VarChar(96)
-  flag        String   @db.VarChar(32)
-  status      String   @db.VarChar(24)
-  evidence    Json?
-  createdAt   DateTime @default(now())
-  resolvedAt  DateTime?
+  id         String    @id @default(cuid())
+  snapshotId String
+  userId     String    @db.VarChar(64)
+  trophyId   String    @db.VarChar(96)
+  flag       String    @db.VarChar(32)
+  status     String    @db.VarChar(24)
+  evidence   Json?
+  createdAt  DateTime  @default(now())
+  resolvedAt DateTime?
 
   snapshot ResumeSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
@@ -14833,15 +15378,15 @@ model ResumeVerificationFlag {
 /// Per-user resume visibility + anonymity preferences. Owner-controlled.
 /// Single row per user.
 model ResumeVisibilitySettings {
-  id                  String   @id @default(cuid())
-  snapshotId          String?  @unique
-  userId              String   @unique @db.VarChar(64)
+  id               String   @id @default(cuid())
+  snapshotId       String?  @unique
+  userId           String   @unique @db.VarChar(64)
   /// JSON-encoded `ResumeVisibilityMap`. Defaults applied in the
   /// visibility helper; absent keys fall back to `DEFAULT_VISIBILITY`.
-  visibility          Json     @default("{}")
-  anonymityEnabled    Boolean  @default(false)
-  hideUsername        Boolean  @default(false)
-  updatedAt           DateTime @default(now()) @updatedAt
+  visibility       Json     @default("{}")
+  anonymityEnabled Boolean  @default(false)
+  hideUsername     Boolean  @default(false)
+  updatedAt        DateTime @default(now()) @updatedAt
 
   snapshot ResumeSnapshot? @relation("ResumeSnapshotVisibility", fields: [snapshotId], references: [id], onDelete: SetNull)
 
@@ -14851,13 +15396,13 @@ model ResumeVisibilitySettings {
 /// Persisted archetype derivation result. Nullable label — AI fill-in
 /// happens out of band.
 model ResumeArchetypeRecord {
-  id          String   @id @default(cuid())
-  snapshotId  String   @unique
-  userId      String   @unique @db.VarChar(64)
-  label       String?  @db.VarChar(64)
-  confidence  Decimal? @db.Decimal(6, 4)
-  source      String?  @db.VarChar(32)
-  computedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  snapshotId String   @unique
+  userId     String   @unique @db.VarChar(64)
+  label      String?  @db.VarChar(64)
+  confidence Decimal? @db.Decimal(6, 4)
+  source     String?  @db.VarChar(32)
+  computedAt DateTime @default(now())
 
   snapshot ResumeSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
 
@@ -14878,17 +15423,17 @@ enum CommissionerInviteStatus {
 }
 
 model CommissionerCandidateInvite {
-  id               String                   @id @default(cuid())
-  leagueId         String                   @db.VarChar(64)
-  commissionerId   String                   @db.VarChar(64)
-  candidateUserId  String                   @db.VarChar(64)
-  status           CommissionerInviteStatus @default(pending)
-  fitScore         Decimal?                 @db.Decimal(5, 4)
-  fitRationale     String?                  @db.VarChar(512)
-  sentAt           DateTime                 @default(now())
-  expiresAt        DateTime?
-  respondedAt      DateTime?
-  updatedAt        DateTime                 @updatedAt
+  id              String                   @id @default(cuid())
+  leagueId        String                   @db.VarChar(64)
+  commissionerId  String                   @db.VarChar(64)
+  candidateUserId String                   @db.VarChar(64)
+  status          CommissionerInviteStatus @default(pending)
+  fitScore        Decimal?                 @db.Decimal(5, 4)
+  fitRationale    String?                  @db.VarChar(512)
+  sentAt          DateTime                 @default(now())
+  expiresAt       DateTime?
+  respondedAt     DateTime?
+  updatedAt       DateTime                 @updatedAt
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -14910,17 +15455,17 @@ enum LeagueApplicationStatus {
 }
 
 model LeagueApplication {
-  id               String                  @id @default(cuid())
-  leagueId         String                  @db.VarChar(64)
-  applicantUserId  String                  @db.VarChar(64)
-  status           LeagueApplicationStatus @default(pending)
-  fitSnapshotJson  Json?
-  message          String?                 @db.VarChar(1024)
-  commissionerNotes String?                @db.VarChar(1024)
-  reviewedBy       String?                 @db.VarChar(64)
-  reviewedAt       DateTime?
-  submittedAt      DateTime                @default(now())
-  updatedAt        DateTime                @updatedAt
+  id                String                  @id @default(cuid())
+  leagueId          String                  @db.VarChar(64)
+  applicantUserId   String                  @db.VarChar(64)
+  status            LeagueApplicationStatus @default(pending)
+  fitSnapshotJson   Json?
+  message           String?                 @db.VarChar(1024)
+  commissionerNotes String?                 @db.VarChar(1024)
+  reviewedBy        String?                 @db.VarChar(64)
+  reviewedAt        DateTime?
+  submittedAt       DateTime                @default(now())
+  updatedAt         DateTime                @updatedAt
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -14945,22 +15490,22 @@ enum LeaguePrestigeTier {
 }
 
 model LeagueReputation {
-  id                      String             @id @default(cuid())
-  leagueId                String             @unique @db.VarChar(64)
-  completionRate          Decimal?           @db.Decimal(5, 4)
-  retentionRate           Decimal?           @db.Decimal(5, 4)
-  stabilityScore          Decimal?           @db.Decimal(5, 4)
-  longevityScore          Decimal?           @db.Decimal(5, 4)
-  competitivenessScore    Decimal?           @db.Decimal(5, 4)
-  overallScore            Decimal?           @db.Decimal(5, 4)
-  tier                    LeaguePrestigeTier @default(standard)
-  verifiedLeague          Boolean            @default(false)
-  totalSeasons            Int                @default(0)
-  abandonedSeasons        Int                @default(0)
+  id                        String             @id @default(cuid())
+  leagueId                  String             @unique @db.VarChar(64)
+  completionRate            Decimal?           @db.Decimal(5, 4)
+  retentionRate             Decimal?           @db.Decimal(5, 4)
+  stabilityScore            Decimal?           @db.Decimal(5, 4)
+  longevityScore            Decimal?           @db.Decimal(5, 4)
+  competitivenessScore      Decimal?           @db.Decimal(5, 4)
+  overallScore              Decimal?           @db.Decimal(5, 4)
+  tier                      LeaguePrestigeTier @default(standard)
+  verifiedLeague            Boolean            @default(false)
+  totalSeasons              Int                @default(0)
+  abandonedSeasons          Int                @default(0)
   /// Denormalized commissioner prestige score for fast descriptor loading.
-  commissionerPrestigeScore Decimal?         @db.Decimal(5, 4)
-  lastComputedAt          DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  commissionerPrestigeScore Decimal?           @db.Decimal(5, 4)
+  lastComputedAt            DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -15023,7 +15568,11 @@ model ReputationTelemetryRecord {
 enum LeagueRenewalStatus {
   pending
   in_progress
+  confirming
+  ready
   completed
+  archived
+  cancelled
   abandoned
 
   @@map("league_renewal_status")
@@ -15033,6 +15582,11 @@ enum LeagueRenewalSlotStatus {
   invited
   confirmed
   declined
+  vacant
+  replacement_invited
+  replacement_accepted
+  commissioner_confirmed
+  removed
   abandoned
 
   @@map("league_renewal_slot_status")
@@ -15074,41 +15628,73 @@ enum LifecycleTelemetryEventKind {
 /// One renewal record per season cycle. Created when commissioner initiates renewal from `offseason`
 /// or `completed`. Tracks window, slot confirmations, and final execution.
 model LeagueRenewal {
-  id              String              @id @default(cuid())
-  leagueId        String              @db.VarChar(64)
-  season          Int
-  renewalKind     String              @db.VarChar(32)
-  status          LeagueRenewalStatus @default(pending)
-  initiatedBy     String              @db.VarChar(64)
-  initiatedAt     DateTime            @default(now())
-  windowClosesAt  DateTime
-  executedAt      DateTime?
-  abandonedAt     DateTime?
-  nextSeason      Int?
+  id             String              @id @default(cuid())
+  leagueId       String              @db.VarChar(64)
+  season         Int
+  renewalKind    String              @db.VarChar(32)
+  status         LeagueRenewalStatus @default(pending)
+  initiatedBy    String              @db.VarChar(64)
+  initiatedAt    DateTime            @default(now())
+  windowClosesAt DateTime
+  executedAt     DateTime?
+  abandonedAt    DateTime?
+  nextSeason     Int?
+  priorSeasonId  String?
+  nextSeasonId   String?             @unique
+  deadlineAt     DateTime?
+  completedAt    DateTime?
+  archivedAt     DateTime?
+  createdByUserId String?             @db.VarChar(64)
+  majorChangeApprovalPolicy String?   @db.VarChar(32)
+  settingsProposalVersionId String?
+  scoringProposalVersionId  String?
+  /// Immutable copy of League.settings taken atomically at renewal completion time.
+  settingsSnapshot          Json?
+  settingsSnapshotVersion   Int?
+  rosterCount               Int?
+  managerAssignmentCount    Int?
+  /// Stable identity for the completion write itself (distinct from the renewal's own id) — survives retries.
+  completionIdempotencyKey  String?
+  completionEventId         String?
+  completionAuditId         String?
+  sourceSeasonId            String?
 
-  league League           @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  league League              @relation(fields: [leagueId], references: [id], onDelete: Cascade)
   slots  LeagueRenewalSlot[]
 
   @@unique([leagueId, season])
+  @@unique([completionIdempotencyKey])
+  @@unique([completionEventId])
   @@index([leagueId, status])
   @@index([windowClosesAt])
+  @@index([priorSeasonId])
   @@map("league_renewals")
 }
 
 /// Per-manager slot in a renewal window. Tracks whether each manager confirms, declines, or abandons.
 model LeagueRenewalSlot {
-  id         String                  @id @default(cuid())
-  renewalId  String
-  leagueId   String                  @db.VarChar(64)
-  userId     String                  @db.VarChar(64)
-  status     LeagueRenewalSlotStatus @default(invited)
-  invitedAt  DateTime                @default(now())
+  id          String                  @id @default(cuid())
+  renewalId   String
+  leagueId    String                  @db.VarChar(64)
+  userId      String                  @db.VarChar(64)
+  status      LeagueRenewalSlotStatus @default(invited)
+  invitedAt   DateTime                @default(now())
   respondedAt DateTime?
-  isReturning Boolean                @default(true)
+  isReturning Boolean                 @default(true)
+  franchiseId String?                 @db.VarChar(64)
+  priorManagerId String?              @db.VarChar(64)
+  candidateManagerId String?          @db.VarChar(64)
+  confirmedManagerId String?          @db.VarChar(64)
+  confirmedAt DateTime?
+  confirmedByUserId String?           @db.VarChar(64)
+  replacementInvitationId String?
+  decisionAt DateTime?
+  removedFromNextSeason Boolean       @default(false)
 
   renewal LeagueRenewal @relation(fields: [renewalId], references: [id], onDelete: Cascade)
 
   @@unique([renewalId, userId])
+  @@unique([renewalId, franchiseId])
   @@index([leagueId, userId])
   @@index([renewalId, status])
   @@map("league_renewal_slots")
@@ -15117,16 +15703,16 @@ model LeagueRenewalSlot {
 /// Season-to-season membership ledger. One row per (league, user, season). Enables returning-manager
 /// detection, churn cohorts, streak computation, and retention rate accuracy.
 model LeagueMemberHistory {
-  id           String    @id @default(cuid())
-  leagueId     String    @db.VarChar(64)
-  userId       String    @db.VarChar(64)
-  season       Int
-  role         String    @db.VarChar(32)
-  joinedAt     DateTime  @default(now())
-  departedAt   DateTime?
-  departReason String?   @db.VarChar(64)
-  isReturning  Boolean   @default(false)
-  consecutiveSeasons Int @default(1)
+  id                 String    @id @default(cuid())
+  leagueId           String    @db.VarChar(64)
+  userId             String    @db.VarChar(64)
+  season             Int
+  role               String    @db.VarChar(32)
+  joinedAt           DateTime  @default(now())
+  departedAt         DateTime?
+  departReason       String?   @db.VarChar(64)
+  isReturning        Boolean   @default(false)
+  consecutiveSeasons Int       @default(1)
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -15159,16 +15745,16 @@ model LeagueChampionship {
 
 /// Commissioner succession request — tracks head-commissioner transfer flow.
 model CommissionerSuccession {
-  id            String                       @id @default(cuid())
-  leagueId      String                       @db.VarChar(64)
-  fromUserId    String                       @db.VarChar(64)
-  toUserId      String                       @db.VarChar(64)
-  status        CommissionerSuccessionStatus @default(pending)
-  reason        String?                      @db.VarChar(256)
-  initiatedAt   DateTime                     @default(now())
-  resolvedAt    DateTime?
-  expiresAt     DateTime
-  inactivityFlag Boolean                     @default(false)
+  id             String                       @id @default(cuid())
+  leagueId       String                       @db.VarChar(64)
+  fromUserId     String                       @db.VarChar(64)
+  toUserId       String                       @db.VarChar(64)
+  status         CommissionerSuccessionStatus @default(pending)
+  reason         String?                      @db.VarChar(256)
+  initiatedAt    DateTime                     @default(now())
+  resolvedAt     DateTime?
+  expiresAt      DateTime
+  inactivityFlag Boolean                      @default(false)
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -15239,26 +15825,26 @@ enum FranchiseEventType {
 /// Persistent cross-season future draft pick record. One row per (leagueId, season, round, originalRosterId).
 /// currentOwnerId tracks ownership after trades; originalOwnerId is immutable for audit.
 model FutureDraftPick {
-  id               String                @id @default(cuid())
-  leagueId         String                @db.VarChar(64)
+  id                   String                @id @default(cuid())
+  leagueId             String                @db.VarChar(64)
   /// The draft year this pick belongs to (e.g. 2027 for a 2027 2nd-round pick).
-  pickSeason       Int
-  round            Int
+  pickSeason           Int
+  round                Int
   /// The roster this pick was originally assigned to (immutable — identity of the "home" team's pick).
-  originalRosterId String                @db.VarChar(64)
+  originalRosterId     String                @db.VarChar(64)
   /// The roster currently holding this pick (changes on trade).
-  currentOwnerId   String                @db.VarChar(64)
-  status           FutureDraftPickStatus @default(active)
-  traded           Boolean               @default(false)
+  currentOwnerId       String                @db.VarChar(64)
+  status               FutureDraftPickStatus @default(active)
+  traded               Boolean               @default(false)
   /// FK to the AfLeagueTrade that last transferred this pick (nullable if never traded).
-  sourceTradeId    String?               @db.VarChar(64)
-  tradedAt         DateTime?
-  usedInDraftSessionId String?           @db.VarChar(64)
-  usedAt           DateTime?
-  forfeitedAt      DateTime?
-  forfeitReason    String?               @db.VarChar(128)
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
+  sourceTradeId        String?               @db.VarChar(64)
+  tradedAt             DateTime?
+  usedInDraftSessionId String?               @db.VarChar(64)
+  usedAt               DateTime?
+  forfeitedAt          DateTime?
+  forfeitReason        String?               @db.VarChar(128)
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -15272,23 +15858,23 @@ model FutureDraftPick {
 /// Immutable audit record of what each roster carried over between seasons.
 /// Created once per (leagueId, rosterId, fromSeason → toSeason). Never updated.
 model RosterCarryover {
-  id              String   @id @default(cuid())
-  leagueId        String   @db.VarChar(64)
-  rosterId        String   @db.VarChar(64)
-  userId          String?  @db.VarChar(64)
-  fromSeason      Int
-  toSeason        Int
-  carryoverKind   String   @db.VarChar(32)
+  id                 String   @id @default(cuid())
+  leagueId           String   @db.VarChar(64)
+  rosterId           String   @db.VarChar(64)
+  userId             String?  @db.VarChar(64)
+  fromSeason         Int
+  toSeason           Int
+  carryoverKind      String   @db.VarChar(32)
   /// Snapshot of playerData at time of carryover (immutable audit).
   playerDataSnapshot Json?
   /// Number of keepers carried.
-  keeperCount     Int      @default(0)
+  keeperCount        Int      @default(0)
   /// Number of taxi slots carried.
-  taxiCount       Int      @default(0)
+  taxiCount          Int      @default(0)
   /// Number of devy rights carried.
-  devyRightsCount Int      @default(0)
-  appliedAt       DateTime @default(now())
-  appliedBy       String   @db.VarChar(64)
+  devyRightsCount    Int      @default(0)
+  appliedAt          DateTime @default(now())
+  appliedBy          String   @db.VarChar(64)
 
   league League @relation(fields: [leagueId], references: [id], onDelete: Cascade)
 
@@ -15420,47 +16006,47 @@ model SponsorCouponRedemption {
 /// One row per LLM call (or deterministic bypass). Never mutate rows.
 /// Used for billing reconciliation, debugging, compliance, and cost monitoring.
 model AiInteractionLog {
-  id               String   @id @default(cuid())
+  id                String   @id @default(cuid())
   /// Null for unauthenticated / guest requests.
-  userId           String?  @db.VarChar(64)
+  userId            String?  @db.VarChar(64)
   /// SportKey: "world_cup" | "nba" | "nfl" | etc.
-  sport            String   @db.VarChar(32)
+  sport             String   @db.VarChar(32)
   /// FeatureKey: "pool_chat" | "commissioner_brain" | etc.
-  feature          String   @db.VarChar(64)
+  feature           String   @db.VarChar(64)
   /// The Next.js API route path that triggered this call.
-  route            String?  @db.VarChar(128)
+  route             String?  @db.VarChar(128)
   /// User's plan at time of call: "free" | "pro" | "commissioner" | "supreme" | "war_room".
-  plan             String?  @db.VarChar(32)
+  plan              String?  @db.VarChar(32)
   /// AI provider that generated the response: "openai" | "anthropic" | "deterministic" | "unavailable".
-  providerSource   String?  @db.VarChar(32)
+  providerSource    String?  @db.VarChar(32)
   /// DataFreshnessTier: "live" | "cached" | "schedule_only" | "pool_only" | "none".
-  freshnessTier    String?  @db.VarChar(32)
+  freshnessTier     String?  @db.VarChar(32)
   /// Coarse intent category from grounding (e.g. "leaderboard", "picks", "live_score").
-  promptIntent     String?  @db.VarChar(64)
+  promptIntent      String?  @db.VarChar(64)
   /// What data was NOT available for this call.
-  missingData      String[]
+  missingData       String[]
   /// What Chimmy was authorized to claim.
-  allowedClaims    String[]
+  allowedClaims     String[]
   /// "clean" | "warned" | "blocked" | "deterministic".
-  validatorResult  String?  @db.VarChar(32)
+  validatorResult   String?  @db.VarChar(32)
   /// Which validation rule triggered a block, if any.
-  blockedReason    String?  @db.VarChar(64)
+  blockedReason     String?  @db.VarChar(64)
   /// Model identifier returned by the provider (e.g. "gpt-4o-mini", "claude-3-haiku").
-  modelUsed        String?  @db.VarChar(64)
+  modelUsed         String?  @db.VarChar(64)
   /// Approximate token cost as reported by the provider.
-  tokenCost        Int?
+  tokenCost         Int?
   /// True when the response was served from deterministic logic with no LLM call.
-  wasDeterministic   Boolean  @default(false)
+  wasDeterministic  Boolean  @default(false)
   /// Billing intent reason from resolveBillingDecision():
   /// "deterministic" | "cache_hit" | "llm_required" | "premium_plan_included" | "validator_blocked" | "provider_missing" | "error"
-  billingReason      String?  @db.VarChar(32)
+  billingReason     String?  @db.VarChar(32)
   /// Policy decision: was this call supposed to charge a token?
-  shouldChargeToken  Boolean  @default(false)
+  shouldChargeToken Boolean  @default(false)
   /// Outcome: was a token actually deducted via TokenSpendService?
-  tokenCharged       Boolean  @default(false)
+  tokenCharged      Boolean  @default(false)
   /// Settlement status: "not_applicable" | "plan_included" | "charged" | "failed"
-  tokenChargeStatus  String?  @db.VarChar(32)
-  createdAt          DateTime @default(now())
+  tokenChargeStatus String?  @db.VarChar(32)
+  createdAt         DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([sport, feature, createdAt])
@@ -15476,23 +16062,23 @@ model AiInteractionLog {
 /// Keyed by (userId, feature, resultKey) — one row per user×answer.
 /// No raw prompt text is stored — only a hash for analytics aggregation.
 model AiFeedback {
-  id          String   @id @default(cuid())
+  id         String   @id @default(cuid())
   /// AllFantasy user id — same as AppUser.id.
-  userId      String   @db.VarChar(64)
+  userId     String   @db.VarChar(64)
   /// Which AI feature generated the answer: "wc_chimmy" | "wc_explain_bracket" | etc.
-  feature     String   @db.VarChar(64)
+  feature    String   @db.VarChar(64)
   /// Optional: AiResult.resultKey this feedback is attached to.
-  resultKey   String?  @db.VarChar(255)
+  resultKey  String?  @db.VarChar(255)
   /// "helpful" or "not_helpful"
-  rating      String   @db.VarChar(32)
+  rating     String   @db.VarChar(32)
   /// SHA-256 hash (first 16 chars) of the normalized prompt — for analytics, never raw text.
-  promptHash  String?  @db.VarChar(32)
+  promptHash String?  @db.VarChar(32)
   /// Sport context at the time of the answer.
-  sport       String?  @db.VarChar(32)
+  sport      String?  @db.VarChar(32)
   /// Optional user-selected reason for "not_helpful" ratings.
   /// e.g. "too_basic" | "not_actionable" | "wrong_data" | "great_insight"
-  reason      String?  @db.VarChar(32)
-  createdAt   DateTime @default(now())
+  reason     String?  @db.VarChar(32)
+  createdAt  DateTime @default(now())
 
   @@unique([userId, feature, resultKey])
   @@index([feature, rating, createdAt])
@@ -15519,23 +16105,23 @@ model Sport {
 }
 
 model SportLeague {
-  id             String    @id @default(cuid())
-  sportKey       String    @map("sport_key") @db.VarChar(32)
-  leagueKey      String    @map("league_key") @db.VarChar(64)
-  name           String    @db.VarChar(128)
-  region         String?   @db.VarChar(64)
-  level          String?   @db.VarChar(32)
-  governingBody  String?   @map("governing_body") @db.VarChar(64)
-  active         Boolean   @default(true)
-  source         String?   @db.VarChar(64)
-  confidence     Float?
-  fetchedAt      DateTime? @map("fetched_at")
-  expiresAt      DateTime? @map("expires_at")
+  id              String    @id @default(cuid())
+  sportKey        String    @map("sport_key") @db.VarChar(32)
+  leagueKey       String    @map("league_key") @db.VarChar(64)
+  name            String    @db.VarChar(128)
+  region          String?   @db.VarChar(64)
+  level           String?   @db.VarChar(32)
+  governingBody   String?   @map("governing_body") @db.VarChar(64)
+  active          Boolean   @default(true)
+  source          String?   @db.VarChar(64)
+  confidence      Float?
+  fetchedAt       DateTime? @map("fetched_at")
+  expiresAt       DateTime? @map("expires_at")
   sourceUpdatedAt DateTime? @map("source_updated_at")
-  lastSeenAt     DateTime? @map("last_seen_at")
-  metadata       Json?
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  metadata        Json?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@unique([sportKey, leagueKey], name: "uniq_sports_core_league")
   @@index([sportKey])
@@ -15545,22 +16131,22 @@ model SportLeague {
 }
 
 model Season {
-  id             String    @id @default(cuid())
-  sportKey       String    @map("sport_key") @db.VarChar(32)
-  leagueKey      String    @map("league_key") @db.VarChar(64)
-  seasonKey      String    @map("season_key") @db.VarChar(32)
-  year           Int?
-  seasonType     String?   @map("season_type") @db.VarChar(32)
-  startsAt       DateTime? @map("starts_at")
-  endsAt         DateTime? @map("ends_at")
-  currentWeek    Int?      @map("current_week")
-  currentRound   String?   @map("current_round") @db.VarChar(64)
-  source         String?   @db.VarChar(64)
-  fetchedAt      DateTime? @map("fetched_at")
-  expiresAt      DateTime? @map("expires_at")
-  metadata       Json?
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id           String    @id @default(cuid())
+  sportKey     String    @map("sport_key") @db.VarChar(32)
+  leagueKey    String    @map("league_key") @db.VarChar(64)
+  seasonKey    String    @map("season_key") @db.VarChar(32)
+  year         Int?
+  seasonType   String?   @map("season_type") @db.VarChar(32)
+  startsAt     DateTime? @map("starts_at")
+  endsAt       DateTime? @map("ends_at")
+  currentWeek  Int?      @map("current_week")
+  currentRound String?   @map("current_round") @db.VarChar(64)
+  source       String?   @db.VarChar(64)
+  fetchedAt    DateTime? @map("fetched_at")
+  expiresAt    DateTime? @map("expires_at")
+  metadata     Json?
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   @@unique([sportKey, leagueKey, seasonKey], name: "uniq_sports_core_season")
   @@index([sportKey, leagueKey])
@@ -15704,6 +16290,12 @@ model PlayerProviderIdentity {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
+  // Cascade rather than restrict. An orphaned identity row is worse than useless: it still
+  // occupies the `uniq_player_provider_identity` slot below, so it BLOCKS re-linking that
+  // provider id to the correct player. Identity rows are re-derivable from providers, and the
+  // dedupe flow repoints them before deleting a player, so this never fires there.
+  player           Player?   @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   @@unique([provider, sportKey, leagueKey, providerPlayerId], name: "uniq_player_provider_identity")
   @@index([playerId])
   @@index([teamId])
@@ -15733,10 +16325,19 @@ model PlayerImage {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  // The only FK on `Player.id` anywhere in the schema. Without it, 215 of 443 rows here
+  // silently pointed at players that do not exist — see the note on `writePrimaryPlayerImage`.
+  // Cascade is right because these rows are a derived image cache: if the player is gone the
+  // cached headshot is meaningless, and re-resolution costs one provider call.
+  player          Player?   @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   @@unique([playerId, imageType, url], name: "uniq_player_image_url")
   @@index([sportKey, leagueKey])
   @@index([imageType, isPrimary])
   @@index([fetchedAt])
+  // Postgres does not index the referencing side of a FK automatically, and without this
+  // every `Player` delete degrades to a sequential scan of this table.
+  @@index([playerId])
   @@map("sports_core_player_images")
 }
 
@@ -15776,21 +16377,21 @@ model Game {
 }
 
 model GameProviderIdentity {
-  id             String    @id @default(cuid())
-  gameId         String?   @map("game_id") @db.VarChar(128)
-  sportKey       String    @map("sport_key") @db.VarChar(32)
-  leagueKey      String?   @map("league_key") @db.VarChar(64)
-  provider       String    @db.VarChar(64)
-  providerGameId String    @map("provider_game_id") @db.VarChar(128)
-  confidence     Float     @default(1)
-  verified       Boolean   @default(false)
-  fetchedAt      DateTime? @map("fetched_at")
-  expiresAt      DateTime? @map("expires_at")
+  id              String    @id @default(cuid())
+  gameId          String?   @map("game_id") @db.VarChar(128)
+  sportKey        String    @map("sport_key") @db.VarChar(32)
+  leagueKey       String?   @map("league_key") @db.VarChar(64)
+  provider        String    @db.VarChar(64)
+  providerGameId  String    @map("provider_game_id") @db.VarChar(128)
+  confidence      Float     @default(1)
+  verified        Boolean   @default(false)
+  fetchedAt       DateTime? @map("fetched_at")
+  expiresAt       DateTime? @map("expires_at")
   sourceUpdatedAt DateTime? @map("source_updated_at")
-  lastSeenAt     DateTime? @map("last_seen_at")
-  rawPayload     Json?     @map("raw_payload")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  lastSeenAt      DateTime? @map("last_seen_at")
+  rawPayload      Json?     @map("raw_payload")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@unique([provider, sportKey, leagueKey, providerGameId], name: "uniq_game_provider_identity")
   @@index([gameId])
@@ -15875,30 +16476,30 @@ model PlayerCareerStat {
 }
 
 model InjuryReport {
-  id              String    @id @default(cuid())
-  playerId        String?   @map("player_id") @db.VarChar(128)
-  teamId          String?   @map("team_id") @db.VarChar(128)
-  sportKey        String    @map("sport_key") @db.VarChar(32)
-  leagueKey       String?   @map("league_key") @db.VarChar(64)
-  seasonKey       String?   @map("season_key") @db.VarChar(32)
-  weekOrRound     String?   @map("week_or_round") @db.VarChar(64)
-  playerName      String    @map("player_name") @db.VarChar(160)
-  teamName        String?   @map("team_name") @db.VarChar(160)
-  status          String?   @db.VarChar(64)
-  practiceStatus  String?   @map("practice_status") @db.VarChar(64)
-  gameStatus      String?   @map("game_status") @db.VarChar(64)
-  bodyPart        String?   @map("body_part") @db.VarChar(96)
-  description     String?
-  reportDate      DateTime? @map("report_date")
-  source          String?   @db.VarChar(64)
-  confidence      Float?
-  identityConfidence Float? @map("identity_confidence")
-  fetchedAt       DateTime? @map("fetched_at")
-  expiresAt       DateTime? @map("expires_at")
-  sourceUpdatedAt DateTime? @map("source_updated_at")
-  rawPayload      Json?     @map("raw_payload")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(cuid())
+  playerId           String?   @map("player_id") @db.VarChar(128)
+  teamId             String?   @map("team_id") @db.VarChar(128)
+  sportKey           String    @map("sport_key") @db.VarChar(32)
+  leagueKey          String?   @map("league_key") @db.VarChar(64)
+  seasonKey          String?   @map("season_key") @db.VarChar(32)
+  weekOrRound        String?   @map("week_or_round") @db.VarChar(64)
+  playerName         String    @map("player_name") @db.VarChar(160)
+  teamName           String?   @map("team_name") @db.VarChar(160)
+  status             String?   @db.VarChar(64)
+  practiceStatus     String?   @map("practice_status") @db.VarChar(64)
+  gameStatus         String?   @map("game_status") @db.VarChar(64)
+  bodyPart           String?   @map("body_part") @db.VarChar(96)
+  description        String?
+  reportDate         DateTime? @map("report_date")
+  source             String?   @db.VarChar(64)
+  confidence         Float?
+  identityConfidence Float?    @map("identity_confidence")
+  fetchedAt          DateTime? @map("fetched_at")
+  expiresAt          DateTime? @map("expires_at")
+  sourceUpdatedAt    DateTime? @map("source_updated_at")
+  rawPayload         Json?     @map("raw_payload")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   @@index([sportKey, leagueKey, reportDate])
   @@index([playerId, reportDate])
@@ -15909,26 +16510,26 @@ model InjuryReport {
 }
 
 model PlayerNewsItem {
-  id              String    @id @default(cuid())
-  playerId        String?   @map("player_id") @db.VarChar(128)
-  teamId          String?   @map("team_id") @db.VarChar(128)
-  sportKey        String    @map("sport_key") @db.VarChar(32)
-  leagueKey       String?   @map("league_key") @db.VarChar(64)
-  headline        String    @db.VarChar(512)
-  body            String?
-  url             String?
-  category        String?   @db.VarChar(64)
-  source          String?   @db.VarChar(96)
-  author          String?   @db.VarChar(128)
-  publishedAt     DateTime? @map("published_at")
-  fetchedAt       DateTime? @map("fetched_at")
-  expiresAt       DateTime? @map("expires_at")
-  confidence      Float?
-  identityConfidence Float? @map("identity_confidence")
-  sentiment       String?   @db.VarChar(32)
-  rawPayload      Json?     @map("raw_payload")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id                 String    @id @default(cuid())
+  playerId           String?   @map("player_id") @db.VarChar(128)
+  teamId             String?   @map("team_id") @db.VarChar(128)
+  sportKey           String    @map("sport_key") @db.VarChar(32)
+  leagueKey          String?   @map("league_key") @db.VarChar(64)
+  headline           String    @db.VarChar(512)
+  body               String?
+  url                String?
+  category           String?   @db.VarChar(64)
+  source             String?   @db.VarChar(96)
+  author             String?   @db.VarChar(128)
+  publishedAt        DateTime? @map("published_at")
+  fetchedAt          DateTime? @map("fetched_at")
+  expiresAt          DateTime? @map("expires_at")
+  confidence         Float?
+  identityConfidence Float?    @map("identity_confidence")
+  sentiment          String?   @db.VarChar(32)
+  rawPayload         Json?     @map("raw_payload")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
 
   @@index([sportKey, leagueKey, publishedAt])
   @@index([playerId, publishedAt])
@@ -15965,23 +16566,23 @@ model Lineup {
 }
 
 model FantasyLeagueContext {
-  id              String    @id @default(cuid())
-  leagueId        String    @map("league_id") @db.VarChar(128)
-  sportKey        String    @map("sport_key") @db.VarChar(32)
-  leagueKey       String?   @map("league_key") @db.VarChar(64)
-  seasonKey       String?   @map("season_key") @db.VarChar(32)
-  platform        String?   @db.VarChar(64)
-  platformLeagueId String?  @map("platform_league_id") @db.VarChar(128)
-  scoringProfileId String?  @map("scoring_profile_id") @db.VarChar(128)
-  rosterSettings  Json?     @map("roster_settings")
-  scoringSettings Json?     @map("scoring_settings")
-  metadata        Json?
-  source          String?   @db.VarChar(64)
-  confidence      Float?
-  fetchedAt       DateTime? @map("fetched_at")
-  expiresAt       DateTime? @map("expires_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id               String    @id @default(cuid())
+  leagueId         String    @map("league_id") @db.VarChar(128)
+  sportKey         String    @map("sport_key") @db.VarChar(32)
+  leagueKey        String?   @map("league_key") @db.VarChar(64)
+  seasonKey        String?   @map("season_key") @db.VarChar(32)
+  platform         String?   @db.VarChar(64)
+  platformLeagueId String?   @map("platform_league_id") @db.VarChar(128)
+  scoringProfileId String?   @map("scoring_profile_id") @db.VarChar(128)
+  rosterSettings   Json?     @map("roster_settings")
+  scoringSettings  Json?     @map("scoring_settings")
+  metadata         Json?
+  source           String?   @db.VarChar(64)
+  confidence       Float?
+  fetchedAt        DateTime? @map("fetched_at")
+  expiresAt        DateTime? @map("expires_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   @@unique([leagueId, sportKey, seasonKey], name: "uniq_fantasy_league_context")
   @@index([sportKey, leagueKey])
@@ -15990,20 +16591,20 @@ model FantasyLeagueContext {
 }
 
 model FantasyRosterSnapshot {
-  id              String    @id @default(cuid())
-  leagueId        String    @map("league_id") @db.VarChar(128)
-  rosterId        String    @map("roster_id") @db.VarChar(128)
-  sportKey        String    @map("sport_key") @db.VarChar(32)
-  seasonKey       String?   @map("season_key") @db.VarChar(32)
-  weekOrRound     String?   @map("week_or_round") @db.VarChar(64)
-  rosterPlayers   Json      @map("roster_players")
-  lineupPlayers   Json?     @map("lineup_players")
-  source          String?   @db.VarChar(64)
-  confidence      Float?
-  fetchedAt       DateTime? @map("fetched_at")
-  expiresAt       DateTime? @map("expires_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id            String    @id @default(cuid())
+  leagueId      String    @map("league_id") @db.VarChar(128)
+  rosterId      String    @map("roster_id") @db.VarChar(128)
+  sportKey      String    @map("sport_key") @db.VarChar(32)
+  seasonKey     String?   @map("season_key") @db.VarChar(32)
+  weekOrRound   String?   @map("week_or_round") @db.VarChar(64)
+  rosterPlayers Json      @map("roster_players")
+  lineupPlayers Json?     @map("lineup_players")
+  source        String?   @db.VarChar(64)
+  confidence    Float?
+  fetchedAt     DateTime? @map("fetched_at")
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
 
   @@unique([leagueId, rosterId, sportKey, seasonKey, weekOrRound], name: "uniq_fantasy_roster_snapshot")
   @@index([rosterId, seasonKey])
@@ -16012,18 +16613,18 @@ model FantasyRosterSnapshot {
 }
 
 model FantasyScoringProfile {
-  id              String    @id @default(cuid())
-  leagueId        String?   @map("league_id") @db.VarChar(128)
-  sportKey        String    @map("sport_key") @db.VarChar(32)
-  profileKey      String    @map("profile_key") @db.VarChar(128)
-  name            String    @db.VarChar(160)
-  rules           Json
-  source          String?   @db.VarChar(64)
-  confidence      Float?
-  fetchedAt       DateTime? @map("fetched_at")
-  expiresAt       DateTime? @map("expires_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  id         String    @id @default(cuid())
+  leagueId   String?   @map("league_id") @db.VarChar(128)
+  sportKey   String    @map("sport_key") @db.VarChar(32)
+  profileKey String    @map("profile_key") @db.VarChar(128)
+  name       String    @db.VarChar(160)
+  rules      Json
+  source     String?   @db.VarChar(64)
+  confidence Float?
+  fetchedAt  DateTime? @map("fetched_at")
+  expiresAt  DateTime? @map("expires_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
   @@unique([sportKey, profileKey, leagueId], name: "uniq_fantasy_scoring_profile")
   @@index([leagueId])
@@ -16111,17 +16712,182 @@ model AIEvidenceItem {
 }
 
 model WaiverWatchlist {
-  id        String   @id @default(cuid())
-  leagueId  String   @db.VarChar(64)
-  userId    String   @db.VarChar(64)
-  playerId  String   @db.VarChar(64)
-  playerName String? @db.VarChar(128)   // ← ADD THIS
-  position  String?  @db.VarChar(16)    // ← ADD THIS
-  team      String?  @db.VarChar(32)    // ← ADD THIS
-  sport     String?  @db.VarChar(16)
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  leagueId   String   @db.VarChar(64)
+  userId     String   @db.VarChar(64)
+  playerId   String   @db.VarChar(64)
+  playerName String?  @db.VarChar(128) // ← ADD THIS
+  position   String?  @db.VarChar(16) // ← ADD THIS
+  team       String?  @db.VarChar(32) // ← ADD THIS
+  sport      String?  @db.VarChar(16)
+  createdAt  DateTime @default(now())
 
   @@unique([leagueId, userId, playerId])
   @@index([leagueId, userId])
   @@map("waiver_watchlists")
+}
+
+/// Decision OS Replay Framework (per docs/SLEEPER_TRADE_REPLAY_ARCHITECTURE_ADR.md).
+/// Generic, provider-agnostic, decision-type-agnostic import of a real
+/// external decision (first implementation: Sleeper trades) for offline
+/// backtesting/validation. Structurally separate from TradeOfferEvent/
+/// TradeOutcomeEvent — never referenced by computeShadowB0()/
+/// promoteShadowB0()/runWeeklyRecalibration(), never written by
+/// logTradeOfferEvent()/logTradeOutcomeEvent() or captureLiveTradeOffer()/
+/// captureLiveTradeOutcome(). Replay is validation only, never live
+/// calibration input.
+model ReplayImport {
+  id                    String    @id @default(uuid())
+  provider              String // e.g. "sleeper" — future: "espn", "yahoo", "allfantasy"
+  decisionType          String // e.g. "trade" — future: "waiver", "draft", "lineup", "commissioner_action", "roster_move"
+  providerLeagueId      String
+  providerTransactionId String
+  season                Int
+  providerWeek          Int? // provider's own round/week bucket — not guaranteed to equal the real calendar week (see the ADR's caveat)
+  proposedAt            DateTime
+  resolvedAt            DateTime?
+  providerStatus        String // raw provider status verbatim (e.g. Sleeper's complete|pending|failed) — never coerced into our own TradeOutcome enum
+  participantsInvolved  Json // provider-native participant identifiers (e.g. Sleeper roster_ids)
+  managerUserIds        Json // resolved provider user IDs per participant
+  managerDisplayNames   Json // denormalized display names — never an identity source of truth
+  payload               Json // decision-type-specific normalized data (e.g. trade: assetsGiven/assetsReceived)
+  rawProviderPayload    Json // the full, unmodified provider payload, kept for reprocessing without re-fetching
+  contextSnapshot       Json // league/context settings (scoring, roster slots, format) frozen at ingestion time
+  isDynasty             Boolean?
+  isSuperFlex           Boolean?
+  ingestSourceUserId    String // which connected provider account discovered this row
+  ingestedAt            DateTime  @default(now())
+
+  backtestResults ReplayBacktestResult[]
+
+  @@unique([provider, decisionType, providerLeagueId, providerTransactionId])
+  @@index([decisionType, season])
+  @@index([provider, providerLeagueId])
+  @@map("replay_imports")
+}
+
+/// One row per (ReplayImport x model/engine/config version) triple — a new
+/// version never overwrites a prior backtest result, so a fixed replay
+/// corpus can be re-evaluated across model versions for offline comparison.
+model ReplayBacktestResult {
+  id                         String   @id @default(uuid())
+  replayId                   String
+  decisionType               String // denormalized from the parent row for query/filter convenience without a join
+  modelVersion               String // stable, human-readable identifier for the scoring approach (e.g. "trade-engine-deterministic-v1")
+  engineVersionHash          String // git commit SHA of the engine code that produced this result
+  deterministicConfigVersion String // version/hash of the specific weights/thresholds/calibratedB0 value used
+  backtestedOutput           Json // decision-type-specific structured output (e.g. trade: acceptProb/verdict/driverSet)
+  realOutcome                Json? // settled only when the underlying ReplayImport.providerStatus reflects a resolved decision
+  replayComputedAt           DateTime @default(now())
+
+  replay ReplayImport @relation(fields: [replayId], references: [id], onDelete: Cascade)
+
+  @@unique([replayId, modelVersion, engineVersionHash, deterministicConfigVersion])
+  @@index([decisionType])
+  @@map("replay_backtest_results")
+}
+
+/// Decision OS Phase A — provider-neutral imported/external-league activity.
+/// Deliberately NOT coupled to AppUser/League/Roster (external managers have no AF account).
+/// Idempotency key = externalSourceKey (the normalizer's deterministic natural key).
+model DecisionOsImportedActivity {
+  id                       String   @id @default(uuid())
+  externalSourceKey        String   @unique
+  provider                 String
+  providerLeagueId         String
+  afLeagueId               String?
+  activityType             String
+  providerEventId          String?
+  occurredAt               DateTime
+  externalManagerId        String?
+  stableExternalManagerKey String?
+  appUserId                String?
+  rosterId                 String?
+  payload                  Json?
+  normalized               Json
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+
+  @@index([afLeagueId, activityType])
+  @@index([providerLeagueId, activityType])
+  @@index([occurredAt])
+  @@map("decision_os_imported_activity")
+}
+
+/// Decision OS Phase A Increment 5 — provider-neutral behavioral snapshot trend history.
+/// Deliberately NOT coupled to AppUser/League/Roster (external managers have no AF account).
+/// managerId uses a stable non-null sentinel ("__league__") for league-scope rows because a
+/// UNIQUE index on a nullable column does not enforce uniqueness against NULL in Postgres.
+model DecisionOsBehavioralSnapshot {
+  id           String   @id @default(uuid())
+  leagueId     String
+  managerId    String   @default("__league__")
+  scope        String
+  cadence      String
+  periodKey    String
+  capturedAt   DateTime
+  lookbackDays Int?
+  eventCount   Int
+  completeness Int
+  facts        Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([leagueId, managerId, periodKey])
+  @@index([leagueId, scope, periodKey])
+  @@index([leagueId, managerId, capturedAt])
+  @@map("decision_os_behavioral_snapshot")
+}
+
+/// Fantasy OS Suite — Phase OS-A1. Decision OS's provider-agnostic BELIEF about whether real money
+/// is involved in a league, and how confident that belief is. Deliberately separate from
+/// `LeagueFinance` (AF-native Stripe/PayPal treasury processing for leagues that opt into AllFantasy's
+/// own paid-league feature) — this model answers "what do we know," not "how do we collect/hold
+/// money." A league can have real money riding on it via LeagueSafe, FanCred, Yahoo, ESPN, or a
+/// handshake deal with zero rows in `LeagueFinance` ever created.
+/// Deliberately NOT FK-related to `League` (plain `leagueId` string), matching
+/// `DecisionOsImportedActivity`/`DecisionOsBehavioralSnapshot`'s existing provider-agnostic,
+/// storage-decoupled convention — this context must be settable for any league id AllFantasy knows
+/// about, imported or native, without requiring a specific relational shape.
+model DecisionOsLeagueContext {
+  id                  String                              @id @default(uuid())
+  leagueId            String                              @unique
+  financialStatus     DecisionOsLeagueFinancialStatus     @default(UNKNOWN)
+  buyInAmount         Float?
+  buyInCurrency       String?                             @db.VarChar(8)
+  escrowProvider      DecisionOsLeagueEscrowProvider      @default(UNKNOWN)
+  financialConfidence DecisionOsLeagueFinancialConfidence @default(UNKNOWN)
+  financialNotes      String?                             @db.VarChar(512)
+  isUserConfirmed     Boolean                             @default(false)
+  lastVerifiedAt      DateTime?
+  createdAt           DateTime                            @default(now())
+  updatedAt           DateTime                            @updatedAt
+
+  @@map("decision_os_league_context")
+}
+
+enum DecisionOsLeagueFinancialStatus {
+  UNKNOWN
+  FREE
+  PAID
+  VERIFIED_PAID
+}
+
+/// Adapter hooks only (Phase OS-A1) — no real integration built for any of these yet.
+enum DecisionOsLeagueEscrowProvider {
+  LEAGUESAFE
+  FANCRED
+  YAHOO
+  ESPN
+  MANUAL
+  OTHER
+  UNKNOWN
+}
+
+enum DecisionOsLeagueFinancialConfidence {
+  UNKNOWN
+  USER_CONFIRMED
+  PROVIDER_CONFIRMED
+  ESCROW_VERIFIED
+  INFERRED
 }

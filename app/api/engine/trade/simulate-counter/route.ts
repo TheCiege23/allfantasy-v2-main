@@ -1,4 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { assertLeagueMember } from "@/lib/league/league-access";
+import { rateLimit, getClientIp } from "@/lib/rate-limit";
 import { runTradeAnalysis } from "@/lib/engine/trade";
 import type {
   TradeEngineRequest,
@@ -8,6 +12,12 @@ import type {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// AF_TRADE_UNIFICATION_BRIEF Phase 0.5: this route previously had NO auth.
+// Now: session required (401), IP rate limit (429), and league membership
+// (403) whenever the payload is league-scoped. League-less simulations
+// (standalone analyzer flows with no internal league) remain allowed for
+// authenticated users only.
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -230,6 +240,23 @@ function extractSimulationPayload(
 
 export async function POST(req: NextRequest) {
   try {
+    const session = (await getServerSession(authOptions as never)) as {
+      user?: { id?: string };
+    } | null;
+    const userId = session?.user?.id;
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const ip = getClientIp(req) || "unknown";
+    const rl = rateLimit(`trade-simulate-counter:${ip}`, 20, 60_000);
+    if (!rl.success) {
+      return NextResponse.json(
+        { error: "Too many requests. Try again shortly." },
+        { status: 429 }
+      );
+    }
+
     const rawBody: unknown = await req.json();
 
     if (!isRecord(rawBody)) {
@@ -243,6 +270,22 @@ export async function POST(req: NextRequest) {
     }
 
     const sourcePayload = extractSimulationPayload(rawBody);
+
+    // League membership gate whenever the simulation is league-scoped.
+    // leagueId may live on the raw body or the extracted simulation payload.
+    const leagueId =
+      toStringValue(rawBody.leagueId) ??
+      toStringValue(rawBody.league_id) ??
+      toStringValue(sourcePayload.leagueId) ??
+      toStringValue(sourcePayload.league_id) ??
+      (req.nextUrl.searchParams?.get("leagueId")?.trim() || undefined);
+
+    if (leagueId) {
+      const gate = await assertLeagueMember(leagueId, userId);
+      if (!gate.ok) {
+        return NextResponse.json({ error: "Forbidden" }, { status: gate.status });
+      }
+    }
     const payload = buildTradeRequest(sourcePayload);
 
     if (payload.assetsA.length === 0 && payload.assetsB.length === 0) {

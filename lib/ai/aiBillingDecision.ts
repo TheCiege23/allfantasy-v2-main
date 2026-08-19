@@ -56,7 +56,7 @@ const CACHE_PROVIDERS = new Set(["cache"])
 const UNAVAILABLE_PROVIDERS = new Set(["unavailable"])
 
 /** Plan values that indicate an active paid subscription */
-const PAID_PLANS = new Set(["pro", "commissioner", "war_room", "all_access", "supreme"])
+const PAID_PLANS = new Set(["pro", "commissioner", "war_room", "supreme"])
 
 const HINTS: Record<AiBillingReason, string> = {
   deterministic:         "No token used · answered from pool data",

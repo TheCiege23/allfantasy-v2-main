@@ -80,7 +80,7 @@ export function getDefaultChimmyChips(options?: {
     ? [
         {
           id: 'chip-war-room-edges',
-          label: compact ? 'War Room edges' : 'War Room edge checks',
+          label: compact ? 'AF Legacy edges' : 'AF Legacy edge checks',
           prompt: `Give me a ${sport} war room edge check: leverage spots, downside flags, and pivots for today.`,
           category: 'war_room',
         },

@@ -15,6 +15,7 @@ import {
   extractProjectionPoints,
   extractReceptionsPerGame,
 } from '@/lib/sports-data-normalization/extractNumeric'
+import { rescoreIdpForLeague } from '@/lib/af-projections/rescoreForLeague'
 import { injuryVolatility01 } from '@/lib/sports-data-normalization/injuryVolatility'
 import { confidenceFromSources } from '@/lib/sports-data-normalization/projection/confidence'
 import { adjustProjectionForLeagueScoring } from '@/lib/sports-data-normalization/projection/scoringRulesAdjust'
@@ -26,6 +27,7 @@ import {
 import { applyInjuryNewsToNormalizedProjection } from '@/lib/news-injury-aggregation/applyInjuryNewsProjection'
 import { resolvePlayerInjuryNewsBatch } from '@/lib/news-injury-aggregation/resolveBatch'
 import { fetchWeatherForTeamHomeWindow } from '@/lib/weather/venueResolver'
+import { buildNameIndex, findVerified } from '@/lib/player-match/verifiedNameMatch'
 import type { NormalizedWeather } from '@/lib/weather/weatherService'
 import type {
   NormalizedActualPerformance,
@@ -36,6 +38,7 @@ import type {
   NormalizedTeamRef,
   NormalizedTrendUsage,
   ProjectionBasis,
+  ProjectionConfidenceBand,
 } from '@/lib/sports-data-normalization/types'
 
 export type SportsPlayerRowInput = {
@@ -72,11 +75,26 @@ function mergeInjuryStatusWithLayer(
   }
 }
 
+/** Shape read from `AFProjectionSnapshot` for tier 0. */
+type AfSnapshotRow = {
+  playerName: string
+  position: string | null
+  afProjection: number
+  confidenceLevel: string
+  adjustmentFactors: unknown
+}
+
 function buildProjection(args: {
   sport: SupportedSport
   name: string
   position: string | null
   injuryStatus: string | null
+  /**
+   * AllFantasy engine projection from `AFProjectionSnapshot`, when one exists for this
+   * player. Outranks every provider tier below because it is the only value scored under
+   * the league's own rules — notably IDP, which no feed scores for us.
+   */
+  afEngine: { points: number; confidence: string; basis: string; reasons: string[] } | null
   weeklyFromDb: number | null
   weeklyFromClearSports: number | null
   riFppg: number | null
@@ -91,7 +109,23 @@ function buildProjection(args: {
   let basis: ProjectionBasis = 'unknown'
   let providerProjectionPayload: Record<string, unknown> | null = null
 
-  if (args.weeklyFromDb != null) {
+  if (args.afEngine != null) {
+    // Tier 0. The engine already applied league scoring (including IDP components) and
+    // derived its own confidence from real input coverage, so its reasons are carried
+    // through verbatim rather than restated — a reader must be able to see WHY it is
+    // trusted, not just that it was.
+    projectedFantasyPoints = args.afEngine.points
+    basis = 'af_engine'
+    providerProjectionPayload = {
+      layer: 'af_projection_snapshot',
+      engineBasis: args.afEngine.basis,
+      confidence: args.afEngine.confidence,
+    }
+    basisNotes.push(
+      `AllFantasy engine projection (${args.afEngine.basis}, confidence ${args.afEngine.confidence}).`,
+      ...args.afEngine.reasons.slice(0, 3),
+    )
+  } else if (args.weeklyFromDb != null) {
     projectedFantasyPoints = args.weeklyFromDb
     basis = 'weekly_provider_projection'
     providerProjectionPayload = { layer: 'sports_db_projections_json' }
@@ -115,12 +149,32 @@ function buildProjection(args: {
   const hasRi = args.riFppg != null
   const hasDbProj = args.weeklyFromDb != null
   const hasCs = args.weeklyFromClearSports != null
-  const { score: projectionConfidence, band: projectionConfidenceBand } = confidenceFromSources({
+  const sourceConfidence = confidenceFromSources({
     hasWeeklyProjection: hasWeekly,
     hasSeasonFppg: hasRi || args.dbFppg != null,
     hasDbProjection: hasDbProj,
     hasClearSports: hasCs,
   })
+
+  // When the engine supplied the number, its own confidence governs. `confidenceFromSources`
+  // counts which PROVIDER feeds answered, which says nothing about whether this particular
+  // player had weekly observations, a depth-chart role, or an estimated tackle split — all of
+  // which the engine already measured. Substituting a feed-count here would overstate a
+  // player the engine itself flagged as low.
+  const engineBand: ProjectionConfidenceBand | null =
+    args.afEngine?.confidence === 'high' || args.afEngine?.confidence === 'medium' || args.afEngine?.confidence === 'low'
+      ? args.afEngine.confidence
+      : null
+  const projectionConfidence =
+    basis === 'af_engine' && engineBand
+      ? engineBand === 'high'
+        ? 90
+        : engineBand === 'medium'
+          ? 65
+          : 35
+      : sourceConfidence.score
+  const projectionConfidenceBand =
+    basis === 'af_engine' && engineBand ? engineBand : sourceConfidence.band
 
   const rpg = extractReceptionsPerGame(args.riSeasonStats ?? undefined)
 
@@ -204,7 +258,47 @@ export async function resolveNormalizedPlayerSportsProfiles(args: {
     batchDataGaps.push('Rolling Insights returned no player rows for the requested names (cache or API).')
   }
 
-  const riByName = new Map(ri.players.map((p) => [p.name.toLowerCase(), p]))
+  // Slice 15 (wrong-row joins): this was a lowercased-NAME map, and the matched
+  // row then SUPPLIED position/team/projections downstream — so a name
+  // collision didn't just mislabel a player, it propagated another athlete's
+  // identity and stats. The caller's own `sportsPlayerRow` carries position and
+  // team, so collisions are now verified rather than resolved by map order.
+  const riIndex = buildNameIndex(
+    ri.players.map((p) => ({ name: p.name, position: p.position ?? null, team: p.team ?? null, row: p })),
+  )
+
+  // --- Tier 0: AllFantasy engine snapshots ------------------------------------------
+  // Read by NAME because the caller supplies names, and verified through the same
+  // name-collision guard as the RI index — a wrong bind here would attach one player's
+  // projection to another. Failure is non-fatal: the provider tiers below still apply.
+  let afIndex = new Map<string, Array<{ name: string; position: string | null; team: string | null; row: AfSnapshotRow }>>()
+  if (names.length > 0) {
+    try {
+      const snapshots = await args.prisma.aFProjectionSnapshot.findMany({
+        where: { sport, playerName: { in: names } },
+        select: {
+          playerName: true,
+          position: true,
+          afProjection: true,
+          confidenceLevel: true,
+          adjustmentFactors: true,
+        },
+      })
+      afIndex = buildNameIndex(
+        snapshots.map((s) => ({
+          name: s.playerName,
+          position: s.position ?? null,
+          team: null,
+          row: s as AfSnapshotRow,
+        })),
+      )
+      if (snapshots.length === 0) {
+        batchDataGaps.push('No AllFantasy engine projections matched the requested players.')
+      }
+    } catch {
+      batchDataGaps.push('AllFantasy engine projection lookup failed (non-fatal).')
+    }
+  }
 
   let csIndex = { byName: new Map<string, Record<string, unknown>>(), byId: new Map<string, Record<string, unknown>>() }
   const useCs = args.includeClearSportsProjections !== false
@@ -228,7 +322,11 @@ export async function resolveNormalizedPlayerSportsProfiles(args: {
     if (!name) continue
 
     const row = entry.sportsPlayerRow ?? null
-    const riRow = riByName.get(name.toLowerCase())
+    const riRow = findVerified(riIndex, {
+      name,
+      position: row?.position ?? null,
+      team: row?.team ?? null,
+    })?.row
 
     const position = row?.position ?? riRow?.position ?? null
     const team: NormalizedTeamRef = {
@@ -297,11 +395,48 @@ export async function resolveNormalizedPlayerSportsProfiles(args: {
           }
         : null
 
+    // Verified match, same collision guard as the RI index. Position comes from the
+    // caller's own row where available, so a shared name cannot silently bind.
+    const afRow = findVerified(afIndex, { name, position, team: row?.team ?? null })?.row ?? null
+    const afFactors =
+      afRow?.adjustmentFactors && typeof afRow.adjustmentFactors === 'object'
+        ? (afRow.adjustmentFactors as Record<string, unknown>)
+        : null
+    // The snapshot stores ONE canonical scoring format (balanced IDP). When this league
+    // supplies its own IDP weights, rescore from the persisted component amounts so a
+    // tackle-heavy league sees tackle-heavy numbers. Falls back to the stored value whenever
+    // rescoring cannot do better — never substitutes a worse number.
+    const rescored = rescoreIdpForLeague(afFactors, args.leagueScoring?.pointsByStat ?? null)
+
+    const afEngine =
+      afRow && typeof afRow.afProjection === 'number' && Number.isFinite(afRow.afProjection)
+        ? {
+            points: rescored ? rescored.points : afRow.afProjection,
+            confidence: String(afRow.confidenceLevel ?? 'low'),
+            basis: String(afFactors?.basis ?? 'unknown'),
+            reasons: [
+              ...(Array.isArray(afFactors?.confidenceReasons)
+                ? (afFactors!.confidenceReasons as unknown[]).map(String)
+                : []),
+              ...(rescored
+                ? [
+                    `Rescored under this league's IDP rules (stored value used the ` +
+                      `${rescored.storedPreset ?? 'default'} preset).`,
+                    ...(rescored.unscoredComponents.length
+                      ? [`Not scored by this league: ${rescored.unscoredComponents.join(', ')}.`]
+                      : []),
+                  ]
+                : []),
+            ],
+          }
+        : null
+
     const projection = buildProjection({
       sport,
       name,
       position,
       injuryStatus: injury?.status ?? null,
+      afEngine,
       weeklyFromDb,
       weeklyFromClearSports: weeklyFromCs,
       riFppg,

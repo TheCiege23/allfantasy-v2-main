@@ -13,6 +13,7 @@ export interface SleeperLeague {
   season: string;
   sport: string;
   status: string;
+  avatar?: string | null;
   total_rosters: number;
   scoring_settings: Record<string, number>;
   roster_positions: string[];

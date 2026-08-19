@@ -6,6 +6,7 @@ import { resolveAdminEmail } from "@/lib/auth/admin"
 import { GlobalShellClient } from "@/components/shell/GlobalShellClient"
 import { AppSidebar } from "@/components/shell/AppSidebar"
 import { ShellLayoutContainer } from "@/components/shell/ShellLayoutContainer"
+import { SupportCrestWidget } from "@/components/support/SupportCrestWidget"
 
 type GlobalAppShellProps = {
   children: ReactNode
@@ -73,6 +74,11 @@ export default async function GlobalAppShell({
           </ShellLayoutContainer>
         )}
       </GlobalShellClient>
+      {/* Global support entry point. Mounted here (not on the dashboard's FloatingCommunications,
+          which is `md:inline-flex` = desktop/tablet only) so phone users — most live-event traffic —
+          can reach support from every product surface. The /login, /signup and /auth/* bypass above
+          returns early, so it never renders on the auth pages. */}
+      <SupportCrestWidget />
     </div>
   )
 }

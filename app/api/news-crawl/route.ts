@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort';
 
 export const dynamic = 'force-dynamic';
 
@@ -126,22 +127,13 @@ export const GET = withApiUsage({ endpoint: "/api/news-crawl", tool: "NewsCrawl"
           playerNames: true,
         },
       }),
-      prisma.sportsInjury.findMany({
-        where: {
-          sport: 'NFL',
-          status: { in: ['Out', 'Doubtful', 'Questionable', 'IR'] },
-          updatedAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 15,
-        select: {
-          id: true,
-          playerName: true,
-          team: true,
-          status: true,
-          type: true,
-          updatedAt: true,
-        },
+      // Slice 18 follow-on — canonical injury read port (one row per player,
+      // TTL-respected, freshest source wins) instead of an ad-hoc 48h query.
+      listInjuryFacts({
+        sport: 'NFL',
+        statuses: ['Out', 'Doubtful', 'Questionable', 'IR'],
+        maxAgeHours: 48,
+        limit: 15,
       }),
     ]);
 
@@ -167,7 +159,7 @@ export const GET = withApiUsage({ endpoint: "/api/news-crawl", tool: "NewsCrawl"
       });
     }
 
-    for (const inj of injuries) {
+    for (const inj of injuries.facts) {
       const statusEmoji = inj.status === 'Out' || inj.status === 'IR' ? '🚨' : '⚠️';
       items.push({
         id: inj.id,
@@ -175,7 +167,7 @@ export const GET = withApiUsage({ endpoint: "/api/news-crawl", tool: "NewsCrawl"
         text: `${statusEmoji} ${inj.playerName} (${inj.team}) — ${inj.status}${inj.type ? `: ${inj.type}` : ''}`,
         source: 'Injury Report',
         team: inj.team,
-        timestamp: inj.updatedAt?.toISOString() || '',
+        timestamp: inj.fetchedAt.toISOString(),
         priority: inj.status === 'Out' || inj.status === 'IR' ? 3 : 2,
       });
     }

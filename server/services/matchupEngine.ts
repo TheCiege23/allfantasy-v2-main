@@ -8,6 +8,7 @@
  * category winners, and rewrites each row with the full breakdown.
  */
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { parseSettingsSnapshot } from '@/lib/league-contract/types'
 import { getMatchupTiebreakerMode } from '@/lib/scoring-engine/scoringSettingsResolved'
 import {
@@ -134,7 +135,7 @@ async function resolveCategoryOutcomesForWeek(
       where: { id: r.id },
       data: {
         winLoss: wl,
-        categoryBreakdown: {
+        categoryBreakdown: toPrismaJsonInput({
           teamStats: extractTeamStatsFromBreakdown(r.categoryBreakdown),
           matchup: {
             categories: mine.categories,
@@ -142,7 +143,7 @@ async function resolveCategoryOutcomesForWeek(
             bWins: mine.bWins,
             ties: mine.ties,
           },
-        },
+        }),
       },
     })
   }

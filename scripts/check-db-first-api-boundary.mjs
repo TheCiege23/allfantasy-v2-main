@@ -12,6 +12,13 @@ const DATA_API_HOST_PATTERNS = [
   /(^|\.)the-odds-api\.com$/i,
   /(^|\.)api\.espn\.com$/i,
   /(^|\.)site\.api\.espn\.com$/i,
+  // TheSportsDB was missing from this list entirely, so every direct read of it
+  // — schedules, teams, headshots, player search — bypassed the DB-first rule
+  // without ever tripping the guard. It is now the provider behind teams, games,
+  // rosters and player stats, which makes an unguarded read path a live risk:
+  // a page that calls it directly gets provider latency and rate limits on the
+  // request path, and goes blank when the provider blips.
+  /(^|\.)thesportsdb\.com$/i,
 ];
 
 const SOURCE_EXTENSIONS = new Set([

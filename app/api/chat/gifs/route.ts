@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isGifSearchConfigured, searchGifs } from '@/lib/rich-message/GIFIntegrationResolver'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,31 @@ export async function GET(req: NextRequest) {
       })
       const total = await prisma.chatGif.count({ where })
       return NextResponse.json({ gifs: rows.map(mapDbRow), total })
+    }
+
+    // Real live search when a GIF provider key is configured (GIPHY_API_KEY in this deploy) —
+    // previously this endpoint only ever searched a small pre-seeded local table regardless
+    // of query, so "search" never actually searched anything beyond ~what was curated ahead
+    // of time. Falls back to the local table if the live call fails or returns nothing.
+    if (isGifSearchConfigured()) {
+      try {
+        const live = await searchGifs(q, limit)
+        if (live.length > 0) {
+          return NextResponse.json({
+            gifs: live.map((g) => ({
+              id: g.id,
+              giphyId: g.id,
+              url: g.url,
+              previewUrl: g.previewUrl || g.url,
+              title: g.title || q,
+            })),
+            total: live.length,
+            source: live[0]?.provider ?? 'unknown',
+          })
+        }
+      } catch (e) {
+        console.error('[api/chat/gifs] live search failed, falling back to local table:', e)
+      }
     }
 
     const term = `%${q}%`

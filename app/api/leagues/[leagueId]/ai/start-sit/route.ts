@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import { runStartSitAiEngine } from '@/lib/ai-matchup-engine/runStartSitAiEngine'
 import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
 import { sanitizeStarterRow } from '@/lib/matchup-center/validateMatchupPayload'
@@ -9,6 +10,9 @@ import { AI_USAGE } from '@/lib/analytics/eventNames'
 import { recordProductEvent } from '@/lib/analytics/recordAnalyticsEvent'
 import { evaluateLegalityForPersistedRoster } from '@/lib/roster-legality/loadLegalityEvaluationContext'
 import { buildLeagueScoringContextForAi } from '@/lib/scoring-defaults/LeagueScoringConfigResolver'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs, type CertifiedScheduleDescription } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -27,15 +31,10 @@ async function leagueScoringHint(leagueId: string): Promise<string | null> {
   return parts.join(' · ')
 }
 
-function isMember(leagueId: string, userId: string) {
-  return prisma.league.findFirst({
-    where: {
-      id: leagueId,
-      OR: [{ userId }, { teams: { some: { platformUserId: userId } } }],
-    },
-    select: { id: true },
-  })
-}
+// Membership is decided by the canonical predicate (lib/league-access.ts). This previously
+// matched `teams.some({ platformUserId })` — a nullable column populated only by the native
+// open-slot claim path — with no roster/redraft/claim fallback, so every Roster-backed member
+// of an imported league was 403'd out of their own start/sit advice.
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ leagueId: string }> }) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -44,8 +43,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
   }
 
   const { leagueId } = await params
-  const member = await isMember(leagueId, session.user.id)
-  if (!member) {
+  const access = await resolveLeagueAccess(leagueId, session.user.id)
+  if (!access?.isMember) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -68,7 +67,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { sport: true },
+    select: { sport: true, season: true, settings: true },
   })
   const sport = String(body.sport ?? league?.sport ?? 'NFL').trim()
 
@@ -105,10 +104,25 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ lea
     }
   }
 
+  // Gated, informational certified SCHEDULE evidence only (kickoff/status/lock/freshness/identity). Never blocks
+  // the advice and never mutates. Injuries/projections/availability are NOT provided by the certified schedule
+  // plane and are surfaced as explicitly `unavailable` rather than fabricated. Wrapped so it can never fail the route.
+  let sportsSchedule: CertifiedScheduleDescription | undefined
+  if (isSportsDataEnabled('lineup') && sport.toUpperCase() === 'NFL') {
+    try {
+      const week = weekFromLeagueSettingsForLineup(league?.settings)
+      const season = league?.season ?? new Date().getFullYear()
+      const refs = extractPlayerRefs([playerA?.playerId, playerB?.playerId].filter(Boolean))
+      sportsSchedule = await new CertifiedLineupIntegrationService().describeScheduleForPlayers({ season: String(season), week: String(week), players: refs })
+    } catch {
+      sportsSchedule = undefined
+    }
+  }
+
   recordProductEvent(AI_USAGE.START_SIT, {
     userId: session.user.id,
     meta: { leagueId, sport },
   })
 
-  return NextResponse.json({ result, leagueId, rosterLegality: rosterLegalitySummary })
+  return NextResponse.json({ result, leagueId, rosterLegality: rosterLegalitySummary, ...(sportsSchedule ? { sportsSchedule } : {}) })
 }

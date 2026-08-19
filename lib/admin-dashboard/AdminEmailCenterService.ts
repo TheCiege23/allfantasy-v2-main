@@ -3,6 +3,7 @@ import "server-only"
 import crypto from "crypto"
 import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
+import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { sendMarketingEmail } from "@/lib/email/marketing-email"
 
@@ -19,6 +20,8 @@ export type AdminEmailAudience =
   | "world_cup_users"
   | "world_cup_pool_creators"
   | "world_cup_unfinalized"
+  | "waitlist_confirmed"
+  | "waitlist_all"
 
 export type AdminEmailStatus = {
   configured: boolean
@@ -36,16 +39,21 @@ export type AdminEmailStatus = {
 }
 
 export type AdminEmailRecipient = {
-  userId: string
+  /*
+   * Null for waitlist recipients: they asked to hear from us but never created
+   * an account, so there is no AppUser to point at. NotificationOutbox.userId is
+   * nullable, so the send still logs -- it just logs without an owner.
+   */
+  userId: string | null
   email: string
-  username: string
+  username: string | null
 }
 
 export type AdminEmailAudiencePreview = {
   audience: AdminEmailAudience
   recipientCount: number
   cappedAt: number
-  sample: Array<{ username: string; emailMasked: string }>
+  sample: Array<{ username: string | null; emailMasked: string }>
   excludedOptOuts: number
 }
 
@@ -61,6 +69,19 @@ export type AdminEmailSendResult = {
 
 export const EMAIL_AUDIENCES: AdminEmailStatus["audiences"] = [
   { id: "all", label: "All signed-up users", description: "All AppUser rows with an email, excluding opt-outs." },
+  /*
+   * The waitlist lives in EarlyAccessSignup, NOT AppUser -- these are people who
+   * asked to hear from us and never became users, so "all" never reached them.
+   * 164 real addresses as of 2026-08-18.
+   *
+   * CONFIRMED AND EVERYONE ARE SEPARATE AUDIENCES ON PURPOSE, and it is not a
+   * nicety. Only 20 of the 164 ever confirmed. Mailing the other 144 is a
+   * months-old, unconfirmed list -- the exact pattern that gets a sending domain
+   * blocked, which would take down password resets and league invites with it.
+   * Anyone picking the wider option should have to pick it deliberately.
+   */
+  { id: "waitlist_confirmed", label: "Waitlist - confirmed only", description: "Early-access signups who confirmed. The safe list: strongest consent signal." },
+  { id: "waitlist_all", label: "Waitlist - everyone (incl. unconfirmed)", description: "All early-access signups. Mostly never confirmed - higher bounce and complaint risk." },
   { id: "free", label: "Free users", description: "Users without an active subscription." },
   { id: "pro", label: "AF Pro / subscribed users", description: "Users with an active/trialing/past-due subscription row." },
   { id: "paying", label: "Paying users", description: "Users with subscription or completed payment records." },
@@ -195,10 +216,58 @@ export async function getEmailCenterStatus(): Promise<AdminEmailStatus> {
   }
 }
 
+/**
+ * Waitlist audiences resolve against EarlyAccessSignup instead of AppUser.
+ *
+ * These people have no account, so there is no `userId` to attach -- the
+ * recipient carries a null id and the signup name as its display name.
+ *
+ * Reserved-domain addresses are excluded here as well as at write time. The 114
+ * test rows were purged on 2026-08-18 and all three writers are now guarded, but
+ * a send is irreversible and this costs one predicate.
+ */
+async function waitlistRecipients(
+  audience: "waitlist_all" | "waitlist_confirmed",
+  limit: number
+): Promise<AdminEmailRecipient[]> {
+  const rows = await prisma.earlyAccessSignup.findMany({
+    where: {
+      email: { contains: "@" },
+      ...(audience === "waitlist_confirmed" ? { confirmedAt: { not: null } } : {}),
+    },
+    select: { email: true, name: true },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(Math.max(limit * 2, 50), MAX_BROADCAST_RECIPIENTS * 2),
+  })
+  const deliverable = rows.filter((row) => !isUndeliverableEmailDomain(row.email))
+  const optOuts = await optOutEmailSet(deliverable.map((row) => row.email.toLowerCase()))
+  return deliverable
+    .filter((row) => !optOuts.has(row.email.toLowerCase()))
+    .slice(0, limit)
+    .map((row) => ({ userId: null, email: row.email, username: row.name ?? null }))
+}
+
 export async function previewEmailAudience(
   audience: AdminEmailAudience,
   limit = MAX_BROADCAST_RECIPIENTS
 ): Promise<{ preview: AdminEmailAudiencePreview; recipients: AdminEmailRecipient[] }> {
+  if (audience === "waitlist_all" || audience === "waitlist_confirmed") {
+    const recipients = await waitlistRecipients(audience, limit)
+    return {
+      recipients,
+      preview: {
+        audience,
+        recipientCount: recipients.length,
+        cappedAt: limit,
+        sample: recipients.slice(0, 8).map((row) => ({
+          username: row.username,
+          emailMasked: maskAdminEmail(row.email),
+        })),
+        excludedOptOuts: 0,
+      },
+    }
+  }
+
   const rows = await prisma.appUser.findMany({
     where: {
       email: { contains: "@" },

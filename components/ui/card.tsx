@@ -7,8 +7,7 @@ const Card = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("rounded-2xl p-4 sm:p-5", className)}
-    style={{ background: "var(--panel)", border: "1px solid var(--border)" }}
+    className={cn("card-premium p-4 sm:p-5", className)}
     {...props}
   />
 ))
@@ -32,8 +31,7 @@ const CardTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("text-sm sm:text-base font-bold leading-none tracking-tight", className)}
-    style={{ color: "var(--text)" }}
+    className={cn("text-sm font-bold leading-none tracking-tight text-primary sm:text-base", className)}
     {...props}
   />
 ))
@@ -45,8 +43,7 @@ const CardDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("text-xs sm:text-sm", className)}
-    style={{ color: "var(--muted2)" }}
+    className={cn("text-xs text-muted sm:text-sm", className)}
     {...props}
   />
 ))
@@ -66,8 +63,7 @@ const CardFooter = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <div
     ref={ref}
-    className={cn("flex items-center pt-3", className)}
-    style={{ borderTop: "1px solid var(--border)" }}
+    className={cn("flex items-center border-t border-subtle pt-3", className)}
     {...props}
   />
 ))

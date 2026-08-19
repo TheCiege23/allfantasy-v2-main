@@ -1,0 +1,279 @@
+/*
+ * AF Auth — the "landing, auth & import" handoff, frames 4A/4B.
+ *
+ * Scoped under `.af-core`; tokens are identical across both handoffs (diffed).
+ * Handoff values: 440px cards at radius 16, fields as 14px-padded rows on
+ * --surface with 1px --line, focused 1px --accent.
+ */
+
+.af-au {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  min-height: 100vh;
+  padding: 48px 16px;
+  background: var(--bg);
+  background-image: var(--hero);
+  background-repeat: no-repeat;
+}
+
+.af-au-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* The wordmark is an <a> to "/" — it is the only way home from auth. Colour and
+   decoration are pinned so it does not inherit default link styling if the
+   Tailwind preflight ordering ever changes underneath this file. */
+.af-au-wordmark {
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.af-au-wordmark:hover {
+  color: var(--accent);
+}
+
+/* ── Card ────────────────────────────────────────────────────────────── */
+
+.af-au-card {
+  width: 100%;
+  max-width: 440px;
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.af-au-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.af-au-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.af-au-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.af-au-switch {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--muted);
+  text-align: right;
+}
+.af-au-switch a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 700;
+}
+
+/* ── Fields ──────────────────────────────────────────────────────────── */
+
+.af-au-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-au-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.af-au-field-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.af-au-forgot {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-au-field input {
+  width: 100%;
+  padding: 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+}
+.af-au-field input:focus {
+  border-color: var(--accent);
+}
+.af-au-field input::placeholder {
+  color: var(--faint);
+}
+
+/*
+ * ⚠ Needs the `.af-core` prefix to beat `.af-core .af-btn`, which sets
+ * min-height 36px. Written as a bare `.af-au-submit` first, the primary submit
+ * on both auth cards rendered 36px — under the 44px minimum touch row the
+ * handoff specifies for mobile. Measured, not assumed; this is the second time
+ * this exact specificity pair has bitten (see af-my-team.css).
+ */
+.af-core .af-au-submit {
+  width: 100%;
+  min-height: 44px;
+  font-size: 14px;
+}
+
+/* ── Agreements ──────────────────────────────────────────────────────── */
+
+.af-au-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+  cursor: pointer;
+  /* 44px minimum touch row. */
+  min-height: 44px;
+}
+
+.af-au-check input {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.af-au-check a {
+  color: var(--accent);
+}
+.af-au-check strong {
+  color: var(--text);
+}
+
+/*
+ * Names the missing agreement rather than failing generically — with two
+ * checkboxes, "accept the terms" does not say which box was skipped.
+ */
+.af-au-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+/* ── OAuth ───────────────────────────────────────────────────────────── */
+
+.af-au-oauth {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.af-au-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.af-au-divider::before,
+.af-au-divider::after {
+  content: '';
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--line);
+}
+
+.af-au-oauth-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.af-au-oauth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/*
+ * A provider that cannot complete a sign-in is visibly out of service AND
+ * labelled. Dimming alone reads as "loading"; the chip says why it will not
+ * work, which is the difference between a broken button and an honest one.
+ */
+.af-au-oauth-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  color: var(--faint);
+}
+
+.af-au-soon {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.af-au-legal {
+  margin: 0;
+  max-width: 440px;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+@media (max-width: 480px) {
+  .af-au {
+    padding: 28px 12px;
+  }
+  .af-au-card {
+    padding: 18px;
+  }
+  .af-au-switch {
+    margin-left: 0;
+    text-align: left;
+  }
+  .af-au-oauth-grid {
+    grid-template-columns: 1fr;
+  }
+}

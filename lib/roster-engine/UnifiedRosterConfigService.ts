@@ -1,4 +1,5 @@
 import { prisma } from '../prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import {
   getRosterEngineRegistry,
 } from './RosterEngineRegistry'
@@ -154,7 +155,7 @@ export async function updateLeagueRosterConfig(
   await prisma.league.update({
     where: { id: leagueId },
     data: {
-      settings: {
+      settings: toPrismaJsonInput({
         ...currentSettings,
         roster: {
           sport,
@@ -172,7 +173,7 @@ export async function updateLeagueRosterConfig(
             sections: buildSectionsFromSlots(latest.slots),
           },
         },
-      },
+      }),
     },
   })
 
@@ -202,7 +203,7 @@ export async function createDefaultLeagueRosterConfig(
   await prisma.league.update({
     where: { id: leagueId },
     data: {
-      settings: {
+      settings: toPrismaJsonInput({
         ...settings,
         roster: {
           sport,
@@ -220,7 +221,7 @@ export async function createDefaultLeagueRosterConfig(
             sections: buildSectionsFromSlots(config.slots),
           },
         },
-      },
+      }),
     },
   })
 }

@@ -14,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   getXPRemainingToNextTier: vi.fn(),
   managerXPProfileUpsert: vi.fn(),
   bcryptHash: vi.fn(),
+  transaction: vi.fn(),
+  betaFindUnique: vi.fn(),
+  betaUpdateMany: vi.fn(),
 }))
 
 vi.mock("@/lib/prisma", () => ({
@@ -29,7 +32,11 @@ vi.mock("@/lib/prisma", () => ({
       create: mocks.appUserCreate,
       update: mocks.appUserUpdate,
     },
+    betaInvite: { findUnique: mocks.betaFindUnique, updateMany: mocks.betaUpdateMany },
     managerXPProfile: { upsert: mocks.managerXPProfileUpsert },
+    // P0-1 BETA-GATE: the OAuth create now runs inside a transaction. With INVITE_ONLY
+    // unset (default here), the callback only calls tx.appUser.create — the gate is skipped.
+    $transaction: mocks.transaction,
   },
 }))
 
@@ -74,6 +81,15 @@ describe("linkSocialAccountToAppUser — duplicate-account protections", () => {
     mocks.bcryptHash.mockResolvedValue("hashed-placeholder")
     mocks.appUserUpdate.mockImplementation(async ({ data }: { data: Record<string, unknown> }) => ({ ...EXISTING_USER, ...data }))
     mocks.authAccountUpdate.mockResolvedValue({})
+    // Run the create transaction by invoking the callback with a tx client backed by the
+    // same appUser/betaInvite mocks, so behavior is identical to a bare create when the
+    // gate is off (INVITE_ONLY unset).
+    mocks.transaction.mockImplementation(async (fn: (tx: unknown) => unknown) =>
+      fn({
+        appUser: { create: mocks.appUserCreate },
+        betaInvite: { findUnique: mocks.betaFindUnique, updateMany: mocks.betaUpdateMany },
+      }),
+    )
   })
 
   it("Google then Discord with the same email resolves to the same AppUser", async () => {
@@ -86,11 +102,17 @@ describe("linkSocialAccountToAppUser — duplicate-account protections", () => {
       provider: "google",
       providerAccountId: "google-acct-1",
       email: "shared@example.com",
+      // Both providers assert a VERIFIED email — that is what lets the email-match resolve
+      // to the existing account instead of falling through to the create branch. Without
+      // this the test never exercised the behavior its name describes (it deref'd undefined
+      // in the create path). Repaired narrowly per the P0-1 audit.
+      emailVerified: true,
     })
     const discordResult = await linkSocialAccountToAppUser({
       provider: "discord",
       providerAccountId: "discord-acct-1",
       email: "shared@example.com",
+      emailVerified: true,
     })
 
     expect(googleResult.id).toBe(EXISTING_USER.id)
@@ -146,6 +168,9 @@ describe("linkSocialAccountToAppUser — duplicate-account protections", () => {
       provider: "spotify",
       providerAccountId: "spotify-acct-race",
       email: "shared@example.com",
+      // Verified email → resolves to the existing account (the test's intent); the race is
+      // then on the AuthAccount link, not on AppUser creation.
+      emailVerified: true,
     })
 
     expect(result.id).toBe(EXISTING_USER.id)

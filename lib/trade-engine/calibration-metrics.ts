@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import { Prisma } from '@prisma/client'
+import { resolveCurrentTradeLearningSeason } from './season-resolver'
 
 export interface CalibrationBucket {
   bucketMin: number
@@ -232,7 +233,7 @@ function computePredictionDistributionFromOffers(offers: Array<{ acceptProb: num
   return dist
 }
 
-export async function computeCalibrationHealth(daysBack: number): Promise<CalibrationHealthMetrics> {
+export async function computeCalibrationHealth(daysBack: number, season?: number): Promise<CalibrationHealthMetrics> {
   const paired = await loadPairedData(daysBack)
   const cutoff = new Date()
   cutoff.setDate(cutoff.getDate() - daysBack)
@@ -269,8 +270,9 @@ export async function computeCalibrationHealth(daysBack: number): Promise<Calibr
 
   let isotonicStatus: CalibrationHealthMetrics['isotonic'] = undefined
   try {
+    const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
     const stats = await prisma.tradeLearningStats.findUnique({
-      where: { season: 2025 },
+      where: { season: resolvedSeason },
       select: { isotonicMapJson: true, isotonicComputedAt: true, isotonicSampleSize: true },
     })
     const rawStats = stats as Record<string, unknown> | null

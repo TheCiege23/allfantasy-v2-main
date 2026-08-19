@@ -15,13 +15,25 @@ export const maxDuration = 60
  * runs, then 'complete' or 'failed' when the background job resolves.
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ leagueId: string }> },
 ) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { leagueId } = await params
+
+  // Commissioner-only explicit repair: by default this retry only re-fetches seasons that are
+  // still missing draft/roster data (the new completion gate skips already-imported seasons for
+  // speed). Pass `{"force": true}` to force a full refetch of every discovered season instead —
+  // e.g. after a known provider data correction.
+  let force = false
+  try {
+    const body = (await req.json()) as { force?: boolean } | null
+    force = Boolean(body?.force)
+  } catch {
+    // No/invalid JSON body is fine — default to the safe, gated retry.
+  }
 
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -63,7 +75,7 @@ export async function POST(
           ((currentSettings as Record<string, unknown>).isDynasty as boolean | undefined) ??
             (currentSettings as Record<string, unknown>).is_dynasty,
         )
-        await syncSleeperHistoricalBackfillAfterImport({ leagueId, isDynasty })
+        await syncSleeperHistoricalBackfillAfterImport({ leagueId, isDynasty, force })
       } else if (provider === 'yahoo') {
         const { syncYahooHistoricalBackfillAfterImport } = await import(
           '@/lib/league-import/yahoo/YahooHistoricalBackfillService'

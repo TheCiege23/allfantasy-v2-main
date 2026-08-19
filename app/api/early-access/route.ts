@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains";
 import { emailSchema, sanitizeString } from "@/lib/validation";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { getResendClient } from "@/lib/resend-client";
@@ -62,6 +63,147 @@ export async function OPTIONS(request: NextRequest) {
   });
 }
 
+/**
+ * Handle a B2B demo request from the "AllFantasy for business" band.
+ *
+ * ⚠ FOLDED INTO THIS ROUTE RATHER THAN GIVEN ITS OWN. The repo is at Vercel's hard
+ * 2048-route ceiling, and this is the closest existing match: public, unauthenticated,
+ * rate-limited lead capture that stores a row and notifies us. It is a distinct branch
+ * with its own table, not a reuse of the waitlist row — see BusinessDemoRequest for why.
+ *
+ * ⚠ THE EMAIL IS SENT EVEN IF THE INSERT FAILS, AND THE ORDER MATTERS. A demo request
+ * is a person with buying intent who now believes we have heard them; the unacceptable
+ * outcome is silence. So a database failure degrades to "email only" instead of a 500,
+ * and the caller is told the truth in `stored` / `notified`. It only errors when BOTH
+ * paths failed, because only then has the lead genuinely been lost.
+ */
+async function handleBusinessDemo(
+  request: NextRequest,
+  body: Record<string, unknown> | null,
+  ctx: { ip: string; userAgent?: string; referrer?: string; corsHeaders: Record<string, string> }
+) {
+  const { userAgent, referrer, corsHeaders } = ctx;
+
+  const parsed = emailSchema.safeParse({ email: body?.email });
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.errors[0]?.message || "Enter a valid work email." },
+      { status: 400, headers: corsHeaders }
+    );
+  }
+
+  const email = sanitizeString(parsed.data.email).toLowerCase();
+  const str = (v: unknown, max: number) =>
+    typeof v === "string" && v.trim() ? sanitizeString(v).slice(0, max) : null;
+
+  const company = str(body?.company, 120);
+  const name = str(body?.name, 100);
+  const useCase = str(body?.useCase, 2000);
+  const referrerPage = str(body?.referrer, 500);
+
+  let stored = false;
+  let storeError: string | null = null;
+  let rowId: string | null = null;
+
+  try {
+    const row = await prisma.businessDemoRequest.create({
+      data: {
+        email,
+        company,
+        name,
+        useCase,
+        source: "allfantasy.ai",
+        referrer: referrerPage,
+        utmSource: str(body?.utm_source, 200),
+        utmMedium: str(body?.utm_medium, 200),
+        utmCampaign: str(body?.utm_campaign, 200),
+        utmContent: str(body?.utm_content, 200),
+        utmTerm: str(body?.utm_term, 200),
+      },
+      select: { id: true },
+    });
+    stored = true;
+    rowId = row.id;
+  } catch (e) {
+    // Swallowed on purpose — the notification below is what actually reaches a
+    // human, and it must go out regardless. P2021 (table missing, i.e. migration
+    // not yet applied) lands here too.
+    storeError = getErrorMessage(e);
+    console.error("[B2B] Failed to store demo request:", storeError);
+  }
+
+  let notified = false;
+  try {
+    const { client, fromEmail } = getResendClient();
+    const from =
+      fromEmail.trim() && !fromEmail.toLowerCase().includes("@gmail.com")
+        ? fromEmail
+        : "AllFantasy <noreply@allfantasy.ai>";
+
+    await client.emails.send({
+      from,
+      to: "allfantasysportsapp@gmail.com",
+      // Reply goes to the buyer, not to us — otherwise answering a lead means
+      // copying an address out of the body by hand.
+      replyTo: email,
+      subject: `Demo request — ${company || email}`,
+      html: `<div style="font-family:sans-serif;padding:20px;">
+<h2 style="margin:0 0 12px;">New demo request</h2>
+${name ? `<p><strong>Name:</strong> ${escapeHtml(name)}</p>` : ""}
+<p><strong>Email:</strong> ${escapeHtml(email)}</p>
+${company ? `<p><strong>Company:</strong> ${escapeHtml(company)}</p>` : ""}
+${useCase ? `<p><strong>What they'd build:</strong><br>${escapeHtml(useCase).replace(/\n/g, "<br>")}</p>` : ""}
+${referrerPage ? `<p><strong>Referrer:</strong> ${escapeHtml(referrerPage)}</p>` : ""}
+${
+  stored
+    ? ""
+    : `<p style="color:#b00;"><strong>⚠ NOT SAVED TO THE DATABASE.</strong> This email is the only
+       record of this lead — ${escapeHtml(storeError || "unknown error")}</p>`
+}
+<p style="color:#888;font-size:12px;">Received ${new Date().toLocaleString("en-US", { timeZone: "America/New_York" })} ET</p>
+</div>`,
+      text: `New demo request\nEmail: ${email}\nCompany: ${company || "—"}\n\n${useCase || ""}${
+        stored ? "" : `\n\n*** NOT SAVED TO DATABASE — this email is the only record. ***`
+      }`,
+    });
+    notified = true;
+
+    if (rowId) {
+      // Records that a human was actually told. A row with notifiedAt still NULL
+      // is a lead nobody has seen, which is the state worth alerting on.
+      await prisma.businessDemoRequest
+        .update({ where: { id: rowId }, data: { notifiedAt: new Date() } })
+        .catch(() => {});
+    }
+  } catch (e) {
+    console.error("[B2B] Failed to notify on demo request:", getErrorMessage(e));
+  }
+
+  await prisma.analyticsEvent
+    .create({
+      data: {
+        event: "signup",
+        toolKey: "business_demo_request",
+        path: "/api/early-access",
+        userAgent,
+        referrer,
+        meta: { email, company, stored, notified, storeError },
+      },
+    })
+    .catch(() => {});
+
+  if (!stored && !notified) {
+    // Both paths failed, so the request really is gone. Say so, rather than
+    // showing a success state to someone we can no longer contact.
+    return NextResponse.json(
+      { error: "We could not record your request. Please email allfantasysportsapp@gmail.com." },
+      { status: 500, headers: corsHeaders }
+    );
+  }
+
+  return NextResponse.json({ ok: true, stored, notified }, { headers: corsHeaders });
+}
+
 export const POST = withApiUsage({
   endpoint: "/api/early-access",
   tool: "EarlyAccess",
@@ -97,8 +239,22 @@ export const POST = withApiUsage({
           utm_term?: string;
           referrer?: string;
           suppressEmail?: boolean;
+          kind?: string;
+          company?: string;
+          useCase?: string;
         }
       | null;
+
+    // B2B demo requests share this route's rate limit, CORS and telemetry but
+    // nothing else — different table, different notification, different response.
+    if (body?.kind === "business-demo") {
+      return await handleBusinessDemo(request, body as Record<string, unknown>, {
+        ip,
+        userAgent,
+        referrer,
+        corsHeaders,
+      });
+    }
 
     const result = emailSchema.safeParse({ email: body?.email });
     if (!result.success) {
@@ -198,6 +354,25 @@ export const POST = withApiUsage({
 
       return NextResponse.json(
         { ok: true, alreadyExists: true, emailSent: false },
+        { headers: corsHeaders }
+      );
+    }
+
+    /*
+     * ⚠ SAME RESERVED-DOMAIN GUARD AS THE REGISTER MIRROR. This endpoint is
+     * public and e2e suites post to it directly, so it is the other way test
+     * addresses reach the marketing list. Answered as a normal success, with the
+     * same body the real path returns, so a test asserting a 200 still passes —
+     * the row simply is not written.
+     *
+     * Returning here also skips the owner-notification email below, which is
+     * the point: every e2e signup currently mails
+     * allfantasysportsapp@gmail.com a "New Early Access Signup" alert for an
+     * address that does not exist.
+     */
+    if (isUndeliverableEmailDomain(email)) {
+      return NextResponse.json(
+        { ok: true, alreadyExists: false, emailSent: false },
         { headers: corsHeaders }
       );
     }

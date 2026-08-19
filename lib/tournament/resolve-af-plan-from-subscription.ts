@@ -4,7 +4,7 @@ import { isActiveOrGraceStatus } from '@/lib/subscription/feature-access'
 
 /**
  * Maps billing `SubscriptionPlanId` sets to AF tournament UI tiers (Pro / Commissioner / Supreme).
- * `all_access` → Supreme; Pro + Commissioner-class → Supreme; single tier → that tier.
+ * Supreme → Supreme; Pro + Commissioner-class → Supreme; single tier → that tier.
  */
 export function resolveAfPlanFromEntitlement(
   plans: SubscriptionPlanId[],
@@ -13,7 +13,6 @@ export function resolveAfPlanFromEntitlement(
   if (!isActiveOrGraceStatus(status)) return null
   const set = new Set(plans)
   if (set.has('supreme')) return 'af_supreme'
-  if (set.has('all_access')) return 'af_supreme'
 
   const hasPro = set.has('pro')
   const hasCommissionerClass = set.has('commissioner') || set.has('war_room')
@@ -32,7 +31,7 @@ export function hasAfProTier(plan: AfPlanId | null | undefined): boolean {
   return plan === 'af_pro' || plan === 'af_supreme'
 }
 
-/** AF Supreme — All-Access bundle or equivalent (see `resolveAfPlanFromEntitlement`). */
+/** AF Supreme — the top bundle tier (see `resolveAfPlanFromEntitlement`). */
 export function hasAfSupremeTier(plan: AfPlanId | null | undefined): boolean {
   return plan === 'af_supreme'
 }

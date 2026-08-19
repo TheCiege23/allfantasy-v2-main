@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { FantasyCalcPlayer, FantasyCalcSettings } from '@/lib/fantasycalc'
 import { fetchFantasyCalcValues } from '@/lib/fantasycalc'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 
 const KEY_PREFIX = 'fantasycalc:values:'
 
@@ -43,13 +44,13 @@ export async function writeFantasyCalcValuesToDb(
   await prisma.sportsDataCache.upsert({
     where: { cacheKey },
     update: {
-      data: payload,
+      data: toPrismaJsonInput(payload),
       expiresAt,
       createdAt: syncedAt,
     },
     create: {
       cacheKey,
-      data: payload,
+      data: toPrismaJsonInput(payload),
       expiresAt,
       createdAt: syncedAt,
     },

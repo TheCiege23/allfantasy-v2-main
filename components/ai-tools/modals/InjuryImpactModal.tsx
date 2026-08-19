@@ -343,13 +343,13 @@ export function InjuryImpactModal({
                 Matchup Prep
               </Link>
               <Link
-                href={getChimmyChatHrefWithPrompt('Open War Room with injury and league context', {
+                href={getChimmyChatHrefWithPrompt('Open AF Legacy with injury and league context', {
                   source: 'injury_impact',
                   leagueId,
                 })}
                 className="text-[11px] font-semibold text-red-300/90 underline-offset-2 hover:underline"
               >
-                War Room
+                AF Legacy
               </Link>
             </div>
           ) : null

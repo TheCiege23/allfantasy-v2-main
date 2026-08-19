@@ -24,8 +24,10 @@ export function WarRoomCard({ children, className, style, accentBorder, as = 'di
     <Tag
       className={`warroom-card warroom-fade-in-stagger rounded-2xl border ${className ?? ''}`}
       style={{
-        background: 'linear-gradient(180deg, rgba(15,20,38,0.92) 0%, rgba(10,14,28,0.92) 100%)',
-        borderColor: accentBorder ?? 'rgba(255,255,255,0.08)',
+        // Broadcast Deck panel tokens — the same surface language as the league
+        // page (.bdx): panel #12163e on ground #0b0e2a, border #262c6a.
+        background: 'linear-gradient(180deg, rgba(18,22,62,0.94) 0%, rgba(11,14,42,0.94) 100%)',
+        borderColor: accentBorder ?? '#262c6a',
         backdropFilter: 'blur(14px)',
         WebkitBackdropFilter: 'blur(14px)',
         ...style,

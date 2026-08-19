@@ -31,13 +31,53 @@ export async function POST(req: NextRequest) {
     sourceId,
   })
   if (!out.ok) {
-    return NextResponse.json({ error: out.error }, { status: 400 })
+    // Normalization / audit failed (e.g. league not found, normalization error) — a client-side issue.
+    return NextResponse.json({ ok: false, error: out.error }, { status: 400 })
   }
-  return NextResponse.json({
-    ok: true,
+
+  // Sanitized diagnostics only — never a provider payload, credentials, lock token, or raw error detail.
+  const base = {
     leagueId: out.leagueId,
     runId: out.runId,
     warningCount: out.warningCount,
     reviewRequired: out.reviewRequired,
-  })
+  }
+  const refresh = out.refresh
+
+  // Non-Sleeper providers have no durable read-model refresh step — preserve existing success behavior.
+  if (refresh === null) {
+    return NextResponse.json({ ok: true, ...base })
+  }
+
+  // A pre-run authorization / not-found / invalid-connection failure keeps its appropriate 4xx meaning.
+  if (refresh.kind === 'auth') {
+    return NextResponse.json(
+      { ok: false, ...base, refresh: { status: 'not_authorized' }, error: refresh.error },
+      { status: refresh.httpStatus },
+    )
+  }
+
+  // Sleeper durable-refresh outcome → honest HTTP status. A non-completed refresh is NEVER reported as success.
+  const refreshResult = { status: refresh.status, advancedFreshness: refresh.advancedFreshness, executed: refresh.executed }
+
+  if (refresh.status === 'completed' && refresh.advancedFreshness === true && refresh.executed === true) {
+    return NextResponse.json({ ok: true, ...base, refresh: refreshResult })
+  }
+  if (refresh.status === 'locked') {
+    return NextResponse.json(
+      { ok: false, ...base, refresh: refreshResult, error: 'This league is already being refreshed. Try again shortly.' },
+      { status: 409 },
+    )
+  }
+  if (refresh.status === 'partial' || refresh.status === 'failed') {
+    return NextResponse.json(
+      { ok: false, ...base, refresh: refreshResult, error: 'The existing league data was preserved, but the refresh did not complete. Please try again shortly.' },
+      { status: 503 },
+    )
+  }
+  // Unknown or non-executed durable outcome — fail closed rather than reporting success.
+  return NextResponse.json(
+    { ok: false, ...base, refresh: refreshResult, error: 'The refresh did not complete. The existing league data was preserved.' },
+    { status: 503 },
+  )
 }

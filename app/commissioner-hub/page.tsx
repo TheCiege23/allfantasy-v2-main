@@ -4,10 +4,13 @@ import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { getCommissionerHubHealthForUser } from '@/lib/commissioner-hub/commissionerHubHealth'
 import type { UserLeague } from '@/app/dashboard/types'
+import { resolveTenantBrand } from '@/lib/white-label'
 import CommissionerHubPageClient from './CommissionerHubPageClient'
 
+const BRAND = resolveTenantBrand()
+
 export const metadata: Metadata = {
-  title: 'Commissioner Hub | AllFantasy',
+  title: `${BRAND.copy.commissionerHubLabel} | ${BRAND.copy.productName}`,
   description:
     'Run better leagues. Draft smarter. Build your fantasy legacy. Every tool a commissioner needs to create, manage, and grow their leagues — in one place.',
 }

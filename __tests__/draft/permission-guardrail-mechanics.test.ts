@@ -444,7 +444,8 @@ describe('Phase 4 Slice 3 - AI and War Room entitlement boundaries', () => {
   it('AI panel renders locked-state copy when AI access is unavailable', () => {
     const src = fs.readFileSync(draftRoomClientPath, 'utf8')
     expect(src).toContain('data-testid="draft-bottom-ai-locked"')
-    expect(src).toContain('AI recommendations locked')
+    // Customer-facing copy dropped "AI" (tier/pricing copy must never say "AI") — see planIncludes.ts.
+    expect(src).toContain('Recommendations locked')
   })
 
   it('War Room popup mount is not entitlement-gated in current client logic', () => {

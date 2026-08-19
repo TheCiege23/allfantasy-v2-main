@@ -15,6 +15,10 @@ import { logAction } from '@/server/services/auditService'
 import { assertRosterTransactionsAllowed } from '@/lib/roster-legality/rosterTransactionGates'
 import { getLeagueRole } from "@/lib/league/permissions"
 import { mergeCommissionerOverrides } from "@/lib/waiver-wire/commissioner-claim-override"
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedWaiverIntegrationService } from '@/lib/fantasy-os/sports-runtime/waiverIntegration'
+import { extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 function waiverClaimErrorCode(message: string): string {
   const m = message.toLowerCase()
@@ -129,6 +133,51 @@ export async function POST(
     return waiverClaimError("You already have a pending claim for this player.", 409)
   }
 
+  // Gated, reject-only certified sports safety — runs AFTER the authoritative eligibility + roster-legality
+  // gates above and BEFORE createClaim. It can only ADD a rejection (never approve, never weaken), and only on
+  // TRUSTWORTHY (current) certified evidence that an add/drop player's game is already locked/started/final. On
+  // stale/unavailable certified data it does NOT block this human-confirmed manual claim (createClaim's own
+  // lock/eligibility checks remain final). Evidence is EMITTED in the response (not persisted). Wrapped so it
+  // can never turn a valid claim into an error.
+  let sportsDataDecision:
+    | { featureGateEnabled: boolean; leagueId: string; rosterId: string; finalDecision: 'allowed' | 'rejected'; reason: string; freshnessStatus: string; identityStatus: string; scheduleSnapshotVersion: string | null; blockedCanonicalPlayerIds: string[]; evaluatedAt: string }
+    | undefined
+  const dropPlayerIdForGuard = body.dropPlayerId ?? body.drop_player_id ?? null
+  if (isSportsDataEnabled('waiver')) {
+    try {
+      const league = await prisma.league.findUnique({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+      if (league && String(league.sport ?? 'NFL').toUpperCase() === 'NFL') {
+        const season = league.season ?? new Date().getFullYear()
+        const week = weekFromLeagueSettingsForLineup(league.settings)
+        const guard = await new CertifiedWaiverIntegrationService().evaluateWaiverClaimSafety({
+          season: String(season),
+          week: String(week),
+          addRefs: extractPlayerRefs([String(addPlayerId)]),
+          dropRefs: dropPlayerIdForGuard ? extractPlayerRefs([String(dropPlayerIdForGuard)]) : [],
+        })
+        sportsDataDecision = {
+          featureGateEnabled: true,
+          leagueId,
+          rosterId: roster.id,
+          finalDecision: guard.block ? 'rejected' : 'allowed',
+          reason: guard.reason,
+          freshnessStatus: guard.freshnessStatus,
+          identityStatus: guard.identityStatus,
+          scheduleSnapshotVersion: guard.snapshotVersion,
+          blockedCanonicalPlayerIds: guard.blockedPlayers,
+          evaluatedAt: new Date().toISOString(),
+        }
+        if (guard.block) {
+          console.info('[waiver-wire/claims][sports-data] rejected', { leagueId, rosterId: roster.id, reason: guard.reason, snapshot: guard.snapshotVersion })
+          return NextResponse.json({ error: `Claim blocked by certified game evidence: ${guard.reason}`, code: 'SPORTS_DATA_LOCK', sportsDataDecision }, { status: 409 })
+        }
+      }
+    } catch {
+      // Fail-open for a human-confirmed manual claim: createClaim's own eligibility/lock checks remain final.
+      sportsDataDecision = { featureGateEnabled: true, leagueId, rosterId: roster.id, finalDecision: 'allowed', reason: 'certified sports evidence unavailable — existing authority final', freshnessStatus: 'unavailable', identityStatus: 'unresolved', scheduleSnapshotVersion: null, blockedCanonicalPlayerIds: [], evaluatedAt: new Date().toISOString() }
+    }
+  }
+
   try {
     let metadataForCreate: Record<string, unknown> | undefined =
       body.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
@@ -196,6 +245,7 @@ export async function POST(
       claim,
       fcfsProcessedImmediately: eff.normalizedWaiverType === "fcfs" && !fcfsProcessWarning,
       ...(fcfsProcessWarning ? { fcfsProcessWarning } : {}),
+      ...(sportsDataDecision ? { sportsDataDecision } : {}),
     })
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to create claim"

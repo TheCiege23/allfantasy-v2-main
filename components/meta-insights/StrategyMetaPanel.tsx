@@ -155,7 +155,7 @@ export default function StrategyMetaPanel(props: {
           Strategy meta dashboard
         </Link>
         <Link href="/af-legacy" className="text-violet-600 hover:underline dark:text-violet-400">
-          War Room
+          AF Legacy
         </Link>
         <Link href="/mock-draft-simulator" className="text-violet-600 hover:underline dark:text-violet-400">
           Mock draft

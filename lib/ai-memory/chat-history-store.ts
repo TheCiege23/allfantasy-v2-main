@@ -36,8 +36,29 @@ export function buildChimmyConversationId(input: {
 export async function appendChatHistory(input: AppendChatHistoryInput): Promise<void> {
   const content = input.content.trim()
   if (!content) return
-  const id = randomUUID()
 
+  // conversationId is caller-suppliable (form field / JSON field), so before writing anything
+  // into it, confirm it either doesn't exist yet or already belongs to this same user. Without
+  // this, one user's turns could be appended into — and silently bump the counters of — another
+  // user's conversation record just by guessing/reusing that user's conversationId.
+  let existing: { id: string; messageCount: number; userId: string | null } | null = null
+  if (input.userId) {
+    try {
+      existing = await prisma.chatConversation.findUnique({
+        where: { id: input.conversationId },
+        select: { id: true, messageCount: true, userId: true },
+      })
+    } catch (error) {
+      console.warn('[ChatHistory] failed to check conversation ownership:', String(error))
+      return
+    }
+    if (existing && existing.userId !== input.userId) {
+      console.warn('[ChatHistory] refused to append to a conversation owned by a different user')
+      return
+    }
+  }
+
+  const id = randomUUID()
   try {
     await prisma.$executeRaw`
       INSERT INTO "chat_history"
@@ -53,10 +74,6 @@ export async function appendChatHistory(input: AppendChatHistoryInput): Promise<
   // Keep chat_conversations fresh for existing UIs that rely on conversation rollups.
   if (input.userId) {
     try {
-      const existing = await prisma.chatConversation.findUnique({
-        where: { id: input.conversationId },
-        select: { id: true, messageCount: true },
-      })
       if (!existing) {
         await prisma.chatConversation.create({
           data: {
@@ -83,17 +100,23 @@ export async function appendChatHistory(input: AppendChatHistoryInput): Promise<
 
 /**
  * Get recent messages for a conversation (for prompt context).
+ *
+ * `conversationId` is caller-suppliable, so this is scoped by `userId` as well — every
+ * `chat_history` row carries the human user's own userId (both their message and Chimmy's reply
+ * are stamped with it), so filtering on it means a caller only ever sees turns from a conversation
+ * they were actually part of, regardless of what conversationId string they pass in.
  */
 export async function getRecentChatHistory(
   conversationId: string,
-  limit: number
+  limit: number,
+  userId: string
 ): Promise<ChatHistoryMessage[]> {
-  if (!conversationId || limit <= 0) return []
+  if (!conversationId || limit <= 0 || !userId) return []
   try {
     const rows = await prisma.$queryRaw<Array<{ role: string; content: string; createdAt: Date }>>`
       SELECT "role", "content", "createdAt"
       FROM "chat_history"
-      WHERE "conversationId" = ${conversationId}
+      WHERE "conversationId" = ${conversationId} AND "userId" = ${userId}
       ORDER BY "createdAt" DESC
       LIMIT ${limit}
     `

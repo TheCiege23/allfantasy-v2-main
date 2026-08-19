@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { computeDraftProjectionScore } from '@/lib/devy-model'
+import { computeDevyProjection } from '@/lib/devy-intel'
 import { computeClassDepthByPosition } from '@/lib/pick-valuation'
 
 function riskBand(player: any): 'LOW' | 'MEDIUM' | 'HIGH' {
@@ -30,13 +30,30 @@ export async function POST(req: Request) {
     },
   })
 
-  const enriched = players.map((p: any) => ({
-    ...p,
-    draftProjectionScore: computeDraftProjectionScore(p),
-    riskBand: riskBand(p),
-  }))
+  const enriched = players.map((p: any) => {
+    // devy-intel rather than devy-model: eight signals (recruiting, production,
+    // breakout, athletic, draft capital, PPA, wEPA, team context) against
+    // devy-model's four, and it is the model wired to the CFBD advanced feeds.
+    // Same honesty contract — null when nothing backed a projection.
+    const projection = computeDevyProjection(p)
+    return {
+      ...p,
+      draftProjectionScore: projection.score,
+      draftProjectionConfidence: projection.confidence,
+      draftProjectionCoverage: projection.coverage,
+      draftProjectionMissing: projection.missing,
+      riskBand: riskBand(p),
+    }
+  })
 
-  enriched.sort((a: any, b: any) => b.draftProjectionScore - a.draftProjectionScore)
+  // Unscored players sort last rather than producing NaN comparisons, which
+  // would leave the board in arbitrary order.
+  enriched.sort((a: any, b: any) => {
+    if (a.draftProjectionScore == null && b.draftProjectionScore == null) return 0
+    if (a.draftProjectionScore == null) return 1
+    if (b.draftProjectionScore == null) return -1
+    return b.draftProjectionScore - a.draftProjectionScore
+  })
 
   const currentYear = new Date().getFullYear()
   const classYears = [currentYear + 1, currentYear + 2, currentYear + 3]

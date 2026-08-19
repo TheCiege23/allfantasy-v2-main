@@ -1,12 +1,12 @@
 import { prisma } from '../prisma'
 import { Prisma } from '@prisma/client'
 import { applyIsotonicMap, type IsotonicBinPoint, type IsotonicMap } from './isotonic-calibrator'
+import { resolveCurrentTradeLearningSeason } from './season-resolver'
 
 const DEFAULT_B0 = -1.10
 const MIN_CALIBRATION_SAMPLE = 30
 const MAX_B0_SHIFT = 0.60
 const OBSERVED_ACCEPT_RATE = 0.85
-const CALIBRATION_SEASON = 2025
 const FEEDBACK_LEARNING_RATE = 0.02
 const MAX_FEEDBACK_ADJ = 0.15
 
@@ -27,7 +27,12 @@ interface CalibrationHistoryEntry {
   sampleSize: number
   avgPredicted: number
   observedRate: number
-  source: 'outcome' | 'feedback'
+  // 'outcome' is written only by the now-retired calibrateInterceptFromOutcomes()
+  // (kept for history-shape compatibility with any pre-existing rows).
+  // 'auto-recalibration' is written by promoteShadowB0() (auto-recalibration.ts),
+  // the sole current owner of calibratedB0 per
+  // docs/TRADE_LEARNING_CALIBRATED_B0_OWNERSHIP_ADR.md.
+  source: 'outcome' | 'feedback' | 'auto-recalibration'
 }
 
 interface FeedbackWeightAdj {
@@ -88,12 +93,13 @@ function reconstructAcceptProb(
 }
 
 export async function calibrateInterceptFromOutcomes(
-  season: number = CALIBRATION_SEASON,
+  season?: number,
 ): Promise<{ newB0: number; sampleSize: number; avgPredicted: number; adjusted: boolean }> {
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
   const trades = await prisma.leagueTrade.findMany({
     where: {
       analyzed: true,
-      season,
+      season: resolvedSeason,
       valueGiven: { not: null },
       valueReceived: { not: null },
       analysisResult: { not: Prisma.DbNull },
@@ -106,7 +112,7 @@ export async function calibrateInterceptFromOutcomes(
   })
 
   const stats = await prisma.tradeLearningStats.findUnique({
-    where: { season },
+    where: { season: resolvedSeason },
   })
 
   const currentB0 = (stats?.calibratedB0 as number) ?? DEFAULT_B0
@@ -165,9 +171,9 @@ export async function calibrateInterceptFromOutcomes(
   const updatedHistory = [...currentHistory.slice(-9), entry]
 
   await prisma.tradeLearningStats.upsert({
-    where: { season },
+    where: { season: resolvedSeason },
     create: {
-      season,
+      season: resolvedSeason,
       calibratedB0: newB0,
       calibrationSampleSize: validCount,
       calibrationHistory: updatedHistory as any,
@@ -187,8 +193,9 @@ export async function calibrateInterceptFromOutcomes(
 }
 
 export async function calibrateFromFeedback(
-  season: number = CALIBRATION_SEASON,
+  season?: number,
 ): Promise<{ adjusted: boolean; feedbackAdj: FeedbackWeightAdj | null }> {
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
   const feedback = await prisma.tradeFeedback.findMany({
     where: {
       createdAt: {
@@ -209,7 +216,7 @@ export async function calibrateFromFeedback(
   }
 
   const stats = await prisma.tradeLearningStats.findUnique({
-    where: { season },
+    where: { season: resolvedSeason },
   })
 
   const currentAdj = (stats?.feedbackWeightAdj as unknown as FeedbackWeightAdj) ?? {
@@ -266,9 +273,9 @@ export async function calibrateFromFeedback(
   }
 
   await prisma.tradeLearningStats.upsert({
-    where: { season },
+    where: { season: resolvedSeason },
     create: {
-      season,
+      season: resolvedSeason,
       feedbackWeightAdj: newAdj as any,
       lastCalibrated: new Date(),
     },
@@ -352,7 +359,7 @@ function resolveSegmentB0(
 }
 
 export async function getCalibratedWeights(
-  season: number = CALIBRATION_SEASON,
+  season?: number,
   segment?: SegmentContext,
 ): Promise<CalibratedWeights> {
   const now = Date.now()
@@ -360,8 +367,9 @@ export async function getCalibratedWeights(
 
   if (!cacheValid) {
     try {
+      const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
       const stats = await prisma.tradeLearningStats.findUnique({
-        where: { season },
+        where: { season: resolvedSeason },
       })
 
       const rawStats = stats as Record<string, unknown> | null
@@ -416,7 +424,7 @@ export function invalidateCalibrationCache(): void {
 
 export async function calibrateAcceptProbability(
   rawProbability: number,
-  season: number = CALIBRATION_SEASON,
+  season?: number,
 ): Promise<{ calibrated: number; raw: number; isotonicApplied: boolean }> {
   await getCalibratedWeights(season)
 
@@ -432,20 +440,46 @@ export function getIsotonicPoints(): IsotonicBinPoint[] | null {
   return cachedIsotonicPoints
 }
 
+/**
+ * Reads the current calibratedB0 without changing it. Per
+ * docs/TRADE_LEARNING_CALIBRATED_B0_OWNERSHIP_ADR.md, intercept calibration
+ * is now owned exclusively by promoteShadowB0() (auto-recalibration.ts),
+ * which calibrates against real TradeOutcomeEvent data. This function no
+ * longer shifts calibratedB0 toward the hardcoded OBSERVED_ACCEPT_RATE
+ * constant that calibrateInterceptFromOutcomes() targets.
+ */
+async function readCurrentB0Unchanged(
+  season: number,
+): Promise<{ newB0: number; sampleSize: number; avgPredicted: number; adjusted: boolean }> {
+  const stats = await prisma.tradeLearningStats.findUnique({
+    where: { season },
+    select: { calibratedB0: true },
+  })
+  const currentB0 = (stats?.calibratedB0 as number) ?? DEFAULT_B0
+  return { newB0: currentB0, sampleSize: 0, avgPredicted: 0, adjusted: false }
+}
+
 export async function runFullCalibration(
-  season: number = CALIBRATION_SEASON,
+  season?: number,
 ): Promise<{
   intercept: { newB0: number; sampleSize: number; adjusted: boolean }
   feedback: { adjusted: boolean }
 }> {
   console.log('[Calibration] Starting full calibration cycle...')
 
-  const intercept = await calibrateInterceptFromOutcomes(season)
-  const feedback = await calibrateFromFeedback(season)
+  const resolvedSeason = season ?? await resolveCurrentTradeLearningSeason()
+
+  // Intercept calibration is retired from this orchestration per
+  // docs/TRADE_LEARNING_CALIBRATED_B0_OWNERSHIP_ADR.md — calibratedB0 is now
+  // written only by promoteShadowB0() (auto-recalibration.ts). This function
+  // still exists, is still exported, and remains independently callable/testable;
+  // it is simply no longer invoked by this default sequence.
+  const intercept = await readCurrentB0Unchanged(resolvedSeason)
+  const feedback = await calibrateFromFeedback(resolvedSeason)
 
   invalidateCalibrationCache()
 
-  console.log(`[Calibration] Complete. b0=${intercept.newB0}, interceptAdj=${intercept.adjusted}, feedbackAdj=${feedback.adjusted}`)
+  console.log(`[Calibration] Complete. b0=${intercept.newB0} (intercept calibration retired — owned by promoteShadowB0), feedbackAdj=${feedback.adjusted}`)
 
   return {
     intercept: {

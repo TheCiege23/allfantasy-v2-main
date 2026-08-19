@@ -1473,14 +1473,7 @@ const EN: WorldCupDictionary = {
   "wc.premium.card.alerts.desc": "Future alerts for bracket swings, group-stage optimizer notes, and upset finder signals.",
 
   // ── Match Impact Center ───────────────────────────────────────────────
-  "wc.matchImpact.title": "Why This Match Matters",
-  "wc.matchImpact.rootFor": "Root for",
-  "wc.matchImpact.worstResult": "Worst result",
-  "wc.matchImpact.ptsAtStake": "Points at stake",
-  "wc.matchImpact.poolSize": "Pool size",
-  "wc.matchImpact.championRisk": "Champion risk",
   "wc.matchImpact.championRiskBody": "Your champion {{name}} is playing. A loss ends your champion bonus points.",
-  "wc.matchImpact.noEntry": "Create a bracket to see which matches affect your picks.",
   "wc.matchImpact.teamInsightBtn": "Team insight",
 
   // ── Team Intelligence Card ────────────────────────────────────────────

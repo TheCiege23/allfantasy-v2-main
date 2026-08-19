@@ -14,6 +14,17 @@ export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = 
           )
         : [],
     )
+    // Tier 0 (Finding #9) — the league-level FAAB budget IS available in the same
+    // payload the mapper receives, so compute `faab_remaining = budget - used`
+    // instead of dropping the field.
+    const leagueSettingsForMapper = (source.league?.settings ?? {}) as Record<string, unknown>
+    const leagueWaiverBudgetRaw = leagueSettingsForMapper.waiver_budget
+    const leagueWaiverBudget =
+      typeof leagueWaiverBudgetRaw === 'number' && Number.isFinite(leagueWaiverBudgetRaw)
+        ? leagueWaiverBudgetRaw
+        : typeof leagueWaiverBudgetRaw === 'string'
+          ? Number.parseInt(leagueWaiverBudgetRaw, 10)
+          : null
     return rosters.map((roster) => {
       const ownerId = typeof roster.owner_id === 'string' ? roster.owner_id.trim() : ''
       const user = users.find((u) => u.user_id === ownerId)
@@ -24,9 +35,12 @@ export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = 
       const settings = (roster.settings ?? {}) as Record<string, unknown>
       const waiverBudgetUsedRaw = settings.waiver_budget_used
       const waiverPositionRaw = settings.waiver_position
-      // waiver_budget_used is referenced to ensure the field is acknowledged;
-      // downstream consumers can enrich via roster.settings.waiver_budget_used.
-      void waiverBudgetUsedRaw
+      const waiverBudgetUsed =
+        typeof waiverBudgetUsedRaw === 'number' && Number.isFinite(waiverBudgetUsedRaw)
+          ? waiverBudgetUsedRaw
+          : typeof waiverBudgetUsedRaw === 'string'
+            ? Number.parseInt(waiverBudgetUsedRaw, 10)
+            : null
       const waiverPosition =
         typeof waiverPositionRaw === 'number'
           ? waiverPositionRaw
@@ -60,10 +74,13 @@ export const SleeperRosterMapper: IExternalRosterMapper<SleeperImportPayload> = 
         starter_ids: roster.starters?.filter((s) => s && s !== '0') ?? [],
         reserve_ids: roster.reserve,
         taxi_ids: roster.taxi,
-        // Sleeper exposes only waiver_budget_used on roster.settings; without
-        // league total we can't compute remaining here, so leave null.
-        // waiver_budget_used is referenced for completeness below.
-        faab_remaining: null,
+        // Tier 0 (Finding #9) — `faab_remaining = league.settings.waiver_budget -
+        // roster.settings.waiver_budget_used`. Falls back to null when either half
+        // of the subtraction is unavailable (older leagues, incomplete payloads).
+        faab_remaining:
+          leagueWaiverBudget != null && waiverBudgetUsed != null
+            ? Math.max(0, leagueWaiverBudget - waiverBudgetUsed)
+            : null,
         waiver_priority:
           waiverPosition != null && Number.isFinite(waiverPosition) ? waiverPosition : null,
       } satisfies NormalizedRoster

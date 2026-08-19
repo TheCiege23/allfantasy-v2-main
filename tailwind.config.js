@@ -146,6 +146,47 @@ const config = {
   theme: {
     extend: {
       colors: {
+        app: 'var(--surface-app)',
+        surface: {
+          DEFAULT: 'var(--surface-card)',
+          app: 'var(--surface-app)',
+          card: 'var(--surface-card)',
+          muted: 'var(--surface-card-soft)',
+          soft: 'var(--surface-card-soft)',
+          inset: 'var(--surface-inset)',
+          hover: 'var(--surface-hover)',
+          overlay: 'var(--surface-overlay)',
+        },
+        primary: 'var(--text-primary)',
+        secondary: 'var(--text-secondary)',
+        muted: 'var(--text-tertiary)',
+        subtle: 'var(--border-subtle)',
+        focus: 'var(--color-primary)',
+        content: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          tertiary: 'var(--text-tertiary)',
+          inverse: 'var(--text-inverse)',
+        },
+        brand: {
+          primary: 'var(--color-primary)',
+          strong: 'var(--color-primary-strong)',
+          soft: 'var(--color-primary-soft)',
+          secondary: 'var(--color-secondary)',
+          accent: 'var(--color-accent)',
+          decision: 'var(--color-decision)',
+          commissioner: 'var(--color-commissioner)',
+        },
+        status: {
+          success: 'var(--color-success)',
+          warning: 'var(--color-warning)',
+          danger: 'var(--color-danger)',
+          info: 'var(--color-info)',
+        },
+        line: {
+          subtle: 'var(--border-subtle)',
+          strong: 'var(--border-strong)',
+        },
         neon: {
           cyan: '#00f5ff',
           purple: '#bf00ff',
@@ -181,6 +222,13 @@ const config = {
       },
       backgroundImage: {
         'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
+      },
+      boxShadow: {
+        soft: 'var(--shadow-card)',
+        popover: 'var(--shadow-popover)',
+      },
+      ringColor: {
+        focus: 'var(--color-primary)',
       },
     },
   },

@@ -14,7 +14,6 @@ export type MonetizationPlanTier =
   | 'pro'
   | 'commissioner'
   | 'war_room'
-  | 'all_access'
   | 'supreme'
   | 'tokens'
   | 'unknown'
@@ -23,7 +22,8 @@ function toPlanTier(input: string | null | undefined): MonetizationPlanTier {
   const value = String(input ?? '').trim().toLowerCase()
   if (!value) return 'unknown'
   if (value.includes('supreme')) return 'supreme'
-  if (value.includes('all_access') || value.includes('all-access')) return 'all_access'
+  // Retired All-Access tier — any legacy all_access value now maps to the surviving Supreme bundle.
+  if (value.includes('all_access') || value.includes('all-access')) return 'supreme'
   if (value.includes('war_room') || value.includes('war-room')) return 'war_room'
   if (value.includes('commissioner')) return 'commissioner'
   if (value.includes('pro')) return 'pro'
@@ -164,7 +164,7 @@ export function trackLockedFeatureViewed(params: {
 
 export function trackLockedFeatureConversionClick(params: {
   surface: string
-  ctaType: 'upgrade' | 'tokens' | 'all_access'
+  ctaType: 'upgrade' | 'tokens' | 'supreme'
   featureId?: string | null
   requiredPlan?: string | null
   ruleCode?: string | null

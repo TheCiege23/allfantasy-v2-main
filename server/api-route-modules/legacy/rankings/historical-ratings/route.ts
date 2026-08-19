@@ -2,6 +2,7 @@ import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getLeagueInfo, getLeagueMatchups, getLeagueRosters, getLeagueUsers } from '@/lib/sleeper-client'
+import { requireLegacySleeperIdentity } from '@/lib/legacy/requireLegacySleeperIdentity'
 
 interface WeeklyRating {
   week: number
@@ -26,9 +27,16 @@ const TEAM_COLORS = [
 export const POST = withApiUsage({ endpoint: "/api/legacy/rankings/historical-ratings", tool: "LegacyRankingsHistoricalRatings" })(async (request: NextRequest) => {
   try {
     const body = await request.json()
-    const { sleeper_username, league_id, season } = body
+    const { league_id, season } = body
 
-    if (!sleeper_username || !league_id) {
+    const gate = await requireLegacySleeperIdentity(request, {
+      requestedUsername: String(body?.sleeper_username || '').trim() || null,
+      rateLimit: { action: 'historical_ratings', maxRequests: 20, windowMs: 60_000 },
+    })
+    if (!gate.ok) return gate.response
+    const sleeper_username = gate.identity.sleeperUsername
+
+    if (!league_id) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
 

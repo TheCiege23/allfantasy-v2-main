@@ -33,7 +33,7 @@ describe("World Cup entitlement helpers", () => {
     expect(canUseWorldCupAiTools({ hasBracketBrainAi: true })).toBe(true)
     expect(canUseWorldCupAiTools({ hasAfPro: true })).toBe(true)
     expect(canUseWorldCupAiTools({ plans: ["pro"] })).toBe(true)
-    expect(canUseWorldCupAiTools({ plans: ["all_access"] })).toBe(true)
+    expect(canUseWorldCupAiTools({ plans: ["supreme"] })).toBe(true)
   })
 
   it("returns copy-ready labels for the shell premium panel", () => {

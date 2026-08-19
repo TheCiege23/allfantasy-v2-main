@@ -12,6 +12,7 @@ import {
   type BestBallCreateSettings,
   type BestBallModeId,
 } from '@/lib/bestball/rules'
+import type { PremiumAdvancedCreateState } from '@/lib/create-league-v2/simple-create'
 
 /** Wizard-level draft type — superset of Prisma's DraftTypeId to accommodate execution modes. */
 export type WizardDraftType = DraftTypeId | 'team' | 'auto' | 'offline'
@@ -39,6 +40,7 @@ export type TradeReviewMode = 'none' | 'commissioner' | 'league_vote'
 export type PprMode = 'standard' | 'half' | 'full'
 export type ScoringSource = 'af' | 'sleeper' | 'espn' | 'yahoo'
 export type SoccerPipeline = 'mls' | 'euro'
+export type LeaguePrivacy = 'public' | 'private'
 
 export type DynastyDraftMode = 'scheduled' | 'offline'
 export type DynastyRookieOrderMethod = 'reverse_standings' | 'max_pf' | 'lottery' | 'commissioner'
@@ -150,6 +152,9 @@ export interface CreateLeagueV2State {
   /** When false, name updates from smart defaults when concept/sport/teams change. */
   nameTouched: boolean
   description: string
+  privacy: LeaguePrivacy
+  draftDate: string
+  draftTime: string
   timezone: string
   language: string
   scoringSource: ScoringSource
@@ -160,6 +165,7 @@ export interface CreateLeagueV2State {
   dynasty: DynastySetupState
   keeper: KeeperSetupState
   bestBall: BestBallSetupState
+  advancedSetup: PremiumAdvancedCreateState
   /** Legacy fields — derived from scoring preset on submit; kept for session hydration compatibility. */
   superflex: boolean
   tePremium: boolean
@@ -262,6 +268,9 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   name: '',
   nameTouched: false,
   description: '',
+  privacy: 'private',
+  draftDate: '',
+  draftTime: '',
   timezone: 'America/New_York',
   language: 'en',
   scoringSource: 'af',
@@ -272,6 +281,7 @@ export const DEFAULT_V2_STATE: CreateLeagueV2State = {
   dynasty: getDefaultDynastySetup('NFL', 'snake'),
   keeper: getDefaultKeeperSetup(),
   bestBall: getDefaultBestBallSetup('NFL', 'standard', 'snake'),
+  advancedSetup: {},
   superflex: false,
   tePremium: false,
   tePremiumMultiplier: 1.5,

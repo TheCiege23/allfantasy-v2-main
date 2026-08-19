@@ -53,11 +53,11 @@ interface PlayerRank {
   careerTierName: string
   careerLevel: number
   careerXp: string
-  aiReportGrade: string
-  aiScore: number
+  aiReportGrade: string | null
+  aiScore: number | null
   aiInsight: string
-  winRate: number
-  playoffRate: number
+  winRate: number | null
+  playoffRate: number | null
   championshipCount: number
   seasonsPlayed: number
   totalWins?: number

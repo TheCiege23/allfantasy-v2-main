@@ -90,9 +90,23 @@ export async function POST(req: Request) {
       .map((t) => (t.player_id ? nameForPlayer(playersMap, t.player_id) : null))
       .filter(Boolean)
 
+    // HONESTY PASS (slice 12): the inputs here ARE real (the manager's actual
+    // roster + Sleeper's real league-wide trending adds), but there are NO
+    // projections in this path, so these are popularity-and-shape suggestions,
+    // not a projected-points ranking. The response now says so, and the model
+    // is barred from inventing statistics to justify a pick.
+    // FOLLOW-UP: route this through the Decision OS waiver engine
+    // (/api/waiver-ai/engine) once Sleeper↔FantasyProjection player-id
+    // namespaces are reconciled — attempting that join today silently matches
+    // nothing (known wrong-row-join defect).
     const system = `You are Chimmy, AllFantasy's waiver wire assistant. Identify roster weaknesses using the roster sample and suggest realistic adds using trending names. Respond with ONLY valid JSON (no markdown):
 {"recommendations":[{"addPlayer":string,"dropPlayer":string,"rationale":string}]}
-Provide up to 5 objects. dropPlayer should name a realistic cut from the user's roster; if unclear use "bench stash".`
+Provide up to 5 objects. dropPlayer should name a realistic cut from the user's roster; if unclear use "bench stash".
+
+CRITICAL HONESTY RULES:
+- You have NO projection or statistical data in this request. Do NOT state projected points, percentages, target shares, snap counts, rankings, or any number presented as measured fact.
+- Base each rationale on roster composition (positional need, depth) and the fact that a player is trending across leagues. Say "trending in add activity" rather than implying analysis you did not perform.
+- Never claim a player "projects for X points" or "is ranked Nth".`
 
     const userPayload = `League: ${String(bundle.league.name ?? '')} (${bundle.sport})\nMy roster (sample):\n${JSON.stringify(myRosterNames, null, 2)}\n\nTrending adds / available buzz (names only):\n${JSON.stringify(trendingNames, null, 2)}`
 
@@ -170,7 +184,22 @@ Provide up to 5 objects. dropPlayer should name a realistic cut from the user's 
       })
     }
 
-    const raw = await callClaudeJson({ system, user: userPayload, userId: targetUserId })
+    const raw = (await callClaudeJson({ system, user: userPayload, userId: targetUserId })) as Record<
+      string,
+      unknown
+    >
+
+    // Provenance is part of the answer: these are suggestions from roster shape
+    // + real league-wide add trends, NOT a projection-ranked waiver board.
+    const result = {
+      ...raw,
+      basis: 'roster_composition_and_league_trending_adds',
+      usesProjections: false,
+      limitations: [
+        'Suggestions reflect roster composition and league-wide add activity — not projected points.',
+        'For a projection-ranked waiver board, use the Waiver Assistant in your league.',
+      ],
+    }
 
     // Write to AiResult cache (fire-and-forget).
     writeAiResultCache({
@@ -181,11 +210,11 @@ Provide up to 5 objects. dropPlayer should name a realistic cut from the user's 
       scopeId: leagueId,
       provider: 'anthropic',
       inputJson: { leagueId, userId: targetUserId, sport: bundle.sport, week: weekTag },
-      resultJson: raw,
+      resultJson: result,
       ttlMs: WAIVER_RECS_TTL_MS,
     }).catch(() => undefined)
 
-    return NextResponse.json(raw)
+    return NextResponse.json(result)
   } catch (e) {
     const msg = e instanceof Error ? e.message : 'Waiver recommendations failed'
     console.error('[api/ai/waiver-recs]', e)

@@ -88,7 +88,7 @@ type DraftPoolCacheModel = {
 }
 
 function getDraftPoolCacheModel(): DraftPoolCacheModel | null {
-  return (prisma as { draftPoolCache?: DraftPoolCacheModel }).draftPoolCache ?? null
+  return (prisma as unknown as { draftPoolCache?: DraftPoolCacheModel }).draftPoolCache ?? null
 }
 
 export const DRAFT_POOL_CACHE_VERSION = 'dbmerge_v4:nflproj_v2:nflfoundation_v1'

@@ -55,9 +55,40 @@ export function gradeTrade(
   profiles?: { a?: TeamProfile; b?: TeamProfile },
 ): { grade: TradeGrade; commissionerReview: CommissionerReview } {
   const valueDifference = sideA.total - sideB.total
+  const confidenceScore = computeConfidence([sideA, sideB])
+
+  // HONESTY PASS: when nothing on either side resolved to a real value, the
+  // old math produced |diff| = 0 over a denominator floor of 1 → fairness 100
+  // → "A+ / within normal market range", and commissionerReview.
+  // reviewRecommended = false. That is the engine asserting a trade is fair
+  // when it knows nothing about it. Refuse to grade instead.
+  const hasAnyValue = sideA.total > 0 || sideB.total > 0
+  if (!hasAnyValue) {
+    return {
+      grade: {
+        grade: null,
+        valueDifference: 0,
+        fairnessScore: null,
+        confidenceScore,
+        insufficientData: true,
+        bullets: [
+          'Not enough value data to grade this trade — no asset on either side resolved to a known value.',
+          'Add player projections or market values for these assets, then re-run.',
+        ],
+      },
+      commissionerReview: {
+        fairnessScore: null,
+        lopsided: false,
+        // Ungradeable ≠ approved. A human should look rather than the system
+        // implying the trade cleared review.
+        reviewRecommended: true,
+        similarValueRange: null,
+      },
+    }
+  }
+
   const denom = Math.max(sideA.total, sideB.total, 1)
   const fairnessScore = Math.round(100 - clamp((Math.abs(valueDifference) / denom) * 100, 0, 100))
-  const confidenceScore = computeConfidence([sideA, sideB])
   const grade = letterFor(fairnessScore)
 
   const bullets: string[] = []
@@ -103,7 +134,7 @@ export function gradeTrade(
   }
 
   return {
-    grade: { grade, valueDifference, fairnessScore, confidenceScore, bullets },
+    grade: { grade, valueDifference, fairnessScore, confidenceScore, insufficientData: false, bullets },
     commissionerReview,
   }
 }

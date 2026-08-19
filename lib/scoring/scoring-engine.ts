@@ -106,18 +106,20 @@ export async function scoreLeagueWeek(input: {
     const rosterPlayerIds = getRosterPlayerIds(roster.playerData)
     if (rosterPlayerIds.length === 0) continue
 
-    const derivedStarterIds = bestBallEnabled
-      ? (
-          await selectBestBallLineupForRoster({
-            leagueId: league.id,
-            leagueSport: league.sport as LeagueSport,
-            season: input.season,
-            weekOrRound: input.weekOrRound,
-            rosterPlayerIds,
-            formatType,
-          })
-        ).starterIds
-      : []
+    // On UNAVAILABLE/unfillable the engine returns EMPTY starterIds by contract, so the
+    // fallback below uses the roster's actual starters instead of an arbitrary all-zero
+    // "optimized" lineup. The status is persisted so the stored score is auditable.
+    const bestBallResult = bestBallEnabled
+      ? await selectBestBallLineupForRoster({
+          leagueId: league.id,
+          leagueSport: league.sport as LeagueSport,
+          season: input.season,
+          weekOrRound: input.weekOrRound,
+          rosterPlayerIds,
+          formatType,
+        })
+      : null
+    const derivedStarterIds = bestBallResult?.starterIds ?? []
 
     const starterIds = derivedStarterIds.length > 0 ? derivedStarterIds : extractStarterIds(roster.playerData)
     const score = await computeRosterScoreForWeek({
@@ -148,6 +150,7 @@ export async function scoreLeagueWeek(input: {
         data: {
           starterIds: starterIds.length > 0 ? starterIds : rosterPlayerIds,
           bestBallEnabled,
+          bestBallStatus: bestBallResult?.status ?? null,
           byPlayerId: score.byPlayerId,
         },
       },
@@ -160,6 +163,7 @@ export async function scoreLeagueWeek(input: {
         data: {
           starterIds: starterIds.length > 0 ? starterIds : rosterPlayerIds,
           bestBallEnabled,
+          bestBallStatus: bestBallResult?.status ?? null,
           byPlayerId: score.byPlayerId,
         },
       },

@@ -35,7 +35,6 @@ describe('LegacySnapshotCard — Phase 4.3 upgrade (structural)', () => {
       'data-testid={testid}',
       'legacy-stat-rank',
       'legacy-stat-tier',
-      'legacy-stat-archetype',
       'legacy-stat-xp',
     ]) {
       expect(snapshotSrc).toContain(t)

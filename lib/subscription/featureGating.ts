@@ -13,14 +13,13 @@ const PLAN_UPGRADE_URLS: Record<string, string> = {
   pro: "/pro",
   commissioner: "/commissioner-upgrade",
   war_room: "/war-room",
-  all_access: "/pricing",
   supreme: "/pricing",
 }
 
 const PLAN_DISPLAY: Record<string, string> = {
   af_pro: "AF Pro",
   af_commissioner: "AF Commissioner",
-  af_war_room: "AF War Room",
+  af_war_room: "AF Legacy",
   af_supreme: "AF Supreme",
 }
 

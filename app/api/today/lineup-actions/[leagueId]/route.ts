@@ -8,8 +8,43 @@ import { buildAiTimeContextPayload } from '@/lib/time-engine/userContext'
 import { estimateNextWaiversProcessUTC } from '@/lib/time-engine/estimateWaiverRun'
 import type { FantasyTimeEngineExtras } from '@/lib/time-engine/fantasyTimePayload'
 import { getServerNowUTC } from '@/lib/time-engine/serverClock'
+import { prisma } from '@/lib/prisma'
+import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
+import { CertifiedLineupIntegrationService, extractPlayerRefs } from '@/lib/fantasy-os/sports-runtime/lineupIntegration'
+import { weekFromLeagueSettingsForLineup } from '@/lib/roster/buildPersistedRosterDataFromRosterState'
 
 export const dynamic = 'force-dynamic'
+
+/**
+ * Gated, informational-only certified schedule urgency for this league's starters. Exposes kickoff countdown,
+ * lock urgency, delayed/unavailable schedule state. It NEVER mutates a lineup and NEVER changes the action list —
+ * the existing computeLineupActionsForUser output is the authority. Wrapped so it can never fail the route.
+ */
+async function buildSportsScheduleUrgency(leagueId: string, userId: string, now: Date) {
+  const league = await prisma.league.findFirst({ where: { id: leagueId }, select: { sport: true, season: true, settings: true } })
+  if (!league || String(league.sport ?? 'NFL').toUpperCase() !== 'NFL') return undefined
+  const roster = await prisma.roster.findFirst({ where: { leagueId, platformUserId: userId }, select: { playerData: true } })
+  const refs = extractPlayerRefs(roster?.playerData)
+  const week = weekFromLeagueSettingsForLineup(league.settings)
+  const season = league.season ?? now.getFullYear()
+  const desc = await new CertifiedLineupIntegrationService().describeScheduleForPlayers({ season: String(season), week: String(week), players: refs, now })
+  const kickoffs = desc.players.map((p) => p.kickoff).filter((k): k is string => !!k).map((k) => new Date(k).getTime()).filter((t) => Number.isFinite(t))
+  const nextKickoff = kickoffs.length > 0 ? Math.min(...kickoffs) : null
+  return {
+    featureGateEnabled: true,
+    scheduleAvailable: desc.available,
+    scheduleDelayed: desc.freshnessStatus !== 'current',
+    freshnessStatus: desc.freshnessStatus,
+    identityStatus: desc.identityStatus,
+    snapshotVersion: desc.snapshotVersion,
+    nextKickoffAt: nextKickoff ? new Date(nextKickoff).toISOString() : null,
+    minutesToNextKickoff: nextKickoff ? Math.max(0, Math.round((nextKickoff - now.getTime()) / 60000)) : null,
+    lockedStarters: desc.players.filter((p) => p.locked).length,
+    lockUrgency: desc.available && desc.players.some((p) => p.locked) ? 'locked' : 'none',
+    unsupported: desc.unsupported,
+    informationalOnly: true as const,
+  }
+}
 
 export async function GET(
   _req: Request,
@@ -59,5 +94,15 @@ export async function GET(
     schemaVersion: 1 as const,
     time: await buildAiTimeContextPayload(userId, timeExtras),
   }
-  return NextResponse.json({ ...withChimmy, intelligence })
+
+  let sportsSchedule: Awaited<ReturnType<typeof buildSportsScheduleUrgency>>
+  if (isSportsDataEnabled('lineup')) {
+    try {
+      sportsSchedule = await buildSportsScheduleUrgency(leagueId, userId, new Date())
+    } catch {
+      sportsSchedule = undefined
+    }
+  }
+
+  return NextResponse.json({ ...withChimmy, intelligence, ...(sportsSchedule ? { sportsSchedule } : {}) })
 }

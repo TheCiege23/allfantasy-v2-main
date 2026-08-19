@@ -14,11 +14,13 @@ describe("Monetization catalog", () => {
   it("contains required subscription and token SKUs", () => {
     const catalog = getMonetizationCatalog()
 
-    expect(catalog.subscriptions.length).toBe(10)
+    expect(catalog.subscriptions.length).toBe(8)
     expect(catalog.tokenPacks.length).toBe(3)
-    expect(catalog.all.length).toBe(13)
+    expect(catalog.all.length).toBe(11)
 
     expect(getMonetizationCatalogItemBySku("af_supreme_monthly")?.amountUsd).toBe(19.99)
+    // Must match subscription-policy.ts's supreme.monthlyIncludedPremiumCredits — the amount
+    // actually granted by the invoice.payment_succeeded webhook (Billing Truth fix).
     expect(getMonetizationCatalogItemBySku("af_supreme_monthly")?.tokenAmount).toBe(1000)
     expect(getMonetizationCatalogItemBySku("af_supreme_yearly")?.amountUsd).toBe(199.99)
     expect(getMonetizationCatalogItemBySku("af_supreme_yearly")?.tokenAmount).toBe(15000)

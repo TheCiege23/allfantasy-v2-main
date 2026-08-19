@@ -17,6 +17,7 @@ import {
 } from "@/lib/notification-settings"
 import { NotificationCategoryRenderer } from "@/components/notification-settings/NotificationCategoryRenderer"
 import type { SettingsProfile } from "./settings-types"
+import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
@@ -257,6 +258,23 @@ export function NotificationsSettingsSection({
           </label>
         </div>
         <p className="text-xs text-[var(--muted)]">{t("settings.notifications.globalHint")}</p>
+      </div>
+
+      {/*
+        Per-DEVICE browser push, distinct from the category toggles below.
+        Those are account preferences; this is a subscription held by this
+        browser, and it is what the injured-starter sweep actually delivers
+        through. Without it that sweep has nobody to notify.
+      */}
+      <div
+        className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--panel2)] p-4"
+        data-testid="notifications-webpush-card"
+      >
+        <p className="text-sm font-medium text-[var(--text)]">
+          {t("settings.notifications.pushTitle")}
+        </p>
+        <EnableWebPushCard />
+        <p className="text-xs text-[var(--muted)]">{t("settings.notifications.pushHint")}</p>
       </div>
 
       <div className="rounded-xl border border-white/[0.08] bg-[#1a1f3a]/90 p-4 space-y-3">

@@ -1,0 +1,38 @@
+{
+  "name": "@allfantasy/widget-react",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AllFantasy Widget SDK — React adapter: useAllFantasyWidget hook + WidgetRenderBoundary/AllFantasyWidget components (Phase 7.8/7.18). Renders IPM presentation models fetched through the framework-agnostic runtime core. Computes nothing — every score/severity/color rendered arrives pre-resolved from the wire. Consumes only the frozen lib/decision-os/sdk + lib/decision-os/presentation/widget-contracts contracts, plus the framework-agnostic runtime core (PHASE_7_5_WIDGET_RUNTIME_BOUNDARY_ADR.md).",
+  "type": "module",
+  "types": "./dist/sdk-runtime/react/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk-runtime/react/src/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

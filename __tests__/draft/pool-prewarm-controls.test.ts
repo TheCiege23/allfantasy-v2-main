@@ -7,11 +7,13 @@
  *   hit the same serverless function instances, causing DB contention and
  *   blocking the resume response for 90 s.
  *
- * New behavior:
- *   - checkDraftPoolCacheFast: DB-only check, returns in <50 ms.
- *   - Cold path: triggerDraftPoolPrewarmBackground fires fire-and-forget,
- *     and start/resume proceed immediately.
- *   - Warm path: resume proceeds without building the pool.
+ * Current behavior:
+ *   - getDraftPoolReadiness is the canonical readiness contract.
+ *   - checkDraftPoolCacheFast delegates to readiness and remains cache-only.
+ *   - Cold start: triggerDraftPoolPrewarmBackground fires fire-and-forget,
+ *     and start returns POOL_NOT_READY until the pool is ready.
+ *   - Cold resume: triggerDraftPoolPrewarmBackground fires fire-and-forget,
+ *     and resume still proceeds so paused clocks can recover.
  *   - pause: no pool check at all.
  *   - [draft-perf] logs at every decision point.
  *
@@ -19,12 +21,12 @@
  *   1.  checkDraftPoolCacheFast is exported from ensureDraftPoolReady.ts.
  *   2.  checkDraftPoolCacheFast does NOT call getResolvedDraftPoolForLeague.
  *   3.  triggerDraftPoolPrewarmBackground is exported and calls ensureDraftPoolReady.
- *   4.  Controls resume uses checkDraftPoolCacheFast, NOT ensureDraftPoolReady directly.
- *   5.  Controls start uses checkDraftPoolCacheFast, NOT ensureDraftPoolReady directly.
+ *   4.  Controls resume uses getDraftPoolReadiness, NOT ensureDraftPoolReady directly.
+ *   5.  Controls start uses getDraftPoolReadiness, NOT ensureDraftPoolReady directly.
  *   6.  Cold resume: triggerDraftPoolPrewarmBackground called + resume proceeds.
  *   7.  Cold resume: resumeDraftSession IS called (timer is not stuck paused).
  *   8.  Warm resume: resumeDraftSession IS called.
- *   9.  Cold start: triggerDraftPoolPrewarmBackground called + start proceeds.
+ *   9.  Cold start: triggerDraftPoolPrewarmBackground called + start returns POOL_NOT_READY.
  *   10. Warm start: startDraftSession IS called.
  *   11. Pause: no checkDraftPoolCacheFast call at all.
  *   12. [draft-perf] log emitted by checkDraftPoolCacheFast.
@@ -66,11 +68,11 @@ describe('Invariant 2: checkDraftPoolCacheFast does not cold-build', () => {
     expect(body).not.toContain('getResolvedDraftPoolForLeague')
   })
 
-  it('checkDraftPoolCacheFast only does a DB findFirst query', () => {
+  it('checkDraftPoolCacheFast delegates through getDraftPoolReadiness', () => {
     const funcStart = prewarmSrc.indexOf('export async function checkDraftPoolCacheFast(')
     const funcEnd = prewarmSrc.indexOf('\nexport function triggerDraftPoolPrewarmBackground(')
     const body = prewarmSrc.slice(funcStart, funcEnd)
-    expect(body).toContain('model.findFirst(')
+    expect(body).toContain('getDraftPoolReadiness(leagueId)')
   })
 
   it('checkDraftPoolCacheFast emits [draft-perf] log', () => {
@@ -105,17 +107,17 @@ describe('Invariant 3: triggerDraftPoolPrewarmBackground fires ensureDraftPoolRe
 // Invariant 4-5: controls route uses fast check, not blocking build
 // ---------------------------------------------------------------------------
 
-describe('Invariant 4: controls resume uses checkDraftPoolCacheFast not ensureDraftPoolReady directly', () => {
-  it('imports checkDraftPoolCacheFast from the prewarm lib', () => {
-    expect(controlsSrc).toContain('checkDraftPoolCacheFast')
+describe('Invariant 4: controls resume uses getDraftPoolReadiness not ensureDraftPoolReady directly', () => {
+  it('imports getDraftPoolReadiness from the prewarm lib', () => {
+    expect(controlsSrc).toContain('getDraftPoolReadiness')
     expect(controlsSrc).toContain("from '@/lib/draft-room/ensureDraftPoolReady'")
   })
 
-  it('resume branch calls checkDraftPoolCacheFast', () => {
+  it('resume branch calls getDraftPoolReadiness', () => {
     const resumeIdx = controlsSrc.indexOf("if (action === 'resume')")
     expect(resumeIdx).toBeGreaterThan(-1)
     const block = controlsSrc.slice(resumeIdx, resumeIdx + 600)
-    expect(block).toContain('checkDraftPoolCacheFast(leagueId)')
+    expect(block).toContain('getDraftPoolReadiness(leagueId)')
   })
 
   it('resume branch does NOT call ensureDraftPoolReady synchronously (await)', () => {
@@ -126,12 +128,12 @@ describe('Invariant 4: controls resume uses checkDraftPoolCacheFast not ensureDr
   })
 })
 
-describe('Invariant 5: controls start uses checkDraftPoolCacheFast not ensureDraftPoolReady directly', () => {
-  it('start branch calls checkDraftPoolCacheFast', () => {
+describe('Invariant 5: controls start uses getDraftPoolReadiness not ensureDraftPoolReady directly', () => {
+  it('start branch calls getDraftPoolReadiness', () => {
     const startIdx = controlsSrc.indexOf("if (action === 'start')")
     expect(startIdx).toBeGreaterThan(-1)
     const block = controlsSrc.slice(startIdx, startIdx + 600)
-    expect(block).toContain('checkDraftPoolCacheFast(leagueId)')
+    expect(block).toContain('getDraftPoolReadiness(leagueId)')
   })
 
   it('start branch does NOT await ensureDraftPoolReady synchronously', () => {
@@ -196,18 +198,18 @@ describe('Invariant 9: cold start fires background prewarm + proceeds', () => {
     expect(block).toContain('triggerDraftPoolPrewarmBackground(leagueId)')
   })
 
-  it('start cold path does not return POOL_NOT_READY', () => {
+  it('start cold path returns POOL_NOT_READY until the pool is ready', () => {
     const startIdx = controlsSrc.indexOf("if (action === 'start')")
-    const block = controlsSrc.slice(startIdx, startIdx + 700)
-    expect(block).not.toContain('POOL_NOT_READY')
-    expect(block).not.toContain('503')
+    const block = controlsSrc.slice(startIdx, startIdx + 1100)
+    expect(block).toContain('POOL_NOT_READY')
+    expect(block).toContain('Preparing player pool. Try again in a few seconds.')
   })
 })
 
 describe('Invariant 10: warm start calls startDraftSession', () => {
   it('start branch contains startDraftSession(leagueId) after the warm-cache check', () => {
     const startIdx = controlsSrc.indexOf("if (action === 'start')")
-    const block = controlsSrc.slice(startIdx, startIdx + 800)
+    const block = controlsSrc.slice(startIdx, startIdx + 1400)
     expect(block).toContain('startDraftSession(leagueId)')
   })
 })
@@ -305,8 +307,8 @@ const getServerSessionMock = vi.hoisted(() =>
 const assertLeagueActionGateMock = vi.hoisted(() =>
   vi.fn(async () => ({ ok: true as const })),
 )
-const checkDraftPoolCacheFastMock = vi.hoisted(() =>
-  vi.fn(async (_leagueId: string) => ({ warm: true })),
+const getDraftPoolReadinessMock = vi.hoisted(() =>
+  vi.fn(async (_leagueId: string) => ({ warm: true, ready: true, source: 'db-cache', entryCount: 300, syncedAt: null, cacheKey: 'cache-key', sourceFingerprint: null })),
 )
 const triggerDraftPoolPrewarmBackgroundMock = vi.hoisted(() => vi.fn((_leagueId: string) => {}))
 const startDraftSessionMock = vi.hoisted(() => vi.fn(async () => ({ ok: true as const })))
@@ -321,7 +323,8 @@ vi.mock('@/server/services/leagueActionGate', () => ({
   assertLeagueActionGate: (...a: unknown[]) => assertLeagueActionGateMock(...a),
 }))
 vi.mock('@/lib/draft-room/ensureDraftPoolReady', () => ({
-  checkDraftPoolCacheFast: (...a: [string]) => checkDraftPoolCacheFastMock(...a),
+  getDraftPoolReadiness: (...a: [string]) => getDraftPoolReadinessMock(...a),
+  checkDraftPoolCacheFast: (...a: [string]) => getDraftPoolReadinessMock(...a),
   triggerDraftPoolPrewarmBackground: (...a: [string]) => triggerDraftPoolPrewarmBackgroundMock(...a),
   ensureDraftPoolReady: vi.fn(async () => ({ ok: true, source: 'db-cache' as const })),
 }))
@@ -445,18 +448,26 @@ function makeReq(action: string, leagueId = 'league-1') {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  checkDraftPoolCacheFastMock.mockResolvedValue({ warm: true })
+  getDraftPoolReadinessMock.mockResolvedValue({
+    warm: true,
+    ready: true,
+    source: 'db-cache',
+    entryCount: 300,
+    syncedAt: null,
+    cacheKey: 'cache-key',
+    sourceFingerprint: null,
+  })
   startDraftSessionMock.mockResolvedValue({ ok: true })
   resumeDraftSessionMock.mockResolvedValue(true)
   buildSessionSnapshotMock.mockResolvedValue({ draftId: 'draft-1', currentPick: null })
 })
 
 describe('Behavioral: warm resume calls resumeDraftSession and does not return 503', () => {
-  it('calls checkDraftPoolCacheFast before resumeDraftSession', async () => {
+  it('calls getDraftPoolReadiness before resumeDraftSession', async () => {
     const [req, ctx] = makeReq('resume')
     await controlsPOST(req, ctx)
-    expect(checkDraftPoolCacheFastMock).toHaveBeenCalledWith('league-1')
-    const checkOrder = checkDraftPoolCacheFastMock.mock.invocationCallOrder[0]
+    expect(getDraftPoolReadinessMock).toHaveBeenCalledWith('league-1')
+    const checkOrder = getDraftPoolReadinessMock.mock.invocationCallOrder[0]
     const resumeOrder = resumeDraftSessionMock.mock.invocationCallOrder[0]
     expect(checkOrder).toBeLessThan(resumeOrder)
   })
@@ -470,7 +481,15 @@ describe('Behavioral: warm resume calls resumeDraftSession and does not return 5
 
 describe('Behavioral: cold resume triggers prewarm and still resumes', () => {
   it('returns success when cache is cold', async () => {
-    checkDraftPoolCacheFastMock.mockResolvedValueOnce({ warm: false })
+    getDraftPoolReadinessMock.mockResolvedValueOnce({
+      warm: false,
+      ready: false,
+      source: 'cold',
+      entryCount: 0,
+      syncedAt: null,
+      cacheKey: 'cache-key',
+      sourceFingerprint: null,
+    })
     const [req, ctx] = makeReq('resume')
     const res = await controlsPOST(req, ctx)
     expect(res.status).toBe(200)
@@ -480,14 +499,30 @@ describe('Behavioral: cold resume triggers prewarm and still resumes', () => {
   })
 
   it('calls resumeDraftSession when cache is cold', async () => {
-    checkDraftPoolCacheFastMock.mockResolvedValueOnce({ warm: false })
+    getDraftPoolReadinessMock.mockResolvedValueOnce({
+      warm: false,
+      ready: false,
+      source: 'cold',
+      entryCount: 0,
+      syncedAt: null,
+      cacheKey: 'cache-key',
+      sourceFingerprint: null,
+    })
     const [req, ctx] = makeReq('resume')
     await controlsPOST(req, ctx)
     expect(resumeDraftSessionMock).toHaveBeenCalledWith('league-1')
   })
 
   it('calls triggerDraftPoolPrewarmBackground when cache is cold', async () => {
-    checkDraftPoolCacheFastMock.mockResolvedValueOnce({ warm: false })
+    getDraftPoolReadinessMock.mockResolvedValueOnce({
+      warm: false,
+      ready: false,
+      source: 'cold',
+      entryCount: 0,
+      syncedAt: null,
+      cacheKey: 'cache-key',
+      sourceFingerprint: null,
+    })
     const [req, ctx] = makeReq('resume')
     await controlsPOST(req, ctx)
     expect(triggerDraftPoolPrewarmBackgroundMock).toHaveBeenCalledWith('league-1')
@@ -495,29 +530,45 @@ describe('Behavioral: cold resume triggers prewarm and still resumes', () => {
 })
 
 describe('Behavioral: cold start triggers prewarm and still starts', () => {
-  it('returns success when cache is cold', async () => {
-    checkDraftPoolCacheFastMock.mockResolvedValueOnce({ warm: false })
+  it('returns POOL_NOT_READY when cache is cold', async () => {
+    getDraftPoolReadinessMock.mockResolvedValueOnce({
+      warm: false,
+      ready: false,
+      source: 'cold',
+      entryCount: 0,
+      syncedAt: null,
+      cacheKey: 'cache-key',
+      sourceFingerprint: null,
+    })
     const [req, ctx] = makeReq('start')
     const res = await controlsPOST(req, ctx)
-    expect(res.status).toBe(200)
+    expect(res.status).toBe(409)
     const body = await res.json()
-    expect(body.ok).toBe(true)
-    expect(body.action).toBe('start')
+    expect(body.code).toBe('POOL_NOT_READY')
   })
 
-  it('calls startDraftSession when cache is cold', async () => {
-    checkDraftPoolCacheFastMock.mockResolvedValueOnce({ warm: false })
+  it('does not call startDraftSession when cache is cold', async () => {
+    getDraftPoolReadinessMock.mockResolvedValueOnce({
+      warm: false,
+      ready: false,
+      source: 'cold',
+      entryCount: 0,
+      syncedAt: null,
+      cacheKey: 'cache-key',
+      sourceFingerprint: null,
+    })
     const [req, ctx] = makeReq('start')
     await controlsPOST(req, ctx)
-    expect(startDraftSessionMock).toHaveBeenCalledWith('league-1')
+    expect(startDraftSessionMock).not.toHaveBeenCalled()
+    expect(triggerDraftPoolPrewarmBackgroundMock).toHaveBeenCalledWith('league-1')
   })
 })
 
 describe('Behavioral: pause never checks pool cache', () => {
-  it('does NOT call checkDraftPoolCacheFast on pause', async () => {
+  it('does NOT call getDraftPoolReadiness on pause', async () => {
     const [req, ctx] = makeReq('pause')
     await controlsPOST(req, ctx)
-    expect(checkDraftPoolCacheFastMock).not.toHaveBeenCalled()
+    expect(getDraftPoolReadinessMock).not.toHaveBeenCalled()
   })
 
   it('does NOT call triggerDraftPoolPrewarmBackground on pause', async () => {
@@ -568,14 +619,15 @@ describe('Invariant 15: drafts page imports prewarm helpers', () => {
 
 const warmScriptSrc = readFileSync(resolve(root, 'scripts/draft-pool-cache-warm.ts'), 'utf8')
 
-describe('Invariant 16: warm script cache key matches pool route (dbmerge_v4)', () => {
+describe('Invariant 16: warm script cache key matches pool route contract', () => {
   it('warm script uses dbmerge_v4 in buildRouteCacheKey', () => {
     expect(warmScriptSrc).toContain('dbmerge_v4')
     expect(warmScriptSrc).not.toContain('dbmerge_v2')
   })
 
-  it('pool route uses dbmerge_v4 in cacheKey', () => {
-    expect(poolRouteSrc).toContain('dbmerge_v4')
+  it('pool route uses shared draft pool cache key builders instead of a hardcoded legacy version', () => {
+    expect(poolRouteSrc).toContain('buildDraftPoolCacheKey')
+    expect(poolRouteSrc).toContain('resolveDraftPoolCacheContext')
     expect(poolRouteSrc).not.toContain('dbmerge_v2')
   })
 })

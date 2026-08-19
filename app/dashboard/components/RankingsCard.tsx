@@ -39,8 +39,8 @@ type RankApiPayload = {
   rankCalculatedAt?: string | null
   rank?: {
     careerXp: string
-    aiReportGrade: string
-    aiScore: number
+    aiReportGrade: string | null
+    aiScore: number | null
     aiInsight?: string
     careerTierName: string
     careerLevel: number
@@ -153,7 +153,7 @@ export function RankingsCard({
   const xpToNext = nextRow ? Math.max(0, nextRow.minXp - xpTotal) : 0
 
   const chimmyWhyHref = getChimmyChatHrefWithPrompt(
-    `Explain my AF rank (level ${level}, ${levelName}) and AI grade ${aiGrade} using only my imported stats.`,
+    `Explain my AF rank (level ${level}, ${levelName}) and Chimmy grade ${aiGrade} using only my imported stats.`,
     { source: 'dashboard_rankings' },
   )
 

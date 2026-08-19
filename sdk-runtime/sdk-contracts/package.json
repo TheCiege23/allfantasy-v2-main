@@ -1,0 +1,33 @@
+{
+  "name": "@allfantasy/sdk-contracts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AllFantasy Widget SDK — frozen contract types and pure validators (Phase 7.4/7.19/7.20 SDK layer + a curated wire-safe subset of the Phase 7.0 Intelligence Presentation Model). Dependency-graph root for every @allfantasy/widget-* package (PHASE_7_22_SDK_PACKAGING_ADR.md).",
+  "type": "module",
+  "types": "./dist/sdk-runtime/sdk-contracts/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk-runtime/sdk-contracts/src/index.d.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "peerDependencies": {},
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "publishConfig": {
+    "access": "restricted"
+  }
+}

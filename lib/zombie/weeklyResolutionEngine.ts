@@ -1,5 +1,6 @@
 import type { ZombieWeeklyResolution } from '@prisma/client'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { resolveWeeklyInfections } from '@/lib/zombie/infectionEngine'
 import { finalizePendingSerumsForWeek } from '@/lib/zombie/serumEngine'
 import { detectAndProcessBashings } from '@/lib/zombie/bashingEngine'
@@ -183,7 +184,7 @@ export async function runWeeklyResolution(
     where: { zombieLeagueId_week: { zombieLeagueId, week } },
     data: {
       status: 'complete',
-      matchupResults: matchupsJson,
+      matchupResults: toPrismaJsonInput(matchupsJson),
       infectionCount: infection.infectionsCreated,
       hordeSize,
       survivorCount,

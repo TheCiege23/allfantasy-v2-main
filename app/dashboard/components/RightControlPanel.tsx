@@ -29,9 +29,8 @@ function resolvePlanChip(ents: ReturnType<typeof useEntitlements>): {
 } | null {
   if (ents.loading) return null
   if (ents.hasSupreme) return { label: 'AF Supreme', dotClass: 'bg-purple-400' }
-  if (ents.hasAllAccess) return { label: 'AF All-Access', dotClass: 'bg-cyan-400' }
   if (ents.hasCommissioner) return { label: 'AF Commissioner', dotClass: 'bg-amber-400' }
-  if (ents.hasWarRoom) return { label: 'AF War Room', dotClass: 'bg-blue-400' }
+  if (ents.hasWarRoom) return { label: 'AF Legacy', dotClass: 'bg-blue-400' }
   if (ents.hasPro) return { label: 'AF Pro', dotClass: 'bg-cyan-400' }
   return { label: 'Free', dotClass: 'bg-white/30' }
 }
@@ -155,7 +154,7 @@ export function RightControlPanel({
       */}
 
       <div
-        className="relative z-10 m-2 flex min-h-[76px] flex-shrink-0 items-center gap-3 rounded-2xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035))] px-3 py-3 shadow-[0_18px_44px_-30px_rgba(34,211,238,0.75)]"
+        className="relative z-10 m-2 flex min-h-[76px] flex-shrink-0 items-center gap-3 rounded-2xl border border-[#262c6a] bg-[radial-gradient(circle_at_top_left,rgba(255,61,129,0.14),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035))] px-3 py-3 shadow-[0_18px_44px_-30px_rgba(255,61,129,0.6)]"
         data-dashboard-user-id={userId}
         data-dashboard-profile-footer
       >
@@ -176,7 +175,10 @@ export function RightControlPanel({
           {(() => {
             const chip = resolvePlanChip(entitlements)
             if (!chip) return null
-            const hasTokens = !tokenBalance.loading && tokenBalance.balance > 0
+            const visibleTokenCount =
+              !tokenBalance.loading && tokenBalance.balance != null && tokenBalance.balance > 0
+                ? tokenBalance.balance
+                : null
             return (
               <Link
                 href="/settings?tab=billing"
@@ -184,8 +186,17 @@ export function RightControlPanel({
               >
                 <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${chip.dotClass}`} />
                 <span className="truncate text-[9px] font-bold text-white/72">{chip.label}</span>
-                {hasTokens ? (
-                  <span className="text-[9px] text-white/35">· {tokenBalance.balance.toLocaleString()} tokens</span>
+                {visibleTokenCount != null ? (
+                  tokenBalance.isAdminBypassAccount ? (
+                    <span
+                      className="text-[9px] text-white/35"
+                      title="Admin bypass — synthetic balance, no ledger history"
+                    >
+                      · Admin bypass
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-white/35">· {visibleTokenCount.toLocaleString()} tokens</span>
+                  )
                 ) : null}
               </Link>
             )

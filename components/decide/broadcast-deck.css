@@ -1,0 +1,270 @@
+/*
+ * Broadcast Deck — scoped design system for the league "Decide" view.
+ *
+ * Direction approved from the A+C mockup merge: Command Deck's structure
+ * (flat panels, thin solid severity rails, density, tabular numerals) in
+ * Broadcast's voice (heavy italic display type, deep navy ground with corner
+ * glows, magenta→orange gradient reserved for primary CTAs and section marks).
+ *
+ * Every rule is namespaced under .bdx so nothing leaks into the app theme.
+ * Severity NEVER speaks through color alone — every severity chip carries an
+ * icon + text label (accessibility rule, matches the dataviz guard).
+ */
+
+.bdx {
+  --bdx-ground: #0b0e2a;
+  --bdx-panel: #12163e;
+  --bdx-panel-deep: #0d1132;
+  --bdx-border: #262c6a;
+  --bdx-border-soft: #1c2153;
+  --bdx-ink: #f0f2ff;
+  --bdx-ink-mid: #c9cff5;
+  --bdx-ink-dim: #aab1e0;
+  --bdx-ink-faint: #7b83c4;
+  --bdx-ink-ghost: #5d64a3;
+  --bdx-grad: linear-gradient(90deg, #ff3d81, #ff8a3d);
+  --bdx-ok: #3ddc97;
+  --bdx-warn: #ffc53d;
+  --bdx-crit: #ff6b8b;
+  --bdx-info: #7fb3ff;
+
+  position: relative;
+  color: var(--bdx-ink);
+  background:
+    radial-gradient(1100px 520px at 85% -10%, #221a4e 0%, transparent 55%),
+    radial-gradient(900px 500px at -10% 110%, #2a0f33 0%, transparent 50%),
+    var(--bdx-ground);
+  border-radius: 14px;
+  padding: 22px 24px 30px;
+  min-height: 60vh;
+}
+.bdx *, .bdx *::before, .bdx *::after { box-sizing: border-box; }
+
+/* ── Display voice ─────────────────────────────────────────────── */
+.bdx .bdx-disp {
+  font-weight: 900;
+  font-style: italic;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+/* ── Section kicker ────────────────────────────────────────────── */
+.bdx .bdx-kick { display: flex; align-items: center; gap: 12px; margin: 0 0 14px; }
+.bdx .bdx-kick h2 { margin: 0; font-size: 16px; color: var(--bdx-ink); }
+.bdx .bdx-kick h2::after {
+  content: "";
+  display: inline-block;
+  width: 46px; height: 4px;
+  margin-left: 12px;
+  vertical-align: middle;
+  background: var(--bdx-grad);
+  border-radius: 99px;
+}
+.bdx .bdx-kick .bdx-sub { font-size: 12.5px; color: var(--bdx-ink-faint); font-weight: 700; }
+
+/* ── KPI row ───────────────────────────────────────────────────── */
+.bdx .bdx-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 0 0 26px; }
+.bdx .bdx-kpi { padding: 15px 18px; border-radius: 12px; background: var(--bdx-panel); border: 1px solid var(--bdx-border); }
+.bdx .bdx-kpi .v {
+  font-size: 32px; font-weight: 900; font-style: italic;
+  letter-spacing: -0.03em; line-height: 1; font-variant-numeric: tabular-nums;
+}
+.bdx .bdx-kpi .l { font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; margin-top: 9px; color: var(--bdx-ink-faint); font-weight: 800; }
+.bdx .bdx-kpi .d { font-size: 11.5px; margin-top: 3px; color: var(--bdx-ink-dim); }
+
+/* ── Attention queue — flat panels + solid severity rails ──────── */
+.bdx .bdx-queue { display: flex; flex-direction: column; gap: 12px; margin-bottom: 28px; }
+.bdx .bdx-card {
+  border-radius: 12px; padding: 18px 22px;
+  background: var(--bdx-panel);
+  border: 1px solid var(--bdx-border);
+  border-left-width: 3px;
+}
+.bdx .bdx-card.c-warn { border-left-color: var(--bdx-warn); }
+.bdx .bdx-card.c-crit { border-left-color: var(--bdx-crit); }
+.bdx .bdx-card.c-ok   { border-left-color: var(--bdx-ok); }
+.bdx .bdx-card.c-info { border-left-color: var(--bdx-info); }
+.bdx .bdx-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+.bdx .bdx-kind { font-size: 12px; color: var(--bdx-ink-dim); font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: 0.05em; }
+.bdx .bdx-when { font-size: 11.5px; margin-left: auto; color: var(--bdx-ink-ghost); font-weight: 700; }
+
+.bdx .bdx-sev {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; font-weight: 800; font-style: italic; letter-spacing: 0.04em;
+  padding: 3px 9px; border-radius: 999px; text-transform: uppercase;
+}
+.bdx .bdx-sev svg { width: 11px; height: 11px; flex: none; }
+.bdx .bdx-sev.warn { background: #3a2c07; color: var(--bdx-warn); }
+.bdx .bdx-sev.crit { background: #3d1220; color: var(--bdx-crit); }
+.bdx .bdx-sev.ok   { background: #0c3326; color: var(--bdx-ok); }
+.bdx .bdx-sev.info { background: #14285a; color: var(--bdx-info); }
+
+/* ── Trade sides ───────────────────────────────────────────────── */
+.bdx .bdx-trade { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: stretch; margin: 12px 0; }
+.bdx .bdx-side { border-radius: 10px; padding: 12px 14px; background: var(--bdx-panel-deep); border: 1px solid var(--bdx-border); }
+.bdx .bdx-side .dir { font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic; }
+.bdx .bdx-asset { display: flex; align-items: center; gap: 9px; padding: 4px 0; font-size: 14px; font-weight: 600; }
+.bdx .bdx-pos { font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 5px; letter-spacing: 0.05em; background: var(--bdx-border); color: var(--bdx-ink-mid); flex: none; }
+.bdx .bdx-swap { align-self: center; font-size: 18px; opacity: 0.55; }
+
+/* ── Verdict line + confidence meter ───────────────────────────── */
+.bdx .bdx-verdict { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin: 10px 0 12px; }
+.bdx .bdx-call {
+  font-size: 20px; font-weight: 900; font-style: italic; text-transform: uppercase; letter-spacing: -0.01em;
+  background: linear-gradient(90deg, #3ddc97, #a7f3d0);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.bdx .bdx-call.watch { background: linear-gradient(90deg, #ffc53d, #ffe29a); -webkit-background-clip: text; background-clip: text; }
+.bdx .bdx-call.risk  { background: linear-gradient(90deg, #ff6b8b, #ffb3c2); -webkit-background-clip: text; background-clip: text; }
+.bdx .bdx-call.na    { background: none; color: var(--bdx-ink-faint); }
+.bdx .bdx-conf { display: flex; align-items: center; gap: 8px; min-width: 190px; }
+.bdx .bdx-conf .bar { flex: 1; height: 6px; border-radius: 99px; overflow: hidden; background: var(--bdx-border-soft); }
+.bdx .bdx-conf .fill { height: 100%; border-radius: 99px; background: var(--bdx-grad); }
+.bdx .bdx-conf .pct { font-size: 12px; font-weight: 800; color: #ff9d5c; font-variant-numeric: tabular-nums; }
+
+/* ── Why bullets / evidence / uncertainty ──────────────────────── */
+.bdx .bdx-why { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.bdx .bdx-why li { font-size: 13px; line-height: 1.5; padding-left: 16px; position: relative; color: var(--bdx-ink-mid); }
+.bdx .bdx-why li::before {
+  content: ""; position: absolute; left: 2px; top: 0.55em;
+  width: 6px; height: 6px; border-radius: 2px;
+  background: linear-gradient(135deg, #ff3d81, #ff8a3d);
+}
+.bdx .bdx-evrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+.bdx .bdx-ev { font-size: 11.5px; padding: 4px 10px; border-radius: 7px; background: var(--bdx-panel-deep); border: 1px solid var(--bdx-border); color: var(--bdx-ink-dim); }
+.bdx .bdx-ev b { color: var(--bdx-ink); font-variant-numeric: tabular-nums; }
+.bdx .bdx-unc { font-size: 12px; margin-top: 10px; font-style: italic; color: var(--bdx-ink-faint); }
+.bdx .bdx-line { margin-top: 8px; font-size: 13.5px; color: var(--bdx-ink-mid); line-height: 1.55; }
+.bdx .bdx-line b { font-weight: 700; color: var(--bdx-ink); }
+
+/* ── Actions ───────────────────────────────────────────────────── */
+.bdx .bdx-acts { display: flex; gap: 9px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+.bdx .bdx-btn { border-radius: 8px; padding: 9px 16px; font-size: 12.5px; border: 1px solid transparent; background: transparent; cursor: pointer; color: inherit; font-family: inherit; }
+.bdx .bdx-btn.pri { background: var(--bdx-grad); color: #fff; font-weight: 800; font-style: italic; text-transform: uppercase; }
+.bdx .bdx-btn.sec { border-color: #343b7d; color: #d5daff; font-weight: 650; }
+.bdx .bdx-note { font-size: 11.5px; margin-left: auto; color: var(--bdx-ink-ghost); }
+
+/* ── Honest empty / insufficient-data state ────────────────────── */
+.bdx .bdx-empty { border: 1px dashed var(--bdx-border); border-radius: 12px; padding: 18px 22px; }
+.bdx .bdx-empty .t { font-size: 13.5px; font-weight: 700; color: var(--bdx-ink-dim); }
+.bdx .bdx-empty .m { font-size: 12.5px; color: var(--bdx-ink-faint); margin-top: 5px; line-height: 1.55; }
+.bdx .bdx-empty .missing { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 10px; }
+.bdx .bdx-empty .missing span { font-size: 11px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--bdx-border); color: var(--bdx-ink-faint); }
+
+/* ── Support band ──────────────────────────────────────────────── */
+.bdx .bdx-support { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.bdx .bdx-panelbox { border-radius: 12px; padding: 16px 20px 18px; background: var(--bdx-panel); border: 1px solid var(--bdx-border); }
+.bdx .bdx-panelbox h3 { margin: 0 0 12px; font-size: 12px; letter-spacing: 0.08em; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic; text-transform: uppercase; }
+.bdx .bdx-stand { width: 100%; border-collapse: collapse; font-size: 13px; }
+.bdx .bdx-stand td { padding: 6px 4px; border-bottom: 1px solid var(--bdx-border-soft); color: var(--bdx-ink-mid); }
+.bdx .bdx-stand tr:last-child td { border-bottom: 0; }
+.bdx .bdx-stand .rk { width: 26px; font-variant-numeric: tabular-nums; }
+.bdx .bdx-stand .rec { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bdx .bdx-stand tr.me td { color: #fff; background: #1a1f55; font-weight: 800; }
+.bdx .bdx-rows { display: flex; flex-direction: column; }
+.bdx .bdx-row { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--bdx-border-soft); font-size: 13px; }
+.bdx .bdx-row:last-child { border-bottom: 0; }
+.bdx .bdx-row .k { color: var(--bdx-ink-faint); }
+.bdx .bdx-row .x { color: var(--bdx-ink-mid); font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; }
+
+/* ── Loading shimmer ───────────────────────────────────────────── */
+.bdx .bdx-skel { border-radius: 12px; background: var(--bdx-panel); border: 1px solid var(--bdx-border); height: 92px; position: relative; overflow: hidden; }
+.bdx .bdx-skel::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, #ffffff10, transparent);
+  animation: bdx-sweep 1.4s ease-in-out infinite;
+}
+@keyframes bdx-sweep { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { .bdx .bdx-skel::after { animation: none; } }
+
+.bdx .bdx-foot { margin-top: 26px; font-size: 11.5px; text-align: center; color: var(--bdx-ink-ghost); line-height: 1.6; }
+
+@media (max-width: 960px) {
+  .bdx { padding: 16px 14px 24px; }
+  .bdx .bdx-kpis { grid-template-columns: repeat(2, 1fr); }
+  .bdx .bdx-support { grid-template-columns: 1fr; }
+  .bdx .bdx-trade { grid-template-columns: 1fr; }
+  .bdx .bdx-swap { transform: rotate(90deg); justify-self: center; }
+}
+
+/* ── League page canvas — resolve the shell tokens to the deck ground so
+   EVERY tab (home, matchups, players, waivers, trades, standings, commish…)
+   sits on the same Broadcast Deck canvas as the Decide tab, not a foreign
+   near-black. AppShell paints background: var(--bg) / var(--panel2) inline,
+   so overriding the vars here re-skins all three columns at once. ── */
+.af-league-deck-ground {
+  --bg: #0b0e2a;
+  --panel: #12163e;
+  --panel2: #0d1132;
+  --border: #262c6a;
+}
+
+/* ── Strip variant — compact inline strips (e.g. the My Leagues live-draft
+   strip) that borrow the deck chip language but must NOT claim the 60vh
+   canvas floor. Fixes the giant dead gap in the My Leagues side panel. ── */
+.bdx.bdx-strip {
+  min-height: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+/* ── League info rail (slice 2A: replaces the desktop left chat column) ── */
+.bdx.bdx-rail {
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  border-radius: 0;
+  padding: 16px 14px 22px;
+}
+.bdx .bdx-rail-head { margin-bottom: 14px; }
+.bdx .bdx-rail-name { font-size: 17px; line-height: 1.15; letter-spacing: -0.02em; }
+.bdx .bdx-rail-chips { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+.bdx .bdx-chip {
+  font-size: 10.5px; padding: 2px 8px; border-radius: 999px; font-weight: 700;
+  background: #181c44; border: 1px solid #2c3260; color: var(--bdx-ink-dim);
+}
+.bdx .bdx-chip.grad { background: var(--bdx-grad); border: 0; color: #fff; font-style: italic; text-transform: uppercase; }
+.bdx .bdx-rail-sec {
+  border: 1px solid var(--bdx-border);
+  border-radius: 12px;
+  background: var(--bdx-panel);
+  padding: 12px 14px 13px;
+  margin-bottom: 10px;
+}
+.bdx .bdx-rail-sec h3 {
+  margin: 0 0 9px; font-size: 11px; letter-spacing: 0.08em;
+  color: var(--bdx-ink-faint); font-weight: 900; font-style: italic; text-transform: uppercase;
+}
+.bdx .bdx-rail-sec .bdx-row { font-size: 12.5px; padding: 5px 0; }
+.bdx .bdx-rail-sec .bdx-stand { font-size: 12px; }
+.bdx .bdx-rail-sec .bdx-stand td { padding: 4px 3px; }
+.bdx .bdx-rail-sec .bdx-stand .nm { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bdx .bdx-rail-empty { font-size: 12px; color: var(--bdx-ink-faint); }
+.bdx .bdx-rail-link { width: 100%; margin-top: 10px; text-align: center; }
+.bdx .bdx-rail-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.bdx .bdx-rail-nav .bdx-btn { text-align: center; padding: 8px 10px; }
+.bdx .bdx-rail-brand {
+  display: flex; align-items: center; gap: 9px;
+  margin-top: 14px; padding: 4px 2px 0;
+  font-size: 10.5px; line-height: 1.5; color: var(--bdx-ink-ghost);
+}
+.bdx .bdx-rail-brand img { width: 34px; height: 34px; border-radius: 9px; flex: none; }
+.bdx .bdx-rail-brand b { color: var(--bdx-ink-faint); }
+
+/* ── Legacy tab (slice 3) ──────────────────────────────────────── */
+.bdx .bdx-champs { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+.bdx .bdx-champ {
+  border: 1px solid var(--bdx-border); border-radius: 12px; background: var(--bdx-panel);
+  padding: 13px 16px; min-width: 165px; max-width: 240px;
+}
+.bdx .bdx-champ .yr {
+  font-size: 10.5px; color: var(--bdx-ink-faint); font-weight: 900; font-style: italic;
+  text-transform: uppercase; letter-spacing: 0.08em;
+}
+.bdx .bdx-champ .nm { font-size: 15px; font-weight: 800; margin-top: 5px; }
+.bdx .bdx-champ .rec { font-size: 11px; color: var(--bdx-ink-ghost); margin-top: 3px; font-variant-numeric: tabular-nums; }
+.bdx .bdx-stand th {
+  font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--bdx-ink-faint); text-align: left; padding: 5px 4px;
+  border-bottom: 1px solid var(--bdx-border); font-weight: 800;
+}

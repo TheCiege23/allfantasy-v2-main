@@ -13,16 +13,16 @@ export const LANDING_COPY = {
     },
     badge: '✦ Fantasy Sports Only · No Gambling · Free for Players',
     hero: {
-      titleTop: 'Run Your League.',
-      titleBottom: 'Win Your League.',
+      titleTop: 'Every League You Play.',
+      titleBottom: 'One Place.',
       subtitle:
-        'Commissioner-first. 100% fantasy sports — no sportsbook, no gambling. Import any league format and get every manager competing in minutes.',
+        'Bring Sleeper, ESPN, Yahoo and more into one command center that shows what needs your attention, who to start, and where to go. 100% fantasy sports — no sportsbook, no gambling.',
       primary: 'Get Started Free →',
       commissionerPrimary: 'Start a League',
       secondary: 'Sign In',
       alreadyHaveAccount: 'Already have an account? Sign in',
       primaryAuthed: 'Go to Dashboard →',
-      reassurance: 'Free for players · Commissioners from $4.99/mo · Cancel anytime',
+      reassurance: 'Free for players · Commissioners from $14.99/mo · Cancel anytime',
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Soccer'],
     trust: [
@@ -165,7 +165,7 @@ export const LANDING_COPY = {
         cta: 'Start Your Championship Run',
       },
       decisionOS: {
-        eyebrow: 'Decision OS',
+        eyebrow: 'Always-On Insight',
         title: 'Always Watching.\nNever In The Way.',
         subtitle: 'A quiet layer running behind every league — checking trade fairness, league health, and engagement so problems get caught before they start.',
         cards: [
@@ -221,7 +221,7 @@ export const LANDING_COPY = {
       secondary: 'Iniciar sesión',
       alreadyHaveAccount: '¿Ya tienes cuenta? Inicia sesión',
       primaryAuthed: 'Ir al panel →',
-      reassurance: 'Gratis para jugadores · Comisionados desde $4.99/mes · Cancela cuando quieras',
+      reassurance: 'Gratis para jugadores · Comisionados desde $14.99/mes · Cancela cuando quieras',
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Soccer'],
     trust: [
@@ -364,7 +364,7 @@ export const LANDING_COPY = {
         cta: 'Empieza tu carrera al campeonato',
       },
       decisionOS: {
-        eyebrow: 'Decision OS',
+        eyebrow: 'Always-On Insight',
         title: 'Siempre vigilando.\nNunca en el camino.',
         subtitle: 'Una capa silenciosa que corre detrás de cada liga — revisando equidad en los trades, salud de la liga y participación para detectar problemas antes de que empiecen.',
         cards: [
@@ -420,7 +420,7 @@ export const LANDING_COPY = {
       secondary: '登录',
       alreadyHaveAccount: '已有账户？登录',
       primaryAuthed: '前往控制台 →',
-      reassurance: '玩家免费 · 赛区长 $4.99/月起 · 随时取消',
+      reassurance: '玩家免费 · 赛区长 $14.99/月起 · 随时取消',
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', '足球'],
     trust: [
@@ -563,7 +563,7 @@ export const LANDING_COPY = {
         cta: '开启你的争冠之路',
       },
       decisionOS: {
-        eyebrow: 'Decision OS',
+        eyebrow: 'Always-On Insight',
         title: '始终在关注。\n从不打扰。',
         subtitle: '一个在每个联赛背后安静运行的层级 — 检查交易公平性、联赛健康度和参与度，在问题发生前就将其发现。',
         cards: [
@@ -619,7 +619,7 @@ export const LANDING_COPY = {
       secondary: 'Mag-sign In',
       alreadyHaveAccount: 'May account na? Mag-sign in',
       primaryAuthed: 'Pumunta sa Dashboard →',
-      reassurance: 'Libre para sa mga manlalaro · Commissioner mula $4.99/buwan · Kanselahin anumang oras',
+      reassurance: 'Libre para sa mga manlalaro · Commissioner mula $14.99/buwan · Kanselahin anumang oras',
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Soccer'],
     trust: [
@@ -762,7 +762,7 @@ export const LANDING_COPY = {
         cta: 'Simulan ang Iyong Championship Run',
       },
       decisionOS: {
-        eyebrow: 'Decision OS',
+        eyebrow: 'Always-On Insight',
         title: 'Palaging Nagmamasid.\nHindi Kailanman Nakakaabala.',
         subtitle: 'Isang tahimik na layer na tumatakbo sa likod ng bawat liga — sinusuri ang trade fairness, kalusugan ng liga, at engagement para mahuli ang mga problema bago pa man ito magsimula.',
         cards: [
@@ -818,7 +818,7 @@ export const LANDING_COPY = {
       secondary: 'Đăng nhập',
       alreadyHaveAccount: 'Đã có tài khoản? Đăng nhập',
       primaryAuthed: 'Đến Bảng Điều Khiển →',
-      reassurance: 'Miễn phí cho người chơi · Commissioner từ $4.99/tháng · Hủy bất cứ lúc nào',
+      reassurance: 'Miễn phí cho người chơi · Commissioner từ $14.99/tháng · Hủy bất cứ lúc nào',
     },
     sports: ['NFL', 'NBA', 'NHL', 'MLB', 'NCAA', 'Bóng đá'],
     trust: [
@@ -961,7 +961,7 @@ export const LANDING_COPY = {
         cta: 'Bắt Đầu Hành Trình Vô Địch Của Bạn',
       },
       decisionOS: {
-        eyebrow: 'Decision OS',
+        eyebrow: 'Always-On Insight',
         title: 'Luôn Dõi Theo.\nKhông Bao Giờ Cản Đường.',
         subtitle: 'Một lớp âm thầm chạy phía sau mọi giải đấu — kiểm tra công bằng giao dịch, sức khỏe giải đấu, và mức độ tham gia để phát hiện vấn đề trước khi chúng bắt đầu.',
         cards: [

@@ -9,6 +9,7 @@
  */
 import * as fs from 'fs'
 import * as path from 'path'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 // Static `import` of lib/prisma would be hoisted ahead of any top-level dotenv.config()
 // call (ESM/esbuild hoisting), so its module-level getDatabaseUrlOrThrow() would run
@@ -27,6 +28,9 @@ const DEV_USER_LOOKUP = {
 }
 
 async function main() {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeSeedTarget('seed-managed-only-dev-league')
+
   const { prisma } = await import('../lib/prisma')
 
   const localDevUser = await prisma.appUser.findFirst({

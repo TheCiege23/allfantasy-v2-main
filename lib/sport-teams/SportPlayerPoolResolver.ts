@@ -10,6 +10,7 @@ import { prisma } from '@/lib/prisma'
 import type { SportType, PoolPlayerRecord } from './types'
 import { leagueSportToSportType } from '@/lib/multi-sport/SportConfigResolver'
 import { getTeamIdByAbbreviationMap } from './SportTeamMetadataRegistry'
+import { formatNflTeamDefenseName } from '@/lib/redraft/teamDefenseIdentity'
 
 const SPORT_STR: Record<LeagueSport, string> = {
   NFL: 'NFL',
@@ -83,11 +84,15 @@ function isHttpImage(url: string | null | undefined): boolean {
 
 function sourceRank(source: string | null | undefined): number {
   const s = String(source ?? '').trim().toLowerCase()
-  if (s === 'thesportsdb') return 5
-  if (s === 'sleeper') return 4
-  if (s === 'api_sports' || s === 'api-sports') return 3
-  if (s === 'backfill') return 2
-  if (s === 'rolling_insights') return 1
+  // CFBD is the authoritative current-season source for NCAAF rosters, so a
+  // fresh CFBD row should win dedup over a stale rolling_insights duplicate.
+  if (s === 'cfbd') return 7
+  if (s === 'thesportsdb') return 6
+  if (s === 'clearsports') return 5
+  if (s === 'api_sports' || s === 'api-sports') return 4
+  if (s === 'rolling_insights') return 3
+  if (s === 'sleeper') return 2
+  if (s === 'backfill') return 1
   return 0
 }
 
@@ -101,6 +106,41 @@ function sportsPlayerQuality(row: {
   if (String(row.sleeperId ?? '').trim()) score += 50
   score += sourceRank(row.source) * 10
   return score
+}
+
+/**
+ * Real, provider-agnostic fantasy-relevance signal for pool selection priority
+ * (Phase 27, refined Phase 28). Returns a Map of `playerKey` (already
+ * `name|position`, lowercased, matching this file's own key format) to that
+ * player's BEST (lowest/most-relevant) real `averageOverallPick` across all
+ * league/scoring contexts -- deliberately broad, not scoped to one specific
+ * league's exact settings, since the goal here is only "how fantasy-relevant
+ * is this player," not "what is their ADP in this exact format."
+ * `averageOverallPick` is a non-nullable schema field (verified this phase),
+ * so every real ADP row always carries a usable rank. A player with multiple
+ * snapshot rows (one per tracked context) is deliberately represented by
+ * their single best real rank, not an average-of-averages -- a simple,
+ * deterministic, real-data-only choice. Never throws: a query failure
+ * degrades to an empty map, which makes the caller's sort a no-op (pure
+ * alphabetical, matching pre-Phase-27 behavior) rather than a hard error.
+ */
+async function loadAdpRankByPlayerKey(sport: string): Promise<Map<string, number>> {
+  try {
+    const rows = await prisma.allFantasyAdpSnapshot.findMany({
+      where: { sport },
+      select: { playerKey: true, averageOverallPick: true },
+    })
+    const bestRankByKey = new Map<string, number>()
+    for (const row of rows) {
+      const current = bestRankByKey.get(row.playerKey)
+      if (current === undefined || row.averageOverallPick < current) {
+        bestRankByKey.set(row.playerKey, row.averageOverallPick)
+      }
+    }
+    return bestRankByKey
+  } catch {
+    return new Map()
+  }
 }
 
 function normalizePositionFilter(sport: string, position?: string): string[] | null {
@@ -144,16 +184,20 @@ export async function getPlayerPoolForSport(
   }
 
   const requestedTake = options?.limit ?? 2000
-  let take = requestedTake
-  const countFn = (prisma.sportsPlayer as { count?: (args: { where: typeof where }) => Promise<number> }).count
-  if (typeof countFn === 'function') {
-    const totalMatching = await countFn.call(prisma.sportsPlayer, { where })
-    take = Math.min(requestedTake, Math.max(totalMatching, 0))
-  }
 
+  // Phase 26 fix: do NOT cap raw rows at requestedTake before dedup. SportsPlayer
+  // has heavy cross-source duplication (measured in production: 17,257 raw NFL
+  // rows for only 12,004 distinct names, across up to 7 known import sources --
+  // see sourceRank() below). An alphabetically-ordered `take` applied BEFORE
+  // dedup can be entirely consumed by duplicate rows for names sharing an early
+  // alphabetical range, silently excluding the majority of the real roster
+  // (measured: a take:800 query never advanced past "Anthony Jones"). Fetch all
+  // matching rows instead, dedupe fully, then apply the requested limit to the
+  // deduplicated, distinct-player result below. All real sport row counts are
+  // bounded (largest measured: NCAAF at ~45,000 rows) -- a safe volume for a
+  // single query.
   const rows = await prisma.sportsPlayer.findMany({
     where,
-    ...(take > 0 ? { take } : {}),
     orderBy: { name: 'asc' },
   })
 
@@ -168,7 +212,36 @@ export async function getPlayerPoolForSport(
       bestByKey.set(key, row)
     }
   }
+
+  // Phase 27 fix: alphabetical order alone is not a fantasy-relevance signal.
+  // Measured in production: with 12,004 distinct NFL names and a limit of 800,
+  // the pool never reached past "Arjen Colquhoun" -- real, ADP-tracked stars
+  // (Saquon Barkley, Justin Jefferson, etc.) never appeared, regardless of
+  // dedup correctness (Phase 26 fixed dedup; this fixes selection). Prioritize
+  // players with a real AllFantasy ADP entry (AllFantasy's own aggregated,
+  // provider-agnostic signal -- not tied to Sleeper/ESPN/any single provider)
+  // ahead of players without one.
+  //
+  // Phase 28 refinement: Phase 27's alphabetical tiebreak WITHIN the ADP tier
+  // itself could still exclude a real top-ADP late-alphabet star at a
+  // constrained limit (measured: Saquon Barkley excluded at limit:250, a real
+  // Waiver-shaped call, while lower-relevance early-alphabet ADP players filled
+  // the budget first). Now sorts the ADP tier by real ADP rank (best/lowest
+  // averageOverallPick first) instead of alphabetically. Tier 2 (no ADP entry)
+  // still falls back to alphabetical order -- both as the tiebreak within Tier 1
+  // (ties on identical rank preserve insertion/alphabetical order, since sort
+  // is stable) and as the complete fallback when a sport has no ADP data at all.
+  const adpRankByKey = await loadAdpRankByPlayerKey(sport)
   const dedupedRows = [...bestByKey.values()]
+    .sort((a, b) => {
+      const aRank = adpRankByKey.get(`${String(a.name ?? '').trim().toLowerCase()}|${String(a.position ?? '').trim().toLowerCase()}`)
+      const bRank = adpRankByKey.get(`${String(b.name ?? '').trim().toLowerCase()}|${String(b.position ?? '').trim().toLowerCase()}`)
+      if (aRank === undefined && bRank === undefined) return 0
+      if (aRank === undefined) return 1
+      if (bRank === undefined) return -1
+      return aRank - bRank
+    })
+    .slice(0, requestedTake)
 
   const primary = dedupedRows.map((r) => ({
     team_abbreviation: r.team ?? null,
@@ -212,7 +285,7 @@ export async function getPlayerPoolForSport(
         league_variant: null,
         team_id: teamId ?? null,
         team: abbr,
-        full_name: `${abbr} Defense`,
+        full_name: formatNflTeamDefenseName(abbr),
         position: 'DEF',
         status: null,
         injury_status: null,

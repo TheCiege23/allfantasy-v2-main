@@ -22,7 +22,6 @@ const LEAGUE_TYPE_LABEL: Record<string, string> = {
   salary_cap: 'Salary Cap',
   survivor: 'Survivor',
   guillotine: 'Guillotine',
-  tournament: 'Tournament',
   devy: 'Devy',
   c2c: 'College to Pros',
   zombie: 'Zombie',
@@ -163,15 +162,7 @@ export function Page4Review({ state, accent, onJump }: Page4ReviewProps) {
             {state.sport === 'SOCCER' && state.soccerPipeline && (
               <Row label="Region" accent={accent} value={SOCCER_PIPELINE_LABEL[state.soccerPipeline] ?? state.soccerPipeline} />
             )}
-            <Row
-              label={lt === 'tournament' ? 'Pool Size' : 'Teams'}
-              accent={accent}
-              value={
-                lt === 'tournament'
-                  ? `${state.teamCount} managers (${Math.floor(state.teamCount / 12)} feeders)`
-                  : state.teamCount
-              }
-            />
+            <Row label="Teams" accent={accent} value={state.teamCount} />
             {lt === 'survivor' ? (
               <Row label="Starting Tribes" accent={accent} value={state.survivorTribeCount} />
             ) : null}

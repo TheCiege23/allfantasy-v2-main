@@ -1,6 +1,7 @@
 import "server-only"
 
 import { prisma } from "@/lib/prisma"
+import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { recordProviderSync } from "@/lib/provider-sync-logger"
 import { normalizePlayerName, normalizeTeamAbbrev } from "@/lib/team-abbrev"
 import { rateLimitManager } from "@/lib/workers/rate-limit-manager"
@@ -459,17 +460,16 @@ async function resolveImportTargets(input: {
       take: input.limit,
     } as any)
     return rows
-      .map((row) => {
+      .flatMap((row): PlayerGameLogImportTarget[] => {
         const id = String((row as Record<string, unknown>)[providerField] ?? "").trim()
         return id
-          ? {
+          ? [{
               providerPlayerId: id,
               playerName: row.canonicalName,
               team: normalizeTeamAbbrev(row.currentTeam) ?? row.currentTeam,
-            }
-          : null
+            }]
+          : []
       })
-      .filter((row): row is PlayerGameLogImportTarget => Boolean(row))
   }
 
   return []
@@ -763,7 +763,7 @@ async function createSyncRun(input: {
         jobScope: `${input.sport}:${input.provider}`,
         trigger: input.trigger,
         status: "running",
-        metadata: input.metadata,
+        metadata: toPrismaJsonInput(input.metadata),
       },
       select: { id: true },
     })
@@ -793,7 +793,7 @@ async function completeSyncRun(input: {
         rowsRead: input.rowsRead,
         rowsWritten: input.rowsWritten,
         rowsSkipped: input.rowsSkipped,
-        metadata: input.metadata,
+        metadata: toPrismaJsonInput(input.metadata),
         errorMessage: input.errorMessage ?? null,
         completedAt: new Date(),
         durationMs,
@@ -968,7 +968,7 @@ export async function importPlayerGameLogs(options: ImportOptions): Promise<Play
           },
         },
         update: {
-          payload: merged.payload,
+          payload: toPrismaJsonInput(merged.payload),
           syncedAt: now,
           expiresAt,
         },
@@ -977,7 +977,7 @@ export async function importPlayerGameLogs(options: ImportOptions): Promise<Play
           sport,
           season,
           seasonType,
-          payload: merged.payload,
+          payload: toPrismaJsonInput(merged.payload),
           syncedAt: now,
           expiresAt,
         },

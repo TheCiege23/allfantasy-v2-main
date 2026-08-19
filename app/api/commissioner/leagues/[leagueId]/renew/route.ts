@@ -14,6 +14,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { notifyCommissionerChange } from '@/lib/commissioner/CommissionerChangeNotifier'
 import { checkAndTriggerRatingIfOffseason } from '@/lib/commissioner/CommissionerRatingTrigger'
 import {
@@ -221,7 +222,7 @@ export async function POST(
       where: { leagueId_season: { leagueId, season: currentSeason } },
       update: {
         status: 'complete',
-        teamRecords: teamRecords as unknown as Record<string, unknown>[],
+        teamRecords: toPrismaJsonInput(teamRecords),
         championName: champion?.ownerName ?? champion?.teamName ?? null,
         runnerUpName: teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null,
         regularSeasonWinnerName: champion?.ownerName ?? champion?.teamName ?? null,
@@ -234,7 +235,7 @@ export async function POST(
         season: currentSeason,
         platformLeagueId: leagueId,
         status: 'complete',
-        teamRecords: teamRecords as unknown as Record<string, unknown>[],
+        teamRecords: toPrismaJsonInput(teamRecords),
         championName: champion?.ownerName ?? champion?.teamName ?? null,
         championAvatar: null,
         runnerUpName: teamRecords[1]?.ownerName ?? teamRecords[1]?.teamName ?? null,
@@ -291,7 +292,7 @@ export async function POST(
     await prisma.roster.updateMany({
       where: { leagueId },
       data: {
-        playerData: {},
+        playerData: toPrismaJsonInput({}),
         faabRemaining: faab,
       },
     })
@@ -345,7 +346,7 @@ export async function POST(
     data: {
       season: nextSeason,
       status: 'pre_draft',
-      settings: updatedSettings,
+      settings: toPrismaJsonInput(updatedSettings),
     },
   })
 

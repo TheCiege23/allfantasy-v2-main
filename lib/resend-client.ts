@@ -63,6 +63,21 @@ export function getResendClient(): ResendClientResult {
   };
 }
 
+/**
+ * Non-throwing check of a Resend send result. The Resend SDK resolves `{ data, error }`
+ * WITHOUT throwing on a provider rejection (unverified domain, sandbox recipient, quota,
+ * etc.), so any caller that ignores `error` silently drops failed sends. Returns a
+ * sanitized, log-safe provider string (message or name only — NEVER the recipient, token,
+ * verification URL, or API key), or null on success.
+ */
+export function resendSendError(
+  result: { error?: { message?: string; name?: string } | null } | null | undefined
+): string | null {
+  const err = result?.error;
+  if (!err) return null;
+  return (err.message && err.message.trim()) || (err.name && err.name.trim()) || "unknown provider error";
+}
+
 function escapeHtml(value: string): string {
   return value
     .replaceAll("&", "&amp;")
@@ -102,10 +117,9 @@ async function sendEmail(params: {
     html: params.html,
   });
 
-  if ("error" in result && result.error) {
-    throw new Error(
-      `[resend] Failed to send email: ${result.error.message || "Unknown error"}`
-    );
+  const sendError = resendSendError(result);
+  if (sendError) {
+    throw new Error(`[resend] Failed to send email: ${sendError}`);
   }
 
   return result;
@@ -182,6 +196,31 @@ export async function sendTradeAlertEmail(
     subject: `${safeAiGrade} Trade in ${safeLeagueName} - AllFantasy.ai`,
     html,
   });
+}
+
+/**
+ * Send an email whose HTML was composed by us and is already escaped at the leaf.
+ *
+ * sendNotificationEmail() takes a param called bodyHtml but strips every tag and
+ * escapes the remainder, so anything richer than a sentence arrives as one flat
+ * paragraph — and entities written into the source (&nbsp;) survive the strip and
+ * then get escaped into visible "&nbsp;" text. That behaviour is the right default
+ * for callers passing interpolated user content, so it stays; this is the path for
+ * a designed template.
+ *
+ * The caller owns escaping. Never hand this raw user input.
+ */
+export async function sendTemplatedEmail(params: {
+  to: string
+  subject: string
+  html: string
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await sendEmail({ to: params.to, subject: params.subject, html: params.html })
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Unknown error" }
+  }
 }
 
 /**

@@ -291,6 +291,7 @@ export async function grantMonthlyCreditsFromInvoice(
   // uses the bare form ("pro").  Strip the prefix for the policy lookup.
   const item = getMonetizationCatalogItemBySku(sub.sku as MonetizationSku)
   if (!item || item.type !== "subscription" || !item.planFamily) return
+  if (item.interval !== "month" && item.interval !== "year") return
 
   const planId = item.planFamily.replace(/^af_/, "") as SubscriptionPlanId
   const tokenAmount = getIncludedPremiumCreditsForSubscription({

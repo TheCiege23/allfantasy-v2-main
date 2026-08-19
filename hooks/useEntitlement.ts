@@ -25,7 +25,7 @@ export interface EntitlementState {
   requiredPlan?: string | null
   upgradePath?: string
   bundleInheritance?: {
-    hasAllAccess: boolean
+    hasSupreme: boolean
     inheritedPlanIds: string[]
     effectivePlanIds: string[]
   } | null
@@ -34,10 +34,18 @@ export interface EntitlementState {
 export interface UseEntitlementResult {
   entitlement: EntitlementState | null
   loading: boolean
+  error: string | null
   featureAccess: boolean
   hasAccess: (featureId: SubscriptionFeatureId) => boolean
   isActiveOrGrace: boolean
   upgradePath: string
+  /**
+   * True when `entitlement` is a synthetic dev-admin grant (lib/dev-admin/access.ts), not a real
+   * Stripe subscription. Mirrors useTokenBalance's isAdminBypassAccount — surfaces rendering a
+   * plan badge/status off this hook must disclose this rather than show it as an indistinguishable
+   * real plan.
+   */
+  isAdminBypassAccount: boolean
   refetch: () => Promise<void>
 }
 
@@ -45,7 +53,6 @@ const ALLOWED_PLAN_IDS = new Set<SubscriptionPlanId>([
   'pro',
   'commissioner',
   'war_room',
-  'all_access',
   'supreme',
 ])
 
@@ -58,7 +65,9 @@ function toPlanIds(plans: string[] | undefined): SubscriptionPlanId[] {
 export function useEntitlement(featureId?: SubscriptionFeatureId): UseEntitlementResult {
   const [entitlement, setEntitlement] = useState<EntitlementState | null>(null)
   const [hasFeatureAccess, setHasFeatureAccess] = useState<boolean | undefined>(undefined)
+  const [isAdminBypassAccount, setIsAdminBypassAccount] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const lastFocusRefetch = useRef(0)
   const trackedLifecycleViews = useRef<Set<string>>(new Set())
 
@@ -72,9 +81,13 @@ export function useEntitlement(featureId?: SubscriptionFeatureId): UseEntitlemen
       if (!res.ok) {
         setEntitlement(null)
         setHasFeatureAccess(false)
+        setIsAdminBypassAccount(false)
+        setError(`Failed to load subscription status (${res.status}).`)
         return
       }
+      setError(null)
       const data = await res.json()
+      setIsAdminBypassAccount(Boolean(data.isAdminBypassAccount))
       if (data.entitlement) {
         setEntitlement({
           plans: data.entitlement.plans ?? [],
@@ -95,6 +108,8 @@ export function useEntitlement(featureId?: SubscriptionFeatureId): UseEntitlemen
     } catch {
       setEntitlement(null)
       setHasFeatureAccess(false)
+      setIsAdminBypassAccount(false)
+      setError('Unable to verify subscription status.')
     } finally {
       setLoading(false)
     }
@@ -184,10 +199,12 @@ export function useEntitlement(featureId?: SubscriptionFeatureId): UseEntitlemen
   return {
     entitlement,
     loading,
+    error,
     featureAccess,
     hasAccess,
     isActiveOrGrace,
     upgradePath,
+    isAdminBypassAccount,
     refetch: fetchEntitlement,
   }
 }

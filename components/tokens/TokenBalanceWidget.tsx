@@ -29,6 +29,10 @@ export function TokenBalanceWidget() {
       <div className="mt-2 flex items-center gap-2">
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin text-amber-200/80" />
+        ) : error || balance == null ? (
+          <span className="text-xl font-semibold text-amber-100/50 tabular-nums" data-testid="token-balance-widget-unavailable">
+            —
+          </span>
         ) : (
           <span className="text-xl font-semibold text-amber-100 tabular-nums">{balance}</span>
         )}

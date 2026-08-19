@@ -13,6 +13,14 @@ export const LEAGUE_SYSTEM_MESSAGE_TYPES = [
   "trade_notice",
   "waiver_notice",
   "trade_accepted",
+  "draft_notice",
+  "draft_summary",
+  "lineup_notice",
+  "scoring_notice",
+  "matchup_notice",
+  "playoff_notice",
+  "champion_announcement",
+  "chat_message",
 ] as const
 export type LeagueSystemMessageType = (typeof LEAGUE_SYSTEM_MESSAGE_TYPES)[number]
 
@@ -39,6 +47,21 @@ export function getLeagueSystemNoticeLabel(messageType: string): string {
       return "Trade"
     case "waiver_notice":
       return "Waiver"
+    case "draft_notice":
+    case "draft_summary":
+      return "Draft"
+    case "lineup_notice":
+      return "Lineup"
+    case "scoring_notice":
+      return "Scoring"
+    case "matchup_notice":
+      return "Matchup"
+    case "playoff_notice":
+      return "Playoff"
+    case "champion_announcement":
+      return "Champion"
+    case "chat_message":
+      return "Chat"
     default:
       return "Notice"
   }

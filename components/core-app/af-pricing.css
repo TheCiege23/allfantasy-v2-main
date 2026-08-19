@@ -1,0 +1,316 @@
+/*
+ * Screen 18a — pricing.
+ *
+ * Authored entirely on var(--token) per the handoff, so all three documented
+ * modes (dark / light / af) resolve without a second stylesheet, and the global
+ * light-mode .mode-readable clamp has nothing hardcoded to fight.
+ */
+
+.af-pr {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 28px 20px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.af-pr-alerts { display: flex; flex-direction: column; gap: 12px; }
+.af-pr-alerts:empty { display: none; }
+
+/* ── Hero ─────────────────────────────────────────────────────── */
+.af-pr-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  padding: 20px 0 4px;
+}
+
+.af-pr-eyebrow {
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-pr-title {
+  margin: 0;
+  max-width: 18ch;
+  font: 900 40px/1.05 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  color: var(--text);
+}
+
+.af-pr-sub {
+  margin: 0;
+  max-width: 60ch;
+  font-size: 14.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-pr-sub--tight { max-width: 66ch; }
+
+.af-pr-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.af-pr-toggle {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 20px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-pr-toggle-btn {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  padding: 7px 18px;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--muted);
+  font: 700 12.5px/1 'Archivo', system-ui, sans-serif;
+}
+.af-pr-toggle-btn[data-on='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-pr-toggle-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The savings chip is derived copy — see planPresentation.ts. */
+.af-pr-savechip {
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 11px;
+  border-radius: 999px;
+  color: var(--good);
+  background: var(--good-soft);
+  border: 1px solid var(--good);
+}
+
+.af-pr-blocked,
+.af-pr-error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--text);
+}
+.af-pr-error { background: var(--bad-soft); border-color: var(--bad); }
+
+/* ── Grid ─────────────────────────────────────────────────────── */
+.af-pr-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.af-pr-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 22px 18px 20px;
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+}
+
+/*
+  The highlighted lane. "Best value" rather than "most popular" — the first is
+  arithmetic, the second would be a claim about behaviour we have no data for.
+*/
+.af-pr-card[data-best='true'] {
+  border: 2px solid var(--accent);
+  background: var(--chimmy, var(--surface));
+}
+
+.af-pr-tab {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font: 800 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.af-pr-name {
+  margin: 0;
+  font: 800 17px/1.2 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-pr-desc {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  /* Keeps the price line aligned across lanes despite uneven copy length. */
+  min-height: 3.6em;
+}
+
+.af-pr-price { display: flex; align-items: baseline; gap: 4px; margin-top: 2px; }
+
+.af-pr-amount {
+  font: 900 30px/1 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+/* A plan not sold on this interval — an em dash, never $0. */
+.af-pr-amount--none { color: var(--faint); }
+
+.af-pr-per {
+  margin: 0;
+  font: 500 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--faint);
+}
+
+.af-pr-save {
+  margin: 0;
+  min-height: 1.2em;
+  font: 600 11px/1.2 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--good);
+}
+/* Reserves the row on the monthly view so cards do not jump on toggle. */
+.af-pr-save--empty { visibility: hidden; }
+
+.af-pr-cta {
+  appearance: none;
+  cursor: pointer;
+  margin-top: 8px;
+  padding: 10px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 700 12.5px/1 'Archivo', system-ui, sans-serif;
+  text-align: center;
+  text-decoration: none;
+}
+.af-pr-cta:hover { filter: brightness(1.06); }
+.af-pr-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-pr-cta:disabled { opacity: 0.5; cursor: not-allowed; }
+.af-pr-cta--ghost {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--chip-line);
+}
+.af-pr-cta--small { margin-top: 4px; padding: 7px 12px; font-size: 11.5px; }
+
+.af-pr-rule { width: 100%; height: 1px; border: 0; background: var(--line); margin: 12px 0 2px; }
+
+.af-pr-features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.af-pr-features li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-pr-tick { flex: none; color: var(--accent); font-weight: 800; }
+
+/* ── Tokens ───────────────────────────────────────────────────── */
+.af-pr-tokens {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 24px;
+  border-radius: 16px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-pr-tokens-head { display: flex; flex-direction: column; gap: 6px; }
+
+.af-pr-h2 {
+  margin: 0;
+  font: 900 22px/1.2 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-pr-packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
+
+.af-pr-pack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+}
+.af-pr-pack-tokens {
+  font: 800 24px/1 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.af-pr-pack-label {
+  font: 500 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-pr-pack-price {
+  margin-top: 6px;
+  font: 700 14px/1 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--text);
+}
+
+.af-pr-foot {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--faint);
+  max-width: 76ch;
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .af-pr-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 780px) {
+  .af-pr-grid { grid-template-columns: 1fr; }
+  .af-pr-title { font-size: 30px; max-width: none; }
+  .af-pr-desc { min-height: 0; }
+  /* Stacked, the reserved row is dead space rather than an alignment aid. */
+  .af-pr-save--empty { display: none; }
+}

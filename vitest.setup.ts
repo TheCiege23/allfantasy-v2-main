@@ -23,6 +23,7 @@ if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
  * when keys are unset locally/CI. Uses `??=` so real env wins.
  */
 process.env.NEXTAUTH_SECRET ??= "test-nextauth-secret-for-vitest"
+process.env.LEAGUE_AUTH_ENCRYPTION_KEY ??= "test-league-auth-encryption-key-for-vitest-min32"
 process.env.OPENAI_API_KEY ??= "sk-mock-openai"
 process.env.AI_INTEGRATIONS_OPENAI_API_KEY ??= process.env.OPENAI_API_KEY
 process.env.ANTHROPIC_API_KEY ??= "sk-ant-mock"

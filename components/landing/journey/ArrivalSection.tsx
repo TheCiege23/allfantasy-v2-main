@@ -5,6 +5,8 @@ import Link from 'next/link'
 import type { LandingCopy } from './copy'
 import { GradientWord } from './shared/GradientWord'
 import { trackLandingCtaClick } from '@/lib/landing-analytics'
+import { PlatformImportPicker } from './PlatformImportPicker'
+import { B2BDemoBand } from './B2BDemoBand'
 
 type Hrefs = {
   signupHref: string
@@ -101,46 +103,43 @@ export function ArrivalSection({
             {copy.hero.primaryAuthed}
           </Link>
         ) : (
-          <div className="flex flex-col items-center gap-1">
-            <Link
-              href={signupHref}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl px-7 py-3.5 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90 sm:w-auto"
-              style={{ backgroundImage: 'linear-gradient(90deg, var(--accent-cyan), color-mix(in srgb, var(--accent-cyan-strong) 72%, #3b82f6))', color: 'var(--on-accent-bg)' }}
-              data-testid="landing-hero-sign-up"
-              onClick={() => trackLandingCtaClick({ cta_label: copy.hero.primary, cta_destination: signupHref, cta_type: 'primary', source: 'hero' })}
-            >
-              {copy.hero.primary}
-            </Link>
-            <Link
-              href={wcIntroHref}
-              className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl border px-7 py-3.5 text-sm font-semibold transition hover:-translate-y-0.5 hover:opacity-90 sm:w-auto"
-              style={{ background: 'linear-gradient(135deg, rgba(5,150,105,0.12), rgba(202,138,4,0.10))', borderColor: 'rgba(5,150,105,0.38)', color: '#6ee7b7' }}
-              data-testid="landing-hero-wc-pools"
-              onClick={() => trackLandingCtaClick({ cta_label: 'AF World Cup Pools', cta_destination: wcIntroHref, cta_type: 'secondary', source: 'hero' })}
-            >
-              ⚽ AF World Cup Pools
-            </Link>
-            <p className="text-[11px] text-center" style={{ color: 'var(--muted2)' }}>
-              Build your bracket. Invite your crew. Chase greatness.
-            </p>
+          <div className="flex w-full flex-col items-center gap-3">
+            <PlatformImportPicker />
 
-            <Link
-              href={loginHref}
-              className="mt-3 text-center text-sm font-medium underline underline-offset-4 transition hover:opacity-90"
-              style={{ color: 'var(--accent-cyan)' }}
-              data-testid="landing-hero-sign-in"
-              onClick={() => trackLandingCtaClick({ cta_label: copy.hero.alreadyHaveAccount, cta_destination: loginHref, cta_type: 'secondary', source: 'hero' })}
-            >
-              {copy.hero.alreadyHaveAccount}
-            </Link>
-            <p className="mt-2 text-center text-[11px]" style={{ color: 'var(--muted)' }}>
-              {copy.hero.reassurance}
-            </p>
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5">
+              <Link
+                href={signupHref}
+                className="text-xs font-semibold underline underline-offset-4 transition hover:opacity-90"
+                style={{ color: 'var(--muted)' }}
+                data-testid="landing-hero-sign-up"
+                onClick={() => trackLandingCtaClick({ cta_label: copy.hero.primary, cta_destination: signupHref, cta_type: 'secondary', source: 'hero' })}
+              >
+                {copy.hero.primary} — free, no card needed
+              </Link>
+              <Link
+                href={loginHref}
+                className="text-xs font-medium underline underline-offset-4 transition hover:opacity-90"
+                style={{ color: 'var(--accent-cyan)' }}
+                data-testid="landing-hero-sign-in"
+                onClick={() => trackLandingCtaClick({ cta_label: copy.hero.alreadyHaveAccount, cta_destination: loginHref, cta_type: 'secondary', source: 'hero' })}
+              >
+                {copy.hero.alreadyHaveAccount}
+              </Link>
+              <Link
+                href={wcIntroHref}
+                className="text-xs font-medium underline underline-offset-4 transition hover:opacity-90"
+                style={{ color: '#6ee7b7' }}
+                data-testid="landing-hero-wc-pools"
+                onClick={() => trackLandingCtaClick({ cta_label: 'AF World Cup Pools', cta_destination: wcIntroHref, cta_type: 'secondary', source: 'hero' })}
+              >
+                ⚽ AF World Cup Pools — free
+              </Link>
+            </div>
           </div>
         )}
       </div>
 
-      <div className="relative z-10 flex flex-wrap items-center justify-center gap-2 px-2" aria-label={ariaSportsLabel}>
+      <div className="relative z-10 mb-6 flex flex-wrap items-center justify-center gap-2 px-2" aria-label={ariaSportsLabel}>
         {copy.sports.map((sport) => (
           <span
             key={sport}
@@ -151,6 +150,8 @@ export function ArrivalSection({
           </span>
         ))}
       </div>
+
+      {!isAuthenticated && <B2BDemoBand />}
     </section>
   )
 }

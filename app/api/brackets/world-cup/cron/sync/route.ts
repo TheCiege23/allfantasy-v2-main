@@ -65,6 +65,10 @@ type WorldCupCronErrorKind =
   | "database_write_failed"
   | "sync_service_failed"
 
+type WorldCupCronRecalculateResult =
+  | { challengeId: string; ok: true; leaderboardCount: number | null }
+  | { challengeId: string; ok: false; error: WorldCupCronErrorKind; message: string }
+
 function sanitizeErrorMessage(message: string) {
   return message
     .replace(/(x-apisports-key=)[^&\s]+/gi, "$1[redacted]")
@@ -154,13 +158,45 @@ async function runWorldCupCronSync(input: z.infer<typeof bodySchema>) {
   }
 
   if (job === "recalculate" || job === "all") {
-    result.recalculated = []
+    // Process each challenge independently: one bad challenge (malformed
+    // entry/pick/match relation, Prisma row issue, or edge-case data) must not
+    // fail the entire scheduled cron. Per-challenge errors are captured, not thrown,
+    // so the route can still return 200 with a per-challenge breakdown.
+    const recalculated: WorldCupCronRecalculateResult[] = []
+    let succeeded = 0
+    let failed = 0
     for (const id of challengeIds) {
-      ;(result.recalculated as unknown[]).push({
-        challengeId: id,
-        leaderboard: dryRun ? null : await recalculateWorldCupChallenge(id),
-      })
+      if (dryRun) {
+        recalculated.push({ challengeId: id, ok: true, leaderboardCount: null })
+        succeeded += 1
+        continue
+      }
+      try {
+        const rows = await recalculateWorldCupChallenge(id)
+        recalculated.push({
+          challengeId: id,
+          ok: true,
+          leaderboardCount: Array.isArray(rows) ? rows.length : 0,
+        })
+        succeeded += 1
+      } catch (error) {
+        const classified = classifyCronError(error)
+        console.error("[world-cup-cron-sync] challenge recalculate failed", {
+          challengeId: id,
+          kind: classified.kind,
+          message: classified.message,
+        })
+        recalculated.push({
+          challengeId: id,
+          ok: false,
+          error: classified.kind,
+          message: classified.message,
+        })
+        failed += 1
+      }
     }
+    result.recalculated = recalculated
+    result.recalculateSummary = { attempted: recalculated.length, succeeded, failed }
   }
 
   return result

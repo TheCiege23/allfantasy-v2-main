@@ -18,6 +18,9 @@ function baseValidRedraft() {
     name: "Commissioner's Test League",
     teamCount: 12,
     draftType: 'snake' as const,
+    draftDate: '2026-08-30',
+    draftTime: '20:00',
+    privacy: 'private' as const,
     tournamentPoolSize: 32,
   }
 }
