@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { cacheBusted } from '@/lib/scores/gameScoreProviders'
 import { normaliseStatus } from './rollingInsightsAdapter'
+import { persistIdpForGame, gameWeekMeta } from '@/lib/idp/persistIdpLines'
 import { parsePlayByPlay, playsToLiveEvents } from './rollingInsightsPlayByPlay'
 import type { LiveEvent } from './eventDetector'
 
@@ -114,6 +115,8 @@ async function writeCache(key: string, data: unknown): Promise<void> {
 export type FeedRefreshResult = {
   gamesPolled: number
   newEvents: number
+  /** Defensive stat rows written this pass — 0 on a quiet poll is correct. */
+  idpRowsWritten: number
   skipped: 'no-token' | 'no-live-games' | null
 }
 
@@ -129,14 +132,15 @@ export type FeedRefreshResult = {
  */
 export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<FeedRefreshResult> {
   const { token, base } = riCredentials()
-  if (!token) return { gamesPolled: 0, newEvents: 0, skipped: 'no-token' }
+  if (!token) return { gamesPolled: 0, newEvents: 0, idpRowsWritten: 0, skipped: 'no-token' }
 
   const gameIds = await inProgressRiGameIds(now)
-  if (gameIds.length === 0) return { gamesPolled: 0, newEvents: 0, skipped: 'no-live-games' }
+  if (gameIds.length === 0) return { gamesPolled: 0, newEvents: 0, idpRowsWritten: 0, skipped: 'no-live-games' }
 
   const cursor = (await readCache<Cursor>(CURSOR_KEY)) ?? {}
   const feed = (await readCache<LiveEvent[]>(FEED_KEY)) ?? []
   const fresh: LiveEvent[] = []
+  let idpWritten = 0
 
   for (const gameId of gameIds) {
     const url = `${base}/play-by-play/NFL?RSC_token=${encodeURIComponent(token)}&game_id=${encodeURIComponent(gameId)}`
@@ -152,6 +156,25 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
       // event — most plays are not scoring plays, and re-reading them every poll
       // would re-emit the next big play forever.
       const high = game.plays.reduce((m, p) => (p.sequence > m ? p.sequence : m), since)
+
+      /*
+       * Defensive stat lines are re-derived and written only when this game
+       * actually produced new plays.
+       *
+       * ⚠ THE CURSOR IS THE THROTTLE. Without this check every poll would
+       * re-upsert every defender in every live game — roughly 260 rows a pass
+       * on a full Sunday, for stat lines that had not changed. Gating on the
+       * cursor means a game in a television timeout costs nothing.
+       *
+       * Derivation is cumulative: each poll re-reads the whole plays array, so
+       * the line written is always the complete one, not a delta to merge.
+       */
+      if (high > since) {
+        const meta = await gameWeekMeta(game.gameId)
+        const persisted = await persistIdpForGame(game, meta).catch(() => null)
+        idpWritten += persisted?.playersWritten ?? 0
+      }
+
       cursor[game.gameId] = high
     }
   }
@@ -169,7 +192,7 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
   }
   await writeCache(CURSOR_KEY, cursor)
 
-  return { gamesPolled: gameIds.length, newEvents: fresh.length, skipped: null }
+  return { gamesPolled: gameIds.length, newEvents: fresh.length, idpRowsWritten: idpWritten, skipped: null }
 }
 
 /**
