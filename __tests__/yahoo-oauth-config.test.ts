@@ -1,7 +1,10 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import {
   getYahooRedirectUri,
+  getYahooStateCookieDomain,
   readYahooOAuthState,
+  sanitizeYahooReturnTo,
+  YAHOO_DEFAULT_RETURN_TO,
   YAHOO_FANTASY_SCOPE,
   YAHOO_STATE_COOKIE_NAMES,
 } from '@/lib/yahoo/oauthConfig'
@@ -70,5 +73,56 @@ describe('yahoo oauth state: a callback must accept either cookie', () => {
 describe('yahoo scope', () => {
   it('is the fantasy read scope — without it a token cannot read a single league', () => {
     expect(YAHOO_FANTASY_SCOPE).toBe('fspt-r')
+  })
+})
+
+describe('returnTo: the flow comes back where it started', () => {
+  it('keeps a same-site absolute path', () => {
+    expect(sanitizeYahooReturnTo('/import?provider=yahoo')).toBe('/import?provider=yahoo')
+  })
+
+  it('defaults to /import, not the af-legacy page the callback used to hardcode', () => {
+    expect(YAHOO_DEFAULT_RETURN_TO).toBe('/import')
+    expect(sanitizeYahooReturnTo(null)).toBe('/import')
+    expect(sanitizeYahooReturnTo(undefined)).toBe('/import')
+    expect(sanitizeYahooReturnTo('')).toBe('/import')
+  })
+
+  // returnTo is caller-supplied and therefore attacker-reachable.
+  it.each([
+    ['absolute url', 'https://evil.test/steal'],
+    ['protocol-relative', '//evil.test/steal'],
+    ['scheme-relative backslash', '/' + String.fromCharCode(92) + 'evil.test/steal'],
+    ['javascript uri', 'javascript:alert(1)'],
+    ['bare path', 'import'],
+  ])('refuses to leave the site: %s', (_label, value) => {
+    expect(sanitizeYahooReturnTo(value)).toBe('/import')
+  })
+
+  it('rejects control characters used to smuggle header breaks', () => {
+    const withNewline = '/import' + String.fromCharCode(10) + 'Set-Cookie: x=1'
+    expect(sanitizeYahooReturnTo(withNewline)).toBe('/import')
+  })
+})
+
+describe('state cookie domain: one round-trip across apex and www', () => {
+  it('scopes to the registrable domain on both hosts', () => {
+    expect(getYahooStateCookieDomain('allfantasy.ai')).toBe('.allfantasy.ai')
+    expect(getYahooStateCookieDomain('www.allfantasy.ai')).toBe('.allfantasy.ai')
+  })
+
+  it('ignores the port', () => {
+    expect(getYahooStateCookieDomain('www.allfantasy.ai:443')).toBe('.allfantasy.ai')
+  })
+
+  it('leaves the cookie host-only elsewhere (localhost, previews)', () => {
+    expect(getYahooStateCookieDomain('localhost:3000')).toBeUndefined()
+    expect(getYahooStateCookieDomain('preview-abc.vercel.app')).toBeUndefined()
+    expect(getYahooStateCookieDomain(null)).toBeUndefined()
+  })
+
+  it('does not match a lookalike domain', () => {
+    expect(getYahooStateCookieDomain('allfantasy.ai.evil.test')).toBeUndefined()
+    expect(getYahooStateCookieDomain('notallfantasy.ai')).toBeUndefined()
   })
 })

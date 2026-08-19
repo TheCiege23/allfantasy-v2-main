@@ -414,9 +414,27 @@ export function ImportV4({
               <div className="af-im-error" role="alert">
                 <p className="af-im-error-text">{error}</p>
                 {needsConnectionSetup(error) ? (
-                  <Link href="/leagues" className="af-im-error-link">
-                    Connect your accounts in League Sync →
-                  </Link>
+                  provider === 'yahoo' ? (
+                    /*
+                      Yahoo used to send the user to /leagues to "connect in League Sync",
+                      which meant: leave this screen, find the sync dashboard, authorise,
+                      then come back here and start over. Six pages to import one league.
+                      This starts the OAuth directly and returns to this screen, already
+                      on the Yahoo tab. Plain <a>, not <Link> -- the target is an API
+                      route that answers with a redirect, so client-side nav must not
+                      intercept it.
+                    */
+                    <a
+                      href="/api/auth/yahoo?returnTo=%2Fimport%3Fprovider%3Dyahoo"
+                      className="af-im-error-link"
+                    >
+                      Connect Yahoo →
+                    </a>
+                  ) : (
+                    <Link href="/leagues" className="af-im-error-link">
+                      Connect your accounts in League Sync →
+                    </Link>
+                  )
                 ) : null}
               </div>
             ) : null}
