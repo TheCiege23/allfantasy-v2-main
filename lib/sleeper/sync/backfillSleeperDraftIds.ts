@@ -38,7 +38,17 @@ export type BackfillDraftIdsResult = {
   failures: Array<{ leagueId: string; reason: string }>
 }
 
-async function fetchDraftIdForLeague(platformLeagueId: string): Promise<string | null> {
+/**
+ * The current draft id for a Sleeper league, or null when no draft exists yet.
+ *
+ * Exported so the league draft resolver can heal a single league on view rather than
+ * waiting for a batch — the import never stored this, so a league that nobody backfilled
+ * would otherwise open an empty board forever.
+ *
+ * Throws on a real upstream failure. A league with no draft yet returns null, which is a
+ * normal state and not an error.
+ */
+export async function fetchDraftIdForLeague(platformLeagueId: string): Promise<string | null> {
   const res = await fetch(`${SLEEPER_V1}/league/${encodeURIComponent(platformLeagueId)}`, {
     cache: 'no-store',
   })
