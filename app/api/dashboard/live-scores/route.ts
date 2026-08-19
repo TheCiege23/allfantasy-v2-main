@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: live scoring reads the platform feed
@@ -244,5 +245,18 @@ export async function GET() {
     return a.leagueName.localeCompare(b.leagueName)
   })
 
-  return NextResponse.json({ scores: results })
+  /*
+   * The play feed rides along with the scores rather than getting its own
+   * route: this repo is at Vercel's hard 2048-route ceiling, and the two are
+   * fetched by the same screen at the same moment anyway. One request, one
+   * render.
+   *
+   * ⚠ THE FEED MUST NEVER BREAK THE SCOREBOARD. Plays are the retention
+   * feature; the score is the product. `getPlayFeed` already swallows its own
+   * errors and returns [], and the catch here is the second belt — a live feed
+   * outage must degrade to "no highlights yet", never to a 500 on the score.
+   */
+  const plays = await getPlayFeed().catch(() => [])
+
+  return NextResponse.json({ scores: results, plays })
 }
