@@ -14,7 +14,7 @@ import { prisma } from '@/lib/prisma'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 import { runLiveScoringForActiveSeasons } from '@/server/services/liveScoring/liveScoreRunner'
 import { RollingInsightsLiveProvider } from '@/lib/live/rollingInsightsLiveProvider'
-import { runPollLoop, LIVE_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
+import { runPollLoop, createCadenceGate, LIVE_POLL_INTERVAL_MS, PBP_POLL_INTERVAL_MS, POLL_BUDGET_MS } from '@/lib/live/gamedayPoller'
 import { refreshPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 
 /**
@@ -133,9 +133,19 @@ export async function GET(request: NextRequest) {
          * the score is the product. If play-by-play throws, the tick still
          * returns the scoring result and the loop keeps going.
          */
+        /*
+         * ⚠ PLAYS RUN ON THEIR OWN CLOCK, NOT ONCE PER TICK. The loop now ticks
+         * at the live cadence, which is faster than the play-by-play cadence on
+         * purpose: `/live` is one call for the whole slate, `/play-by-play` is
+         * one call PER LIVE GAME. Refreshing plays on every tick would multiply
+         * the expensive endpoint by the cheap one's frequency — on a 13-game
+         * Sunday that is 13 extra requests every 10 seconds, for plays the
+         * contract says arrive every 35.
+         */
+        const pbpDue = createCadenceGate(PBP_POLL_INTERVAL_MS)
         const tickOnce = async () => {
           const scored = await runLiveScoringForActiveSeasons(prisma, provider ? { provider } : {})
-          pbp = await refreshPlayByPlayFeed().catch(() => pbp)
+          if (pbpDue()) pbp = await refreshPlayByPlayFeed().catch(() => pbp)
           return scored
         }
         let last = await tickOnce()
@@ -159,6 +169,7 @@ export async function GET(request: NextRequest) {
           pollStoppedBecause: loop?.stoppedBecause ?? 'no-active-games',
           pollElapsedMs: loop?.elapsedMs ?? 0,
           pollIntervalMs: LIVE_POLL_INTERVAL_MS,
+          pbpIntervalMs: PBP_POLL_INTERVAL_MS,
           pollBudgetMs: POLL_BUDGET_MS,
           /* `pbpSkipped: 'no-token'` is a configuration problem; 'no-live-games'
              is a Tuesday. Distinguishing them in telemetry is the difference

@@ -23,8 +23,52 @@ import { normaliseStatus } from './rollingInsightsAdapter'
  * hot. That is why this can sit on a frequent cron without burning anything.
  */
 
-/** Poll cadence while a game is in progress — INTEGRATION.md §4. */
-export const LIVE_POLL_INTERVAL_MS = 35_000
+/**
+ * Poll cadence while a game is in progress.
+ *
+ * ⚠ SCORES AND PLAYS DO NOT COST THE SAME, SO THEY DO NOT SHARE A CADENCE.
+ * `/live` returns the ENTIRE slate in one call, so polling it harder costs one
+ * request no matter how many games are on. `/play-by-play` needs a game_id, so
+ * it costs one request PER LIVE GAME per pass — on a 13-game Sunday that is 13×
+ * the price for the same interval.
+ *
+ * So scores run fast and plays run at the contract's 35s. For reference, the
+ * industry floor is 3–5s (SportsData.io publishes that, and caches for a
+ * minimum of 3s, so nobody on that feed is fresher). We sit above it
+ * deliberately: Rolling Insights recommends at least 5s between calls and has
+ * never quantified its own upstream latency, so polling faster than 10s spends
+ * requests chasing freshness the vendor may not have.
+ */
+export const LIVE_POLL_INTERVAL_MS = 10_000
+
+/**
+ * Play-by-play cadence. Kept at the contract's 35s because this one multiplies
+ * by the number of live games. See the note above.
+ */
+export const PBP_POLL_INTERVAL_MS = 35_000
+
+/**
+ * A gate that opens at most once per `intervalMs`.
+ *
+ * Lets one loop drive two different cadences: the loop ticks at the live
+ * interval, and anything more expensive asks this whether it is due yet.
+ *
+ * ⚠ THE FIRST CALL ALWAYS OPENS. An invocation that polled scores but skipped
+ * plays entirely would be worse than the single-tick cron this replaced — the
+ * first pass of a fresh invocation is exactly when the play feed is most stale.
+ */
+export function createCadenceGate(
+  intervalMs: number,
+  now: () => number = () => Date.now(),
+): () => boolean {
+  let lastAt: number | null = null
+  return () => {
+    const t = now()
+    if (lastAt !== null && t - lastAt < intervalMs) return false
+    lastAt = t
+    return true
+  }
+}
 
 /**
  * How long one invocation may keep polling. Must stay comfortably under BOTH the
