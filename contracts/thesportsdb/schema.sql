@@ -205,6 +205,13 @@ CREATE TABLE tsdb.media_asset (
 CREATE INDEX tsdb_media_displayable_idx
   ON tsdb.media_asset (owner_type, owner_id) WHERE display_allowed = true;
 
+-- ⚠ 2026-08-18: THIS GATE WAS NEVER BUILT, AND SHOULD NOT BE.
+-- The owner's counsel cleared displaying player headshots (GAPS.md G-03), and
+-- this file is a design document -- there is no `tsdb` schema in Prisma and no
+-- migration behind it. `display_allowed` has never gated anything in the running
+-- system. Implementing it now would block images that are cleared to show.
+-- What IS still binding is attribution, and the ban on modifying team badges and
+-- league logos. Neither is a per-asset boolean.
 COMMENT ON COLUMN tsdb.media_asset.display_allowed IS
   'THE ONLY column UI code should read. Policy (see README.md): '
   'true for team/league badges and logos (TRADEMARK_ASIS, unmodified display only); '

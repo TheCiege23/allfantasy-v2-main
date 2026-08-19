@@ -50,7 +50,7 @@ one that produced everything in `fixtures/`.
 |---|---|---|---|---|
 | `G-01` | Exact slug for `/livescore/{sport}` for American football | UNVERIFIED | nothing | **Use `/livescore/4391` instead** — documented, unambiguous. Slug is probably `American_Football` per their `Ice_Hockey` convention. |
 | `G-02` | Does NFL livescore actually populate during games? | UNVERIFIED | livescore fallback | Documented with NFL as the worked example, but the static `livescore_all.json` sample has **zero** American Football rows (May 2025 offseason snapshot — weak evidence). **Probe during a live NFL game with a paid key.** |
-| `G-03` | Artwork licensing — is displaying non-CC player headshots commercially defensible? | UNVERIFIED | headshot display | **LEGAL. Needs counsel.** `schema.sql` defaults these to `display_allowed = false` until cleared. |
+| `G-03` | Artwork licensing — is displaying non-CC player headshots commercially defensible? | **RESOLVED 2026-08-18** | nothing | **CLEARED BY THE OWNER'S COUNSEL.** Player headshots may be displayed. Do NOT re-raise this, and do NOT build a `display_allowed` gate — `schema.sql` is a design document, and no such column exists in Prisma or the database. See the note below. |
 | `G-04` | `lookupplayerstats` position coverage | PARTIAL | player profiles | QB returned passing + rushing. Untested: receiving (WR/TE), defensive (IDP), kicking. Probe one player per position. |
 
 ## Non-blocking
@@ -106,3 +106,34 @@ NCAAF play-by-play; nflverse covers history.
 **Probe NFL endpoints during the season.** Offseason probes return nulls that are indistinguishable
 from unsupported endpoints — which is the exact ambiguity that causes the re-probing loop in the
 first place. When you do probe off-season, record *that it was off-season* in `notes`.
+
+---
+
+## G-03 — artwork licensing, resolved
+
+**2026-08-18: the owner's lawyer cleared displaying player headshots.** That is the
+authority this gap was waiting on. Treat it as settled.
+
+Two things a future session should not do:
+
+- **Do not build a `display_allowed` gate.** The column appears in
+  `contracts/thesportsdb/schema.sql`, which is a DESIGN DOCUMENT — there is no
+  `tsdb` schema in Prisma, no migration, and `PlayerImage` carries no licence or
+  display flag. Nothing in the running system has ever gated on it. Adding one
+  now would block images the owner has been advised are fine to show.
+- **Do not re-open this on reading the vendor's "most are fan created" line.**
+  That wording is in `ENDPOINTS.yaml` and it is what prompted the original
+  question. It has been considered and cleared.
+
+### Still outstanding, and separate
+
+⚠ **Attribution is a contractual term of the paid tier, not a licensing
+question, and it is NOT satisfied by the legal clearance above.** The terms
+require *"Data provided by TheSportsDB"* plus a link back wherever their data or
+artwork appears. That obligation stands on its own and still needs a credit line
+somewhere in the product.
+
+⚠ **Modification of team badges and league logos remains forbidden** by the same
+terms — display unmodified only. That is a trademark constraint on marks the
+vendor does not own, and counsel clearing *player headshots* does not speak to
+it.
