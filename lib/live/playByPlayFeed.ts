@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import { cacheBusted } from '@/lib/scores/gameScoreProviders'
 import { normaliseStatus } from './rollingInsightsAdapter'
+import { notifyBigPlays } from '@/lib/live/bigPlayNotifier'
 import { parsePlayByPlay, playsToLiveEvents } from './rollingInsightsPlayByPlay'
 import type { LiveEvent } from './eventDetector'
 
@@ -114,6 +115,8 @@ async function writeCache(key: string, data: unknown): Promise<void> {
 export type FeedRefreshResult = {
   gamesPolled: number
   newEvents: number
+  /** Big-play notifications sent this pass. 0 on a quiet poll is correct. */
+  alertsSent: number
   skipped: 'no-token' | 'no-live-games' | null
 }
 
@@ -129,14 +132,15 @@ export type FeedRefreshResult = {
  */
 export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<FeedRefreshResult> {
   const { token, base } = riCredentials()
-  if (!token) return { gamesPolled: 0, newEvents: 0, skipped: 'no-token' }
+  if (!token) return { gamesPolled: 0, newEvents: 0, alertsSent: 0, skipped: 'no-token' }
 
   const gameIds = await inProgressRiGameIds(now)
-  if (gameIds.length === 0) return { gamesPolled: 0, newEvents: 0, skipped: 'no-live-games' }
+  if (gameIds.length === 0) return { gamesPolled: 0, newEvents: 0, alertsSent: 0, skipped: 'no-live-games' }
 
   const cursor = (await readCache<Cursor>(CURSOR_KEY)) ?? {}
   const feed = (await readCache<LiveEvent[]>(FEED_KEY)) ?? []
   const fresh: LiveEvent[] = []
+  let alertsSent = 0
 
   for (const gameId of gameIds) {
     const url = `${base}/play-by-play/NFL?RSC_token=${encodeURIComponent(token)}&game_id=${encodeURIComponent(gameId)}`
@@ -156,6 +160,17 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
     }
   }
 
+  /*
+   * ⚠ NOTIFY ON `fresh` ONLY — the events this pass newly discovered. The feed
+   * array holds the whole game, so notifying on it would re-alert every
+   * touchdown on every poll. `fresh` is already cursor-filtered, which makes it
+   * the only correct input here.
+   */
+  if (fresh.length > 0) {
+    const notified = await notifyBigPlays(fresh).catch(() => null)
+    alertsSent += notified?.notificationsSent ?? 0
+  }
+
   if (fresh.length > 0) {
     /*
      * Dedupe on idempotencyKey across the whole feed, not just this batch. A
@@ -169,7 +184,7 @@ export async function refreshPlayByPlayFeed(now: Date = new Date()): Promise<Fee
   }
   await writeCache(CURSOR_KEY, cursor)
 
-  return { gamesPolled: gameIds.length, newEvents: fresh.length, skipped: null }
+  return { gamesPolled: gameIds.length, newEvents: fresh.length, alertsSent, skipped: null }
 }
 
 /**
