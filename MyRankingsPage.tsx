@@ -3,9 +3,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useSession } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
-import { OverviewReportCard } from '@/app/af-legacy/components/OverviewReportCard'
-import { OverviewInsights }   from '@/app/af-legacy/components/OverviewInsights'
-import { OverviewLanes }      from '@/app/af-legacy/components/OverviewLanes'
+import { OverviewReportCard } from '@/components/legacy/OverviewReportCard'
+import { OverviewInsights }   from '@/components/legacy/OverviewInsights'
+import { OverviewLanes }      from '@/components/legacy/OverviewLanes'
 
 // ─── TYPES ───────────────────────────────────────────────────────
 

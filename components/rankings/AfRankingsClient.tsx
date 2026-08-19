@@ -23,7 +23,7 @@ import {
 } from '@/components/rankings/AfRankingsPageSections'
 
 /** Split AF Legacy overview chunks so the rankings route initial bundle stays smaller. */
-const OverviewReportCard = dynamic(() => import('@/app/af-legacy/components/OverviewReportCard'), {
+const OverviewReportCard = dynamic(() => import('@/components/legacy/OverviewReportCard'), {
   loading: () => (
     <div
       className="h-64 animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]"
@@ -31,7 +31,7 @@ const OverviewReportCard = dynamic(() => import('@/app/af-legacy/components/Over
     />
   ),
 })
-const OverviewInsights = dynamic(() => import('@/app/af-legacy/components/OverviewInsights'), {
+const OverviewInsights = dynamic(() => import('@/components/legacy/OverviewInsights'), {
   loading: () => (
     <div
       className="h-44 animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]"
@@ -39,7 +39,7 @@ const OverviewInsights = dynamic(() => import('@/app/af-legacy/components/Overvi
     />
   ),
 })
-const OverviewLanes = dynamic(() => import('@/app/af-legacy/components/OverviewLanes'), {
+const OverviewLanes = dynamic(() => import('@/components/legacy/OverviewLanes'), {
   loading: () => (
     <div
       className="h-52 animate-pulse rounded-2xl border border-white/8 bg-white/[0.03]"
