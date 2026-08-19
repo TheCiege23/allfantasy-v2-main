@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { encrypt } from '@/lib/league-auth-crypto'
+import { readYahooOAuthState, YAHOO_STATE_COOKIE_NAMES } from '@/lib/yahoo/oauthConfig'
 
 const YAHOO_CLIENT_ID = process.env.YAHOO_CLIENT_ID
 const YAHOO_CLIENT_SECRET = process.env.YAHOO_CLIENT_SECRET
@@ -37,7 +38,10 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo/callback", tool: "A
     return NextResponse.redirect(`${APP_URL}/af-legacy?yahoo_error=no_code`)
   }
   
-  const storedState = request.cookies.get('yahoo_oauth_state')?.value
+  // Accept EITHER historical cookie. Once both entry points share one redirect_uri,
+  // a round-trip started by the other flow lands here, and a round-trip already in
+  // flight when this shipped carries the other name.
+  const storedState = readYahooOAuthState(request.cookies)
   const initiatingUserId = request.cookies.get('yahoo_oauth_user_id')?.value
   if (!storedState || storedState !== state || !initiatingUserId || initiatingUserId !== session.user.id) {
     return NextResponse.redirect(`${APP_URL}/af-legacy?yahoo_error=invalid_state`)
@@ -122,7 +126,8 @@ export const GET = withApiUsage({ endpoint: "/api/auth/yahoo/callback", tool: "A
       path: '/',
     })
     
-    response.cookies.delete('yahoo_oauth_state')
+    // Clear both names -- either could have carried this round-trip.
+    for (const name of YAHOO_STATE_COOKIE_NAMES) response.cookies.delete(name)
     response.cookies.delete('yahoo_oauth_user_id')
     
     return response
