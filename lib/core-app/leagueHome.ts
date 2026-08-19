@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
+import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
 
 /**
  * Everything the league-selected dashboard (screen 2) renders, read from the
@@ -102,6 +103,17 @@ export type LeagueHomeData = {
     rank: number | null
     pointsFor: number
   }>
+  /**
+   * Where this league is in its year, and whether the season has started.
+   *
+   * The screen renders the same six sections for every league, so a league three weeks
+   * from its draft got the in-season layout and five panels correctly reporting they had
+   * nothing. A drafting league has no standings because no game has been played -- that
+   * is not a gap in ingestion, and saying so matters: one reads as "we are broken", the
+   * other as "come back after the draft".
+   */
+  stage: string | null
+  preSeason: boolean
   standings: SectionState<LeagueStanding[]>
   timeline: SectionState<SeasonStage[]>
   matchup: UnavailableSection
@@ -234,6 +246,12 @@ export async function getLeagueHomeData(
       season: true,
       leagueType: true,
       updatedAt: true,
+      // Where the league is in its year. `status` is written by the platform import;
+      // `lifecycleState` is our own state machine, which has never run for imported
+      // leagues and sits at its in_season default. resolveLeagueStage prefers the
+      // former -- see lib/league-stage/leagueStage.ts.
+      status: true,
+      lifecycleState: true,
       // The timeline used to be built from the week number alone. These two keys
       // are present in League.settings on production Sleeper leagues, so the
       // deadline and playoff stages can be placed from the league's OWN
@@ -242,6 +260,20 @@ export async function getLeagueHomeData(
     },
   })
   if (!league) return null
+
+  /*
+   * A PRE-SEASON LEAGUE IS NOT A LEAGUE WITH MISSING DATA.
+   *
+   * Measured on a real drafting league: 12 teams, all with avatars, 13 rosters, synced
+   * hours earlier -- and every in-season panel reporting "not ingested". Each message was
+   * true and all of them were misleading, because the league has not played a game yet.
+   * "Not ingested" reads as a broken pipeline; "the season has not started" reads as a
+   * calendar, and only one of those is what is actually happening.
+   *
+   * Computed here rather than at the return so every section below can use it.
+   */
+  const stage = resolveLeagueStage(league)
+  const preSeason = isPreDraftOrDrafting(league)
 
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId },
@@ -270,7 +302,9 @@ export async function getLeagueHomeData(
     teams.length === 0
       ? { available: false, reason: 'no teams imported for this league' }
       : !anyResults
-        ? { available: false, reason: 'teams imported but no results read yet — every record is 0-0' }
+        ? preSeason
+          ? { available: false, reason: 'no standings until the season starts — this league has not drafted' }
+          : { available: false, reason: 'teams imported but no results read yet — every record is 0-0' }
         : {
             available: true,
             data: teams.map((t) => ({
@@ -340,6 +374,8 @@ export async function getLeagueHomeData(
   const draftRow = draftAll?.rows?.[0] ?? null
 
   return {
+    stage,
+    preSeason,
     league: {
       id: league.id,
       name: leagueDisplayName(league.name),
@@ -351,10 +387,20 @@ export async function getLeagueHomeData(
     },
     yourTeam,
     standings,
-    timeline: buildTimeline(currentWeek, league.settings),
+    /*
+     * The timeline marks "you are here" against a week number. Before a draft there is no
+     * meaningful week, and the League.lifecycleState default of in_season is exactly what
+     * made an undrafted league render as WEEK 2. Withheld rather than pointed at a week
+     * the league has not reached.
+     */
+    timeline: preSeason
+      ? { available: false, reason: 'the season timeline starts once this league drafts' }
+      : buildTimeline(currentWeek, league.settings),
     // Live matchup needs per-week scoring for imported leagues, which no writer
     // produces today. The handoff's 71% win probability would be fabricated.
-    matchup: { available: false, reason: 'no weekly matchup or scoring data ingested for imported leagues' },
+    matchup: preSeason
+      ? { available: false, reason: 'no matchups yet — this league has not drafted' }
+      : { available: false, reason: 'no weekly matchup or scoring data ingested for imported leagues' },
     /*
      * ⚠ THIS REASON WAS STALE. It said "pick inventory and lottery odds are not
      * ingested", which is true of the handoff's LOTTERY ODDS and false of the
@@ -391,7 +437,9 @@ export async function getLeagueHomeData(
         }
       : { available: false, reason: 'no draft has been set up for this league' },
     commissioner: { available: false, reason: 'votes and commissioner tasks are not ingested for imported leagues' },
-    buzz: { available: false, reason: 'league transactions are not ingested for this platform yet' },
+    buzz: preSeason
+      ? { available: false, reason: 'no league activity yet — trades and waivers start after the draft' }
+      : { available: false, reason: 'league transactions are not ingested for this platform yet' },
     syncAge: { label: age.label, stale: age.stale },
   }
 }
