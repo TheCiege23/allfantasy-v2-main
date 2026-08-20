@@ -4659,27 +4659,64 @@ export function DraftRoomPageClient({
                           </div>
                         </div>
                       ) : recommendationResult?.recommendation ? (
+                        /*
+                         * 8b's Chimmy card, built from data the room ALREADY had.
+                         *
+                         * The engine returns confidence alongside the player and the reason, and
+                         * this panel was dropping it — the one number that tells a manager how
+                         * hard to lean on the suggestion. It is the same RecommendationEngine
+                         * score Draft HQ shows, so 8a and 8b cannot disagree (8b build rule 2).
+                         *
+                         * ≥80 reads good, below reads borderline — the handoff's own thresholds.
+                         *
+                         * Copy says Chimmy, never "AI" (8b build rule 6). Scoped to this panel on
+                         * purpose: __tests__/no-ai-customer-copy.test.ts guards app/dashboard only
+                         * and its header calls widening that scan "a surface-by-surface decision,
+                         * not an auto-apply". Renaming the whole draft client is that decision,
+                         * and it is not this change.
+                         */
                         <div className="mt-2 space-y-2 rounded-lg border border-cyan-400/20 bg-cyan-500/10 p-3">
-                          <p className="text-sm font-semibold text-white">
-                            {recommendationResult.recommendation.player.name}
-                            <span className="ml-1 text-cyan-100/80">
-                              {recommendationResult.recommendation.player.position}
-                              {recommendationResult.recommendation.player.team ? ` - ${recommendationResult.recommendation.player.team}` : ''}
-                            </span>
-                          </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold text-white">
+                              {recommendationResult.recommendation.player.name}
+                              <span className="ml-1 text-cyan-100/80">
+                                {recommendationResult.recommendation.player.position}
+                                {recommendationResult.recommendation.player.team ? ` - ${recommendationResult.recommendation.player.team}` : ''}
+                              </span>
+                            </p>
+                            {Number.isFinite(recommendationResult.recommendation.confidence) ? (
+                              <span
+                                data-testid="draft-bottom-chimmy-confidence"
+                                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${
+                                  recommendationResult.recommendation.confidence >= 80
+                                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                                    : 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+                                }`}
+                                title="How strongly this league's scoring and your roster holes support the pick"
+                              >
+                                CONF {Math.round(recommendationResult.recommendation.confidence)}
+                              </span>
+                            ) : null}
+                          </div>
                           <p className="text-[11px] text-white/70">{recommendationResult.recommendation.reason}</p>
+                          {/* 8b requires the disclosure: the product analyses, the manager picks. */}
+                          <p className="text-[10px] text-white/45">
+                            You make the pick — AllFantasy never drafts for you.
+                          </p>
                           <button
                             type="button"
                             onClick={() => setMobileTab('helper')}
                             className="rounded border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/20"
                             data-testid="draft-bottom-ai-open-helper"
                           >
-                            Open Full AI Panel
+                            Ask Chimmy
                           </button>
                         </div>
                       ) : (
                         <div className="mt-2 rounded-lg border border-white/12 bg-black/25 p-3">
-                          <p className="text-white/65">No recommendation yet. AI updates when draft context changes.</p>
+                          <p className="text-white/65">
+                            No recommendation yet. Chimmy updates when the draft context changes.
+                          </p>
                         </div>
                       )}
                     </div>
