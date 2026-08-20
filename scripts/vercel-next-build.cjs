@@ -3,6 +3,21 @@ const path = require('path')
 const { spawn } = require('child_process')
 const { patchManifestRace } = require('./patch-manifest-race.cjs')
 
+/**
+ * Does NODE_OPTIONS already pin V8's old-space heap?
+ *
+ * Node accepts BOTH `--max-old-space-size` and `--max_old_space_size`, and Vercel's larger
+ * build machines set the UNDERSCORE form ambiently (observed: `--max_old_space_size=14979`
+ * on an 8-core/16 GB box). Checking only for hyphens meant that ceiling went unnoticed, our
+ * own hyphenated default was appended after it, and Node applied the LAST flag — capping a
+ * 16 GB machine at 6 GB and producing FatalProcessOutOfMemory → SIGABRT at ~5.2 GB.
+ *
+ * Matching both spellings makes the "explicit setting wins" contract actually hold.
+ */
+function hasExplicitHeapFlag(nodeOptions) {
+  return /--max[-_]old[-_]space[-_]size=/.test(nodeOptions ?? '')
+}
+
 const repoRoot = process.cwd()
 const backupRoot = path.join(repoRoot, '.next-build-disabled-routes')
 const MANIFEST_FILE = 'manifest.json'
@@ -473,7 +488,8 @@ function runTypecheckBeforeBuild() {
         stdio: 'inherit',
         env: {
           ...process.env,
-          NODE_OPTIONS: process.env.NODE_OPTIONS?.includes('--max-old-space-size=')
+          // Same both-spellings guard as the main build below — see hasExplicitHeapFlag.
+          NODE_OPTIONS: hasExplicitHeapFlag(process.env.NODE_OPTIONS)
             ? process.env.NODE_OPTIONS
             : [process.env.NODE_OPTIONS, '--max-old-space-size=4096'].filter(Boolean).join(' '),
         },
@@ -756,10 +772,18 @@ async function run() {
      * the rest of the pipeline — deliberately not 8192, which would race the container limit and
      * trade a V8 OOM for a harder-to-read kill.
      *
-     * Still overridable: an explicit NODE_OPTIONS --max-old-space-size wins, so this can be tuned
-     * from Vercel env vars without a deploy.
+     * Still overridable: an explicit NODE_OPTIONS heap flag wins, so this can be tuned from
+     * Vercel env vars without a deploy.
+     *
+     * ⚠ Node accepts BOTH spellings of this flag — `--max-old-space-size` and
+     * `--max_old_space_size` — and Vercel's larger build machines set the UNDERSCORE form
+     * ambiently (observed: `--max_old_space_size=14979` on an 8-core/16 GB box). A guard that
+     * only looked for hyphens missed that, appended its own hyphenated 6144, and Node applied
+     * the LAST flag — capping a 16 GB machine at 6 GB and turning the override into its exact
+     * opposite. That is the `FatalProcessOutOfMemory` → SIGABRT seen at ~5.2 GB. Match both
+     * spellings so a platform-provided ceiling is respected instead of silently shrunk.
      */
-    NODE_OPTIONS: process.env.NODE_OPTIONS?.includes('--max-old-space-size=')
+    NODE_OPTIONS: hasExplicitHeapFlag(process.env.NODE_OPTIONS)
       ? process.env.NODE_OPTIONS
       : [process.env.NODE_OPTIONS, '--max-old-space-size=6144'].filter(Boolean).join(' '),
   }
