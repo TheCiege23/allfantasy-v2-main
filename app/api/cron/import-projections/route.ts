@@ -27,6 +27,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { fetchWithChain } from "@/lib/workers/api-chain"
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
+import { getWeekBoard } from "@/lib/sports-data/sleeperMarketService"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -45,6 +46,23 @@ const SCORING_PRESET_ID = "ppr"
 const PROJECTION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Preseason through championship for each sport — see lib/sport-defaults/SeasonCalendarResolver.ts. */
+/**
+ * Whether a real projection source exists for the sport AT ALL.
+ *
+ * NFL has one (Sleeper, below). NCAAF does not: measured 2026-08-13, every
+ * provider in the chain fails for `projections`, and CollegeFootballData — the
+ * only NCAAF feed we hold a key for — returns 404 for both /projections/player
+ * and /player/injuries. There is nothing to import.
+ *
+ * That distinction matters operationally. A sport with no source is not a
+ * failing sport: reporting it as an error forever teaches the operator to
+ * ignore this cron, which is exactly how the next REAL failure gets missed.
+ */
+const HAS_PROJECTION_SOURCE: Record<ProjectionSport, boolean> = {
+  NFL: true,
+  NCAAF: false,
+}
+
 const SEASON_ACTIVE_MONTHS: Record<ProjectionSport, readonly number[]> = {
   NFL: [8, 9, 10, 11, 12, 1, 2],
   NCAAF: [8, 9, 10, 11, 12, 1],
@@ -141,6 +159,44 @@ async function persistProjectionRows(
   return written
 }
 
+/**
+ * Real NFL projections from Sleeper.
+ *
+ * The provider chain (Rolling Insights -> ClearSports -> TheSportsDB ->
+ * API-Sports -> Sleeper chain adapter) reports "All providers failed" for
+ * projections, which is why fantasy_projections sat at 0 rows while the cron
+ * ran daily. This is the same feed lib/sports-data/sleeperMarketService already
+ * uses for stat boards, and it returns real rows today (3,111 for 2026 wk1).
+ *
+ * The FULL stat line is carried through, not just pts_ppr, because
+ * fantasy_projections.stats is JSON and scoreStatLine can then rescore a
+ * projection under a league's own settings — a TE-premium league should not
+ * read a generic PPR number for its tight end.
+ */
+async function fetchSleeperNflProjections(
+  season: string,
+  week: number,
+): Promise<Array<Record<string, unknown>>> {
+  const board = await getWeekBoard(season, week)
+  if (!board) return []
+  const rows: Array<Record<string, unknown>> = []
+  for (const p of Object.values(board.players)) {
+    const points = p.stats?.pts_ppr
+    if (typeof points !== "number" || !Number.isFinite(points)) continue
+    rows.push({
+      playerId: p.playerId,
+      name: p.name,
+      position: p.position,
+      team: p.team,
+      week,
+      projectedPoints: points,
+      // Preserved so consumers can rescore under league settings.
+      stats: p.stats,
+    })
+  }
+  return rows
+}
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
   const sports = resolveSports(url.searchParams.get("sport"))
@@ -152,6 +208,18 @@ async function handle(req: NextRequest) {
 
   try {
     for (const sport of sports) {
+      if (!HAS_PROJECTION_SOURCE[sport]) {
+        results[sport] = {
+          ok: true,
+          skipped: true,
+          reason:
+            `No projection source exists for ${sport}. Every chain provider fails for ` +
+            `projections, and CollegeFootballData returns 404 for /projections/player. ` +
+            `Reported as idle rather than failed so a real failure elsewhere stays visible.`,
+        }
+        continue
+      }
+
       if (!force && !isInSeason(sport)) {
         results[sport] = {
           ok: true,
@@ -168,30 +236,80 @@ async function handle(req: NextRequest) {
         forceRefresh: true,
       })
 
-      const rows = Array.isArray(chainResult.data)
+      let rows = Array.isArray(chainResult.data)
         ? chainResult.data.filter((r): r is Record<string, unknown> => !!r && typeof r === "object")
         : []
+      let usedSource = chainResult.source ?? "chain"
+
+      // The chain is tried first so a recovered provider is preferred, but it has
+      // been failing outright — fall back to the Sleeper feed that actually works
+      // rather than leaving the table empty for another day.
+      if (rows.length === 0 && sport === "NFL") {
+        // NOT toFiniteNumber(searchParams.get("week")): Number(null) is 0 and
+        // Number.isFinite(0) is true, so an absent param resolved to week 0 —
+        // a real Sleeper board (7,620 players) that carries ZERO pts_ppr because
+        // preseason has no projections. It synced nothing and looked like the
+        // provider failing again.
+        const weekParam = url.searchParams.get("week")
+        const parsedWeek = weekParam == null ? null : toFiniteNumber(weekParam)
+        const week = parsedWeek != null && parsedWeek > 0 ? parsedWeek : approximateCurrentWeek()
+        rows = await fetchSleeperNflProjections(season, week)
+        if (rows.length > 0) usedSource = "sleeper"
+      }
 
       if (rows.length === 0) {
+        /**
+         * An empty ingest during an ACTIVE season is a FAILURE, not a quiet
+         * success. Reporting `ok: !chainResult.error` here is precisely what let
+         * production run with an empty `fantasy_projections` table: the provider
+         * returned nothing WITHOUT setting an error, so this evaluated to
+         * `ok: true`, the cron returned 200, the health chip's Projections domain
+         * read a `fetchedAt` that never advanced, and every downstream surface
+         * (Player Command Center, replacement options, Chimmy's cited numbers,
+         * Draft VORP, three war rooms) rendered "unavailable" with nobody told.
+         *
+         * Degrading gracefully and telling the operator are different jobs. This
+         * is the second.
+         */
+        const emptyIsFailure = isInSeason(sport)
         results[sport] = {
-          ok: !chainResult.error,
+          ok: !emptyIsFailure,
           synced: 0,
-          error: chainResult.error ?? null,
+          error:
+            chainResult.error ??
+            (emptyIsFailure
+              ? `No projection rows for ${sport} ${season} (provider: ${chainResult.source ?? "none"}). ` +
+                `${sport} is in season, so an empty ingest is a failure, not an idle no-op.`
+              : null),
         }
         continue
       }
 
-      const synced = await persistProjectionRows(sport, season, rows, chainResult.source ?? "clearsports")
-      results[sport] = { ok: true, synced, source: chainResult.source ?? null }
+      const synced = await persistProjectionRows(sport, season, rows, usedSource)
+      // Report the source that actually produced the rows, not the chain's idea
+      // of one — otherwise a Sleeper-sourced ingest reads as a chain success and
+      // hides that the chain is still broken.
+      results[sport] = { ok: true, synced, source: usedSource, chainSource: chainResult.source ?? null }
     }
 
-    return NextResponse.json({
-      ok: true,
-      season,
-      results,
-      durationMs: Date.now() - startedAt,
-      timestamp: new Date().toISOString(),
-    })
+    // Surface failure at the TOP level too, and with a non-2xx status — Vercel's
+    // cron dashboard keys off the HTTP status, so a 200 body containing
+    // `ok: false` would still read as a healthy run.
+    const failed = Object.entries(results)
+      .filter(([, r]) => (r as { ok?: boolean }).ok === false)
+      .map(([sport]) => sport)
+
+    return NextResponse.json(
+      {
+        ok: failed.length === 0,
+        season,
+        failedSports: failed.length ? failed : undefined,
+        results,
+        durationMs: Date.now() - startedAt,
+        timestamp: new Date().toISOString(),
+      },
+      { status: failed.length ? 500 : 200 },
+    )
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     console.error("[cron/import-projections] failed:", message)

@@ -34,6 +34,9 @@ vi.mock('@/lib/prisma', () => ({
     roster: { findMany: rosterFindMany },
     leagueTeam: { findMany: leagueTeamFindMany },
     userProfile: { findUnique: userProfileFindUnique },
+    // Slice 4/18 — the assemble path dereferences these models; absent keys
+    // throw TypeError inside the async fn and reject the whole portfolio.
+    fantasyProjection: { findMany: () => Promise.resolve([]) },
   },
 }))
 vi.mock('@/lib/shared-services/player-identity', () => ({ resolvePlayers: resolvePlayersMock }))

@@ -301,10 +301,23 @@ export async function assertImportCommissioner(args: {
   if (!args.requireCommissioner || !base.ok) return base
 
   if (base.isCommissioner === false) {
+    // Member-import (Aug 2026): the provider PROVED the requester is a real
+    // member of the source league — just not its commissioner. Hard-blocking
+    // members killed the growth loop (most users aren't commish of every
+    // league they play in), so a verified member may proceed WITH an explicit
+    // recorded attestation. Stamped `verification:'attestation'`, never
+    // `'api'`, so the audit trail records that commissioner status was NOT
+    // proven. Non-members are still rejected outright by the membership check.
+    if (args.attestation?.accepted === true && attestationMatchesThisRequest(args.attestation, args)) {
+      return { ...base, verification: 'attestation' }
+    }
     return {
+      ...base,
       ok: false,
       isCommissioner: false,
-      reason: 'Only the league commissioner can import this league into AllFantasy.',
+      requiresAttestation: true,
+      reason:
+        'You’re a verified member of this league (not its commissioner). Confirm to import it anyway — your leaguemates can claim their teams, and the commissioner can take it over later.',
     }
   }
 

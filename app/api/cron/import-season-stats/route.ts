@@ -29,6 +29,8 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { syncNflFoundationSeasonStats } from "@/lib/nfl-data-foundation/nflFoundationSync"
 
 export const dynamic = "force-dynamic"
+import { ingestPlayerStats } from '@/lib/sports-data/theSportsDbIngest'
+
 export const maxDuration = 300
 
 async function handle(req: NextRequest) {
@@ -45,9 +47,39 @@ async function handle(req: NextRequest) {
       ...(Number.isFinite(limitParam) && limitParam > 0 ? { limit: limitParam } : {}),
     })
 
+    /*
+     * TheSportsDB season statistics.
+     *
+     * Folded in here rather than given a route — the repo is at the 2048-route
+     * ceiling, and this cron already owns season stats. Daily at 06:20 matches
+     * freshnessPolicy's player_season_stats tier.
+     *
+     * ⚠ BOUNDED AND CYCLING. lookupplayerstats is ONE CALL PER PLAYER, so all
+     * ~5,000 stored players would take about an hour — far past this route's 300s
+     * maxDuration. Each run takes a slice; ingestPlayerStats orders players with
+     * no stats row first, then least-recently-fetched, so successive runs walk
+     * the whole population instead of re-fetching the same head every night.
+     */
+    const tsdbStats: Record<string, unknown> = {}
+    if (url.searchParams.get('tsdb') !== '0' && !dryRun) {
+      for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
+        try {
+          const r = await ingestPlayerStats(sport, { maxPlayers: 60 })
+          tsdbStats[sport] = {
+            queried: r.playersQueried,
+            withStats: r.playersWithStats,
+            seasonRows: r.seasonRowsWritten,
+          }
+        } catch (err) {
+          tsdbStats[sport] = { error: String(err).slice(0, 120) }
+        }
+      }
+    }
+
     return NextResponse.json({
       ok: true,
       dryRun,
+      thesportsdb: tsdbStats,
       requestedSeason: report.requestedSeason,
       season: report.season,
       fallbackSeasonUsed: report.fallbackSeasonUsed,

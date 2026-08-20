@@ -180,6 +180,104 @@ function buildUserContextSection(structuredFantasyContext: StructuredFantasyCont
   return lines.join('\n')
 }
 
+/**
+ * Player Command Center (Slice 3) — renders the cross-league player summary
+ * (ChimmyCrossLeaguePlayerSummary from crossLeaguePlayerPortfolio.ts) when the
+ * pipeline attached one under `crossLeague`. Curated and compact by design:
+ * injured players, bye-week players, overexposure, and leagues needing action —
+ * never the full portfolio. Absent key → empty string, zero prompt change.
+ */
+function buildCrossLeagueSection(structuredFantasyContext: StructuredFantasyContext): string {
+  const root = asRecord(structuredFantasyContext)
+  const summary = asRecord(root.crossLeague)
+  if (Object.keys(summary).length === 0) return ''
+
+  const lines = ['## CROSS-LEAGUE PORTFOLIO (all connected leagues)']
+  lines.push(`- Connected leagues: ${String(summary.connectedLeagueCount ?? 'Unknown')}`)
+
+  const renderRefs = (value: unknown, label: string, detail: (r: Record<string, unknown>) => string) => {
+    if (!Array.isArray(value) || value.length === 0) return
+    const rendered = value
+      .slice(0, 6)
+      .map((raw) => {
+        const r = asRecord(raw)
+        const leagues = asStringArray(r.leagueNames)
+        const leagueNote = leagues.length > 0 ? ` [${joinList(leagues, 3)}]` : ''
+        return `${String(r.displayName ?? 'Unknown')}${detail(r)}${leagueNote}`
+      })
+      .join('; ')
+    lines.push(`- ${label}: ${rendered}`)
+  }
+
+  renderRefs(summary.injuredPlayers, 'Injured rostered players', (r) => ` (${String(r.injuryStatus ?? 'unknown')})`)
+  renderRefs(summary.byeWeekPlayers, 'On bye', (r) => ` (week ${String(r.byeWeek ?? '?')})`)
+  renderRefs(
+    summary.overexposedPlayers,
+    'Overexposed',
+    (r) => ` (${Math.round(Number(r.percentageOfUserLeagues ?? 0) * 100)}% of leagues)`,
+  )
+  renderRefs(
+    summary.playersNeedingAction,
+    'Needing action',
+    (r) => ` (${String(r.criticalCount ?? 0)} critical / ${String(r.highCount ?? 0)} high)`,
+  )
+
+  return lines.length > 2 ? lines.join('\n') : ''
+}
+
+/**
+ * Slice 8 — deterministic replacement options for a mentioned rostered player
+ * (from lib/shared-services/league-hub/replacementOptions.ts, the same engine
+ * the Player Command Center serves). Rendered as data + a hard instruction so
+ * prose answers cite these real deltas instead of inventing alternatives.
+ * Absent key → empty string, zero prompt change.
+ */
+function buildReplacementOptionsSection(structuredFantasyContext: StructuredFantasyContext): string {
+  const root = asRecord(structuredFantasyContext)
+  const reps = asRecord(root.replacementOptions)
+  if (Object.keys(reps).length === 0) return ''
+
+  const playerName = String(reps.playerName ?? 'the player')
+  const lines = [`## REPLACEMENT OPTIONS — ${playerName} (deterministic; cite these numbers, do not invent alternatives)`]
+
+  if (reps.limitation === 'no_projection_data') {
+    lines.push('- No real projection data exists for this league yet — say so rather than estimating.')
+    return lines.join('\n')
+  }
+
+  const week = reps.projectionWeek
+  const affected = reps.affectedProjection
+  if (typeof affected === 'number') {
+    lines.push(`- ${playerName} projects ${affected.toFixed(1)}${week != null ? ` (week ${String(week)})` : ''}`)
+  }
+
+  const renderList = (value: unknown, label: string) => {
+    if (!Array.isArray(value) || value.length === 0) return
+    const rendered = value
+      .slice(0, 3)
+      .map((raw) => {
+        const c = asRecord(raw)
+        const delta = typeof c.delta === 'number' ? ` (${c.delta >= 0 ? '+' : ''}${c.delta.toFixed(1)})` : ''
+        const pos = c.position ? ` ${String(c.position)}` : ''
+        const proj = typeof c.projectedPoints === 'number' ? ` ${c.projectedPoints.toFixed(1)} proj` : ''
+        return `${String(c.name ?? 'Unknown')}${pos}${proj}${delta}`
+      })
+      .join('; ')
+    lines.push(`- ${label}: ${rendered}`)
+  }
+  renderList(reps.benchOptions, 'Best on their bench')
+  renderList(reps.freeAgentOptions, 'Best available (unrostered)')
+
+  const claim = asRecord(reps.claimTarget)
+  if (claim.kind === 'native') {
+    lines.push('- Claims for this league happen on the AllFantasy waiver wire (link the user there when relevant).')
+  } else if (claim.kind === 'provider') {
+    lines.push(`- This league lives on ${String(claim.provider ?? 'another platform')} — AllFantasy advises but cannot execute the claim.`)
+  }
+
+  return lines.length > 1 ? lines.join('\n') : ''
+}
+
 export function buildCompressedSystemPrompt(args: {
   rawPrompt: string
   structuredFantasyContext?: StructuredFantasyContext
@@ -191,6 +289,8 @@ export function buildCompressedSystemPrompt(args: {
     buildFormatRulesSection(activeFormats),
     buildLeagueContextSection(args.structuredFantasyContext),
     buildUserContextSection(args.structuredFantasyContext, args.ctx),
+    buildCrossLeagueSection(args.structuredFantasyContext),
+    buildReplacementOptionsSection(args.structuredFantasyContext),
   ].filter(Boolean)
 
   return sections.join('\n\n').trim()

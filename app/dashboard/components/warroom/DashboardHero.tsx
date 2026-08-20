@@ -163,25 +163,28 @@ export function DashboardHero({
   }
 
   return (
-    <WarRoomCard className="relative overflow-hidden p-4 sm:p-5" accentBorder="rgba(34,211,238,0.18)">
+    <WarRoomCard className="relative overflow-hidden p-4 sm:p-5" accentBorder="rgba(255,61,129,0.28)">
+      {/* Broadcast Deck glow — same pink/orange signature as the league page. */}
       <div aria-hidden className="pointer-events-none absolute inset-x-0 top-0 h-32 opacity-80"
-        style={{ background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(34,211,238,0.18) 0%, transparent 70%)' }} />
+        style={{ background: 'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(255,61,129,0.16) 0%, transparent 70%)' }} />
+      <div aria-hidden className="absolute inset-x-0 top-0 h-[3px]"
+        style={{ background: 'linear-gradient(90deg,#ff3d81,#ff8a3d)' }} />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-        <div className="relative hidden h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-white/10 bg-white/[0.04] sm:block"
-          style={{ boxShadow: '0 0 0 1px rgba(34,211,238,0.12), 0 0 28px -8px rgba(34,211,238,0.5)' }} aria-hidden>
+        <div className="relative hidden h-14 w-14 shrink-0 overflow-hidden rounded-2xl border border-[#262c6a] bg-white/[0.04] sm:block"
+          style={{ boxShadow: '0 0 0 1px rgba(255,61,129,0.14), 0 0 28px -8px rgba(255,61,129,0.5)' }} aria-hidden>
           <Image src={heroArt.thumbnail} alt="" fill sizes="56px" className="object-cover opacity-90" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-400/70">{t(EYEBROW_KEY[context])}</p>
+            <p className="text-[11px] font-black uppercase italic tracking-[0.14em] text-[#ff8a3d]">{t(EYEBROW_KEY[context])}</p>
             {greetingPeriod ? (
               <p className="text-[11px] font-medium text-white/45">
                 {tInterpolate(`dashboard.warroom.hero.greeting.${greetingPeriod}`, { name: userName })}
               </p>
             ) : null}
           </div>
-          <h1 className="mt-1 text-[22px] font-black leading-[1.1] tracking-tight text-white sm:text-[26px]"
-            style={{ textShadow: '0 2px 24px rgba(34,211,238,0.18)' }}>
+          <h1 className="mt-1 text-[22px] font-black italic leading-[1.1] tracking-tight text-[#f0f2ff] sm:text-[26px]"
+            style={{ textShadow: '0 2px 24px rgba(255,61,129,0.18)' }}>
             {t(HEADLINE_KEY[context])}
           </h1>
 
@@ -216,10 +219,10 @@ export function DashboardHero({
 
           {/* Compact icon actions — the old giant launcher cards, collapsed to one row. */}
           <div className="mt-3.5 flex flex-wrap items-center gap-2">
-            <NavChip icon={Swords} accent="text-cyan-400" label={t('dashboard.warroom.hero.navWarRoomTitle')} href="/war-room" />
-            <NavChip icon={Crown} accent="text-amber-400" label={isCommissionerAnywhere ? t('dashboard.warroom.hero.navCommissionerHubTitle') : t('dashboard.warroom.hero.navRunLeagueTitle')} href="/commissioner-hub" />
-            <NavChip icon={Sparkles} accent="text-violet-400" label={t('dashboard.warroom.hero.navChimmyTitle')} onClick={openChimmy} />
-            <NavChip icon={MessageCircle} accent="text-cyan-300" label={t('dashboard.warroom.hero.navComms')} onClick={openComms} />
+            <NavChip icon={Swords} accent="text-[#ff3d81]" label={t('dashboard.warroom.hero.navWarRoomTitle')} href="/war-room" />
+            <NavChip icon={Crown} accent="text-[#ffc53d]" label={isCommissionerAnywhere ? t('dashboard.warroom.hero.navCommissionerHubTitle') : t('dashboard.warroom.hero.navRunLeagueTitle')} href="/commissioner-hub" />
+            <NavChip icon={Sparkles} accent="text-[#ff8a3d]" label={t('dashboard.warroom.hero.navChimmyTitle')} onClick={openChimmy} />
+            <NavChip icon={MessageCircle} accent="text-[#7fb3ff]" label={t('dashboard.warroom.hero.navComms')} onClick={openComms} />
           </div>
         </div>
       </div>

@@ -65,7 +65,7 @@ export function TradeDiscoveryPanel({
   )
 
   return (
-    <div className="rounded-lg border border-cyan-300/15 bg-cyan-400/[0.05]" data-testid="trade-discovery-panel">
+    <div className="rounded-lg border border-[#ff9ec0]/15 bg-[#ff3d81]/[0.05]" data-testid="trade-discovery-panel">
       <button
         type="button"
         data-testid="trade-discovery-toggle"
@@ -73,14 +73,14 @@ export function TradeDiscoveryPanel({
           setOpen((v) => !v)
           if (!partners && !loading) void load()
         }}
-        className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-cyan-100"
+        className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold text-[#ffd7e5]"
       >
         <span>Find a Trade — best partners &amp; package ideas</span>
-        <span className="text-cyan-200/70">{open ? '▾' : '▸'}</span>
+        <span className="text-[#ffb8d1]/70">{open ? '▾' : '▸'}</span>
       </button>
 
       {open ? (
-        <div className="space-y-2 border-t border-cyan-300/15 px-3 py-2 text-[11px]">
+        <div className="space-y-2 border-t border-[#ff9ec0]/15 px-3 py-2 text-[11px]">
           {loading ? (
             <p className="text-white/50">Finding partners…</p>
           ) : error ? (
@@ -90,7 +90,7 @@ export function TradeDiscoveryPanel({
               <div key={p.rosterId} className="rounded border border-white/10 bg-black/20 p-2" data-testid="discovery-partner-card">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-white">{p.teamName}</span>
-                  <span className="rounded border border-cyan-300/40 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] text-cyan-100">Match {p.matchScore}</span>
+                  <span className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[10px] text-[#ffd7e5]">Match {p.matchScore}</span>
                 </div>
                 <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
                   {p.partnerNeeds.map((n) => (
@@ -118,7 +118,7 @@ export function TradeDiscoveryPanel({
                     type="button"
                     data-testid={`discovery-build-${p.rosterId}`}
                     onClick={() => onBuildProposal(p.rosterId)}
-                    className="rounded bg-cyan-500/85 px-2 py-1 text-[10px] font-semibold text-black"
+                    className="rounded bg-[#ff3d81]/85 px-2 py-1 text-[10px] font-semibold text-black"
                   >
                     Build proposal
                   </button>

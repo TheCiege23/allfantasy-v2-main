@@ -105,6 +105,10 @@ export const POST = withApiUsage({ endpoint: "/api/auth/login", tool: "AuthLogin
   const cookie = signAdminSessionCookie({
     authenticated: true,
     role: "admin",
+    // Shared-password login carries no per-person identity. Record the METHOD so audited
+    // actions attribute to the honest "password-admin" (see resolveAdminAuditIdentity),
+    // never "unknown-admin" and never a specific administrator's email.
+    authMethod: "password",
   });
 
   const res = NextResponse.json({ ok: true, next });

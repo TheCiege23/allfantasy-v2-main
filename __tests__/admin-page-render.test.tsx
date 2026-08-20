@@ -417,6 +417,8 @@ describe("/admin page render states", () => {
     expect(screen.getByText(/Integrity \/ Fraud/i)).toBeInTheDocument()
     expect(screen.getByText("API-Football / API-Sports World Cup")).toBeInTheDocument()
     expect(screen.getByText(/Recent Users/i)).toBeInTheDocument()
+    // P0-1: the Closed-Beta Invitations panel renders on the healthy admin page.
+    expect(screen.getByText(/Closed-Beta Invitations/i)).toBeInTheDocument()
     expect(mocks.getAdminCommandCenterMetrics).toHaveBeenCalledWith("ciege")
   })
 
@@ -443,5 +445,8 @@ describe("/admin page render states", () => {
       "href",
       "/admin/production-health",
     )
+    // P0-1 SSR RESILIENCE: an unrelated admin data-loader failure must NOT hide the
+    // Closed-Beta Invitations controls — an authenticated admin can still issue invites.
+    expect(screen.getByText(/Closed-Beta Invitations/i)).toBeInTheDocument()
   })
 })

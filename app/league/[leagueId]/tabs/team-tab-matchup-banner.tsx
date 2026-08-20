@@ -53,11 +53,11 @@ export function TeamTabMatchupBanner({ leagueId }: { leagueId: string }) {
     <Link
       href="?tab=matchups"
       className={cn(
-        'mb-3 flex w-full items-center gap-2 rounded-lg border border-cyan-500/20 bg-cyan-500/[0.04] px-3 py-2 text-left transition hover:border-cyan-500/35 hover:bg-cyan-500/[0.07]',
+        'mb-3 flex w-full items-center gap-2 rounded-lg border border-[#ff3d81]/20 bg-[#ff3d81]/[0.04] px-3 py-2 text-left transition hover:border-[#ff3d81]/35 hover:bg-[#ff3d81]/[0.07]',
       )}
       data-testid="team-tab-matchup-banner"
     >
-      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-cyan-300/80">
+      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#ff9ec0]/80">
         Week {data.week}
       </span>
       <span className="text-[11px] text-white/50">vs.</span>
@@ -67,7 +67,7 @@ export function TeamTabMatchupBanner({ leagueId }: { leagueId: string }) {
       <span className="shrink-0 text-[11px] text-white/55">
         ~{userPts} – ~{themPts}
       </span>
-      <span className="shrink-0 text-[10px] text-cyan-400/70">›</span>
+      <span className="shrink-0 text-[10px] text-[#ff3d81]/70">›</span>
     </Link>
   )
 }

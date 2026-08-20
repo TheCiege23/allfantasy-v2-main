@@ -1,5 +1,14 @@
 # Waiver Shared-Service Shadow Compare (Phase 12)
 
+> **STALE-MODULE NOTE (2026-08-09, AF_TRADE_UNIFICATION_BRIEF Phase 0.5):** the module
+> this document describes — `lib/decision-os/waiver/sharedServiceShadowCompare.ts` —
+> **does not exist in the repo** (never landed on this branch or was removed). Its test
+> was deleted in Phase 0/1 because it imported the missing path. The 39/39 result below
+> is historical evidence from that module's validation runs and cannot currently be
+> reproduced from `main`. The live, real waiver shadow is
+> `lib/decision-os/waiver/shadow.ts`, wired into `app/api/waiver-ai/engine/route.ts`
+> with `emitShadowParity('manager.waiver.claim', …)`.
+
 **Status: implemented (Phase 12), real-data validated against one real imported Sleeper league (Phase 13), player-identity gap closed (Phase 14), decision-context fidelity fixed (Phase 15), generalized to 3 distinct real rosters (Phase 16). Off by default in every real environment. Not an authoritative migration.**
 
 **Phase 15 update:** the shadow-compare seam previously never forwarded `currentWeek`/`goal`/`maxResults` to `evaluateWaiverShadow`, so it always evaluated as week-1/balanced/top-10 regardless of the real request. Fixed via a new, narrow `WaiverRequestContext` extraction (see [`FANTASY_OS_DECISION_CONTEXT.md`](FANTASY_OS_DECISION_CONTEXT.md) for the full audit, security review, and Context Fidelity Matrix). Re-validated against the same real Sleeper league: `equivalent` rate rose from 14/21 (67%, Phase 14) to **21/21 (100%)** — for the correct reason (identical decision context), not a masked one.

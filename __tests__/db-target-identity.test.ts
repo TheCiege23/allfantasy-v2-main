@@ -1,6 +1,8 @@
 import { createRequire } from "module"
 
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+import { assertNonProductionDbTarget } from "@/scripts/_db-target-identity"
 
 const requireCjs = createRequire(import.meta.url)
 const {
@@ -101,5 +103,92 @@ describe("describeTarget", () => {
     expect(described).not.toContain("://")
     expect(described).toContain("ep-curly-block-ad0dlt9o")
     expect(described).toContain("PRODUCTION")
+  })
+})
+
+
+/**
+ * `assertNonProductionDbTarget` is the guard every `scripts/*-nonprod.ts`, conformance, probe and
+ * staging-parity script now calls. It exits the process on refusal, so these tests stub
+ * `process.exit` and assert on whether it fired.
+ */
+describe("assertNonProductionDbTarget", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    delete process.env.ALLOW_PROD_READONLY
+  })
+
+  /** Stub process.exit so a refusal is observable instead of killing the test run. */
+  function runGuard(opts: Parameters<typeof assertNonProductionDbTarget>[0]) {
+    const exit = vi.spyOn(process, "exit").mockImplementation((() => {
+      throw new Error("__EXIT__")
+    }) as never)
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    vi.spyOn(console, "warn").mockImplementation(() => {})
+    vi.spyOn(console, "log").mockImplementation(() => {})
+    let exited = false
+    try {
+      assertNonProductionDbTarget(opts)
+    } catch (e) {
+      if ((e as Error).message !== "__EXIT__") throw e
+      exited = true
+    }
+    // Last call, not first: spying an already-spied method reuses the existing mock, so calls
+    // accumulate across invocations within a single test.
+    return { exited, exitCode: exit.mock.calls.at(-1)?.[0] }
+  }
+
+  it("permits the test database", () => {
+    expect(runGuard({ script: "t", url: TEST_DB }).exited).toBe(false)
+  })
+
+  it("refuses production, pooled and direct alike", () => {
+    expect(runGuard({ script: "t", url: PROD_DIRECT }).exited).toBe(true)
+    expect(runGuard({ script: "t", url: PROD_POOLED }).exited).toBe(true)
+  })
+
+  // The regression this whole module exists for: the old per-file guard named the dev fork as
+  // production, so it refused the safe database and let the real one through.
+  it("does NOT refuse the old ep-spring-tooth marker as though it were production", () => {
+    const { exited } = runGuard({ script: "t", url: OLD_MARKER })
+    // It is still refused — but as an UNRECOGNISED target (fail-closed), not as production.
+    expect(exited).toBe(true)
+    expect(isProductionTarget(OLD_MARKER)).toBe(false)
+  })
+
+  it("fails closed on an unrecognised target rather than allowing it", () => {
+    expect(runGuard({ script: "t", url: "postgresql://u:pw@ep-nobody-knows.neon.tech/neondb" }).exited).toBe(true)
+  })
+
+  it("fails closed when no URL can be resolved at all", () => {
+    expect(runGuard({ script: "t", url: "" }).exited).toBe(true)
+  })
+
+  it("honours the caller's exit code so SKIPPED-style scripts keep exiting 0", () => {
+    expect(runGuard({ script: "t", url: PROD_DIRECT, exitCode: 0 }).exitCode).toBe(0)
+    expect(runGuard({ script: "t", url: PROD_DIRECT }).exitCode).toBe(1)
+  })
+
+  describe("read-only production opt-in", () => {
+    it("still refuses production when the script did not opt in, even with the env var set", () => {
+      process.env.ALLOW_PROD_READONLY = "1"
+      expect(runGuard({ script: "t", url: PROD_DIRECT }).exited).toBe(true)
+    })
+
+    it("still refuses production when the script opted in but the env var is unset", () => {
+      expect(runGuard({ script: "t", url: PROD_DIRECT, readOnlyProdOptIn: true }).exited).toBe(true)
+    })
+
+    it("permits production only when BOTH the opt-in and the env var are present", () => {
+      process.env.ALLOW_PROD_READONLY = "1"
+      expect(runGuard({ script: "t", url: PROD_DIRECT, readOnlyProdOptIn: true }).exited).toBe(false)
+    })
+
+    // The opt-in means "I know this is production", not "let anything through".
+    it("does NOT rescue an unrecognised target", () => {
+      process.env.ALLOW_PROD_READONLY = "1"
+      const url = "postgresql://u:pw@ep-brand-new-branch99.neon.tech/neondb"
+      expect(runGuard({ script: "t", url, readOnlyProdOptIn: true }).exited).toBe(true)
+    })
   })
 })

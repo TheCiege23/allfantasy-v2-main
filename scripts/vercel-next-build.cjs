@@ -176,6 +176,15 @@ const filesToKeep = new Set([
   // `vercel.json` entries rather than consume route budget.
   path.join('app', 'api', 'cron', 'import-players', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-injuries', 'route.ts').replace(/\\/g, '/'),
+  // Phase 1 of the AF Projections Engine (2026-08-10): scheduled daily in
+  // vercel.json — the FantasyStatLine writer that had never existed.
+  path.join('app', 'api', 'cron', 'import-stat-lines', 'route.ts').replace(/\\/g, '/'),
+  // Phase 2 of the AF Projections Engine (2026-08-11): consumes the Phase 1 stat lines and
+  // writes AFProjectionSnapshot. Scheduled after import-stat-lines in vercel.json.
+  path.join('app', 'api', 'cron', 'compute-projections', 'route.ts').replace(/\\/g, '/'),
+  // Alert sweep (2026-08-11): the scheduled evaluation that makes alerts reach anyone at all.
+  // Without it, runUnifiedAlertEngine only runs when a user already has the app open.
+  path.join('app', 'api', 'cron', 'alert-sweep', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-news', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-scores', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'import-standings', 'route.ts').replace(/\\/g, '/'),
@@ -187,6 +196,11 @@ const filesToKeep = new Set([
   path.join('app', 'api', 'cron', 'draft-pool-prewarm', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'fantasy-os-exec-sync', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'cron', 'trade-weekly-recalibration', 'route.ts').replace(/\\/g, '/'),
+  // Scheduled in vercel.json but missing from every keep-list until Phase 0.5 of
+  // AF_TRADE_UNIFICATION_BRIEF — they 404'd on every scheduled run. Fourth instance
+  // of the #284 class.
+  path.join('app', 'api', 'cron', 'weekly-awards', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'morning-briefing', 'route.ts').replace(/\\/g, '/'),
   // All three are scheduled in vercel.json, and `app/api/cron` is excluded wholesale above, so
   // every one of them needs a keep-line or Vercel invokes it on schedule and 404s every time —
   // draft-tick at 1/min is 1440 failed calls a day. Same class as the regression #284 fixed.
@@ -203,6 +217,17 @@ const filesToKeep = new Set([
   // Decision OS three-brain (Phase 2) maintenance drain — scheduled in vercel.json (*/10). `app/api/cron` is
   // disabled wholesale above, so without this keep-line Vercel would invoke it on schedule and 404 every time.
   path.join('app', 'api', 'cron', 'decision-os-intelligence-maintenance', 'route.ts').replace(/\\/g, '/'),
+  // Decision OS behavioral snapshot capture — daily discovery walk (30 7 * * *). Scheduled Aug 2026;
+  // same keep-line class as every other vercel.json cron (guard fails the build without it).
+  path.join('app', 'api', 'cron', 'decision-os-snapshot-capture', 'route.ts').replace(/\\/g, '/'),
+  // Decision OS imported-activity ingestion — daily Sleeper walk (0 7 * * *), feeds the 07:30 snapshots.
+  path.join('app', 'api', 'cron', 'decision-os-activity-ingest', 'route.ts').replace(/\\/g, '/'),
+  // Trade-grade notifier (*/30), weekly league recap (Tue), morning briefing (daily) — all three are
+  // scheduled in vercel.json but NEVER had keep-lines, so they 404'd on every scheduled fire since
+  // they shipped. Same regression class as #284: every vercel.json cron needs a keep-line here.
+  path.join('app', 'api', 'cron', 'trade-grade-notify', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'weekly-awards', 'route.ts').replace(/\\/g, '/'),
+  path.join('app', 'api', 'cron', 'morning-briefing', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'automation', 'waivers', 'run', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'ai', 'waivers', 'commissioner-insights', 'route.ts').replace(/\\/g, '/'),
@@ -231,12 +256,57 @@ const filesToKeep = new Set([
   // back to zeros/empty. Verified against production: these returned 404 while kept siblings
   // (status, ai/audit-logs) correctly returned 401.
   path.join('app', 'api', 'admin', 'visitor-analytics', 'route.ts').replace(/\\/g, '/'),
+  // Social/campaign attribution reporting, fetched by the admin dashboard UI. Without this
+  // keep-line the whole `app/api/admin` directory exclusion applies and the panel renders
+  // against a 404 — the same failure mode documented for its siblings above.
+  path.join('app', 'api', 'admin', 'visitor-analytics', 'campaigns', 'route.ts').replace(/\\/g, '/'),
+  // Closed-beta invite admin (P0-1 BETA-GATE): issue/list/revoke. Ships despite the
+  // wholesale app/api/admin exclusion, or the admin UI would render against a 404.
+  path.join('app', 'api', 'admin', 'beta-invites', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'api-health', 'route.ts').replace(/\\/g, '/'),
   path.join('app', 'api', 'admin', 'chimmy', 'health', 'route.ts').replace(/\\/g, '/'),
   // Also the endpoint the Stripe checkout-link verification step depends on — it has been
   // recommended as the P0-A verification for days while silently 404ing in production.
   path.join('app', 'api', 'admin', 'monetization', 'checkout-link-mapping', 'route.ts').replace(/\\/g, '/'),
 ])
+
+// ── Cron keep-line guard ─────────────────────────────────────────────────────
+// Twice now a vercel.json cron has pointed at a route this script excludes
+// without a keep-line — Vercel then fires the schedule into a 404 forever
+// (regression #284, and again in the Aug 2026 dispatcher consolidation).
+// Fail the build loudly instead of shipping silently-dead crons.
+;(function assertScheduledCronsSurviveExclusion() {
+  let crons = []
+  try {
+    crons = JSON.parse(fs.readFileSync(path.join(repoRoot, 'vercel.json'), 'utf8')).crons || []
+  } catch {
+    return // no vercel.json → nothing scheduled → nothing to guard
+  }
+  const problems = []
+  for (const cron of crons) {
+    const p = String(cron.path || '').split('?')[0] // cron paths may carry query strings
+    if (!p.startsWith('/')) continue
+    const routeFile = path.join('app', ...p.split('/').filter(Boolean), 'route.ts').replace(/\\/g, '/')
+    if (!fs.existsSync(path.join(repoRoot, routeFile))) {
+      problems.push(`${p} -> ${routeFile} does not exist in the repo`)
+      continue
+    }
+    const excludedByDir = routeDirsToDisable.some((dir) => {
+      const d = String(dir).replace(/\\/g, '/')
+      return routeFile === d || routeFile.startsWith(d + '/')
+    })
+    if (excludedByDir && !filesToKeep.has(routeFile)) {
+      problems.push(`${p} -> ${routeFile} is excluded by this script with NO keep-line (would 404 on every scheduled fire)`)
+    }
+  }
+  if (problems.length > 0) {
+    console.error('[vercel-next-build] FATAL: scheduled vercel.json crons would be dead in this build:')
+    for (const x of problems) console.error('  - ' + x)
+    console.error('[vercel-next-build] Add a keep-line to filesToKeep (or unschedule the cron) before deploying.')
+    process.exit(1)
+  }
+  console.log(`[vercel-next-build] Cron keep-line guard: ${crons.length} scheduled cron(s) verified against exclusions`)
+})()
 
 function directoryExists(targetPath) {
   try {

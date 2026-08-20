@@ -150,6 +150,25 @@ test('shows import provider states without broken unsupported actions', async ({
   await expect(page.getByTestId('g30-import-provider-mfl')).toContainText('Limited beta')
   await expect(page.getByTestId('g30-import-provider-manual')).toContainText('Coming soon')
   await expect(page.getByTestId('g30-import-provider-manual').getByRole('button')).toBeDisabled()
+
+  // Sleeper is the only provider with a working import path, so it is the only
+  // one allowed to hand the user a link — and it must go to the real route.
+  await expect(
+    page.getByTestId('g30-import-provider-sleeper').getByRole('link', { name: /start import/i })
+  ).toHaveAttribute('href', /\/import\?provider=sleeper/)
+
+  // The modal tells the user a beta provider "cannot be launched from this flow
+  // yet". A beta provider quietly growing a live-looking link would contradict
+  // that in the one place the user is deciding whether to trust the import.
+  for (const provider of ['espn', 'fantrax', 'yahoo', 'mfl']) {
+    await expect(
+      page.getByTestId(`g30-import-provider-${provider}`).getByRole('link', { name: /start import/i })
+    ).toHaveCount(0)
+  }
+
+  await expect(
+    page.getByTestId('g30-import-provider-espn').getByText(/cannot be launched from this flow yet/i)
+  ).toBeVisible()
 })
 
 test('locks advanced setup for non-commissioner and enables it for AF Commissioner', async ({ page }) => {

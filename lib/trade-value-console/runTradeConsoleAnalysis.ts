@@ -232,6 +232,14 @@ async function resolveAssets(
     }
 
     const pa = sportsRecordToPricedAsset(row)
+    if (!pa) {
+      // Pricing can now REFUSE (slice 11: no market value and no projection ->
+      // null rather than a fabricated number). An unpriceable asset belongs in
+      // `unresolved` so the grader sees a short side and reports insufficient
+      // data, instead of being handed a zero that reads as "worthless".
+      unresolved.push(displayName || raw.playerId || row.id)
+      continue
+    }
     priced.push(pa)
     lines.push(
       lineFromPriced(pa, {

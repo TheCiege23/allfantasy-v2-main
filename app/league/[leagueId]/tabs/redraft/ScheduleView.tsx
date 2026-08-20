@@ -52,7 +52,7 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Schedule</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Schedule</p>
           <h3 className="text-[15px] font-semibold text-white">
             Week {visibleWeek?.week ?? schedule.currentWeek} matchups
           </h3>
@@ -76,7 +76,7 @@ export function ScheduleView({ schedule }: { schedule: RedraftScheduleClient | n
             className={[
               'min-w-12 rounded-lg border px-2 py-1 text-[11px] transition',
               week.week === visibleWeek?.week
-                ? 'border-cyan-300/60 bg-cyan-400/15 text-cyan-100'
+                ? 'border-[#ff9ec0]/60 bg-[#ff3d81]/15 text-[#ffd7e5]'
                 : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/25 hover:text-white/80',
             ].join(' ')}
             aria-pressed={week.week === visibleWeek?.week}

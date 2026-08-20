@@ -712,12 +712,31 @@ export function DraftTopBar({
             ) : null}
 
             {currentManagerOnClock ? (
+              /*
+                8b: gold is the "act now, and it is YOU" signal.
+
+                This chip previously rendered violet for whoever was on the clock, which made your
+                own turn look exactly like everybody else's — the one state on this screen that
+                demands you do something was styled identically to the eleven states that do not.
+                Gold + pulse now fires only when `isCurrentUserOnClock`; another manager's turn
+                stays violet, because it is information, not a call to act.
+
+                ⚠ 8b build rule 1 asks for gold to appear NOWHERE ELSE in the product, and this
+                file alone already spends amber on six other meanings: the paused state, the ≤30s
+                danger timer, pool-not-ready, reach warnings, bye conflicts, and a toggle. Making
+                gold literally exclusive is a colour audit across the whole draft room, not a
+                top-bar change, so it is deliberately not attempted here — flagged rather than
+                half-done.
+              */
               <div
                 className={`inline-flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 ring-1 ${
-                  rs
-                    ? 'border-violet-400/40 bg-[radial-gradient(ellipse_at_30%_0%,rgba(139,92,246,0.28),transparent),linear-gradient(145deg,rgba(109,40,217,0.22),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(139,92,246,0.22)] ring-violet-400/25'
-                    : 'border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-[#0a1228]/95 shadow-[0_6px_28px_rgba(139,92,246,0.15)] ring-violet-400/10'
+                  isCurrentUserOnClock
+                    ? 'animate-pulse border-amber-400/60 bg-[radial-gradient(ellipse_at_30%_0%,rgba(251,191,36,0.30),transparent),linear-gradient(145deg,rgba(180,83,9,0.28),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(251,191,36,0.28)] ring-amber-400/35'
+                    : rs
+                      ? 'border-violet-400/40 bg-[radial-gradient(ellipse_at_30%_0%,rgba(139,92,246,0.28),transparent),linear-gradient(145deg,rgba(109,40,217,0.22),rgba(8,15,28,0.96))] shadow-[0_12px_40px_rgba(139,92,246,0.22)] ring-violet-400/25'
+                      : 'border-violet-400/25 bg-gradient-to-br from-violet-500/[0.14] to-[#0a1228]/95 shadow-[0_6px_28px_rgba(139,92,246,0.15)] ring-violet-400/10'
                 }`}
+                data-on-clock-self={isCurrentUserOnClock ? 'true' : undefined}
               >
                 {currentManagerAvatarUrl ? (
                   <Image
@@ -733,7 +752,11 @@ export function DraftTopBar({
                     }}
                   />
                 ) : (
-                  <User className="h-4 w-4 shrink-0 text-violet-300" />
+                  <User
+                    className={`h-4 w-4 shrink-0 ${
+                      isCurrentUserOnClock ? 'text-amber-300' : 'text-violet-300'
+                    }`}
+                  />
                 )}
                 <span
                   className="min-w-0 truncate text-[13px] font-bold text-white"
@@ -741,7 +764,11 @@ export function DraftTopBar({
                 >
                   {currentManagerOnClock}
                 </span>
-                <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-violet-200/75">
+                <span
+                  className={`shrink-0 text-[9px] font-semibold uppercase tracking-wide ${
+                    isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
+                  }`}
+                >
                   {isOrphanOnClock
                     ? orphanModeLabel
                     : isCurrentUserOnClock

@@ -376,7 +376,23 @@ async function mockKeeperDraftRoomApis(page: Page, leagueId: string) {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ ok: true, keeper: { config: state.keeperConfig, selections: state.keeperSelections, locks: keeperLocks() }, session: buildSession() }),
+      // Shape must match app/api/leagues/[leagueId]/draft/keepers/route.ts, which
+      // returns these fields at the TOP level. The mock previously nested them
+      // under `keeper`, so KeeperPanel read json.config as undefined and fell back
+      // to { maxKeepers: 0 } — which makes canEdit false and hides the entire add
+      // form. The keepers tab still rendered, so the failure looked like a missing
+      // button rather than a mock that answered the wrong shape.
+      body: JSON.stringify({
+        config: state.keeperConfig,
+        deadlineLocked: false,
+        sessionStatus: state.status,
+        selections: state.keeperSelections,
+        locks: keeperLocks(),
+        mySelections: state.keeperSelections.filter((s) => s.rosterId === 'roster-1'),
+        carryoverByRoster: {},
+        myCarryover: [],
+        currentUserRosterId: 'roster-1',
+      }),
     })
   })
 

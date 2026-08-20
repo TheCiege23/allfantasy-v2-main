@@ -7,6 +7,8 @@ import {
   type AdminMetric,
 } from "@/lib/admin-dashboard/AdminCommandCenterService"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
+import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
+import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
 import { AiProviderHealthPanel } from "@/components/admin/AiProviderHealthPanel"
 import { PlatformOsOperatorPanel } from "@/components/admin/PlatformOsOperatorPanel"
 import type {
@@ -39,6 +41,9 @@ import type {
 } from "@/lib/sports-os/ProviderTeamReconciliationService"
 
 export const dynamic = "force-dynamic"
+
+// Admin surfaces must never be indexed (defense-in-depth beyond robots.txt Disallow: /admin).
+export const metadata = { robots: { index: false, follow: false } }
 
 function MetricCard({ item }: { item: AdminMetric }) {
   return (
@@ -280,6 +285,25 @@ function AdminOverviewDeck({
   )
 }
 
+/**
+ * Non-sensitive build marker: shows the deployment's abbreviated commit SHA + environment
+ * (e.g. "build a1b2c3d · preview") so a deployed build is identifiable at a glance — you can
+ * tell Preview from Production without guessing from appearance. Reads only Vercel-set system
+ * vars; never renders secrets. Falls back gracefully when the vars are absent.
+ */
+function DeploymentMarker() {
+  const env = process.env.VERCEL_ENV || process.env.NODE_ENV || "local"
+  const commit = (process.env.VERCEL_GIT_COMMIT_SHA || "").slice(0, 7) || "dev"
+  return (
+    <span
+      data-testid="admin-build-marker"
+      className="inline-flex items-center rounded-md border border-cyan-300/30 bg-cyan-300/10 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100"
+    >
+      build {commit} · {env}
+    </span>
+  )
+}
+
 function AdminPageLoadFailure({
   message,
 }: {
@@ -290,9 +314,12 @@ function AdminPageLoadFailure({
       <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,0.20),transparent_34%),radial-gradient(circle_at_85%_8%,rgba(251,191,36,0.14),transparent_30%),linear-gradient(180deg,#020817_0%,#06111f_46%,#020817_100%)]" />
       <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-8 sm:px-6 lg:px-8">
         <section className="rounded-3xl border border-rose-300/20 bg-black/35 p-6 shadow-[0_28px_90px_-54px_rgba(244,63,94,0.65)] backdrop-blur-xl sm:p-8">
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-rose-200">
-            Admin degraded
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-xs font-black uppercase tracking-[0.22em] text-rose-200">
+              Admin degraded
+            </p>
+            <DeploymentMarker />
+          </div>
           <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-5xl">
             The admin shell loaded, but the data pipeline failed.
           </h1>
@@ -329,6 +356,16 @@ function AdminPageLoadFailure({
             </a>
           </div>
         </section>
+
+        {/*
+          P0-1: closed-beta invitations must NOT disappear because an unrelated admin data
+          loader failed. BetaInvitePanel is a client component that fetches its own data from
+          the admin-gated API, so it renders here in degraded mode exactly as on the healthy
+          page — an authenticated admin can always issue/list/revoke invites.
+        */}
+        <AccordionSection id="beta-invites" title="Closed-Beta Invitations" eyebrow="access">
+          <BetaInvitePanel />
+        </AccordionSection>
       </div>
     </main>
   )
@@ -1481,7 +1518,10 @@ export default async function AdminPage({
         <header className="rounded-3xl border border-cyan-300/15 bg-black/35 p-5 shadow-[0_28px_90px_-54px_rgba(34,211,238,0.85)] backdrop-blur-xl sm:p-7">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">AllFantasy Admin</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-xs font-black uppercase tracking-[0.22em] text-cyan-200">AllFantasy Admin</p>
+                <DeploymentMarker />
+              </div>
               <h1 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-5xl">
                 Command Center
               </h1>
@@ -1516,6 +1556,16 @@ export default async function AdminPage({
           <ProductionReadinessPanel data={data.productionReadiness} />
         </div>
         <TrafficGeoPanel data={data.productionReadiness} metrics={data.traffic} />
+        <div id="social-campaigns">
+          <AccordionSection title="Social & Campaigns" eyebrow="attribution">
+            <CampaignAttributionPanel />
+          </AccordionSection>
+        </div>
+        <div id="beta-invites">
+          <AccordionSection title="Closed-Beta Invitations" eyebrow="access">
+            <BetaInvitePanel />
+          </AccordionSection>
+        </div>
         <EmailCenterPanel status={data.emailStatus} />
         <div id="sports-os">
           <SportsOperatingSystemPanel audit={data.sportsOperatingSystem} />
@@ -1645,6 +1695,155 @@ export default async function AdminPage({
               )}
             </div>
           </div>
+        </section>
+
+        {/*
+          ── Early-access waitlist ──────────────────────────────────────────
+          The list was never lost, only never shown: EarlyAccessSignup has been
+          collecting since April and nothing in this panel read it, so the only
+          way to know it existed was to query the database directly.
+
+          ⚠ CONFIRMED AND UNCONFIRMED ARE REPORTED SEPARATELY, ON PURPOSE. A
+          signup that never confirmed is a weaker consent signal than one that
+          did. Showing a single total invites reading "N signups" as "N people
+          who opted in", which is the number that matters if this list is ever
+          emailed — and emailing people who never confirmed is how a sending
+          domain gets burned.
+
+          ⚠ READ ONLY. There is no send button here by design. Bulk email to a
+          months-old list is one-way and belongs behind an explicit decision
+          about recipients and copy, not a click on a dashboard.
+        */}
+        <section className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-[0_20px_70px_-52px_rgba(34,211,238,0.7)]">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <h2 className="text-sm font-black uppercase tracking-[0.18em] text-cyan-100/80">
+              Early-access waitlist
+            </h2>
+            <span className="text-[11px] text-white/45">
+              {data.waitlist.firstAt ? (
+                <>
+                  {formatDate(data.waitlist.firstAt)} &rarr; {formatDate(data.waitlist.lastAt ?? data.waitlist.firstAt)}
+                </>
+              ) : (
+                "no signups yet"
+              )}
+            </span>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+              <div className="text-2xl font-black text-white">{data.waitlist.total}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Total signups</div>
+            </div>
+            <div className="rounded-2xl border border-emerald-300/20 bg-black/25 p-3">
+              <div className="text-2xl font-black text-emerald-300">{data.waitlist.confirmed}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Confirmed</div>
+            </div>
+            <div className="rounded-2xl border border-amber-300/20 bg-black/25 p-3">
+              <div className="text-2xl font-black text-amber-300">{data.waitlist.unconfirmed}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Never confirmed</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+              <div className="text-2xl font-black text-white">{data.waitlist.last30Days}</div>
+              <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">Last 30 days</div>
+            </div>
+          </div>
+
+          {/* How old the list is, at a glance — a dormant list and a growing one
+              call for completely different decisions. */}
+          {data.waitlist.byMonth.length > 0 ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {data.waitlist.byMonth.map((m) => (
+                <span
+                  key={m.month}
+                  className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-[11px] text-white/70"
+                >
+                  {m.month} &middot; <span className="font-black text-white">{m.count}</span>
+                </span>
+              ))}
+            </div>
+          ) : null}
+
+          {(data.waitlist.bySource.length > 0 || data.waitlist.byUtmSource.length > 0) ? (
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">By source</div>
+                <ul className="mt-2 space-y-1 text-sm text-white/70">
+                  {data.waitlist.bySource.map((r) => (
+                    <li key={r.source} className="flex justify-between gap-3">
+                      <span className="truncate">{r.source}</span>
+                      <span className="font-black text-white">{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.16em] text-white/45">By UTM source</div>
+                <ul className="mt-2 space-y-1 text-sm text-white/70">
+                  {data.waitlist.byUtmSource.map((r) => (
+                    <li key={r.source} className="flex justify-between gap-3">
+                      <span className="truncate">{r.source}</span>
+                      <span className="font-black text-white">{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : null}
+
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[720px] text-left text-sm">
+              <thead className="text-[11px] uppercase tracking-[0.16em] text-white/45">
+                <tr>
+                  <th className="py-2 pr-3">Email</th>
+                  <th className="py-2 pr-3">Name</th>
+                  <th className="py-2 pr-3">Confirmed</th>
+                  <th className="py-2 pr-3">Source</th>
+                  <th className="py-2 pr-3">Campaign</th>
+                  <th className="py-2 pr-3">Signed up</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/10">
+                {data.waitlist.recent.length > 0 ? (
+                  data.waitlist.recent.map((row) => (
+                    <tr key={row.email} className="text-white/76">
+                      {/* Full address, not masked: the operator deciding whether
+                          to email this list needs to see who is on it. This page
+                          is already behind the admin allowlist. */}
+                      <td className="py-3 font-mono text-xs text-white">{row.email}</td>
+                      <td className="py-3">{row.name ?? "—"}</td>
+                      <td className="py-3">
+                        <span
+                          className={
+                            row.confirmed
+                              ? "rounded-full border border-emerald-300/30 px-2 py-0.5 text-[10px] font-black text-emerald-300"
+                              : "rounded-full border border-amber-300/30 px-2 py-0.5 text-[10px] font-black text-amber-300"
+                          }
+                        >
+                          {row.confirmed ? "YES" : "NO"}
+                        </span>
+                      </td>
+                      <td className="py-3 text-xs text-white/55">{row.source ?? "—"}</td>
+                      <td className="py-3 text-xs text-white/55">{row.utmCampaign ?? row.utmSource ?? "—"}</td>
+                      <td className="py-3 text-xs text-white/55">{formatDate(row.createdAt)}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="py-4 text-white/45">
+                      No waitlist signups recorded.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {data.waitlist.total > data.waitlist.recent.length ? (
+            <p className="mt-3 text-[11px] text-white/45">
+              Showing the {data.waitlist.recent.length} most recent of {data.waitlist.total}.
+            </p>
+          ) : null}
         </section>
 
         <section className="grid gap-4 xl:grid-cols-2">

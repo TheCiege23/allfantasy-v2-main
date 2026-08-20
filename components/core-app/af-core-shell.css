@@ -1,0 +1,390 @@
+/*
+ * AF Core — shell layout (rail, nav, top bar).
+ *
+ * Split from af-core.css so the token/primitive layer stays readable as it is
+ * shared by all nine screens, while this file owns only the chrome around them.
+ * Everything is still scoped under `.af-core`; see af-core.css for why that
+ * namespacing is load-bearing rather than stylistic.
+ */
+
+.af-shell {
+  display: grid;
+  grid-template-columns: 68px 232px minmax(0, 1fr);
+  min-height: 100vh;
+  background: var(--bg);
+  background-image: var(--hero);
+  background-repeat: no-repeat;
+}
+
+/* ── League rail ─────────────────────────────────────────────────────── */
+
+.af-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 0;
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+}
+
+.af-rail-logo {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 900;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+}
+
+.af-rail-divider {
+  width: 26px;
+  height: 1px;
+  background: var(--line2);
+  margin: 2px 0 4px;
+}
+
+.af-rail-tile {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  font-weight: 900;
+  font-size: 15px;
+  text-decoration: none;
+  border: 1px solid transparent;
+}
+
+/* The alert dot is the only thing on the rail that moves the eye, so it is
+   reserved for a league that genuinely needs a decision. */
+.af-rail-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  border: 2px solid var(--rail);
+}
+.af-rail-dot[data-tone='bad'] {
+  background: var(--bad);
+}
+.af-rail-dot[data-tone='warn'] {
+  background: var(--warn);
+}
+
+.af-rail-add,
+.af-rail-profile,
+.af-rail-more {
+  background: var(--chip);
+  border-color: var(--chip-line);
+  color: var(--muted);
+}
+
+/* Overflow counter — reads as a count, not another league. */
+.af-rail-more {
+  font: 700 11px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: -0.02em;
+}
+.af-rail-more:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.af-rail-spacer {
+  flex: 1 1 auto;
+}
+
+/* ── Primary nav ─────────────────────────────────────────────────────── */
+
+.af-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 12px;
+  background: var(--surface2);
+  border-right: 1px solid var(--line);
+}
+
+.af-nav-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: var(--text2);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.af-nav-item[data-active='true'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+}
+
+.af-nav-glyph {
+  width: 16px;
+  text-align: center;
+  opacity: 0.85;
+}
+.af-nav-label {
+  flex: 1 1 auto;
+}
+
+.af-nav-badge {
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-weight: 800;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  padding: 3px 6px;
+  border-radius: 6px;
+}
+.af-nav-badge[data-tone='live'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-nav-badge[data-tone='level'] {
+  background: var(--chip);
+  color: var(--muted);
+}
+.af-nav-badge[data-tone='count'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-import-cta {
+  margin-top: auto;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af-import-title {
+  font-weight: 800;
+  font-size: 13px;
+  color: var(--text);
+}
+.af-import-body {
+  margin: 6px 0 10px;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.af-import-btn {
+  width: 100%;
+  text-decoration: none;
+}
+
+/* ── Main column + top bar ───────────────────────────────────────────── */
+
+.af-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.af-topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+
+/*
+ * The search field primitive moved to af-core.css.
+ *
+ * It is used by two surfaces that do NOT share this stylesheet: the shell's
+ * topbar, and Player Finder's search rail - which renders at /players/{slug}
+ * OUTSIDE AfCoreShell and so never loads this file. Measured before moving it:
+ * on the public page `.af-search` computed to `display:block` with no border and
+ * no radius, and the input painted as a raw white browser control. Only the
+ * topbar's own sizing stays here.
+ */
+.af-shell .af-search {
+  flex: 0 1 380px;
+  height: 36px;
+}
+
+.af-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.af-week {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+.af-sync {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+.af-plan {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+}
+.af-plan-name {
+  color: var(--accent);
+}
+.af-plan-tokens {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-content {
+  padding: 20px 18px 40px;
+  min-width: 0;
+}
+
+/* ── Help dots ───────────────────────────────────────────────────────── */
+
+.af-help-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.af-help-dot {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.af-help-body {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 40;
+  width: 260px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text2);
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.5;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.af-help-body b {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* ── Responsive: the nav collapses before the rail does ──────────────── */
+
+@media (max-width: 1080px) {
+  .af-shell {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+  .af-nav {
+    display: none;
+  }
+}
+
+/*
+ * Below 720px the nav does not vanish — it becomes a horizontal strip under the
+ * rail. Hiding it outright (which this file did first) left Player Finder, Draft
+ * HQ and the rest unreachable on a phone, which is a dead end rather than a
+ * responsive layout.
+ */
+@media (max-width: 720px) {
+  .af-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto auto minmax(0, 1fr);
+  }
+  .af-nav {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    overflow-x: auto;
+    padding: 8px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    -webkit-overflow-scrolling: touch;
+  }
+  .af-nav-items {
+    flex-direction: row;
+    gap: 6px;
+  }
+  .af-nav-item {
+    flex: 0 0 auto;
+    min-height: 44px;
+    padding: 0 12px;
+    white-space: nowrap;
+  }
+  /* The import CTA is a block of prose; it belongs at the end of the page on a
+     phone, not wedged into a horizontal scroller. */
+  .af-import-cta {
+    display: none;
+  }
+  .af-rail {
+    flex-direction: row;
+    justify-content: flex-start;
+    overflow-x: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 10px 12px;
+  }
+  .af-rail-spacer {
+    display: none;
+  }
+  .af-rail-divider {
+    width: 1px;
+    height: 26px;
+    margin: 0 4px;
+  }
+  .af-topbar {
+    flex-wrap: wrap;
+  }
+  .af-search {
+    flex: 1 1 100%;
+    order: 2;
+  }
+  .af-content {
+    padding: 14px 12px 32px;
+  }
+}

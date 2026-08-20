@@ -93,12 +93,19 @@ async function sendToSubscription(
     ? (payload.href.startsWith("http") ? payload.href : `${baseUrl}${payload.href}`)
     : baseUrl
 
+  // Emit BOTH `href` and `url`. public/sw.js — the service worker actually registered by
+  // SafeGlobalChrome — reads `payload.url` and falls back to `/app`; public/sw-push.js reads
+  // `href` and is never registered. Sending only `href` meant every notification clicked
+  // through to `/app` rather than its target. Emitting both also survives a stale service
+  // worker on a user's device, which is the normal case after a deploy.
   const payloadStr = JSON.stringify({
     title: payload.title,
     body: payload.body ?? "",
     href,
+    url: href,
     tag: payload.tag ?? undefined,
     type: payload.type ?? "notification",
+    leagueId: payload.leagueId ?? null,
   })
 
   const pushSubscription = {

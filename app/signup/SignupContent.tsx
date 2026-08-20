@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { loginUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
+import { CLOSED_BETA_ENABLED } from "@/lib/beta-invite/closedBetaFlag"
 import { resolveSignupRedirectPath } from "@/lib/auth/SignupFlowController"
 import { rememberUnifiedAuthDestination } from "@/lib/auth/UnifiedAuthOrchestrator"
 import { getTermsUrl, getPrivacyUrl, getNoGamblingPolicyUrl } from "@/lib/legal/LegalRouteResolver"
@@ -36,6 +37,30 @@ const CARD_STYLE: React.CSSProperties = {
   background: "var(--color-surface)",
 }
 
+/**
+ * Honest, non-enumerating copy for a beta-admission rejection surfaced via `?betaError=`
+ * (set when an OAuth signup is refused). Mirrors the server's admissionErrorMessage, kept
+ * here as a small client map because the server module is server-only.
+ */
+function resolveBetaErrorMessage(code: string): string {
+  switch (code) {
+    case "INVITE_REQUIRED":
+      return "AllFantasy is in a closed beta — you need an invitation to create an account."
+    case "INVITE_EXPIRED":
+      return "That invitation has expired. Ask your inviter for a new one."
+    case "INVITE_REVOKED":
+      return "That invitation is no longer active."
+    case "INVITE_REDEEMED":
+      return "That invitation has already been used."
+    case "INVITE_EMAIL_MISMATCH":
+      return "That invitation was issued for a different email address."
+    case "GATE_UNAVAILABLE":
+      return "We couldn't verify your invitation right now. Please try again in a moment."
+    default:
+      return "That invitation link isn't valid."
+  }
+}
+
 export default function SignupContent() {
   const { language } = useOptionalLanguage()
   const { mode } = useThemeMode()
@@ -52,6 +77,19 @@ export default function SignupContent() {
     [searchParams]
   )
   const refParam = searchParams?.get("ref")?.trim() || undefined
+  // Closed-beta (P0-1 BETA-GATE). The admission token normally rides an httpOnly cookie set
+  // at /api/auth/beta/claim; `?invite=` is a secondary carry for a pasted token. `beta=1`
+  // shows the closed-beta context; `betaError` is the honest reason from an OAuth rejection.
+  const inviteParam = searchParams?.get("invite")?.trim() || undefined
+  // Both beta params are IGNORED while signup is open. They are client-supplied claims, not
+  // server policy, and the server can no longer produce a betaError code at all — so a stale
+  // tab, bookmark, back-navigation or shared link carrying `?betaError=INVITE_REQUIRED` was
+  // still rendering "AllFantasy is in a closed beta" as a red alert over a working form.
+  const betaMode = CLOSED_BETA_ENABLED && searchParams?.get("beta") === "1"
+  const betaErrorCode = CLOSED_BETA_ENABLED
+    ? searchParams?.get("betaError")?.trim() || undefined
+    : undefined
+  const betaErrorMessage = betaErrorCode ? resolveBetaErrorMessage(betaErrorCode) : undefined
 
   const [fullName, setFullName] = useState("")
   const [email, setEmail] = useState("")
@@ -136,6 +174,7 @@ export default function SignupContent() {
           preferredLanguage: resolveLanguage(language),
           themePreference: mode,
           referralCode: refParam,
+          inviteToken: inviteParam,
         }),
       })
 
@@ -281,9 +320,38 @@ export default function SignupContent() {
     >
       <div className="card" style={CARD_STYLE}>
         <h1 style={{ fontSize: 26, lineHeight: 1.2, margin: "0 0 6px" }}>Create your account</h1>
-        <p style={{ fontSize: 14, color: "var(--color-neutral-500)", margin: "0 0 24px" }}>
+        <p style={{ fontSize: 14, color: "var(--color-neutral-500)", margin: "0 0 6px" }}>
           Free to start — no gambling, no DFS.
         </p>
+        <p style={{ fontSize: 11.5, lineHeight: 1.5, color: "var(--color-neutral-500)", margin: "0 0 24px" }}>
+          AllFantasy is a fantasy sports management and intelligence platform. It does not offer sports betting,
+          wagering, DFS contests, or gambling.
+        </p>
+
+        {(betaMode || betaErrorMessage) && (
+          <div
+            role={betaErrorMessage ? "alert" : undefined}
+            style={{
+              marginBottom: 16,
+              padding: "11px 13px",
+              fontSize: 13,
+              lineHeight: 1.5,
+              borderRadius: "var(--radius-md)",
+              border: betaErrorMessage
+                ? "1px solid color-mix(in srgb, var(--color-error) 45%, transparent)"
+                : "1px solid var(--color-neutral-800)",
+              background: "var(--color-surface-2, transparent)",
+              color: "var(--color-neutral-300)",
+            }}
+          >
+            {/* Signup is OPEN — an invite link is a welcome, not a requirement. Only the
+                error variant (unreachable while the gate is off) still mentions invitations. */}
+            {betaErrorMessage ?? "Welcome to AllFantasy. Signup is open — create your account below to get started."}{" "}
+            <Link href={loginUrlWithIntent(postSignupDestination)} style={{ fontWeight: 600 }}>
+              Already have an account? Sign in
+            </Link>
+          </div>
+        )}
 
         {error && (
           <div
@@ -490,7 +558,17 @@ export default function SignupContent() {
           <span>or continue with</span>
         </div>
 
-        <NocturneOAuthGrid callbackUrl={postSignupDestination} />
+        {/* The consent checkbox governs OAuth signup exactly as it governs the credentials
+            submit. Previously only `callbackUrl` was passed, so a tick made here never
+            reached the server and the resulting account had no age confirmation recorded. */}
+        <NocturneOAuthGrid
+          callbackUrl={postSignupDestination}
+          consent={{
+            granted: consentChecked,
+            onMissing: () =>
+              setError("Please confirm you're 18+ and agree to the terms to continue."),
+          }}
+        />
 
         <p
           style={{

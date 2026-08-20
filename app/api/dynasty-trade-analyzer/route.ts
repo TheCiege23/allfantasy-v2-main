@@ -22,6 +22,7 @@ import {
 } from '@/lib/ai-context-envelope';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
 import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader';
+import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow';
 
 function parseLeagueContext(raw: string | undefined): LeagueContextInput {
   if (!raw) return {}
@@ -123,9 +124,31 @@ export async function POST(req: Request) {
 
     console.log(`[dynasty-trade-analyzer] Stage B completed in ${stageBLatency}ms`)
 
+    // AF_TRADE_UNIFICATION_BRIEF Phase 2 shadow instrumentation (flag-gated,
+    // never affects the response). Dynasty's weak point is free-text name
+    // matching — no roster identity exists, so this emits the structured skip
+    // plus the surface's own deterministic verdict for cross-comparison.
+    const emitDynastyShadow = (verdict: string | null, confidence: number | null, deltaPct: number | null) =>
+      recordTradeSurfaceShadow({
+        surface: 'dynasty',
+        userId: session.user?.id ?? null,
+        leagueId: leagueId ?? parsedLeague.leagueId ?? null,
+        assetsGive: sideAAssets.length,
+        assetsGet: sideBAssets.length,
+        surfaceVerdict: verdict,
+        surfaceConfidence: confidence,
+        surfaceValueDeltaPct: deltaPct,
+        surfaceAnalysisMode: 'free_text_assets',
+      })
+
     if (!consensus) {
       const { deterministicFallback, fallbackExplanation, reliability } = buildStableFallbackResponse(tradeContext);
       const detVerdictOnly = computeDeterministicVerdict(tradeContext).verdict;
+      emitDynastyShadow(
+        deterministicFallback.verdict ?? detVerdictOnly ?? null,
+        deterministicFallback.confidence ?? null,
+        tradeContext.valueDelta?.percentageDiff ?? null,
+      )
       const normalizedOutput = normalizeToContract(
         {
           primaryAnswer: fallbackExplanation ?? detVerdictOnly,
@@ -169,6 +192,12 @@ export async function POST(req: Request) {
     const sections = formatTradeResponse(consensus, tradeContext, gate)
 
     const detVerdict = sections.deterministicVerdict
+
+    emitDynastyShadow(
+      detVerdict.winnerLabel ?? null,
+      detVerdict.confidence ?? null,
+      detVerdict.netValueDeltaPct ?? tradeContext.valueDelta?.percentageDiff ?? null,
+    )
 
     const primaryAnswer = [detVerdict.winnerLabel, gate.filteredReasons?.slice(0, 2).join('; ')].filter(Boolean).join(' — ') || consensus.verdict;
     const normalizedOutput = normalizeToContract(

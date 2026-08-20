@@ -8,6 +8,7 @@ export type SubscriptionFeatureId =
   /** Enterprise Fantasy OS executive workspace access — gates the /fantasy-os route + nav. */
   | 'fantasy_os_workspace'
   | 'trade_analyzer'
+  | 'manager_psychology'
   | 'ai_chat'
   | 'ai_waivers'
   | 'planning_tools'

@@ -5,6 +5,7 @@
 
 import type { ProfileLabel } from './types'
 import type { BehaviorSignalsOutput } from './BehaviorSignalAggregator'
+import { evaluateAllDimensions, type PsychDimension } from './ProfileEvidenceFloor'
 
 export interface LabelThresholds {
   tradeHeavyMinTrades: number
@@ -18,6 +19,14 @@ export interface LabelThresholds {
   quietStrategistMaxActivity: number
   valueFirstMinTradeTiming: number
   riskAverseMaxRisk: number
+  earlyRoundFocusedMinRate: number
+  lateRoundAccumulatorMaxRate: number
+  positionFocusedMinConcentration: number
+  balancedDrafterMaxConcentration: number
+  /** Below this share of picks resolved, positional claims are not made at all. */
+  positionMinCoverage: number
+  /** Deviation from league mean, in league-spread units, required for a draft label. */
+  draftPeerDeviation: number
 }
 
 const DEFAULT_THRESHOLDS: LabelThresholds = {
@@ -32,11 +41,77 @@ const DEFAULT_THRESHOLDS: LabelThresholds = {
   quietStrategistMaxActivity: 38,
   valueFirstMinTradeTiming: 35,
   riskAverseMaxRisk: 35,
+  // Half a manager's picks landing in rounds 1-3 is a genuinely premium-weighted
+  // draft; a quarter or less is a back-weighted, volume approach.
+  // Draft claims are made against a manager's OWN leaguemates, so this is a
+  // deviation in units of the league's spread, not a percentage. Absolute
+  // thresholds measured league draft depth instead of the manager: a 44-round
+  // league sat every one of its 14 managers at 20-23% early-round share and
+  // labelled all of them identically.
+  //
+  // One full spread-width keeps the label for managers who actually stand out
+  // and leaves the middle of the pack — most of any league — unlabelled.
+  draftPeerDeviation: 1,
+  earlyRoundFocusedMinRate: 50,
+  lateRoundAccumulatorMaxRate: 30,
+  // With 4-6 positions in play an even spread sits near 20-25%, so half of all
+  // picks in one position is real focus and <=30% is genuine balance.
+  positionFocusedMinConcentration: 50,
+  balancedDrafterMaxConcentration: 30,
+  positionMinCoverage: 50,
 }
 
 /**
- * Resolve profile labels from aggregated behavior signals.
+ * Which evidence stream each label actually rests on.
+ *
+ * A label may only be emitted when ITS dimension cleared the evidence floor.
+ * Without this, the quiet archetypes fire on emptiness: every threshold for
+ * `conservative` and `quiet strategist` is an upper bound, so a manager with no
+ * recorded activity satisfies all of them and gets a personality he never
+ * demonstrated. Measured before this gate:
+ *
+ *   zero trades, zero claims, zero picks -> ["conservative", "quiet strategist"]
  */
+const LABEL_DIMENSION: Record<ProfileLabel, PsychDimension> = {
+  'trade-heavy': 'trade',
+  aggressive: 'trade',
+  conservative: 'trade',
+  'value-first': 'trade',
+  'win-now': 'trade',
+  'patient rebuilder': 'trade',
+  'waiver-focused': 'roster',
+  'chaos agent': 'roster',
+  'quiet strategist': 'roster',
+  'rookie-heavy': 'draft',
+  'early-round focused': 'draft',
+  'late-round accumulator': 'draft',
+  'position-focused': 'draft',
+  'balanced drafter': 'draft',
+} as Record<ProfileLabel, PsychDimension>
+
+/**
+ * Resolve profile labels from aggregated behavior signals.
+ *
+ * Labels are filtered by evidence: a dimension with too little recorded
+ * behaviour yields NO labels for that dimension rather than the ones absence
+ * happens to satisfy. An unobserved manager returns an empty array, which
+ * callers must render as "not enough activity yet" — never as a personality.
+ */
+/**
+ * Keep only the labels resting on a given evidence stream.
+ *
+ * Surfaces are dimension-specific: a draft room should not cite how someone
+ * trades, and a trade email should not cite how they draft. Both are real
+ * observations; each is off-topic in the other's context, and citing it there
+ * reads as padding a thin profile.
+ */
+export function filterLabelsByDimension(
+  labels: readonly ProfileLabel[],
+  dimension: PsychDimension
+): ProfileLabel[] {
+  return labels.filter((label) => LABEL_DIMENSION[label] === dimension)
+}
+
 export function resolveProfileLabels(
   signals: BehaviorSignalsOutput,
   thresholds: Partial<LabelThresholds> = {}
@@ -45,11 +120,19 @@ export function resolveProfileLabels(
   const labels: ProfileLabel[] = []
   const activity = (signals.tradeFrequencyNorm + signals.waiverFocusNorm + signals.lineupChangeRate) / 3
 
-  if (signals.tradeCount >= t.tradeHeavyMinTrades) labels.push('trade-heavy')
+  // Busy relative to the league, not to a fixed number that a long-lived league
+  // clears by simply existing. The absolute floor stays as a sanity bound so a
+  // quiet league cannot crown its most active manager on two trades.
+  if (
+    signals.tradeFrequencyRelative >= t.draftPeerDeviation &&
+    signals.tradeCount >= t.tradeHeavyMinTrades
+  ) {
+    labels.push('trade-heavy')
+  }
   if (signals.waiverClaimCount >= t.waiverFocusedMinClaims) labels.push('waiver-focused')
   if (signals.aggressionNorm >= t.aggressiveMinScore || signals.tradeTimingLateRate >= 60) labels.push('aggressive')
   if (
-    signals.tradeCount <= t.conservativeMaxTrade &&
+    signals.tradeFrequencyRelative <= -t.draftPeerDeviation &&
     signals.waiverFocusNorm < 30 &&
     signals.riskNorm <= t.riskAverseMaxRisk
   ) {
@@ -73,10 +156,44 @@ export function resolveProfileLabels(
     labels.push('value-first')
   }
   if (signals.rookieAcquisitionRate >= t.rookieHeavyMinRate) labels.push('rookie-heavy')
+
+  // Draft shape. Both of these require picks to exist in their own right: the
+  // rates are 0 for a manager with no draft history, and a bare `<=` threshold
+  // would read that emptiness as "late-round accumulator" — absence dressed as a
+  // strategy. The evidence gate below would catch it, but a rule that only holds
+  // because something downstream cleans up after it is a trap for the next edit.
+  if (signals.draftPickCount > 0) {
+    if (signals.draftEarlyRoundRelative >= t.draftPeerDeviation) {
+      labels.push('early-round focused')
+    } else if (signals.draftEarlyRoundRelative <= -t.draftPeerDeviation) {
+      labels.push('late-round accumulator')
+    }
+  }
+
+  // Positional claims need the positions to have actually resolved. Draft facts
+  // key players by provider id, and when that join misses, concentration is
+  // reported as 0 — which without this guard would fire 'balanced drafter' for
+  // every manager whose picks we failed to identify.
+  if (signals.positionSampleCoverage >= t.positionMinCoverage) {
+    if (signals.positionConcentrationRelative >= t.draftPeerDeviation) {
+      labels.push('position-focused')
+    } else if (signals.positionConcentrationRelative <= -t.draftPeerDeviation) {
+      labels.push('balanced drafter')
+    }
+  }
   if (signals.contentionScore >= t.winNowMinContention && signals.tradeTimingLateRate >= 30) labels.push('win-now')
   if (signals.rebuildScore >= t.rebuildMinScore && signals.rookieAcquisitionRate >= 40) labels.push('patient rebuilder')
 
-  return [...new Set(labels)]
+  // Evidence gate. Keep only labels whose own dimension was actually observed.
+  const evidence = evaluateAllDimensions(signals)
+  const gated = [...new Set(labels)].filter((label) => {
+    const dimension = LABEL_DIMENSION[label]
+    // An unmapped label is not silently trusted; it is dropped.
+    if (!dimension) return false
+    return evidence[dimension].sufficient
+  })
+
+  return gated
 }
 
 /**

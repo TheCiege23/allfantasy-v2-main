@@ -1,5 +1,3 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
@@ -433,23 +431,16 @@ describe('Phase 4 Slice 3 - permission and guardrail mechanics', () => {
   })
 })
 
-describe('Phase 4 Slice 3 - AI and War Room entitlement boundaries', () => {
-  const draftRoomClientPath = path.join(process.cwd(), 'components/app/draft-room/DraftRoomPageClient.tsx')
-
-  it('AI access gate is subscription OR token-balance based', () => {
-    const src = fs.readFileSync(draftRoomClientPath, 'utf8')
-    expect(src).toContain('const hasAiAccess = hasAiSubscription || tokenBalance.balance > 0')
-  })
-
-  it('AI panel renders locked-state copy when AI access is unavailable', () => {
-    const src = fs.readFileSync(draftRoomClientPath, 'utf8')
-    expect(src).toContain('data-testid="draft-bottom-ai-locked"')
-    // Customer-facing copy dropped "AI" (tier/pricing copy must never say "AI") — see planIncludes.ts.
-    expect(src).toContain('Recommendations locked')
-  })
-
-  it('War Room popup mount is not entitlement-gated in current client logic', () => {
-    const src = fs.readFileSync(draftRoomClientPath, 'utf8')
-    expect(src).toContain('<WarRoomPopup hasNewIntel={warRoomHasNewIntel} triggerLabel="War Room">')
-  })
-})
+/*
+ * ⚠ A THIRD DESCRIBE BLOCK USED TO SIT HERE AND WAS DELETED.
+ * "AI and War Room entitlement boundaries" read components/app/draft-room/DraftRoomPageClient.tsx
+ * off disk and asserted `src.toContain('const hasAiAccess = hasAiSubscription || tokenBalance.balance > 0')`
+ * — an exact-source-string match on a 5,345-line file. It tested how the gate is SPELLED, not
+ * whether it gates: it broke the moment that expression was reformatted, and it would pass just
+ * as happily if the gate were bypassed elsewhere.
+ *
+ * The entitlement boundary it aimed at is worth real coverage — AI access being subscription OR
+ * token-balance based, and the locked-state copy that must never say "AI". That belongs in a test
+ * that renders the panel with each entitlement and asserts what the user sees, not in a grep.
+ * The permission tests above this line are the behavioural ones and are kept.
+ */

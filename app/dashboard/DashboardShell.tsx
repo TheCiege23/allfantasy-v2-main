@@ -695,7 +695,7 @@ export function DashboardShell({
   return (
     <AppShell
       layoutMode="balanced-three-panel"
-      rootClassName="h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#020713]"
+      rootClassName="h-[100dvh] min-h-[100dvh] overflow-hidden bg-[#0b0e2a]"
       rootProps={{ 'data-dashboard-user-id': userId }}
       rightRailCollapsed={myLeaguesRail.collapsed}
       onRightRailExpand={() => myLeaguesRail.setCollapsed(false)}
@@ -758,13 +758,14 @@ export function DashboardShell({
               <button
                 type="button"
                 onClick={() => openComms(null)}
-                className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-cyan-300/25 bg-cyan-300/[0.08] text-cyan-50 shadow-[0_0_22px_-10px_rgba(34,211,238,0.85)] transition active:scale-95 active:bg-cyan-300/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300/70"
+                className="touch-manipulation inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#ff3d81]/30 text-white shadow-[0_0_22px_-10px_rgba(255,61,129,0.85)] transition active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ff3d81]/70"
+                style={{ background: 'linear-gradient(135deg,rgba(255,61,129,0.18),rgba(255,138,61,0.12))' }}
                 aria-label={t('dashboard.comms.open')}
               >
                 <Bot className="h-5 w-5" aria-hidden />
               </button>
               <div className="min-w-0 flex-1 text-center">
-                <p className="text-[9px] font-black uppercase tracking-[0.24em] text-cyan-200/60">
+                <p className="text-[9px] font-black uppercase italic tracking-[0.24em] text-[#ff8a3d]">
                   AllFantasy
                 </p>
                 <p className="truncate text-sm font-black text-white">
@@ -793,14 +794,15 @@ export function DashboardShell({
           </div>
 
           <div
-            className="af-dashboard-topbar hidden border-b px-6 py-3 md:flex md:items-center md:justify-between md:gap-3 [&>p:first-child]:hidden"
+            className="af-dashboard-topbar hidden border-b border-[#1c2153] px-6 py-3 md:flex md:items-center md:justify-between md:gap-3"
           >
-            <p className="text-[11px] font-bold uppercase tracking-widest text-white/25">AllFantasy · Dashboard</p>
+            {/* Audit fix: removed the permanently-hidden "AllFantasy · Dashboard" <p>
+                (dead node kept alive by a [&>p:first-child]:hidden hack). */}
             <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.24em] text-cyan-200/60">
+              <p className="text-[10px] font-black uppercase italic tracking-[0.24em] text-[#ff8a3d]">
                 AllFantasy Command Center
               </p>
-              <p className="mt-0.5 truncate text-sm font-black text-white/90">
+              <p className="mt-0.5 truncate text-sm font-black italic text-[#f0f2ff]">
                 {isLeagueRoute ? selectedLeague?.name ?? t('dashboard.shell.leagueFallback') : t('dashboard.shell.title')}
               </p>
             </div>
@@ -873,7 +875,7 @@ export function DashboardShell({
           onClick={() => setMobileRightOpen(false)}
         >
           <div
-            className="absolute inset-x-0 bottom-0 flex max-h-[90dvh] min-h-[50dvh] flex-col overflow-hidden rounded-t-[24px] border-t border-white/[0.07] bg-[#0a0a1f] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)]"
+            className="absolute inset-x-0 bottom-0 flex max-h-[90dvh] min-h-[50dvh] flex-col overflow-hidden rounded-t-[24px] border-t border-[#262c6a] bg-[#0b0e2a] pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-12px_48px_rgba(0,0,0,0.45)]"
             role="dialog"
             aria-modal="true"
             aria-label={t('dashboard.right.myLeagues')}

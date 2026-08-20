@@ -68,7 +68,7 @@ export default function WaiverFilters({
                 onClick={() => onPositionChange(pos)}
                 data-testid={`waiver-position-filter-${pos}`}
                 className={`rounded-full border px-2.5 py-1 ${
-                  position === pos ? "border-cyan-400 bg-cyan-500/20 text-cyan-100" : "border-white/15 bg-black/40 text-white/65"
+                  position === pos ? "border-[#ff3d81] bg-[#ff3d81]/20 text-[#ffd7e5]" : "border-white/15 bg-black/40 text-white/65"
                 }`}
               >
                 {pos}

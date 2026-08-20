@@ -149,7 +149,7 @@ export function LegacyImportResults({
             Import Complete
           </div>
           <h1 className="text-3xl font-black tracking-tight text-transparent sm:text-4xl">
-            <span className="bg-gradient-to-r from-cyan-300 via-cyan-200 to-white bg-clip-text">
+            <span className="bg-gradient-to-r from-[#ff9ec0] via-[#ffb8d1] to-white bg-clip-text">
               {variant === 'legacy_sleeper' ? 'Your Legacy Profile' : 'League Imported'}
             </span>
           </h1>
@@ -157,7 +157,7 @@ export function LegacyImportResults({
 
         {variant === 'legacy_sleeper' && loading && (
           <div className="flex flex-1 items-center justify-center">
-            <div className="h-12 w-12 animate-spin rounded-full border-2 border-cyan-400/30 border-t-cyan-400" />
+            <div className="h-12 w-12 animate-spin rounded-full border-2 border-[#ff3d81]/30 border-t-[#ff3d81]" />
           </div>
         )}
 
@@ -176,10 +176,10 @@ export function LegacyImportResults({
                 lucide icons per tile, color-grammar text tones. */}
             <div className="grid gap-4 sm:grid-cols-2">
               <StatTile
-                icon={<Sparkles className="h-4 w-4 text-cyan-300" aria-hidden />}
+                icon={<Sparkles className="h-4 w-4 text-[#ff9ec0]" aria-hidden />}
                 label="Legacy score (XP)"
                 value={legacyScore != null ? String(legacyScore) : '—'}
-                valueClass="text-cyan-200"
+                valueClass="text-[#ffb8d1]"
               />
               <StatTile
                 icon={<Trophy className="h-4 w-4 text-amber-300" aria-hidden />}
@@ -227,7 +227,7 @@ export function LegacyImportResults({
               >
                 <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <History className="h-3.5 w-3.5 text-cyan-300/80" aria-hidden />
+                    <History className="h-3.5 w-3.5 text-[#ff9ec0]/80" aria-hidden />
                     <p className="text-[11px] font-black uppercase tracking-[0.18em] text-white/70">
                       Leagues imported <span className="ml-1 text-white/40">({payload.league_history?.length ?? 0})</span>
                     </p>
@@ -237,7 +237,7 @@ export function LegacyImportResults({
                 <ul className="max-h-[220px] divide-y divide-white/[0.05] overflow-y-auto">
                   {(payload.league_history ?? []).slice(0, 12).map((row) => (
                     <li key={`${row.league_id ?? 'x'}-${row.season ?? '?'}`} className="flex items-center gap-3 px-4 py-2.5">
-                      <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-400/60" aria-hidden />
+                      <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-[#ff3d81]/60" aria-hidden />
                       <span className="min-w-0 flex-1 truncate text-[13px] text-white/85">{row.name ?? 'Untitled league'}</span>
                       <span className="shrink-0 rounded-full border border-white/10 bg-white/[0.04] px-2 py-0.5 text-[10px] font-black tabular-nums text-white/60">
                         {row.season ?? '—'}
@@ -278,7 +278,7 @@ export function LegacyImportResults({
               data-testid="import-league-summary"
               className="warroom-card warroom-fade-in-stagger overflow-hidden rounded-2xl border border-emerald-500/25 bg-emerald-500/[0.05]"
             >
-              <div className="h-1 bg-gradient-to-r from-emerald-400/70 via-cyan-400/50 to-emerald-400/70" />
+              <div className="h-1 bg-gradient-to-r from-emerald-400/70 via-[#ff3d81]/50 to-emerald-400/70" />
               <div className="p-5">
                 <div className="mb-3 flex items-center gap-2">
                   <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/[0.10]">
@@ -311,7 +311,7 @@ export function LegacyImportResults({
             type="button"
             onClick={() => goDashboard()}
             data-testid="import-go-dashboard"
-            className="warroom-pressable rounded-2xl bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-3 text-sm font-black text-white shadow-[0_10px_40px_-15px_rgba(34,211,238,0.75)]"
+            className="warroom-pressable rounded-2xl bg-gradient-to-r from-[#ff3d81] to-blue-600 px-6 py-3 text-sm font-black text-white shadow-[0_10px_40px_-15px_rgba(255,61,129,0.75)]"
           >
             Go to my dashboard
           </button>

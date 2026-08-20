@@ -196,7 +196,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
           type="button"
           onClick={() => void load()}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[11px] font-semibold text-cyan-100/95 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-3 py-2 text-[11px] font-semibold text-[#ffd7e5]/95 disabled:opacity-40"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           Refresh
@@ -218,7 +218,7 @@ export function MatchupTabContainer({ league }: { league: UserLeague }) {
       </div>
 
       {loading && !payload ? (
-        <div className="flex justify-center py-16 text-cyan-300/90">
+        <div className="flex justify-center py-16 text-[#ff9ec0]/90">
           <Loader2 className="h-8 w-8 animate-spin" />
         </div>
       ) : null}

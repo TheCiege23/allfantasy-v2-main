@@ -190,7 +190,7 @@ export interface ManagerIntelligenceV1 {
 
   // ── Engagement tier & risk ──────────────────────────────────────────────
   participationTier:      'elite' | 'active' | 'moderate' | 'passive' | 'inactive'
-  retentionRisk:          'low' | 'medium' | 'high' | 'critical'
+  retentionRisk:          'low' | 'medium' | 'high' | 'critical' | 'insufficient_data'
   /** Human-readable reasons driving the retention risk level. */
   retentionRiskReasons:   string[]
 
@@ -305,7 +305,7 @@ export interface LeagueIntelligenceV1 {
   draftActivity:  LeagueActivityDimensionV1
 
   // ── Risk & workload ─────────────────────────────────────────────────────
-  retentionRisk:        'low' | 'medium' | 'high' | 'critical'
+  retentionRisk:        'low' | 'medium' | 'high' | 'critical' | 'insufficient_data'
   commissionerWorkload: 'light' | 'moderate' | 'heavy' | 'critical'
 
   // ── Recommendations ─────────────────────────────────────────────────────
@@ -333,7 +333,7 @@ export interface LeagueIntelligenceV1 {
 export interface ManagerSummaryV1 {
   managerId:              string
   participationTier:      'elite' | 'active' | 'moderate' | 'passive' | 'inactive'
-  retentionRisk:          'low' | 'medium' | 'high' | 'critical'
+  retentionRisk:          'low' | 'medium' | 'high' | 'critical' | 'insufficient_data'
   retentionRiskReasons:   string[]
   overallEngagementScore: number
   daysSinceLastActivity:  number | null

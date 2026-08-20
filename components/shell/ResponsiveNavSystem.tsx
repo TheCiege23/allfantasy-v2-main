@@ -311,7 +311,7 @@ export function ResponsiveNavSystem({
         onOpenSearch={() => setSearchOpen(true)}
       />
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <div className={isAuthenticated ? "pb-20 lg:pb-0" : undefined}>{children}</div>
+      <div className={isAuthenticated && !hideHeader ? "pb-20 lg:pb-0" : undefined}>{children}</div>
       {isAuthenticated ? (
         <>
           {showShortcutHint && !suppressShortcutHintOnLaunchSurface ? (

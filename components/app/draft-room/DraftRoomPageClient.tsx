@@ -1719,6 +1719,8 @@ export function DraftRoomPageClient({
       team: p.team ?? null,
       adp: draftUISettings?.aiAdpEnabled && p.aiAdp != null ? p.aiAdp : p.adp,
       byeWeek: p.byeWeek ?? null,
+      // Draft VORP slice: real pool projection when the row carries one.
+      projectedPoints: p.nflDraftProjectionSplits?.projectedPoints ?? null,
     }))
     if (available.length === 0) {
       setLiveBrainEnvelope(null)
@@ -3476,6 +3478,8 @@ export function DraftRoomPageClient({
             position: p.position,
             team: p.team ?? null,
             adp: draftUISettings?.aiAdpEnabled && p.aiAdp != null ? p.aiAdp : p.adp,
+            // Draft VORP slice: real pool projection when the row carries one.
+            projectedPoints: p.nflDraftProjectionSplits?.projectedPoints ?? null,
           }))
         if (available.length === 0) {
           setWarRoomData(null)

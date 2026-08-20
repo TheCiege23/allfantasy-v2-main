@@ -49,19 +49,19 @@ export function LegacyImportLoadingScreen({
       <div className="warroom-card warroom-fade-in-stagger w-full max-w-lg rounded-3xl border border-white/10 bg-gradient-to-b from-[#0a1228] to-[#070a14] p-6 sm:p-8">
         <div className="mb-6 flex items-center justify-between gap-3">
           <div>
-            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300/80">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-[#ff9ec0]/80">
               Building your legacy
             </p>
             <h2 className="mt-1 text-xl font-bold text-white sm:text-2xl">{platformLabel}</h2>
           </div>
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-500/25 bg-cyan-500/10">
-            <Sparkles className="h-5 w-5 text-cyan-300" aria-hidden />
+          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-[#ff3d81]/25 bg-[#ff3d81]/10">
+            <Sparkles className="h-5 w-5 text-[#ff9ec0]" aria-hidden />
           </div>
         </div>
 
         <div className="mb-4 h-2 w-full overflow-hidden rounded-full bg-white/10">
           <div
-            className="h-full rounded-full bg-gradient-to-r from-cyan-500 to-blue-500"
+            className="h-full rounded-full bg-gradient-to-r from-[#ff3d81] to-blue-500"
             style={{
               width: `${Math.max(4, progress)}%`,
               transition: 'width var(--dash-dur, 200ms) var(--dash-ease, ease-out)',

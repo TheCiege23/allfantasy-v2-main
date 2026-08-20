@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe('@ai ai system final integration click audit', () => {
   test.describe.configure({ mode: 'serial', timeout: 210_000 })
@@ -384,7 +385,7 @@ test.describe('@ai ai system final integration click audit', () => {
   async function fillAndEvaluateTrade(page: Page) {
     await page.getByLabel('sender player 1 name').fill('Atlas Runner')
     await page.getByLabel('receiver player 1 name').fill('Blaze Catcher')
-    await page.getByTestId('trade-evaluate-button').click()
+    await clickHydrated(page.getByTestId('trade-evaluate-button'))
     await expect(page.getByTestId('trade-ai-explanation-link')).toBeVisible()
   }
 
@@ -394,13 +395,13 @@ test.describe('@ai ai system final integration click audit', () => {
     await mockDashboardApis(page)
 
     await page.goto('/e2e/dashboard-soccer-grouping')
-    await page.locator('[data-dashboard-tab="AI"]').click()
+    await clickHydrated(page.locator('[data-dashboard-tab="AI"]'))
     const askChimmyLink = page.getByRole('link', { name: /Ask Chimmy/i }).first()
     await expect(askChimmyLink).toHaveAttribute('href', /\/messages\?tab=ai/)
 
     ai.enabled = false
     await page.reload()
-    await page.locator('[data-dashboard-tab="AI"]').click()
+    await clickHydrated(page.locator('[data-dashboard-tab="AI"]'))
     const fallbackLink = page.getByRole('link', { name: /Open lineup help/i }).first()
     await expect(fallbackLink).toHaveAttribute('href', /\/app\/coach/)
   })
@@ -418,7 +419,7 @@ test.describe('@ai ai system final integration click audit', () => {
     await expect(page.getByTestId('draft-helper-ai-explanation-toggle')).toBeDisabled()
     const fallbackButton = page.getByTestId('draft-ai-suggestion-fallback-button')
     await expect(fallbackButton).toBeVisible()
-    await fallbackButton.click()
+    await clickHydrated(fallbackButton)
     await expect(page.getByTestId('draft-helper-harness-refresh-count')).toContainText('Refresh count: 1')
   })
 
@@ -465,12 +466,12 @@ test.describe('@ai ai system final integration click audit', () => {
     await mockLeagueChatApis(page, leagueId)
 
     await page.goto('/e2e/league-chat-ai')
-    await page.getByRole('button', { name: /AI Chat/i }).click()
+    await clickHydrated(page.getByRole('button', { name: /AI Chat/i }))
     await expect(page.getByTestId('chimmy-chat-shell')).toBeVisible()
 
     ai.enabled = false
     await page.reload()
-    await page.getByRole('button', { name: /AI Chat/i }).click()
+    await clickHydrated(page.getByRole('button', { name: /AI Chat/i }))
     await expect(page.getByTestId('league-chat-ai-fallback')).toBeVisible()
     await expect(page.getByRole('link', { name: /Open waiver planner/i })).toHaveAttribute(
       'href',

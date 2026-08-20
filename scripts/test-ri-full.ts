@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 dotenv.config({ path: '.env' })
 
-const BASE = 'http://rest.datafeeds.rolling-insights.com/api/v1'
+const BASE = 'https://rest.datafeeds.rolling-insights.com/api/v1'
 
 // ── Resolve both credential sets ──────────────────────────
 // Credential set 1: NFL

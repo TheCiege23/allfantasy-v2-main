@@ -355,7 +355,7 @@ export interface RawScheduleGameRow {
   fetchedAt: Date | null
   expiresAt: Date | null
   updatedAt: Date | null
-  sourceModel: 'FantasyScheduleGame' | 'GameSchedule'
+  sourceModel: 'FantasyScheduleGame' | 'GameSchedule' | 'SportsGame'
 }
 
 // ──────────────────────────────────────────────────────────────────────────

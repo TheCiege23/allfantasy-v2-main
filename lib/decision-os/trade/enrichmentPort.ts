@@ -10,8 +10,9 @@
  *                  path reads). Keyed by playerId + sport, freshest by createdAt. Live FFC is NEVER called.
  *   • position   — the D.1 `resolvePlayerMetadata` seam (persisted SportsPlayer cache). Authoritative;
  *                  the ADP record's position is a fallback only.
- *   • projection — NO provider-id-keyed read-only source exists in shadow (D.1 finding). Stays null and is
- *                  surfaced as `projection_unavailable` — NEVER fabricated (P3). Lands in a later phase.
+ *   • projection — persisted `FantasyProjection` rows via the F2.5 world port (playerId-keyed), anchored
+ *                  to the canonical world's season/currentWeek. Unanchored/empty ⇒ honest `projection_*`
+ *                  warnings — NEVER fabricated (P3).
  *   • marketValue— Phase F enrichment; honest-absent today.
  *
  * HONEST & READ-ONLY: never writes, never warms a cache, never calls a live provider API, never throws
@@ -25,17 +26,26 @@
 import type { CanonicalMemoEnrichment } from './canonicalMemo'
 import { loadAdpRecords, type AdpRecordRow } from './loader'
 import { resolvePlayerMetadata, type PlayerMetadataResult } from '@/lib/decision-os/world'
+import { loadProjectionRows } from '@/lib/decision-os/world/port'
+import { projectProjectionContext } from '@/lib/decision-os/world/projectionEnrichedWorld'
+import type { RawProjectionRow } from '@/lib/decision-os/world/facts'
 
 export interface TradeEnrichmentPort {
   /** READ-ONLY: freshest-first persisted ADP records for the sport + player ids. NEVER writes/calls APIs. */
   loadAdp: (sport: string, playerIds: string[]) => Promise<AdpRecordRow[]>
   /** READ-ONLY: persisted player metadata (authoritative position) via the D.1 substrate seam. */
   resolveMetadata: (sport: string, playerIds: string[]) => Promise<PlayerMetadataResult>
+  /**
+   * READ-ONLY: persisted weekly projections via the F2.5 world port (`FantasyProjection`,
+   * playerId-keyed — the provider-id-keyed source the D.1 audit predated). NEVER calls a live API.
+   */
+  loadProjections: (sport: string, playerIds: string[], season: string, week: number) => Promise<RawProjectionRow[]>
 }
 
 export const defaultTradeEnrichmentPort: TradeEnrichmentPort = {
   loadAdp: (sport, ids) => loadAdpRecords(sport, ids),
   resolveMetadata: (sport, ids) => resolvePlayerMetadata(sport, ids),
+  loadProjections: (sport, ids, season, week) => loadProjectionRows(sport, ids, season, week),
 }
 
 export interface TradeEnrichmentResult {
@@ -47,7 +57,7 @@ export interface TradeEnrichmentResult {
   adpResolved: number
   /** Count of requested ids that resolved a real position. */
   positionResolved: number
-  /** Count of requested ids that resolved a real projection — 0 today (no canonical projection source). */
+  /** Count of requested ids that resolved a real stored projection (F2.5 port). */
   projectionResolved: number
   /** Requested ids that resolved NEITHER adp nor position. */
   unresolvedIds: string[]
@@ -73,7 +83,15 @@ function emptyResult(): TradeEnrichmentResult {
  * degrades that field to honest-empty without losing the other.
  */
 export async function resolveTradeEnrichment(
-  args: { sport: string; playerIds: string[] },
+  args: {
+    sport: string
+    playerIds: string[]
+    /** F2.5 projection anchor — when either is absent, projections stay honestly unavailable. */
+    season?: number | null
+    week?: number | null
+    /** League scoring preset for the projection match tier (null ⇒ any_scoring + mismatch note). */
+    scoringPresetId?: string | null
+  },
   port: TradeEnrichmentPort = defaultTradeEnrichmentPort,
 ): Promise<TradeEnrichmentResult> {
   const ids = Array.from(new Set(args.playerIds.filter((x) => typeof x === 'string' && x.length > 0)))
@@ -81,7 +99,7 @@ export async function resolveTradeEnrichment(
 
   const adpByPlayerId: Record<string, number | null> = {}
   const positionByPlayerId: Record<string, string | null> = {}
-  // No provider-id-keyed projection source is read in shadow (D.1) — left empty, surfaced as a warning.
+  // F2.5-fed below when the season/week anchor is present; otherwise honestly empty.
   const projectionByPlayerId: Record<string, number | null> = {}
   const warnings: string[] = []
   const contributing: string[] = []
@@ -118,8 +136,36 @@ export async function resolveTradeEnrichment(
     warnings.push('player_metadata_source_unavailable')
   }
 
-  // Projection has no canonical read-only source in shadow — honest gap, surfaced not fabricated.
-  warnings.push('projection_unavailable')
+  // Projection — F2.5 wiring: persisted `FantasyProjection` rows via the world port, anchored to the
+  // canonical world's season/week. Absent anchor or empty store ⇒ honest gap, surfaced not fabricated.
+  let projectionResolved = 0
+  if (args.season != null && args.week != null && args.week > 0) {
+    try {
+      const rows = await port.loadProjections(args.sport, ids, String(args.season), args.week)
+      const rowsByPlayer = new Map<string, RawProjectionRow[]>()
+      for (const row of rows) {
+        const list = rowsByPlayer.get(row.playerId)
+        if (list) list.push(row)
+        else rowsByPlayer.set(row.playerId, [row])
+      }
+      const now = new Date()
+      let scoringMismatch = false
+      for (const id of ids) {
+        const ctx = projectProjectionContext(rowsByPlayer.get(id) ?? [], args.scoringPresetId ?? null, now)
+        if (ctx.projectedPoints == null) continue
+        projectionByPlayerId[id] = ctx.projectedPoints
+        projectionResolved += 1
+        if (ctx.matchTier === 'any_scoring') scoringMismatch = true
+      }
+      if (projectionResolved > 0) contributing.push('fantasy_projection')
+      if (scoringMismatch) warnings.push('projection_scoring_format_mismatch')
+    } catch {
+      warnings.push('projection_source_unavailable')
+    }
+  } else {
+    warnings.push('projection_week_unanchored')
+  }
+  if (projectionResolved === 0) warnings.push('projection_unavailable')
 
   const adpResolved = Object.values(adpByPlayerId).filter((v) => v != null).length
   const positionResolved = Object.values(positionByPlayerId).filter((v) => v != null).length
@@ -131,7 +177,7 @@ export async function resolveTradeEnrichment(
     valuationSource: contributing.length > 0 ? contributing.join('+') : null,
     adpResolved,
     positionResolved,
-    projectionResolved: 0,
+    projectionResolved,
     unresolvedIds,
     warnings: Array.from(new Set(warnings)),
   }

@@ -163,7 +163,14 @@ async function rosterIdsToAssets(args: {
       const row = await getPlayer(id)
       if (row) {
         const pa = sportsRecordToPricedAsset(row)
-        out.push(pricedAssetToEngineAsset(pa))
+        if (pa) {
+          out.push(pricedAssetToEngineAsset(pa))
+        } else {
+          // Honesty pass: no dynasty value and no projection for this player.
+          // Previously a hardcoded 1200 stood in here, which made unpriceable
+          // players look identically valuable.
+          args.dataGaps.push(`No market value or projection available for "${row.name}"`)
+        }
       }
     } catch {
       args.dataGaps.push(`Could not load roster player id ${id.slice(0, 24)}…`)

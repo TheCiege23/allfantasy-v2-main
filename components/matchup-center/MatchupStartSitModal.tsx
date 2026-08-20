@@ -32,7 +32,7 @@ export function MatchupStartSitModal({
       <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-white/[0.1] bg-[#060b18] p-4 shadow-2xl">
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2">
-            <Scale className="h-5 w-5 text-cyan-300/90" />
+            <Scale className="h-5 w-5 text-[#ff9ec0]/90" />
             <h2 className="text-sm font-bold text-white">Start / sit — AI</h2>
           </div>
           <button
@@ -49,7 +49,7 @@ export function MatchupStartSitModal({
         </p>
 
         {loading ? (
-          <div className="flex items-center gap-2 py-10 text-cyan-300/90">
+          <div className="flex items-center gap-2 py-10 text-[#ff9ec0]/90">
             <Loader2 className="h-6 w-6 animate-spin" />
             <span className="text-sm">Running multi-model analysis…</span>
           </div>
@@ -60,7 +60,7 @@ export function MatchupStartSitModal({
         {result && !loading ? (
           <div className="mt-3 space-y-2 text-[12px] leading-snug text-white/80">
             <p>
-              <span className="font-semibold text-cyan-200/90">Pick: </span>
+              <span className="font-semibold text-[#ffb8d1]/90">Pick: </span>
               {pickName}{' '}
               <span className="text-white/45">
                 ({result.confidencePct}% confidence · {result.recommendation})

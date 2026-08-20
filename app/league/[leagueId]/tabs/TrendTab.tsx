@@ -305,7 +305,7 @@ function TrendColumn({
           <select
             value={filter}
             onChange={(e) => onFilterChange(e.target.value)}
-            className="appearance-none rounded-lg border border-white/[0.1] bg-[#07071a] py-1.5 pl-2.5 pr-8 text-[11px] font-semibold text-white/85 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+            className="appearance-none rounded-lg border border-white/[0.1] bg-[#07071a] py-1.5 pl-2.5 pr-8 text-[11px] font-semibold text-white/85 focus:border-[#ff3d81]/40 focus:outline-none focus:ring-1 focus:ring-[#ff3d81]/30"
           >
             {pills.map((p) => (
               <option key={p} value={p}>
@@ -395,7 +395,7 @@ function TrendColumn({
                             </span>
                           ))}
                           {owner ? (
-                            <span className="truncate text-cyan-300/85">→ {owner}</span>
+                            <span className="truncate text-[#ff9ec0]/85">→ {owner}</span>
                           ) : null}
                         </div>
                       </div>

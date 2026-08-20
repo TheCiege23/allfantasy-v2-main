@@ -84,7 +84,7 @@ describe('Notification composition error handling (Phase OS-C6)', () => {
     // The section itself rendered fully (proving no crash), AND the real Attention Queue signal
     // still renders correctly (proving the failure was scoped to notification composition only) —
     // the Notification Center degrades to its own honest empty state since composition threw.
-    expect(screen.getByTestId('attention-queue-item-critical')).toBeInTheDocument()
+    expect(screen.getByTestId('attention-queue-item-signal-1')).toBeInTheDocument()
     expect(screen.getByTestId('notification-center-empty')).toBeInTheDocument()
     expect(console.error).toHaveBeenCalled()
   })
@@ -120,7 +120,7 @@ describe('Notification composition error handling (Phase OS-C6)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('command-center-overview')).toBeInTheDocument()
     })
-    expect(screen.getByTestId('attention-queue-item-critical')).toBeInTheDocument()
+    expect(screen.getByTestId('attention-queue-item-signal-1')).toBeInTheDocument()
     expect(screen.getByTestId('notification-center-empty')).toBeInTheDocument()
     expect(console.error).toHaveBeenCalled()
   })

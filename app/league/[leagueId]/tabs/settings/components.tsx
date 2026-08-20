@@ -48,7 +48,7 @@ export function SettingsRow({
         <div className="flex-shrink-0">{control}</div>
       </div>
       {faqOpen && faqText ? (
-        <div className="mt-2 rounded-xl border border-cyan-500/10 bg-cyan-500/[0.06] p-3 text-[11px] leading-relaxed text-cyan-100/80">
+        <div className="mt-2 rounded-xl border border-[#ff3d81]/10 bg-[#ff3d81]/[0.06] p-3 text-[11px] leading-relaxed text-[#ffd7e5]/80">
           {faqText}
         </div>
       ) : null}
@@ -88,7 +88,7 @@ export function Toggle({
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
       className={`relative h-6 w-10 flex-shrink-0 rounded-full transition-colors ${
-        checked ? 'bg-cyan-500' : 'bg-white/[0.12]'
+        checked ? 'bg-[#ff3d81]' : 'bg-white/[0.12]'
       } ${disabled ? 'cursor-not-allowed opacity-40' : 'cursor-pointer'}`}
     >
       <span
@@ -118,7 +118,7 @@ export function Select({
       value={value}
       disabled={disabled}
       onChange={(e) => onChange(e.target.value)}
-      className={`rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 py-2 text-[13px] text-white outline-none transition hover:border-white/[0.20] focus:border-cyan-500/50 disabled:opacity-50 ${className}`}
+      className={`rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 py-2 text-[13px] text-white outline-none transition hover:border-white/[0.20] focus:border-[#ff3d81]/50 disabled:opacity-50 ${className}`}
     >
       {children}
     </select>
@@ -132,7 +132,7 @@ export function Input(
   return (
     <input
       {...rest}
-      className={`rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 py-2 text-[13px] text-white outline-none transition placeholder:text-white/30 hover:border-white/[0.20] focus:border-cyan-500/50 disabled:opacity-50 ${className}`}
+      className={`rounded-xl border border-white/[0.10] bg-white/[0.06] px-3 py-2 text-[13px] text-white outline-none transition placeholder:text-white/30 hover:border-white/[0.20] focus:border-[#ff3d81]/50 disabled:opacity-50 ${className}`}
     />
   )
 }
@@ -186,7 +186,7 @@ export function LeagueSettingsHeader({
           type="button"
           onClick={onSaveAll}
           disabled={!canEdit}
-          className="rounded-xl bg-cyan-500 px-4 py-2 text-[13px] font-bold text-black transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:opacity-40"
+          className="rounded-xl bg-[#ff3d81] px-4 py-2 text-[13px] font-bold text-black transition hover:bg-[#ff3d81] disabled:cursor-not-allowed disabled:opacity-40"
         >
           {t('league.draftSettings.saveChanges')}
         </button>

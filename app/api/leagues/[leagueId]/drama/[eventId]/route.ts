@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getDramaEventById } from '@/lib/drama-engine/DramaQueryService'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,6 +14,9 @@ export async function GET(
 ) {
   try {
     const { leagueId, eventId } = await ctx.params
+    // Membership gate. This route was reachable by anyone holding a league id.
+    const gate = await requireLeagueApiAccess(leagueId)
+    if (!gate.ok) return gate.response
     if (!eventId) return NextResponse.json({ error: 'Missing eventId' }, { status: 400 })
 
     const event = await getDramaEventById(eventId)

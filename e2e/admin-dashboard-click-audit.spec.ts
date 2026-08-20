@@ -5,7 +5,18 @@ test.describe.configure({ timeout: 240_000 })
 test.describe("@admin admin dashboard click audit", () => {
   test("admin route redirects to login without admin session", async ({ page }) => {
     await page.goto("/admin?tab=overview", { waitUntil: "domcontentloaded" })
-    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fadmin%3Ftab%3Doverview/, { timeout: 20_000 })
+    /*
+     * /admin sends signed-out visitors to its OWN login page, not the app one:
+     * app/admin/page.tsx redirects to `/admin-login?next=/admin` when the gate
+     * reports "unauthenticated". This asserted the app login's
+     * `/login?callbackUrl=...` shape, which the admin surface stopped using when
+     * it gained a dedicated sign-in screen — so the test was describing a
+     * redirect the product no longer performs.
+     *
+     * `next` is matched raw-or-encoded because whether the slash survives
+     * depends on the navigation path, and pinning one form makes this flake.
+     */
+    await expect(page).toHaveURL(/\/admin-login\?next=(%2F|\/)admin/, { timeout: 20_000 })
   })
 
   test("admin dashboard core click paths are wired end-to-end", async ({ page }) => {

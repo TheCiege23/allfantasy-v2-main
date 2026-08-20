@@ -28,6 +28,237 @@ model EarlyAccessSignup {
   @@index([utmSource])
 }
 
+/// Market player values, snapshotted from external sources.
+///
+/// ⚠ SNAPSHOT, NEVER UPSERT-IN-PLACE. History is the asset: a year of daily rows
+/// yields trend, volatility and buy-low detection that a single current-value
+/// table can never reconstruct, and it costs almost nothing to store.
+///
+/// ⚠ `source` EXISTS FROM DAY ONE SO `INTERNAL` SLOTS IN WITHOUT A MIGRATION.
+/// Every value here is someone else's asset — FantasyCalc could close tomorrow.
+/// Capturing our own trades into this same table is how that dependency becomes a
+/// sanity check rather than a single point of failure. Five minutes now.
+model PlayerValueSnapshot {
+  id String @id @default(cuid())
+
+  /// Sleeper player id — the join key every source in use can reach.
+  sleeperId String @db.VarChar(32)
+  name      String
+  position  String? @db.VarChar(8)
+
+  /// FANTASYCALC | DYNASTYPROCESS | INTERNAL
+  source String @db.VarChar(24)
+  /// DYNASTY | REDRAFT
+  format String @db.VarChar(12)
+  /// ONE_QB | SUPERFLEX
+  qbFormat String @db.VarChar(12)
+
+  value        Int
+  overallRank  Int?
+  positionRank Int?
+  /// 30-day movement, where the source publishes it.
+  trend30d     Int?
+  /// ⚠ LIQUIDITY, AND ALMOST NOBODY SURFACES IT. A high value with near-zero trade
+  /// frequency is a thin, rarely-tested price — worth saying so on a trade screen.
+  tradeFrequency Float?
+  /// ⚠ MARKET DISAGREEMENT. High deviation means the market disagrees with itself,
+  /// which is exactly where an edge lives and a natural confidence input.
+  marketStdDev   Float?
+
+  capturedAt DateTime @default(now())
+
+  @@unique([sleeperId, source, format, qbFormat, capturedAt])
+  @@index([sleeperId, capturedAt])
+  @@index([source, capturedAt])
+}
+
+/// Measured team-season play-calling tendencies, derived from play-by-play.
+///
+/// ⚠ STORED AT TEAM-SEASON, NOT COACH, AND THAT IS DELIBERATE. No dataset records
+/// who actually calls plays — some head coaches call their own offense, some
+/// defer, some take over mid-season. Attributing a measured PROE to a named
+/// coordinator who may not have called it is worse than leaving it unattributed:
+/// the number is then pointed at the wrong human. Tendencies are measured where
+/// they are unambiguous (the team) and resolved to coaches at read time through
+/// CoachStint, with attribution confidence capped accordingly.
+///
+/// ⚠ EVERY RATE CARRIES ITS OWN SAMPLE SIZE. Coverage windows differ per field —
+/// shotgun/no-huddle from 1999, PROE from 2006, FTN charting only from 2022 — so a
+/// single row can hold a PROE backed by 1,000 plays beside a motion rate backed by
+/// none. One confidence number across both would launder the weak field's
+/// uncertainty into the strong one.
+model TeamTendencySeason {
+  id     String @id @default(cuid())
+  teamId String @db.VarChar(8)
+  season Int
+
+  /// Plays surviving the neutral-script filter — the denominator for the rates below.
+  neutralPlays Int @default(0)
+
+  /// Pass rate over expected. nflfastR `pass_oe`; NULL before 2006.
+  proe            Float?
+  proeN           Int?
+  shotgunRate     Float?
+  shotgunN        Int?
+  noHuddleRate    Float?
+  noHuddleN       Int?
+  /// Seconds per play in neutral script — pace. Lower = more plays = more fantasy points.
+  secPerPlay      Float?
+  secPerPlayN     Int?
+
+  /// FTN charting, 2022+ only. NULL for earlier seasons by coverage, not by failure.
+  playActionRate Float?
+  playActionN    Int?
+  motionRate     Float?
+  motionN        Int?
+  rpoRate        Float?
+  rpoN           Int?
+  screenRate     Float?
+  screenN        Int?
+
+  source     String   @db.VarChar(32)
+  computedAt DateTime @default(now())
+
+  @@unique([teamId, season])
+  @@index([season])
+}
+
+/// Canonical coaching identity — one row per human.
+///
+/// ⚠ NEVER KEY ON NAME. The league has repeated Shanahans, Ryans, Harbaughs and
+/// Kubiaks, and a name-keyed join silently merges a father and son into one career.
+model Coach {
+  id String @id @default(cuid())
+
+  fullName String
+  /// Lowercased, punctuation- and suffix-stripped. The fuzzy-match join key.
+  nameNormalized String
+
+  /// Disambiguates the Mike/Kyle Shanahan class of collision when known.
+  birthYear Int?
+  /// Best available external anchor.
+  pfrId           String?
+  coachingTreeId  String?
+
+  stints    CoachStint[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([nameNormalized])
+}
+
+/// Coach x team x season x role — the staff history that did not previously exist.
+model CoachStint {
+  id      String @id @default(cuid())
+  coachId String
+  coach   Coach  @relation(fields: [coachId], references: [id], onDelete: Cascade)
+
+  /// Franchise code, relocation-normalised (STL->LA, OAK->LV, SD->LAC).
+  teamId String @db.VarChar(8)
+  /// The code exactly as the source gave it, so a relocation mapping stays auditable.
+  teamRaw String @db.VarChar(8)
+  season Int
+
+  /// HC | OC | DC | STC | PASS_GAME_COORD | RUN_GAME_COORD | POSITION | ASSISTANT_HC | OTHER
+  role String @db.VarChar(24)
+  /// Source string verbatim — coaching titles are not standardised across the league.
+  roleRaw String?
+
+  /// ⚠ NULLABLE ON PURPOSE, AND MUST NOT DEFAULT TO false. No dataset reliably
+  /// records who actually calls plays: some head coaches call their own offense,
+  /// some defer, some take it over mid-season. `false` would assert someone is not
+  /// the play-caller, which we do not know. Only set true on sourced confirmation.
+  isPlayCaller Boolean?
+
+  /// COACHING_TREE | NFLVERSE | SPORTSDATAIO | WIKIPEDIA | MANUAL
+  source String @db.VarChar(24)
+  /// HIGH | MEDIUM | LOW
+  sourceConfidence String @db.VarChar(8)
+
+  ingestedAt DateTime @default(now())
+
+  /// ⚠ DELIBERATELY NOT UNIQUE ON (coachId, teamId, season). A coach can hold more
+  /// than one role in a season — head coach who is also de facto OC is common — and
+  /// a unique constraint here would silently drop the second role.
+  @@unique([coachId, teamId, season, role])
+  @@index([teamId, season])
+  @@index([season, role])
+}
+
+/// A business asking for a demo of Decision OS / Chimmy Intelligence, captured from
+/// the "AllFantasy for business" band on the marketing page.
+///
+/// ⚠ DELIBERATELY NOT FOLDED INTO EarlyAccessSignup, despite both being lead capture.
+/// That model's `email` is @unique and its handler returns `alreadyExists: true`
+/// WITHOUT writing anything — so a buyer who had already joined the consumer
+/// waitlist with their work address would have their demo request silently
+/// discarded. A dropped B2B lead is the single most expensive failure this form
+/// has, so `email` here is intentionally NOT unique: the same person may ask twice,
+/// and two rows are recoverable where a swallowed request is not.
+model BusinessDemoRequest {
+  id      String @id @default(cuid())
+  email   String
+  company String?
+  name    String?
+  /// Free text — what they said they want to build. Never rendered as HTML unescaped.
+  useCase String?
+
+  source      String? @default("allfantasy.ai")
+  referrer    String?
+  utmCampaign String?
+  utmContent  String?
+  utmMedium   String?
+  utmSource   String?
+  utmTerm     String?
+
+  /// `new` until someone works the lead. Not an enum: sales stages change more
+  /// often than migrations should.
+  status String @default("new")
+
+  /// When the notification email actually reached the inbox. NULL means the row
+  /// was stored but nobody has been told — the state worth alerting on, and the
+  /// reason this is a column rather than an inference from createdAt.
+  notifiedAt DateTime?
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([email])
+}
+
+/// Closed-beta account admission (P0-1 BETA-GATE). Distinct from InviteLink (viral,
+/// user-issued, league/referral-typed) and EarlyAccessSignup (waitlist capture): a
+/// BetaInvite is admin-issued, email-bound, single-use for ACCOUNT CREATION, and
+/// revocable. The raw token is NEVER stored — only its sha256 digest. `redeemedByUserId`
+/// is a plain column (no Prisma relation) to avoid modifying the heavily-referenced
+/// AppUser model; it is set only when account creation succeeds.
+model BetaInvite {
+  id               String    @id @default(uuid())
+  /// sha256 hex digest of the raw token. Unique so a token can be looked up without storing it.
+  tokenDigest      String    @unique
+  /// Normalized (trimmed, lowercased) invited email. REQUIRED and non-empty: every ordinary
+  /// invite is email-bound and admission must match it (no token-only / transferable codes).
+  invitedEmail     String
+  /// pending | redeemed | revoked. Explicit state, not derived from timestamps.
+  status           String    @default("pending") @db.VarChar(16)
+  /// Optional non-sensitive internal note (e.g. "wave 1 - reddit").
+  note             String?
+  /// Admin identity that issued this invite (email or user id).
+  createdByAdmin   String
+  createdAt        DateTime  @default(now())
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+  revokedBy        String?
+  redeemedAt       DateTime?
+  redeemedByUserId String?
+
+  @@index([invitedEmail])
+  @@index([status])
+  @@index([redeemedByUserId])
+  @@map("beta_invites")
+}
+
 model VisitorLocation {
   id          String   @id @default(cuid())
   ipAddress   String   @unique
@@ -2937,6 +3168,9 @@ model Player {
   rawPayload           Json?     @map("raw_payload")
   lastSyncedAt         DateTime  @updatedAt
   createdAt            DateTime  @default(now())
+
+  images               PlayerImage[]
+  providerIdentities   PlayerProviderIdentity[]
 
   @@index([league])
   @@index([devyEligible])
@@ -10885,12 +11119,25 @@ model PlayerGameStat {
   updatedAt         DateTime  @updatedAt
   sportType         String    @db.VarChar(12)
 
+  /// Defense faced, e.g. "IND". From the provider row, not derived from a schedule join.
+  opponent String? @db.VarChar(8)
+  /// ⚠ The team AT THE TIME OF THE GAME, NOT the player's current team. A 2024 row for
+  /// Tank Bigsby carries "JAX" while his current team is "PHI"; using the current team
+  /// would attribute historical performance to a franchise he never played it for.
+  team     String? @db.VarChar(8)
+  /// Kickoff date — the source for month-of-season effects.
+  gameDate DateTime? @map("game_date") @db.Date
+
   @@unique([playerId, sportType, gameId])
   @@index([playerId, sportType, season])
   @@index([sportType, season, weekOrRound])
   @@index([sportType, source])
   @@index([fetchedAt])
   @@index([expiresAt])
+  /// "This player vs this defense, across seasons" — the opponent adjustment's own query.
+  @@index([playerId, sportType, opponent])
+  /// "What this defense allowed to this position" — the larger-sample signal.
+  @@index([sportType, opponent, season])
   @@map("player_game_stats")
 }
 
@@ -16153,6 +16400,12 @@ model PlayerProviderIdentity {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
+  // Cascade rather than restrict. An orphaned identity row is worse than useless: it still
+  // occupies the `uniq_player_provider_identity` slot below, so it BLOCKS re-linking that
+  // provider id to the correct player. Identity rows are re-derivable from providers, and the
+  // dedupe flow repoints them before deleting a player, so this never fires there.
+  player           Player?   @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   @@unique([provider, sportKey, leagueKey, providerPlayerId], name: "uniq_player_provider_identity")
   @@index([playerId])
   @@index([teamId])
@@ -16182,10 +16435,19 @@ model PlayerImage {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
+  // The only FK on `Player.id` anywhere in the schema. Without it, 215 of 443 rows here
+  // silently pointed at players that do not exist — see the note on `writePrimaryPlayerImage`.
+  // Cascade is right because these rows are a derived image cache: if the player is gone the
+  // cached headshot is meaningless, and re-resolution costs one provider call.
+  player          Player?   @relation(fields: [playerId], references: [id], onDelete: Cascade, onUpdate: Cascade)
+
   @@unique([playerId, imageType, url], name: "uniq_player_image_url")
   @@index([sportKey, leagueKey])
   @@index([imageType, isPrimary])
   @@index([fetchedAt])
+  // Postgres does not index the referencing side of a FK automatically, and without this
+  // every `Player` delete degrades to a sequential scan of this table.
+  @@index([playerId])
   @@map("sports_core_player_images")
 }
 

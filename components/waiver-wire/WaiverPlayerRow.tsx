@@ -134,7 +134,7 @@ export default function WaiverPlayerRow({
 
   return (
     <li
-      className="group grid gap-3 rounded-xl border border-white/10 bg-[#070d1a]/90 px-3 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition hover:border-cyan-400/35 hover:bg-[#0b1428] sm:grid-cols-[minmax(0,1fr)_auto] sm:px-4"
+      className="group grid gap-3 rounded-xl border border-white/10 bg-[#070d1a]/90 px-3 py-3 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.18)] transition hover:border-[#ff3d81]/35 hover:bg-[#0b1428] sm:grid-cols-[minmax(0,1fr)_auto] sm:px-4"
       data-testid={`waiver-player-row-${player.id}`}
       onClick={onRowClick}
     >
@@ -261,7 +261,7 @@ export default function WaiverPlayerRow({
               onAddClick()
             }}
             data-testid={`waiver-claim-open-${player.id}`}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-cyan-400/50 bg-cyan-500/15 px-3 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-500/25 disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-[#ff3d81]/50 bg-[#ff3d81]/15 px-3 py-1.5 text-xs font-medium text-[#ffd7e5] hover:bg-[#ff3d81]/25 disabled:opacity-50"
           >
             {actionLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
             Claim

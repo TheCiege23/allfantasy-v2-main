@@ -70,37 +70,38 @@ const EXCLUDED_DIRS = [
   'app/api/leagues/[leagueId]/devy/scoring-presets',
 ]
 
-const FILES_KEPT = [
-  'app/api/cron/_auth.ts', 'app/api/cron/waivers/route.ts',
-  // Sports-data ingestion crons, restored to the build by #284. This list is the THIRD
-  // hand-maintained copy of the build script's filesToKeep (the others being
-  // scripts/vercel-next-build.cjs and scripts/route-budget-count.mjs), and nothing
-  // asserts the three agree. Leaving these out made this guard subtract 13 routes that
-  // actually ship — under-reporting against GREEN_LIMIT, so the cap check would fire 13
-  // routes late in exactly the situation it exists to catch.
-  'app/api/cron/import-players/route.ts', 'app/api/cron/import-injuries/route.ts',
-  'app/api/cron/import-news/route.ts', 'app/api/cron/import-scores/route.ts',
-  'app/api/cron/import-standings/route.ts', 'app/api/cron/import-schedules/route.ts',
-  'app/api/cron/import-depth-charts/route.ts', 'app/api/cron/import-projections/route.ts',
-  'app/api/cron/adp-refresh/route.ts', 'app/api/cron/recompute-allfantasy-adp/route.ts',
-  'app/api/cron/draft-pool-prewarm/route.ts', 'app/api/cron/fantasy-os-exec-sync/route.ts',
-  'app/api/cron/trade-weekly-recalibration/route.ts',
-  // scheduled in vercel.json — must be kept or they 404 (see vercel-next-build.cjs).
-  // Union of this branch's two and main's one; keeping only one side re-breaks the other.
-  'app/api/cron/draft-tick/route.ts', 'app/api/cron/live-score-tick/route.ts',
-  'app/api/cron/sync-player-images/route.ts',
-  'app/api/cron/legacy-import-drain/route.ts', 'app/api/cron/import-season-stats/route.ts',
-  'app/api/cron/import-player-game-stats/route.ts',
-  'app/api/cron/import-nfl-team-defense/route.ts',
-  'app/api/admin/automation/health/route.ts', 'app/api/admin/automation/waivers/run/route.ts',
-  'app/api/ai/waivers/commissioner-insights/route.ts', 'app/api/ai/waivers/recommend/route.ts',
-  // Admin routes with live non-admin/lib callers — kept built despite app/api/admin exclusion.
-  'app/api/admin/sports/sync/route.ts', 'app/api/admin/fantasy-data/import/route.ts',
-  // Fetched by the admin dashboard UI itself (app/admin/** is NOT excluded and does ship, so
-  // excluding these made the panel render against 404s).
-  'app/api/admin/visitor-analytics/route.ts', 'app/api/admin/api-health/route.ts',
-  'app/api/admin/chimmy/health/route.ts', 'app/api/admin/monetization/checkout-link-mapping/route.ts',
-]
+/**
+ * Derived from the build script itself rather than hand-copied.
+ *
+ * This used to be the THIRD hand-maintained copy of filesToKeep, and it had
+ * already drifted: seven scheduled crons that DO ship (alert-sweep,
+ * trade-grade-notify, compute-projections, import-stat-lines and the three
+ * decision-os jobs — all verified 401 in production) were reported missing.
+ * A guard that cries wolf is worse than no guard, because the next real
+ * scheduled-but-unbuilt cron gets waved through as "that test is always red".
+ *
+ * Parsing the real list means this can never disagree with what ships.
+ */
+function readFilesKept(): string[] {
+  const src = readFileSync(join(root, 'scripts', 'vercel-next-build.cjs'), 'utf8')
+  const start = src.indexOf('const filesToKeep = new Set([')
+  if (start === -1) throw new Error('filesToKeep not found in vercel-next-build.cjs')
+  const end = src.indexOf('])', start)
+  if (end === -1) throw new Error('filesToKeep block not terminated')
+  const block = src.slice(start, end)
+
+  const out: string[] = []
+  // Entries are path.join('a', 'b', 'route.ts') or a plain quoted string.
+  for (const m of block.matchAll(/path\.join\(([^)]*)\)/g)) {
+    const parts = [...m[1]!.matchAll(/'([^']+)'/g)].map((x) => x[1]!)
+    if (parts.length) out.push(parts.join('/'))
+  }
+  const withoutJoins = block.replace(/path\.join\([^)]*\)/g, '')
+  for (const m of withoutJoins.matchAll(/'((?:app|scripts)\/[^']+)'/g)) out.push(m[1]!)
+  return [...new Set(out)]
+}
+
+const FILES_KEPT = readFilesKept()
 
 function getProductionSignals(): number {
   const appDir = join(root, 'app')
@@ -136,6 +137,17 @@ function getProductionSignals(): number {
   try { crons = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')).crons?.length ?? 0 } catch {}
   return (sourceTotal - netExcluded) + crons
 }
+
+describe('The keep-list parse itself', () => {
+  // If the regex ever stops matching, FILES_KEPT silently becomes [] and every
+  // check built on it passes vacuously. Assert the parse actually found things.
+  it('extracts a plausible keep-list from the build script', () => {
+    expect(FILES_KEPT.length).toBeGreaterThan(50)
+    expect(FILES_KEPT).toContain('app/api/cron/import-players/route.ts')
+    // Added mid-2026 and verified live at 401; a stale hand-copy missed it.
+    expect(FILES_KEPT).toContain('app/api/cron/alert-sweep/route.ts')
+  })
+})
 
 describe('Every scheduled cron survives the production build', () => {
   // This has now gone wrong three separate times: the original 13 sports-data crons (#284),

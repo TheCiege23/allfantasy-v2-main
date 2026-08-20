@@ -183,8 +183,9 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
       const finalScoreOpts = { biggestNeed, secondaryNeed, isSF, isTEP, totalTeams, pickNumber }
 
       safeCandidates.sort((a, b) => {
-        const aScore = computeDevyFinalScore(a, finalScoreOpts).finalScore
-        const bScore = computeDevyFinalScore(b, finalScoreOpts).finalScore
+        // Unscorable players sort last rather than comparing against null.
+        const aScore = computeDevyFinalScore(a, finalScoreOpts)?.finalScore ?? -1
+        const bScore = computeDevyFinalScore(b, finalScoreOpts)?.finalScore ?? -1
         return bScore - aScore
       })
 
@@ -225,14 +226,17 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/devy-board", tool: "Le
           athleticProfileScore: metrics.athleticProfileScore,
           productionIndex: metrics.productionIndex,
           volatilityScore: metrics.volatilityScore,
-          finalScore: fs.finalScore,
-          scoreBreakdown: {
-            draftProjectionComponent: fs.draftProjectionComponent,
-            adpMarketComponent: fs.adpMarketComponent,
-            leagueNeedComponent: fs.leagueNeedComponent,
-            scarcityComponent: fs.scarcityComponent,
-            volatilityComponent: fs.volatilityComponent,
-          },
+          finalScore: fs?.finalScore ?? null,
+          // No final score means no breakdown to explain — null, not a row of zeros.
+          scoreBreakdown: fs
+            ? {
+                draftProjectionComponent: fs.draftProjectionComponent,
+                adpMarketComponent: fs.adpMarketComponent,
+                leagueNeedComponent: fs.leagueNeedComponent,
+                scarcityComponent: fs.scarcityComponent,
+                volatilityComponent: fs.volatilityComponent,
+              }
+            : null,
           riskBand: computeRiskBand(p),
         }
       }

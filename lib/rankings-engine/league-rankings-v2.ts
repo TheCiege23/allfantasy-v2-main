@@ -1163,7 +1163,14 @@ function computeRosterInjuryImpact(
   return { powerHealthRatio, marketDiscount, riskConcentration, uncertaintyVolatility, injuryProfiles: profiles, byPlayerId }
 }
 
-async function fetchDbInjuryMap(playerNames: string[]): Promise<Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>> {
+/**
+ * Slice 15 (wrong-row joins): this query previously had NO `sport` filter while
+ * matching on `playerName`, so a same-named athlete in another sport could
+ * supply the injury. This rankings path is Sleeper-backed and NFL-only (see
+ * `getLeagueRosters`/`getAllPlayers` above), so NFL is the honest default
+ * rather than an assumption smuggled into an unscoped query.
+ */
+async function fetchDbInjuryMap(playerNames: string[], sport = 'NFL'): Promise<Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>> {
   const result = new Map<string, { severity: string | null; date: Date | null; type: string | null; description: string | null }>()
   if (playerNames.length === 0) return result
 
@@ -1171,6 +1178,7 @@ async function fetchDbInjuryMap(playerNames: string[]): Promise<Map<string, { se
     const cutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
     const injuries = await prisma.sportsInjury.findMany({
       where: {
+        sport,
         playerName: { in: playerNames },
         fetchedAt: { gte: cutoff },
       },
@@ -1293,10 +1301,42 @@ function computeTeamDataQuality(
     confidence -= 1
   }
 
+  // Three of the composite's five inputs — winScore, luckScore and
+  // managerSkillScore — are all derived from played games. With none played they
+  // resolve to the same value for every team in the league, so they contribute
+  // nothing to the ordering: the ranking is really just power score and market
+  // value wearing a five-factor label.
+  //
+  // Confidence measured only source freshness (valuation coverage, injury age,
+  // sync age) and never asked whether the inputs themselves carried information.
+  // Measured on real leagues: a league with no games played reported 79/100
+  // "HIGH — Good Confidence", against 80/100 for a completed season where all
+  // five inputs varied. A one-point difference between "we know almost nothing
+  // about how these teams play" and "we watched a full season".
+  //
+  // The cap is deliberately not a small penalty. Three constants out of five is
+  // not a slightly-degraded ranking; it is a different, much weaker claim, and
+  // the badge that reads off this number should say so.
+  // Weeks actually SCORED, not array length. The array can carry a zero-filled
+  // entry for a league that has not kicked off, so length alone reports history
+  // that does not exist — a team with a real played week always scores something.
+  const playedWeeks = weeklyPts.filter((pts) => pts > 0).length
+  const informativeInputs = playedWeeks > 0 ? 5 : 2
+  if (informativeInputs < 5) {
+    confidence = Math.min(confidence, 55)
+    signals.push(
+      'No games played yet — win, luck and manager-skill scores are identical for every team, so this ranking reflects roster value only',
+    )
+  }
+
   confidence = Math.max(10, Math.min(100, confidence))
 
   let dataCoverage: 'FULL' | 'PARTIAL' | 'MINIMAL'
-  if (valueCoverage >= 0.85 && weeklyPts.length >= 3 && injuryCoverage >= 0.10) {
+  if (playedWeeks === 0) {
+    // Rich valuation data does not make coverage FULL when the performance half
+    // of the model has nothing to read.
+    dataCoverage = 'MINIMAL'
+  } else if (valueCoverage >= 0.85 && weeklyPts.length >= 3 && injuryCoverage >= 0.10) {
     dataCoverage = 'FULL'
   } else if (valueCoverage >= 0.50 || weeklyPts.length >= 2) {
     dataCoverage = 'PARTIAL'

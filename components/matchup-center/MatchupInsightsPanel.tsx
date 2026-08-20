@@ -24,24 +24,24 @@ export function MatchupInsightsPanel({
       </div>
       <div className="space-y-2 text-[12px] leading-snug text-white/75">
         <p>
-          <span className="font-semibold text-cyan-200/90">Edge: </span>
+          <span className="font-semibold text-[#ffb8d1]/90">Edge: </span>
           {insights.matchupEdge}
         </p>
         <p>
-          <span className="font-semibold text-cyan-200/90">Start/sit: </span>
+          <span className="font-semibold text-[#ffb8d1]/90">Start/sit: </span>
           {insights.startSit}
         </p>
         <p>
-          <span className="font-semibold text-cyan-200/90">Floor vs ceiling: </span>
+          <span className="font-semibold text-[#ffb8d1]/90">Floor vs ceiling: </span>
           {insights.floorVsCeiling}
         </p>
         <p>
-          <span className="font-semibold text-cyan-200/90">Risk: </span>
+          <span className="font-semibold text-[#ffb8d1]/90">Risk: </span>
           <span className="uppercase tracking-wide text-white/60">{insights.riskLevel}</span>
           <span className="text-white/50"> — volatility heuristic from projections vs actuals.</span>
         </p>
         <p>
-          <span className="font-semibold text-cyan-200/90">Swing players: </span>
+          <span className="font-semibold text-[#ffb8d1]/90">Swing players: </span>
         </p>
         <ul className="list-disc space-y-1 pl-4 text-[11px] text-white/70">
           {insights.swingPlayers.map((line, i) => (
@@ -49,18 +49,18 @@ export function MatchupInsightsPanel({
           ))}
         </ul>
         <p>
-          <span className="font-semibold text-cyan-200/90">Weather: </span>
+          <span className="font-semibold text-[#ffb8d1]/90">Weather: </span>
           {insights.weather}
         </p>
         <p>
-          <span className="font-semibold text-cyan-200/90">Injuries & news: </span>
+          <span className="font-semibold text-[#ffb8d1]/90">Injuries & news: </span>
           {insights.injuryNews}
         </p>
       </div>
       <div className="mt-3 flex flex-wrap gap-2 border-t border-white/[0.06] pt-3">
         <Link
           href={`/league/${leagueId}?tab=waivers`}
-          className="rounded-lg border border-cyan-400/25 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-medium text-cyan-200 hover:bg-cyan-500/20"
+          className="rounded-lg border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-3 py-1.5 text-[11px] font-medium text-[#ffb8d1] hover:bg-[#ff3d81]/20"
         >
           Check Waiver Wire
         </Link>

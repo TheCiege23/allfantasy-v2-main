@@ -59,7 +59,7 @@ function positionAccent(pos: string): { border: string; label: string } {
   if (['DB', 'CB', 'S', 'SS', 'FS'].includes(p)) return { border: 'border-indigo-400/65', label: 'text-indigo-300/90' }
   if (p === 'K') return { border: 'border-yellow-400/55', label: 'text-yellow-200/85' }
   if (p === 'DEF' || p === 'DST') return { border: 'border-slate-400/60', label: 'text-slate-300/90' }
-  return { border: 'border-cyan-400/50', label: 'text-cyan-300/85' }
+  return { border: 'border-[#ff3d81]/50', label: 'text-[#ff9ec0]/85' }
 }
 
 export function TradesTab({ league, teams }: TradesTabProps) {
@@ -68,6 +68,9 @@ export function TradesTab({ league, teams }: TradesTabProps) {
   const [tradeBlock, setTradeBlock] = useState<LeagueTradeBlockPanelItem[]>([])
   const [activeTrades, setActiveTrades] = useState<LeagueTradeHistoryItem[]>([])
   const [activeCount, setActiveCount] = useState(0)
+  /** Pending trades proposed ON the provider (Sleeper). Read-only in AllFantasy. */
+  const [providerPending, setProviderPending] = useState(0)
+  const [providerUrl, setProviderUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [watch, setWatch] = useState<Set<string>>(() => readWatchSet(league.id))
@@ -108,6 +111,8 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         tradeBlock?: LeagueTradeBlockPanelItem[]
         activeTrades?: LeagueTradeHistoryItem[]
         activeCount?: number
+        providerPendingCount?: number
+        providerLeagueUrl?: string
         error?: string
       } | null
       if (!res.ok) {
@@ -115,16 +120,22 @@ export function TradesTab({ league, teams }: TradesTabProps) {
         setTradeBlock([])
         setActiveTrades([])
         setActiveCount(0)
+        setProviderPending(0)
+        setProviderUrl(null)
         return
       }
       setTradeBlock(Array.isArray(data?.tradeBlock) ? data.tradeBlock : [])
       setActiveTrades(Array.isArray(data?.activeTrades) ? (data.activeTrades as LeagueTradeHistoryItem[]) : [])
       setActiveCount(typeof data?.activeCount === 'number' ? data.activeCount : 0)
+      setProviderPending(typeof data?.providerPendingCount === 'number' ? data.providerPendingCount : 0)
+      setProviderUrl(typeof data?.providerLeagueUrl === 'string' ? data.providerLeagueUrl : null)
     } catch {
       setErr('Could not load trades.')
       setTradeBlock([])
       setActiveTrades([])
       setActiveCount(0)
+      setProviderPending(0)
+      setProviderUrl(null)
     } finally {
       setLoading(false)
     }
@@ -225,7 +236,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <button
             type="button"
             onClick={() => setProposeOpen(true)}
-            className="rounded-xl border border-cyan-500/35 bg-cyan-500/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-cyan-100 hover:bg-cyan-500/20"
+            className="rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#ffd7e5] hover:bg-[#ff3d81]/20"
             data-testid="trades-tab-propose-trade-header"
           >
             Propose a Trade
@@ -239,11 +250,39 @@ export function TradesTab({ league, teams }: TradesTabProps) {
           <div className="flex items-center justify-between gap-2 border-b border-white/[0.05] px-4 py-3">
             <div className="flex items-center gap-2">
               <h2 className="text-[13px] font-bold tracking-tight text-white">Active Trades</h2>
-              <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-cyan-500/20 px-1.5 text-[11px] font-bold text-cyan-300">
+              <span className="flex h-6 min-w-[1.5rem] items-center justify-center rounded-full bg-[#ff3d81]/20 px-1.5 text-[11px] font-bold text-[#ff9ec0]">
                 {loading ? '—' : badgeCount}
               </span>
             </div>
           </div>
+
+          {/* Pending trades proposed ON Sleeper are surfaced read-only: the
+              provider's public API has no write endpoint, so AllFantasy can
+              show and analyze them but the manager must respond in Sleeper. */}
+          {!loading && providerPending > 0 ? (
+            <div className="mx-4 mt-3 rounded-xl border border-amber-400/25 bg-amber-400/10 px-3 py-2">
+              <div className="text-[11px] font-semibold text-amber-200">
+                {providerPending} pending {providerPending === 1 ? 'trade' : 'trades'} from Sleeper
+              </div>
+              <p className="mt-0.5 text-[11px] leading-snug text-amber-100/70">
+                Shown here for analysis. Accept or reject them in Sleeper —
+                AllFantasy can&apos;t respond on your behalf.
+                {providerUrl ? (
+                  <>
+                    {' '}
+                    <a
+                      href={providerUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-semibold text-amber-200 underline hover:text-amber-100"
+                    >
+                      Open in Sleeper
+                    </a>
+                  </>
+                ) : null}
+              </p>
+            </div>
+          ) : null}
 
           <div className="flex gap-2 px-4 pt-3">
             <button
@@ -311,7 +350,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                     <button
                       type="button"
                       onClick={() => setProposeOpen(true)}
-                      className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-400 transition hover:text-cyan-300"
+                      className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-[#ff3d81] transition hover:text-[#ff9ec0]"
                       data-testid="trades-tab-propose-trade"
                     >
                       Propose a trade
@@ -319,7 +358,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                   ) : (
                     <Link
                       href={tradeFinderHref}
-                      className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-cyan-400 transition hover:text-cyan-300"
+                      className="mt-4 text-[11px] font-bold uppercase tracking-[0.14em] text-[#ff3d81] transition hover:text-[#ff9ec0]"
                       data-testid="trades-tab-propose-trade"
                     >
                       Propose a trade
@@ -463,7 +502,7 @@ export function TradesTab({ league, teams }: TradesTabProps) {
                       <p className="mt-2 truncate text-[12px] font-bold leading-tight text-white">
                         {shortDisplayName(item.name)}
                       </p>
-                      <p className="mt-auto truncate pt-2 text-[10px] text-cyan-200/45">{item.ownerName}</p>
+                      <p className="mt-auto truncate pt-2 text-[10px] text-[#ffb8d1]/45">{item.ownerName}</p>
                     </div>
                   )
                 })}

@@ -287,7 +287,7 @@ function slotBadgeClass(slot: string): string {
   if (u.includes('RB')) return 'border-emerald-500/35 bg-emerald-500/25 text-emerald-400'
   if (u.includes('WR')) return 'border-blue-500/35 bg-blue-500/25 text-blue-400'
   if (u.includes('TE')) return 'border-orange-500/35 bg-orange-500/25 text-orange-400'
-  if (u.includes('FLEX') || u.includes('SF') || u.includes('SUPER') || u.includes('WRT')) return 'border-cyan-500/35 bg-cyan-500/25 text-cyan-400'
+  if (u.includes('FLEX') || u.includes('SF') || u.includes('SUPER') || u.includes('WRT')) return 'border-[#ff3d81]/35 bg-[#ff3d81]/25 text-[#ff3d81]'
   if (u.includes('K')) return 'border-gray-500/35 bg-gray-500/25 text-gray-400'
   if (u.includes('DEF') || u.includes('DST')) return 'border-purple-500/35 bg-purple-500/25 text-purple-400'
   return 'border-subtle bg-surface-muted text-secondary'
@@ -505,7 +505,7 @@ function PlayerDetailSheet({
               onClose()
               onViewFullStats(playerId)
             }}
-            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 py-3 text-[13px] font-bold text-cyan-200 transition hover:bg-cyan-400/20 active:scale-95"
+            className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#ff3d81]/30 bg-[#ff3d81]/10 py-3 text-[13px] font-bold text-[#ffb8d1] transition hover:bg-[#ff3d81]/20 active:scale-95"
           >
             <ExternalLink className="h-4 w-4" aria-hidden />
             Full Stats
@@ -658,7 +658,7 @@ function LineupReplacementPickerSheet({
                       className={[
                         'w-full rounded-xl border px-3 py-2 text-left transition',
                         selected
-                          ? 'border-cyan-400/50 bg-cyan-500/10'
+                          ? 'border-[#ff3d81]/50 bg-[#ff3d81]/10'
                           : 'border-subtle bg-surface-muted hover:bg-surface-hover',
                         !c.eligible || locked ? 'opacity-40' : '',
                       ].join(' ')}
@@ -732,7 +732,7 @@ function LineupReplacementPickerSheet({
               'w-full rounded-xl border py-2.5 text-sm font-bold transition',
               confirmDisabled
                 ? 'cursor-not-allowed border-subtle bg-surface-muted text-muted'
-                : 'border-cyan-400/35 bg-cyan-500/15 text-cyan-100 hover:bg-cyan-500/25',
+                : 'border-[#ff3d81]/35 bg-[#ff3d81]/15 text-[#ffd7e5] hover:bg-[#ff3d81]/25',
             ].join(' ')}
           >
             {saving ? 'Saving replacement...' : 'Confirm replacement'}
@@ -927,7 +927,7 @@ function RosterRow({
           />
         </span>
         <span
-          className={ptFlash ? 'w-10 tabular-nums font-semibold text-cyan-300 transition-colors duration-700' : 'w-10 tabular-nums text-white/55 transition-colors duration-700'}
+          className={ptFlash ? 'w-10 tabular-nums font-semibold text-[#ff9ec0] transition-colors duration-700' : 'w-10 tabular-nums text-white/55 transition-colors duration-700'}
           data-testid="roster-player-pts"
         >
           {liveScore != null ? liveScore.toFixed(2) : '-'}
@@ -969,13 +969,13 @@ function RosterRow({
             placeholder="Optional context for Chimmy..."
             rows={2}
             data-testid={`roster-row-chimmy-note-${playerId}`}
-            className="mb-2 w-full resize-y rounded-md border border-white/[0.08] bg-[#0a1228] px-2 py-1.5 text-[11px] text-white/85 placeholder:text-white/25 focus:border-cyan-500/40 focus:outline-none focus:ring-1 focus:ring-cyan-500/30"
+            className="mb-2 w-full resize-y rounded-md border border-white/[0.08] bg-[#0a1228] px-2 py-1.5 text-[11px] text-white/85 placeholder:text-white/25 focus:border-[#ff3d81]/40 focus:outline-none focus:ring-1 focus:ring-[#ff3d81]/30"
           />
           <button
             type="button"
             onClick={() => onAskChimmy?.()}
             data-testid={`roster-row-chimmy-ask-${playerId}`}
-            className="rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-cyan-100 hover:bg-cyan-500/20"
+            className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[#ffd7e5] hover:bg-[#ff3d81]/20"
           >
             Ask Chimmy
           </button>
@@ -1730,7 +1730,7 @@ const maxWeekMenu = useMemo(() => {
               className="inline-flex h-10 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-muted px-2.5 text-[9px] font-bold uppercase tracking-wide text-secondary transition hover:border-brand-primary/30 hover:text-brand-primary"
               data-testid="team-tab-waiver"
             >
-              <ClipboardList className="mb-0.5 h-4 w-4 text-cyan-300/90" strokeWidth={2} />
+              <ClipboardList className="mb-0.5 h-4 w-4 text-[#ff9ec0]/90" strokeWidth={2} />
               Waiver
             </Link>
             <Link
@@ -1738,7 +1738,7 @@ const maxWeekMenu = useMemo(() => {
               className="inline-flex h-10 flex-col items-center justify-center rounded-xl border border-subtle bg-surface-muted px-2.5 text-[9px] font-bold uppercase tracking-wide text-secondary transition hover:border-brand-primary/30 hover:text-brand-primary"
               data-testid="team-tab-trade"
             >
-              <ArrowLeftRight className="mb-0.5 h-4 w-4 text-cyan-300/90" strokeWidth={2} />
+              <ArrowLeftRight className="mb-0.5 h-4 w-4 text-[#ff9ec0]/90" strokeWidth={2} />
               Trade
             </Link>
           </div>
@@ -1811,7 +1811,7 @@ const maxWeekMenu = useMemo(() => {
       ) : null}
 
       {savingLineup ? (
-        <p className="text-[11px] text-cyan-200/80">Saving lineup...</p>
+        <p className="text-[11px] text-[#ffb8d1]/80">Saving lineup...</p>
       ) : null}
 
       <div className="rounded-xl border border-subtle bg-surface-muted p-4">
@@ -1842,7 +1842,7 @@ const maxWeekMenu = useMemo(() => {
               onClick={() => void handleAutoCoachToggle()}
               className={[
                 'relative h-6 w-11 shrink-0 rounded-full border transition-colors',
-                autoCoachRow?.enabled ? 'border-cyan-400 bg-cyan-500' : 'border-subtle bg-surface-muted',
+                autoCoachRow?.enabled ? 'border-[#ff3d81] bg-[#ff3d81]' : 'border-subtle bg-surface-muted',
               ].join(' ')}
             >
               <span
@@ -2480,7 +2480,7 @@ const maxWeekMenu = useMemo(() => {
                   {p.status && p.status !== 'pending' && p.status !== 'scheduled' ? (
                     <span className="ml-2 text-[10px] text-white/35">({p.status})</span>
                   ) : null}
-                  <span className="mt-1 block text-[10px] text-cyan-400/80">Tap for trade history</span>
+                  <span className="mt-1 block text-[10px] text-[#ff3d81]/80">Tap for trade history</span>
                 </button>
               </li>
             ))}
@@ -2545,7 +2545,7 @@ const maxWeekMenu = useMemo(() => {
                   )}
                   <Link
                     href={`/league/${encodeURIComponent(league.id)}?view=trades`}
-                    className="mt-2 inline-block text-[10px] font-semibold text-cyan-400/90 hover:text-cyan-300"
+                    className="mt-2 inline-block text-[10px] font-semibold text-[#ff3d81]/90 hover:text-[#ff9ec0]"
                   >
                     Open trades tab -&gt;
                   </Link>

@@ -5,10 +5,12 @@ import {
   captureLeagueSnapshotsBatchJob,
 } from "@/lib/decision-os/snapshot/captureLeagueSnapshotJob"
 import { createDefaultBehavioralSnapshotStore } from "@/lib/decision-os/snapshot/prismaBehavioralSnapshotStore"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { prisma } from "@/lib/prisma"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
-export const maxDuration = 60
+export const maxDuration = 300
 
 /**
  * GET /api/cron/decision-os-snapshot-capture
@@ -16,15 +18,20 @@ export const maxDuration = 60
  * Non-production: `?secret=${CRON_SECRET}` allowed for local smoke tests.
  *
  * Commissioner OS Surface Alignment — Phase B Increment 4. Captures the already-built Decision OS
- * behavioral snapshot (Phase A Increment 5's writer) for one or more EXPLICITLY named leagues —
- * deliberately not a platform-wide "discover every league" job, which is a separate, larger scope
- * decision. Pass `?leagueId=<id>` for a single league (on-demand verification) or
+ * behavioral snapshot (Phase A Increment 5's writer) for one or more EXPLICITLY named leagues.
+ * Pass `?leagueId=<id>` for a single league (on-demand verification) or
  * `?leagueIds=<id1>,<id2>,...` for an explicit batch.
  *
- * Not registered in `vercel.json` — this route exists and is fully authorized/testable, but is not
- * scheduled to run automatically. Wiring it into a cron schedule is a separate, deliberate
- * deployment decision (see docs/os/COMMISSIONER_OS_SURFACE_ALIGNMENT.md §4d).
+ * Aug 2026 — SCHEDULED discovery mode (`?discover=1`): the deliberate deployment decision the
+ * Phase B comment deferred (docs/os/COMMISSIONER_OS_SURFACE_ALIGNMENT.md §4d) has now been made.
+ * The daily cron walks non-archived canonical leagues (freshest-updated first, hard cap 200) under
+ * a 240s time budget — leagues skipped for time are reported honestly (`skippedForTime`), never
+ * silently dropped, and the daily-cadence snapshot writer dedupes per UTC day so tomorrow's fire
+ * resumes them. Explicit-id calls behave exactly as before. Telemetry: SyncJobRun
+ * `cron-decision-os-snapshot-capture` via withSyncJobRun (production-health cron panel).
  */
+const DISCOVERY_TIME_BUDGET_MS = 240_000
+const DISCOVERY_LEAGUE_CAP = 200
 function authorizeCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
@@ -60,7 +67,69 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   const dryRun = url.searchParams.get("dryRun") === "true"
-  const leagueIds = parseLeagueIds(url)
+  let leagueIds = parseLeagueIds(url)
+
+  // Scheduled discovery mode — walk non-archived canonical leagues under a time
+  // budget, wrapped in SyncJobRun telemetry so staleness is observable.
+  if (leagueIds.length === 0 && url.searchParams.get("discover") === "1") {
+    const summary = await withSyncJobRun(
+      { jobName: "cron-decision-os-snapshot-capture", trigger: "cron" },
+      async () => {
+        const startedAt = Date.now()
+        const leagues = await prisma.league
+          .findMany({
+            where: { status: { notIn: ["complete", "completed", "archived"] } },
+            select: { id: true },
+            orderBy: { updatedAt: "desc" },
+            take: DISCOVERY_LEAGUE_CAP,
+          })
+          .catch(() => [] as { id: string }[])
+
+        const store = createDefaultBehavioralSnapshotStore()
+        if (!store) {
+          return { storeUnavailable: true, discovered: 0, processed: 0, failed: 0, skippedForTime: 0, errors: [] as string[] }
+        }
+
+        let processed = 0
+        let failed = 0
+        let skippedForTime = 0
+        const errors: string[] = []
+        for (const league of leagues) {
+          if (Date.now() - startedAt > DISCOVERY_TIME_BUDGET_MS) {
+            skippedForTime += 1
+            continue
+          }
+          const result = await captureLeagueSnapshotJob(league.id, { store })
+          if (result.ok) processed += 1
+          else {
+            failed += 1
+            if (errors.length < 5) errors.push(`${league.id}: ${result.error}`)
+          }
+        }
+        return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, errors }
+      },
+      (s) => ({
+        rowsRead: s.discovered,
+        rowsWritten: s.processed,
+        rowsSkipped: s.skippedForTime,
+        errors: s.storeUnavailable ? ["snapshot_store_unavailable"] : s.errors,
+        warnings: s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${DISCOVERY_TIME_BUDGET_MS / 1000}s time budget`] : [],
+      }),
+    )
+
+    if (summary.storeUnavailable) {
+      return NextResponse.json({ ok: false, mode: "discover", error: "snapshot_store_unavailable" }, { status: 503 })
+    }
+    return NextResponse.json({
+      ok: summary.failed === 0,
+      mode: "discover" as const,
+      discovered: summary.discovered,
+      processed: summary.processed,
+      failed: summary.failed,
+      skippedForTime: summary.skippedForTime,
+      errors: summary.errors,
+    })
+  }
 
   if (leagueIds.length === 0) {
     return NextResponse.json({ ok: false, error: "no_leagues_specified" }, { status: 400 })

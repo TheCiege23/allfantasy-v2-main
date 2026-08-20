@@ -921,7 +921,7 @@ export default function WaiverWirePage({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12" data-testid="waiver-loading-state">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-[#ff3d81]" />
       </div>
     )
   }
@@ -985,7 +985,7 @@ export default function WaiverWirePage({
                 })
               }
               data-testid="waiver-open-player-compare"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 sm:text-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3 py-1.5 text-xs text-[#ffb8d1] hover:bg-[#ff3d81]/20 sm:text-sm"
             >
               <GitCompare className="h-3.5 w-3.5" />
               Compare players
@@ -994,7 +994,7 @@ export default function WaiverWirePage({
             <Link
               href={`/player-compare?leagueId=${encodeURIComponent(leagueId)}&sport=${encodeURIComponent(settings?.sport ?? DEFAULT_SPORT)}`}
               data-testid="waiver-open-player-compare-fallback"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-1.5 text-xs text-cyan-200 hover:bg-cyan-500/20 sm:text-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3 py-1.5 text-xs text-[#ffb8d1] hover:bg-[#ff3d81]/20 sm:text-sm"
             >
               <GitCompare className="h-3.5 w-3.5" />
               Compare players
@@ -1048,7 +1048,7 @@ export default function WaiverWirePage({
               onClick={() => setActiveTab(tab)}
               data-testid={`waiver-tab-${tab}`}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                activeTab === tab ? "bg-cyan-500/20 text-cyan-200" : "text-white/70 hover:text-white"
+                activeTab === tab ? "bg-[#ff3d81]/20 text-[#ffb8d1]" : "text-white/70 hover:text-white"
               }`}
             >
               {tab === "available" ? "All players" : getTabLabel(tab, claims.length)}
@@ -1173,7 +1173,7 @@ export default function WaiverWirePage({
                 >
                   <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
                   <span>Add {t.addPlayerId}</span>
-                  {t.faabSpent != null && <span className="text-cyan-300">${t.faabSpent}</span>}
+                  {t.faabSpent != null && <span className="text-[#ff9ec0]">${t.faabSpent}</span>}
                   <span className="ml-auto text-xs text-white/50">
                     {formatInTimezone(t.processedAt)}
                   </span>
@@ -1287,7 +1287,7 @@ export default function WaiverWirePage({
                           </div>
                         </div>
                         <div className="flex shrink-0 items-center gap-2 sm:flex-col sm:items-end">
-                          {c.faabBid != null && <span className="text-cyan-300">${c.faabBid}</span>}
+                          {c.faabBid != null && <span className="text-[#ff9ec0]">${c.faabBid}</span>}
                           {c.processedAt && (
                             <span className="text-xs text-white/50">{formatInTimezone(c.processedAt)}</span>
                           )}
@@ -1306,7 +1306,7 @@ export default function WaiverWirePage({
       {!lockedTab && <CommissionerWaiverInsightsPanel leagueId={leagueId} />}
 
       {!lockedTab && (
-      <section id="waiver-ai-engine-panel" className="rounded-xl border border-cyan-500/20 bg-black/20 p-4" data-testid="waiver-ai-engine-panel">
+      <section id="waiver-ai-engine-panel" className="rounded-xl border border-[#ff3d81]/20 bg-black/20 p-4" data-testid="waiver-ai-engine-panel">
         <InContextMonetizationCard
           title="Waiver AI access"
           featureId="ai_waivers"
@@ -1316,7 +1316,7 @@ export default function WaiverWirePage({
         />
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-cyan-100">Waiver AI Engine</h2>
+            <h2 className="text-sm font-semibold text-[#ffd7e5]">Waiver AI Engine</h2>
             <p className="mt-1 text-xs text-white/60">
               Deterministic waiver pickups scored from available players and team-needs context, with optional AI explanation.
             </p>
@@ -1345,7 +1345,7 @@ export default function WaiverWirePage({
             onClick={() => void analyzeWaiversWithEngine()}
             disabled={waiverAiLoading || players.length === 0}
             data-testid="waiver-ai-engine-analyze"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-cyan-500/40 bg-cyan-500/20 px-3 py-1.5 text-xs font-medium text-cyan-100 hover:bg-cyan-500/30 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/20 px-3 py-1.5 text-xs font-medium text-[#ffd7e5] hover:bg-[#ff3d81]/30 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {waiverAiLoading ? (
               <>
@@ -1375,7 +1375,7 @@ export default function WaiverWirePage({
               <div className="mb-1 flex items-center gap-2 text-xs text-white/65">
                 <span>
                   Explanation source:{" "}
-                  <span className="font-medium text-cyan-200">{waiverAiAnalysis.explanation.source}</span>
+                  <span className="font-medium text-[#ffb8d1]">{waiverAiAnalysis.explanation.source}</span>
                 </span>
                 <span className="text-white/35">|</span>
                 <span>Sport: {waiverAiAnalysis.sport}</span>
@@ -1393,7 +1393,7 @@ export default function WaiverWirePage({
                     <span className="text-white">
                       #{index + 1} {suggestion.playerName} ({suggestion.position})
                     </span>
-                    <span className="text-cyan-200">
+                    <span className="text-[#ffb8d1]">
                       {suggestion.recommendation} · Score {suggestion.compositeScore}
                       {suggestion.faabBid != null ? ` · FAAB ${suggestion.faabBid}%` : ""}
                     </span>
@@ -1466,7 +1466,7 @@ export default function WaiverWirePage({
           <Link
             href={waiverAiHelpHref}
             data-testid="waiver-ai-help-link"
-            className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-200 hover:bg-cyan-500/20 transition-colors"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3 py-2 text-xs text-[#ffb8d1] hover:bg-[#ff3d81]/20 transition-colors"
           >
             <MessageSquare className="h-3.5 w-3.5" />
             {aiAssistantEnabled ? "Get AI waiver help" : "Open deterministic waiver guidance"}

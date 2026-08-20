@@ -6,10 +6,11 @@ import { WarRoomCard } from './WarRoomCard'
 
 export type EmptyStateTone = 'positive' | 'info' | 'neutral'
 
+// Broadcast Deck status ramp (league page tokens): ok #3ddc97 · info #7fb3ff.
 const TONE: Record<EmptyStateTone, { ring: string; icon: string; title: string; border: string }> = {
-  positive: { ring: 'bg-emerald-500/10', icon: 'text-emerald-300', title: 'text-emerald-300', border: 'rgba(52,211,153,0.2)' },
-  info: { ring: 'bg-cyan-500/10', icon: 'text-cyan-300', title: 'text-cyan-100', border: 'rgba(34,211,238,0.18)' },
-  neutral: { ring: 'bg-white/[0.06]', icon: 'text-white/50', title: 'text-white/80', border: 'rgba(255,255,255,0.08)' },
+  positive: { ring: 'bg-[#3ddc97]/10', icon: 'text-[#3ddc97]', title: 'text-[#3ddc97]', border: 'rgba(61,220,151,0.22)' },
+  info: { ring: 'bg-[#7fb3ff]/10', icon: 'text-[#7fb3ff]', title: 'text-[#c6cbf5]', border: 'rgba(127,179,255,0.2)' },
+  neutral: { ring: 'bg-white/[0.06]', icon: 'text-white/50', title: 'text-white/80', border: '#262c6a' },
 }
 
 export interface EmptyStateProps {

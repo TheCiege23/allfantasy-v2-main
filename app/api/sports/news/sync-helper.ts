@@ -628,6 +628,27 @@ export async function syncNewsToDb(team?: string): Promise<number> {
   return total;
 }
 
+/**
+ * ESPN-only refresh — no NewsAPI calls, so it is safe to run on a short cadence.
+ *
+ * WHY THIS EXISTS: `sports_news` sat 107 days stale because the only writers
+ * (`syncNewsToDb` / `syncFullNewsCoverage`) are invoked by an on-demand route and
+ * an aggregator refresh flag — nothing scheduled. The 15-minute `import-news` cron
+ * calls `runNewsImporter`, which re-reads `sports_news` and writes the same rows
+ * back into `player_news` under `skipDuplicates`, so it advanced nothing while
+ * still reporting `ok:true`.
+ *
+ * Wiring full coverage into that cron would have meant ~384 NewsAPI calls/day
+ * against a 100/day free tier. ESPN has no key and no documented quota, so the
+ * fast cadence uses this and NewsAPI runs hourly via `?full=1`.
+ */
+export async function syncEspnNewsOnly(): Promise<{ total: number; breakdown: Record<string, number> }> {
+  const espnArticles = await fetchESPNNews()
+  const espn = await upsertArticles(espnArticles, 'espn')
+  console.log(`[News] ESPN-only sync: ${espn} articles`)
+  return { total: espn, breakdown: { espn } }
+}
+
 export async function syncFullNewsCoverage(): Promise<{ total: number; breakdown: Record<string, number> }> {
   const breakdown: Record<string, number> = {};
 

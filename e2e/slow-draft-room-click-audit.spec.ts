@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -464,43 +465,43 @@ test.describe('@slow-draft-room click audit', () => {
     const resyncCountBefore = mocks.getResyncHits().length
     const timerBefore = await page.getByTestId('draft-topbar-timer-value').first().innerText()
     expect(timerBefore.toLowerCase()).toContain('h')
-    await page.getByTestId('draft-resync-button').click()
+    await clickHydrated(page.getByTestId('draft-resync-button'))
     await expect.poll(() => mocks.getResyncHits().length).toBeGreaterThan(resyncCountBefore)
     await expect
       .poll(async () => page.getByTestId('draft-topbar-timer-value').first().innerText())
       .not.toBe(timerBefore)
 
     // Pause window behavior via overnight mode + slow automation tick.
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
     const commissionerModal = page.getByTestId('draft-commissioner-modal')
     await expect(commissionerModal).toBeVisible()
     await commissionerModal.getByTestId('draft-commissioner-select-timer-mode').selectOption('overnight_pause')
-    await commissionerModal.getByTestId('draft-commissioner-slow-tick').click()
-    await commissionerModal.getByTestId('draft-commissioner-close').click()
+    await clickHydrated(commissionerModal.getByTestId('draft-commissioner-slow-tick'))
+    await clickHydrated(commissionerModal.getByTestId('draft-commissioner-close'))
     await expect(page.getByTestId('draft-topbar-timer-value').first()).toContainText(/h|m:/i)
     await expect(page.locator('header')).toContainText('paused')
 
     // Return to active mode, force expiry, then submit from queue.
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
     await expect(commissionerModal).toBeVisible()
     await commissionerModal.getByTestId('draft-commissioner-select-timer-mode').selectOption('per_pick')
-    await commissionerModal.getByTestId('draft-commissioner-slow-tick').click()
-    await commissionerModal.getByTestId('draft-commissioner-close').click()
+    await clickHydrated(commissionerModal.getByTestId('draft-commissioner-slow-tick'))
+    await clickHydrated(commissionerModal.getByTestId('draft-commissioner-close'))
     await expect(page.getByTestId('draft-use-queue-button')).toBeVisible()
-    await page.getByTestId('draft-use-queue-button').click()
+    await clickHydrated(page.getByTestId('draft-use-queue-button'))
     expect(mocks.getAutopickRequests().length).toBeGreaterThan(0)
     await expect(desktop.getByTestId('draft-board')).toContainText('Blaze Catcher')
 
     // Manual pick submission still works.
-    await desktop.getByTestId('draft-player-button-0').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
     await expect(desktop.getByTestId('draft-pick-confirmation')).toBeVisible()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     expect(mocks.getPickRequests().length).toBeGreaterThan(0)
     await expect(desktop.getByTestId('draft-board')).toContainText(/Atlas Runner|Blaze Catcher|Core Signal/i)
 
     // Resync should not leave stale on-the-clock state.
     const onClockBefore = await page.getByTestId('draft-topbar-on-clock-manager').first().innerText()
-    await page.getByTestId('draft-resync-button').click()
+    await clickHydrated(page.getByTestId('draft-resync-button'))
     await expect.poll(() => mocks.getResyncHits().length).toBeGreaterThan(0)
     const onClockAfter = await page.getByTestId('draft-topbar-on-clock-manager').first().innerText()
     expect(onClockAfter).toEqual(onClockBefore)

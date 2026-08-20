@@ -2,9 +2,11 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getLatestNews } from '@/lib/data/news'
-import { getInjuryReport } from '@/lib/data/players'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { getNewsApiEverythingDbFirst } from '@/lib/news/newsapi-cache'
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope'
+
+const NL = String.fromCharCode(10)
 
 const SPORT_NEWS_QUERY: Record<SupportedSport, string> = {
   NFL: '(NFL OR "fantasy football") AND (injury OR trade OR lineup)',
@@ -143,7 +145,15 @@ export async function buildChimmySportDataDigest(args: {
     const sportReady = ensureReadiness(sp)
     const [newsRows, injRows, gameRows, standingsRows, transactionRows] = await Promise.all([
       getLatestNews(sp, args.sport === 'all' ? 8 : 20),
-      getInjuryReport(sp),
+      // The canonical injury read port: TTL-respected, one row per player,
+      // freshest source wins, and it reports its own staleness.
+      //
+      // This previously called getInjuryReport, which reads injury_report_records
+      // and only refreshes when that table is EMPTY. It has not been empty since
+      // April, so Chimmy was handed 108-day-old designations with no date on them
+      // and stated them as current, while the live feed sat one table away.
+      // A fallback written for absence does nothing about staleness.
+      listInjuryFacts({ sport: sp, limit: args.sport === 'all' ? 12 : 35 }),
       wantsGames
         ? prisma.sportsGame.findMany({
             where: {
@@ -282,41 +292,91 @@ ${parsed
       }
     }
 
-    if (injRows.length) {
+    // Injuries are rendered ONLY when the feed is alive, and every line carries
+    // its own age. A stale designation is a confident false statement about a
+    // real player's availability — worse than saying nothing, because the model
+    // has no way to tell it is old and will present it as today's news.
+    //
+    // When the feed is stale or empty we say so and mark the category missing,
+    // rather than reaching for the older table. Falling back to staler data is
+    // what produced the three-month-old report in the first place.
+    const injuryFacts = injRows.facts ?? []
+    const freshInjuries = injuryFacts.filter((f) => !f.stale)
+
+    if (freshInjuries.length > 0) {
       sportReady.hasInjuries = true
-      const sourceKey = `injury_report_${sp}`
+      const sourceKey = `injury_facts_${sp}`
       sources.push(sourceKey)
-      setSourceFreshness(sourceKey, injRows.map((r) => r.reportDate))
+      setSourceFreshness(sourceKey, freshInjuries.map((f) => f.fetchedAt))
+      const newestIso = injRows.newestFetchedAt
+        ? injRows.newestFetchedAt.toISOString().slice(0, 10)
+        : 'unknown'
       chunks.push(
-        `### ${sp} — Injury report (DB / sports ingest)\n${injRows
+        `### ${sp} — Injury report (live feed, newest ${newestIso})
+${freshInjuries
           .slice(0, args.sport === 'all' ? 12 : 35)
-          .map(
-            (r) =>
-              `- ${r.playerName}${r.team ? ` (${r.team})` : ''}: ${r.status ?? 'Unknown'}${r.notes ? ` — ${String(r.notes).slice(0, 120)}` : ''}`
-          )
-          .join('\n')}`
+          .map((f) => {
+            const age = f.ageHours < 24
+              ? `${Math.max(0, Math.round(f.ageHours))}h ago`
+              : `${Math.round(f.ageHours / 24)}d ago`
+            // A null status means no designation was stated. It does NOT mean
+            // healthy, and must not be rendered as though it did.
+            const status = f.status ?? 'no designation stated'
+            const detail = f.description ? ` — ${String(f.description).slice(0, 120)}` : ''
+            const part = f.type ? ` [${f.type}]` : ''
+            return `- ${f.playerName}${f.team ? ` (${f.team})` : ''}: ${status}${part}${detail} (reported ${age})`
+          })
+          .join(NL)}`
       )
     } else {
-      const legacyInjuryRows =
-        (await (prisma as any).sportsInjury?.findMany?.({
-          where: { sport: sp },
-          orderBy: { date: 'desc' },
-          take: args.sport === 'all' ? 12 : 35,
-        })) ?? []
-      if (legacyInjuryRows.length) {
-        sportReady.hasInjuries = true
-        const sourceKey = `sports_injuries_${sp}`
+      const reason = injuryFacts.length > 0
+        ? 'every row in the feed is past its freshness window'
+        : 'no live injury feed for this sport'
+      chunks.push(
+        `### ${sp} — Injury report
+UNAVAILABLE: ${reason}. Do not state or imply any player's injury status for ${sp}; say the feed is unavailable instead.`
+      )
+    }
+
+    // Game weather. The forecast pipeline exists and runs — /api/weather/refresh-cron
+    // every three hours, OpenWeatherMap key verified live — but nothing in the
+    // Chimmy path ever read it, so the assistant could not answer "is it going to
+    // be windy in Buffalo" despite the row sitting in the database.
+    //
+    // Only unexpired rows are used. A lapsed forecast is not a forecast, and the
+    // read paths that honour expiresAt are the reason the TTL had to be raised to
+    // outlive the refresh cadence.
+    if (wantsGames) {
+      const weatherRows = await prisma.weatherCache
+        .findMany({
+          where: { sport: sp, expiresAt: { gt: now } },
+          orderBy: { forecastForTime: 'asc' },
+          take: args.sport === 'all' ? 4 : 10,
+        })
+        .catch(() => [] as Array<Record<string, unknown>>)
+
+      if (weatherRows.length) {
+        const sourceKey = `weather_${sp}`
         sources.push(sourceKey)
-        setSourceFreshness(sourceKey, legacyInjuryRows.map((r: any) => r.date ?? r.fetchedAt ?? r.updatedAt))
+        setSourceFreshness(sourceKey, weatherRows.map((w: any) => w.fetchedAt))
         chunks.push(
-          `### ${sp} - Injuries (DB cache)\n${legacyInjuryRows
-            .map(
-              (r: any) =>
-                `- ${r.playerName}${r.team ? ` (${r.team})` : ''}: ${r.status ?? 'Unknown'}${
-                  r.description ? ` - ${String(r.description).slice(0, 120)}` : ''
-                }`
-            )
-            .join('\n')}`
+          `### ${sp} — Game weather (forecast)${NL}${weatherRows
+            .map((w: any) => {
+              const indoors = Boolean(w.isIndoor || w.isDome || w.roofClosed)
+              if (indoors) {
+                // Stating the roof matters more than the number: an indoor game
+                // has no weather effect, and quoting a temperature invites one.
+                return `- ${w.cacheKey ?? 'venue'}: indoors — weather not a factor`
+              }
+              const bits: string[] = []
+              if (typeof w.temperatureF === 'number') bits.push(`${Math.round(w.temperatureF)}F`)
+              if (w.conditionLabel) bits.push(String(w.conditionLabel))
+              if (typeof w.windSpeedMph === 'number') bits.push(`wind ${Math.round(w.windSpeedMph)}mph`)
+              if (typeof w.precipChancePct === 'number') bits.push(`precip ${Math.round(w.precipChancePct)}%`)
+              const when = w.forecastForTime ? formatEt(new Date(w.forecastForTime)) : 'time TBD'
+              return `- ${w.cacheKey ?? 'venue'} (${when}): ${bits.length ? bits.join(', ') : 'no readings'}`
+            })
+            .join(NL)}`
         )
       }
     }
@@ -349,6 +409,77 @@ ${transactionRows
         orderBy: [{ season: 'desc' }, { updatedAt: 'desc' }],
         take: args.sport === 'all' ? 6 : 10,
       })
+
+      // player_season_stats holds NFL only (5,186 rows; zero for any other
+      // sport). College season stats live in fantasy_stat_lines — 5,530 NCAAF
+      // rows loaded from CFBD — where the player NAME is inside the stats JSON
+      // rather than a column, which is why a name query against the first table
+      // silently returned nothing for college and Chimmy reported no stats.
+      let fallbackStatChunk: string | null = null
+      let fallbackStatDates: Array<Date | null> = []
+      if (playerStatsRows.length === 0) {
+        // The JSON name filter is case-sensitive in Postgres and stored names
+        // are Title Case, while mentions arrive as the user typed them.
+        // Normalising the whole word — not just its first letter — is what lets
+        // an ALL-CAPS "JORDAN BROWN" match the stored "Jordan Brown".
+        const titleCase = (value: string) =>
+          value
+            .toLowerCase()
+            .split(' ')
+            .map((word) => (word ? word.charAt(0).toUpperCase() + word.slice(1) : word))
+            .join(' ')
+        const nameFilters = [
+          ...new Set(
+            playerMentions.flatMap((n) => {
+              const title = titleCase(n)
+              return title === n ? [n] : [n, title]
+            })
+          ),
+        ]
+        const lineRows = await prisma.fantasyStatLine.findMany({
+          where: {
+            sport: sp,
+            OR: nameFilters.map((name) => ({
+              stats: { path: ['name'], string_contains: name },
+            })),
+          },
+          orderBy: [{ season: 'desc' }, { week: 'desc' }],
+          take: args.sport === 'all' ? 6 : 10,
+        }).catch(() => [] as Array<Record<string, unknown>>)
+
+        if (lineRows.length) {
+          fallbackStatDates = lineRows.map((r: any) => r.updatedAt ?? r.fetchedAt ?? null)
+          fallbackStatChunk = lineRows
+            .map((r: any) => {
+              const st = (r.stats ?? {}) as Record<string, any>
+              const agg = (st.regular_season ?? {}) as Record<string, any>
+              const name = st.name ?? st.riPlayerName ?? r.playerId
+              const bits: string[] = []
+              const push = (label: string, v: unknown) => {
+                if (typeof v === 'number') bits.push(`${label}: ${v}`)
+              }
+              push('G', agg.games_played)
+              push('Pts', agg.DK_fantasy_points)
+              push('PPG', agg.DK_fantasy_points_per_game)
+              push('PassYds', agg['passing.YDS'])
+              push('RushYds', agg['rushing.YDS'])
+              push('RecYds', agg['receiving.YDS'])
+              // The season is stated because these are completed-season
+              // aggregates. Without it the model presents last season's
+              // production as this year's form.
+              return `- ${name}${r.team ? ` (${r.team})` : ''} [${r.season} season totals]${bits.length ? ` · ${bits.join(', ')}` : ''}`
+            })
+            .join(NL)
+        }
+      }
+
+      if (fallbackStatChunk) {
+        sportReady.hasPlayerStats = true
+        const sourceKey = `fantasy_stat_lines_${sp}`
+        sources.push(sourceKey)
+        setSourceFreshness(sourceKey, fallbackStatDates)
+        chunks.push(`### ${sp} — Player season stats (fantasy stat lines)${NL}${fallbackStatChunk}`)
+      }
 
       if (playerStatsRows.length) {
         sportReady.hasPlayerStats = true

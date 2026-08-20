@@ -164,7 +164,11 @@ export async function getCanonicalPlayer(
     // NOTE: InjuryReport has no `publishedAt` — its recency column is `reportDate`
     // (`sports_core_injury_reports`). Ordering by publishedAt here throws at runtime.
     prisma.injuryReport.findFirst({
-      where: { playerId },
+      // Slice 15 (wrong-row joins): `sportKey` was missing here while every
+      // sibling query above scopes by it. InjuryReport uses the API-Sports id
+      // namespace, which is NOT globally unique across sports, so an unscoped
+      // playerId could return another sport's athlete's injury.
+      where: { playerId, sportKey },
       orderBy: [{ reportDate: 'desc' }, { fetchedAt: 'desc' }],
       select: { status: true, bodyPart: true, description: true },
     }),

@@ -142,7 +142,7 @@ function LeagueRulesSummaryCard({
 
   const rules: RuleItem[] = [
     {
-      icon: <Zap className="h-3.5 w-3.5 text-cyan-400" aria-hidden />,
+      icon: <Zap className="h-3.5 w-3.5 text-[#ff3d81]" aria-hidden />,
       label: 'Scoring',
       value: safeStr(league.scoring),
     },
@@ -355,7 +355,7 @@ function mapActivityRow(item: LeagueActivityItem): LeagueActivityFeedRow {
 }
 
 function activityDotClass(category: LeagueActivityFeedRow['category']): string {
-  if (category === 'trade') return 'bg-cyan-400'
+  if (category === 'trade') return 'bg-[#ff3d81]'
   if (category === 'waiver') return 'bg-sky-400'
   if (category === 'add_drop') return 'bg-emerald-400'
   if (category === 'draft') return 'bg-violet-400'
@@ -542,7 +542,7 @@ function LeagueMembersPreview({
 
 // Phase V1.3: `label`'s highlighted-row text was `text-amber-50/95` — near-white — sitting on a
 // near-white `bg-[#fef9c3]/12` highlighted background, i.e. barely-visible text on a barely-visible
-// tint. `valueClass`'s "positive" tone was `text-cyan-300`, the same recurring light-pastel pattern
+// tint. `valueClass`'s "positive" tone was `text-[#ff9ec0]`, the same recurring light-pastel pattern
 // fixed repeatedly since V1.0. Both swapped to readable, saturated shades; hues and the highlight
 // background are unchanged (a contrast fix, not a meaning change).
 function ScoringRow({ label, value, highlight, valueTone }: ScoringRowProps) {
@@ -669,7 +669,7 @@ export function LeagueTab({
           hub client flag is on) + Commissioner "League Intelligence" (member-readable; the
           commissioner-only cards are API-gated with 403 + an honest restricted state in the hub).
           League home is the LAUNCHER — it does not duplicate hub contents.
-          Phase V1.1: heading/detail text was `text-violet-100`/`text-cyan-100` and `text-*-200/60` —
+          Phase V1.1: heading/detail text was `text-violet-100`/`text-[#ffd7e5]` and `text-*-200/60` —
           a light pastel palette tuned for a dark background, the same class of light-mode contrast bug
           found and fixed on Commissioner Hub in Phase V1.0 (docs/os/VISUAL_OS_V1_AUDIT.md Finding 3/4).
           Body text now routes through `text-primary`/`text-secondary`; only the icon+arrow keep a

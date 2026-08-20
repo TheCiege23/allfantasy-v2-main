@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -337,52 +338,52 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(desktop).toContainText('Campus Ace')
     await expect(desktop).toContainText('Ohio State')
 
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Veteran Pro')
     await expect(desktop).toContainText('Veteran Pro')
     await expect(desktop).toContainText('Pro')
 
     // College-only round rejects pro pick.
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(page.getByText(/college-only \(C2C\)/i)).toBeVisible()
 
     // Draft two college picks to move into pro round.
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Campus Ace')
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('Campus Ace')
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('C')
 
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Future Route')
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
 
     await expect(desktop).toContainText(/Pro round \(C2C\)/i)
 
     // Pro round rejects college pick.
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('College')
     await desktop.getByTestId('draft-player-search-input').fill('Pipeline Runner')
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(page.getByText(/pro-only \(C2C\)/i)).toBeVisible()
 
     // Pro pick accepted and board shows mixed pool marker.
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Immediate Impact')
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-3')).toContainText('Immediate Impact')
     await expect(desktop.getByTestId('draft-board-cell-3')).toContainText('P')
 
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('All')
     await expect(desktop.getByTestId('draft-pool-filter')).toBeVisible()
   })
@@ -401,15 +402,15 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-player-panel')).toBeVisible()
     await expect(desktop.getByTestId('draft-pool-filter')).toHaveCount(0)
 
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
     const modal = page.getByTestId('draft-commissioner-modal')
     await expect(modal).toBeVisible()
 
-    await modal.getByTestId('draft-commissioner-toggle-c2c-enabled').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-toggle-c2c-enabled'))
     await modal.getByTestId('draft-commissioner-input-c2c-rounds').fill('1, 3, 99')
-    await modal.getByTestId('draft-commissioner-save-c2c-config').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-save-c2c-config'))
     await expect(modal.getByTestId('draft-commissioner-c2c-config-message')).toContainText(/saved/i)
-    await modal.getByTestId('draft-commissioner-close').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-close'))
 
     await expect(desktop.getByTestId('draft-pool-filter')).toBeVisible()
   })

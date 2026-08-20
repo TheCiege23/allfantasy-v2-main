@@ -170,8 +170,8 @@ export default function AppShell({
               type="button"
               onClick={onLeftRailExpand}
               className="inline-flex h-10 w-9 shrink-0 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-white/80 transition hover:bg-white/[0.08]"
-              aria-label="Open chat"
-              title="Open chat"
+              aria-label="Open league panel"
+              title="Open league panel"
               data-testid="chat-rail-expand"
             >
               <Bot className="h-5 w-5" aria-hidden />
@@ -184,11 +184,11 @@ export default function AppShell({
                 type="button"
                 onClick={onLeftRailCollapse}
                 className="absolute right-1 top-1 z-10 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded border border-white/[0.08] bg-black/40 text-white/40 transition hover:text-white/70"
-                aria-label="Collapse chat"
-                title="Collapse chat"
+                aria-label="Collapse league panel"
+                title="Collapse league panel"
                 data-testid="chat-rail-collapse"
               >
-                <ChevronRight className="h-3.5 w-3.5" aria-hidden />
+                <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
               </button>
             ) : null}
             {leftPanel}

@@ -81,6 +81,13 @@ import { LeagueTab } from './tabs/LeagueTab'
 import { PlayersTab } from './tabs/PlayersTab'
 import { TrendTab } from './tabs/TrendTab'
 import { TradesTab } from './tabs/TradesTab'
+import { DecideHome } from '@/components/decide/DecideHome'
+import { LeagueInfoRail } from '@/components/decide/LeagueInfoRail'
+import { ChimmyBubble } from '@/components/decide/ChimmyBubble'
+import { buildLeagueTabGroups, groupForLeagueTab } from '@/components/decide/leagueTabGroups'
+import { LegacyHome } from '@/components/decide/LegacyHome'
+import { DraftIntelHome } from '@/components/decide/DraftIntelHome'
+import { LiveRosterPanel } from '@/components/decide/LiveRosterPanel'
 import { ScoresTab } from './tabs/ScoresTab'
 import { WarRoomTab } from './tabs/WarRoomTab'
 import { AICoachingTab } from './tabs/AICoachingTab'
@@ -288,7 +295,7 @@ export function LeagueShell({
   const { summary: capSummary } = useIdpCapSummary(league.id, capRosterId)
   const idpCapEnabled = Boolean(capSummary)
   const { t, language } = useLanguage()
-  const shouldUseMatchupPrimary = shouldUseMatchupInsteadOfDraft(league.lifecycleState)
+  const shouldUseMatchupPrimary = shouldUseMatchupInsteadOfDraft(league)
   const isPredraftLifecycle = useMemo(() => {
     const state = String(league.lifecycleState ?? '').trim().toLowerCase()
     return state === 'pre_draft' || state === 'predraft' || state === 'draft_setup' || state === 'setup'
@@ -348,7 +355,15 @@ export function LeagueShell({
     if (nflRedraftCore) {
       const core: TabDef[] = [
         { id: 'home', label: 'Home' },
+        // Decision OS + Live draft cockpit + Legacy engines were previously
+        // only reachable on NON-core (general/imported) leagues — core NFL
+        // redraft leagues had no path to them at all. Same render cases, same
+        // engines (league-pulse, manager-intelligence, /api/league/history,
+        // /api/draft/intel), now reachable per league here too.
+        { id: 'decide', label: 'Decide' },
+        { id: 'ai_coaching', label: 'AI Coaching' },
         { id: 'draft', label: 'Draft' },
+        { id: 'draft_intel', label: 'Live Intel' },
         { id: 'roster', label: 'My Team' },
         { id: 'matchups', label: 'Matchups' },
         { id: 'schedule', label: 'Schedule' },
@@ -356,6 +371,8 @@ export function LeagueShell({
         { id: 'waivers', label: 'Waivers' },
         { id: 'trades', label: 'Trades' },
         { id: 'standings', label: 'Standings' },
+        { id: 'legacy', label: 'Legacy' },
+        { id: 'war_room', label: 'War Room' },
         { id: 'league_chat', label: 'League Chat' },
       ]
       if (isCommissioner) core.push({ id: 'commissioner', label: 'Commissioner' })
@@ -434,7 +451,20 @@ export function LeagueShell({
       base = idx >= 0 ? [...base.slice(0, idx + 1), ...dynastyTabs, ...base.slice(idx + 1)] : [...dynastyTabs, ...base]
     }
     const withSettings = [...base, { id: 'settings', label: 'Settings' }]
-    return localizeLeagueTabs(applyMatchupPrimaryTab(withSettings, shouldUseMatchupPrimary), t)
+    // Broadcast Deck redesign, slice 1: "Decide" — the Decision-OS-first landing
+    // view — is prepended AFTER matchup-primary reordering so it is always the
+    // first tab (and therefore the default landing) for general/imported leagues.
+    // Deep links (?view=…) still land on their requested tab via leagueTabSync.
+    return [
+      { id: 'decide', label: 'Decide' },
+      // Slice 4: live Sleeper draft cockpit. Grouped under Draft by the group
+      // bar; renders honest unlinked/no-draft states when there's nothing live.
+      { id: 'draft_intel', label: 'Live Intel' },
+      ...localizeLeagueTabs(applyMatchupPrimaryTab(withSettings, shouldUseMatchupPrimary), t),
+      // Slice 3: full-chain league history (LegacyHome). Appended for every
+      // general/imported league; the group bar surfaces it as the Legacy group.
+      { id: 'legacy', label: 'Legacy' },
+    ]
   }, [
     nflRedraftCore,
     league.sport,
@@ -614,6 +644,17 @@ export function LeagueShell({
     const sportU = String(league.sport ?? '').toUpperCase()
     const intelligenceFallback = sportU === 'NFL' || sportU === 'NCAAF' ? 'trend' : 'players'
     const map: Record<string, string> = {
+      // Broadcast Deck tabs — without these aliases, a remount or external
+      // ?view=decide/legacy/… deep link silently fell through to nothing and
+      // the shell snapped back to its default tab.
+      decide: 'decide',
+      draft_intel: 'draft_intel',
+      live_intel: 'draft_intel',
+      legacy: 'legacy',
+      league_chat: 'league_chat',
+      chat: 'league_chat',
+      commissioner: 'commissioner',
+      commish: 'commissioner',
       home: 'home',
       team: nflRedraftCore ? 'roster' : 'team',
       roster: nflRedraftCore ? 'roster' : 'team',
@@ -705,8 +746,14 @@ export function LeagueShell({
     if (next.get('view') === activeTab) return
 
     next.set('view', activeTab)
-    router.replace(`${pathname}?${next.toString()}`, { scroll: false })
-  }, [activeTab, nflRedraftCore, pathname, router, searchParams, tabDefs])
+    // SHALLOW update (native history, Next 14.1+ keeps useSearchParams in sync).
+    // router.replace on this force-dynamic page triggered a full RSC re-render +
+    // loading.tsx remount on EVERY tab click — the shell's state (activeTab,
+    // userPickedTabRef) reset mid-click and the landing/deep-link effects then
+    // bounced the user to a different tab. Tab switching is pure client state;
+    // the URL mirror is only for shareable deep links and back/forward.
+    window.history.replaceState(null, '', `${pathname}?${next.toString()}`)
+  }, [activeTab, nflRedraftCore, pathname, searchParams, tabDefs])
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -967,9 +1014,10 @@ export function LeagueShell({
     if (changed) {
       const q = params.toString()
       const base = pathname ?? `/league/${league.id}`
-      router.replace(q ? `${base}?${q}` : base, { scroll: false })
+      // Shallow — a router.replace here remounts the force-dynamic page.
+      window.history.replaceState(null, '', q ? `${base}?${q}` : base)
     }
-  }, [activeTab, league.id, nflRedraftCore, pathname, router, searchParams, tabDefs])
+  }, [activeTab, league.id, nflRedraftCore, pathname, searchParams, tabDefs])
 
   const blockConceptIntroForInvitePrefill =
     defaultShowInvite && inviteAutoOpenedForLeague.current !== league.id
@@ -985,8 +1033,9 @@ export function LeagueShell({
     params.delete('tab')
     const q = params.toString()
     const base = pathname ?? `/league/${league.id}`
-    router.replace(q ? `${base}?${q}` : base, { scroll: false })
-  }, [nflRedraftCore, searchParams, pathname, router, league.id, openLeagueSettingsModal])
+    // Shallow — a router.replace here remounted the page and wiped the modal state.
+    window.history.replaceState(null, '', q ? `${base}?${q}` : base)
+  }, [nflRedraftCore, searchParams, pathname, league.id, openLeagueSettingsModal])
 
   const settingsPanelDeepLinkRef = useRef<string | null>(null)
   /** Deep-link from draft room gear: `/league/{id}?settingsPanel=draft` opens Draft settings panel. */
@@ -1003,8 +1052,9 @@ export function LeagueShell({
     params.delete('settingsPanel')
     const q = params.toString()
     const base = pathname ?? `/league/${league.id}`
-    router.replace(q ? `${base}?${q}` : base, { scroll: false })
-  }, [searchParams, pathname, router, league.id, openLeagueSettingsModal])
+    // Shallow — a router.replace here remounted the page and wiped the modal state.
+    window.history.replaceState(null, '', q ? `${base}?${q}` : base)
+  }, [searchParams, pathname, league.id, openLeagueSettingsModal])
 
   /**
    * Slice H - listen for the navigation-free `af-pre-draft-fix-action`
@@ -1148,10 +1198,26 @@ export function LeagueShell({
         settings={league.settings}
       />
       <div className="contents" data-league-id={league.id} data-embed-mode={embedMode ? '1' : undefined}>
+        {!embedMode ? (
+          <ChimmyBubble
+            selectedLeague={selectedLeague}
+            activeLeagueId={league.id}
+            userId={userId}
+            userDisplayName={userName}
+            userImage={userImage}
+            leagues={leagueList}
+            discordConnected={discordConnected}
+            commissionerLeagues={commissionerLeagues}
+            zombieChimmyPrefill={zombieChimmyPrefill}
+            initialOpenChat={initialOpenChat}
+          />
+        ) : null}
         <AppShell
           layoutMode="balanced-three-panel"
           immersive={specialtyImmersive}
-          rootClassName="h-[calc(100dvh-8.5rem)] min-h-0 lg:h-[calc(100dvh-3.5rem)]"
+          // Global top nav + bottom tabs are hidden on /league/* (layout hideHeader),
+          // so the shell owns the full viewport at every breakpoint.
+          rootClassName="af-league-deck-ground h-[100dvh] min-h-0"
           rightRailCollapsed={myLeaguesRail.collapsed}
           onRightRailExpand={() => myLeaguesRail.setCollapsed(false)}
           rightRailCollapsedHint={leagueList.length ? String(leagueList.length) : undefined}
@@ -1159,18 +1225,15 @@ export function LeagueShell({
           onLeftRailExpand={() => setDesktopChatOpen(true)}
           onLeftRailCollapse={() => setDesktopChatOpen(false)}
           leftPanel={
-          <LeftChatPanel
-            selectedLeague={selectedLeague}
-            activeLeagueId={league.id}
-            userId={userId}
-            userDisplayName={userName}
-            userImage={userImage}
-            rootId="league-left-chat"
-            leagues={leagueList}
-            discordConnected={discordConnected}
-            commissionerLeagues={commissionerLeagues}
-            zombieChimmyPrefill={zombieChimmyPrefill}
-            initialOpenChat={initialOpenChat}
+          /* Slice 2A: the desktop left column is league context now — chat
+             moved into the floating ChimmyBubble (same engine, new housing).
+             The mobile chat sheet below is unchanged. */
+          <LeagueInfoRail
+            league={selectedLeague}
+            teams={teamSlots}
+            userTeamId={userTeam?.id ?? null}
+            isCommissioner={Boolean(isCommissioner)}
+            onOpenTab={handleUserTabChange}
           />
         }
         rightPanel={
@@ -1204,7 +1267,7 @@ export function LeagueShell({
                     ? 'border-x border-sky-500/15 bg-gradient-to-b from-[#07111f] via-[#050a16] to-[#060b14]'
                     : league.leagueType === 'devy' || league.leagueVariant === 'devy_dynasty'
                       ? 'border-x border-indigo-500/15 bg-gradient-to-b from-[#0a1022] via-[#070a18] to-[#060913]'
-                  : 'border-x border-cyan-500/10 bg-gradient-to-b from-[#071322] via-[#050814] to-[#020611]'
+                  : 'border-x border-[#ff3d81]/10 bg-gradient-to-b from-[#071322] via-[#050814] to-[#020611]'
           }`}
           data-testid="league-command-center-surface"
           data-league-variant={
@@ -1318,17 +1381,17 @@ export function LeagueShell({
             />
 
             {dispersalDraftInProgress ? (
-              <div className="shrink-0 border-b border-cyan-500/20 bg-[#081226] px-4 py-2.5">
+              <div className="shrink-0 border-b border-[#ff3d81]/20 bg-[#081226] px-4 py-2.5">
                 <Link
                   href={`/league/${league.id}/dispersal-draft/${dispersalDraftInProgress.draftId}`}
-                  className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-cyan-100/95 hover:text-cyan-50"
+                  className="flex flex-wrap items-center justify-between gap-2 text-[12px] text-[#ffd7e5]/95 hover:text-[#ffe9f1]"
                 >
                   <span>
                     {dispersalDraftInProgress.status === 'in_progress'
                       ? 'Dispersal draft in progress - join the draft room to make picks.'
                       : 'Dispersal draft open - continue setup or open the draft room.'}
                   </span>
-                  <span className="font-semibold text-cyan-300 underline decoration-cyan-500/40 underline-offset-2">
+                  <span className="font-semibold text-[#ff9ec0] underline decoration-[#ff3d81]/40 underline-offset-2">
                     {dispersalDraftInProgress.status === 'in_progress' ? 'Join draft room ->' : 'Open ->'}
                   </span>
                 </Link>
@@ -1480,7 +1543,10 @@ export function LeagueShell({
                   onImport={handleImport}
                   onAfterLeagueNavigate={() => setMobileRightOpen(false)}
                   onSettingsNavigate={() => setMobileRightOpen(false)}
-                  onRailCollapse={() => myLeaguesRail.setCollapsed(true)}
+                  // Close THIS sheet — previously collapsed the desktop rail
+                  // (sessionStorage), so the panel was mysteriously gone when
+                  // the user next visited on desktop.
+                  onRailCollapse={() => setMobileRightOpen(false)}
                 />
               </div>
             </div>
@@ -1625,7 +1691,7 @@ export function LeagueShell({
                 href={`https://sleeper.com/leagues/${encodeURIComponent(league.platformLeagueId)}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-4 inline-flex text-[13px] font-semibold text-cyan-400 hover:text-cyan-300"
+                className="mt-4 inline-flex text-[13px] font-semibold text-[#ff3d81] hover:text-[#ff9ec0]"
               >
                 Open league in Sleeper {'->'}
               </a>
@@ -1752,7 +1818,7 @@ function LeagueTabRouter({
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6">
         <section
-          className="relative overflow-hidden rounded-2xl border border-cyan-500/[0.15] bg-gradient-to-br from-cyan-500/[0.07] via-[#050814] to-violet-500/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]"
+          className="relative overflow-hidden rounded-2xl border border-[#ff3d81]/[0.15] bg-gradient-to-br from-[#ff3d81]/[0.07] via-[#050814] to-violet-500/[0.04] p-5 shadow-[0_18px_60px_rgba(0,0,0,0.28)]"
           data-testid="league-command-center-card"
         >
           <div
@@ -1760,12 +1826,12 @@ function LeagueTabRouter({
             className="pointer-events-none absolute inset-x-0 top-0 h-32 opacity-70"
             style={{
               background:
-                'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(34,211,238,0.16) 0%, transparent 70%)',
+                'radial-gradient(ellipse 80% 60% at 50% -10%, rgba(255,61,129,0.16) 0%, transparent 70%)',
             }}
           />
           <div className="relative flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-1">
-              <p className="text-[11px] font-bold uppercase tracking-widest text-cyan-400/60">Draft setup</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-[#ff3d81]/60">Draft setup</p>
               <h2 className="text-[26px] font-black leading-tight tracking-tight text-white sm:text-[30px]">
                 Draft setup is ready
               </h2>
@@ -1774,8 +1840,8 @@ function LeagueTabRouter({
                 when the commissioner is ready.
               </p>
             </div>
-            <div className="rounded-2xl border border-cyan-500/30 bg-gradient-to-br from-cyan-500/[0.12] via-cyan-500/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(34,211,238,0.08)]">
-              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">League fill</p>
+            <div className="rounded-2xl border border-[#ff3d81]/30 bg-gradient-to-br from-[#ff3d81]/[0.12] via-[#ff3d81]/[0.06] to-transparent px-4 py-3 text-right shadow-[0_0_20px_rgba(255,61,129,0.08)]">
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">League fill</p>
               <p className="mt-1 text-lg font-bold text-white">
                 {joinedTeams}/{teamCount}
               </p>
@@ -1803,7 +1869,7 @@ function LeagueTabRouter({
             <Link
               href={`/league/${leagueId}/draft`}
               data-testid="predraft-open-draft-room"
-              className="touch-manipulation inline-flex min-h-[40px] items-center justify-center rounded-xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-2 text-[12px] font-semibold text-cyan-200 transition hover:bg-cyan-500/20 active:bg-cyan-500/25"
+              className="touch-manipulation inline-flex min-h-[40px] items-center justify-center rounded-xl border border-[#ff3d81]/30 bg-[#ff3d81]/10 px-3 py-2 text-[12px] font-semibold text-[#ffb8d1] transition hover:bg-[#ff3d81]/20 active:bg-[#ff3d81]/25"
             >
               Open Live Draft Room
             </Link>
@@ -1936,6 +2002,30 @@ function LeagueTabRouter({
           Commissioner tools only.
         </div>
       )
+    case 'legacy':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          <LegacyHome league={selectedLeague} leagueId={leagueId} />
+        </div>
+      )
+    case 'draft_intel':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          <DraftIntelHome league={selectedLeague} leagueId={leagueId} />
+        </div>
+      )
+    case 'decide':
+      return (
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 lg:px-6">
+          <DecideHome
+            league={selectedLeague}
+            teams={teamSlots}
+            userTeamId={userTeam?.id ?? null}
+            isCommissioner={Boolean(isCommissioner)}
+            onOpenTab={onSelectTab}
+          />
+        </div>
+      )
     case 'idp':
       return <IDPHome leagueId={leagueId} />
     case 'keeper':
@@ -1944,17 +2034,24 @@ function LeagueTabRouter({
     case 'roster':
     case 'squad':
       return (
-        <TeamTab
-          league={selectedLeague}
-          userTeam={userTeam}
-          onPlayerClick={onPlayerClick}
-          inviteToken={inviteToken}
-          sport={sport}
-          idpLeagueUi={idpLeagueActive}
-          idpViewMode={idpViewMode}
-          idpPositionMode={idpPositionMode}
-          onUserSettingsClick={() => router.push('/settings')}
-        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+          {/* Draft-aware live roster (Sleeper leagues): current roster incl.
+              in-progress draft picks; renders nothing for other platforms. */}
+          <div className="px-4 pt-4 lg:px-6">
+            <LiveRosterPanel leagueId={leagueId} />
+          </div>
+          <TeamTab
+            league={selectedLeague}
+            userTeam={userTeam}
+            onPlayerClick={onPlayerClick}
+            inviteToken={inviteToken}
+            sport={sport}
+            idpLeagueUi={idpLeagueActive}
+            idpViewMode={idpViewMode}
+            idpPositionMode={idpPositionMode}
+            onUserSettingsClick={() => router.push('/settings')}
+          />
+        </div>
       )
     case 'league':
       return (
@@ -1973,9 +2070,9 @@ function LeagueTabRouter({
     case 'league_chat':
       return (
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6" data-testid="g32-league-chat-tab">
-          <section className="rounded-3xl border border-cyan-500/15 bg-white/[0.035] p-5">
+          <section className="rounded-3xl border border-[#ff3d81]/15 bg-white/[0.035] p-5">
             <div className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-cyan-200" aria-hidden />
+              <MessageSquare className="h-5 w-5 text-[#ffb8d1]" aria-hidden />
               <h2 className="text-xl font-black text-white">League Chat</h2>
             </div>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
@@ -2116,7 +2213,7 @@ function LeagueTabNavGlyph({
       <Icon className={className} strokeWidth={2.25} aria-hidden />
       {tabId === 'trend' && !active ? (
         <span
-          className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-cyan-400 ring-2 ring-[#0a1228]"
+          className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-[#ff3d81] ring-2 ring-[#0a1228]"
           aria-hidden
         />
       ) : null}
@@ -2253,19 +2350,19 @@ function LeagueHeader({
         : 'border-[color:var(--cap-red)]/45 bg-[color:var(--cap-red)]/15 text-red-100'
   return (
     <div
-      className="sticky top-0 z-[45] isolate flex-shrink-0 border-b border-cyan-500/[0.14] bg-[#050814]/95 shadow-[0_12px_34px_rgba(0,0,0,0.46)] backdrop-blur-xl"
+      className="sticky top-0 z-[45] isolate flex-shrink-0 border-b border-[#ff3d81]/[0.14] bg-[#050814]/95 shadow-[0_12px_34px_rgba(0,0,0,0.46)] backdrop-blur-xl"
       data-testid="league-command-center-header"
     >
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-cyan-500/[0.08] via-[#050814]/95 to-violet-500/[0.05]"
+        className="pointer-events-none absolute inset-0 -z-10 bg-gradient-to-br from-[#ff3d81]/[0.08] via-[#050814]/95 to-violet-500/[0.05]"
       />
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-24 opacity-60"
         style={{
           background:
-            'radial-gradient(ellipse 80% 60% at 50% -20%, rgba(34,211,238,0.18) 0%, transparent 70%)',
+            'radial-gradient(ellipse 80% 60% at 50% -20%, rgba(255,61,129,0.18) 0%, transparent 70%)',
         }}
       />
       <div
@@ -2327,7 +2424,7 @@ function LeagueHeader({
                 'inline-flex min-h-6 items-center rounded-full border px-2 text-[9px] font-black uppercase tracking-[0.14em]',
                 headerSportLabel === 'NCAAF'
                   ? 'border-amber-300/30 bg-amber-500/10 text-amber-100'
-                  : 'border-cyan-300/30 bg-cyan-500/10 text-cyan-100',
+                  : 'border-[#ff9ec0]/30 bg-[#ff3d81]/10 text-[#ffd7e5]',
               )}
               data-testid="league-header-sport-badge"
             >
@@ -2469,7 +2566,7 @@ function LeagueHeader({
             <button
               type="button"
               onClick={onGoHome}
-              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] text-white/60 transition hover:border-cyan-400/35 hover:bg-cyan-500/10 hover:text-cyan-100"
+              className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] text-white/60 transition hover:border-[#ff3d81]/40 hover:bg-[#ff3d81]/10 hover:text-[#ff9ec0]"
               aria-label={t('league.header.dashboardHome')}
               data-testid="league-header-home"
             >
@@ -2484,8 +2581,8 @@ function LeagueHeader({
               aria-expanded={memberGearMenu ? memberGearOpen : undefined}
               aria-haspopup={memberGearMenu ? 'menu' : undefined}
               className={cn(
-                'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] transition hover:border-cyan-400/35 hover:bg-cyan-500/10',
-                memberGearOpen ? 'text-cyan-300' : 'text-white/50 hover:text-cyan-100',
+                'flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl border border-white/[0.12] bg-white/[0.04] transition hover:border-[#ff3d81]/40 hover:bg-[#ff3d81]/10',
+                memberGearOpen ? 'text-[#ff9ec0]' : 'text-white/50 hover:text-[#ff9ec0]',
               )}
               aria-label={memberGearMenu ? t('league.header.leagueMenu') : t('league.header.leagueSettings')}
               data-testid="league-header-settings"
@@ -2568,7 +2665,7 @@ function LeagueHeader({
             <Link
               key={label}
               href={href}
-              className="inline-flex snap-start min-h-[40px] shrink-0 touch-manipulation items-center whitespace-nowrap rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[11px] font-semibold text-cyan-200/90 transition-colors hover:bg-cyan-500/10"
+              className="inline-flex snap-start min-h-[40px] shrink-0 touch-manipulation items-center whitespace-nowrap rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[11px] font-semibold text-[#ffb8d1]/90 transition-colors hover:bg-[#ff3d81]/10"
               data-testid={`idp-cap-quick-${label.toLowerCase().replace(/\s+/g, '-')}`}
             >
               {label}
@@ -2608,7 +2705,7 @@ function LeagueHeader({
               <Link
                 key={`c2c-${label}`}
                 href={href}
-                className="inline-flex snap-start min-h-[40px] shrink-0 touch-manipulation items-center whitespace-nowrap rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[11px] font-semibold text-cyan-200/90 transition-colors hover:bg-cyan-500/10"
+                className="inline-flex snap-start min-h-[40px] shrink-0 touch-manipulation items-center whitespace-nowrap rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[11px] font-semibold text-[#ffb8d1]/90 transition-colors hover:bg-[#ff3d81]/10"
                 data-testid={`c2c-quick-${label.toLowerCase()}`}
               >
                 {label}
@@ -2649,7 +2746,7 @@ function LeagueHeader({
               <Link
                 key={label}
                 href={href}
-                className="inline-flex snap-start min-h-[40px] shrink-0 touch-manipulation items-center whitespace-nowrap rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[11px] font-semibold text-cyan-200/90 transition-colors hover:bg-cyan-500/10"
+                className="inline-flex snap-start min-h-[40px] shrink-0 touch-manipulation items-center whitespace-nowrap rounded-lg border border-white/[0.08] bg-black/25 px-3 py-2 text-[11px] font-semibold text-[#ffb8d1]/90 transition-colors hover:bg-[#ff3d81]/10"
                 data-testid={`devy-quick-${label.toLowerCase()}`}
               >
                 {label}
@@ -2741,59 +2838,106 @@ function LeagueHeader({
         </div>
       ) : null}
 
+      {/* Slice 2B (Broadcast Deck): the flat 15+ tab strip folds into ordered
+          groups (Decide · Draft · Roster · League · Legacy · Commish) with the
+          active group's tabs as a sub-row. Presentation-only — every tab id,
+          deep link, testid, and the roster-issue badge survive unchanged. */}
       <div className="scrollbar-none mt-2 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-5 sm:pb-3">
-        <div
-          className="scrollbar-none flex snap-x snap-mandatory gap-1 overflow-x-auto scroll-pb-1 rounded-xl border border-cyan-500/[0.16] bg-white/[0.04] p-1.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_0_24px_rgba(34,211,238,0.04)] [-webkit-overflow-scrolling:touch]"
-          role="tablist"
-          aria-label="League navigation"
-          data-testid="league-command-center-tabs"
-        >
-          {tabs.map((tab) => {
-            const isActive = activeTab === tab.id
-            const rosterTab = tab.id === 'team' || tab.id === 'roster' || tab.id === 'squad'
-            const showRosterBadge = rosterIssueCount > 0 && rosterTab
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                data-testid={`league-tab-${tab.id}`}
-                onClick={() => onTabChange(tab.id)}
-                className={cn(
-                  'touch-manipulation flex snap-start min-h-[44px] min-w-0 shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-2 text-[10px] font-bold uppercase tracking-wide transition-colors sm:min-h-[40px] sm:px-3 sm:text-[11px]',
-                  isActive
-                    ? 'bg-cyan-400 text-[#050814] shadow-sm'
-                    : 'text-cyan-400/95 hover:bg-white/[0.06] hover:text-cyan-300',
-                )}
+        {(() => {
+          const tabGroups = buildLeagueTabGroups(tabs)
+          const activeGroupId = groupForLeagueTab(activeTab)
+          const activeGroup = tabGroups.find((g) => g.id === activeGroupId) ?? tabGroups[0]
+          return (
+            <div
+              className="rounded-xl border border-[#262c6a] bg-[#0d1132]/85 p-1.5"
+              data-testid="league-command-center-tabs"
+            >
+              {/* ONE combined row: group pills · divider · the active group's tabs.
+                  Previously two stacked rows — merged so the header reads as a
+                  single nav rail (and costs one less row of vertical space on
+                  mobile). Every tab id, testid, deep link, and the roster-issue
+                  badge survive unchanged. */}
+              <div
+                className="scrollbar-none flex snap-x items-center gap-1 overflow-x-auto [-webkit-overflow-scrolling:touch]"
+                role="tablist"
+                aria-label="League navigation"
               >
-                <LeagueTabNavGlyph
-                  tabId={tab.id}
-                  active={isActive}
-                  className={cn(
-                    'h-3.5 w-3.5 sm:h-4 sm:w-4',
-                    isActive ? 'text-[#050814]' : 'text-cyan-400',
-                  )}
-                />
-                <span className="truncate">{tab.label}</span>
-                {showRosterBadge ? (
-                  <span
-                    className={cn(
-                      'ml-0.5 min-w-[1.125rem] rounded-full px-1 text-center text-[9px] font-extrabold tabular-nums ring-1',
-                      isActive
-                        ? 'bg-amber-500 text-[#050814] ring-amber-700/40'
-                        : 'bg-amber-500/95 text-[#050814] ring-amber-400/30',
-                    )}
-                    aria-label={`${rosterIssueCount} roster issues`}
-                    data-testid={`league-tab-${tab.id}-roster-issues-badge`}
-                  >
-                    {rosterIssueCount > 99 ? '99+' : rosterIssueCount}
-                  </span>
+                {tabGroups.map((group) => {
+                  const isActiveGroup = group.id === activeGroup?.id
+                  return (
+                    <button
+                      key={group.id}
+                      type="button"
+                      aria-pressed={isActiveGroup}
+                      data-testid={`league-tab-group-${group.id}`}
+                      onClick={() => {
+                        const first = group.tabs[0]
+                        if (first) onTabChange(first.id)
+                      }}
+                      className={cn(
+                        'touch-manipulation flex snap-start min-h-[40px] shrink-0 items-center gap-1.5 rounded-lg px-3.5 py-2 text-[11px] font-black italic uppercase tracking-wide transition-colors',
+                        isActiveGroup
+                          ? 'bg-[linear-gradient(90deg,#ff3d81,#ff8a3d)] text-white shadow-sm'
+                          : 'border border-transparent text-[#aab1e0] hover:border-[#262c6a] hover:text-white',
+                      )}
+                    >
+                      {group.id === 'decide' ? <span aria-hidden>⚡</span> : null}
+                      {group.label}
+                    </button>
+                  )
+                })}
+                {activeGroup && activeGroup.tabs.length > 1 ? (
+                  <>
+                    <span aria-hidden className="mx-1 h-6 w-px shrink-0 bg-[#262c6a]" />
+                    {activeGroup.tabs.map((tab) => {
+                    const isActive = activeTab === tab.id
+                    const rosterTab = tab.id === 'team' || tab.id === 'roster' || tab.id === 'squad'
+                    const showRosterBadge = rosterIssueCount > 0 && rosterTab
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        data-testid={`league-tab-${tab.id}`}
+                        onClick={() => onTabChange(tab.id)}
+                        className={cn(
+                          'touch-manipulation flex snap-start min-h-[38px] min-w-0 shrink-0 items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide transition-colors sm:text-[10.5px]',
+                          isActive
+                            ? 'bg-white/[0.07] text-[#ff9d5c]'
+                            : 'text-[#7b83c4] hover:bg-white/[0.04] hover:text-white',
+                        )}
+                      >
+                        <LeagueTabNavGlyph
+                          tabId={tab.id}
+                          active={isActive}
+                          className={cn(
+                            'h-3.5 w-3.5',
+                            isActive ? 'text-[#ff9d5c]' : 'text-[#7b83c4]',
+                          )}
+                        />
+                        <span className="truncate">{tab.label}</span>
+                        {showRosterBadge ? (
+                          <span
+                            className={cn(
+                              'ml-0.5 min-w-[1.125rem] rounded-full px-1 text-center text-[9px] font-extrabold tabular-nums ring-1',
+                              'bg-amber-500 text-[#050814] ring-amber-700/40',
+                            )}
+                            aria-label={`${rosterIssueCount} roster issues`}
+                            data-testid={`league-tab-${tab.id}-roster-issues-badge`}
+                          >
+                            {rosterIssueCount > 99 ? '99+' : rosterIssueCount}
+                          </span>
+                        ) : null}
+                      </button>
+                    )
+                    })}
+                  </>
                 ) : null}
-              </button>
-            )
-          })}
-        </div>
+              </div>
+            </div>
+          )
+        })()}
       </div>
     </div>
   )

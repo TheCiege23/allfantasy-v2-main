@@ -99,7 +99,7 @@ function HeroQuickButton({
   icon: React.ComponentType<{ className?: string }>
 }) {
   const cls = cn(
-    'inline-flex items-center gap-1.5 rounded-xl border border-white/[0.12] bg-black/35 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-cyan-400/35 hover:bg-cyan-500/10 hover:text-cyan-100',
+    'inline-flex items-center gap-1.5 rounded-xl border border-white/[0.12] bg-black/35 px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-white/90 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition hover:border-[#ff3d81]/35 hover:bg-[#ff3d81]/10 hover:text-[#ffd7e5]',
   )
   if (href) {
     return (
@@ -337,7 +337,7 @@ export function SpecialtyLeagueHomeHero({
               className="absolute inset-0 opacity-[0.18]"
               style={{
                 backgroundImage:
-                  'repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 64px), repeating-linear-gradient(90deg, rgba(34,211,238,0.04) 0 1px, transparent 1px 72px)',
+                  'repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0 1px, transparent 1px 64px), repeating-linear-gradient(90deg, rgba(255,61,129,0.04) 0 1px, transparent 1px 72px)',
               }}
             />
           ) : null}
@@ -426,10 +426,10 @@ export function SpecialtyLeagueHomeHero({
               {variant === 'tournament' && tournamentContext ? (
                 <div className="space-y-2 text-[13px] text-white/85">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="text-[11px] font-bold uppercase tracking-wide text-cyan-200/90">Hub</span>
+                    <span className="text-[11px] font-bold uppercase tracking-wide text-[#ffb8d1]/90">Hub</span>
                     <Link
                       href={`/tournament/${tournamentContext.tournamentId}`}
-                      className="text-[11px] font-semibold text-cyan-300 underline-offset-2 hover:text-cyan-200 hover:underline"
+                      className="text-[11px] font-semibold text-[#ff9ec0] underline-offset-2 hover:text-[#ffb8d1] hover:underline"
                       data-testid="specialty-hero-tournament-hub"
                     >
                       {tournamentContext.tournamentName} →
@@ -451,7 +451,7 @@ export function SpecialtyLeagueHomeHero({
                     <p
                       className={cn(
                         'text-[12px] font-medium',
-                        draftCountdown.urgent ? 'text-amber-200' : 'text-cyan-100/90',
+                        draftCountdown.urgent ? 'text-amber-200' : 'text-[#ffd7e5]/90',
                       )}
                     >
                       Draft starts in{' '}
@@ -536,7 +536,7 @@ export function SpecialtyLeagueHomeHero({
                     <p
                       className={cn(
                         'text-[12px]',
-                        evictionCd.urgent ? 'text-red-200' : 'text-cyan-100/90',
+                        evictionCd.urgent ? 'text-red-200' : 'text-[#ffd7e5]/90',
                       )}
                     >
                       Eviction / vote closes:{' '}

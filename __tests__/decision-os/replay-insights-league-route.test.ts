@@ -32,7 +32,7 @@ vi.mock('@/lib/decision-os/replay-insights/replayInsightResolver', async (import
 })
 
 import { NextRequest } from 'next/server'
-import { GET } from '@/app/api/leagues/[leagueId]/replay-insights/route'
+import { GET } from '@/app/api/leagues/[leagueId]/replay-insights/handler'
 
 function makeReq(): NextRequest {
   return new NextRequest('http://localhost/api/leagues/L1/replay-insights')

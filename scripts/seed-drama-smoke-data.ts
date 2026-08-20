@@ -1,5 +1,6 @@
 import { prisma } from '../lib/prisma'
 import { SUPPORTED_SPORTS } from '../lib/sport-scope'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 type TeamSeed = {
   externalId: string
@@ -411,6 +412,9 @@ async function seedSport(userId: string, sport: string): Promise<{
 }
 
 async function main(): Promise<void> {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeSeedTarget('seed-drama-smoke-data')
+
   const user = await prisma.appUser.findFirst({
     select: { id: true, email: true },
     orderBy: { createdAt: 'asc' },

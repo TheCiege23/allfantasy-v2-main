@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe('@ai reliability click audit', () => {
   test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -294,31 +295,31 @@ test.describe('@ai reliability click audit', () => {
       /Some AI providers|temporarily unavailable|deterministic/i
     )
 
-    await resultPanel.getByTestId('ai-data-quality-toggle-button').click()
+    await clickHydrated(resultPanel.getByTestId('ai-data-quality-toggle-button'))
     await expect(resultPanel.getByTestId('ai-data-quality-details')).toBeVisible()
 
-    await resultPanel.getByTestId('ai-confidence-info-button').click()
+    await clickHydrated(resultPanel.getByTestId('ai-confidence-info-button'))
     await expect(resultPanel.getByTestId('ai-confidence-reason-text')).toContainText(/Data coverage/i)
 
-    await resultPanel.getByTestId('ai-sources-toggle-button').click()
+    await clickHydrated(resultPanel.getByTestId('ai-sources-toggle-button'))
     await expect(resultPanel.getByText(/Fairness score 52/i)).toBeVisible()
 
-    await resultPanel.getByTestId('ai-compare-providers-toggle-button').click()
+    await clickHydrated(resultPanel.getByTestId('ai-compare-providers-toggle-button'))
     await expect(resultPanel.getByTestId('ai-provider-failure-note')).toBeVisible()
     await expect(resultPanel.getByTestId('ai-provider-output-deepseek')).toContainText(/Provider failed/i)
 
     await expect(resultPanel.getByTestId('unified-ai-alternate-output-panel')).toBeVisible()
-    await resultPanel.getByTestId('unified-ai-alternate-output-grok-button').click()
+    await clickHydrated(resultPanel.getByTestId('unified-ai-alternate-output-grok-button'))
     await expect(resultPanel.getByTestId('unified-ai-explanation-text')).toContainText(/Alternative output: wait one week/i)
     await expect(resultPanel.getByTestId('unified-ai-disagreement-note')).toContainText(/different verdicts/i)
 
-    await page.getByTestId('unified-ai-regenerate-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-regenerate-button'))
     await expect(resultPanel.getByTestId('ai-fallback-explanation')).toContainText(/deterministic/i)
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.getByTestId('unified-ai-run-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-run-button'))
 
-    await page.getByTestId('unified-ai-mobile-drawer-open-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-mobile-drawer-open-button'))
     const mobileDrawer = page.getByTestId('unified-ai-mobile-drawer')
     const drawerErrorState = page.getByTestId('unified-ai-mobile-drawer-error-state')
     const recoveryOutput = mobileDrawer.getByText(/Recovery output after retry/i)
@@ -333,9 +334,9 @@ test.describe('@ai reliability click audit', () => {
       }
     }
     await expect(recoveryOutput).toBeVisible({ timeout: 10_000 })
-    await page.getByTestId('unified-ai-mobile-drawer-close-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-mobile-drawer-close-button'))
 
-    await page.getByTestId('unified-ai-back-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-back-button'))
     await expect(workbenchPrompt).toHaveValue('')
 
     expect(runBodies.length).toBeGreaterThanOrEqual(3)

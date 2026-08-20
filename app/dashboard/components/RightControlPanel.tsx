@@ -154,7 +154,7 @@ export function RightControlPanel({
       */}
 
       <div
-        className="relative z-10 m-2 flex min-h-[76px] flex-shrink-0 items-center gap-3 rounded-2xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,0.16),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035))] px-3 py-3 shadow-[0_18px_44px_-30px_rgba(34,211,238,0.75)]"
+        className="relative z-10 m-2 flex min-h-[76px] flex-shrink-0 items-center gap-3 rounded-2xl border border-[#262c6a] bg-[radial-gradient(circle_at_top_left,rgba(255,61,129,0.14),transparent_42%),linear-gradient(135deg,rgba(255,255,255,0.08),rgba(255,255,255,0.035))] px-3 py-3 shadow-[0_18px_44px_-30px_rgba(255,61,129,0.6)]"
         data-dashboard-user-id={userId}
         data-dashboard-profile-footer
       >

@@ -262,7 +262,7 @@ export function LeagueManagersStandingsSection({
                   </span>
                   <ManagerRoleBadge role={team.role} />
                   {showUnclaimed ? (
-                    <span className="rounded border border-cyan-500/40 bg-cyan-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-cyan-300">
+                    <span className="rounded border border-[#ff3d81]/40 bg-[#ff3d81]/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-[#ff9ec0]">
                       Unclaimed
                     </span>
                   ) : null}
@@ -310,7 +310,7 @@ export function LeagueManagersStandingsSection({
     if (standingsPresentation.mode === 'divisions' && divisionBlocks) {
       return divisionBlocks.map((block) => (
         <div key={block.title}>
-          <div className="bg-[#151a28] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-cyan-200/80 sm:px-4">
+          <div className="bg-[#151a28] px-3 py-2 text-[11px] font-bold uppercase tracking-wide text-[#ffb8d1]/80 sm:px-4">
             {block.title}
           </div>
           <ul className="divide-y divide-white/[0.04] px-2 sm:px-3">
@@ -385,7 +385,7 @@ export function LeagueManagersStandingsSection({
           {!preDraft ? (
             <Link
               href={bracketHref}
-              className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.1] bg-[#12192e] text-cyan-300/90 transition hover:bg-white/[0.06] hover:text-cyan-200"
+              className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/[0.1] bg-[#12192e] text-[#ff9ec0]/90 transition hover:bg-white/[0.06] hover:text-[#ffb8d1]"
               aria-label="Playoff bracket, standings and seeds"
               title="Playoff bracket, standings and seeds"
               data-testid="league-standings-bracket-link"

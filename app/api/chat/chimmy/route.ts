@@ -19,6 +19,7 @@ import { getInsightBundle } from '@/lib/ai-simulation-integration'
 import type { InsightType } from '@/lib/ai-simulation-integration'
 import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { loadLeagueSnapshotForUser } from '@/lib/chimmy/chimmy-league-snapshot'
+import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
 import { buildChimmySportDataDigest } from '@/lib/chimmy/chimmy-sport-data-digest'
@@ -804,6 +805,8 @@ function isLeagueDataUsageQuestion(message: string): boolean {
     /what\s+data\s+sources\s+(are\s+you|you're)\s+using/i.test(message)
 }
 
+const NEWLINE = String.fromCharCode(10)
+
 function buildLeagueGroundingLine(args: {
   leagueSnapshot: Awaited<ReturnType<typeof loadLeagueSnapshotForUser>>
   leagueNameHint?: string
@@ -1004,6 +1007,18 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const leagueSnapshot =
     leagueId && userId ? await loadLeagueSnapshotForUser(userId, leagueId).catch(() => null) : null
+
+  // How the managers in this league have actually behaved. Entitlement is checked
+  // inside, so an unentitled user grounds exactly as before; and the block names
+  // the managers it has NOT observed, because a model handed a partial roster of
+  // personalities will invent the rest in the same confident voice.
+  const psychologyGroundingLines =
+    leagueSnapshot && userId
+      ? await buildPsychologyGroundingLines({
+          leagueId: leagueSnapshot.id,
+          userId,
+        }).catch(() => [] as string[])
+      : []
 
   let normalizedLeagueContext: NormalizedLeagueContext | null = null
   if (leagueId && userId) {
@@ -1328,10 +1343,17 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     screenshotSummary,
     insightSummary,
     memorySection: combinedMemorySection || undefined,
-    leagueGroundingLine: buildLeagueGroundingLine({
-      leagueSnapshot,
-      leagueNameHint: leagueNameHint ?? undefined,
-    }),
+    leagueGroundingLine: [
+      buildLeagueGroundingLine({
+        leagueSnapshot,
+        leagueNameHint: leagueNameHint ?? undefined,
+      }),
+      ...(psychologyGroundingLines.length > 0
+        ? [psychologyGroundingLines.join(NEWLINE)]
+        : []),
+    ]
+      .filter(Boolean)
+      .join(NEWLINE) || undefined,
     leagueFormat,
     scoring,
     strategyMode: effectiveStrategyModeFinal,

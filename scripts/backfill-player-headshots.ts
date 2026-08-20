@@ -14,7 +14,15 @@
  *     (since pool playerIds are synthetic name-keys today, externalId is the
  *     same synthetic key prefixed `name:`).
  *   - --force overwrites a non-null existing imageUrl.
- *   - Default mode is dry-run; nothing is written without --apply.
+ *   - Default mode is dry-run for the SportsPlayer upsert below.
+ *
+ * ⚠ --apply does NOT gate every write this script causes. `resolver.resolve()` runs before
+ * the --apply check and performs its own `PlayerImage` write-through internally, so a
+ * "dry run" still writes rows to `sports_core_player_images`. It also passes no `playerId`
+ * — pool ids are synthetic name-keys (`name:<Name>:<Pos>:<Team>`), not `Player.id` — so the
+ * resolver derives one, which is how this script contributed orphan image rows.
+ * `writePrimaryPlayerImage` now refuses derived ids that match no `Player`, but the
+ * dry-run-still-writes asymmetry is real: treat this script as a writer in every mode.
  */
 
 /** server-only stub is loaded by scripts/_audit-preload.cjs (node --require). */

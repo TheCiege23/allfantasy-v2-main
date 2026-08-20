@@ -1,6 +1,10 @@
 # Next / node
 node_modules/
 .next/
+# Ad-hoc verification build dirs (.next-myteam-3100, .next-verify-nocturne, …) are
+# created routinely by local dev/verification runs and reach hundreds of MB each.
+# Without this they show up as untracked and are one `git add -A` away from the repo.
+.next-*/
 .next-playwright-*/
 .next-dev*/
 .next-dev-local/
@@ -62,6 +66,16 @@ scripts/ri-import-all.ts
 # local agent settings (may contain secrets)
 .claude/settings.local.json
 
+# Pre-write snapshots taken by the destructive maintenance scripts. These are verbatim dumps
+# of PRODUCTION rows, and this repo is public — they must never be committed. The dedupe
+# script has been writing to this path since before the rule existed.
+scripts/.dedupe-players-snapshot-*.json
+scripts/.orphan-player-images-snapshot-*.json
+# Holds prior password hashes for the fixture accounts being rotated — never commit.
+scripts/.fixture-accounts-snapshot-*.json
+# Full row dumps of the fixture users/leagues/players deleted by cleanup-fixture-data.
+scripts/.fixture-data-snapshot-*.json
+
 # Player value reference docs (local updates; folder tracked via .gitkeep)
 app/player-values/*.md
 app/player-values/*.txt
@@ -93,3 +107,6 @@ spotify-final-results.txt
 
 .env.redraft-test
 .env*
+
+# dedupe snapshots contain production row dumps — never commit them
+scripts/.dedupe-players-snapshot-*.json

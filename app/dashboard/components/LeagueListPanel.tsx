@@ -4,7 +4,9 @@ import { Search, Trophy } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LeagueSidebarCard } from '@/components/league/LeagueSidebarCard'
 import { EmptyState } from '@/components/ui-states/EmptyState'
+import { DashboardLiveDrafts } from '@/app/dashboard/components/DashboardLiveDrafts'
 import type { UserLeague } from '../types'
+import '@/components/decide/broadcast-deck.css'
 
 const FAVORITES_KEY = 'af-league-favorites'
 const ORDER_KEY = 'af-league-order'
@@ -303,17 +305,22 @@ export function LeagueListPanel({
   )
 
   return (
-    <div className="flex h-full min-w-0 w-full max-w-full flex-col overflow-hidden bg-[#0a0a1f]">
+    <div className="flex h-full min-w-0 w-full max-w-full flex-col overflow-hidden bg-[#0b0e2a]">
+      {/* Cross-league draft strip — the ONLY place all your drafts appear
+          together. Renders in BOTH modes: a live draft in a league that isn't
+          imported yet must still be reachable (links into the import flow). */}
+      <DashboardLiveDrafts leagues={leagues} />
+
       {!compact ? (
-        <div className="border-b border-white/[0.07] px-3 py-3">
-          <div className="flex items-center rounded-xl border border-white/[0.07] bg-white/[0.05] px-3 py-2">
-            <Search className="h-4 w-4 flex-shrink-0 text-white/35" />
+        <div className="border-b border-[#1c2153] px-3 py-3">
+          <div className="flex items-center rounded-xl border border-[#262c6a] bg-[#12163e] px-3 py-2">
+            <Search className="h-4 w-4 flex-shrink-0 text-[#5d64a3]" />
             <input
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
               placeholder="Search leagues..."
-              className="ml-2 w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
+              className="ml-2 w-full bg-transparent text-sm text-white outline-none placeholder:text-[#5d64a3]"
             />
           </div>
         </div>

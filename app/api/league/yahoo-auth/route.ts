@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import crypto from 'crypto';
-
-const YAHOO_AUTH_URL = 'https://api.login.yahoo.com/oauth2/request_auth';
+import { getYahooRedirectUri, YAHOO_AUTH_URL, YAHOO_FANTASY_SCOPE } from '@/lib/yahoo/oauthConfig';
 
 export async function GET(request: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
@@ -19,14 +18,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(new URL('/leagues?error=yahoo_not_configured', request.url));
   }
 
-  const redirectUri = process.env.YAHOO_REDIRECT_URI || `${request.nextUrl.origin}/api/league/yahoo/callback`;
+  const redirectUri = getYahooRedirectUri(`${request.nextUrl.origin}/api/league/yahoo/callback`);
   const state = crypto.randomBytes(16).toString('hex');
 
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
-    scope: 'fspt-r',
+    scope: YAHOO_FANTASY_SCOPE,
     state,
   });
 

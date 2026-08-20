@@ -16,7 +16,7 @@ function SleeperEditLink({ href }: { href: string }) {
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-[13px] font-semibold text-cyan-400 hover:text-cyan-300"
+      className="text-[13px] font-semibold text-[#ff3d81] hover:text-[#ff9ec0]"
       data-testid="scoring-settings-edit-sleeper"
     >
       Edit
@@ -57,9 +57,9 @@ export function ScoringSettingsFullSection({
         {showEditLink && sleeperSettingsHref ? <SleeperEditLink href={sleeperSettingsHref} /> : null}
       </div>
 
-      <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/[0.07] px-3 py-2 text-[11px] text-cyan-100/85">
+      <div className="rounded-lg border border-[#ff3d81]/20 bg-[#ff3d81]/[0.07] px-3 py-2 text-[11px] text-[#ffd7e5]/85">
         Values are synced from your host league. Use Edit to change scoring in Sleeper (or your platform).
-        Flavor hint: <span className="font-semibold text-cyan-50">{flavor}</span>.
+        Flavor hint: <span className="font-semibold text-[#ffe9f1]">{flavor}</span>.
       </div>
 
       <p className="text-[10px] font-bold uppercase tracking-wide text-white/38">All scoring rules</p>
@@ -109,7 +109,7 @@ export function ScoringSettingsFullSection({
               target="_blank"
               rel="noopener noreferrer"
               data-testid="scoring-preset-espn"
-              className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-left transition hover:border-cyan-500/25 hover:bg-white/[0.06]"
+              className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-left transition hover:border-[#ff3d81]/25 hover:bg-white/[0.06]"
             >
               <p className="text-[13px] font-bold text-white">ESPN</p>
               <p className="mt-1 text-[11px] leading-snug text-white/45">Apply ESPN-style scoring in commissioner tools.</p>
@@ -119,7 +119,7 @@ export function ScoringSettingsFullSection({
               target="_blank"
               rel="noopener noreferrer"
               data-testid="scoring-preset-yahoo"
-              className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-left transition hover:border-cyan-500/25 hover:bg-white/[0.06]"
+              className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-left transition hover:border-[#ff3d81]/25 hover:bg-white/[0.06]"
             >
               <p className="text-[13px] font-bold text-white">Yahoo</p>
               <p className="mt-1 text-[11px] leading-snug text-white/45">Apply Yahoo-style scoring in commissioner tools.</p>
@@ -149,7 +149,7 @@ export function ScoringSettingsFullSection({
           href={sleeperSettingsHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block text-[12px] font-medium text-cyan-400/90 hover:underline"
+          className="inline-block text-[12px] font-medium text-[#ff3d81]/90 hover:underline"
         >
           Open full scoring editor on host →
         </a>

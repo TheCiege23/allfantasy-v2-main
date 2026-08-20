@@ -95,7 +95,7 @@ export function KeeperModal({
         <div className="mt-3 flex flex-wrap gap-2 text-[12px]">
           <Link
             href={`/league/${leagueId}?tab=keeper`}
-            className="rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-1.5 font-semibold text-cyan-200 hover:bg-cyan-500/20"
+            className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20"
           >
             Open Keepers tab
           </Link>
@@ -106,7 +106,7 @@ export function KeeperModal({
             Open Draft tab
           </Link>
         </div>
-        {loading ? <p className="mt-4 text-[12px] text-cyan-400/80">Loading rosters…</p> : null}
+        {loading ? <p className="mt-4 text-[12px] text-[#ff3d81]/80">Loading rosters…</p> : null}
         {error ? <p className="mt-2 text-[12px] text-red-400">{error}</p> : null}
         <div className="mt-4 space-y-4">
           {teams.map((team) => (
@@ -132,7 +132,7 @@ export function KeeperModal({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl bg-cyan-500 px-4 py-2 text-[13px] font-bold text-black hover:bg-cyan-400"
+            className="rounded-xl bg-[#ff3d81] px-4 py-2 text-[13px] font-bold text-black hover:bg-[#ff3d81]"
           >
             Close
           </button>

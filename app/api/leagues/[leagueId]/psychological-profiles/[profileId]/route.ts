@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveProfileAccess, presentProfile } from '@/lib/psychological-profiles/ProfileAccess'
 import { getProfileById, listProfileEvidence } from '@/lib/psychological-profiles/ManagerBehaviorQueryService'
 
 export const dynamic = 'force-dynamic'
@@ -21,11 +22,21 @@ export async function GET(
     const seasonParam = url.searchParams?.get('season')
     const season = seasonParam != null ? parseInt(seasonParam, 10) : undefined
 
-    const profile = await getProfileById(profileId)
-    if (!profile || profile.leagueId !== leagueId) {
+    // Same payload as the list route. Gating that one and leaving this open
+    // would make the gate decorative — the profile is one id away.
+    const access = await resolveProfileAccess(leagueId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.reason }, { status: access.status })
+    }
+
+    const found = await getProfileById(profileId)
+    if (!found || found.leagueId !== leagueId) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 })
     }
-    if (!includeEvidence) return NextResponse.json(profile)
+    const profile = presentProfile(found, access)
+    // Evidence records are the raw behavioural detail behind the labels, so a
+    // locked viewer does not get them either.
+    if (!includeEvidence || 'locked' in profile) return NextResponse.json(profile)
 
     const evidence = await listProfileEvidence(profileId, {
       limit,

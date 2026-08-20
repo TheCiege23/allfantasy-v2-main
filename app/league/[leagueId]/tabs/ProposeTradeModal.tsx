@@ -212,7 +212,7 @@ export function ProposeTradeModal({ open, onClose, leagueId, teams, onSubmitted 
                 type="button"
                 onClick={() => void handleSubmit()}
                 disabled={!canSubmit}
-                className="rounded-lg bg-cyan-500/85 px-3 py-2 text-[12px] font-semibold text-black disabled:opacity-50"
+                className="rounded-lg bg-[#ff3d81]/85 px-3 py-2 text-[12px] font-semibold text-black disabled:opacity-50"
                 data-testid="propose-trade-submit"
               >
                 {submitting ? 'Sending…' : 'Send Trade Offer'}

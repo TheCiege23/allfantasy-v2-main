@@ -255,11 +255,12 @@ describe('CommissionerAttentionQueue — no internal-token leakage into customer
       const leagueNameById = new Map([['league-1', 'Test League']])
       render(
         <CommissionerAttentionQueue
-          entries={[makeSignal({ severity, explanation: `Explanation for ${severity}` })]}
+          entries={[makeSignal({ id: `signal-${severity}`, severity, explanation: `Explanation for ${severity}` })]}
           leagueNameById={leagueNameById}
         />,
       )
-      const item = screen.getByTestId(`attention-queue-item-${severity}`)
+      // Id-based testid (PR #185 — severity is not unique across items).
+      const item = screen.getByTestId(`attention-queue-item-signal-${severity}`)
       const visibleText = item.textContent ?? ''
       expect(visibleText).not.toMatch(/border-|bg-status|text-status|rounded-|bg-rose|bg-amber|bg-emerald/)
       expect(visibleText).toContain('Test League')

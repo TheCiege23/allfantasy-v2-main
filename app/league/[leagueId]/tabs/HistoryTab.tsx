@@ -32,8 +32,8 @@ function avatarUrlFromId(avatar: string | null | undefined): string | null {
 function getSeasonAccent(index: number) {
   if (index === 0) {
     return {
-      pill: 'border-cyan-400/30 bg-cyan-400/12 text-cyan-100',
-      card: 'border-cyan-400/18 bg-[linear-gradient(135deg,rgba(34,211,238,0.12),rgba(255,255,255,0.03))]',
+      pill: 'border-[#ff3d81]/30 bg-[#ff3d81]/12 text-[#ffd7e5]',
+      card: 'border-[#ff3d81]/18 bg-[linear-gradient(135deg,rgba(255,61,129,0.12),rgba(255,255,255,0.03))]',
       label: 'Current import layer',
     }
   }
@@ -175,7 +175,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
             type="button"
             onClick={() => void handleSync()}
             disabled={syncing}
-            className="mt-3 text-xs font-semibold text-cyan-400/90 hover:text-cyan-300 disabled:opacity-50"
+            className="mt-3 text-xs font-semibold text-[#ff3d81]/90 hover:text-[#ff9ec0] disabled:opacity-50"
           >
             {syncing ? 'Syncing…' : 'Try sync from Sleeper'}
           </button>
@@ -275,7 +275,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-[11px] font-bold uppercase tracking-wider text-white/40">Season History</h2>
           {historicalBackfillStatus === 'pending' ? (
-            <span className="rounded-full border border-cyan-400/25 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-100">
+            <span className="rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#ffd7e5]">
               Layering prior seasons…
             </span>
           ) : null}
@@ -345,7 +345,7 @@ export function HistoryTab({ league }: HistoryTabProps) {
                   <button
                     type="button"
                     onClick={() => setExpanded((prev) => ({ ...prev, [s.season]: !open }))}
-                    className="text-[11px] font-semibold text-cyan-400/80 hover:text-cyan-300"
+                    className="text-[11px] font-semibold text-[#ff3d81]/80 hover:text-[#ff9ec0]"
                   >
                     Standings {open ? '▲' : '▼'}
                   </button>

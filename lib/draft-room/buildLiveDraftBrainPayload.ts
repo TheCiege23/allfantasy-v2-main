@@ -16,6 +16,10 @@ type PoolPlayer = {
   aiAdpLowSample?: boolean
   isRookie?: boolean
   age?: number | null
+  /** Real projected fantasy points from the pool row, when present (Draft VORP slice). */
+  projectedPoints?: number | null
+  /** PlayerEntry pool rows carry projections here instead (Draft VORP slice). */
+  nflDraftProjectionSplits?: { projectedPoints?: number | null } | null
 }
 
 function playerKey(p: { name: string; position: string; team: string | null }): string {
@@ -214,6 +218,13 @@ export function buildLiveDraftBrainPayload(args: {
       byeWeek: p.byeWeek ?? null,
       isRookie: p.isRookie,
       age: p.age ?? null,
+      projectedPoints:
+        typeof p.projectedPoints === 'number' && Number.isFinite(p.projectedPoints)
+          ? p.projectedPoints
+          : typeof p.nflDraftProjectionSplits?.projectedPoints === 'number' &&
+              Number.isFinite(p.nflDraftProjectionSplits.projectedPoints)
+            ? p.nflDraftProjectionSplits.projectedPoints
+            : null,
     })
 
     const blended = blendCombinedAdp(row)

@@ -160,10 +160,10 @@ export function BestBallWarRoomPanel({ leagueId }: { leagueId: string }) {
       </div>
 
       {/* Automatic lineup explanation — best ball has NO manual start/sit. */}
-      <div className="flex items-start gap-2 rounded-lg border border-cyan-400/15 bg-cyan-500/[0.05] p-3" data-testid="best-ball-war-room-auto-lineup">
-        <Zap className="mt-0.5 h-4 w-4 shrink-0 text-cyan-300/80" />
+      <div className="flex items-start gap-2 rounded-lg border border-[#ff3d81]/15 bg-[#ff3d81]/[0.05] p-3" data-testid="best-ball-war-room-auto-lineup">
+        <Zap className="mt-0.5 h-4 w-4 shrink-0 text-[#ff9ec0]/80" />
         <p className="text-[11px] leading-relaxed text-white/70">
-          <span className="font-semibold text-cyan-100">Automatic lineup.</span> Best ball auto-selects your highest-scoring valid
+          <span className="font-semibold text-[#ffd7e5]">Automatic lineup.</span> Best ball auto-selects your highest-scoring valid
           lineup every {context.scoring.scoringPeriod} period — there is no manual start/sit. Win by drafting DEPTH, CEILING, and
           smart roster construction.
         </p>

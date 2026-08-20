@@ -32,6 +32,7 @@ const GLOBAL_TABS = [
   { href: "/dashboard", label: "Home" },
   { href: "/war-room", label: "AF Legacy" },
   { href: "/discover/leagues", label: "Leagues" },
+  { href: "/player-command-center", label: "My Players" },
   { href: "/ai/tools", label: "Intelligence Hub" },
   { href: "/af-rankings", label: "Rankings" },
   { href: "/profile", label: "Profile" },

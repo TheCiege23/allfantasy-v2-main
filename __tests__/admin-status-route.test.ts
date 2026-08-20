@@ -34,6 +34,8 @@ describe("admin status route", () => {
 
     expect(res.status).toBe(401)
     expect(body).toMatchObject({ authenticated: false, admin: false })
+    // Deployment/database identity must never reach an unauthenticated caller.
+    expect(body).not.toHaveProperty("deployment")
   })
 
   it("returns 403 for authenticated non-admin users", async () => {
@@ -54,6 +56,7 @@ describe("admin status route", () => {
       user: { id: "user-1", username: "MemberOne", emailMasked: "me***@example.com" },
     })
     expect(JSON.stringify(body)).not.toContain("member@example.com")
+    expect(body).not.toHaveProperty("deployment")
   })
 
   it("returns masked admin status for admins", async () => {
@@ -76,5 +79,33 @@ describe("admin status route", () => {
       user: { id: "admin-1", username: "TheCiege26", emailMasked: "fo***@example.com" },
     })
     expect(JSON.stringify(body)).not.toContain("founder@example.com")
+  })
+
+  it("exposes deployment and database identity to admins without leaking credentials", async () => {
+    process.env.VERCEL_ENV = "production"
+    process.env.VERCEL_GIT_COMMIT_SHA = "e61a63886189c65e3aeea5ff7f6017f5cc70dae8"
+    process.env.DATABASE_URL =
+      "postgresql://db_owner:npg_FAKE_TEST_VALUE@ep-fixture-endpoint-00000000.c-2.us-east-1.aws.neon.tech/appdb"
+
+    mocks.getAdminAccessState.mockResolvedValueOnce({
+      status: "admin",
+      source: "app_session",
+      user: { id: "admin-1", email: "founder@example.com", username: "TheCiege26", role: "admin" },
+    })
+
+    const { GET } = await import("@/app/api/admin/status/route")
+    const body = await (await GET()).json()
+
+    expect(body.deployment).toMatchObject({
+      environment: "production",
+      commitShaShort: "e61a638",
+      database: { endpointLabel: "ep-fixture-endpoint-00000000", databaseName: "appdb", unavailable: false },
+    })
+    expect(JSON.stringify(body)).not.toContain("npg_FAKE_TEST_VALUE")
+    expect(JSON.stringify(body)).not.toContain("db_owner")
+
+    delete process.env.VERCEL_ENV
+    delete process.env.VERCEL_GIT_COMMIT_SHA
+    delete process.env.DATABASE_URL
   })
 })

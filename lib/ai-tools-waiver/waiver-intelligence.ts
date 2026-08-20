@@ -808,9 +808,14 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
       const row = await resolveRecordForFreeAgent(sportStr, c.externalId)
       if (row) {
         recordId = row.id
+        // Pricing can refuse (slice 11) when there is neither market value nor
+        // projection. Leave composite/marketValue at their honest defaults
+        // rather than scoring the candidate off a fabricated zero.
         const pa = sportsRecordToPricedAsset(row)
-        composite = compositeScore(pa.assetValue)
-        marketValue = pa.assetValue.marketValue
+        if (pa) {
+          composite = compositeScore(pa.assetValue)
+          marketValue = pa.assetValue.marketValue
+        }
         headshotUrl = row.headshotUrlLg ?? row.headshotUrlSm ?? row.headshotUrl ?? null
         imageUrl = headshotUrl
         if (row.injuryStatus) injuryStatus = row.injuryStatus
@@ -1008,6 +1013,10 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
       const row = await resolveSportsPlayerRecord(sportStr, id)
       if (!row) continue
       const pa = sportsRecordToPricedAsset(row)
+      // An unpriceable player cannot be ranked as a drop candidate. Skipping is
+      // honest; scoring it off a fabricated zero would rank it as the WORST
+      // player on the roster and recommend dropping it first.
+      if (!pa) continue
       const comp = compositeScore(pa.assetValue)
       dropScores.push({
         id,

@@ -130,6 +130,90 @@ export type LeagueSettingsModalProps = {
   initialActivePanel?: string | null
 }
 
+/**
+ * Imported leagues (Sleeper/Yahoo/ESPN/…) are READ-ONLY mirrors — nothing here
+ * can change how the league runs, so the full commissioner control-center tree
+ * is noise. This centered summary shows how the league runs, from the imported
+ * snapshot only, plus a deep link to the host platform for actual changes.
+ */
+function ImportedLeagueSummary({
+  league,
+  displayLeague,
+  platform,
+  sleeperLeagueId,
+}: {
+  league: LeagueShellLeague
+  displayLeague: UserLeague
+  platform: string
+  sleeperLeagueId: string | null
+}) {
+  const settings = (league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+    ? (league.settings as Record<string, unknown>)
+    : {}) as Record<string, unknown>
+  const rosterPositions = Array.isArray(settings.roster_positions)
+    ? (settings.roster_positions as unknown[]).filter((p): p is string => typeof p === 'string')
+    : []
+  const innerSettings = (settings.settings && typeof settings.settings === 'object' && !Array.isArray(settings.settings)
+    ? (settings.settings as Record<string, unknown>)
+    : {}) as Record<string, unknown>
+  const waiverType = typeof innerSettings.waiver_type === 'number'
+    ? (innerSettings.waiver_type === 2 ? 'FAAB' : innerSettings.waiver_type === 1 ? 'Rolling priority' : 'Reverse standings')
+    : null
+  const playoffTeams = typeof innerSettings.playoff_teams === 'number' ? innerSettings.playoff_teams : null
+  const platformLabel = platform.charAt(0).toUpperCase() + platform.slice(1)
+  const hostSettingsHref = sleeperLeagueId ? `https://sleeper.com/leagues/${sleeperLeagueId}/settings` : null
+
+  const rows: Array<[string, string]> = [
+    ['Platform', platformLabel],
+    ['Season', String(displayLeague.season ?? '—')],
+    ['Teams', String(displayLeague.teamCount ?? league.leagueSize ?? '—')],
+    ['Format', String(displayLeague.format ?? (league.isDynasty ? 'Dynasty' : 'Redraft'))],
+    ['Scoring', String(displayLeague.scoring ?? league.scoring ?? '—')],
+    ['Status', String(displayLeague.status ?? league.status ?? '—').replace(/_/g, ' ')],
+  ]
+  if (waiverType) rows.push(['Waivers', waiverType])
+  if (playoffTeams) rows.push(['Playoff teams', String(playoffTeams)])
+
+  return (
+    <div className="mx-auto max-w-md space-y-4 py-2" data-testid="imported-league-settings-summary">
+      <div className="rounded-xl border border-[#262c6a] bg-[#12163e]/70 p-4">
+        <p className="text-[10px] font-black uppercase italic tracking-wide text-[#ff8a3d]">How this league runs</p>
+        <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3">
+          {rows.map(([label, value]) => (
+            <div key={label}>
+              <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">{label}</p>
+              <p className="mt-0.5 text-[13px] font-semibold capitalize text-white/90">{value}</p>
+            </div>
+          ))}
+        </div>
+        {rosterPositions.length > 0 ? (
+          <div className="mt-4">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-white/35">Roster construction</p>
+            <p className="mt-1 text-[12px] leading-relaxed text-white/70">{rosterPositions.join(', ')}</p>
+          </div>
+        ) : null}
+      </div>
+      <div className="rounded-xl border border-[#262c6a] bg-white/[0.03] p-4">
+        <p className="text-[12px] leading-relaxed text-white/55">
+          This league is imported from {platformLabel}, so its rules are a read-only mirror — AllFantasy never
+          changes your source league. To change how the league runs, edit it on {platformLabel} and it syncs here.
+        </p>
+        {hostSettingsHref ? (
+          <a
+            href={hostSettingsHref}
+            target="_blank"
+            rel="noreferrer"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3.5 py-2 text-[12px] font-extrabold text-white"
+            style={{ background: 'linear-gradient(90deg,#ff3d81,#ff8a3d)' }}
+          >
+            Edit on {platformLabel} →
+          </a>
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
 export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
   const {
     open,
@@ -148,6 +232,12 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
 
   const [mainTab, setMainTab] = useState<SettingsTabKey>('general')
   const [activePanel, setActivePanel] = useState<string | null>(null)
+  // Imported (non-native) leagues get the read-only summary in GENERAL —
+  // there is nothing to edit here, the host platform owns the rules.
+  const importedPlatform = useMemo(() => {
+    const p = String(league.platform ?? '').toLowerCase()
+    return p && !['allfantasy', 'native', 'af', ''].includes(p) ? p : null
+  }, [league.platform])
   const [isMd, setIsMd] = useState(false)
   const [idpLeague, setIdpLeague] = useState(false)
   /** Avoid treating `!idpLeague` as definitive until `/idp/config` has responded (prevents flashing off IDP tab). */
@@ -340,7 +430,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
               aria-modal="true"
               aria-labelledby="league-settings-modal-title"
               className={`pointer-events-auto flex max-h-[100dvh] w-full flex-col overflow-hidden rounded-t-2xl border border-white/[0.08] bg-[#0d1117] shadow-2xl md:max-h-[min(92vh,900px)] md:rounded-2xl ${
-                isCommissioner && mainTab === 'general' ? 'max-w-4xl' : 'max-w-2xl'
+                isCommissioner && mainTab === 'general' && !importedPlatform ? 'max-w-4xl' : 'max-w-2xl'
               }`}
               initial={modalVariants.initial}
               animate={modalVariants.animate}
@@ -383,14 +473,14 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                     onClick={() => setMainTab('user')}
                     className={`flex items-center gap-1.5 rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
                       mainTab === 'user'
-                        ? 'border-cyan-500/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
+                        ? 'border-[#ff3d81]/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(255,61,129,0.12)]'
                         : 'border-transparent bg-white/[0.04] text-white/40 hover:bg-white/[0.07] hover:text-white/65'
                     }`}
                     data-testid="league-settings-tab-user"
                     aria-label="User settings"
                   >
                     <User
-                      className={`h-3.5 w-3.5 ${mainTab === 'user' ? 'text-cyan-300' : 'text-white/35'}`}
+                      className={`h-3.5 w-3.5 ${mainTab === 'user' ? 'text-[#ff9ec0]' : 'text-white/35'}`}
                       strokeWidth={2}
                       aria-hidden
                     />
@@ -401,7 +491,7 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                     onClick={() => setMainTab('general')}
                     className={`rounded-full border px-4 py-2 text-[11px] font-bold tracking-wide transition ${
                       mainTab === 'general'
-                        ? 'border-cyan-500/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(34,211,238,0.12)]'
+                        ? 'border-[#ff3d81]/45 bg-white/[0.12] text-white shadow-[0_0_0_1px_rgba(255,61,129,0.12)]'
                         : 'border-transparent bg-white/[0.04] text-white/40 hover:bg-white/[0.07] hover:text-white/65'
                     }`}
                   >
@@ -451,6 +541,15 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                       Use the home icon in the league header to return to the dashboard.
                     </p>
                   </div>
+                ) : mainTab === 'general' && importedPlatform ? (
+                  // Imported leagues: read-only "how it runs" summary instead of
+                  // the full editable settings tree (no changes possible here).
+                  <ImportedLeagueSummary
+                    league={league}
+                    displayLeague={displayLeague}
+                    platform={importedPlatform}
+                    sleeperLeagueId={sleeperLeagueId}
+                  />
                 ) : isCommissioner && mainTab === 'general' ? (
                   <CommissionerLeagueSettingsShell
                     key={`${league.id}-${initialActivePanel ?? 'hub'}`}
@@ -470,12 +569,12 @@ export function LeagueSettingsModal(props: LeagueSettingsModalProps) {
                           className={`rounded-xl border p-3 text-left transition ${
                             ai
                               ? 'border-violet-500/25 bg-gradient-to-br from-violet-950/80 via-[#1a1f3a] to-fuchsia-950/50 hover:border-violet-400/35'
-                              : 'border-white/[0.08] bg-[#1a1f3a] hover:border-cyan-500/25 hover:bg-[#1f2544]'
+                              : 'border-white/[0.08] bg-[#1a1f3a] hover:border-[#ff3d81]/25 hover:bg-[#1f2544]'
                           }`}
                         >
                           <div
                             className={`mb-2 flex h-9 w-9 items-center justify-center rounded-lg ${
-                              ai ? 'bg-white/[0.08] text-violet-200' : 'bg-white/[0.06] text-cyan-400/95'
+                              ai ? 'bg-white/[0.08] text-violet-200' : 'bg-white/[0.06] text-[#ff3d81]/95'
                             }`}
                           >
                             <Icon className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />

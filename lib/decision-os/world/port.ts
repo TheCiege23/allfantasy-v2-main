@@ -345,7 +345,19 @@ export async function loadScheduleGameRows(
         }
       : { sportType: cleanSport, season }
 
-  const [fantasyRows, gameRows] = await Promise.all([
+  // Slice 9 — SportsGame joined the read port. It's what syncAPISportsGamesToDb
+  // (NFL/NCAAF api_sports schedule sync) actually writes; before this it was a
+  // write-only table no schedule consumer ever read (REQ-WIRING class gap).
+  const sportsGameWhere =
+    cleanTeams.length > 0
+      ? {
+          sport: cleanSport,
+          season,
+          OR: [{ homeTeam: { in: cleanTeams } }, { awayTeam: { in: cleanTeams } }],
+        }
+      : { sport: cleanSport, season }
+
+  const [fantasyRows, gameRows, sportsGameRows] = await Promise.all([
     prisma.fantasyScheduleGame.findMany({
       where: fantasyWhere,
       orderBy: [{ week: 'asc' }, { fetchedAt: 'desc' }],
@@ -377,6 +389,25 @@ export async function loadScheduleGameRows(
         updatedAt: true,
       },
     }),
+    prisma.sportsGame
+      .findMany({
+        where: sportsGameWhere,
+        orderBy: [{ week: 'asc' }, { fetchedAt: 'desc' }],
+        select: {
+          sport: true,
+          season: true,
+          week: true,
+          homeTeam: true,
+          awayTeam: true,
+          startTime: true,
+          status: true,
+          source: true,
+          fetchedAt: true,
+          expiresAt: true,
+          updatedAt: true,
+        },
+      })
+      .catch(() => []),
   ])
 
   const combined: RawScheduleGameRow[] = [
@@ -429,12 +460,50 @@ export async function loadScheduleGameRows(
       updatedAt: row.updatedAt ?? null,
       sourceModel: 'GameSchedule' as const,
     })),
+    ...sportsGameRows.map((row: {
+      sport: string
+      season: number | null
+      week: number | null
+      homeTeam: string
+      awayTeam: string
+      startTime: Date | null
+      status: string | null
+      source: string
+      fetchedAt: Date
+      expiresAt: Date
+      updatedAt: Date
+    }) => ({
+      sport: cleanSport,
+      season: row.season ?? season,
+      week: row.week ?? 0,
+      homeTeam: cleanScheduleTeam(row.homeTeam),
+      awayTeam: cleanScheduleTeam(row.awayTeam),
+      kickoffTime: row.startTime ?? null,
+      status: row.status ?? null,
+      source: row.source ?? null,
+      fetchedAt: row.fetchedAt ?? null,
+      expiresAt: row.expiresAt ?? null,
+      updatedAt: row.updatedAt ?? null,
+      sourceModel: 'SportsGame' as const,
+    })),
   ]
 
+  // Weekly rows dedupe on (week, matchup) as before — fantasy-cache rows still
+  // shadow generic rows. Slice 9: WEEKLESS rows (daily sports / SportsGame rows
+  // without a week) are no longer dropped; they dedupe on (kickoff time,
+  // matchup) instead, since the next-game model anchors on real timestamps.
+  // Weekless rows WITHOUT a timestamp stay excluded — nothing could ever
+  // consume them without guessing.
   const deduped = new Map<string, RawScheduleGameRow>()
   for (const row of combined) {
-    if (row.week <= 0) continue
-    const key = scheduleGameKey(row)
+    let key: string
+    if (row.week > 0) {
+      key = scheduleGameKey(row)
+    } else if (row.kickoffTime instanceof Date && !Number.isNaN(row.kickoffTime.getTime())) {
+      key = `t|${row.kickoffTime.toISOString()}|${cleanScheduleTeam(row.homeTeam) ?? ''}|${cleanScheduleTeam(row.awayTeam) ?? ''}`
+    } else {
+      continue
+    }
     if (!deduped.has(key)) deduped.set(key, row)
   }
   return [...deduped.values()].sort((a, b) => a.week - b.week)

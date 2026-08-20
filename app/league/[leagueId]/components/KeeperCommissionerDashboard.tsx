@@ -284,10 +284,10 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
           </div>
         </div>
       ) : (
-        <div className="space-y-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4">
+        <div className="space-y-4 rounded-xl border border-[#ff3d81]/20 bg-[#ff3d81]/5 p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-[12px] font-semibold text-cyan-100/90">Active declaration session</p>
+              <p className="text-[12px] font-semibold text-[#ffd7e5]/90">Active declaration session</p>
               <p className="text-[11px] text-white/45">
                 Status: <span className="text-white/75">{ctx.session.status}</span> · Session{' '}
                 <code className="rounded bg-black/30 px-1 text-[10px] text-white/60">{ctx.session.id}</code>
@@ -422,7 +422,7 @@ export function KeeperCommissionerDashboard({ leagueId }: { leagueId: string }) 
         </p>
         <Link
           href={`/league/${leagueId}?tab=draft`}
-          className="mt-2 inline-block text-[12px] font-semibold text-cyan-300 hover:underline"
+          className="mt-2 inline-block text-[12px] font-semibold text-[#ff9ec0] hover:underline"
         >
           Open draft tab →
         </Link>

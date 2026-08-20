@@ -39,6 +39,59 @@ export const USER_MENU_ITEMS: NavLinkItem[] = [
 /** Admin nav item (shown only when user is admin). */
 export const ADMIN_NAV_ITEM: NavLinkItem = { href: "/admin", label: "Admin" }
 
+/**
+ * Broadcast Deck header consolidation: the 11-tab flat strip folds into four
+ * groups (single-item groups render as a direct link; multi-item groups render
+ * as dropdowns). Every PRIMARY_NAV_ITEMS route survives — this is presentation
+ * only, mirroring the league page's Decide/Draft/Roster/League/Legacy fold.
+ */
+export interface NavGroup {
+  id: string
+  label: string
+  items: NavLinkItem[]
+}
+
+export const PRIMARY_NAV_GROUPS: NavGroup[] = [
+  { id: "home", label: "Home", items: [{ href: "/dashboard", label: "Home" }] },
+  {
+    id: "play",
+    label: "Play",
+    items: [
+      // "My Leagues" (incl. every imported league) lives on the dashboard rail —
+      // named here so imported leagues are one obvious click from anywhere.
+      { href: "/dashboard", label: "My Leagues" },
+      { href: "/discover/leagues", label: "Find Leagues" },
+      { href: "/af-rankings", label: "Rankings" },
+      { href: "/war-room", label: "AF Legacy" },
+    ],
+  },
+  {
+    id: "hubs",
+    label: "Hubs",
+    items: [
+      { href: "/commissioner-hub", label: "Commissioner Hub" },
+      { href: "/manager-hub", label: "Manager Hub" },
+      { href: "/ai/tools", label: "Intelligence Hub" },
+    ],
+  },
+  {
+    id: "you",
+    label: "You",
+    items: [
+      { href: "/profile", label: "Profile" },
+      { href: "/messages", label: "Messages" },
+      { href: "/wallet", label: "Wallet" },
+      { href: "/settings", label: "Settings" },
+    ],
+  },
+]
+
+/** Grouped primary nav (optionally appends Admin as its own direct group). */
+export function getPrimaryNavGroups(isAdmin: boolean): NavGroup[] {
+  if (!isAdmin) return PRIMARY_NAV_GROUPS
+  return [...PRIMARY_NAV_GROUPS, { id: "admin", label: "Admin", items: [ADMIN_NAV_ITEM] }]
+}
+
 /** Resolve primary nav items for display (optionally include admin when isAdmin). */
 export function getPrimaryNavItems(isAdmin: boolean): NavLinkItem[] {
   if (!isAdmin) return PRIMARY_NAV_ITEMS

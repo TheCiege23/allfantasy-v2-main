@@ -8,6 +8,7 @@ import {
   isSocialProviderEnabled,
 } from "@/lib/auth/SocialProviderResolver"
 import { buildProviderPendingHref } from "@/lib/auth/ProviderPendingFlow"
+import { buildSignupConsentCookie } from "@/lib/auth/signupConsentCookie"
 
 /**
  * The Nocturne 2×2 OAuth grid shared by /signup and /login.
@@ -61,12 +62,43 @@ const PROVIDERS: { provider: SocialProvider; label: string; glyph: () => JSX.Ele
   { provider: "discord", label: "Discord", glyph: DiscordGlyph },
 ]
 
-export default function NocturneOAuthGrid({ callbackUrl }: { callbackUrl: string }) {
+/**
+ * `consent` is supplied by SIGNUP only. On /login there is no checkbox and nothing to
+ * carry, so it is omitted and sign-in behaves exactly as before — an existing user must
+ * never be re-gated on an agreement they already made.
+ */
+export default function NocturneOAuthGrid({
+  callbackUrl,
+  consent,
+}: {
+  callbackUrl: string
+  consent?: {
+    /** Has the user ticked the 18+/terms box? */
+    granted: boolean
+    /** Surface the same inline error the credentials submit shows. */
+    onMissing: () => void
+  }
+}) {
   const router = useRouter()
   const [loadingProvider, setLoadingProvider] = useState<SocialProvider | null>(null)
 
   async function handleClick(provider: SocialProvider) {
     if (loadingProvider) return
+
+    // Two bugs closed here. Previously the grid received only `callbackUrl`, so on /signup
+    // a user could tick the box and have it silently discarded, OR click straight through
+    // without ticking at all — both produced an account with no consent recorded, and every
+    // later gate then told them they had never confirmed their age.
+    if (consent && !consent.granted) {
+      consent.onMissing()
+      return
+    }
+    if (consent?.granted) {
+      // Must be written BEFORE the redirect: the provider round trip leaves this page, and
+      // the account-creation path on the way back is the only place that can persist it.
+      document.cookie = buildSignupConsentCookie(window.location.protocol === "https:")
+    }
+
     setLoadingProvider(provider)
     try {
       if (isSocialProviderEnabled(provider)) {

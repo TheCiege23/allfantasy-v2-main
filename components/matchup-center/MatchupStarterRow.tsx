@@ -58,7 +58,7 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
           <div className={`truncate text-[9px] text-white/35 ${align === 'right' ? 'text-right' : ''}`}>{side.newsBlurb}</div>
         ) : null}
         {side.aiInsight ? (
-          <div className={`truncate text-[9px] text-cyan-200/70 ${align === 'right' ? 'text-right' : ''}`}>{side.aiInsight}</div>
+          <div className={`truncate text-[9px] text-[#ffb8d1]/70 ${align === 'right' ? 'text-right' : ''}`}>{side.aiInsight}</div>
         ) : null}
         <div className={`mt-0.5 flex flex-wrap gap-1 ${align === 'right' ? 'justify-end' : ''}`}>
           {side.injuryStatus ? (
@@ -104,7 +104,7 @@ export function MatchupStarterRow({
     <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-1 border-b border-white/[0.06] py-2.5">
       {left ? <PlayerCell side={left} align="left" /> : <div className="opacity-40" />}
       <div className="flex flex-col items-center gap-1 px-1">
-        <span className="rounded-md border border-cyan-400/25 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-100/95">
+        <span className="rounded-md border border-[#ff3d81]/25 bg-[#ff3d81]/10 px-2 py-0.5 text-[10px] font-bold text-[#ffd7e5]/95">
           {position}
         </span>
         {left && right && onStartSit ? (

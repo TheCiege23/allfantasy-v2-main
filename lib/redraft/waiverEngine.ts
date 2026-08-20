@@ -319,19 +319,38 @@ export async function processWaiverWindow(
       payload: { claimId: r.claimId, result: r.status },
     })
   }
-  await events.emit(EVENT.WAIVER_WINDOW_PROCESSED, {
-    leagueId,
-    seasonId,
-    sport: season.sport ?? null,
-    leagueConcept: 'redraft',
-    actor: { type: 'system' },
-    source: 'engine:waiver',
-    payload: {
-      processed: results.length,
-      succeeded: results.filter((r) => r.status === 'approved').length,
-      failed: results.filter((r) => r.status !== 'approved').length,
-    },
-  })
+  // Only summarise a window that actually DID something.
+  //
+  // This is called on every waiver cron fire — every five minutes — and previously emitted a
+  // summary even when it processed no claims. On production 2026-08-20 that had produced
+  // 7,740 events reading `processed: 0`: 98.8% of the entire domain event store, ~288 per active
+  // league per day.
+  //
+  // The damage was not just volume. The intelligence projection categorises by type prefix, so each
+  // one incremented `waiverCount`, and the Decision OS evidence packet then told an AI model the
+  // league had hundreds of waiver events when the true number was zero. A heartbeat had been
+  // recorded as manager behaviour.
+  //
+  // The per-claim `WAIVER_PROCESSED` emits above already carry an `idempotencyKey`; this one had
+  // none, so nothing deduplicated it either. It now gets a deterministic key derived from the
+  // claims in the window — bounded rather than a full id list, so it cannot outgrow the column.
+  if (results.length > 0) {
+    const claimIds = results.map((r) => r.claimId).sort()
+    await events.emit(EVENT.WAIVER_WINDOW_PROCESSED, {
+      leagueId,
+      seasonId,
+      sport: season.sport ?? null,
+      leagueConcept: 'redraft',
+      actor: { type: 'system' },
+      source: 'engine:waiver',
+      idempotencyKey: `waiver.window:${seasonId}:${claimIds.length}:${claimIds[0]}:${claimIds[claimIds.length - 1]}`,
+      payload: {
+        processed: results.length,
+        succeeded: results.filter((r) => r.status === 'approved').length,
+        failed: results.filter((r) => r.status !== 'approved').length,
+      },
+    })
+  }
 
   return results
 }

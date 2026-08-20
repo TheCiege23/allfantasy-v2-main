@@ -74,6 +74,8 @@ export interface ManagerCommandCenterSnapshot {
   totalLeagues: number
   healthyLeagueCount: number
   atRiskLeagueCount: number
+  /** Phase 36: leagues whose retention risk cannot be assessed (no recorded events) — never bucketed as at-risk. */
+  insufficientDataLeagueCount: number
   unavailableLeagueCount: number
   leagueSummaries: ManagerCommandCenterLeagueSummary[]
   attentionQueue: DecisionOsAttentionSignal[]
@@ -88,6 +90,7 @@ function emptySnapshot(now: Date, warnings: string[]): ManagerCommandCenterSnaps
     totalLeagues: 0,
     healthyLeagueCount: 0,
     atRiskLeagueCount: 0,
+    insufficientDataLeagueCount: 0,
     unavailableLeagueCount: 0,
     leagueSummaries: [],
     attentionQueue: [],
@@ -129,6 +132,7 @@ export async function resolveManagerCommandCenterSnapshot(
 
   let healthyLeagueCount = 0
   let atRiskLeagueCount = 0
+  let insufficientDataLeagueCount = 0
   let unavailableLeagueCount = 0
   const leagueSummaries: ManagerCommandCenterLeagueSummary[] = []
   const attentionSignals: DecisionOsAttentionSignal[] = []
@@ -163,7 +167,13 @@ export async function resolveManagerCommandCenterSnapshot(
     }
 
     const { teamHealth, recommendations, leagueTrend } = snapshot
-    if (AT_RISK_RETENTION.has(teamHealth.retentionRisk) || teamHealth.isInactive) {
+    // Phase 36: insufficient_data wins over isInactive — isInactive is legitimately
+    // computed but derives from the SAME empty event stream, so bucketing it as
+    // at-risk would defeat the whole insufficient_data fix (real 8-league user
+    // showed 8/8 at-risk until this was corrected).
+    if (teamHealth.retentionRisk === 'insufficient_data') {
+      insufficientDataLeagueCount += 1
+    } else if (AT_RISK_RETENTION.has(teamHealth.retentionRisk) || teamHealth.isInactive) {
       atRiskLeagueCount += 1
     } else {
       healthyLeagueCount += 1
@@ -213,6 +223,7 @@ export async function resolveManagerCommandCenterSnapshot(
     totalLeagues: leagueIds.length,
     healthyLeagueCount,
     atRiskLeagueCount,
+    insufficientDataLeagueCount,
     unavailableLeagueCount,
     leagueSummaries,
     attentionQueue,

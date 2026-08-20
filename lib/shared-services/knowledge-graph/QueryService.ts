@@ -4,6 +4,24 @@
  * versioned persistence → return. No caller should read SignalStore/
  * SnapshotStore directly; this is the boundary every future OS module
  * (Trade OS, Manager OS, etc.) will eventually call through.
+ *
+ * ⚠️ VERIFIED 2026-08-09 (Slice 16) — THE GRAPH HAS NO WRITERS IN PRODUCTION.
+ *
+ * `SignalIngestionService`, `TradeSignalHook` and `WaiverSignalHook` exist but
+ * are referenced by nothing outside this package and its tests. A repo-wide
+ * search for callers returns zero. Consequently every read through this
+ * service resolves against an EMPTY signal store, and manager-behavior /
+ * player-exposure profiles are permanently unavailable in production.
+ *
+ * This is not currently a correctness bug: every live consumer degrades
+ * honestly (`DraftShadowService.resolveManagerTendency` returns
+ * `status: 'unavailable'` and pushes a real uncertainty line rather than
+ * fabricating tendencies). It IS a capability gap, and the important thing is
+ * that nobody builds a feature assuming these profiles carry real data.
+ *
+ * To make the graph real, the ingestion hooks must be invoked from the live
+ * trade-accept / trade-reject / waiver-processed paths. Until then, treat any
+ * "manager tendency" signal in this codebase as structurally absent.
  */
 
 import { defaultSignalStore, type SignalStore } from './SignalStore'

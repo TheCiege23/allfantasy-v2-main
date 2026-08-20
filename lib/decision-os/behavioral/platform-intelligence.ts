@@ -335,11 +335,13 @@ function buildRetentionDistribution(
   leagues: LeagueBehavioralIntelligence[],
   managers: ManagerBehavioralIntelligence[],
 ): PlatformRetentionDistribution {
-  const mc = { critical: 0, high: 0, medium: 0, low: 0 }
+  // Phase 36: insufficient_data is a coverage gap, not a risk tier — it is
+  // counted separately and never inflates the critical/high buckets.
+  const mc = { critical: 0, high: 0, medium: 0, low: 0, insufficient_data: 0 }
   for (const m of managers) mc[m.retentionRisk]++
   const tm = managers.length
 
-  const lc = { critical: 0, high: 0, medium: 0, low: 0 }
+  const lc = { critical: 0, high: 0, medium: 0, low: 0, insufficient_data: 0 }
   for (const l of leagues) lc[l.retentionRisk]++
   const tl = leagues.length
 

@@ -27,15 +27,20 @@ interface WaiverClaim {
 
 interface WaiverWireClientProps {
   leagueId: string
+  /** Slice 7 (Player Command Center deep-link): auto-open the claim panel for this player once the pool loads. */
+  preselectPlayerId?: string | null
 }
 
 type TabType = "available" | "myClaims" | "recommendations" | "watchlist"
 
-export function WaiverWireClient({ leagueId }: WaiverWireClientProps) {
+export function WaiverWireClient({ leagueId, preselectPlayerId = null }: WaiverWireClientProps) {
   const router = useRouter()
   const [players, setPlayers] = useState<Player[]>([])
   const [claims, setClaims] = useState<WaiverClaim[]>([])
-  const [faabBalance, setFaabBalance] = useState(100)
+  // Honesty pass: FAAB starts UNKNOWN, not at an invented $100. A fabricated
+  // budget let a broke manager see a full bar and submit claims the server
+  // rejects — and `||` swallowed a real $0 as "no value, use the default".
+  const [faabBalance, setFaabBalance] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [bidAmount, setBidAmount] = useState("")
@@ -94,9 +99,26 @@ export function WaiverWireClient({ leagueId }: WaiverWireClientProps) {
         console.log(`Loaded ${safePlayers.length} players`)
         setPlayers(safePlayers)
 
+        // Slice 7 — Command Center deep-link: auto-open the claim panel for
+        // the linked player when they're actually in this league's pool.
+        if (preselectPlayerId) {
+          const match = safePlayers.find((p: { id: string }) => p.id === preselectPlayerId)
+          if (match) {
+            setSelectedPlayer(match)
+            setActiveTab("available")
+          }
+        }
+
         const userClaims = claimsData.claims || []
         setClaims(userClaims)
-        setFaabBalance(stateData.faabBudget || stateData.balance || 100)
+        // Nullish coalescing (not ||) so a real $0 balance survives.
+        const resolvedFaab =
+          typeof stateData.faabBudget === 'number'
+            ? stateData.faabBudget
+            : typeof stateData.balance === 'number'
+              ? stateData.balance
+              : null
+        setFaabBalance(resolvedFaab)
       } catch (error) {
         console.error("Failed to load waiver data:", error)
         setError(error instanceof Error ? error.message : "Failed to load waiver wire")
@@ -143,7 +165,10 @@ export function WaiverWireClient({ leagueId }: WaiverWireClientProps) {
       return
     }
     
-    if (bid > faabBalance) {
+    // Client-side budget check only when the real balance is known. When it
+    // isn't, we let the server be the authority rather than validating against
+    // an invented number.
+    if (faabBalance != null && bid > faabBalance) {
       setError(`You only have $${faabBalance} remaining`)
       return
     }
@@ -200,7 +225,9 @@ export function WaiverWireClient({ leagueId }: WaiverWireClientProps) {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold">Waiver Wire</h1>
-              <p className="text-sm text-white/50">FAAB Budget: ${faabBalance}</p>
+              <p className="text-sm text-white/50">
+                {faabBalance != null ? `FAAB Budget: $${faabBalance}` : 'FAAB Budget: unavailable'}
+              </p>
             </div>
             <div className="flex items-center gap-4">
               <span className="text-sm text-white/50">
@@ -468,24 +495,26 @@ export function WaiverWireClient({ leagueId }: WaiverWireClientProps) {
                       value={bidAmount}
                       onChange={(e) => setBidAmount(e.target.value)}
                       min="0"
-                      max={faabBalance}
+                      max={faabBalance ?? undefined}
                       className="w-full rounded-lg border border-white/10 bg-black/50 px-4 py-2 text-white focus:border-cyan-500 focus:outline-none"
                       placeholder="Enter bid..."
                     />
                     <div className="mt-1 flex justify-between text-xs text-white/30">
-                      <span>Remaining: ${faabBalance}</span>
+                      <span>{faabBalance != null ? `Remaining: $${faabBalance}` : 'Remaining: unavailable'}</span>
                       <button
                         onClick={() => setBidAmount("0")}
                         className="text-cyan-400 hover:underline"
                       >
                         $0
                       </button>
-                      <button
-                        onClick={() => setBidAmount(faabBalance.toString())}
-                        className="text-cyan-400 hover:underline"
-                      >
-                        ${faabBalance}
-                      </button>
+                      {faabBalance != null && (
+                        <button
+                          onClick={() => setBidAmount(faabBalance.toString())}
+                          className="text-cyan-400 hover:underline"
+                        >
+                          ${faabBalance}
+                        </button>
+                      )}
                     </div>
                   </div>
 

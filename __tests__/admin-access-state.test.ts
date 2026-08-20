@@ -108,4 +108,25 @@ describe("admin access state", () => {
     })
     expect(mocks.getServerSession).not.toHaveBeenCalled()
   })
+
+  it("passes authMethod through for a shared-password admin cookie (no email/id)", async () => {
+    mocks.cookieGet.mockReturnValueOnce({ value: "signed-cookie" })
+    mocks.verifyAdminSessionCookie.mockReturnValueOnce({
+      authenticated: true,
+      role: "admin",
+      authMethod: "password",
+      // deliberately no id / email — a shared-password login has no per-person identity
+    })
+
+    const { getAdminAccessState } = await import("@/lib/adminAuth")
+    const state = await getAdminAccessState()
+
+    expect(state.status).toBe("admin")
+    if (state.status === "admin") {
+      expect(state.source).toBe("admin_session")
+      expect(state.user).toMatchObject({ role: "admin", authMethod: "password" })
+      expect(state.user.email).toBeUndefined()
+      expect(state.user.id).toBeUndefined()
+    }
+  })
 })

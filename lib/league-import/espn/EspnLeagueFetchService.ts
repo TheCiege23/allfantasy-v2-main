@@ -240,6 +240,19 @@ export function parseEspnSourceInput(sourceInput: string): { leagueId: string; s
   return { leagueId, season }
 }
 
+const ESPN_FETCH_RETRIES = 3
+const ESPN_FETCH_TIMEOUT_MS = 12000
+
+const espnFetchDelay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Resilient ESPN GET: per-request timeout plus bounded retries with exponential
+ * backoff on TRANSIENT failures only (network error / timeout / 5xx / 429).
+ * Definitive statuses (401/403/404/other 4xx) throw EspnApiResponseError
+ * immediately so the cookie-fallback and private-league messaging in
+ * loadEspnLeagueRaw keep their exact semantics. Exhausted retries throw a
+ * plain Error with an honest attempt count — never a silent null.
+ */
 async function fetchEspnJsonByUrl(
   url: string,
   cookieHeader?: string | null,
@@ -256,17 +269,46 @@ async function fetchEspnJsonByUrl(
         ...extraHeaders,
       }
 
-  const response = await fetch(url, {
-    headers,
-    cache: 'no-store',
-  })
+  let lastError: unknown = null
+  for (let attempt = 0; attempt < ESPN_FETCH_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), ESPN_FETCH_TIMEOUT_MS)
+    let response: Response
+    try {
+      response = await fetch(url, {
+        headers,
+        cache: 'no-store',
+        signal: controller.signal,
+      })
+    } catch (err) {
+      clearTimeout(timer)
+      lastError = err
+      if (attempt < ESPN_FETCH_RETRIES - 1) {
+        await espnFetchDelay(300 * 2 ** attempt)
+        continue
+      }
+      break
+    }
+    clearTimeout(timer)
 
-  if (!response.ok) {
+    if (response.ok) {
+      return response.json()
+    }
+
+    if ((response.status >= 500 || response.status === 429) && attempt < ESPN_FETCH_RETRIES - 1) {
+      await espnFetchDelay(300 * 2 ** attempt)
+      continue
+    }
+
     const body = await response.text()
     throw new EspnApiResponseError(response.status, body || response.statusText)
   }
 
-  return response.json()
+  throw new Error(
+    `ESPN request failed after ${ESPN_FETCH_RETRIES} attempts (${
+      lastError instanceof Error ? lastError.message : 'network error'
+    }).`,
+  )
 }
 
 async function fetchEspnJson(

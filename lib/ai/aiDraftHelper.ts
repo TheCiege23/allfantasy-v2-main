@@ -57,6 +57,13 @@ export type DraftWarRoomOutput = {
   /** True when LLM unavailable or parse failed — UI may show softer copy */
   fallback: boolean
   provider?: 'openai' | 'deepseek' | 'deterministic'
+  /**
+   * Slice 16 — PER-FIELD provenance. The object-level `provider` could not
+   * express that `bestPick`/`confidence`/`risk` are engine output while the
+   * narrative fields may be model output. Decision fields are always
+   * 'deterministic'; only prose is ever 'ai'.
+   */
+  fieldSources?: Record<string, 'deterministic' | 'deterministic_ranked' | 'ai'>
 }
 
 export type DraftCompareInput = {
@@ -324,20 +331,42 @@ export async function runDraftWarRoomRecommendation(input: DraftWarRoomInput): P
   }
 
   const strategyTip = typeof r.strategyTip === 'string' ? r.strategyTip.slice(0, 280) : base.strategyTip
-  const riskRaw = String(r.risk ?? '').toLowerCase()
-  const risk: 'low' | 'medium' | 'high' =
-    riskRaw === 'low' || riskRaw === 'high' || riskRaw === 'medium' ? riskRaw : base.risk
+
+  // HONESTY PASS (Slice 16): the model used to OVERWRITE the deterministic
+  // `risk` label and replace `alternatives` with players of its own choosing —
+  // while the result was still stamped with a single object-level `provider`,
+  // so nothing downstream could tell that `bestPick`/`confidence` were engine
+  // output but `risk`/`alternatives` were model output. A board badge reading
+  // "risky" could contradict the engine's own confidence.
+  //
+  // Now, matching the pattern TradeAnalyzerAIService already established
+  // ("do not override the fairness score"):
+  //   • `risk` stays DETERMINISTIC. It is derived from the engine's own
+  //     uncertainty/caveats/confidence and the model cannot move it.
+  //   • `riskNote` may be model prose — it explains, it doesn't decide.
+  //   • `alternatives` may be REORDERED by the model but must be a SUBSET of
+  //     the engine's ranked alternates. The model cannot introduce a player
+  //     the engine never surfaced.
+  const risk = base.risk
   const riskNote = typeof r.riskNote === 'string' ? r.riskNote.slice(0, 280) : base.riskNote
 
+  const deterministicAlternates = new Map(base.alternatives.map((p) => [p.name, p]))
   const altNames = Array.isArray(r.alternativeNames) ? r.alternativeNames : []
   const alternatives: WarRoomPlayer[] = []
   for (const nm of altNames) {
-    const found = findPlayer(available, String(nm))
-    if (found && found.name !== base.bestPick.name) alternatives.push(found)
+    const candidate = deterministicAlternates.get(String(nm))
+    if (candidate && candidate.name !== base.bestPick.name && !alternatives.includes(candidate)) {
+      alternatives.push(candidate)
+    }
     if (alternatives.length >= 3) break
   }
-  if (alternatives.length === 0) {
-    alternatives.push(...base.alternatives)
+  // Anything the engine ranked that the model omitted still belongs on the
+  // board — the model may reprioritize, not silently drop.
+  for (const candidate of base.alternatives) {
+    if (alternatives.length >= 3) break
+    if (!alternatives.includes(candidate) && candidate.name !== base.bestPick.name) {
+      alternatives.push(candidate)
+    }
   }
 
   return {
@@ -349,6 +378,17 @@ export async function runDraftWarRoomRecommendation(input: DraftWarRoomInput): P
     alternatives,
     fallback: false,
     provider: llm.provider,
+    // Per-FIELD provenance, so a consumer never mistakes model prose for
+    // engine output (the object-level `provider` alone could not express this).
+    fieldSources: {
+      bestPick: 'deterministic',
+      confidence: 'deterministic',
+      risk: 'deterministic',
+      alternatives: 'deterministic_ranked',
+      reasoning: Array.isArray(r.reasoning) ? 'ai' : 'deterministic',
+      strategyTip: typeof r.strategyTip === 'string' ? 'ai' : 'deterministic',
+      riskNote: typeof r.riskNote === 'string' ? 'ai' : 'deterministic',
+    },
   }
 }
 

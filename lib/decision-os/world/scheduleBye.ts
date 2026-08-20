@@ -31,7 +31,14 @@ const SCHEDULE_STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000
 export type ScheduleHomeAway = 'home' | 'away'
 
 export interface ScheduleContextProvenance {
-  sourceModel: 'FantasyScheduleGame' | 'GameSchedule' | null
+  /**
+   * `SportsGame` joined the union in slice 9: a sync process had been writing
+   * that table while no schedule consumer read it, so multi-sport and NCAAF
+   * timing degraded to `schedule_unavailable` despite the rows existing. The
+   * reader was widened; this provenance type was not, so every row sourced from
+   * SportsGame failed to typecheck on assignment.
+   */
+  sourceModel: 'FantasyScheduleGame' | 'GameSchedule' | 'SportsGame' | null
   source: string | null
 }
 

@@ -51,16 +51,16 @@ function ToolLinkCard({
   return (
     <Link
       href={href}
-      className="group flex flex-col rounded-xl border border-white/[0.08] bg-[#07071a] p-3 transition hover:border-cyan-500/20 hover:bg-white/[0.03]"
+      className="group flex flex-col rounded-xl border border-white/[0.08] bg-[#07071a] p-3 transition hover:border-[#ff3d81]/20 hover:bg-white/[0.03]"
       data-testid={`war-room-quick-${title.toLowerCase().replace(/\s+/g, '-')}`}
     >
       <div className="flex items-start gap-2">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-cyan-400/80" strokeWidth={2} />
+        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-[#ff3d81]/80" strokeWidth={2} />
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-white">{title}</p>
           <p className="mt-1 text-[11px] leading-snug text-white/45">{description}</p>
         </div>
-        <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:text-cyan-400/70" />
+        <ArrowRight className="h-4 w-4 shrink-0 text-white/25 transition group-hover:text-[#ff3d81]/70" />
       </div>
     </Link>
   )
@@ -74,7 +74,7 @@ function GatedToolCard({ tool }: { tool: GatedTool }) {
         <p className="mt-1 text-[11px] text-white/45">{tool.description}</p>
         <Link
           href={tool.href}
-          className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-cyan-400/90 hover:text-cyan-300"
+          className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-[#ff3d81]/90 hover:text-[#ff9ec0]"
         >
           {tool.cta}
           <ArrowRight className="h-3.5 w-3.5" />
@@ -315,7 +315,7 @@ export function WarRoomTab({ league, sport, dashboardEmbed = false }: WarRoomTab
                 type="button"
                 onClick={() => setMetaFrame(f)}
                 className={`rounded-md px-2 py-1 text-[10px] font-semibold ${
-                  metaFrame === f ? 'bg-cyan-500/20 text-cyan-100' : 'text-white/45 hover:text-white/70'
+                  metaFrame === f ? 'bg-[#ff3d81]/20 text-[#ffd7e5]' : 'text-white/45 hover:text-white/70'
                 }`}
               >
                 {f}

@@ -1,5 +1,11 @@
 # Waiver Shadow-Compare — Multi-League Generalization Validation (Phase 16)
 
+> **STALE-MODULE NOTE (2026-08-09, AF_TRADE_UNIFICATION_BRIEF Phase 0.5):** the module
+> validated here — `lib/decision-os/waiver/sharedServiceShadowCompare.ts` — **does not
+> exist in the repo**. The 39/39 result is historical evidence, not reproducible from
+> `main`. The live waiver shadow is `lib/decision-os/waiver/shadow.ts` wired into
+> `app/api/waiver-ai/engine/route.ts`.
+
 **Status: Path A executed. 3 genuinely distinct real rosters validated within the one real-Sleeper-league environment available. 39/39 (100%) real telemetry events `equivalent`. No new bugs found — no code changed this phase. Readiness classification: B — continue shadow validation (upgraded confidence, sample size still real but modest).**
 
 ## Mandatory decision: Path A vs Path B

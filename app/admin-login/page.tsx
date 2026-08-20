@@ -9,7 +9,7 @@ export const metadata = {
 
 function AdminLoginFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0f1a] text-white/60 text-sm">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-b from-white to-[#EEF1F7] text-[13px] text-[color:var(--muted)]">
       Loading…
     </div>
   )

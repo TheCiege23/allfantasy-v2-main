@@ -5,6 +5,7 @@ import { resolveNormalizedPlayerSportsProfiles } from '@/lib/sports-data-normali
 import type { NormalizedScoringRules } from '@/lib/league-context-engine/types'
 import type { SupportedSport } from '@/lib/sport-scope'
 import { effectiveFantasyPoints, collectProjectionNotes } from '@/lib/projection-engine'
+import { buildNameIndex, findVerified } from '@/lib/player-match/verifiedNameMatch'
 
 export type WaiverProjectionSlice = {
   effectiveProjection: number | null
@@ -65,11 +66,28 @@ export async function enrichWaiverCandidatesWithProjections(args: {
     includeClearSportsProjections: players.length <= 36,
   })
 
-  const byName = new Map(batch.players.map((p) => [p.player.name.toLowerCase(), p]))
+  // Slice 15 (wrong-row joins): keyed on lowercased NAME alone while `row`
+  // (fetched by id) carries position and team. A name collision attached
+  // another athlete's projection/weather/news to this waiver candidate.
+  const profileIndex = buildNameIndex(
+    batch.players.map((p) => ({
+      name: p.player.name,
+      position: p.player.position?.code ?? null,
+      // NormalizedTeamRef is an object ({externalId, abbrev, name}) — passing it
+      // whole stringified to "[OBJECT OBJECT]" for every row, so team narrowing
+      // never matched and ambiguous collisions produced no enrichment.
+      team: p.player.team?.abbrev ?? null,
+      profile: p,
+    })),
+  )
   for (const x of withRec) {
     const row = byId.get(x.recordId)
     if (!row) continue
-    const prof = byName.get(row.name.toLowerCase())
+    const prof = findVerified(profileIndex, {
+      name: row.name,
+      position: row.position ?? null,
+      team: row.team ?? null,
+    })?.profile
     const eff = effectiveFantasyPoints(prof)
     const notes = collectProjectionNotes(prof)
     out.set(x.playerId, {

@@ -74,9 +74,64 @@ function resolvePort() {
   return "3000"
 }
 
+/**
+ * Refuse to boot the e2e server against a database that is not positively known to be safe.
+ *
+ * WHY THIS EXISTS
+ * `resolveDatabaseUrl()` above falls back to `.env.local`, and in this repo `.env.local` is
+ * PRODUCTION (`ep-curly-block/neondb`). So `npx playwright test` with a clean shell pointed the
+ * entire e2e suite at production — and the auth specs sign up real accounts there, because
+ * `e2e/helpers/auth-flow.ts` registers `e2e.<Date.now()>@example.com` with a password hardcoded
+ * in this PUBLIC repo.
+ *
+ * It already happened: production holds 108 such accounts, created across five run-days between
+ * 2026-04-26 and 2026-07-02, all of which accepted that published password. Together with the
+ * fixture seeds, 184 of 256 production accounts (72%) were reachable with a known credential.
+ *
+ * Note that `playwright.config.ts` passes `DATABASE_URL: '' ` when the shell has none, and
+ * `@next/env` treats an empty string as unset — so even the explicit-looking env block in that
+ * config does not stop the fallback. The check has to live here, where the URL is actually
+ * resolved, and it has to fail CLOSED: an unrecognised target is refused, not allowed.
+ */
+function assertSafeE2ETarget(url) {
+  const identity = require(path.resolve(__dirname, "db-target-identity.cjs"))
+  const target = identity.identifyTarget(url)
+  // Credential-free description only — this repo is public.
+  console.log(`[playwright-dev-server] database target: ${identity.describeTarget(url)}`)
+
+  if (target.kind === "safe") return
+
+  if (process.env.ALLOW_PROD_E2E === "1") {
+    console.warn(
+      `[playwright-dev-server] ⚠ ALLOW_PROD_E2E=1 — running e2e against a ${target.kind} target. ` +
+        `The auth specs WILL create real accounts with a password published in this repo.`,
+    )
+    return
+  }
+
+  const reason =
+    target.kind === "production"
+      ? "this is PRODUCTION"
+      : `this target is ${target.kind}, and unrecognised targets are refused`
+
+  console.error(
+    `\n[playwright-dev-server] REFUSED TO START: ${reason} ` +
+      `(${identity.describeTarget(url)}).\n\n` +
+      `  The e2e suite signs up accounts with a password hardcoded in this public repo, so\n` +
+      `  running it against a real database publishes working logins for that environment.\n` +
+      `  Production already holds 108 accounts from earlier unguarded runs.\n\n` +
+      `  Point at a safe database and re-run, e.g.:\n` +
+      `    $env:DATABASE_URL = (Get-Content .env.test | Select-String '^DATABASE_URL=').Line.Substring(13)\n\n` +
+      `  See KNOWN_SAFE_TARGETS in scripts/db-target-identity.cjs; confirm with npm run db:target.\n` +
+      `  To override deliberately, set ALLOW_PROD_E2E=1.\n`,
+  )
+  process.exit(1)
+}
+
 const port = resolvePort()
 const envDb = resolveDatabaseUrl()
 const normalizedDb = normalizeSupabaseSessionPooler(envDb)
+assertSafeE2ETarget(normalizedDb)
 const distDir = process.env.AF_NEXT_DIST_DIR || process.env.PLAYWRIGHT_DIST_DIR || `.next-playwright-${port}`
 const childEnv = {
   ...process.env,

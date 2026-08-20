@@ -341,7 +341,7 @@ export function TeamSettingsPanel({ leagueId, canEdit }: { leagueId: string; can
                           </span>
                         ) : null}
                         {team.isCoCommissioner ? (
-                          <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-cyan-200">
+                          <span className="rounded bg-[#ff3d81]/20 px-1.5 py-0.5 text-[9px] font-bold uppercase text-[#ffb8d1]">
                             Co-comm
                           </span>
                         ) : null}

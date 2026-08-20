@@ -12,6 +12,8 @@ export type AdminUser = {
   name?: string;
   username?: string;
   role?: string;
+  /** Audit metadata: how the admin session was established (e.g. "password"). Not an identity. */
+  authMethod?: string;
 };
 
 export type AdminAccessState =
@@ -102,6 +104,7 @@ function getCookieAdminAccessState(): AdminAccessState | null {
     email: payload.email,
     name: payload.name,
     role: payload.role,
+    authMethod: payload.authMethod,
   };
 
   return { status: "admin", source: "admin_session", user };

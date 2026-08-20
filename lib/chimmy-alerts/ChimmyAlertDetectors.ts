@@ -7,6 +7,91 @@ function minutesUntil(targetIso: string | null | undefined, now: Date): number |
   return Math.round((target.getTime() - now.getTime()) / 60000)
 }
 
+/**
+ * Designations severe enough that a manager needs to act before lock. `Questionable` is
+ * deliberately excluded from the urgent tier: it fires constantly, and an alert that cries
+ * wolf every Sunday trains people to ignore the one that matters.
+ */
+const URGENT_DESIGNATIONS = new Set(['out', 'doubtful', 'ir', 'suspension', 'suspended'])
+
+function isUrgentDesignation(designation: string): boolean {
+  return URGENT_DESIGNATIONS.has(String(designation ?? '').trim().toLowerCase())
+}
+
+/**
+ * The Sunday-panic detector: a rostered STARTER carries an urgent injury designation and
+ * lock is approaching.
+ *
+ * This is the alert the whole delivery effort exists for. It fires only on starters —
+ * an injured bench player is information, not an emergency — and only on designations that
+ * actually threaten availability.
+ *
+ * Urgency scales with time to lock rather than being constant, because the same fact is a
+ * different problem at 45 minutes than at two days.
+ */
+export function detectInjuredStarterAlerts(context: ChimmyAlertContext): ChimmyAlertCandidate[] {
+  const out: ChimmyAlertCandidate[] = []
+  const now = context.now ?? new Date()
+  const signals = context.signalBundle ?? {}
+  const injured = signals.injuredStarters ?? []
+  if (injured.length === 0) return out
+
+  for (const player of injured) {
+    if (!isUrgentDesignation(player.designation)) continue
+
+    // The player's OWN kickoff is his lock. A league-wide time would be wrong for most of a
+    // roster — a Thursday-night starter locks Thursday, a 4:25pm starter locks Sunday
+    // afternoon. Fall back to a league-level lock only when the schedule has no game for him.
+    const mins = minutesUntil(player.lockAt ?? signals.lineupLockAt, now)
+
+    // Past lock there is nothing the manager can do, so saying it would be noise.
+    if (mins != null && mins < 0) continue
+
+    const urgencySignal = mins == null ? 70 : mins <= 60 ? 99 : mins <= 180 ? 88 : mins <= 720 ? 74 : 60
+
+    const where = player.platform
+      ? `Set your lineup in ${player.platform}.`
+      : 'Update your lineup.'
+    const swap = player.replacement
+      ? player.replacement.projectedPoints != null
+        ? ` ${player.replacement.playerName} is your best bench option (${player.replacement.projectedPoints.toFixed(1)} projected).`
+        : ` ${player.replacement.playerName} is available on your bench.`
+      : ''
+    // Staleness is stated, never silently dropped — an old designation may no longer hold.
+    const caveat = player.stale ? ' This designation has not updated recently — check before acting.' : ''
+
+    out.push({
+      class: 'lineup',
+      type: 'injured_starter_before_lock',
+      title: `${player.playerName} is ${player.designation} and still starting`,
+      message:
+        (mins != null
+          ? `${player.playerName}${player.position ? ` (${player.position})` : ''} is listed ${player.designation} with ${mins} minutes to lock in ${player.leagueName ?? 'your league'}.`
+          : `${player.playerName}${player.position ? ` (${player.position})` : ''} is listed ${player.designation} and is in your starting lineup in ${player.leagueName ?? 'your league'}.`) +
+        swap +
+        ` ${where}` +
+        caveat,
+      confidenceScore: player.stale ? 70 : 94,
+      urgencySignal,
+      urgencyDeadlineAt: player.lockAt ?? signals.lineupLockAt ?? null,
+      roleScope: 'member',
+      // Short cooldown near lock: this is the one alert worth repeating.
+      repeatCooldownMinutes: mins != null && mins <= 90 ? 20 : 120,
+      leagueId: player.leagueId,
+      metadata: {
+        minutesToLock: mins,
+        designation: player.designation,
+        detail: player.detail ?? null,
+        platform: player.platform ?? null,
+        replacement: player.replacement ?? null,
+        stale: Boolean(player.stale),
+      },
+    })
+  }
+
+  return out
+}
+
 export function detectLineupAlerts(context: ChimmyAlertContext): ChimmyAlertCandidate[] {
   const out: ChimmyAlertCandidate[] = []
   const now = context.now ?? new Date()
@@ -311,6 +396,9 @@ export function detectAdminIntegrityAlerts(context: ChimmyAlertContext): ChimmyA
 
 export function detectAlertCandidates(context: ChimmyAlertContext): ChimmyAlertCandidate[] {
   return [
+    // Injured-starter first: it is the highest-urgency class this engine produces, and
+    // ordering makes the intent legible even though scoring, not order, decides ranking.
+    ...detectInjuredStarterAlerts(context),
     ...detectLineupAlerts(context),
     ...detectWaiverAlerts(context),
     ...detectTradeAlerts(context),

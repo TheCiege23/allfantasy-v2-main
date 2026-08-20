@@ -10,6 +10,7 @@ import type { RedraftLineupPlayer } from '@/lib/redraft/lineupValidation'
 import type { DecisionProvenance } from '@/lib/decision-os/core/decision'
 import type { LineupWorld, LockState } from './world'
 import type { LineupWarehouseFacts } from './warehouseFacts'
+import type { LineupSignalFacts } from './signalFacts'
 
 export interface LineupDCO {
   decision_type: 'manager.lineup.set'
@@ -32,6 +33,12 @@ export interface LineupDCO {
    * which is different from loaded-but-unavailable (a LineupWarehouseFacts with nulls).
    */
   warehouse?: LineupWarehouseFacts
+  /**
+   * F2.2–F2.7 signal grounding (injury / schedule / projections / weather /
+   * news) — ENRICHMENT ONLY, same contract as `warehouse`: memo/uncertainty/
+   * explainability only, never read by the deterministic rules.
+   */
+  signals?: LineupSignalFacts
 }
 
 export interface LineupDCOInput {
@@ -47,6 +54,8 @@ export interface LineupDCOInput {
   scanIncomplete?: boolean
   /** Optional F2.9/F2.10 warehouse grounding — see LineupDCO.warehouse. */
   warehouse?: LineupWarehouseFacts
+  /** Optional F2.2–F2.7 signal grounding — see LineupDCO.signals. */
+  signals?: LineupSignalFacts
 }
 
 /** Pure, read-only DCO assembly with honest provenance + completeness. */
@@ -57,6 +66,8 @@ export function buildLineupDCO(input: LineupDCOInput): LineupDCO {
   if (input.projectionConfidence == null) uncertainty.push('Projection confidence unavailable.')
   // Warehouse grounding gaps surface as uncertainty — never as fabricated history (P2).
   if (input.warehouse) uncertainty.push(...input.warehouse.uncertainty)
+  // Signal-layer gaps surface the same way (F2.2–F2.7 wiring; P2 unchanged).
+  if (input.signals) uncertainty.push(...input.signals.uncertainty)
 
   // Weakest required input drives completeness/provenance (honesty contract).
   const weakest: DecisionProvenance = input.scanIncomplete
@@ -78,5 +89,6 @@ export function buildLineupDCO(input: LineupDCOInput): LineupDCO {
     uncertainty,
     simulation_available: false, // Slice 1 placeholder (Art. XVII wired in a later slice)
     ...(input.warehouse ? { warehouse: input.warehouse } : {}),
+    ...(input.signals ? { signals: input.signals } : {}),
   }
 }

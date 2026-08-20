@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { encrypt } from '@/lib/league-auth-crypto';
+import { readYahooOAuthState, YAHOO_STATE_COOKIE_NAMES } from '@/lib/yahoo/oauthConfig'
 
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
@@ -32,7 +33,10 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/leagues?error=no_code', req.url));
   }
 
-  const storedState = req.cookies.get('yahoo_league_oauth_state')?.value;
+  // Accept EITHER historical cookie. Once both entry points share one redirect_uri,
+  // a round-trip started by the other flow lands here, and a round-trip already in
+  // flight when this shipped carries the other name.
+  const storedState = readYahooOAuthState(req.cookies);
   if (!storedState || storedState !== state) {
     console.error('[Yahoo Callback] State mismatch');
     return NextResponse.redirect(new URL('/leagues?error=invalid_state', req.url));
@@ -79,7 +83,8 @@ export async function GET(req: NextRequest) {
     });
 
     const response = NextResponse.redirect(new URL('/leagues?success=yahoo_connected', req.url));
-    response.cookies.delete('yahoo_league_oauth_state');
+    // Clear both names -- either could have carried this round-trip.
+    for (const name of YAHOO_STATE_COOKIE_NAMES) response.cookies.delete(name);
     return response;
   } catch (err: any) {
     console.error('[Yahoo Callback] Error:', err);

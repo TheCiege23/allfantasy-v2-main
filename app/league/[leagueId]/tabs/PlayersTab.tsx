@@ -453,7 +453,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               data-testid={`players-tab-subtab-${tab.id}`}
               className={`rounded-lg border px-3 py-1.5 text-[11px] font-semibold transition ${
                 activeSubtab === tab.id
-                  ? 'border-cyan-500/60 bg-cyan-500/20 text-cyan-100'
+                  ? 'border-[#ff3d81]/60 bg-[#ff3d81]/20 text-[#ffd7e5]'
                   : 'border-white/10 bg-white/[0.03] text-white/55 hover:border-white/25 hover:text-white/80'
               }`}
             >
@@ -495,7 +495,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               onClick={() => setPos(p)}
               className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
                 pos === p
-                  ? 'border-cyan-500 bg-cyan-500/20 text-cyan-400'
+                  ? 'border-[#ff3d81] bg-[#ff3d81]/20 text-[#ff3d81]'
                   : 'border-white/10 bg-white/5 text-white/50 hover:border-white/20'
               }`}
               data-testid={`players-tab-pos-${p}`}
@@ -569,14 +569,14 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
               onClick={toggle}
               className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition ${
                 on
-                  ? 'border-cyan-500/50 bg-cyan-500/15 text-cyan-200'
+                  ? 'border-[#ff3d81]/50 bg-[#ff3d81]/15 text-[#ffb8d1]'
                   : 'border-white/10 bg-transparent text-white/45 hover:border-white/20'
               }`}
               data-testid={`players-tab-toggle-${key}`}
             >
               <span
                 className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] ${
-                  on ? 'border-cyan-400 bg-cyan-500 text-black' : 'border-white/25'
+                  on ? 'border-[#ff3d81] bg-[#ff3d81] text-black' : 'border-white/25'
                 }`}
               >
                 {on ? '✓' : ''}
@@ -635,7 +635,7 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
             <div className="flex py-1 text-[9px] font-semibold uppercase tracking-wide text-white/35">
               <div className="w-8 shrink-0" />
               <div className="w-[200px] shrink-0">Player</div>
-              <div className="w-14 shrink-0 text-right text-cyan-300/90">PTS</div>
+              <div className="w-14 shrink-0 text-right text-[#ff9ec0]/90">PTS</div>
               <div className="w-[120px] shrink-0 text-center">Rushing</div>
               <div className="w-[160px] shrink-0 text-center">Receiving</div>
               <div className="min-w-0 flex-1 text-center">Passing</div>
@@ -713,8 +713,8 @@ export function PlayersTab({ league, onPlayerClick, sport }: PlayersTabProps) {
                       onClick={() => toggleWatchPlayer(p.id)}
                       className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] transition ${
                         wlIds.has(p.id)
-                          ? 'border-cyan-500/50 bg-cyan-500/20 text-cyan-200'
-                          : 'border-white/20 text-white/60 hover:border-cyan-500/40'
+                          ? 'border-[#ff3d81]/50 bg-[#ff3d81]/20 text-[#ffb8d1]'
+                          : 'border-white/20 text-white/60 hover:border-[#ff3d81]/40'
                       }`}
                       aria-label={wlIds.has(p.id) ? 'Remove from watchlist' : 'Add to watchlist'}
                       title="Watchlist"

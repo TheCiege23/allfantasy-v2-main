@@ -5,6 +5,7 @@ import {
   buildSurvivorSettingsSnapshotPatch,
   normalizeSurvivorFoundationSettings,
 } from '../lib/survivor/normalizeSurvivorSettings'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const prisma = new PrismaClient()
 
@@ -172,6 +173,10 @@ async function seedLeague(input: { leagueId: string; name: string; commissionerP
 }
 
 async function main() {
+  // Fail closed before the first write: these fixtures create login accounts whose password
+  // is hardcoded in this public repo, so seeding a real environment publishes credentials.
+  assertSafeSeedTarget('seed-survivor-phase2-runtime')
+
   const passwordHash = await bcrypt.hash(SURVIVOR_PHASE2_RUNTIME_SEED.password, 10)
   const generated = [...generatedUsers('sp2-host', SURVIVOR_PHASE2_RUNTIME_SEED.castSize), ...generatedUsers('sp2-player', SURVIVOR_PHASE2_RUNTIME_SEED.castSize)]
   for (const user of [...coreUsers, ...generated]) await upsertUser(user, passwordHash)

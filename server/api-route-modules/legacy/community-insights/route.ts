@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { listInjuryFacts, type InjuryFactListItem } from '@/lib/injuries/injuryReadPort'
 import { getOpenAIRouteClient } from '@/lib/ai/openai-route-client'
 import { requireAuthOrOrigin, forbiddenResponse } from '@/lib/api-auth'
 
@@ -21,7 +22,7 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/community-insights", to
 
   try {
     let recentNews: any[] = []
-    let recentInjuries: any[] = []
+    let recentInjuries: InjuryFactListItem[] = []
 
     const [newsResult, injuryResult] = await Promise.allSettled([
       prisma.sportsNews.findMany({
@@ -31,13 +32,13 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/community-insights", to
         orderBy: { publishedAt: 'desc' },
         take: 20,
       }),
-      prisma.sportsInjury.findMany({
-        where: {
-          status: { in: ['Out', 'Doubtful', 'Questionable', 'IR'] },
-          updatedAt: { gte: new Date(Date.now() - 48 * 60 * 60 * 1000) },
-        },
-        orderBy: { updatedAt: 'desc' },
-        take: 10,
+      // Slice 18 follow-on — canonical injury read port (one row per player,
+      // TTL-respected, freshest source wins) instead of an ad-hoc 48h query.
+      listInjuryFacts({
+        sport: 'NFL',
+        statuses: ['Out', 'Doubtful', 'Questionable', 'IR'],
+        maxAgeHours: 48,
+        limit: 10,
       }),
     ])
 
@@ -50,7 +51,7 @@ export const GET = withApiUsage({ endpoint: "/api/legacy/community-insights", to
     }
 
     if (injuryResult.status === 'fulfilled') {
-      recentInjuries = injuryResult.value
+      recentInjuries = injuryResult.value.facts
       if (recentInjuries.length > 0) sourcesUsed.push('injuries')
     } else {
       errors.push(`injuries: ${String(injuryResult.reason)}`)

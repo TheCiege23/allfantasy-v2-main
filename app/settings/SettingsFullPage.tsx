@@ -468,10 +468,16 @@ export default function SettingsFullPage() {
     if (deleteConfirm !== "DELETE") return
     setDeleteBusy(true)
     try {
-      const res = await fetch("/api/user/delete", { method: "POST" })
+      const res = await fetch("/api/user/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      })
       if (res.ok) {
         setDeleteOpen(false)
         setDeleteConfirm("")
+        // Account PII is erased + auth revoked — sign the user out and leave.
+        window.location.href = "/api/auth/signout?callbackUrl=/"
       }
     } finally {
       setDeleteBusy(false)

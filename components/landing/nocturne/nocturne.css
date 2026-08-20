@@ -6,7 +6,10 @@
  * `--color-primary` variable family). Ported from the design handoff
  * `design-system/nocturne-styles.css` + `reference.html` (direction "1a").
  *
- * Dark-theme only by design — this page does not need a light mode.
+ * Theme-aware: the base block below is the dark palette (and no-data-mode
+ * fallback); `html[data-mode="light"]` and `html[data-mode="legacy"]` blocks
+ * re-map the scoped color tokens so the landing follows the app-wide theme
+ * selector (lib/theme) — Light, Dark, and AF Legacy.
  */
 
 .nocturne {
@@ -17,6 +20,10 @@
   --color-accent: #9184d9;
   --color-accent-2: #a7a1db;
   --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+  /* Sticky-nav translucent ground — tokenized so it flips with the theme
+     (was a hard-coded dark rgba inline in the component). */
+  --color-nav-bg: rgba(22, 24, 38, 0.72);
+  --color-check: #7ee081; /* feature-list check; darkened in light mode for contrast */
 
   /* ── Neutral ramp ────────────────────────────────────────────────── */
   --color-neutral-100: #f3f5fe;
@@ -69,6 +76,96 @@
   line-height: 1.55;
   font-weight: 400;
   -webkit-font-smoothing: antialiased;
+}
+
+/* ── Theme modes ─────────────────────────────────────────────────────────
+ * The base `.nocturne` block above is the DARK palette (also the fallback if
+ * no data-mode is present). These blocks re-map the scoped color tokens for the
+ * app's other two modes, keyed off the same `<html data-mode>` the rest of the
+ * app uses (lib/theme resolveEffectiveDataMode → 'light' | 'dark' | 'legacy').
+ * Structural tokens (radii, font, layout) stay on the base block and are shared.
+ * Purple identity is kept for light + dark; AF Legacy adopts the app's cyan-on-
+ * navy so "AF mode" reads as visibly distinct. */
+html[data-mode="light"] .nocturne {
+  --color-bg: #f7f8fb;
+  --color-surface: #ffffff;
+  --color-text: #0b0f1a;
+  --color-accent: #6152c9;
+  --color-accent-2: #6f68a8;
+  --color-nav-bg: rgba(255, 255, 255, 0.82);
+  --color-check: #2f9e44;
+
+  --color-neutral-100: #ffffff;
+  --color-neutral-200: #12141c;
+  --color-neutral-300: #2b2f3b;
+  --color-neutral-400: #444a58;
+  --color-neutral-500: #565c6b;
+  --color-neutral-600: #6b7180;
+  --color-neutral-700: #9298a6;
+  --color-neutral-800: #e3e6ee;
+  --color-neutral-900: #f0f2f8;
+
+  --color-accent-100: #2a2350; /* dark text on the light accent chip (tag-accent) */
+  --color-accent-200: #efecfd;
+  --color-accent-300: #6d5fd0;
+  --color-accent-400: #5a4bc4;
+  --color-accent-500: #6152c9;
+  --color-accent-600: #5346b0;
+  --color-accent-700: #b0a4ec;
+  --color-accent-800: #c3bbf3;
+  --color-accent-900: #efeafc;
+
+  --color-accent-2-400: #7c76b6;
+  --color-accent-2-500: #6f68a8;
+  --color-accent-2-800: #e6e4f2;
+  --color-accent-2-100: #2a2350;
+
+  --color-section: #eef0ff;
+  --color-section-glow: #d9dcff;
+  --color-section-ghost: #c3c8f2;
+}
+/* Soften the bottom-left black radial (unwanted smudge on a light ground). */
+html[data-mode="light"] .nocturne .afglow {
+  background: radial-gradient(900px 520px at 82% -140px, color-mix(in srgb, var(--color-section-glow) 60%, transparent), transparent 62%);
+}
+
+html[data-mode="legacy"] .nocturne {
+  --color-bg: #020617;
+  --color-surface: #0b1324;
+  --color-text: #eaf6fb;
+  --color-accent: #22d3ee;
+  --color-accent-2: #5fb7cf;
+  --color-nav-bg: rgba(3, 8, 20, 0.72);
+  --color-check: #5ce0b0;
+
+  --color-neutral-100: #04141a; /* dark text on the bright cyan accent (buttons/badges) */
+  --color-neutral-200: #dcecf2;
+  --color-neutral-300: #b7ccd4;
+  --color-neutral-400: #93a8b3;
+  --color-neutral-500: #75909c;
+  --color-neutral-600: #5f7784;
+  --color-neutral-700: #47606b;
+  --color-neutral-800: #143246;
+  --color-neutral-900: #0c1f2b;
+
+  --color-accent-100: #d9f6fb; /* light text on the dark cyan chip (tag-accent) */
+  --color-accent-200: #0a3a45;
+  --color-accent-300: #a5eefb;
+  --color-accent-400: #67e8f9;
+  --color-accent-500: #22d3ee;
+  --color-accent-600: #17a8c6;
+  --color-accent-700: #0b4b5c;
+  --color-accent-800: #0e3a47;
+  --color-accent-900: #082a34;
+
+  --color-accent-2-400: #7fd0e2;
+  --color-accent-2-500: #5fb7cf;
+  --color-accent-2-800: #0d3a46;
+  --color-accent-2-100: #d9f6fb;
+
+  --color-section: #06323d;
+  --color-section-glow: #0a4a5a;
+  --color-section-ghost: #0e6274;
 }
 
 .nocturne *,
@@ -352,6 +449,10 @@
   transition: color 0.15s ease;
 }
 .nocturne .nnav-signin:hover { color: var(--color-accent); }
+.nocturne .n-nav-logo { height: 34px; width: auto; }
+.nocturne .nnav-actions { flex: none; }
+/* Nav CTA label swap: full label by default, short label only on tiny phones. */
+.nocturne .n-cta-short { display: none; }
 
 /* Inline body link treatment (non-button) */
 .nocturne .n-link { color: var(--color-accent-400); text-decoration: none; }
@@ -394,15 +495,46 @@
 }
 .nocturne .nocturne-price-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 20px;
+  /* auto-fit keeps every card ≥180px and wraps gracefully: 5-across on desktop
+     (the afwrap max-width caps content, so it never over-stretches), degrading to
+     3/2/1 as the viewport narrows — no fixed column count to fight the 5 tiers. */
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  align-items: stretch;
+}
+.nocturne .n-price-card {
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  padding: 24px 22px;
+  border: 1px solid var(--color-neutral-800);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.nocturne .n-price-card.is-featured {
+  border-color: var(--color-accent-700);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-accent-800) 40%, transparent), var(--color-surface));
+  box-shadow: 0 20px 50px color-mix(in srgb, var(--color-accent-900) 50%, transparent);
+}
+.nocturne .n-price-name {
+  font-size: 12.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-neutral-600);
+  margin-bottom: 14px;
+}
+.nocturne .n-price-card.is-featured .n-price-name { color: var(--color-accent-400); }
+.nocturne .n-price-amt {
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
 }
 
 /* Tablet / small-desktop */
 @media (max-width: 960px) {
   .nocturne .nocturne-hero-grid { grid-template-columns: 1fr; gap: 44px; }
   .nocturne .nocturne-comm-grid { grid-template-columns: 1fr; gap: 40px; }
-  .nocturne .nocturne-price-grid { grid-template-columns: 1fr; }
+  /* .nocturne-price-grid intentionally omitted: its auto-fit rule self-collapses. */
   .nocturne .n-import-grid { grid-template-columns: 1fr; gap: 40px; }
 }
 @media (max-width: 820px) {
@@ -426,8 +558,23 @@
   .nocturne .n-hero-cta { width: 100%; }
   .nocturne .n-hero-cta .btn { width: 100%; }
 }
+/* Tiny phones: keep BOTH "Sign in" and the primary CTA reachable in the nav
+   (previously "Sign in" was hidden below 460px, leaving no top-of-page login).
+   Make room instead — shorter CTA label, tighter spacing, smaller wordmark. */
 @media (max-width: 460px) {
-  .nocturne .nnav-signin { display: none; }
+  .nocturne .n-cta-full { display: none; }
+  .nocturne .n-cta-short { display: inline; }
+  .nocturne .n-nav-logo { height: 26px; }
+  .nocturne .nnav-actions { gap: 10px; }
+  .nocturne .nnav-cta { padding: 8px 12px; font-size: 13px; }
+  .nocturne .nnav-signin { font-size: 13px; }
+  /* Compact the hero dashboard-mockup rows so nothing clips on narrow screens. */
+  .nocturne .afrow { gap: 9px; padding: 10px 12px; }
+  .nocturne .afsrc { width: 24px; height: 24px; }
+}
+@media (max-width: 360px) {
+  .nocturne .afwrap { padding: 0 16px; }
+  .nocturne .nnav-actions { gap: 8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

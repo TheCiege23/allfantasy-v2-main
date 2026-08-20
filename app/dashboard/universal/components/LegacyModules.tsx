@@ -33,9 +33,9 @@ import { computeCompositeProfile, type CompositeProfile, type LeagueRecord } fro
 import { FeatureGate } from '@/components/subscription/FeatureGate'
 import styles from './universal-dashboard.module.css'
 
-const OverviewReportCard = dynamic(() => import('@/app/af-legacy/components/OverviewReportCard'), { ssr: false })
-const OverviewLanes = dynamic(() => import('@/app/af-legacy/components/OverviewLanes'), { ssr: false })
-const OverviewInsights = dynamic(() => import('@/app/af-legacy/components/OverviewInsights'), { ssr: false })
+const OverviewReportCard = dynamic(() => import('@/components/legacy/OverviewReportCard'), { ssr: false })
+const OverviewLanes = dynamic(() => import('@/components/legacy/OverviewLanes'), { ssr: false })
+const OverviewInsights = dynamic(() => import('@/components/legacy/OverviewInsights'), { ssr: false })
 const LeagueRankingsV2Panel = dynamic(() => import('@/components/LeagueRankingsV2Panel'), { ssr: false })
 
 type BoardLeague = UserLeague & { navigationLeagueId?: string | null }

@@ -9,9 +9,15 @@
  * DATABASE_URL isn't pointed at a real database.
  */
 import { describe, expect, it } from 'vitest'
-import { prisma } from '@/lib/prisma'
-import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
-import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
+
+// Module-level guard: importing @/lib/prisma without a DATABASE_URL throws at
+// load time, which turned this deliberately-DB-gated audit suite into a hard
+// failure in DB-less environments. Skip the whole suite cleanly instead and
+// lazy-import the DB-touching modules inside the tests.
+const HAS_DB = Boolean(
+  process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL || process.env.POSTGRES_URL,
+)
+const describeDb = HAS_DB ? describe : describe.skip
 
 const REAL_SLEEPER_LEAGUE_ID = 'a6f74157-b569-4dfd-86a6-2231a83d8e0f'
 // Real roster platformUserId (raw Sleeper numeric owner id) confirmed via this session's
@@ -20,8 +26,10 @@ const REAL_SLEEPER_MANAGER_ID = '603671080950886400'
 // Real AllFantasy userId confirmed (Phase 33-34) to own real rosters across 8 real leagues.
 const REAL_MULTI_LEAGUE_USER_ID = '9791bae0-e47f-418a-ae40-285f6a2e7887'
 
-describe('Manager OS — real .env.test execution (Phase 35, Track B, audit only)', () => {
+describeDb('Manager OS — real .env.test execution (Phase 35, Track B, audit only)', () => {
   it('resolveUserOsSnapshot executes against a real Sleeper league/manager without crashing', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const { resolveUserOsSnapshot } = await import('@/lib/decision-os/userOs')
     const league = await prisma.league.findUnique({ where: { id: REAL_SLEEPER_LEAGUE_ID } })
     if (!league) {
       console.warn('Skipping: DATABASE_URL is not pointed at the real .env.test database.')
@@ -40,6 +48,8 @@ describe('Manager OS — real .env.test execution (Phase 35, Track B, audit only
   })
 
   it('resolveManagerCommandCenterSnapshot executes against a real multi-league user without crashing', async () => {
+    const { prisma } = await import('@/lib/prisma')
+    const { resolveManagerCommandCenterSnapshot } = await import('@/lib/decision-os/managerCommandCenter')
     const rosters = await prisma.roster.findMany({ where: { platformUserId: REAL_MULTI_LEAGUE_USER_ID }, select: { leagueId: true } })
     if (rosters.length === 0) {
       console.warn('Skipping: DATABASE_URL is not pointed at the real .env.test database, or the real fixture user is absent.')

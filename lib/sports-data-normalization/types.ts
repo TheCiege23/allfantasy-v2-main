@@ -8,6 +8,13 @@ import type { NormalizedPlayerInjuryNewsLayer } from '@/lib/news-injury-aggregat
  */
 
 export type ProjectionBasis =
+  /**
+   * Computed by the AllFantasy projection engine (`lib/af-projections`) and read from
+   * `AFProjectionSnapshot`. Highest precedence: it is the only basis scored under the
+   * league's own rules — including IDP components, which no provider feed scores for us.
+   * Carries its own confidence derived from real input coverage.
+   */
+  | 'af_engine'
   | 'weekly_provider_projection'
   | 'season_fppg_proxy'
   | 'season_avg_actual_proxy'

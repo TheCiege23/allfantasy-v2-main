@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -330,15 +331,15 @@ test.describe('@draft-import click audit', () => {
     await openDraftRoomHarness(page)
     const desktop = page.getByTestId('draft-desktop-layout')
 
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
     const modal = page.getByTestId('draft-commissioner-modal')
     await expect(modal).toBeVisible()
-    await modal.getByTestId('draft-commissioner-open-import').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-open-import'))
     const importFlow = modal.getByTestId('draft-import-flow-root')
     await expect(importFlow).toBeVisible()
 
     await importFlow.getByTestId('draft-import-json-input').fill('{"draftOrder": [')
-    await importFlow.getByTestId('draft-import-validate').click()
+    await clickHydrated(importFlow.getByTestId('draft-import-validate'))
     await expect(importFlow.getByTestId('draft-import-parse-error')).toBeVisible()
 
     const duplicatePayload = JSON.stringify({
@@ -352,7 +353,7 @@ test.describe('@draft-import click audit', () => {
       ],
     })
     await importFlow.getByTestId('draft-import-json-input').fill(duplicatePayload)
-    await importFlow.getByTestId('draft-import-validate').click()
+    await clickHydrated(importFlow.getByTestId('draft-import-validate'))
     await expect(importFlow.getByTestId('draft-import-report')).toContainText(/DUPLICATE_OVERALL/i)
 
     const validPayload = JSON.stringify({
@@ -371,19 +372,19 @@ test.describe('@draft-import click audit', () => {
       mimeType: 'application/json',
       buffer: Buffer.from(validPayload, 'utf8'),
     })
-    await importFlow.getByTestId('draft-import-validate').click()
+    await clickHydrated(importFlow.getByTestId('draft-import-validate'))
     await expect(importFlow.getByTestId('draft-import-preview-summary')).toContainText(/2 picks/i)
     await expect(importFlow.getByTestId('draft-import-preview-slot-order')).toBeVisible()
     await expect(importFlow.getByTestId('draft-import-preview-picks')).toBeVisible()
 
-    await importFlow.getByTestId('draft-import-commit').click()
+    await clickHydrated(importFlow.getByTestId('draft-import-commit'))
     await expect(modal.getByTestId('draft-commissioner-open-import')).toBeVisible()
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('Import QB')
 
-    await modal.getByTestId('draft-commissioner-open-import').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-open-import'))
     const importFlowAfterCommit = modal.getByTestId('draft-import-flow-root')
     await expect(importFlowAfterCommit.getByTestId('draft-import-rollback')).toBeVisible()
-    await importFlowAfterCommit.getByTestId('draft-import-rollback').click()
+    await clickHydrated(importFlowAfterCommit.getByTestId('draft-import-rollback'))
     await expect(modal.getByTestId('draft-commissioner-open-import')).toBeVisible()
     await expect(desktop.getByTestId('draft-board-cell-1')).not.toContainText('Import QB')
   })
@@ -395,11 +396,11 @@ test.describe('@draft-import click audit', () => {
     await page.goto(`/e2e/draft-room?leagueId=${leagueId}&sport=NFL`)
     await openDraftRoomHarness(page)
 
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
     const modal = page.getByTestId('draft-commissioner-modal')
-    await modal.getByTestId('draft-commissioner-open-import').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-open-import'))
     await expect(modal.getByTestId('draft-import-flow-root')).toBeVisible()
-    await modal.getByTestId('draft-import-cancel').click()
+    await clickHydrated(modal.getByTestId('draft-import-cancel'))
     await expect(modal.getByTestId('draft-import-flow-root')).toHaveCount(0)
     await expect(modal.getByTestId('draft-commissioner-open-import')).toBeVisible()
   })

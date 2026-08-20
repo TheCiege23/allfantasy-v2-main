@@ -299,7 +299,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
                         {p.team ? ` · ${p.team}` : ''}
                       </span>
                       {e?.projectedCost || e?.projectedCostRound != null ? (
-                        <span className="mt-0.5 block text-[11px] text-cyan-200/80">
+                        <span className="mt-0.5 block text-[11px] text-[#ffb8d1]/80">
                           Projected cost:{' '}
                           {e.projectedCost ??
                             (e.projectedCostRound != null ? `Round ${e.projectedCostRound}` : '—')}
@@ -350,7 +350,7 @@ export function KeeperSelectionTab({ leagueId }: { leagueId: string }) {
           For snake draft sessions, you can also set keepers from the live draft room&apos;s Keeper panel before the
           clock starts.
         </p>
-        <Link href={`/league/${leagueId}?tab=draft`} className="mt-2 inline-block font-semibold text-cyan-300 hover:underline">
+        <Link href={`/league/${leagueId}?tab=draft`} className="mt-2 inline-block font-semibold text-[#ff9ec0] hover:underline">
           Go to draft →
         </Link>
       </div>

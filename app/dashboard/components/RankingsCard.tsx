@@ -39,8 +39,8 @@ type RankApiPayload = {
   rankCalculatedAt?: string | null
   rank?: {
     careerXp: string
-    aiReportGrade: string
-    aiScore: number
+    aiReportGrade: string | null
+    aiScore: number | null
     aiInsight?: string
     careerTierName: string
     careerLevel: number

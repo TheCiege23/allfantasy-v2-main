@@ -100,7 +100,7 @@ function SleeperLink({ href, children }: { href: string; children: React.ReactNo
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="mt-3 inline-flex text-[13px] font-semibold text-cyan-400/95 underline-offset-2 hover:text-cyan-300"
+      className="mt-3 inline-flex text-[13px] font-semibold text-[#ff3d81]/95 underline-offset-2 hover:text-[#ff9ec0]"
     >
       {children}
     </a>
@@ -185,11 +185,11 @@ function DivisionSettingsPanel({ ctx }: { ctx: SubPanelContext }) {
           href={sleeperSettingsHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="flex w-full items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-3 text-left transition hover:border-cyan-500/25"
+          className="flex w-full items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-3 text-left transition hover:border-[#ff3d81]/25"
           data-testid="division-settings-count-row"
         >
           <span className="text-[15px] font-semibold text-white">{label}</span>
-          <span className="text-[13px] font-semibold text-cyan-400">Edit</span>
+          <span className="text-[13px] font-semibold text-[#ff3d81]">Edit</span>
         </a>
       ) : (
         <div className="rounded-xl border border-white/[0.06] bg-[#0a1228]/80 px-3 py-3 text-[14px] text-white/85">{label}</div>
@@ -228,7 +228,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
           type="button"
           onClick={() => setTab('spots')}
           className={`flex-1 rounded-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
-            tab === 'spots' ? 'bg-cyan-500/25 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.25)]' : 'text-white/45'
+            tab === 'spots' ? 'bg-[#ff3d81]/25 text-[#ffd7e5] shadow-[inset_0_0_0_1px_rgba(255,61,129,0.25)]' : 'text-white/45'
           }`}
           data-testid="roster-tab-spots"
         >
@@ -238,7 +238,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
           type="button"
           onClick={() => setTab('limits')}
           className={`flex-1 rounded-full px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide transition ${
-            tab === 'limits' ? 'bg-cyan-500/25 text-cyan-100 shadow-[inset_0_0_0_1px_rgba(34,211,238,0.25)]' : 'text-white/45'
+            tab === 'limits' ? 'bg-[#ff3d81]/25 text-[#ffd7e5] shadow-[inset_0_0_0_1px_rgba(255,61,129,0.25)]' : 'text-white/45'
           }`}
           data-testid="roster-tab-limits"
         >
@@ -313,7 +313,7 @@ function RosterSettingsReadonlyPanel({ ctx }: { ctx: SubPanelContext }) {
                         href={sleeperSettingsHref}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.06] text-cyan-300/90 hover:border-cyan-500/30"
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-white/[0.1] bg-white/[0.06] text-[#ff9ec0]/90 hover:border-[#ff3d81]/30"
                         title="Edit position limits in Sleeper"
                         aria-label={`Edit position limits for ${formatSlotLabel(slot)} in Sleeper`}
                       >
@@ -954,7 +954,7 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
             </span>
           )}
         </div>
-        <label className="cursor-pointer rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-3 py-1.5 text-[12px] font-semibold text-cyan-200 hover:bg-cyan-500/20">
+        <label className="cursor-pointer rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-3 py-1.5 text-[12px] font-semibold text-[#ffb8d1] hover:bg-[#ff3d81]/20">
           {uploading ? 'Uploading…' : 'Upload avatar'}
           <input type="file" accept="image/*" className="hidden" onChange={onAvatar} />
         </label>
@@ -964,7 +964,7 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
         <input
           value={teamName}
           onChange={(e) => setTeamName(e.target.value)}
-          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white outline-none focus:border-cyan-500/40"
+          className="mt-1 w-full rounded-xl border border-white/10 bg-[#1a1f3a] px-3 py-2 text-[13px] text-white outline-none focus:border-[#ff3d81]/40"
         />
       </div>
       <p className="text-[11px] text-white/40">
@@ -972,7 +972,7 @@ function MyTeamPanel({ ctx }: { ctx: SubPanelContext }) {
       </p>
       <button
         type="button"
-        className="w-full rounded-xl bg-cyan-500/20 py-2.5 text-[13px] font-bold text-cyan-100 hover:bg-cyan-500/30"
+        className="w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/30"
       >
         Save
       </button>
@@ -1013,7 +1013,7 @@ function DraftSubPanel({
             href={mockDraftHref}
             target="_blank"
             rel="noopener noreferrer"
-            className="rounded-xl border border-cyan-500/30 bg-cyan-500/10 py-2.5 text-center text-[13px] font-semibold text-cyan-100"
+            className="rounded-xl border border-[#ff3d81]/30 bg-[#ff3d81]/10 py-2.5 text-center text-[13px] font-semibold text-[#ffd7e5]"
           >
             Mock Draft
           </a>
@@ -1075,13 +1075,13 @@ function NotificationsPanel() {
             type="checkbox"
             checked={toggles[key] ?? false}
             onChange={(e) => setToggles((s) => ({ ...s, [key]: e.target.checked }))}
-            className="h-4 w-4 accent-cyan-500"
+            className="h-4 w-4 accent-[#ff3d81]"
           />
         </label>
       ))}
       <button
         type="button"
-        className="w-full rounded-xl bg-cyan-500/20 py-2.5 text-[13px] font-bold text-cyan-100"
+        className="w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5]"
         onClick={() => {}}
       >
         Save preferences
@@ -1151,7 +1151,7 @@ function CoOwnersPanel({ ctx }: { ctx: SubPanelContext }) {
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search usernames"
-          className="w-full rounded-full border border-white/[0.08] bg-white/[0.06] py-2.5 pl-9 pr-3 text-[13px] text-white placeholder:text-white/35 outline-none focus:border-cyan-500/35"
+          className="w-full rounded-full border border-white/[0.08] bg-white/[0.06] py-2.5 pl-9 pr-3 text-[13px] text-white placeholder:text-white/35 outline-none focus:border-[#ff3d81]/35"
           data-testid="co-owners-search"
         />
       </label>
@@ -1251,7 +1251,7 @@ function LeagueHistoryPanel({
             >
               <span className="text-[16px] font-bold text-white">{r.season}</span>
               <span className="text-[12px] text-white/45">{r.name}</span>
-              <span className="text-[11px] font-medium text-cyan-400/90">Open in Sleeper →</span>
+              <span className="text-[11px] font-medium text-[#ff3d81]/90">Open in Sleeper →</span>
             </a>
           </li>
         ))}
@@ -1286,7 +1286,7 @@ function CommishGeneralPanel({
       </div>
       <label className="flex items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-[#1a1f3a] px-3 py-2">
         <span className="text-[12px] text-white/85">Public league</span>
-        <input type="checkbox" className="h-4 w-4 accent-cyan-500" />
+        <input type="checkbox" className="h-4 w-4 accent-[#ff3d81]" />
       </label>
       {sleeperSettingsHref ? (
         <SleeperLink href={sleeperSettingsHref}>Open in Sleeper Commissioner Tools →</SleeperLink>
@@ -1407,9 +1407,9 @@ function CommishNotePanel({ ctx }: { ctx: SubPanelContext }) {
       </button>
       {error ? <p className="text-[12px] text-rose-300">{error}</p> : null}
       {result?.title ? (
-        <p className="text-[12px] font-semibold text-cyan-200">{result.title}</p>
+        <p className="text-[12px] font-semibold text-[#ffb8d1]">{result.title}</p>
       ) : null}
-      <button type="button" className="w-full rounded-xl bg-cyan-500/20 py-2.5 text-[13px] font-bold text-cyan-100">
+      <button type="button" className="w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5]">
         Post / Update
       </button>
     </div>
@@ -1588,7 +1588,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
         <button
           type="button"
           onClick={() => setActiveTool(null)}
-          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-cyan-400/95 hover:text-cyan-300"
+          className="inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#ff3d81]/95 hover:text-[#ff9ec0]"
           data-testid="commish-tool-back"
         >
           <ArrowLeft className="h-4 w-4" aria-hidden />
@@ -1596,7 +1596,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
         </button>
         <span className="sr-only">Press Escape to return to the commissioner tools grid.</span>
         <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-cyan-300/95">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.06] text-[#ff9ec0]/95">
             <Icon className="h-5 w-5" strokeWidth={2} aria-hidden />
           </div>
           <div>
@@ -1620,7 +1620,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
           </p>
         ) : null}
         {extraHint && !scoresNotReadyYet ? (
-          <p className="rounded-lg border border-cyan-500/15 bg-cyan-500/[0.07] px-3 py-2 text-[11px] leading-relaxed text-cyan-100/85">
+          <p className="rounded-lg border border-[#ff3d81]/15 bg-[#ff3d81]/[0.07] px-3 py-2 text-[11px] leading-relaxed text-[#ffd7e5]/85">
             {extraHint}
           </p>
         ) : null}
@@ -1655,7 +1655,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
           const Icon = t.icon
           const inner = (
             <>
-              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-cyan-300/95">
+              <div className="mb-2 flex h-9 w-9 items-center justify-center rounded-lg bg-white/[0.06] text-[#ff9ec0]/95">
                 <Icon className="h-[18px] w-[18px]" strokeWidth={2} aria-hidden />
               </div>
               <h3 className="text-[12px] font-bold leading-snug text-white">{t.title}</h3>
@@ -1668,7 +1668,7 @@ function CommishControlsPanel({ ctx }: { ctx: SubPanelContext }) {
               type="button"
               onClick={() => setActiveTool(t.id)}
               data-testid={`commish-tile-${t.id}`}
-              className="rounded-xl border border-white/[0.08] bg-[#0a1228]/90 p-3 text-left transition hover:border-cyan-500/25 hover:bg-[#0c1220]"
+              className="rounded-xl border border-white/[0.08] bg-[#0a1228]/90 p-3 text-left transition hover:border-[#ff3d81]/25 hover:bg-[#0c1220]"
             >
               {inner}
             </button>
@@ -1753,7 +1753,7 @@ function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
         <span className="text-[13px] font-medium text-white/90">Track dues</span>
         <input
           type="checkbox"
-          className="h-5 w-5 accent-cyan-500"
+          className="h-5 w-5 accent-[#ff3d81]"
           checked={track}
           disabled={!loaded}
           onChange={(e) => setTrack(e.target.checked)}
@@ -1767,7 +1767,7 @@ function LeagueDuesTrackerPanel({ ctx }: { ctx: SubPanelContext }) {
         type="button"
         onClick={() => save()}
         disabled={!loaded}
-        className="w-full rounded-xl border border-cyan-500/35 bg-cyan-500/15 py-2.5 text-[13px] font-bold text-cyan-100 hover:bg-cyan-500/25 disabled:cursor-not-allowed disabled:opacity-40"
+        className="w-full rounded-xl border border-[#ff3d81]/35 bg-[#ff3d81]/15 py-2.5 text-[13px] font-bold text-[#ffd7e5] hover:bg-[#ff3d81]/25 disabled:cursor-not-allowed disabled:opacity-40"
         data-testid="league-dues-save"
       >
         Save

@@ -146,7 +146,7 @@ export function RosterComplianceSettingsPanel({
               Standard football redraft defaults. Superflex is visible and starts at 0.
             </p>
           </div>
-          <span className="rounded-full border border-cyan-300/25 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-cyan-100">
+          <span className="rounded-full border border-[#ff9ec0]/25 bg-[#ff3d81]/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#ffd7e5]">
             Redraft
           </span>
         </div>

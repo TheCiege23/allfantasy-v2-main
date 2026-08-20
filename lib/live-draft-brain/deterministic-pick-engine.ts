@@ -217,14 +217,18 @@ export function runDeterministicPickEngine(args: {
     const scarcityHigh = mapPoolScarcity(pos, available, totalTeams) >= 75
     const wot = waitOrTake(row, overall, scarcityHigh)
 
+    // Honesty pass: ADP-derived CLAIMS ("value vs ADP", "reach vs ADP") assert
+    // market behavior and must only fire on real ADP, never the synthetic
+    // `overall + 20` prior. Scores still use the prior for ordering.
     const pickReasons: string[] = []
     if (row.needScore >= 55) pickReasons.push(`Addresses ${pos} roster pressure`)
-    if (row.adpEdge > 4) pickReasons.push('Value vs expected draft position')
+    if (row.adpEdge > 4 && row.adpIsReal) pickReasons.push('Value vs expected draft position')
     if (formatBoostHint > 0) pickReasons.push('Format alignment (e.g. superflex / premium)')
     if (pickReasons.length === 0) pickReasons.push('Best composite score for this pick context')
 
     const riskNotes: string[] = []
-    if (row.adp > overall + 4) riskNotes.push('Reach vs ADP — acceptable only if you prioritize need or scarcity')
+    if (row.adpIsReal && row.adp > overall + 4) riskNotes.push('Reach vs ADP — acceptable only if you prioritize need or scarcity')
+    if (!row.adpIsReal) riskNotes.push('No ADP data for this player — market comparison unavailable')
     if (breakdown.draftRiskScore > 70) riskNotes.push('Higher outcome variance than other targets')
     if (riskNotes.length === 0) riskNotes.push('Risk profile within normal range for this round')
 

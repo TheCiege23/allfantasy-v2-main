@@ -11,8 +11,7 @@
  */
 
 import type { Session } from 'next-auth'
-import type { CSSProperties, ReactNode } from 'react'
-import Image from 'next/image'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import {
   ArrowRight,
@@ -35,7 +34,8 @@ import {
 } from 'lucide-react'
 import { loginUrlWithIntent, signupUrlWithIntent } from '@/lib/auth/auth-intent-resolver'
 import { trackLandingCtaClick } from '@/lib/landing-analytics'
-import { NOCTURNE_COPY as C } from './copy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getNocturneCopy } from './copy.i18n'
 import { NocturneImport } from './NocturneImport'
 import './nocturne.css'
 
@@ -63,13 +63,16 @@ const COMM_ICONS: Record<string, LucideIcon> = {
 }
 
 export default function LandingNocturne(_props: LandingNocturneProps) {
+  // Copy follows the app-wide language selector (falls back to English).
+  const { language } = useOptionalLanguage()
+  const C = getNocturneCopy(language)
+
   // ── Destinations ──────────────────────────────────────────────────────────
   const signupHref = signupUrlWithIntent('/dashboard')
   const loginHref = loginUrlWithIntent('/dashboard')
   // Paid CTAs route through signup → the matching MonetizationPurchaseSurface,
-  // since Stripe checkout requires an authenticated session.
-  const commissionerHref = signupUrlWithIntent('/upgrade?plan=commissioner')
-  const legacyHref = signupUrlWithIntent('/upgrade?plan=war_room')
+  // since Stripe checkout requires an authenticated session. Each pricing tier's
+  // destination is derived from its `plan` key below (see the pricing grid).
   // "Bring your league" / "Start a league" → create/import-league flow.
   const createLeagueHref = signupUrlWithIntent('/create-league')
 
@@ -84,7 +87,7 @@ export default function LandingNocturne(_props: LandingNocturneProps) {
           top: 0,
           zIndex: 50,
           borderBottom: '1px solid color-mix(in srgb, var(--color-text) 7%, transparent)',
-          background: 'rgba(22,24,38,.72)',
+          background: 'var(--color-nav-bg)',
           backdropFilter: 'blur(14px)',
           WebkitBackdropFilter: 'blur(14px)',
         }}
@@ -99,14 +102,17 @@ export default function LandingNocturne(_props: LandingNocturneProps) {
             gap: 20,
           }}
         >
-          <Link href="/" aria-label={C.nav.ariaHome} style={{ display: 'flex', alignItems: 'center' }}>
-            <Image
+          <Link href="/" aria-label={C.nav.ariaHome} style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+            {/* Plain <img> (not next/image) so this module SSRs cleanly — see the
+                header note in app/page.tsx on the Next 14.2 next/image SSR bug. */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src="/brand/allfantasy-wordmark-transparent.png"
               alt="AllFantasy"
               width={1198}
               height={306}
-              priority
-              style={{ height: 34, width: 'auto' }}
+              className="n-nav-logo"
+              style={{ width: 'auto' }}
             />
           </Link>
 
@@ -118,7 +124,7 @@ export default function LandingNocturne(_props: LandingNocturneProps) {
             </a>
           </nav>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+          <div className="nnav-actions" style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <Link
               href={loginHref}
               className="nnav-signin"
@@ -129,11 +135,12 @@ export default function LandingNocturne(_props: LandingNocturneProps) {
             </Link>
             <Link
               href={signupHref}
-              className="btn btn-primary"
+              className="btn btn-primary nnav-cta"
               data-testid="nocturne-nav-sign-up"
               onClick={() => track(C.nav.getStarted, signupHref, 'primary', 'nav')}
             >
-              {C.nav.getStarted}
+              <span className="n-cta-full">{C.nav.getStarted}</span>
+              <span className="n-cta-short">{C.nav.getStartedShort}</span>
             </Link>
           </div>
         </div>
@@ -456,98 +463,58 @@ export default function LandingNocturne(_props: LandingNocturneProps) {
           {C.pricing.body}
         </p>
         <div className="nocturne-price-grid">
-          {/* Free */}
-          <PlanCard>
-            <div style={PLAN_NAME_STYLE}>{C.pricing.plans.free.name}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 22 }}>
-              <span style={{ fontSize: 42, fontWeight: 600, letterSpacing: '-0.03em' }}>{C.pricing.plans.free.price}</span>
-              <span style={{ fontSize: 14, color: 'var(--color-neutral-600)' }}>{C.pricing.plans.free.priceSuffix}</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-              {C.pricing.plans.free.features.map((f) => (
-                <PlanLine key={f.text} locked={f.locked}>
-                  {f.text}
-                </PlanLine>
-              ))}
-            </div>
-            <Link
-              href={signupHref}
-              className="btn btn-secondary btn-block"
-              data-testid="nocturne-plan-free"
-              onClick={() => track(C.pricing.plans.free.cta, signupHref, 'secondary', 'pricing-free')}
-            >
-              {C.pricing.plans.free.cta}
-            </Link>
-          </PlanCard>
-
-          {/* Commissioner */}
-          <PlanCard>
-            <div style={PLAN_NAME_STYLE}>{C.pricing.plans.commissioner.name}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 42, fontWeight: 600, letterSpacing: '-0.03em' }}>{C.pricing.plans.commissioner.price}</span>
-              <span style={{ fontSize: 14, color: 'var(--color-neutral-600)' }}>{C.pricing.plans.commissioner.priceSuffix}</span>
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--color-neutral-600)', marginBottom: 18 }}>{C.pricing.plans.commissioner.priceYear}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-              {C.pricing.plans.commissioner.features.map((f) => (
-                <PlanLine key={f}>{f}</PlanLine>
-              ))}
-            </div>
-            <Link
-              href={commissionerHref}
-              className="btn btn-secondary btn-block"
-              data-testid="nocturne-plan-commissioner"
-              onClick={() => track(C.pricing.plans.commissioner.cta, commissionerHref, 'secondary', 'pricing-commissioner')}
-            >
-              {C.pricing.plans.commissioner.cta}
-            </Link>
-          </PlanCard>
-
-          {/* AF Legacy (featured) */}
-          <div
-            style={{
-              padding: 30,
-              borderRadius: 'var(--radius-lg)',
-              background: 'linear-gradient(180deg,color-mix(in srgb, var(--color-accent-800) 40%, transparent),var(--color-surface))',
-              border: '1px solid var(--color-accent-700)',
-              position: 'relative',
-              boxShadow: '0 20px 50px color-mix(in srgb, var(--color-accent-900) 50%, transparent)',
-            }}
-          >
-            <span className="tag" style={{ position: 'absolute', top: 22, right: 26, background: 'var(--color-accent)', color: 'var(--color-neutral-100)' }}>
-              <Sparkles size={12} />
-              {C.pricing.plans.legacy.badge}
-            </span>
-            <div style={{ ...PLAN_NAME_STYLE, color: 'var(--color-accent-400)' }}>{C.pricing.plans.legacy.name}</div>
-            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-              <span style={{ fontSize: 42, fontWeight: 600, letterSpacing: '-0.03em' }}>{C.pricing.plans.legacy.price}</span>
-              <span style={{ fontSize: 14, color: 'var(--color-accent-2-500)' }}>{C.pricing.plans.legacy.priceSuffix}</span>
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--color-accent-2-500)', marginBottom: 18 }}>{C.pricing.plans.legacy.priceYear}</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>
-              {C.pricing.plans.legacy.features.map((f) => (
-                <PlanLine key={f} accent>
-                  {f}
-                </PlanLine>
-              ))}
-            </div>
-            <Link
-              href={legacyHref}
-              className="btn btn-primary btn-block"
-              data-testid="nocturne-plan-legacy"
-              onClick={() => track(C.pricing.plans.legacy.cta, legacyHref, 'primary', 'pricing-legacy')}
-            >
-              {C.pricing.plans.legacy.cta}
-            </Link>
-          </div>
+          {C.pricing.tiers.map((tier) => {
+            const href = tier.plan ? signupUrlWithIntent(`/upgrade?plan=${tier.plan}`) : signupHref
+            const dimColor = tier.featured ? 'var(--color-accent-2-500)' : 'var(--color-neutral-600)'
+            return (
+              <div key={tier.key} className={`n-price-card${tier.featured ? ' is-featured' : ''}`}>
+                {tier.badge ? (
+                  <span
+                    className="tag"
+                    style={{ position: 'absolute', top: 16, right: 16, background: 'var(--color-accent)', color: 'var(--color-neutral-100)' }}
+                  >
+                    <Sparkles size={12} />
+                    {tier.badge}
+                  </span>
+                ) : null}
+                <div className="n-price-name">{tier.name}</div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap', marginBottom: tier.priceYear ? 4 : 20 }}>
+                  <span className="n-price-amt">{tier.price}</span>
+                  <span style={{ fontSize: 13.5, color: dimColor }}>{tier.priceSuffix}</span>
+                </div>
+                {tier.priceYear ? (
+                  <div style={{ fontSize: 12.5, color: dimColor, marginBottom: 16 }}>{tier.priceYear}</div>
+                ) : null}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, flex: 1, marginBottom: 8 }}>
+                  {tier.features.map((f) => (
+                    <PlanLine key={f.text} locked={f.locked ?? false} accent={tier.featured}>
+                      {f.text}
+                    </PlanLine>
+                  ))}
+                </div>
+                <Link
+                  href={href}
+                  className={`btn ${tier.featured ? 'btn-primary' : 'btn-secondary'} btn-block`}
+                  data-testid={`nocturne-plan-${tier.key}`}
+                  onClick={() => track(tier.cta, href, tier.featured ? 'primary' : 'secondary', `pricing-${tier.key}`)}
+                >
+                  {tier.cta}
+                </Link>
+              </div>
+            )
+          })}
         </div>
+        <p style={{ fontSize: 13, lineHeight: 1.5, color: 'var(--color-neutral-600)', margin: '22px 0 0', textAlign: 'center' }}>
+          {C.pricing.footnote}
+        </p>
       </div>
 
       {/* ═══ FINAL CTA ═══ */}
       <div style={{ position: 'relative', marginTop: 56 }}>
         <div className="afglow" />
         <div className="afwrap" style={{ position: 'relative', zIndex: 2, paddingTop: 64, paddingBottom: 40, textAlign: 'center' }}>
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src="/brand/af-shield-transparent.png"
             alt=""
             width={584}
@@ -588,7 +555,8 @@ export default function LandingNocturne(_props: LandingNocturneProps) {
           style={{ paddingTop: 30, paddingBottom: 34, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, flexWrap: 'wrap' }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src="/brand/allfantasy-wordmark-transparent.png"
               alt="AllFantasy"
               width={1198}
@@ -625,31 +593,6 @@ function track(
   trackLandingCtaClick({ cta_label: label, cta_destination: destination, cta_type: type, source })
 }
 
-const PLAN_NAME_STYLE: CSSProperties = {
-  fontSize: 13,
-  letterSpacing: '.1em',
-  textTransform: 'uppercase',
-  color: 'var(--color-neutral-600)',
-  marginBottom: 14,
-}
-
-function PlanCard({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        padding: 30,
-        border: '1px solid var(--color-neutral-800)',
-        borderRadius: 'var(--radius-lg)',
-        background: 'var(--color-surface)',
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {children}
-    </div>
-  )
-}
-
 function PlanLine({ children, locked = false, accent = false }: { children: ReactNode; locked?: boolean; accent?: boolean }) {
   const color = locked ? 'var(--color-neutral-600)' : accent ? 'var(--color-neutral-200)' : 'var(--color-neutral-300)'
   return (
@@ -657,7 +600,7 @@ function PlanLine({ children, locked = false, accent = false }: { children: Reac
       {locked ? (
         <Lock size={17} style={{ color: 'var(--color-neutral-700)', flex: 'none', marginTop: 1 }} />
       ) : (
-        <Check size={17} style={{ color: accent ? 'var(--color-accent-400)' : '#7ee081', flex: 'none', marginTop: 1 }} />
+        <Check size={17} style={{ color: accent ? 'var(--color-accent-400)' : 'var(--color-check)', flex: 'none', marginTop: 1 }} />
       )}
       {children}
     </div>

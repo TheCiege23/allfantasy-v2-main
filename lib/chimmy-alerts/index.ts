@@ -1,6 +1,7 @@
 export * from './types'
 export {
   detectAlertCandidates,
+  detectInjuredStarterAlerts,
   detectLineupAlerts,
   detectWaiverAlerts,
   detectTradeAlerts,

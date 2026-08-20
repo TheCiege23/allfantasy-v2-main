@@ -6,8 +6,54 @@ import { notifyOwnerOfNewSignup } from "@/lib/notifications/notifyOwnerOfNewSign
 import { ensureSharedAccountProfile } from "@/lib/auth/SharedAccountBootstrapService";
 import { hasProfanityInUsername } from "@/lib/signup/UsernameProfanityGuard";
 import { getTierFromXP, getXPRemainingToNextTier } from "@/lib/xp-progression/TierResolver";
+import {
+  consumeAdmission,
+  isInviteOnlyEnabled,
+  validateAdmission,
+  type AdmissionErrorCode,
+} from "@/lib/beta-invite/betaAdmissionService";
+import { BETA_ADMISSION_COOKIE } from "@/lib/beta-invite/betaAdmissionCookie";
+import { SIGNUP_CONSENT_COOKIE, isConsentCookieValue } from "@/lib/auth/signupConsentCookie";
 
 const OAUTH_PLACEHOLDER_BCRYPT_ROUNDS = 10;
+
+/**
+ * Thrown from the OAuth create branch when closed-beta admission is missing or invalid for
+ * a genuinely NEW account. lib/auth.ts maps `code` onto an honest OAuth error redirect.
+ * Message is prefixed so the NextAuth error string is recognizable and never contains a token.
+ */
+export class BetaOAuthAdmissionError extends Error {
+  constructor(public readonly code: AdmissionErrorCode) {
+    super(`BETA_INVITE_${code}`);
+    this.name = "BetaOAuthAdmissionError";
+  }
+}
+
+/** Read the httpOnly admission cookie during the OAuth callback request. */
+async function readOAuthAdmissionToken(): Promise<string | null> {
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    return store.get(BETA_ADMISSION_COOKIE)?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The signup consent tick, carried across the provider redirect (see signupConsentCookie).
+ * Absent for a sign-in that did not originate at /signup, which is correct: nothing was
+ * ticked, so nothing is recorded. Never throws — a failed read must not block sign-in.
+ */
+async function readSignupConsentCookie(): Promise<boolean> {
+  try {
+    const { cookies } = await import("next/headers");
+    const store = await cookies();
+    return isConsentCookieValue(store.get(SIGNUP_CONSENT_COOKIE)?.value);
+  } catch {
+    return false;
+  }
+}
 
 /** Unusable for credentials login; satisfies any code paths that expect a set password hash. */
 async function hashOAuthOnlyPlaceholder(): Promise<string> {
@@ -187,6 +233,26 @@ export async function linkSocialAccountToAppUser(
   }
 
   if (!user && normalizedEmail) {
+    // ── P0-1 BETA-GATE (OAuth new-account path) ──────────────────────────────────────
+    // Reached ONLY for a genuinely new AppUser — the existing-account link paths return
+    // above, so a returning Google/Discord/Spotify sign-in never hits this and never needs
+    // an invite. The admission token rides the httpOnly cookie set at /api/auth/beta/claim,
+    // which survives the provider's cross-site redirect (SameSite=Lax). The OAuth email must
+    // match the invited email. Pre-check fails fast; consumption is atomic with the create.
+    const betaGateActive = isInviteOnlyEnabled();
+    const admissionToken = betaGateActive ? await readOAuthAdmissionToken() : null;
+    if (betaGateActive) {
+      let precheck;
+      try {
+        precheck = await validateAdmission({ rawToken: admissionToken, email: normalizedEmail });
+      } catch {
+        throw new BetaOAuthAdmissionError("GATE_UNAVAILABLE"); // fail closed
+      }
+      if (!precheck.ok) {
+        throw new BetaOAuthAdmissionError(precheck.code);
+      }
+    }
+
     const displayNameBase = input.name?.trim() || "";
     const select = {
       id: true,
@@ -207,16 +273,33 @@ export async function linkSocialAccountToAppUser(
       const passwordHash = await hashOAuthOnlyPlaceholder();
 
       try {
-        user = await prisma.appUser.create({
-          data: {
-            email: normalizedEmail,
-            username,
-            displayName: displayNameBase || username,
-            avatarUrl: input.image?.trim() || null,
-            emailVerified: providerVerifiedEmail ? new Date() : null,
-            passwordHash,
-          },
-          select,
+        // Create the account and consume the invite in ONE transaction: a consume race
+        // rolls the account back and leaves the invite redeemable (a failed signup never
+        // burns an invite). When the gate is inactive this is a plain create.
+        user = await prisma.$transaction(async (tx) => {
+          const created = await tx.appUser.create({
+            data: {
+              email: normalizedEmail,
+              username,
+              displayName: displayNameBase || username,
+              avatarUrl: input.image?.trim() || null,
+              emailVerified: providerVerifiedEmail ? new Date() : null,
+              passwordHash,
+            },
+            select,
+          });
+          if (betaGateActive) {
+            const consumed = await consumeAdmission({
+              rawToken: admissionToken,
+              email: normalizedEmail,
+              userId: created.id,
+              db: tx,
+            });
+            if (!consumed.ok) {
+              throw new BetaOAuthAdmissionError(consumed.code);
+            }
+          }
+          return created;
         });
         // New OAuth account created (this is the create branch; the link-to-existing
         // path above returns before reaching here, so login stays silent).
@@ -227,6 +310,30 @@ export async function linkSocialAccountToAppUser(
           userId: user.id,
           username: user.username,
         });
+
+        // Campaign funnel truth for OAuth signups. Emitted from this create branch
+        // specifically — the link-to-existing path returns before here — so a returning
+        // Google/Discord/Spotify login is never counted as a new signup. Without this,
+        // campaign conversion would only ever see email/password accounts.
+        // `next/headers` is imported dynamically to match this module's existing
+        // constraint of never pulling it into a non-request server context.
+        // Fire-and-forget; a failure must not break sign-in.
+        void (async () => {
+          try {
+            const { cookies } = await import("next/headers");
+            const cookieStore = await cookies();
+            const { recordFunnelEvent } = await import("@/lib/analytics/recordFunnelEvent");
+            const { ACQUISITION } = await import("@/lib/analytics/eventNames");
+            await recordFunnelEvent({
+              event: ACQUISITION.SIGNUP_COMPLETED,
+              userId: user.id,
+              getCookie: (name) => cookieStore.get(name)?.value,
+              meta: { auth_method: `oauth:${input.provider}` },
+            });
+          } catch (funnelErr) {
+            console.warn("[social-link] signup funnel event failed (non-blocking):", funnelErr);
+          }
+        })();
       } catch (error) {
         if (!isUniqueConstraintError(error)) {
           throw error;
@@ -362,6 +469,10 @@ export async function linkSocialAccountToAppUser(
     await ensureSharedAccountProfile({
       userId: user.id,
       displayName: user.displayName,
+      // The 18+/terms tick from /signup, carried across the provider redirect. Without
+      // this an OAuth account was created with ageConfirmedAt null even when the user had
+      // checked the box, and every later gate then reported they never confirmed.
+      ageConfirmed: await readSignupConsentCookie(),
     });
   } catch (error) {
     console.error(

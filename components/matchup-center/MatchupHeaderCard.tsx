@@ -32,7 +32,7 @@ export function MatchupHeaderCard({
       <div className="flex items-stretch justify-between gap-2 px-3 pt-4 pb-3">
         <div className="min-w-0 flex-1 text-center">
           <div className="truncate text-[13px] font-bold text-white">{left.teamName}</div>
-          <div className="mt-1 text-2xl font-black tabular-nums text-cyan-300">{left.totalPoints.toFixed(2)}</div>
+          <div className="mt-1 text-2xl font-black tabular-nums text-[#ff9ec0]">{left.totalPoints.toFixed(2)}</div>
           <div className="text-[10px] text-white/45">Proj {left.projectedTotal.toFixed(1)}</div>
           <div className="mt-1 text-[11px] text-white/55">
             {left.record.wins}-{left.record.losses}
@@ -47,7 +47,7 @@ export function MatchupHeaderCard({
         </div>
         <div className="min-w-0 flex-1 text-center">
           <div className="truncate text-[13px] font-bold text-white">{right.teamName}</div>
-          <div className="mt-1 text-2xl font-black tabular-nums text-cyan-300">{right.totalPoints.toFixed(2)}</div>
+          <div className="mt-1 text-2xl font-black tabular-nums text-[#ff9ec0]">{right.totalPoints.toFixed(2)}</div>
           <div className="text-[10px] text-white/45">Proj {right.projectedTotal.toFixed(1)}</div>
           <div className="mt-1 text-[11px] text-white/55">
             {right.record.wins}-{right.record.losses}
@@ -64,7 +64,7 @@ export function MatchupHeaderCard({
           </div>
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-emerald-400 transition-[width] duration-700"
+              className="h-full rounded-full bg-gradient-to-r from-[#ff3d81] to-emerald-400 transition-[width] duration-700"
               style={{ width: `${(winProbabilityLeft * 100).toFixed(1)}%` }}
               role="meter"
               aria-valuenow={Math.round(winProbabilityLeft * 100)}

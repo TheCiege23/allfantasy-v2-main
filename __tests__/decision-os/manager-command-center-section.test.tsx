@@ -100,8 +100,8 @@ describe('ManagerCommandCenterSection', () => {
     })
 
     // Reused CommissionerAttentionQueue, unchanged — renders real manager signals.
-    expect(screen.getByTestId('attention-queue-item-critical')).toHaveTextContent('Redraft Rebels')
-    expect(screen.getByTestId('attention-queue-item-critical')).toHaveTextContent(
+    expect(screen.getByTestId('attention-queue-item-manager_engagement_risk:league-2')).toHaveTextContent('Redraft Rebels')
+    expect(screen.getByTestId('attention-queue-item-manager_engagement_risk:league-2')).toHaveTextContent(
       'Your retention risk for this team is "critical".',
     )
 

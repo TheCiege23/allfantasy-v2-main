@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { inspectPlaybackScopes, describePlaybackGap } from '@/lib/spotify/playbackCapability'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,9 @@ export async function GET() {
         access_token: true,
         refresh_token: true,
         expires_at: true,
+        // Required by inspectPlaybackScopes below. Omitting it reports every user
+        // as incapable, which is the opposite failure but equally wrong.
+        scope: true,
       },
     }),
   ])
@@ -144,11 +148,29 @@ export async function GET() {
     )
   }
 
+  /*
+   * ⚠ A VALID TOKEN IS NOT A PLAYABLE TOKEN. Measured in production: all 8
+   * connected Spotify accounts hold `scope: user-read-email` and nothing else.
+   * That token refreshes, identifies the user, and passes every check the widget
+   * made — so the player rendered, looked connected, and silently produced no
+   * audio. Scopes are granted at authorization time, so widening the scope list
+   * fixed NEW connections and did nothing for existing ones.
+   *
+   * Reporting the gap here means the client can say "reconnect" instead of
+   * showing a dead player.
+   */
+  const playback = inspectPlaybackScopes(spotifyAccount?.scope ?? null)
+  const playbackMessage = describePlaybackGap(playback, spotify.isPremium ?? false)
+
   return NextResponse.json({
     token: accessToken,
     expiresIn: expiresAt > 0 ? Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)) : 3600,
     isPremium: spotify.isPremium ?? false,
     displayName: spotify.displayName ?? profile?.spotifyDisplayName ?? null,
     connected: true,
+    canPlay: playback.canPlay && (spotify.isPremium ?? false),
+    needsReauthorization: playback.needsReauthorization,
+    missingScopes: playback.missing,
+    playbackMessage,
   })
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { resolveProfileAccess } from '@/lib/psychological-profiles/ProfileAccess'
 import { prisma } from '@/lib/prisma'
 import { runPsychologicalProfileEngine } from '@/lib/psychological-profiles/PsychologicalProfileEngine'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -16,6 +17,14 @@ export async function POST(
   try {
     const { leagueId } = await ctx.params
     if (!leagueId) return NextResponse.json({ error: 'Missing leagueId' }, { status: 400 })
+
+    // Profiles the entire league — the most expensive endpoint here. It was callable by anyone
+    // holding a league id. Membership is required; the premium gate is not, since
+    // running the engine is how a member gets their own free profile.
+    const access = await resolveProfileAccess(leagueId)
+    if (!access.ok) {
+      return NextResponse.json({ error: access.reason }, { status: access.status })
+    }
 
     const league = await prisma.league.findUnique({
       where: { id: leagueId },

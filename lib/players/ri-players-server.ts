@@ -17,9 +17,50 @@ export type RiPlayerValue = {
 
 export type RiPlayerMap = Record<string, RiPlayerValue>
 
-const RI_REST_BASE = 'http://rest.datafeeds.rolling-insights.com'
+// https only: RSC_token travels in the query string, so a plaintext request puts
+// a long-lived credential on the wire. See contracts/rolling-insights/ENDPOINTS.yaml
+// (auth.security_rules, transport).
+const RI_REST_BASE = 'https://rest.datafeeds.rolling-insights.com'
 const RI_GRAPHQL_URL = 'https://datafeeds.rolling-insights.com/graphql'
 const RI_AUTH_URL = 'https://datafeeds.rolling-insights.com/auth/token'
+
+/**
+ * A 304 from Rolling Insights is an intermediary caching artifact, not a
+ * "nothing changed" signal and not an empty result — there is no ETag contract
+ * to build on. Returning [] on 304 silently reports "no players" for a cache
+ * hit. Vendor guidance is to defeat the cache and retry once.
+ *
+ * See contracts/rolling-insights/ENDPOINTS.yaml (transport.cache_buster) and
+ * INTEGRATION.md §3.
+ */
+function withCacheBuster(url: string): string {
+  const u = new URL(url)
+  u.searchParams.set('_', String(Date.now())) // ms precision, per the contract
+  return u.toString()
+}
+
+async function fetchRINoCache(url: string, label: string): Promise<Response> {
+  const headers = {
+    Accept: 'application/json',
+    'Cache-Control': 'no-cache, no-store',
+    Pragma: 'no-cache',
+  } as const
+
+  let res = await fetch(withCacheBuster(url), {
+    signal: AbortSignal.timeout(55_000),
+    headers,
+  })
+
+  if (res.status === 304) {
+    console.log(`[RI REST] ${label} — 304, retrying once with a fresh cache-buster`)
+    res = await fetch(withCacheBuster(url), {
+      signal: AbortSignal.timeout(55_000),
+      headers,
+    })
+  }
+
+  return res
+}
 
 // ─── Auth (cached per client id) ───────────────────────────────────────────
 
@@ -113,14 +154,12 @@ export async function fetchRIPlayersREST(sport: string): Promise<RIPlayer[]> {
     const url = `${RI_REST_BASE}/api/v1/player-info/${key}?RSC_token=${encodeURIComponent(authToken)}${leagueParam}`
     console.log(`[RI REST] fetching player-info for ${key}${leagueParam ? ' (league=EPL)' : ''}`)
 
-    const res = await fetch(url, {
-      signal: AbortSignal.timeout(55_000),
-      headers: { Accept: 'application/json' },
-    })
+    const res = await fetchRINoCache(url, key)
 
     if (res.status === 304) {
-      console.log(`[RI REST] ${key} — 304 Not Modified, no new data`)
-      return []
+      // Still 304 after a cache-busted retry — surface it rather than passing a
+      // cache artifact off as an empty roster.
+      throw new Error(`[RI REST] ${key} still 304 after cache-busted retry`)
     }
 
     if (!res.ok) {
@@ -309,8 +348,14 @@ async function fetchRESTTeams(sport: string): Promise<RITeam[]> {
 
   const leagueParam = sport === 'SOCCER' ? '&league=EPL' : ''
   const url = `${RI_REST_BASE}/api/v1/teams/${sport}?RSC_token=${encodeURIComponent(token)}${leagueParam}`
-  const res = await fetch(url, { signal: AbortSignal.timeout(55_000), headers: { Accept: 'application/json' } })
-  if (res.status === 304) return []
+  const res = await fetchRINoCache(url, `teams/${sport}`)
+  // fetchRESTTeams is best-effort and swallows failures; a persistent 304 is
+  // still a cache artifact rather than "this sport has no teams", so log it
+  // instead of letting it look like a legitimately empty result.
+  if (res.status === 304) {
+    console.warn(`[RI REST] teams/${sport} still 304 after cache-busted retry — returning no teams`)
+    return []
+  }
   if (!res.ok) return []
 
   let data: unknown

@@ -749,6 +749,9 @@ export const translationsEsParity: Record<string, string> = {
   "settings.notifications.globalHint":
     "Si está desactivado, se pausan notificaciones no críticas. Correos de cuenta y seguridad siguen aplicando.",
   "settings.notifications.globalLabel": "Notificaciones",
+  "settings.notifications.pushTitle": "Notificaciones push del navegador",
+  "settings.notifications.pushHint":
+    "Solo aplica a este navegador. Actívalo de nuevo en cualquier otro dispositivo que quieras alertar.",
   "settings.notifications.off": "No",
   "settings.notifications.on": "Sí",
   "settings.notifications.pushAll": "Push / en la app (todas las categorías)",

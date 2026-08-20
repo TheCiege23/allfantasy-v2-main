@@ -8,8 +8,9 @@
  * only replaces the HTTP/session shell with a direct function call, the same discipline
  * `decision-os-import-sleeper-nonprod.ts` and `decision-os-suite-conformance.ts` already established.
  *
- * Read-only: makes zero writes. HARD-REFUSES the production DB host (ep-spring-tooth) and skips
- * cleanly without DATABASE_URL, matching every other `*-nonprod.ts` script's own boundary.
+ * Read-only: makes zero writes. HARD-REFUSES production -- and any target not positively
+ * recognised as safe -- via `assertNonProductionDbTarget`, and skips cleanly without
+ * DATABASE_URL, matching every other `*-nonprod.ts` script's own boundary.
  *
  *     DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-manager-os-live-validate-nonprod.ts --userId=<id>
  *
@@ -17,22 +18,14 @@
  *   --userId=<id>   AppUser.id to validate as (required — must own at least one claimed team).
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { assertNonProductionDbTarget, describeDbTarget } from './_db-target-identity'
 
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
 function arg(name: string): string | undefined {
   const hit = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))
   return hit ? hit.slice(name.length + 3) : undefined
 }
 
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
-}
 
 ;(async () => {
   // Gate BEFORE importing anything that pulls the prisma singleton.
@@ -40,11 +33,14 @@ function hostOf(url: string | null): string {
     console.log('SKIPPED (no DATABASE_URL) — set a NON-PROD DATABASE_URL to run this validation.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host (${PROD_HOST_MARKER}). This runner must NEVER touch production, even read-only.`)
-    process.exit(1)
-  }
+  const dbTargetUrl = resolveDatabaseUrl()
+  const host = describeDbTarget(dbTargetUrl)
+  assertNonProductionDbTarget({
+    script: 'decision-os-manager-os-live-validate-nonprod',
+    url: dbTargetUrl,
+    action: 'reads live manager data',
+    exitCode: 1,
+  })
   console.log(`Target DB host: ${host} (confirmed non-production)`)
 
   const userId = arg('userId')

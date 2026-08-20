@@ -24,6 +24,12 @@ export interface PlayerGameStatIngestInput {
   playerId: string
   gameId: string
   statPayload: Record<string, number>
+  /** Defense faced, e.g. "IND". Optional: not every provider shape supplies it. */
+  opponent?: string | null
+  /** ⚠ Team AT THE TIME OF THE GAME, not the player's current team. */
+  team?: string | null
+  /** Kickoff date — the source for month-of-season effects. */
+  gameDate?: Date | null
 }
 
 export interface TeamGameStatIngestInput {
@@ -159,6 +165,15 @@ export async function ingestSportStats(
               statPayload: row.statPayload,
               normalizedStatMap: normalized,
               fantasyPoints,
+              /*
+               * ⚠ `?? undefined`, NEVER `?? null`. Prisma treats an explicit null as
+               * "write NULL", so a provider shape that omits opponent would ERASE a
+               * value an earlier, richer import had already stored. `undefined` omits
+               * the field and leaves the existing value alone.
+               */
+              opponent: row.opponent ?? undefined,
+              team: row.team ?? undefined,
+              gameDate: row.gameDate ?? undefined,
               updatedAt: new Date(),
             },
             create: {
@@ -170,6 +185,9 @@ export async function ingestSportStats(
               statPayload: row.statPayload,
               normalizedStatMap: normalized,
               fantasyPoints,
+              opponent: row.opponent ?? null,
+              team: row.team ?? null,
+              gameDate: row.gameDate ?? null,
             },
             // RETURNING trimmed to id: callers ignore the row, and selecting every column
             // breaks against a DB whose table lags schema.prisma (P2022) — which prod's

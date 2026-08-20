@@ -4,10 +4,10 @@ import type { TabDef } from '@/app/league/[leagueId]/LeagueTabs'
 
 describe('matchup tab transition', () => {
   it('shouldUseMatchupInsteadOfDraft for in-season and post_draft', () => {
-    expect(shouldUseMatchupInsteadOfDraft('in_season')).toBe(true)
-    expect(shouldUseMatchupInsteadOfDraft('post_draft')).toBe(true)
-    expect(shouldUseMatchupInsteadOfDraft('drafting')).toBe(false)
-    expect(shouldUseMatchupInsteadOfDraft('setup')).toBe(false)
+    expect(shouldUseMatchupInsteadOfDraft({ status: 'in_season' })).toBe(true)
+    expect(shouldUseMatchupInsteadOfDraft({ status: 'post_draft' })).toBe(true)
+    expect(shouldUseMatchupInsteadOfDraft({ status: 'drafting' })).toBe(false)
+    expect(shouldUseMatchupInsteadOfDraft({ status: 'setup' })).toBe(false)
   })
 
   it('replaces draft tab with matchup', () => {

@@ -22,8 +22,8 @@
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
 import type { CanonicalWorld } from '../lib/decision-os/world/facts'
 import type { TradeAssetSummary } from '../lib/decision-os/trade/dco'
+import { assertNonProductionDbTarget, describeDbTarget } from './_db-target-identity'
 
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -31,14 +31,6 @@ const check = (name: string, ok: boolean, detail = '') => {
   if (!ok) failures++
 }
 
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
-}
 
 ;(async () => {
   // Gate BEFORE importing anything that pulls the prisma singleton (which throws without a DB URL).
@@ -47,13 +39,16 @@ function hostOf(url: string | null): string {
     process.exit(0)
   }
 
-  const host = hostOf(resolveDatabaseUrl())
+  const dbTargetUrl = resolveDatabaseUrl()
+  const host = describeDbTarget(dbTargetUrl)
   // The trade conformance check stages representative trades + runs the memo; per the E.5 mandate it
   // REFUSES the production database outright (it never runs against prod, even read-only).
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.log(`TRADE_CONFORMANCE SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  assertNonProductionDbTarget({
+    script: 'decision-os-trade-conformance',
+    url: dbTargetUrl,
+    action: 'stages representative trades',
+    exitCode: 0,
+  })
   console.log(`Phase E.5 trade conformance — READ-ONLY — DB host: ${host}`)
 
   // Dynamic imports AFTER the DB gate so the skip path never evaluates the prisma singleton.

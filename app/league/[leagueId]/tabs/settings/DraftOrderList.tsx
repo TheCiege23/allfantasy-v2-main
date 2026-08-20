@@ -79,7 +79,7 @@ export function DraftOrderList({
             key={`slot-${row.slot}-${idx}`}
             className={`flex items-center gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] px-2 py-1.5 ${
               manual ? 'cursor-grab active:cursor-grabbing' : ''
-            } ${dragIdx === idx ? 'ring-1 ring-cyan-500/40' : ''}`}
+            } ${dragIdx === idx ? 'ring-1 ring-[#ff3d81]/40' : ''}`}
             draggable={manual}
             onDragStart={() => handleDragStart(idx)}
             onDragOver={handleDragOver}

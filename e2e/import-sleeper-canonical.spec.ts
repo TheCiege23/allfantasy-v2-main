@@ -5,10 +5,10 @@ import { test, expect } from '@playwright/test'
  *
  * This certifies the launch import journey end-to-end through the actual routed
  * page + component chain (`app/import/page.tsx` → `ImportPageClient` →
- * `components/unified-import-ui/LeagueImportFlow.tsx`), NOT the orphaned
- * `/create-league` UI (see e2e/league-creation-sleeper-import.spec.ts, which
- * drives a flow that no longer exists in production and must not be treated as
- * the launch path).
+ * `components/unified-import-ui/LeagueImportFlow.tsx`), NOT the `/create-league`
+ * UI. (There used to be an e2e/league-creation-sleeper-import.spec.ts driving
+ * that flow; it has since been deleted, because the flow it described no longer
+ * exists — the create wizard only links out to this route now.)
  *
  * The Sleeper provider's server calls are mocked at the canonical API boundary
  * (`/api/leagues/import/discover|preview|commit`) with controlled fixtures — the
@@ -18,6 +18,15 @@ import { test, expect } from '@playwright/test'
  *   - a successful commit surfaces the canonical `League.id` and links the user
  *     to `/league/[League.id]` (never `/af-legacy`).
  */
+
+/**
+ * This spec's own waits total up to 70s (15 + 15 + 15 + 25), which does not fit
+ * inside Playwright's DEFAULT 30s per-test budget — it only ever passed while the
+ * dev server happened to be warm. The final hop to /dashboard is the one that
+ * tips it over: that route is large and compiles on demand under `next dev`.
+ * Matches the 180s its sibling specs already declare.
+ */
+test.describe.configure({ timeout: 180_000 })
 
 const CANONICAL_LEAGUE_ID = '11111111-2222-3333-4444-555555555555'
 const SLEEPER_LEAGUE_ID = '987654321'
@@ -119,8 +128,14 @@ test.describe('Canonical Sleeper import — real /import route', () => {
     await gotoWithRetry(page, '/import?provider=sleeper&username=commish_user')
 
     // Sleeper tab selected + username prefilled into the discovery input.
-    await expect(page.getByTestId('import-tab-sleeper')).toBeVisible()
-    await expect(page.getByTestId('import-discovery-account')).toHaveValue('commish_user')
+    //
+    // Generous first-paint budget on purpose: this is the FIRST assertion after
+    // landing on /import, so under `next dev` it waits on that route's initial
+    // compile. The default 5s is a bet that the page is already built, which is
+    // true locally and false on a cold CI runner — it failed there at exactly this
+    // line while every later step passed.
+    await expect(page.getByTestId('import-tab-sleeper')).toBeVisible({ timeout: 90_000 })
+    await expect(page.getByTestId('import-discovery-account')).toHaveValue('commish_user', { timeout: 30_000 })
 
     // 1) Discover leagues from the prefilled Sleeper account identifier.
     await page.getByTestId('import-discovery-find').click()
@@ -143,7 +158,12 @@ test.describe('Canonical Sleeper import — real /import route', () => {
     await page.getByTestId('import-go-dashboard').click()
     // Assert the DESTINATION (client nav commit) — not full dashboard render,
     // which can exceed the timeout on a cold dev compile.
-    await page.waitForURL('**/dashboard**', { timeout: 25_000, waitUntil: 'commit' })
+    // `commit` still needs the server to answer with headers, and /dashboard is
+    // large enough that a cold `next dev` compile blows past 25s whenever anything
+    // else is competing for the machine. Raising the per-test budget alone was not
+    // enough — this inner wait was the binding constraint, and it is a dev-server
+    // build cost, not a product latency the user would ever see.
+    await page.waitForURL('**/dashboard**', { timeout: 120_000, waitUntil: 'commit' })
     expect(new URL(page.url()).pathname).toBe('/dashboard')
 
     // The flagship import must never have used the legacy career-history pipeline.

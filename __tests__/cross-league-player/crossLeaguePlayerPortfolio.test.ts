@@ -28,6 +28,9 @@ vi.mock('@/lib/prisma', () => ({
     roster: { findMany: rosterFindMany },
     leagueTeam: { findMany: leagueTeamFindMany },
     userProfile: { findUnique: userProfileFindUnique },
+    // Slice 4/18 — the assemble path dereferences these models; absent keys
+    // throw TypeError inside the async fn and reject the whole portfolio.
+    fantasyProjection: { findMany: () => Promise.resolve([]) },
   },
 }))
 vi.mock('@/lib/shared-services/player-identity', () => ({ resolvePlayers: resolvePlayersMock }))
@@ -190,14 +193,35 @@ describe('assembleCrossLeaguePlayerPortfolio', () => {
     expect(result.items[0].exposure.percentageOfUserLeagues).toBe(0.5)
   })
 
-  it('marks a non-NFL sport unsupported for schedule/bye — never applies NFL-shaped bye logic', async () => {
+  it('never applies NFL-shaped bye logic to a daily-cadence sport — NBA uses the next-game model (Slice 6), not the bye model', async () => {
+    // HISTORY: this test originally asserted NBA ∈ unsupportedSports. Slice 6
+    // moved NBA to NEXT_GAME_SUPPORTED_SPORTS, which made that assertion
+    // wrong — but the suite's prisma mock was missing `fantasyProjection`, so
+    // the whole assemble call rejected with a TypeError and the outdated
+    // expectation stayed masked until 2026-08-10.
     rosterFindMany.mockResolvedValue([
       baseRoster({ league: { ...baseRoster().league, sport: 'NBA' } }),
     ])
     resolvePlayersMock.mockResolvedValue([resolutionFor('p1', { player: { ...resolutionFor('p1').player!, sport: 'NBA' } })])
     const { assembleCrossLeaguePlayerPortfolio } = await import('@/lib/shared-services/league-hub/crossLeaguePlayerPortfolio')
     const result = await assembleCrossLeaguePlayerPortfolio({ appUserId: 'user-1' })
-    expect(result.unsupportedSports).toContain('NBA')
+    // NBA is schedule-capable via the next-game model — honestly NOT unsupported.
+    expect(result.unsupportedSports).not.toContain('NBA')
+    // The NFL bye-week resolver must never run for a daily-cadence sport.
+    expect(resolveScheduleContextMock).not.toHaveBeenCalled()
+    // With no next-game cache rows available in this test, schedule degrades
+    // to null rather than fabricating a bye week.
+    expect(result.items[0].schedule).toBeNull()
+  })
+
+  it('marks a genuinely unsupported sport honestly in unsupportedSports', async () => {
+    rosterFindMany.mockResolvedValue([
+      baseRoster({ league: { ...baseRoster().league, sport: 'CRICKET' } }),
+    ])
+    resolvePlayersMock.mockResolvedValue([resolutionFor('p1', { player: { ...resolutionFor('p1').player!, sport: 'CRICKET' } })])
+    const { assembleCrossLeaguePlayerPortfolio } = await import('@/lib/shared-services/league-hub/crossLeaguePlayerPortfolio')
+    const result = await assembleCrossLeaguePlayerPortfolio({ appUserId: 'user-1' })
+    expect(result.unsupportedSports).toContain('CRICKET')
     expect(result.items[0].schedule).toBeNull()
     expect(resolveScheduleContextMock).not.toHaveBeenCalled()
   })

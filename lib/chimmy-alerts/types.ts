@@ -73,9 +73,47 @@ export interface ChimmyAlert {
   metadata?: Record<string, unknown>
 }
 
+/**
+ * A rostered STARTER carrying an injury designation, with the best available replacement.
+ *
+ * This is the signal the Sunday-panic case turns on — "OUT and still starting, 45 minutes to
+ * lock" — and it did not exist. `hydrateSignalBundle` previously queried only draft state,
+ * storylines and pending trades, so no detector could fire on an injury no matter how fresh
+ * the injury table was.
+ */
+export interface InjuredStarterSignal {
+  playerName: string
+  position: string | null
+  /** Parsed designation, e.g. "Out" / "Doubtful" / "Questionable". Never invented. */
+  designation: string
+  /** Body part or prose detail, when the provider stated one. */
+  detail?: string | null
+  leagueId: string
+  leagueName?: string | null
+  /** Where the manager must actually go to fix it — imported leagues are not editable here. */
+  platform?: string | null
+  /**
+   * When THIS player locks — his own kickoff, from the real schedule.
+   *
+   * Deliberately per-player rather than per-league. A Thursday-night starter locks Thursday
+   * while a 4:25pm starter locks Sunday afternoon, so a single league-wide lock time would be
+   * wrong for most of a roster. Null when the schedule has no game for him (bye, or no row).
+   */
+  lockAt?: string | null
+  /** Best replacement on the bench, when a projection exists to rank by. */
+  replacement?: { playerName: string; projectedPoints: number | null } | null
+  /**
+   * True when the designation is older than the freshness window. A two-week-old
+   * "Questionable" is a false statement, not old data, so it is carried rather than hidden.
+   */
+  stale?: boolean
+}
+
 export interface ChimmyAlertSignalBundle {
   lineupIncomplete?: boolean
   lineupLockAt?: string | null
+  /** Rostered starters carrying an injury designation. Empty array = checked, none found. */
+  injuredStarters?: InjuredStarterSignal[]
   highConfidenceStartSitSwing?: boolean
   highConfidenceWaiverAdd?: { playerName: string; confidence: number; faabPct?: number } | null
   tradeOfferPendingCount?: number
@@ -203,5 +241,11 @@ export interface ChimmyAlertCandidate {
   repeatable?: boolean
   repeatCooldownMinutes?: number
   roleScope?: 'member' | 'commissioner' | 'admin'
+  /**
+   * League this candidate belongs to. `ChimmyAlert` already carries it; a candidate needs it
+   * too whenever one sweep spans several leagues — otherwise two leagues' alerts for the same
+   * player are indistinguishable, and per-league mute preferences cannot be applied.
+   */
+  leagueId?: string | null
   metadata?: Record<string, unknown>
 }

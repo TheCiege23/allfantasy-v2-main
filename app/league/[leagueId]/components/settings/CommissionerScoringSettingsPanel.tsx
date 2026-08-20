@@ -8,7 +8,7 @@ import type { LeagueScoringConfig } from '@/lib/scoring-defaults/LeagueScoringCo
 import { getScoringSettingsLayout, type ScoringLayoutRow } from '@/lib/scoring-defaults/scoring-settings-layout'
 import { templateStatKeyFromUiKey } from '@/lib/league/scoring-stat-metadata'
 
-const ACCENT = 'bg-cyan-400/15 text-cyan-200 border border-cyan-400/35'
+const ACCENT = 'bg-[#ff3d81]/15 text-[#ffb8d1] border border-[#ff3d81]/35'
 const PILL_INACTIVE = 'border border-white/[0.1] bg-white/[0.04] text-white/70 hover:bg-white/[0.07]'
 
 function isYardStatKey(uiKey: string): boolean {
@@ -328,7 +328,7 @@ export function CommissionerScoringSettingsPanel({
                       disabled={!canEdit}
                       aria-label={`${row.label} scoring enabled`}
                       onChange={(e) => setEnabled(row.uiKey, e.target.checked)}
-                      className="h-3.5 w-3.5 rounded border border-white/25 bg-[#070a10] text-cyan-500 focus:ring-cyan-500/40 disabled:opacity-50"
+                      className="h-3.5 w-3.5 rounded border border-white/25 bg-[#070a10] text-[#ff3d81] focus:ring-[#ff3d81]/40 disabled:opacity-50"
                     />
                     On
                   </label>
@@ -337,7 +337,7 @@ export function CommissionerScoringSettingsPanel({
                     inputMode="decimal"
                     disabled={!canEdit || !st.enabled}
                     aria-label={`${row.label} points`}
-                    className="h-8 w-[4.5rem] rounded-md border border-white/[0.12] bg-[#070a10] px-2 text-right text-[12px] font-medium tabular-nums text-white shadow-inner placeholder:text-white/20 focus:border-cyan-500/45 focus:outline-none focus:ring-1 focus:ring-cyan-500/30 disabled:opacity-45"
+                    className="h-8 w-[4.5rem] rounded-md border border-white/[0.12] bg-[#070a10] px-2 text-right text-[12px] font-medium tabular-nums text-white shadow-inner placeholder:text-white/20 focus:border-[#ff3d81]/45 focus:outline-none focus:ring-1 focus:ring-[#ff3d81]/30 disabled:opacity-45"
                     value={Number.isFinite(val) ? String(val) : ''}
                     onChange={(e) => setPoints(row.uiKey, e.target.value)}
                   />
@@ -353,7 +353,7 @@ export function CommissionerScoringSettingsPanel({
           type="button"
           disabled={!canEdit || saving || !dirty}
           onClick={() => void save()}
-          className="mx-auto flex w-full max-w-md items-center justify-center rounded-xl bg-gradient-to-r from-cyan-500/85 to-sky-600/90 px-5 py-2.5 text-[12px] font-bold uppercase tracking-wide text-[#041018] shadow-lg shadow-cyan-500/15 disabled:cursor-not-allowed disabled:opacity-40"
+          className="mx-auto flex w-full max-w-md items-center justify-center rounded-xl bg-gradient-to-r from-[#ff3d81]/85 to-sky-600/90 px-5 py-2.5 text-[12px] font-bold uppercase tracking-wide text-[#041018] shadow-lg shadow-[#ff3d81]/15 disabled:cursor-not-allowed disabled:opacity-40"
         >
           {saving ? 'Saving…' : 'Save changes'}
         </button>

@@ -10,7 +10,7 @@ import {
   type MonetizationSku,
 } from "@/lib/monetization/catalog"
 import { resolveSafeReturnPath } from "@/lib/monetization/checkout-urls"
-import { buildStripeCheckoutDestinationForSku } from "@/lib/monetization/StripeCheckoutLinkRegistry"
+import { buildStripeCheckoutSessionForSku } from "@/lib/monetization/StripeCheckoutSession"
 import { enforcePaidSubscriptionGeo } from "@/lib/geo/enforcePaidSubscriptionGeo"
 import {
   normalizeCouponCode,
@@ -97,14 +97,16 @@ export async function POST(req: Request) {
     }
 
     const returnPath = resolveSafeReturnPath(body?.returnPath, "/pricing")
-    const destination = buildStripeCheckoutDestinationForSku({
+    // Canonical checkout: charge is derived from the catalog price id
+    // (STRIPE_PRICE_AF_*), guaranteeing charged == displayed catalog price.
+    const checkout = await buildStripeCheckoutSessionForSku({
       sku: item.sku,
       userId: session.user.id,
       userEmail: session.user.email ?? null,
       returnPath,
       couponCode: resolvedCouponCode,
     })
-    if (!destination || destination.purchaseType !== "tokens") {
+    if (!checkout || checkout.purchaseType !== "tokens") {
       return NextResponse.json(
         {
           error: "Checkout is temporarily unavailable for this token pack. Please try again shortly.",
@@ -114,7 +116,7 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({
-      url: destination.url,
+      url: checkout.url,
       sku: item.sku,
       tokenAmount: item.tokenAmount ?? 0,
       purchaseType: "tokens",

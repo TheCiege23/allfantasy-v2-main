@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireLeagueApiAccess } from '@/lib/api/require-league-access'
 
 export const dynamic = 'force-dynamic'
 
@@ -10,6 +11,9 @@ export async function GET(
   if (!leagueId) {
     return NextResponse.json({ error: 'leagueId required' }, { status: 400 })
   }
+  // Membership gate. This route was reachable by anyone holding a league id.
+  const gate = await requireLeagueApiAccess(leagueId)
+  if (!gate.ok) return gate.response
 
   try {
     const [{ getDraftConfigForLeague }, { prisma }] = await Promise.all([

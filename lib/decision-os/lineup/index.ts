@@ -14,6 +14,7 @@ import { buildLineupDCO, type LineupDCO } from './dco'
 import { decideLineupSet, type LineupDecisionDeps } from './decision'
 import { compareLineupParity, type LineupParityResult } from './parity'
 import type { LineupWarehouseFacts } from './warehouseFacts'
+import type { LineupSignalFacts } from './signalFacts'
 
 export * from './world'
 export * from './dco'
@@ -37,6 +38,8 @@ export interface RunLineupSetInput {
   scanIncomplete?: boolean
   /** Optional F2.9/F2.10 warehouse grounding (ADR F2.10) — memo/explainability enrichment only. */
   warehouse?: LineupWarehouseFacts
+  /** Optional F2.2–F2.7 signal grounding — memo/explainability enrichment only. */
+  signals?: LineupSignalFacts
 }
 
 export interface RunLineupSetDeps {
@@ -69,6 +72,7 @@ export async function runLineupSetDecision(input: RunLineupSetInput, deps: RunLi
     projectionConfidence: input.projectionConfidence,
     scanIncomplete: input.scanIncomplete,
     warehouse: input.warehouse,
+    signals: input.signals,
   })
   const decision = await decideLineupSet(dco, deps.decision)
 

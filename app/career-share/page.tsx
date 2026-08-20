@@ -57,8 +57,8 @@ interface RankSnapshot {
   careerTierName: string
   careerLevel: number
   careerXp: string
-  aiReportGrade: string
-  aiScore: number
+  aiReportGrade: string | null
+  aiScore: number | null
   aiInsight: string
 }
 
@@ -663,7 +663,10 @@ export default function CareerSharePage() {
                         <span className="font-bold text-white/80">{rankData.careerTierName}</span>
                         <span className="text-violet-300">Level {rankData.careerLevel}</span>
                       </div>
-                      <div>{Number(rankData.careerXp).toLocaleString()} XP · AI Grade {rankData.aiReportGrade}</div>
+                      <div>
+                        {Number(rankData.careerXp).toLocaleString()} XP
+                        {rankData.aiReportGrade ? ` · AI Grade ${rankData.aiReportGrade}` : ''}
+                      </div>
                     </div>
                   ) : (
                     <div className="rounded-xl bg-white/3 p-3 text-[11px] text-white/45">

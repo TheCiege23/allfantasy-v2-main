@@ -86,6 +86,14 @@ const CRON_METADATA: Record<string, CronMetadata> = {
   "/api/redraft/score-sync": { jobName: "cron-redraft-score-sync", category: "scores", staleAfterH: 2, instrumented: true },
   "/api/redraft/waiver-process": { jobName: "redraft-waiver-process", category: "waivers", staleAfterH: 4, instrumented: false },
   "/api/cron/import-nfl-team-defense": { jobName: "cron-nfl-team-defense-import", category: "scores", staleAfterH: 4, instrumented: true },
+  // Notification/recap fleet — wrapped in withSyncJobRun (Aug 2026) after all three
+  // shipped scheduled-but-404ing for weeks with zero telemetry to catch it.
+  "/api/cron/weekly-awards": { jobName: "cron-weekly-awards", category: "ai", staleAfterH: 192, instrumented: true },
+  "/api/cron/trade-grade-notify": { jobName: "cron-trade-grade-notify", category: "ai", staleAfterH: 2, instrumented: true },
+  "/api/cron/morning-briefing": { jobName: "cron-morning-briefing", category: "ai", staleAfterH: 30, instrumented: true },
+  // Decision OS behavioral snapshot daily discovery walk (Aug 2026).
+  "/api/cron/decision-os-snapshot-capture": { jobName: "cron-decision-os-snapshot-capture", category: "ai", staleAfterH: 30, instrumented: true },
+  "/api/cron/decision-os-activity-ingest": { jobName: "cron-decision-os-activity-ingest", category: "data-import", staleAfterH: 30, instrumented: true },
 }
 
 function deriveCategory(pathname: string): CronCategory {

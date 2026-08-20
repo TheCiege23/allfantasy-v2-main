@@ -54,29 +54,56 @@ export async function POST(req: Request) {
   await (prisma as any).emailVerifyToken.deleteMany({ where: { userId } }).catch(() => {})
   const tokenRecord = await (prisma as any).emailVerifyToken.create({ data: { userId, tokenHash, expiresAt } })
 
+  // Preview-aware, spoof-safe origin (mirrors the register route): a resend on a PREVIEW
+  // deployment links back to the preview host so the token resolves in the preview DB;
+  // production keeps the configured canonical. Never derived from a request header.
+  const { getDeploymentLinkOrigin } = await import("@/lib/site-public-origin")
   const { USER_FACING_SITE_ORIGIN } = await import("@/lib/auth/user-facing-site-origin")
-  const verifyUrl = `${USER_FACING_SITE_ORIGIN}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent(safeReturnTo)}`
+  const emailOrigin = getDeploymentLinkOrigin() || USER_FACING_SITE_ORIGIN
+  const verifyUrl = `${emailOrigin}/verify/email?token=${encodeURIComponent(rawToken)}&returnTo=${encodeURIComponent(safeReturnTo)}`
 
-  const { getResendClient } = await import("@/lib/resend-client")
-  const { client, fromEmail } = await getResendClient()
+  const { getResendClient, resendSendError } = await import("@/lib/resend-client")
 
   const { buildVerificationEmailHtml } = await import("@/lib/email/verification-email-html")
   const { buildEmailIdempotencyKey } = await import("@/lib/email/idempotency")
 
-  await client.emails.send(
-    {
-      from: fromEmail || "AllFantasy.ai <noreply@allfantasy.ai>",
-      to: targetEmail,
-      subject: "Verify your email for AllFantasy.ai",
-      html: buildVerificationEmailHtml({
-        title: "Verify your email",
-        greeting: "Click the button below to verify your AllFantasy.ai email address.",
-        verifyUrl,
-        footerNote: "If you didn't request this, you can safely ignore this email.",
-      }),
-    },
-    { idempotencyKey: buildEmailIdempotencyKey("email-verify-resend", userId, tokenRecord.id) }
-  )
+  // Resend resolves { data, error } WITHOUT throwing on a provider rejection; a thrown error
+  // (missing key / network) is also possible. Treat either as a failed send so we never report
+  // success for an email that did not go out.
+  let sendError: string | null = null
+  try {
+    const { client, fromEmail } = await getResendClient()
+    const sendResult = await client.emails.send(
+      {
+        from: fromEmail || "AllFantasy.ai <noreply@allfantasy.ai>",
+        to: targetEmail,
+        subject: "Verify your email for AllFantasy.ai",
+        html: buildVerificationEmailHtml({
+          title: "Verify your email",
+          greeting: "Click the button below to verify your AllFantasy.ai email address.",
+          verifyUrl,
+          footerNote: "If you didn't request this, you can safely ignore this email.",
+        }),
+      },
+      { idempotencyKey: buildEmailIdempotencyKey("email-verify-resend", userId, tokenRecord.id) }
+    )
+    sendError = resendSendError(sendResult)
+  } catch (err) {
+    sendError = err instanceof Error ? err.message : "unknown error"
+  }
+
+  if (sendError) {
+    // Log the provider message ONLY — never the recipient, token, or verification URL.
+    console.error(`[verify-email/send] verification email send failed: ${sendError}`)
+    // The email did not go out — drop the just-created token so it is not left usable, and
+    // return an honest failure instead of a false success. (Auth, cooldown, and rate limits
+    // above are unchanged; a successful send still keeps its token and returns { ok: true }.)
+    await (prisma as any).emailVerifyToken.delete({ where: { id: tokenRecord.id } }).catch(() => {})
+    return NextResponse.json(
+      { error: "EMAIL_SEND_FAILED", message: "We couldn't send the verification email right now. Please try again." },
+      { status: 502 }
+    )
+  }
 
   return NextResponse.json({ ok: true })
 }

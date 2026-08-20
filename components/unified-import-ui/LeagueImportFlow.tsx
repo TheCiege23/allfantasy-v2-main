@@ -104,6 +104,15 @@ export function LeagueImportFlow({
     sourceInput: string
     leagueName: string
     canonical: CanonicalPreview | null
+    /** True when this preview passed the gate via member/commissioner attestation — commit must resend it. */
+    attested?: boolean
+  } | null>(null)
+  /** The gate asked for an explicit confirmation (member import / unverifiable commissioner). */
+  const [attestPrompt, setAttestPrompt] = useState<{
+    provider: ImportProvider
+    sourceInput: string
+    discoverySourceId?: string
+    message: string
   } | null>(null)
   const [committing, setCommitting] = useState(false)
   const [conflict, setConflict] = useState<{ message: string } | null>(null)
@@ -123,6 +132,68 @@ export function LeagueImportFlow({
     sourceId: string
     message: string
   } | null>(null)
+  // ── Bulk import ("Import all") over the discovery results ──────────────────
+  // Sequential commits through the SAME /api/leagues/import/commit pipeline as
+  // single imports — same commissioner gate, same normalization/backfill. Each
+  // league's outcome is shown honestly: imported / already imported / needs
+  // commissioner confirmation / failed. Nothing is force-overwritten.
+  type BulkLeagueStatus = 'importing' | 'done' | 'exists' | 'needs-attestation' | 'failed'
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkDone, setBulkDone] = useState(false)
+  const [bulkAttest, setBulkAttest] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<Record<string, BulkLeagueStatus>>({})
+
+  async function runBulkImport() {
+    if (bulkRunning || discoveredLeagues.length === 0) return
+    setBulkRunning(true)
+    setBulkDone(false)
+    setBulkStatus({})
+    setPreviewInfo(null)
+    setFormError(null)
+    for (const league of discoveredLeagues) {
+      setBulkStatus((prev) => ({ ...prev, [league.sourceId]: 'importing' }))
+      let result = await submitImportCreation(activeImportProvider, league.sourceId, userId)
+      if (!result.ok && result.requiresAttestation && bulkAttest) {
+        result = await submitImportCreation(activeImportProvider, league.sourceId, userId, {
+          accepted: true,
+          statement: 'Bulk import: I confirm I am authorized to import this league into AllFantasy.',
+        })
+      }
+      const status: BulkLeagueStatus = result.ok
+        ? 'done'
+        : result.status === 409
+          ? 'exists'
+          : result.requiresAttestation
+            ? 'needs-attestation'
+            : 'failed'
+      setBulkStatus((prev) => ({ ...prev, [league.sourceId]: status }))
+    }
+    setBulkRunning(false)
+    setBulkDone(true)
+  }
+
+  const bulkCounts = useMemo(() => {
+    const values = Object.values(bulkStatus)
+    return {
+      done: values.filter((v) => v === 'done').length,
+      exists: values.filter((v) => v === 'exists').length,
+      needsAttestation: values.filter((v) => v === 'needs-attestation').length,
+      failed: values.filter((v) => v === 'failed').length,
+      processed: values.filter((v) => v !== 'importing').length,
+    }
+  }, [bulkStatus])
+
+  function BulkChip({ status }: { status: BulkLeagueStatus }) {
+    if (status === 'importing')
+      return <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#ffb8d1]"><Loader2 className="h-3 w-3 animate-spin" />importing…</span>
+    if (status === 'done')
+      return <span className="rounded-full bg-emerald-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-300">imported ✓</span>
+    if (status === 'exists')
+      return <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white/55">already imported</span>
+    if (status === 'needs-attestation')
+      return <span className="rounded-full bg-amber-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-200">needs commissioner confirmation</span>
+    return <span className="rounded-full bg-red-500/[0.15] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-red-300">failed</span>
+  }
 
   const previewSectionRef = useRef<HTMLDivElement>(null)
 
@@ -169,6 +240,34 @@ export function LeagueImportFlow({
   const activeImportProvider = tabToImportProvider(tab)
   const supportsAccountDiscovery =
     supportsImportProviderDiscovery(activeImportProvider)
+
+  // Auto-discovery: Sleeper (linked account) and Yahoo (connected OAuth) can
+  // list "your leagues" with no input — run it on tab entry so the league list
+  // and Import All are just THERE. Silent on failure (no linked account →
+  // the manual identifier input still works exactly as before).
+  useEffect(() => {
+    if (!supportsAccountDiscovery) return
+    if (activeImportProvider !== 'sleeper' && activeImportProvider !== 'yahoo') return
+    let cancelled = false
+    void discoverProviderLeagues(activeImportProvider, '', { sport: 'nfl' }).then((result) => {
+      if (cancelled || !result.ok) return
+      const payload = result.data as {
+        account?: { displayName?: string; accountIdentifier?: string }
+        leagues?: ProviderLeagueDiscoveryItem[]
+      }
+      setDiscoveredAccountLabel(
+        payload.account?.displayName?.trim() || payload.account?.accountIdentifier?.trim() || '',
+      )
+      setDiscoveredLeagues(payload.leagues ?? [])
+    })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeImportProvider, supportsAccountDiscovery])
+  // Yahoo discovery lists leagues from the user's CONNECTED Yahoo account
+  // (OAuth) — no account identifier input is shown or required for it.
+  const discoveryUsesConnectedAccount = activeImportProvider === 'yahoo'
   const panelProviders = useMemo<ImportProvider[]>(
     () => [activeImportProvider],
     [activeImportProvider],
@@ -182,17 +281,39 @@ export function LeagueImportFlow({
     } as Partial<Record<ImportProvider, string>>
   }, [activeImportProvider, initialLeagueSourceId])
 
-  async function runPreview(provider: ImportProvider, sourceInput: string, discoverySourceId?: string) {
+  async function runPreview(
+    provider: ImportProvider,
+    sourceInput: string,
+    discoverySourceId?: string,
+    attest = false,
+  ) {
     setLoadingProvider(provider)
     setPreviewingSourceId(discoverySourceId ?? null)
     setFormError(null)
     setLeaguePreviewError(null)
     setPreviewInfo(null)
     setConflict(null)
+    setAttestPrompt(null)
 
     try {
-      const preview = await fetchImportPreview(provider, sourceInput)
+      const preview = await fetchImportPreview(
+        provider,
+        sourceInput,
+        attest ? { accepted: true } : undefined,
+      )
       if (!preview.ok) {
+        // The gate wants an explicit confirmation (verified member importing a
+        // league they don't commission, or a provider that can't auto-verify).
+        // Surface a confirm panel instead of a dead-end error.
+        if (preview.requiresAttestation) {
+          setAttestPrompt({
+            provider,
+            sourceInput,
+            discoverySourceId,
+            message: preview.error || 'Confirm to import this league.',
+          })
+          return
+        }
         throw new Error(preview.error || t('import.error.previewFailed'))
       }
 
@@ -203,7 +324,7 @@ export function LeagueImportFlow({
       const leagueName =
         payload?.league?.name?.trim() || t('import.leagueDefaultName')
       const canonical = payload?.canonical ?? null
-      setPreviewInfo({ provider, sourceInput, leagueName, canonical })
+      setPreviewInfo({ provider, sourceInput, leagueName, canonical, attested: attest })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : t('import.error.generic')
       if (discoverySourceId) {
@@ -264,7 +385,7 @@ export function LeagueImportFlow({
         previewInfo.provider,
         previewInfo.sourceInput,
         userId,
-        undefined,
+        previewInfo.attested ? { accepted: true } : undefined,
         { force },
       )
 
@@ -331,7 +452,7 @@ export function LeagueImportFlow({
   const rootShellClassName =
     mode === 'embedded'
       ? ''
-      : 'af-import-shell min-h-screen bg-gradient-to-b from-slate-950 to-slate-900 py-12 sm:py-20'
+      : 'af-import-shell min-h-screen bg-gradient-to-b from-[#0b0e2a] to-[#12163e] py-12 sm:py-20'
 
   return (
     <div className={rootShellClassName}>
@@ -361,13 +482,13 @@ export function LeagueImportFlow({
 
         <div className="warroom-fade-in-stagger relative mb-10">
           <div className="mx-auto mb-4 inline-flex w-full items-center justify-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-cyan-500/25 bg-cyan-500/[0.06] px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-cyan-300/85">
-              <span className="inline-block h-1.5 w-1.5 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.6)]" aria-hidden />
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#ff3d81]/25 bg-[#ff3d81]/[0.06] px-3 py-1 text-[11px] font-black uppercase tracking-[0.24em] text-[#ff9ec0]/85">
+              <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#ff3d81] shadow-[0_0_10px_rgba(255,61,129,0.6)]" aria-hidden />
               Step 1 · Choose Platform
             </span>
           </div>
-          <h1 className="relative text-center text-4xl font-bold text-transparent sm:text-5xl">
-            <span className="bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text">
+          <h1 className="relative text-center text-4xl font-black italic text-transparent sm:text-5xl">
+            <span className="bg-gradient-to-r from-[#ff3d81] via-[#ff6b5e] to-[#ff8a3d] bg-clip-text">
               Connect your league
             </span>
           </h1>
@@ -380,7 +501,7 @@ export function LeagueImportFlow({
             Connect provider credentials in{' '}
             <Link
               href="/settings"
-              className="text-cyan-400 underline hover:text-cyan-300"
+              className="text-[#ff3d81] underline hover:text-[#ff9ec0]"
             >
               Settings
             </Link>{' '}
@@ -388,8 +509,8 @@ export function LeagueImportFlow({
           </p>
         </div>
 
-        <div className="warroom-card warroom-fade-in-stagger relative overflow-hidden rounded-3xl border border-white/10 bg-white/5 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
-          <div className="h-1 bg-gradient-to-r from-cyan-400/60 via-purple-400/60 to-cyan-400/60" />
+        <div className="warroom-card warroom-fade-in-stagger relative overflow-hidden rounded-3xl border border-[#262c6a] bg-[#12163e]/70 shadow-[0_20px_60px_rgba(0,0,0,0.45)]">
+          <div className="h-1 bg-gradient-to-r from-[#ff3d81] to-[#ff8a3d]" />
           <div className="p-6 sm:p-8">
             <h2 className="text-2xl font-bold text-white">
               Choose your platform
@@ -414,7 +535,7 @@ export function LeagueImportFlow({
                   }}
                   className={`warroom-pressable relative min-w-[100px] flex-1 rounded-xl px-2 py-2.5 text-sm font-semibold transition ${
                     tab === id
-                      ? 'border border-cyan-400/50 bg-gradient-to-r from-cyan-500/30 to-purple-500/30 text-white'
+                      ? 'border border-[#ff3d81]/50 bg-gradient-to-r from-[#ff3d81]/30 to-[#ff8a3d]/30 text-white'
                       : 'border border-white/10 bg-black/30 text-white/60 hover:border-white/25 hover:text-white'
                   }`}
                   data-testid={`import-tab-${id}`}
@@ -439,51 +560,59 @@ export function LeagueImportFlow({
                 step.
               </p>
               {supportsAccountDiscovery ? (
-                <div className="rounded-2xl border border-cyan-500/20 bg-cyan-500/[0.05] p-4">
+                <div className="rounded-2xl border border-[#ff3d81]/20 bg-[#ff3d81]/[0.05] p-4">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold text-cyan-100">
+                      <p className="text-sm font-semibold text-[#ffd7e5]">
                         Discover leagues from account
                       </p>
-                      <p className="mt-1 text-[12px] text-cyan-50/70">
-                        Use a provider account identifier to find an NFL league,
-                        then preview the canonical import before you commit it.
+                      <p className="mt-1 text-[12px] text-[#ffe9f1]/70">
+                        {discoveryUsesConnectedAccount
+                          ? 'Lists the NFL leagues on your connected Yahoo account. Connect Yahoo in Settings first if you have not yet.'
+                          : 'Use a provider account identifier to find an NFL league, then preview the canonical import before you commit it.'}
                       </p>
                     </div>
-                    <span className="rounded-full border border-cyan-400/25 bg-black/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-200/85">
+                    <span className="rounded-full border border-[#ff3d81]/25 bg-black/20 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#ffb8d1]/85">
                       {getImportProviderLabel(activeImportProvider)}
                     </span>
                   </div>
 
                   <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      value={providerAccountInput}
-                      onChange={(event) =>
-                        setProviderAccountInput(event.target.value)
-                      }
-                      placeholder="Provider username or account identifier"
-                      data-testid="import-discovery-account"
-                      className="h-11 flex-1 rounded-xl border border-cyan-400/35 bg-[#030a20] px-3 text-sm text-white outline-none placeholder:text-white/30"
-                    />
+                    {!discoveryUsesConnectedAccount ? (
+                      <input
+                        value={providerAccountInput}
+                        onChange={(event) =>
+                          setProviderAccountInput(event.target.value)
+                        }
+                        placeholder="Provider username or account identifier"
+                        data-testid="import-discovery-account"
+                        className="h-11 flex-1 rounded-xl border border-[#ff3d81]/35 bg-[#0b0e2a] px-3 text-sm text-white outline-none placeholder:text-white/30"
+                      />
+                    ) : null}
                     <button
                       type="button"
                       disabled={
                         discoveringProvider === activeImportProvider ||
-                        !providerAccountInput.trim()
+                        (!discoveryUsesConnectedAccount &&
+                          !providerAccountInput.trim())
                       }
                       onClick={() =>
                         void runProviderDiscovery(
                           activeImportProvider,
-                          providerAccountInput,
+                          discoveryUsesConnectedAccount
+                            ? ''
+                            : providerAccountInput,
                         )
                       }
                       data-testid="import-discovery-find"
-                      className="warroom-pressable inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-cyan-300/40 px-4 text-sm font-semibold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-40"
+                      className="warroom-pressable inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-[#ff9ec0]/40 px-4 text-sm font-semibold text-[#ffd7e5] hover:bg-[#ff9ec0]/10 disabled:opacity-40"
                     >
                       <Search className="h-4 w-4" />
                       {discoveringProvider === activeImportProvider
                         ? 'Finding leagues...'
-                        : 'Find leagues'}
+                        : discoveryUsesConnectedAccount
+                          ? 'List my Yahoo leagues'
+                          : 'Find leagues'}
                     </button>
                   </div>
 
@@ -505,15 +634,74 @@ export function LeagueImportFlow({
 
                   {discoveredLeagues.length > 0 ? (
                     <div className="mt-4 space-y-2">
-                      <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-cyan-200/70">
-                        {discoveredAccountLabel
-                          ? `${discoveredAccountLabel} leagues`
-                          : 'Discovered leagues'}
-                      </p>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-[#ffb8d1]/70">
+                          {discoveredAccountLabel
+                            ? `${discoveredAccountLabel} leagues`
+                            : 'Discovered leagues'}
+                        </p>
+                        <button
+                          type="button"
+                          disabled={bulkRunning || previewingSourceId !== null || loadingProvider !== null}
+                          onClick={() => void runBulkImport()}
+                          data-testid="import-all"
+                          className="warroom-pressable inline-flex h-9 items-center justify-center gap-2 rounded-xl bg-[#ff3d81] px-4 text-[13px] font-bold text-black hover:bg-[#ff3d81] disabled:opacity-50"
+                        >
+                          {bulkRunning ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              Importing {bulkCounts.processed}/{discoveredLeagues.length}…
+                            </>
+                          ) : (
+                            <>Import all ({discoveredLeagues.length}) &amp; update dashboard</>
+                          )}
+                        </button>
+                      </div>
+                      <label className="flex cursor-pointer items-start gap-2 text-[11.5px] leading-snug text-white/55">
+                        <input
+                          type="checkbox"
+                          checked={bulkAttest}
+                          onChange={(e) => setBulkAttest(e.target.checked)}
+                          disabled={bulkRunning}
+                          className="mt-0.5 h-3.5 w-3.5 accent-[#ff3d81]"
+                          data-testid="import-all-attest"
+                        />
+                        Also import leagues where I can&apos;t be auto-verified as commissioner — I
+                        confirm I&apos;m authorized to import them (recorded in the audit trail).
+                      </label>
+                      {bulkDone ? (
+                        <div className="rounded-xl border border-[#ff3d81]/25 bg-[#ff3d81]/[0.06] p-3">
+                          <p className="text-[13px] font-semibold text-[#ffd7e5]">
+                            Bulk import finished — {bulkCounts.done} imported
+                            {bulkCounts.exists > 0 ? ` · ${bulkCounts.exists} already in AllFantasy` : ''}
+                            {bulkCounts.needsAttestation > 0 ? ` · ${bulkCounts.needsAttestation} need commissioner confirmation` : ''}
+                            {bulkCounts.failed > 0 ? ` · ${bulkCounts.failed} failed` : ''}.
+                          </p>
+                          {bulkCounts.needsAttestation > 0 && !bulkAttest ? (
+                            <p className="mt-1 text-[11.5px] text-white/55">
+                              Tick the authorization box above and run again to include the flagged leagues.
+                            </p>
+                          ) : null}
+                          <p className="mt-1 text-[11.5px] text-white/55">
+                            Next: open a league from My Leagues and hit <b>Invite managers</b> —
+                            every leaguemate who claims their team unlocks trades, chat, and
+                            career cards for your whole league.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => router.push(onCompleteRedirect ?? '/dashboard')}
+                            data-testid="import-all-go-dashboard"
+                            className="warroom-pressable mt-2 inline-flex h-9 items-center justify-center rounded-xl bg-[#ff3d81] px-4 text-[13px] font-bold text-black hover:bg-[#ff3d81]"
+                          >
+                            Go to dashboard →
+                          </button>
+                        </div>
+                      ) : null}
                       <div className="space-y-2">
                         {discoveredLeagues.map((league) => {
                           const isThisLoading = previewingSourceId === league.sourceId
-                          const isAnyLoading = previewingSourceId !== null || loadingProvider !== null
+                          const isAnyLoading = previewingSourceId !== null || loadingProvider !== null || bulkRunning
+                          const bulkState = bulkStatus[league.sourceId]
                           const thisError = leaguePreviewError?.sourceId === league.sourceId ? leaguePreviewError.message : null
                           const thisPreviewed = previewInfo?.sourceInput === league.sourceId
 
@@ -530,7 +718,11 @@ export function LeagueImportFlow({
                                   {league.season ?? 'Current season'} |{' '}
                                   {(league.sport ?? 'NFL').toUpperCase()} |{' '}
                                   {league.totalTeams ?? '--'} teams
-                                  {league.isDynasty ? ' | Dynasty' : ' | Redraft'}
+                                  {league.isDynasty === undefined
+                                    ? ''
+                                    : league.isDynasty
+                                      ? ' | Dynasty'
+                                      : ' | Redraft'}
                                 </p>
                                 {thisError ? (
                                   <p className="mt-2 text-[12px] text-red-300">
@@ -539,9 +731,14 @@ export function LeagueImportFlow({
                                   </p>
                                 ) : null}
                                 {thisPreviewed && !thisError ? (
-                                  <p className="mt-2 text-[12px] font-semibold text-cyan-300">
+                                  <p className="mt-2 text-[12px] font-semibold text-[#ff9ec0]">
                                     Preview loaded — see below
                                   </p>
+                                ) : null}
+                                {bulkState ? (
+                                  <div className="mt-2">
+                                    <BulkChip status={bulkState} />
+                                  </div>
                                 ) : null}
                               </div>
                               <button
@@ -557,8 +754,8 @@ export function LeagueImportFlow({
                                 }
                                 className={`warroom-pressable inline-flex h-10 shrink-0 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-black ${
                                   isThisLoading
-                                    ? 'bg-cyan-500/60'
-                                    : 'bg-cyan-500 hover:bg-cyan-400 disabled:opacity-50'
+                                    ? 'bg-[#ff3d81]/60'
+                                    : 'bg-[#ff3d81] hover:bg-[#ff3d81] disabled:opacity-50'
                                 }`}
                               >
                                 {isThisLoading ? (
@@ -593,9 +790,43 @@ export function LeagueImportFlow({
                 loadingProvider={loadingProvider}
                 initialInputs={unifiedInitialInputs}
               />
+              {attestPrompt && attestPrompt.provider === activeImportProvider && (
+                <div className="rounded-xl border border-amber-500/30 bg-amber-500/[0.06] p-4" data-testid="import-attest-prompt">
+                  <p className="text-[13px] font-semibold text-amber-100">Confirmation needed</p>
+                  <p className="mt-1 text-[12.5px] text-white/70">{attestPrompt.message}</p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      data-testid="import-attest-confirm"
+                      onClick={() =>
+                        void runPreview(
+                          attestPrompt.provider,
+                          attestPrompt.sourceInput,
+                          attestPrompt.discoverySourceId,
+                          true,
+                        )
+                      }
+                      className="rounded-xl bg-amber-400 px-4 py-2 text-[13px] font-bold text-black hover:bg-amber-300"
+                    >
+                      I confirm — import this league
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAttestPrompt(null)}
+                      className="rounded-xl border border-white/15 px-4 py-2 text-[13px] font-semibold text-white/70 hover:bg-white/5"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  <p className="mt-2 text-[11px] text-white/45">
+                    Recorded in the import audit trail. Your leaguemates can claim their teams, and the
+                    commissioner can take over the league later.
+                  </p>
+                </div>
+              )}
               {previewInfo && previewInfo.provider === activeImportProvider && (
-                <div ref={previewSectionRef} className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
-                  <p className="mb-1 text-[15px] font-semibold text-cyan-200">
+                <div ref={previewSectionRef} className="rounded-xl border border-[#ff3d81]/25 bg-[#ff3d81]/5 p-4">
+                  <p className="mb-1 text-[15px] font-semibold text-[#ffb8d1]">
                     {t('import.previewLoaded')}
                   </p>
                   <p className="mb-3 text-[13px] text-white/75">
@@ -614,7 +845,7 @@ export function LeagueImportFlow({
                       disabled={committing}
                       data-testid="import-commit"
                       onClick={() => void handleCommit(false)}
-                      className="rounded-xl bg-cyan-500 px-4 py-2 text-[13px] font-bold text-black hover:bg-cyan-400 disabled:opacity-40"
+                      className="rounded-xl bg-[#ff3d81] px-4 py-2 text-[13px] font-bold text-black hover:bg-[#ff3d81] disabled:opacity-40"
                     >
                       {committing ? t('import.importing') : t('import.commitImport')}
                     </button>

@@ -127,7 +127,34 @@ async function waitForTokensReady(page: Page) {
   await expect(page.getByTestId('tokens-buy-cta-af_tokens_5')).toBeVisible({ timeout: 20_000 })
 }
 
-test.describe('@token-system click audit', () => {
+/*
+ * ⚠ THESE DRIVE A /tokens SCREEN THAT NO LONGER EXISTS. Not flaky, and not
+ * fixable with selectors.
+ *
+ * /tokens now renders components/core-app/screens/TokenCentreV4 (handoff 20a),
+ * which is a deliberately simpler page: balance, token packs, spend rules and a
+ * short history list. Two of the ids these tests need mapped to behaviour that
+ * survived, and have been restored on that screen — `tokens-balance-display`
+ * and `tokens-buy-cta-{sku}`. The rest are absent FEATURES, verified as having
+ * no occurrence anywhere under app/ or components/:
+ *
+ *   monetization-fancred-link          a link out to fancred.app
+ *   tokens-spend-confirm               the spend confirmation step
+ *   tokens-insufficient-state          the not-enough-tokens state
+ *   tokens-usage-history-toggle        show/hide on the history panel
+ *   tokens-usage-history-panel         the panel itself as a toggleable region
+ *   tokens-pricing-search-input        search over the spend-rules matrix
+ *   tokens-pricing-category-select     category filter
+ *   tokens-pricing-discount-toggle     subscriber-discount view
+ *   tokens-pricing-results-count       result count for the above
+ *   tokens-pricing-clear-filters       reset for the above
+ *
+ * Whether those come back or the tests go is a product call, not a test fix, so
+ * this is skipped with the list rather than deleted. The network contract is
+ * unchanged and still correct: resolveCheckoutUrl posts token packs to
+ * /api/monetization/checkout/tokens with { sku, returnPath: '/tokens' }.
+ */
+test.describe.skip('@token-system click audit', () => {
   test('buy tokens CTA dispatches checkout payload', async ({ page }) => {
     await mockTokenCenterApis(page)
     let checkoutBody: unknown = null

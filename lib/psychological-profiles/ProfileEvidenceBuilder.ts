@@ -4,6 +4,7 @@
 
 import type { EvidenceType } from './types'
 import type { BehaviorSignalsOutput } from './BehaviorSignalAggregator'
+import { EVIDENCE_FLOORS, evaluateAllDimensions } from './ProfileEvidenceFloor'
 import type { ProfileEvidencePayload } from './types'
 
 export function buildEvidenceFromSignals(
@@ -65,6 +66,16 @@ export function buildEvidenceFromSignals(
     )
   }
   add('risk_taking', signals.riskNorm, 'inferred')
+
+  // Per-dimension evidence counts, always written (including 0). Every record
+  // above is conditional on its signal being non-zero, so their ABSENCE is
+  // ambiguous — a missing trade_frequency row could mean "no trades" or "never
+  // profiled". These make the read layer able to say "unmeasured" instead of
+  // handing a UI a 0 that renders as a confident "0% risk tolerance".
+  const dims = evaluateAllDimensions(signals)
+  add('trade_evidence_count', dims.trade.evidenceCount, `floor:${EVIDENCE_FLOORS.trade.min}`)
+  add('draft_evidence_count', dims.draft.evidenceCount, `floor:${EVIDENCE_FLOORS.draft.min}`)
+  add('roster_evidence_count', dims.roster.evidenceCount, `floor:${EVIDENCE_FLOORS.roster.min}`)
 
   return out
 }

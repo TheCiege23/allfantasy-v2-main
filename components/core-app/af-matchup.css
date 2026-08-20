@@ -1,0 +1,272 @@
+/*
+ * AF Core — screen 5, Matchup.
+ * Scoped under `.af-core` via the shell; see af-core.css for why.
+ */
+
+.af-mu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1020px;
+}
+
+/* ── Week banner ─────────────────────────────────────────────────────── */
+
+.af-mu-week {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-mu-week-state {
+  margin-left: auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-mu-week-state[data-final='true'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+/* An unscored week is not a 0-0 game — it reads as a caution, not a result. */
+.af-mu-week-state[data-final='false'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+/* ── Head to head ────────────────────────────────────────────────────── */
+
+.af-mu-h2h {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, 220px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+}
+
+.af-mu-team {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.af-mu-team[data-align='right'] {
+  flex-direction: row-reverse;
+  text-align: right;
+}
+
+.af-mu-crest {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+  font-weight: 900;
+  font-size: 16px;
+}
+/* Your own side carries the accent so the eye lands on it first. */
+.af-mu-team[data-you='true'] .af-mu-crest {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.af-mu-team-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.af-mu-team-name {
+  font-weight: 800;
+  font-size: 15px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-mu-team-meta {
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.af-mu-score {
+  flex: 0 0 auto;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Centre column ───────────────────────────────────────────────────── */
+
+.af-mu-centre {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px 10px;
+  border-radius: 14px;
+  border: 1px dashed var(--line2);
+  background: var(--surface2);
+  text-align: center;
+}
+
+.af-mu-centre-label {
+  color: var(--faint);
+}
+
+/* The absent probability. Deliberately faint and small — a large grey number
+   still reads as a figure, and this is the absence of one. */
+.af-mu-centre-dash {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--faint);
+  line-height: 1;
+}
+
+.af-mu-centre-why {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+.af-mu-margin {
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+.af-mu-margin[data-leader='you'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-mu-margin[data-leader='opponent'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-mu-margin[data-leader='tied'] {
+  background: var(--chip);
+  color: var(--muted);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+
+.af-mu-section {
+  padding: 14px 16px;
+}
+
+.af-mu-section-head {
+  margin-bottom: 8px;
+}
+
+.af-mu-unavailable {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+.af-mu-unavailable--block {
+  grid-column: 1 / -1;
+  padding: 18px;
+  border-radius: 12px;
+  border: 1px dashed var(--line2);
+  background: var(--surface2);
+  text-align: center;
+}
+
+.af-mu-note {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-mu-missing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.af-mu-missing li {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.af-mu-missing-key {
+  flex: 0 0 auto;
+  min-width: 150px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-mu-missing-why {
+  flex: 1 1 240px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+/* The win probability, when we have one. Sized to match the dash it replaces so
+   the centre column does not jump between the two states. */
+.af-mu-centre-value {
+  font-size: 26px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.af-mu-missing-value {
+  flex: 1 1 240px;
+  font-size: 13.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--ink);
+}
+/*
+  The coverage caveat is quieter than the total but NOT hidden — it qualifies the
+  number it sits beside, and a caveat nobody reads is the same as no caveat.
+*/
+.af-mu-missing-caveat {
+  font-style: normal;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--faint);
+}
+
+@media (max-width: 780px) {
+  .af-mu-h2h {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .af-mu-team[data-align='right'] {
+    flex-direction: row;
+    text-align: left;
+  }
+  .af-mu-centre {
+    order: 3;
+  }
+  .af-mu-missing li {
+    flex-direction: column;
+    gap: 2px;
+  }
+}

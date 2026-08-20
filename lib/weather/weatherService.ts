@@ -46,7 +46,24 @@ const MIN = 60 * MS
 const HOUR = 60 * MIN
 
 export const GAME_WEATHER_TTL_MS = 30 * MIN
-export const TEAM_WINDOW_WEATHER_TTL_MS = 60 * MIN
+
+/**
+ * Must outlive the refresh cadence, or the cache is expired more often than not.
+ *
+ * /api/weather/refresh-cron runs every 3 hours and only refetches a row when it
+ * has expired or is older than 3 hours — but this TTL was 60 minutes, so every
+ * team-window row spent two of every three hours expired. Measured in
+ * production: 229 rows cached, newest fetched 05:53 the same morning, and ZERO
+ * of them unexpired at the time of the check. Consumers that honour expiresAt
+ * (the read paths do) therefore saw no weather at all most of the day, which
+ * reads as "we have no forecast" rather than "the cache lapsed".
+ *
+ * Four hours covers the 3-hour cadence plus cron jitter. Raising the TTL rather
+ * than running the cron hourly is deliberate: the refresh fetches one call per
+ * team-window, so hourly would be ~5.5k provider calls a day against a 1k
+ * allowance.
+ */
+export const TEAM_WINDOW_WEATHER_TTL_MS = 4 * HOUR
 export const CITY_WEATHER_TTL_MS = 30 * MIN
 export const COORDS_WEATHER_TTL_MS = 30 * MIN
 export const STATIC_WEATHER_TTL_MS = 6 * HOUR

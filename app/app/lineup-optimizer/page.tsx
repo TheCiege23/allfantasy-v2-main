@@ -2,7 +2,7 @@ import { LineupOptimizerExperience } from '@/components/lineup-optimizer'
 
 export const metadata = {
   title: 'Lineup Optimizer | AllFantasy',
-  description: 'Premium AI lineup decisions, start/sit, and injury-only auto-sub for your fantasy teams.',
+  description: 'Premium lineup decisions, start/sit, and injury-only auto-sub for your fantasy teams.',
 }
 
 export default function LineupOptimizerPage() {

@@ -17,6 +17,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { UserLeague } from '@/app/dashboard/types'
+import { CommissionerPulse } from '@/components/decide/CommissionerPulse'
 
 type WorkspaceAction = {
   id: string
@@ -53,10 +54,10 @@ function ActionCard({ action }: { action: WorkspaceAction }) {
       disabled={unavailable}
       onClick={action.onClick}
       data-testid={`commissioner-operation-${action.id}`}
-      className="flex min-h-[132px] w-full touch-manipulation flex-col rounded-2xl border border-white/[0.08] bg-black/20 p-4 text-left transition enabled:hover:border-cyan-400/30 enabled:hover:bg-white/[0.055] disabled:cursor-not-allowed disabled:opacity-55"
+      className="flex min-h-[132px] w-full touch-manipulation flex-col rounded-2xl border border-white/[0.08] bg-black/20 p-4 text-left transition enabled:hover:border-[#ff3d81]/30 enabled:hover:bg-white/[0.055] disabled:cursor-not-allowed disabled:opacity-55"
     >
       <div className="flex w-full items-start justify-between gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-cyan-400/10 text-cyan-200">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#ff3d81]/10 text-[#ffb8d1]">
           <Icon className="h-5 w-5" aria-hidden />
         </span>
         <span className="rounded-full border border-white/10 bg-white/[0.04] px-2 py-1 text-[9px] font-bold uppercase tracking-[0.14em] text-white/50">
@@ -155,16 +156,28 @@ export function CommissionerOperationsWorkspace({
 
   return (
     <div className="min-w-0 space-y-5 p-4 pb-8 sm:p-5" data-testid="commissioner-operations-workspace" data-league-id={leagueId}>
-      <header className="rounded-3xl border border-cyan-400/15 bg-gradient-to-br from-cyan-400/[0.08] to-violet-500/[0.06] p-5">
+      <header className="rounded-3xl border border-[#262c6a] bg-[#12163e]/70 p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/65">Commissioner Operations</p>
-            <h2 className="mt-1 text-xl font-black text-white">{league.name}</h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Manage the active league from one place. Each action opens the existing authoritative workflow.</p>
+            <p className="text-[10px] font-black uppercase italic tracking-[0.18em] text-[#ff8a3d]">Commissioner OS</p>
+            <h2 className="mt-1 text-xl font-black italic text-[#f0f2ff]">{league.name}</h2>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">Run the league from one place — live manager-health signals from the Decision OS above, and every authoritative workflow one tap below.</p>
           </div>
-          <span className="rounded-full border border-cyan-300/20 bg-black/25 px-3 py-1.5 text-xs font-bold text-cyan-100" data-testid="commissioner-league-state">{leagueStateLabel}</span>
+          <span className="rounded-full px-3 py-1.5 text-xs font-extrabold text-white" style={{ background: 'linear-gradient(90deg,#ff3d81,#ff8a3d)' }} data-testid="commissioner-league-state">{leagueStateLabel}</span>
         </div>
+        <a
+          href={`/league/${leagueId}/intelligence`}
+          className="mt-4 inline-flex items-center gap-1.5 rounded-lg border border-[#ff3d81]/40 bg-[#ff3d81]/10 px-3.5 py-2 text-[12px] font-extrabold text-[#ff9ec0] transition hover:bg-[#ff3d81]/20"
+          data-testid="commissioner-open-intelligence-hub"
+        >
+          Open League Intelligence Hub →
+        </a>
       </header>
+
+      {/* Decision OS commissioner lens — the same live CommissionerPulse engine
+          the Decide tab renders: inactive/at-risk managers from counted signals
+          (empty starters, transaction drought, scoring trend, orphan rosters). */}
+      <CommissionerPulse leagueId={leagueId} />
 
       {groups.map((group) => (
         <section key={group.id} aria-labelledby={`commissioner-group-${group.id}`} data-testid={`commissioner-group-${group.id}`}>

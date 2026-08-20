@@ -1,0 +1,289 @@
+{
+  "captured_at": "2026-08-17T14:43:55.541Z",
+  "season_phase": "preseason",
+  "key_tier": "paid-or-unknown",
+  "probes": [
+    {
+      "name": "lookupleague.NFL",
+      "endpoint": "lookupleague.php",
+      "params": {
+        "id": "4391"
+      },
+      "why": "confirm R-05 idLeague 4391",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookupleague.php?id=4391",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "leagues",
+      "returned_null": false,
+      "row_count": 1,
+      "error": null
+    },
+    {
+      "name": "lookupleague.NCAAF",
+      "endpoint": "lookupleague.php",
+      "params": {
+        "id": "4479"
+      },
+      "why": "confirm R-06 idLeague 4479",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookupleague.php?id=4479",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "leagues",
+      "returned_null": false,
+      "row_count": 1,
+      "error": null
+    },
+    {
+      "name": "search_all_teams.NFL",
+      "endpoint": "search_all_teams.php",
+      "params": {
+        "l": "NFL"
+      },
+      "why": "team dimension — replaces the non-existent lookup_all_teams.php",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/search_all_teams.php?l=NFL",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "teams",
+      "returned_null": false,
+      "row_count": 32,
+      "error": null
+    },
+    {
+      "name": "search_all_teams.NCAAF",
+      "endpoint": "search_all_teams.php",
+      "params": {
+        "l": "NCAA Division 1"
+      },
+      "why": "NCAAF teams; note strLeague, not the numeric id",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/search_all_teams.php?l=NCAA+Division+1",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "teams",
+      "returned_null": false,
+      "row_count": 260,
+      "error": null
+    },
+    {
+      "name": "all_leagues",
+      "endpoint": "all_leagues.php",
+      "params": {},
+      "why": "truncation control — free key truncates, paid does not (R-08)",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/all_leagues.php",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "leagues",
+      "returned_null": false,
+      "row_count": 1527,
+      "error": null
+    },
+    {
+      "name": "lookupplayer.NFL",
+      "endpoint": "lookupplayer.php",
+      "params": {
+        "id": "34201502"
+      },
+      "why": "66-field FullPlayersResponse shape",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookupplayer.php?id=34201502",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "players",
+      "returned_null": false,
+      "row_count": 1,
+      "error": null
+    },
+    {
+      "name": "lookupplayerstats.NFL",
+      "endpoint": "lookupplayerstats.php",
+      "params": {
+        "id": "34201502"
+      },
+      "why": "R-04 works for NFL; season aggregates only",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookupplayerstats.php?id=34201502",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "playerstats",
+      "returned_null": false,
+      "row_count": 34,
+      "error": null
+    },
+    {
+      "name": "lookupeventstats.NFL",
+      "endpoint": "lookupeventstats.php",
+      "params": {
+        "id": "2475349"
+      },
+      "why": "R-01 expected NULL — re-record with season stamp",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookupeventstats.php?id=2475349",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "eventstats",
+      "returned_null": true,
+      "row_count": 0,
+      "error": null
+    },
+    {
+      "name": "lookuptimeline.NFL",
+      "endpoint": "lookuptimeline.php",
+      "params": {
+        "id": "2475349"
+      },
+      "why": "R-02 expected NULL",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookuptimeline.php?id=2475349",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "timeline",
+      "returned_null": true,
+      "row_count": 0,
+      "error": null
+    },
+    {
+      "name": "lookuplineup.NFL",
+      "endpoint": "lookuplineup.php",
+      "params": {
+        "id": "2475349"
+      },
+      "why": "R-03 expected NULL",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookuplineup.php?id=2475349",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "lineup",
+      "returned_null": true,
+      "row_count": 0,
+      "error": null
+    },
+    {
+      "name": "eventsnextleague.NFL",
+      "endpoint": "eventsnextleague.php",
+      "params": {
+        "id": "4391"
+      },
+      "why": "upcoming schedule shape",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/eventsnextleague.php?id=4391",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "events",
+      "returned_null": false,
+      "row_count": 20,
+      "error": null
+    },
+    {
+      "name": "eventspastleague.NFL",
+      "endpoint": "eventspastleague.php",
+      "params": {
+        "id": "4391"
+      },
+      "why": "R-10 quarter scores as HTML in strResult",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/eventspastleague.php?id=4391",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "events",
+      "returned_null": false,
+      "row_count": 15,
+      "error": null
+    },
+    {
+      "name": "eventsnextleague.NCAAF",
+      "endpoint": "eventsnextleague.php",
+      "params": {
+        "id": "4479"
+      },
+      "why": "NCAAF schedule shape",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/eventsnextleague.php?id=4479",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "events",
+      "returned_null": false,
+      "row_count": 20,
+      "error": null
+    },
+    {
+      "name": "eventspastleague.NCAAF",
+      "endpoint": "eventspastleague.php",
+      "params": {
+        "id": "4479"
+      },
+      "why": "NCAAF result shape",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/eventspastleague.php?id=4479",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 200,
+      "api_message": null,
+      "top_level_key": "events",
+      "returned_null": false,
+      "row_count": 15,
+      "error": null
+    },
+    {
+      "name": "latestamericanfootball",
+      "endpoint": "latestamericanfootball.php",
+      "params": {},
+      "why": "R-11 premium-gated on free key; G-02",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/latestamericanfootball.php",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 404,
+      "api_message": null,
+      "top_level_key": null,
+      "returned_null": null,
+      "row_count": null,
+      "error": "non-JSON: <!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\r\n<html xml"
+    },
+    {
+      "name": "latestncaafootball",
+      "endpoint": "latestncaafootball.php",
+      "params": {},
+      "why": "R-11 premium-gated on free key",
+      "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/latestncaafootball.php",
+      "captured_at": "2026-08-17T14:43:55.541Z",
+      "season_phase": "preseason",
+      "key_tier": "paid-or-unknown",
+      "http_status": 404,
+      "api_message": null,
+      "top_level_key": null,
+      "returned_null": null,
+      "row_count": null,
+      "error": "non-JSON: <!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\r\n<html xml"
+    }
+  ]
+}

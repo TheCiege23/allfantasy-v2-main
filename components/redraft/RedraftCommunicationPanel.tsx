@@ -152,7 +152,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
             <h3 className="text-base font-black text-white">League communication</h3>
             {unreadCount > 0 ? (
               <span
-                className="rounded-full border border-cyan-300/40 bg-cyan-400/15 px-2 py-0.5 text-[10px] font-bold text-cyan-100"
+                className="rounded-full border border-[#ff9ec0]/40 bg-[#ff3d81]/15 px-2 py-0.5 text-[10px] font-bold text-[#ffd7e5]"
                 data-testid="g42-unread-badge"
               >
                 {unreadCount} unread
@@ -168,7 +168,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
             <button
               type="button"
               onClick={() => void markAllAsRead()}
-              className="inline-flex min-h-8 items-center gap-1.5 rounded-xl border border-white/10 px-2.5 text-[11px] font-bold text-cyan-100 hover:bg-white/[0.06]"
+              className="inline-flex min-h-8 items-center gap-1.5 rounded-xl border border-white/10 px-2.5 text-[11px] font-bold text-[#ffd7e5] hover:bg-white/[0.06]"
               data-testid="g42-mark-all-read"
             >
               <CheckCheck className="h-3.5 w-3.5" />
@@ -191,7 +191,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
         <div className="min-w-0 space-y-3">
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.035] p-3">
             <div className="flex items-center gap-2">
-              <Bell className="h-4 w-4 text-cyan-200" aria-hidden />
+              <Bell className="h-4 w-4 text-[#ffb8d1]" aria-hidden />
               <p className="text-xs font-black uppercase tracking-[0.16em] text-white/55">Notifications</p>
             </div>
             {notificationsLoading ? (
@@ -235,11 +235,11 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
                 {systemMessages.slice(0, 3).map((message) => (
                   <li
                     key={message.id}
-                    className="rounded-xl border border-cyan-300/10 bg-cyan-400/[0.06] px-3 py-2"
+                    className="rounded-xl border border-[#ff9ec0]/10 bg-[#ff3d81]/[0.06] px-3 py-2"
                     data-testid="g42-chat-system-message"
                   >
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-xs font-bold text-cyan-100">{message.senderName || 'AllFantasy'}</p>
+                      <p className="text-xs font-bold text-[#ffd7e5]">{message.senderName || 'AllFantasy'}</p>
                       <span className="shrink-0 text-[10px] text-white/30">{timeAgo(message.createdAt)}</span>
                     </div>
                     <p className="mt-1 text-[11px] leading-4 text-white/55">{clip(message.body)}</p>
@@ -289,7 +289,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
 
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.035] p-3">
             <div className="flex items-center gap-2">
-              <MessageSquare className="h-4 w-4 text-cyan-200" aria-hidden />
+              <MessageSquare className="h-4 w-4 text-[#ffb8d1]" aria-hidden />
               <p className="text-xs font-black uppercase tracking-[0.16em] text-white/55">League chat</p>
             </div>
             <textarea
@@ -297,7 +297,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
               onChange={(event) => setChatBody(event.target.value)}
               rows={2}
               placeholder="Message league chat"
-              className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none placeholder:text-white/25 focus:border-cyan-200/40"
+              className="mt-3 w-full resize-none rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-white outline-none placeholder:text-white/25 focus:border-[#ffb8d1]/40"
               data-testid="g42-chat-input"
             />
             <div className="mt-2 flex gap-2">
@@ -305,7 +305,7 @@ export function RedraftCommunicationPanel({ leagueId, isCommissioner, onOpenChat
                 type="button"
                 disabled={!chatBody.trim() || chatSending}
                 onClick={() => void sendChat()}
-                className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-cyan-200/30 bg-cyan-300/10 px-3 text-xs font-bold text-cyan-100 disabled:opacity-45"
+                className="inline-flex min-h-9 flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#ffb8d1]/30 bg-[#ff9ec0]/10 px-3 text-xs font-bold text-[#ffd7e5] disabled:opacity-45"
                 data-testid="g42-chat-send"
               >
                 {chatSending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}

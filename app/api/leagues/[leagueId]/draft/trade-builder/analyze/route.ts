@@ -19,6 +19,7 @@ import { buildDraftPickTradeStructuredAnalysis } from '@/lib/live-draft-engine/d
 import { EntitlementResolver } from '@/lib/subscription/EntitlementResolver'
 import { getCanonicalDraftState } from '@/lib/draft/getCanonicalDraftState'
 import type { TradedPickRecord } from '@/lib/live-draft-engine/types'
+import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
 
 export const dynamic = 'force-dynamic'
 
@@ -243,6 +244,26 @@ export async function POST(
       }
     }
   }
+
+  // AF_TRADE_UNIFICATION_BRIEF Phase 2 shadow instrumentation (flag-gated,
+  // never affects the response). This surface has the FULL identity chain
+  // (league + both roster IDs) — the only canonical input still missing is a
+  // persisted TradeValueSnapshot for pick assets, which telemetry will report
+  // as reason 'missing_snapshot'.
+  recordTradeSurfaceShadow({
+    surface: 'draftpick',
+    userId,
+    leagueId,
+    proposerRosterId: myRosterId,
+    receiverRosterId,
+    seasonId: draftSession.id,
+    hasDeterministicSnapshot: false,
+    assetsGive: 1,
+    assetsGet: 1,
+    surfaceVerdict: review.verdict,
+    surfaceConfidence: aiConfidence,
+    surfaceAnalysisMode: 'draft_pick_structured',
+  })
 
   return NextResponse.json({
     ok: true,

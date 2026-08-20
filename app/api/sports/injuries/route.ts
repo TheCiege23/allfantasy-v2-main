@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort';
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev';
 import { parseSportsRouteSportParam } from '@/lib/sports-route-params';
 
@@ -28,17 +29,6 @@ export const GET = withApiUsage({ endpoint: "/api/sports/injuries", tool: "Sport
 
     const normalizedTeam = team ? normalizeTeamAbbrev(team) || team : null;
     const normalizedInjurySport = parsedSport.isWorldCup ? 'WC_SOCCER' : parsedSport.sport;
-    const where: Record<string, unknown> = {
-      sport: parsedSport.sport,
-    };
-
-    if (normalizedTeam) {
-      where.team = normalizedTeam;
-    }
-
-    if (player) {
-      where.playerName = { contains: player, mode: 'insensitive' };
-    }
 
     const reportWhere: Record<string, unknown> = {
       sport: normalizedInjurySport,
@@ -46,11 +36,15 @@ export const GET = withApiUsage({ endpoint: "/api/sports/injuries", tool: "Sport
     if (normalizedTeam) reportWhere.team = normalizedTeam;
     if (player) reportWhere.playerName = { contains: player, mode: 'insensitive' };
 
-    const [sportsInjuries, injuryReports] = await Promise.all([
-      prisma.sportsInjury.findMany({
-        where,
-        orderBy: { fetchedAt: 'desc' },
-        take: 300,
+    // Slice 18 follow-on — sportsInjury reads go through the canonical injury
+    // read port: TTL-respected, ONE row per player, freshest source wins.
+    // The old ad-hoc query returned expired rows and provider duplicates.
+    const [factList, injuryReports] = await Promise.all([
+      listInjuryFacts({
+        sport: parsedSport.sport,
+        team: normalizedTeam,
+        playerNameContains: player,
+        limit: 300,
       }),
       prisma.injuryReportRecord.findMany({
         where: reportWhere,
@@ -58,6 +52,26 @@ export const GET = withApiUsage({ endpoint: "/api/sports/injuries", tool: "Sport
         take: 300,
       }),
     ]);
+
+    const sportsInjuries = factList.facts.map((f) => ({
+      id: f.id,
+      sport: parsedSport.sport,
+      playerName: f.playerName,
+      team: f.team,
+      position: f.position,
+      status: f.status,
+      type: f.type,
+      description: f.description,
+      date: f.date,
+      week: f.week,
+      source: f.source,
+      fetchedAt: f.fetchedAt,
+      // Staleness is REPORTED, never hidden — a stale designation is a claim
+      // that can no longer be stood behind (see injuryReadPort).
+      stale: f.stale,
+      ageHours: Math.round(f.ageHours * 10) / 10,
+      normalized: true,
+    }));
 
     const reportRows = injuryReports.map((injury) => ({
       id: injury.id,
@@ -84,7 +98,9 @@ export const GET = withApiUsage({ endpoint: "/api/sports/injuries", tool: "Sport
       .filter((value): value is Date => value != null && Number.isFinite(value.getTime()))
       .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
     const now = Date.now();
-    const staleSportsRows = sportsInjuries.some((injury) => injury.expiresAt < new Date());
+    // Port rows are TTL-filtered (never expired); staleness = the port's own
+    // 36h claim-freshness rule, per-row or feed-wide.
+    const staleSportsRows = factList.feedStale || factList.facts.some((f) => f.stale);
     const staleReportRows = injuryReports.some((injury) => now - injury.reportDate.getTime() > 6 * 60 * 60 * 1000);
     const stale = injuries.length > 0 && (staleSportsRows || staleReportRows);
 

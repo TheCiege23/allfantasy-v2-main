@@ -137,7 +137,8 @@ export function LeagueSidebarCard({
           <div
             {...dragHandleProps}
             className={[
-              'flex w-3.5 shrink-0 cursor-grab select-none items-center justify-center self-stretch rounded-sm text-white/20 hover:text-white/50 active:cursor-grabbing',
+              // De-noise: the reorder handle only appears on hover/focus.
+              'flex w-3.5 shrink-0 cursor-grab select-none items-center justify-center self-stretch rounded-sm text-white/20 opacity-0 transition-opacity hover:text-white/50 focus-visible:opacity-100 active:cursor-grabbing group-hover:opacity-100',
               dragHandleProps.className,
             ]
               .filter(Boolean)
@@ -164,12 +165,13 @@ export function LeagueSidebarCard({
             }
           }}
           className={[
+            // Broadcast Deck row: deck panel + solid gradient left rail when active.
             'flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-2.5 outline-none transition-all duration-150',
-            'border-l-2 focus-visible:ring-2 focus-visible:ring-cyan-500/40',
+            'border border-l-[3px] focus-visible:ring-2 focus-visible:ring-[#ff3d81]/40',
             compact ? 'min-h-[52px] py-2' : 'py-2.5',
             isSelected
-              ? 'border-l-cyan-500 bg-gradient-to-r from-cyan-500/12 via-cyan-500/[0.06] to-transparent hover:from-cyan-500/15'
-              : 'border-l-transparent hover:bg-white/[0.06] hover:shadow-[0_1px_10px_rgba(0,0,0,0.3)]',
+              ? 'border-[#262c6a] border-l-[#ff3d81] bg-[#12163e] shadow-[0_2px_14px_rgba(255,61,129,0.10)]'
+              : 'border-transparent border-l-transparent hover:border-[#262c6a] hover:bg-[#12163e]/70',
           ].join(' ')}
         >
           <div className="shrink-0">
@@ -179,9 +181,9 @@ export function LeagueSidebarCard({
           <div className="min-w-0 flex-1 space-y-0.5">
             <div className="flex min-w-0 items-center gap-1.5">
               <p
-                className={`min-w-0 flex-1 truncate font-bold leading-tight text-white/90 ${
-                  compact ? 'text-[14px]' : 'text-[13px]'
-                }`}
+                className={`min-w-0 flex-1 truncate font-extrabold leading-tight tracking-tight ${
+                  isSelected ? 'text-[#f0f2ff]' : 'text-white/90'
+                } ${compact ? 'text-[14px]' : 'text-[13px]'}`}
               >
                 {league.name}
               </p>
@@ -214,11 +216,7 @@ export function LeagueSidebarCard({
                 <span className="shrink-0 rounded border border-emerald-500/25 bg-emerald-500/10 px-1 py-0.5 text-[8px] font-semibold text-emerald-400">
                   Paid
                 </span>
-              ) : (
-                <span className="shrink-0 rounded bg-white/[0.05] px-1 py-0.5 text-[8px] font-medium text-white/25">
-                  Free
-                </span>
-              )}
+              ) : null /* de-noise: "Free" on every row said nothing */}
               {league.lifecycleState === 'renewal_pending' && (
                 <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1 py-0.5 text-[8px] font-bold text-amber-300" title="League renewal window is open">
                   RENEW
@@ -271,7 +269,7 @@ export function LeagueSidebarCard({
             }}
             className={`shrink-0 text-white/35 transition hover:text-white/80 ${
               compact ? 'self-center p-0.5' : 'self-start pt-2 text-sm leading-none'
-            }`}
+            } ${isFavorite ? '' : 'opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100'}`}
             aria-label={isFavorite ? 'Remove favorite' : 'Add favorite'}
           >
             {compact ? (

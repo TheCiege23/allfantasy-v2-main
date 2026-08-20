@@ -177,7 +177,11 @@ export async function assembleUserOsContext(args: {
   const injuryRows = lineupPlayerIds.length
     ? await prisma.injuryReportRecord
         .findMany({
-          where: { playerId: { in: lineupPlayerIds } },
+          // Slice 15 (wrong-row joins): `sport` was missing, so a provider id
+          // that collides across sports could attach another sport's athlete's
+          // injury to this lineup. InjuryReportRecord.sport exists and is
+          // filtered by every other consumer.
+          where: { sport: active.sport, playerId: { in: lineupPlayerIds } },
           orderBy: { reportDate: 'desc' },
           select: { playerId: true, status: true, gameStatus: true, reportDate: true },
         })

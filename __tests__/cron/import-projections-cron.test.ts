@@ -104,7 +104,10 @@ describe("import-projections cron route", () => {
     )
   })
 
-  it("reports a clean non-error result when the provider chain returns no rows", async () => {
+  it("fails loudly (500) when the provider chain errors during an active season", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z")) // NFL in season
+
     mocks.fetchWithChain.mockResolvedValue({ data: null, fromCache: false, error: "All providers failed" })
 
     const { GET } = await import("@/app/api/cron/import-projections/route")
@@ -113,9 +116,58 @@ describe("import-projections cron route", () => {
     )
     const body = await res.json()
 
-    expect(res.status).toBe(200)
+    // Non-2xx matters: Vercel's cron dashboard keys off HTTP status, so a 200
+    // carrying `ok:false` still reads as a healthy run.
+    expect(res.status).toBe(500)
+    expect(body.ok).toBe(false)
+    expect(body.failedSports).toEqual(["NFL"])
     expect(body.results.NFL).toMatchObject({ ok: false, synced: 0, error: "All providers failed" })
     expect(mocks.fantasyProjectionUpsert).not.toHaveBeenCalled()
+  })
+
+  /**
+   * THE PRODUCTION CASE. Measured 2026-08-10: `fantasy_projections` held only 43
+   * seed rows because the provider returned an empty payload WITHOUT setting
+   * `error`, so the old `ok: !chainResult.error` evaluated to true. The cron
+   * returned 200 every day for a month while writing nothing, and the health
+   * chip's Projections domain read a `fetchedAt` that never advanced.
+   */
+  it("treats an empty-but-error-free provider payload as failure during the season", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-10-15T12:00:00Z"))
+
+    mocks.fetchWithChain.mockResolvedValue({ data: [], fromCache: false, source: "rolling_insights" })
+
+    const { GET } = await import("@/app/api/cron/import-projections/route")
+    const res = await GET(
+      req("https://www.allfantasy.ai/api/cron/import-projections?sport=NFL", "cron-secret")
+    )
+    const body = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(body.ok).toBe(false)
+    expect(body.results.NFL.ok).toBe(false)
+    expect(body.results.NFL.error).toMatch(/in season/i)
+    expect(mocks.fantasyProjectionUpsert).not.toHaveBeenCalled()
+  })
+
+  it("does NOT fail on an empty payload outside the season, even when forced", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-05-01T12:00:00Z")) // NFL offseason
+
+    mocks.fetchWithChain.mockResolvedValue({ data: [], fromCache: false, source: "rolling_insights" })
+
+    const { GET } = await import("@/app/api/cron/import-projections/route")
+    const res = await GET(
+      req("https://www.allfantasy.ai/api/cron/import-projections?sport=NFL&force=true", "cron-secret")
+    )
+    const body = await res.json()
+
+    // Forced offseason runs legitimately return nothing — that must stay quiet,
+    // or the alert becomes noise and gets ignored.
+    expect(res.status).toBe(200)
+    expect(body.ok).toBe(true)
+    expect(body.results.NFL).toMatchObject({ ok: true, synced: 0 })
   })
 })
 

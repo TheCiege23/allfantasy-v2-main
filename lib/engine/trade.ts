@@ -848,11 +848,19 @@ function splitDevyAssets(assets: Asset[]) {
 function devySideValue(devyPlayers: TradePlayerAsset[], teamDirection?: string) {
   const mult = devyValueMultiplier(teamDirection);
   let total = 0;
+  let unpriced = 0;
   for (const p of devyPlayers) {
-    const score = p.draftProjectionScore ?? 50;
-    total += score * mult;
+    // A devy player with nothing behind him used to contribute 50 * mult to a
+    // real trade valuation. Counting him is a claim we cannot support; he is
+    // excluded and reported, so the caller can say the side is under-counted
+    // instead of silently pricing a stranger as average.
+    if (typeof p.draftProjectionScore !== "number") {
+      unpriced += 1;
+      continue;
+    }
+    total += p.draftProjectionScore * mult;
   }
-  return { total, mult };
+  return { total, mult, unpriced };
 }
 
 function faabValue(assets: Asset[], leagueFaabBudget: number = 100) {
@@ -1192,7 +1200,14 @@ export async function runTradeAnalysis(req: TradeEngineRequest): Promise<TradeEn
           {
             key: "devy_projection_layer",
             delta: 2,
-            note: `Devy priced via DraftProjectionScore (multA=${devyA.mult.toFixed(2)} multB=${devyB.mult.toFixed(2)})`,
+            // Name the players we could not price. A side missing value is very
+            // different from a side that is genuinely worth less, and the reader
+            // cannot tell them apart unless we say so.
+            note:
+              `Devy priced via DraftProjectionScore (multA=${devyA.mult.toFixed(2)} multB=${devyB.mult.toFixed(2)})` +
+              (devyA.unpriced || devyB.unpriced
+                ? ` — ${devyA.unpriced + devyB.unpriced} devy player(s) had no projection and were excluded, so devy value is under-counted`
+                : ""),
           },
         ]
       : []),
@@ -1474,8 +1489,8 @@ export async function runTradeAnalysis(req: TradeEngineRequest): Promise<TradeEn
       teamB: { direction: teamB.direction, confidence: teamB.directionConfidence },
       liquidity,
       devy: {
-        sideA: { count: splitA.devyPlayers.length, mult: devyA.mult },
-        sideB: { count: splitB.devyPlayers.length, mult: devyB.mult },
+        sideA: { count: splitA.devyPlayers.length, mult: devyA.mult, unpriced: devyA.unpriced },
+        sideB: { count: splitB.devyPlayers.length, mult: devyB.mult, unpriced: devyB.unpriced },
       },
       fairnessDeltaPct,
     },

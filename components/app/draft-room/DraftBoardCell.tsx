@@ -137,9 +137,19 @@ export type DraftBoardCellProps = {
   onCommissionerEditPick?: () => void
 }
 
+/**
+ * ⚠ GOLD BELONGS TO "ON THE CLOCK" AND NOTHING ELSE ON THIS BOARD.
+ *
+ * The user tone used to be amber — the same family as the `#f6c445` on-the-clock cell. On a
+ * twelve-team board that meant your own completed picks glowed like the one state that demands you
+ * act right now, which is the fastest way to make an urgency colour stop meaning urgency. Your
+ * picks are accent (the product's cyan); the clock keeps gold to itself.
+ *
+ * `ai` stays sky — distinct from both, and mutually exclusive with `user` on a given cell anyway.
+ */
 function highlightClass(tone: PickHighlightTone | undefined): string {
   if (tone === 'user')
-    return 'ring-1 ring-amber-400/60 border-amber-400/50 shadow-[0_4px_24px_rgba(251,191,36,0.24)]'
+    return 'ring-1 ring-cyan-400/60 border-cyan-400/50 shadow-[0_4px_24px_rgba(34,211,238,0.24)]'
   if (tone === 'ai') return 'ring-1 ring-sky-400/55 border-sky-400/45 shadow-[0_4px_26px_rgba(56,189,248,0.26)]'
   return ''
 }
@@ -263,7 +273,8 @@ function DraftBoardCellInner({
               ? 'border-emerald-400/42 bg-gradient-to-br from-emerald-500/18 via-[#142338] to-[#0f1c2e] ring-1 ring-emerald-400/38 shadow-[0_0_26px_rgba(52,211,153,0.22)]'
               : 'border-emerald-400/46 bg-gradient-to-br from-emerald-500/18 via-[#1e2f46] to-[#172438] ring-1 ring-emerald-400/38 shadow-[0_0_24px_rgba(52,211,153,0.26)]'
             : isEmpty
-              ? 'border-white/[0.025] bg-[rgba(7,11,22,0.64)]'
+              ? // Dashed per 8b: an unpicked slot reads as an outline waiting to be filled.
+                'border-dashed border-white/[0.10] bg-[rgba(7,11,22,0.64)]'
               : `border-white/[0.10] bg-gradient-to-br from-[#1c2741] via-[#141e31] to-[#0f1928] ${rs ? 'shadow-[0_8px_22px_rgba(2,8,24,0.40)]' : 'shadow-[0_10px_24px_rgba(2,8,24,0.42)]'} ${highlightClass(pickHighlight)}`
       }`}
       style={tint ?? managerTint}

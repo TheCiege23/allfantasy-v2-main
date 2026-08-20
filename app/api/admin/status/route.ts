@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { getAdminAccessState } from "@/lib/adminAuth"
 import { maskAdminEmail } from "@/lib/admin-dashboard/format"
 import { getAdminProductionReadiness } from "@/lib/admin-dashboard/AdminProductionReadinessService"
+import { getDeploymentIdentity } from "@/lib/admin-dashboard/deploymentIdentity"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -40,6 +41,9 @@ export async function GET() {
     admin: true,
     status: state.status,
     source: state.source,
+    // Admin-only. Answers "which build, environment, and database am I looking at?"
+    // without exposing any credential — see lib/admin-dashboard/deploymentIdentity.ts.
+    deployment: getDeploymentIdentity(),
     readiness: readiness
       ? {
           missingCriticalEnv: readiness.env.filter((row) => row.status === "missing" && row.severity === "critical").map((row) => row.label),

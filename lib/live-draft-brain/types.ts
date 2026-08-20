@@ -152,6 +152,8 @@ export interface LiveDraftBrainPoolPlayer {
   isRookie?: boolean
   /** When known (dynasty / rookie drafts) */
   age?: number | null
+  /** Real projected fantasy points from the pool row, when present (Draft VORP slice). */
+  projectedPoints?: number | null
 }
 
 export interface LiveDraftBrainInput {

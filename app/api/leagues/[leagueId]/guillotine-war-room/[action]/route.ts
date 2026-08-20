@@ -30,6 +30,7 @@ import { GUILLOTINE_WAR_ROOM_SYSTEM_RULES, buildGuillotineWarRoomPrompt } from '
 import { requireEntitlement } from '@/lib/subscription/requireEntitlement'
 import { openaiChatText } from '@/lib/openai-client'
 import type { GuillotineWarRoomContext } from '@/lib/guillotine-war-room/types'
+import { recordWarRoomTradeShadow } from '@/lib/decision-os/trade/warRoomShadow'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -109,6 +110,17 @@ export async function POST(
         rosterId,
         outgoingPlayerIds: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds : [],
         incomingPlayerIds: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds : [],
+      })
+      // Slice 13 — flip-gate visibility. War rooms produce verdicts entirely
+      // outside the canonical stack; recording them is what makes that
+      // divergence measurable. Flag-gated, guarded, never affects the response.
+      recordWarRoomTradeShadow({
+        format: 'guillotine',
+        leagueId,
+        rosterId,
+        outgoingCount: Array.isArray(body.outgoingPlayerIds) ? body.outgoingPlayerIds.length : 0,
+        incomingCount: Array.isArray(body.incomingPlayerIds) ? body.incomingPlayerIds.length : 0,
+        analysis,
       })
       return NextResponse.json({ tradeAnalysis: analysis })
     }

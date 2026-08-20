@@ -124,27 +124,67 @@ export function getValuationCacheAgeMs(settings: FantasyCalcSettings): number | 
   return Date.now() - cached.fetchedAt;
 }
 
+/**
+ * Slice 15 (wrong-row joins): this used to take the FIRST substring hit as
+ * definitive — no position, team or uniqueness check — while feeding trade
+ * valuation, waiver scoring and player outlook. A substring match is how
+ * "Josh Allen" binds to the wrong athlete, and how a short surname can match
+ * an unrelated player entirely.
+ *
+ * Now: exact matches are disambiguated by position/team when the caller knows
+ * them, and a SUBSTRING match is only accepted when it is UNIQUE. An ambiguous
+ * partial returns null — a missing market value is a gap; the wrong player's
+ * market value is a false number in a trade grade.
+ *
+ * Backward compatible: callers that pass no hints get identical behavior for
+ * unique names, which is the overwhelming majority.
+ */
 export function findPlayerByName(
   players: FantasyCalcPlayer[],
-  name: string
+  name: string,
+  hints?: { position?: string | null; team?: string | null }
 ): FantasyCalcPlayer | null {
-  const normalized = name.toLowerCase().trim()
-    .replace(/\bjr\.?\b/i, '').replace(/\bsr\.?\b/i, '').replace(/\bii+\b/i, '')
-    .replace(/\biii\b/i, '').replace(/\biv\b/i, '').replace(/\s+/g, ' ').trim();
-  
   const normalizeFcName = (n: string) => n.toLowerCase().trim()
     .replace(/\bjr\.?\b/i, '').replace(/\bsr\.?\b/i, '').replace(/\bii+\b/i, '')
     .replace(/\biii\b/i, '').replace(/\biv\b/i, '').replace(/\s+/g, ' ').trim();
 
-  const exactMatch = players.find(p => normalizeFcName(p.player.name) === normalized);
-  if (exactMatch) return exactMatch;
-  
-  const partialMatch = players.find(p => {
+  const normalized = normalizeFcName(name);
+  if (!normalized) return null;
+
+  const token = (v: string | null | undefined) => {
+    const t = String(v ?? '').trim().toUpperCase();
+    return t ? t : null;
+  };
+  const wantPos = token(hints?.position);
+  const wantTeam = token(hints?.team);
+
+  /** Narrow a candidate set by position, then team; null when still ambiguous. */
+  const disambiguate = (candidates: FantasyCalcPlayer[]): FantasyCalcPlayer | null => {
+    if (candidates.length === 0) return null;
+    if (candidates.length === 1) return candidates[0]!;
+    let narrowed = candidates;
+    if (wantPos) {
+      const byPos = narrowed.filter(p => token(p.player.position) === wantPos);
+      if (byPos.length > 0) narrowed = byPos;
+    }
+    if (narrowed.length > 1 && wantTeam) {
+      const byTeam = narrowed.filter(p => token(p.player.maybeTeam) === wantTeam);
+      if (byTeam.length > 0) narrowed = byTeam;
+    }
+    // Still more than one, or narrowed only by luck → refuse.
+    return narrowed.length === 1 ? narrowed[0]! : null;
+  };
+
+  const exactMatches = players.filter(p => normalizeFcName(p.player.name) === normalized);
+  if (exactMatches.length > 0) return disambiguate(exactMatches);
+
+  const partialMatches = players.filter(p => {
     const fcNorm = normalizeFcName(p.player.name);
     return fcNorm.includes(normalized) || normalized.includes(fcNorm);
   });
-  
-  return partialMatch || null;
+  // A substring match is only trustworthy when nothing else could have matched.
+  if (partialMatches.length === 1) return partialMatches[0]!;
+  return disambiguate(partialMatches);
 }
 
 export function findPlayerBySleeperId(

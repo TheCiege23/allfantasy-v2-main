@@ -133,8 +133,12 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
 
         <aside className="space-y-4">
           <DecisionOsPanel title="Retention risk" className="bg-surface-muted">
+            {/* Phase 36: human-readable label — never the raw snake_case enum, and
+                "Insufficient data" must read as a coverage gap, not a negative judgment. */}
             <p className="mt-2 text-sm font-bold text-primary" data-testid="user-os-retention-risk">
-              {teamHealth.retentionRisk}
+              {teamHealth.retentionRisk === 'insufficient_data'
+                ? 'Insufficient data'
+                : teamHealth.retentionRisk.charAt(0).toUpperCase() + teamHealth.retentionRisk.slice(1)}
             </p>
             {teamHealth.retentionRiskReasons.length > 0 ? (
               <p className="mt-1 text-xs leading-5 text-secondary">

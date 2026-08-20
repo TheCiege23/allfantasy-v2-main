@@ -80,7 +80,7 @@ export function LeagueRulesSummarySection({
             href={editHref!}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-[13px] font-semibold text-cyan-400 hover:text-cyan-300"
+            className="text-[13px] font-semibold text-[#ff3d81] hover:text-[#ff9ec0]"
             data-testid="league-rules-edit-sleeper"
           >
             Edit
@@ -160,7 +160,7 @@ export function LeagueRulesSummarySection({
           href={editHref}
           target="_blank"
           rel="noopener noreferrer"
-          className="inline-block text-[12px] font-medium text-cyan-400/90 hover:underline"
+          className="inline-block text-[12px] font-medium text-[#ff3d81]/90 hover:underline"
           data-testid="league-rules-open-sleeper"
         >
           Open full league settings on host →

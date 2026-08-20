@@ -1,0 +1,149 @@
+/*
+ * Monetization surfaces — AF handoff tokens.
+ *
+ * ⚠ AUTHORED ON var(--token), NEVER ON LITERAL COLOURS OR TAILWIND COLOUR
+ * UTILITIES. The app ships a global light-mode `.mode-readable` clamp that
+ * overrides hardcoded colours, and the handoff documents three modes
+ * (dark / light / af) that all resolve through the same custom properties.
+ * A literal here would look right in one mode and be unreadable in another.
+ * Fallback values are supplied only so the components still render if mounted
+ * outside a themed root.
+ */
+
+/* ── Locked-feature banner (gate pattern, rule 2) ──────────────────── */
+.af-mz-lockbanner {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--warn-soft, rgba(251, 191, 36, 0.12));
+  border: 1px solid var(--warn, #fbbf24);
+}
+
+.af-mz-lockbanner-glyph {
+  flex: none;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--warn, #fbbf24);
+}
+
+.af-mz-lockbanner-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text, #eef0fa);
+}
+
+.af-mz-lockbanner-body {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2, #c3c9e6);
+}
+
+/* ── Checkout outcome (screen 20c) ─────────────────────────────────── */
+.af-mz-outcome {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 22px;
+  border-radius: 14px;
+  background: var(--surface, #0d1020);
+  border: 1px solid var(--line2, rgba(255, 255, 255, 0.13));
+  /*
+    State is carried by a stripe as well as by the tag, so the outcome reads
+    before any of the words do. This panel is the first thing someone looks at
+    after paying, and "did it work" should not require reading a sentence.
+  */
+  border-left-width: 3px;
+}
+
+.af-mz-outcome[data-state='ok'] { border-left-color: var(--good, #34d399); }
+.af-mz-outcome[data-state='wait'] { border-left-color: var(--warn, #fbbf24); }
+.af-mz-outcome[data-state='bad'] { border-left-color: var(--bad, #fb5b78); }
+.af-mz-outcome[data-state='off'] { border-left-color: var(--muted, #989fc2); }
+
+.af-mz-outcome-tag {
+  align-self: flex-start;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+}
+
+.af-mz-outcome[data-state='ok'] .af-mz-outcome-tag { color: var(--good, #34d399); }
+.af-mz-outcome[data-state='wait'] .af-mz-outcome-tag { color: var(--warn, #fbbf24); }
+.af-mz-outcome[data-state='bad'] .af-mz-outcome-tag { color: var(--bad, #fb5b78); }
+.af-mz-outcome[data-state='off'] .af-mz-outcome-tag { color: var(--muted, #989fc2); }
+
+.af-mz-outcome-title {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text, #eef0fa);
+}
+
+.af-mz-outcome-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text2, #c3c9e6);
+  max-width: 62ch;
+}
+
+.af-mz-outcome-facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text2, #c3c9e6);
+}
+
+/* Quantities are mono per the handoff's own rule: if it is a number, it is mono. */
+.af-mz-outcome-facts b {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  color: var(--text, #eef0fa);
+}
+
+.af-mz-outcome-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.af-mz-btn {
+  appearance: none;
+  cursor: pointer;
+  font: 600 12.5px/1 'Archivo', system-ui, sans-serif;
+  padding: 9px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--chip-line, rgba(255, 255, 255, 0.1));
+  background: var(--chip, rgba(255, 255, 255, 0.05));
+  color: var(--text, #eef0fa);
+  text-decoration: none;
+}
+
+.af-mz-btn:hover { border-color: var(--accent, #22d3ee); }
+
+.af-mz-btn:focus-visible {
+  outline: 2px solid var(--accent, #22d3ee);
+  outline-offset: 2px;
+}
+
+.af-mz-btn--primary {
+  background: var(--accent, #22d3ee);
+  border-color: var(--accent, #22d3ee);
+  color: var(--accent-ink, #04050c);
+  font-weight: 700;
+}

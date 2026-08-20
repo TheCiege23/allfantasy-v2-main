@@ -403,8 +403,16 @@ export interface CanonicalMemoTelemetry {
   valuation_source: 'deterministic_engine'
   completeness: number
   uncertainty_count: number
-  grade: string
-  fairness_score: number
+  /**
+   * Nullable since slice 11: the grader REFUSES to grade when neither side has
+   * any value data, rather than computing |0-0|/max(0,0,1) = fairness 100 and
+   * reporting "A+ / within normal market range". Telemetry has to be able to
+   * represent that refusal — coercing it to a string here would put the exact
+   * fabricated grade we removed from the UI back into the parity stream, and the
+   * Phase 3 flip gate reads that stream.
+   */
+  grade: string | null
+  fairness_score: number | null
   confidence_score: number
   /** Provider + asset source models — provenance/debug only (no provider name in decision-facing fields). */
   provenance: { provider: string | null; asset_source_models: string[] }

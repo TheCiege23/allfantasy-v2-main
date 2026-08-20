@@ -29,7 +29,19 @@ function injuryVolatility(status: string | null | undefined): number {
   return 0.24
 }
 
-export function sportsRecordToPricedAsset(row: SportsPlayerRecord): PricedAsset {
+/**
+ * HONESTY PASS: this used to fall back to a hardcoded `market = 1200` for any
+ * player with neither a dynasty value nor a projection — then derive
+ * "impactValue" and "vorpValue" from that constant. In sports where
+ * `dynastyValue`/`projections` are sparse (everything outside NFL), that made
+ * every player identical, every trade "even", and the fabrication was
+ * indistinguishable from a real valuation downstream.
+ *
+ * Now it returns `null` when nothing real resolved. Callers must report the
+ * gap (they already carry a `dataGaps` channel) rather than trade on a
+ * constant.
+ */
+export function sportsRecordToPricedAsset(row: SportsPlayerRecord): PricedAsset | null {
   const dyn = row.dynastyValue
   const projPts = extractProjectionPoints(row.projections)
   let market = typeof dyn === 'number' && dyn > 0 ? Math.round(dyn * 75) : 0
@@ -37,7 +49,7 @@ export function sportsRecordToPricedAsset(row: SportsPlayerRecord): PricedAsset 
     market = Math.round(clamp(projPts * 45, 200, 9000))
   }
   if (market <= 0) {
-    market = 1200
+    return null
   }
   const vol = injuryVolatility(row.injuryStatus)
   const impact = Math.round(market * 0.62)

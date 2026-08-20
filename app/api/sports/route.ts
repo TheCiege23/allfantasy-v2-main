@@ -3,6 +3,7 @@ import { withApiUsage } from '@/lib/telemetry/usage'
 import { API_CHAIN_TTLS, SUPPORTED_SPORTS, apiChainSportToDbSport, toApiChainSport } from '@/lib/workers/api-config'
 import type { ApiChainSport, ApiDataType } from '@/lib/workers/api-config'
 import { prisma } from '@/lib/prisma'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,18 +129,33 @@ async function readCachedSportsData(args: {
           take: limit,
         }),
       }
-    case 'injuries':
+    case 'injuries': {
+      // Slice 18 follow-on — canonical injury read port: TTL-respected, one
+      // row per player, freshest source wins, staleness reported per row.
+      const factList = await listInjuryFacts({
+        sport: args.sport,
+        team: team ? team.toUpperCase() : null,
+        playerNameContains: search ?? null,
+        limit,
+      })
       return {
-        data: await prisma.sportsInjury.findMany({
-          where: {
-            sport: args.sport,
-            ...(team ? { team: team.toUpperCase() } : {}),
-            ...(search ? { playerName: { contains: search, mode: 'insensitive' } } : {}),
-          },
-          orderBy: { fetchedAt: 'desc' },
-          take: limit,
-        }),
+        data: factList.facts.map((f) => ({
+          id: f.id,
+          sport: args.sport,
+          playerName: f.playerName,
+          team: f.team,
+          position: f.position,
+          status: f.status,
+          type: f.type,
+          description: f.description,
+          date: f.date,
+          week: f.week,
+          source: f.source,
+          fetchedAt: f.fetchedAt,
+          stale: f.stale,
+        })),
       }
+    }
     case 'news':
       return {
         data: await prisma.sportsNews.findMany({

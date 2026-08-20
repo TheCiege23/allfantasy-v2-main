@@ -324,20 +324,20 @@ export function CommissionerSettingsModal({
         <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden border-t border-white/[0.06] bg-[#0c111c] md:border-l md:border-t-0">
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-width:thin]">
           {tournamentShellId ? (
-            <div className="border-b border-cyan-500/25 bg-cyan-500/10 px-4 py-3 text-[12px] text-cyan-50">
+            <div className="border-b border-[#ff3d81]/25 bg-[#ff3d81]/10 px-4 py-3 text-[12px] text-[#ffe9f1]">
               <p className="font-semibold text-white">
                 Managing tournament league ·{' '}
                 {payload?.league && typeof (payload.league as { name?: string }).name === 'string'
                   ? (payload.league as { name?: string }).name
                   : 'This league'}
               </p>
-              <p className="mt-1 text-[11px] text-cyan-100/80">
+              <p className="mt-1 text-[11px] text-[#ffd7e5]/80">
                 Linked to a Tournament Shell — open the hub for national-style navigation and shell commissioner
                 tools.
               </p>
               <Link
                 href={`/tournament/${tournamentShellId}`}
-                className="mt-2 inline-flex font-semibold text-cyan-300 underline hover:text-cyan-200"
+                className="mt-2 inline-flex font-semibold text-[#ff9ec0] underline hover:text-[#ffb8d1]"
                 data-testid="commissioner-tournament-hub-link"
               >
                 Manage full tournament settings →
@@ -378,7 +378,7 @@ export function CommissionerSettingsModal({
                 scoringConfig={payload?.scoringConfig ?? null}
               />
               <details className="border-t border-white/[0.06] bg-[#0a0f18]/40">
-                <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-cyan-200/80">
+                <summary className="cursor-pointer px-6 py-3 text-[12px] font-semibold text-[#ffb8d1]/80">
                   League format, roster slots & advanced sport config
                 </summary>
                 <SportConfigSettingsPanel

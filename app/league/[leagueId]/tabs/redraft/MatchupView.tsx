@@ -114,12 +114,12 @@ export function MatchupView({
   return (
     <div className="space-y-3">
       <div
-        className="rounded-2xl border border-cyan-300/15 bg-[#0a1220] p-4 shadow-[0_0_32px_rgba(34,211,238,0.08)]"
+        className="rounded-2xl border border-[#ff9ec0]/15 bg-[#0a1220] p-4 shadow-[0_0_32px_rgba(255,61,129,0.08)]"
         data-testid={liveMatchup ? 'redraft-live-scoring-view' : undefined}
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-cyan-200/70">Week matchup</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#ffb8d1]/70">Week matchup</p>
             <p className="text-[11px] text-white/40">
               {liveMatchup
                 ? `Week ${liveMatchup.week} - ${liveMatchup.status.replace(/_/g, ' ')}`
@@ -194,12 +194,12 @@ export function MatchupView({
 
             <div className="grid gap-3 lg:grid-cols-2">
               <div className="space-y-3">
-                <p className="truncate text-[11px] font-bold text-cyan-100">{selectedName}</p>
+                <p className="truncate text-[11px] font-bold text-[#ffd7e5]">{selectedName}</p>
                 <PlayerScoreRows title="Starters" players={selectedLiveTeam?.starters ?? []} />
                 <PlayerScoreRows title="Bench" players={selectedLiveTeam?.bench ?? []} />
               </div>
               <div className="space-y-3">
-                <p className="truncate text-[11px] font-bold text-cyan-100">{opponentName}</p>
+                <p className="truncate text-[11px] font-bold text-[#ffd7e5]">{opponentName}</p>
                 <PlayerScoreRows title="Starters" players={opponentLiveTeam?.starters ?? []} />
                 <PlayerScoreRows title="Bench" players={opponentLiveTeam?.bench ?? []} />
               </div>
@@ -210,7 +210,7 @@ export function MatchupView({
 
       {showAfHint ? (
         <div className="mt-2 flex items-center gap-1.5 text-[11px] text-white/35">
-          <span className="bg-gradient-to-r from-cyan-400 to-violet-400 bg-clip-text text-[10px] font-bold text-transparent">
+          <span className="bg-gradient-to-r from-[#ff3d81] to-violet-400 bg-clip-text text-[10px] font-bold text-transparent">
             AF
           </span>
           <span>Weather-sensitive scoring surfaces use cached data before any AI analysis.</span>

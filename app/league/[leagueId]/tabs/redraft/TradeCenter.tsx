@@ -176,7 +176,7 @@ export function TradeCenter({
             data-testid="trade-center-open"
             onClick={() => setModalOpen(true)}
             disabled={!canPropose}
-            className="rounded-lg bg-cyan-500/85 px-3 py-1.5 text-[12px] font-semibold text-black disabled:opacity-50"
+            className="rounded-lg bg-[#ff3d81]/85 px-3 py-1.5 text-[12px] font-semibold text-black disabled:opacity-50"
           >
             Propose Trade
           </button>
@@ -202,23 +202,23 @@ export function TradeCenter({
 
       {runtime ? (
         <div
-          className="grid gap-2 rounded-lg border border-cyan-300/15 bg-cyan-400/[0.06] p-3 text-[11px] text-white/70 sm:grid-cols-4"
+          className="grid gap-2 rounded-lg border border-[#ff9ec0]/15 bg-[#ff3d81]/[0.06] p-3 text-[11px] text-white/70 sm:grid-cols-4"
           data-testid="redraft-trade-runtime-summary"
         >
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">Runtime</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Runtime</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.pendingTrades} pending</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">History</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">History</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.transactionCount} records</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">Vote State</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Vote State</p>
             <p className="mt-1 font-semibold text-white">{runtime.coverage.voteCount} votes</p>
           </div>
           <div>
-            <p className="text-[10px] uppercase tracking-[0.16em] text-cyan-100/60">Pick Trading</p>
+            <p className="text-[10px] uppercase tracking-[0.16em] text-[#ffd7e5]/60">Pick Trading</p>
             <p className="mt-1 font-semibold text-white">
               {runtime.settings.pickExecutionStatus === 'reference_only'
                 ? 'Reference-only'
@@ -252,7 +252,7 @@ export function TradeCenter({
                   <div className="flex items-center gap-1.5">
                     {p.valueSnapshot ? (
                       <span
-                        className="rounded border border-cyan-300/40 bg-cyan-400/10 px-1.5 py-0.5 text-[10px] font-bold text-cyan-100"
+                        className="rounded border border-[#ff9ec0]/40 bg-[#ff3d81]/10 px-1.5 py-0.5 text-[10px] font-bold text-[#ffd7e5]"
                         title={`Original grade at proposal time · fairness ${p.valueSnapshot.fairnessScore}/100`}
                         data-testid="trade-proposal-grade"
                       >

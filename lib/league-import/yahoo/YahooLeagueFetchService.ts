@@ -21,7 +21,7 @@ type YahooApiFetchContext = {
   refreshToken: string | null
 }
 
-type YahooLeagueLookup = {
+export type YahooLeagueLookup = {
   leagueKey: string
   season: number | null
   sport: string | null
@@ -55,7 +55,7 @@ type YahooTeamMetadata = {
   isCommissioner: boolean
 }
 
-class YahooApiResponseError extends Error {
+export class YahooApiResponseError extends Error {
   status: number
 
   constructor(status: number, message: string) {
@@ -324,18 +324,60 @@ async function fetchYahooLoggedInUserGuid(context: YahooApiFetchContext): Promis
   return null
 }
 
-async function yahooApiFetchJson(url: string, context: YahooApiFetchContext): Promise<any> {
-  const request = async (accessToken: string) =>
-    fetch(url, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-      },
-    })
+const YAHOO_FETCH_RETRIES = 3
+const YAHOO_FETCH_TIMEOUT_MS = 12000
 
-  let response = await request(context.accessToken)
+const yahooFetchDelay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Resilient Yahoo GET: per-request timeout plus bounded retries with exponential
+ * backoff on TRANSIENT failures only (network error / timeout / 5xx / 429).
+ * Definitive statuses (401/403/404/other 4xx) return immediately so auth and
+ * not-found semantics stay exact. Exhausted retries surface as a
+ * YahooApiResponseError with status 0 and an honest attempt count — never a
+ * silent null. The token-refresh POST is intentionally NOT retried here; it has
+ * its own single-shot path in refreshYahooAccessToken.
+ */
+async function yahooRequestWithResilience(url: string, accessToken: string): Promise<Response> {
+  let lastError: unknown = null
+  for (let attempt = 0; attempt < YAHOO_FETCH_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), YAHOO_FETCH_TIMEOUT_MS)
+    try {
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        signal: controller.signal,
+      })
+      clearTimeout(timer)
+      if ((response.status >= 500 || response.status === 429) && attempt < YAHOO_FETCH_RETRIES - 1) {
+        await yahooFetchDelay(300 * 2 ** attempt)
+        continue
+      }
+      return response
+    } catch (err) {
+      clearTimeout(timer)
+      lastError = err
+      if (attempt < YAHOO_FETCH_RETRIES - 1) {
+        await yahooFetchDelay(300 * 2 ** attempt)
+        continue
+      }
+    }
+  }
+  throw new YahooApiResponseError(
+    0,
+    `Yahoo request failed after ${YAHOO_FETCH_RETRIES} attempts (${
+      lastError instanceof Error ? lastError.message : 'network error'
+    }).`,
+  )
+}
+
+async function yahooApiFetchJson(url: string, context: YahooApiFetchContext): Promise<any> {
+  let response = await yahooRequestWithResilience(url, context.accessToken)
   if (response.status === 401 && context.refreshToken) {
     const refreshedToken = await refreshYahooAccessToken(context)
-    response = await request(refreshedToken)
+    response = await yahooRequestWithResilience(url, refreshedToken)
   }
 
   if (!response.ok) {
@@ -375,6 +417,19 @@ async function listYahooLeaguesForUser(context: YahooApiFetchContext): Promise<Y
   }
 
   return leagues
+}
+
+/**
+ * Public discovery entry: list every fantasy league on the user's CONNECTED
+ * Yahoo account (`users;use_login=1` — no account identifier is needed, and
+ * none is accepted, because Yahoo scopes the list to the OAuth session).
+ *
+ * Throws `YahooImportConnectionError` when Yahoo isn't connected in League
+ * Sync, and `YahooApiResponseError` when the Yahoo API rejects the call.
+ */
+export async function listYahooLeaguesForAccount(userId: string): Promise<YahooLeagueLookup[]> {
+  const context = await getYahooAuthForUser(userId)
+  return listYahooLeaguesForUser(context)
 }
 
 async function resolveYahooLeagueLookup(

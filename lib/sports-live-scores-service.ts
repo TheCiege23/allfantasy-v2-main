@@ -357,8 +357,23 @@ function rollingInsightsScheduleTokenCandidates(): Array<{ name: string; value: 
   ].filter((candidate) => candidate.value)
 }
 
+/**
+ * Both spellings exist in the wild — README documents them as interchangeable —
+ * but they carry DIFFERENT semantics: `ROLLING_INSIGHTS_REST_BASE` is the host
+ * root (see lib/sports-data/playerAssetsService.ts) while
+ * `ROLLING_INSIGHTS_REST_BASE_URL` already includes `/api/v1`. Reading only the
+ * latter meant a deployment configured with the FORMER was silently ignored and
+ * fell through to the default — the same class of failure as the ClearSports
+ * base-URL override pointing at a host that no longer resolves. Accept either
+ * and normalize, matching scripts/force-ri-sport-ingest-pg.mjs.
+ */
 function rollingInsightsScheduleBaseUrl(): string {
-  return (process.env.ROLLING_INSIGHTS_REST_BASE_URL || DEFAULT_ROLLING_INSIGHTS_REST_BASE_URL).replace(/\/+$/, '')
+  const raw =
+    process.env.ROLLING_INSIGHTS_REST_BASE_URL?.trim() ||
+    process.env.ROLLING_INSIGHTS_REST_BASE?.trim() ||
+    DEFAULT_ROLLING_INSIGHTS_REST_BASE_URL
+  const trimmed = raw.replace(/\/+$/, '')
+  return /\/api\/v\d+$/.test(trimmed) ? trimmed : `${trimmed}/api/v1`
 }
 
 export function buildRollingInsightsScheduleSeasonUrl(input: {

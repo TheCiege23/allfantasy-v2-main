@@ -840,6 +840,8 @@ export async function getResolvedDraftPoolForLeague(
   const injuryByPlayerId = new Map<string, InjuryLookupRow>()
   const injuryByNameTeam = new Map<string, InjuryLookupRow>()
   const injuryByName = new Map<string, InjuryLookupRow>()
+  /** Names held by more than one distinct athlete — never bind these by name alone. */
+  const injuryNameCollisions = new Set<string>()
   const injuryRecentCutoff = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000)
   const inferredWeek = sport === 'NFL' ? inferCurrentNflWeek() : null
   try {
@@ -897,9 +899,18 @@ export async function getResolvedDraftPoolForLeague(
         injuryByNameTeam.set(nameTeam, injuryRow)
       }
 
+      // Slice 15 (wrong-row joins): "first wins" silently bound one athlete's
+      // injury to a same-named other (QB Josh Allen vs LB Josh Allen). Track
+      // collisions so the name-ONLY fallback below can refuse them; the
+      // name+team tier above is unaffected because it is already verified.
       const nameOnly = injuryNameKey(injuryRow.playerName)
-      if (nameOnly && !injuryByName.has(nameOnly)) {
-        injuryByName.set(nameOnly, injuryRow)
+      if (nameOnly) {
+        const existing = injuryByName.get(nameOnly)
+        if (!existing) {
+          injuryByName.set(nameOnly, injuryRow)
+        } else if ((existing.team || '') !== (injuryRow.team || '')) {
+          injuryNameCollisions.add(nameOnly)
+        }
       }
     }
   } catch (error) {
@@ -1691,7 +1702,13 @@ export async function getResolvedDraftPoolForLeague(
       dbInjuryHit = byNameTeam ?? null
     }
     if (!dbInjuryHit) {
-      dbInjuryHit = injuryByName.get(injuryNameKey(name)) ?? null
+      // Name-only is the last resort and is REFUSED when that name is shared by
+      // more than one athlete. A missing injury badge is a gap; the wrong
+      // player's injury badge on a draft board is a false statement.
+      const nameKey = injuryNameKey(name)
+      dbInjuryHit = nameKey && !injuryNameCollisions.has(nameKey)
+        ? injuryByName.get(nameKey) ?? null
+        : null
     }
 
     const resolvedRawInjuryStatus =

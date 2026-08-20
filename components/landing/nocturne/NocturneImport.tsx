@@ -24,7 +24,9 @@ import { ArrowRight, Lock } from 'lucide-react'
 import { signupUrlWithIntent } from '@/lib/auth/auth-intent-resolver'
 import { isImportProviderAvailable } from '@/lib/league-import/provider-ui-config'
 import { trackLandingCtaClick } from '@/lib/landing-analytics'
-import { NOCTURNE_COPY as C } from './copy'
+import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
+import { getNocturneCopy } from './copy.i18n'
+import type { NocturneCopy } from './copy'
 
 type PlatformId = 'sleeper' | 'espn' | 'yahoo' | 'mfl' | 'fantrax' | 'fleaflicker'
 
@@ -63,6 +65,8 @@ export function buildImportIntentPath(platform: Pick<PlatformMeta, 'id' | 'input
 
 export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
   const router = useRouter()
+  const { language } = useOptionalLanguage()
+  const C = getNocturneCopy(language)
   const [platformId, setPlatformId] = useState<PlatformId>('sleeper')
   const [value, setValue] = useState('')
 
@@ -112,7 +116,7 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
         >
           {PLATFORMS.map((p) => (
             <option key={p.id} value={p.id}>
-              {isImportProviderAvailable(p.id) ? p.label : `${p.label} — Coming soon`}
+              {isImportProviderAvailable(p.id) ? p.label : `${p.label} — ${C.importFlow.platformSoon}`}
             </option>
           ))}
         </select>
@@ -138,7 +142,7 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
         >
           {submitLabel}
         </button>
-        <TrustLine platform={platform} available={platformAvailable} compact />
+        <TrustLine platform={platform} available={platformAvailable} copy={C} compact />
       </form>
     )
   }
@@ -161,7 +165,7 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
             >
               <span className="n-plat-sq" style={{ background: p.color }}>{p.initial}</span>
               {p.label}
-              {soon ? <span className="n-plat-soon"> · Coming soon</span> : null}
+              {soon ? <span className="n-plat-soon"> · {C.importFlow.platformSoon}</span> : null}
             </button>
           )
         })}
@@ -191,7 +195,7 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
           {submitLabel} <ArrowRight size={16} style={{ marginLeft: 2 }} />
         </button>
       </div>
-      <TrustLine platform={platform} available={platformAvailable} />
+      <TrustLine platform={platform} available={platformAvailable} copy={C} />
     </form>
   )
 }
@@ -201,10 +205,12 @@ export function NocturneImport({ variant }: { variant: 'mini' | 'full' }) {
 function TrustLine({
   platform,
   available,
+  copy,
   compact = false,
 }: {
   platform: PlatformMeta
   available: boolean
+  copy: NocturneCopy
   compact?: boolean
 }) {
   const base: React.CSSProperties = {
@@ -216,8 +222,8 @@ function TrustLine({
     color: 'var(--color-neutral-600)',
   }
   const text = available
-    ? C.importFlow.trustNote.replace('{label}', platform.label)
-    : `${platform.label} isn't available yet — coming soon.`
+    ? copy.importFlow.trustNote.replace('{label}', platform.label)
+    : copy.importFlow.comingSoonNote.replace('{label}', platform.label)
   return (
     <p className="n-import-status" style={base}>
       <Lock size={13} style={{ flex: 'none' }} />

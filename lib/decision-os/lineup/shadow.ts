@@ -21,6 +21,7 @@ import {
 } from './canonicalBridge'
 import { buildProductionCanonicalValidatorDep } from './deps'
 import { loadLineupWarehouseFacts, type LineupWarehouseFacts } from './warehouseFacts'
+import { loadLineupSignalFacts, type LineupSignalFacts } from './signalFacts'
 
 export function shouldRunLineupShadow(
   env: NodeJS.ProcessEnv = process.env,
@@ -80,6 +81,12 @@ export interface LineupShadowDeps {
    * warehouse block (older behavior).
    */
   loadWarehouseFacts?: (args: { leagueId: string; sport: string; userId: string; playerIds: string[] }) => Promise<LineupWarehouseFacts | null>
+  /**
+   * F2.2–F2.7 signal grounding (injury/schedule/projections/weather/news) —
+   * same enrichment-only contract as the warehouse loader. Optional; absence
+   * skips the block entirely.
+   */
+  loadSignalFacts?: (args: { leagueId: string; sport: string; week: number; players: { playerId: string; playerName: string; team?: string | null }[] }) => Promise<LineupSignalFacts | null>
 }
 
 const defaultShadowDeps: LineupShadowDeps = {
@@ -91,6 +98,7 @@ const defaultShadowDeps: LineupShadowDeps = {
   loadCanonicalContext: (leagueId, week) => loadCanonicalValidatorContext(leagueId, week),
   buildCanonicalDep: (ctx) => buildProductionCanonicalValidatorDep(ctx),
   loadWarehouseFacts: (args) => loadLineupWarehouseFacts(args),
+  loadSignalFacts: (args) => loadLineupSignalFacts(args),
 }
 
 /**
@@ -134,6 +142,18 @@ export async function runLineupShadow(
         playerIds: input.players.map((p) => p.playerId),
       }).catch(() => null)
       if (warehouse) input = { ...input, warehouse }
+    }
+    // F2.2–F2.7 signal grounding (memo enrichment only — rules never read it).
+    // Loader never throws; failures arrive as uncertainty inside the facts.
+    const loadSignals = deps.loadSignalFacts ?? defaultShadowDeps.loadSignalFacts
+    if (loadSignals) {
+      const signals = await loadSignals({
+        leagueId: args.leagueId,
+        sport: input.sport,
+        week: input.editingWeek,
+        players: input.players.map((p) => ({ playerId: p.playerId, playerName: p.playerName, team: p.team ?? null })),
+      }).catch(() => null)
+      if (signals) input = { ...input, signals }
     }
     const memo = args.legacySummary
     const result = await runLineupSetDecision(input, {

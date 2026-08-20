@@ -5,7 +5,9 @@ import { consumeRateLimit, getClientIp } from '@/lib/rate-limit'
 import { pricePlayer, ValuationContext } from '@/lib/hybrid-valuation'
 import { fetchFantasyCalcValues, type FantasyCalcSettings } from '@/lib/fantasycalc'
 import { convertSleeperToAssets } from '@/lib/trade-engine'
-import { getPreAnalysisStatus } from '@/lib/trade-pre-analysis'
+import { getPreAnalysisStatus, runPreAnalysis } from '@/lib/trade-pre-analysis'
+import { waitUntil } from '@vercel/functions'
+import { resolveTendencyCoverage } from '@/lib/trade-finder/tendencyCoverage'
 import { findBestPartners, type MatchmakingGoal } from '@/lib/trade-finder/partner-matchmaking'
 import type { PricedAsset } from '@/lib/trade-finder/candidate-generator'
 import type { LeagueIntelligence, ManagerProfile } from '@/lib/trade-engine/types'
@@ -327,7 +329,30 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
       }
     }
 
+    /**
+     * MANAGER TENDENCIES ARE THE MAJORITY OF THE SCORE, AND THEY WERE SILENTLY OPTIONAL.
+     *
+     * Four of the five scoring dimensions -- bias alignment, trade frequency, overpay
+     * willingness and part of need overlap -- come from `TradePreAnalysisCache`. Nothing
+     * on the new surface has ever written that table: the only two callers of
+     * `runPreAnalysis` live inside `app/af-legacy/`, and there is no cron or script for
+     * it. Production held ONE row across every league.
+     *
+     * So this block was a no-op almost every time, wrapped in a bare `catch {}` that made
+     * the miss invisible. Ranking on roster overlap alone and ranking on the full model
+     * rendered identically, which is precisely the "absence averaged into the answer"
+     * failure the trade grades already avoid.
+     *
+     * Now: use the cache when it is ready, warm it in the background when it is not, and
+     * tell the caller which of those happened. `runPreAnalysis` is safe to trigger this
+     * way -- it has a 4h freshness check, an in-progress guard, and fans out per manager
+     * through `Promise.allSettled` -- but it is several provider round-trips, so it must
+     * not sit in front of the response.
+     */
     let tendenciesMap: Record<string, any> = {}
+    let warmStarted = false
+    let lookupFailed = false
+
     try {
       const preAnalysis = await getPreAnalysisStatus(resolvedUsername, leagueId)
       if (preAnalysis.status === 'ready') {
@@ -348,7 +373,23 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
           }
         }
       }
-    } catch {}
+
+      if (Object.keys(tendenciesMap).length === 0) {
+        // Background, never in front of the response. runPreAnalysis is idempotent and
+        // guards its own concurrency, so a burst of requests produces one run.
+        waitUntil(
+          runPreAnalysis(resolvedUsername, leagueId).catch((e) => {
+            console.error('[matchmaking] pre-analysis warm failed', e instanceof Error ? e.message : e)
+          }),
+        )
+        warmStarted = true
+      }
+    } catch (e) {
+      // Previously `catch {}`. A failure here silently downgraded every score, so it is
+      // reported to the caller rather than absorbed.
+      console.error('[matchmaking] tendency lookup failed', e instanceof Error ? e.message : e)
+      lookupFailed = true
+    }
 
     const intelligence: LeagueIntelligence = {
       assetsByRosterId,
@@ -463,6 +504,16 @@ export const POST = withApiUsage({ endpoint: "/api/trade-finder/matchmaking", to
     return NextResponse.json({
       success: true,
       ...enrichedResult,
+      /**
+       * What the ranking was actually able to use. A caller that renders partners without
+       * reading this is presenting a roster-overlap ranking as the full model.
+       */
+      tendencyCoverage: resolveTendencyCoverage({
+        managersWithTendencies: Object.keys(tendenciesMap).length,
+        managersEvaluated: allRosters.length,
+        warmStarted,
+        lookupFailed,
+      }),
       leagueInfo: {
         name: league.name,
         type: league.settings?.type === 2 ? 'Dynasty' : 'Redraft',

@@ -3,14 +3,15 @@
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { MessageCircle, Shield, Sparkles, Menu, Search, Settings as SettingsIcon, Swords } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { ChevronDown, MessageCircle, Shield, Sparkles, Menu, Search, Settings as SettingsIcon, Swords } from "lucide-react"
 import { loginUrlWithIntent, signupUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
 import { ProductContextSwitcher } from "@/components/shell/ProductContextSwitcher"
 import NotificationBell from "@/components/shared/NotificationBell"
 import WalletSummaryBadge from "@/components/shared/WalletSummaryBadge"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { UserMenuDropdown } from "@/components/navigation/UserMenuDropdown"
-import { getPrimaryNavItems } from "@/lib/navigation"
+import { getPrimaryNavGroups, type NavGroup } from "@/lib/navigation"
 import { showAdminNav } from "@/lib/navigation"
 import { isNavItemActive } from "@/lib/shell"
 import { getPrimaryChimmyEntry } from "@/lib/ai-product-layer"
@@ -30,6 +31,109 @@ function cn(...parts: Array<string | false | null | undefined>) {
   return parts.filter(Boolean).join(" ")
 }
 
+/**
+ * Broadcast Deck nav fold: one pill per GROUP. Single-item groups are direct
+ * links; multi-item groups open a dropdown. Active group wears the deck's
+ * pink→orange gradient (same treatment as the league page's tab groups), and
+ * every old flat-strip route survives inside a group.
+ */
+function NavGroupBar({ groups, currentPath }: { groups: NavGroup[]; currentPath: string }) {
+  const [openId, setOpenId] = useState<string | null>(null)
+  const barRef = useRef<HTMLDivElement | null>(null)
+
+  // Close on outside click and on navigation.
+  useEffect(() => {
+    if (!openId) return
+    const handler = (e: MouseEvent) => {
+      if (!barRef.current?.contains(e.target as Node)) setOpenId(null)
+    }
+    window.addEventListener("mousedown", handler)
+    return () => window.removeEventListener("mousedown", handler)
+  }, [openId])
+  useEffect(() => {
+    setOpenId(null)
+  }, [currentPath])
+
+  const isItemActive = (href: string) =>
+    href === "/admin" ? currentPath.startsWith("/admin") : isNavItemActive(currentPath, href)
+
+  return (
+    <div ref={barRef} className="flex gap-1 overflow-x-auto pb-1">
+      {groups.map((group) => {
+        const groupActive = group.items.some((item) => isItemActive(item.href))
+        const pillStyle = groupActive
+          ? { background: "linear-gradient(90deg,#ff3d81,#ff8a3d)", color: "#fff" }
+          : { background: "color-mix(in srgb, var(--panel2) 80%, transparent)", color: "var(--muted)" }
+        const pillClass = cn(
+          "whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] transition sm:px-3 sm:text-xs",
+          groupActive && "font-black italic uppercase tracking-wide",
+        )
+
+        if (group.items.length === 1) {
+          const item = group.items[0]
+          return (
+            <Link
+              key={group.id}
+              href={item.href}
+              className={pillClass}
+              style={pillStyle}
+              aria-current={groupActive ? "page" : undefined}
+              data-testid={`global-nav-group-${group.id}`}
+            >
+              {group.label}
+            </Link>
+          )
+        }
+
+        const open = openId === group.id
+        return (
+          <div key={group.id} className="relative">
+            <button
+              type="button"
+              onClick={() => setOpenId(open ? null : group.id)}
+              className={cn(pillClass, "inline-flex items-center gap-1")}
+              style={pillStyle}
+              aria-expanded={open}
+              aria-haspopup="menu"
+              data-testid={`global-nav-group-${group.id}`}
+            >
+              {group.label}
+              <ChevronDown className={cn("h-3 w-3 transition-transform", open && "rotate-180")} />
+            </button>
+            {open ? (
+              <div
+                role="menu"
+                className="absolute left-0 top-full z-50 mt-1 min-w-[13rem] overflow-hidden rounded-xl border shadow-2xl"
+                style={{ background: "#12163e", borderColor: "#262c6a" }}
+                data-testid={`global-nav-menu-${group.id}`}
+              >
+                {group.items.map((item) => {
+                  const active = isItemActive(item.href)
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      role="menuitem"
+                      onClick={() => setOpenId(null)}
+                      className="block px-3.5 py-2.5 text-[12.5px] transition"
+                      style={active
+                        ? { color: "#ff9d5c", background: "rgba(255,255,255,0.05)", fontWeight: 800 }
+                        : { color: "#c6cbf5" }}
+                      aria-current={active ? "page" : undefined}
+                    >
+                      {item.label}
+                    </Link>
+                  )
+                })}
+              </div>
+            ) : null}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function GlobalTopNav({
   isAuthenticated,
   isAdmin = false,
@@ -41,7 +145,7 @@ export default function GlobalTopNav({
   const pathname = usePathname()
   const currentPath = pathname ?? ""
   const chimmyEntry = getPrimaryChimmyEntry({ source: "top_bar" })
-  const primaryItems = getPrimaryNavItems(isAdmin)
+  const primaryGroups = getPrimaryNavGroups(isAdmin)
   const shortcutLabel = getCommandPaletteShortcut()
   const utilitySpecs = getTopBarUtilities({
     isAuthenticated,
@@ -174,26 +278,7 @@ export default function GlobalTopNav({
           </div>
         </div>
 
-        {isAuthenticated && (
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {primaryItems.map((item) => {
-            const active = item.href === "/admin" ? currentPath.startsWith("/admin") : isNavItemActive(currentPath, item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn("whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] transition sm:px-3 sm:text-xs")}
-                aria-current={active ? "page" : undefined}
-                style={active
-                  ? { background: "var(--text)", color: "var(--bg)" }
-                  : { background: "color-mix(in srgb, var(--panel2) 80%, transparent)", color: "var(--muted)" }}
-              >
-                {item.label}
-              </Link>
-            )
-          })}
-        </div>
-        )}
+        {isAuthenticated && <NavGroupBar groups={primaryGroups} currentPath={currentPath} />}
       </div>
     </header>
   )

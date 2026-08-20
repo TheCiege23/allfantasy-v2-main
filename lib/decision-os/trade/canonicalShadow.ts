@@ -109,7 +109,7 @@ export interface CanonicalTradeShadowDeps {
    * the persisted `AdpDataRecord` + SportsPlayer caches; honest-empty when prisma is unavailable). Feeds
    * `MarketContext`; missing values stay null. Never writes, warms a cache, or calls a live provider API.
    */
-  resolveEnrichment: (args: { sport: string; playerIds: string[] }) => Promise<TradeEnrichmentResult>
+  resolveEnrichment: (args: { sport: string; playerIds: string[]; season?: number | null; week?: number | null; scoringPresetId?: string | null }) => Promise<TradeEnrichmentResult>
   /**
    * E.5 — OPTIONAL read-only roster-identity resolver mapping proposal-space roster ids to canonical join
    * keys (teamId/managerUserId). Absent by default ⇒ direct-match only (production shadow behavior, E.4).
@@ -270,7 +270,14 @@ export async function runCanonicalTradeShadowAttempt(
     //    so the engine degrades honestly; this never fabricates a value (P3) and never affects the native path.
     let enrichmentResult: TradeEnrichmentResult
     try {
-      enrichmentResult = await resolveEnrichment({ sport: world.league.sport, playerIds: playerIdsFromMovements(movements) })
+      enrichmentResult = await resolveEnrichment({
+        sport: world.league.sport,
+        playerIds: playerIdsFromMovements(movements),
+        // F2.5 projection anchor — the canonical world's own season/week facts (provenance-safe).
+        season: world.league.season,
+        week: world.league.currentWeek,
+        scoringPresetId: world.league.scoringPresetId,
+      })
     } catch {
       enrichmentResult = { enrichment: {}, valuationSource: null, adpResolved: 0, positionResolved: 0, projectionResolved: 0, unresolvedIds: [], warnings: ['enrichment_unavailable'] }
     }

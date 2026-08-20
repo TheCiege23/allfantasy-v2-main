@@ -70,12 +70,20 @@ export function snapshotToEvaluation(proposalId: string, snap: TradeValueSnapsho
   const proposerTotal = snap.sides[0]?.total ?? 0
   const receiverTotal = snap.sides[1]?.total ?? 0
   const diff = snap.grade.valueDifference
-  const leanedTo = diff > 0 ? (snap.sides[0]?.rosterId ?? 'proposer') : diff < 0 ? (snap.sides[1]?.rosterId ?? 'receiver') : 'even'
+  // Honesty pass: an ungradeable snapshot (no asset resolved to a value) has
+  // no lean — 'even' would assert balance the engine never established.
+  const leanedTo = snap.grade.insufficientData
+    ? null
+    : diff > 0
+      ? (snap.sides[0]?.rosterId ?? 'proposer')
+      : diff < 0
+        ? (snap.sides[1]?.rosterId ?? 'receiver')
+        : 'even'
   return {
     proposalId,
     participantCount: snap.sides.length,
     evaluatorSupported: true,
-    unsupportedReason: null,
+    unsupportedReason: snap.grade.insufficientData ? 'insufficient_value_data' : null,
     grade: snap.grade.grade,
     fairnessScore: snap.grade.fairnessScore,
     confidenceScore: snap.grade.confidenceScore,

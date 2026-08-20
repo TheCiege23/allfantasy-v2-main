@@ -142,7 +142,7 @@ function NflRedraftDraftOrderBlock({
             <button
               type="button"
               onClick={onGenerateDraftOrder}
-              className="rounded-lg border border-cyan-500/35 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-cyan-200 hover:bg-cyan-500/20"
+              className="rounded-lg border border-[#ff3d81]/35 bg-[#ff3d81]/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-[#ffb8d1] hover:bg-[#ff3d81]/20"
               data-testid="nfl-redraft-generate-draft-order"
             >
               {hasOrder ? 'Regenerate draft order' : 'Generate draft order'}
@@ -167,7 +167,7 @@ function NflRedraftDraftOrderBlock({
               key={t.id}
               className="flex items-center justify-between gap-2 rounded-lg border border-white/[0.06] bg-black/20 px-3 py-2 text-[12px]"
             >
-              <span className="font-bold tabular-nums text-cyan-300">{i + 1}.</span>
+              <span className="font-bold tabular-nums text-[#ff9ec0]">{i + 1}.</span>
               <span className="min-w-0 flex-1 truncate font-semibold text-white">{t.teamName}</span>
               <span className="shrink-0 text-[10px] text-white/40">Slot #{t.draftPosition}</span>
             </li>
@@ -508,24 +508,24 @@ export function DraftTab({
               <p className="mt-0.5 text-[11px] text-white/45">Copy the link and share with your friends</p>
             </div>
             <div className="shrink-0 text-[13px] font-bold tabular-nums">
-              <span className="text-cyan-400">{filled}</span>
+              <span className="text-[#ff3d81]">{filled}</span>
               <span className="text-white/80">/{cap}</span>
             </div>
           </div>
           {justCreated && showInviteHighlight ? (
-            <p className="mt-2 text-[11px] text-cyan-200/80">League ID: {league.id}</p>
+            <p className="mt-2 text-[11px] text-[#ffb8d1]/80">League ID: {league.id}</p>
           ) : null}
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <div className="relative min-w-0 flex-1">
-              <code className="block truncate rounded-lg border border-white/[0.07] bg-black/25 py-2 pl-3 pr-10 text-[11px] text-cyan-200/90">
+              <code className="block truncate rounded-lg border border-white/[0.07] bg-black/25 py-2 pl-3 pr-10 text-[11px] text-[#ffb8d1]/90">
                 {inviteCopyUrl || inviteDisplayPath}
               </code>
             </div>
             <button
               type="button"
               onClick={() => void handleCopyInvite()}
-              className="shrink-0 rounded-xl bg-cyan-500 px-4 py-2 text-[11px] font-black uppercase tracking-wide text-black transition hover:bg-cyan-400"
+              className="shrink-0 rounded-xl bg-[#ff3d81] px-4 py-2 text-[11px] font-black uppercase tracking-wide text-black transition hover:bg-[#ff3d81]"
               data-testid="league-invite-copy"
             >
               COPY
@@ -538,7 +538,7 @@ export function DraftTab({
                 className={`shrink-0 rounded-xl border px-3 py-2 text-[11px] font-bold uppercase tracking-wide transition ${
                   finderListed
                     ? 'border-white/20 bg-white/[0.08] text-white/80 hover:bg-white/[0.12]'
-                    : 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200 hover:bg-cyan-500/20'
+                    : 'border-[#ff3d81]/40 bg-[#ff3d81]/10 text-[#ffb8d1] hover:bg-[#ff3d81]/20'
                 } disabled:opacity-50`}
                 data-testid="league-finder-toggle"
               >
@@ -548,7 +548,7 @@ export function DraftTab({
           </div>
           {isCommissioner ? (
             <p className="mt-2 text-[10px] leading-relaxed text-white/35">
-              <Link href="/app/discover" className="text-cyan-400/90 underline decoration-cyan-500/30 underline-offset-2 hover:text-cyan-300">
+              <Link href="/app/discover" className="text-[#ff3d81]/90 underline decoration-[#ff3d81]/30 underline-offset-2 hover:text-[#ff9ec0]">
                 League finder
               </Link>{' '}
               matches your league to managers within one rank tier of yours (same, one above, or one below).
@@ -591,7 +591,7 @@ export function DraftTab({
               <p className="mt-1 text-[12px] font-normal leading-snug text-white/80 sm:text-[13px]">
                 {draftDateLabel}
               </p>
-              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-200/70">{leagueIdentityLabel}</p>
+              <p className="mt-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#ffb8d1]/70">{leagueIdentityLabel}</p>
             </div>
             <div className="flex shrink-0 gap-2">
               <button
@@ -694,7 +694,7 @@ export function DraftTab({
               <button
                 type="button"
                 onClick={openSettingsDraft}
-                className="flex flex-1 items-center justify-center rounded-full bg-cyan-400 px-5 py-3 text-[12px] font-black uppercase tracking-wide text-[#0a0f18] shadow-md shadow-cyan-900/30 transition hover:bg-cyan-300"
+                className="flex flex-1 items-center justify-center rounded-full bg-[#ff3d81] px-5 py-3 text-[12px] font-black uppercase tracking-wide text-[#0a0f18] shadow-md shadow-cyan-900/30 transition hover:bg-[#ff9ec0]"
                 data-testid="league-draftboard-set-time"
               >
                 Set time
@@ -704,7 +704,7 @@ export function DraftTab({
                 type="button"
                 onClick={() => void handleDraftRoom()}
                 disabled={!canEnterDraftRoom}
-                className="flex flex-1 items-center justify-center rounded-full bg-cyan-400 px-5 py-3 text-[12px] font-black uppercase tracking-wide text-[#0a0f18] shadow-md shadow-cyan-900/30 transition hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-50"
+                className="flex flex-1 items-center justify-center rounded-full bg-[#ff3d81] px-5 py-3 text-[12px] font-black uppercase tracking-wide text-[#0a0f18] shadow-md shadow-cyan-900/30 transition hover:bg-[#ff9ec0] disabled:cursor-not-allowed disabled:opacity-50"
                 data-testid="league-draftboard-enter-room"
               >
                 Draftroom
