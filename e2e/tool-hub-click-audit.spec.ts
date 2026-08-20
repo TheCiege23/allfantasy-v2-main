@@ -66,3 +66,4 @@ test.describe("@toolhub tool hub click audit", () => {
     await page.getByTestId("tools-hub-back-home").click()
     await expect(page).toHaveURL(/\/$/, { timeout: 20_000 })
   })
+})
