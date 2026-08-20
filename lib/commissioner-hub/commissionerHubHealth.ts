@@ -106,6 +106,12 @@ type RosterHealthRow = {
 
 type LeagueHealthRow = {
   id: string
+  /**
+   * When this league was last read from its source platform. `null` means NEVER —
+   * not "recently". The confidence ladder below depends on this being present; without
+   * it the engine cannot tell a healthy league from one nobody has ever looked at.
+   */
+  lastSyncedAt?: Date | string | null
   name?: string | null
   sport?: string | null
   season?: number | string | null
@@ -528,6 +534,20 @@ function buildAssistantQuestions(args: {
   ]
 }
 
+/**
+ * A league that has not been read within this many days has missed at least one full scoring
+ * period in-season. Its numbers may still be right, but nobody has checked -- `medium`, never
+ * `high`.
+ */
+const STALE_SYNC_DAYS = 7
+
+/** Parse a Date | ISO string | null into a valid Date, or null. Never throws, never guesses. */
+function toOptionalDate(value: Date | string | null | undefined): Date | null {
+  if (!value) return null
+  const d = value instanceof Date ? value : new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
 export function buildCommissionerHealthSnapshot(
   input: CommissionerHealthBuildInput,
 ): CommissionerLeagueHealthSnapshot {
@@ -598,12 +618,41 @@ export function buildCommissionerHealthSnapshot(
   }
 
   const source = input.source ?? 'database'
+
+  /**
+   * Confidence is a claim about whether anyone has READ this league, not about how many
+   * rows happen to exist.
+   *
+   * This previously returned `high` for any league with >=1 roster row, and `medium` for a
+   * league with NO rosters at all -- rating the emptiest possible state above the floor.
+   * Production made that concrete: 873 rosters across 69 leagues while `lastSyncedAt` was
+   * null on all 98, so the engine answered "high confidence, 57, DRIFTING" for leagues
+   * nobody had ever read.
+   *
+   * The score is not merely uncertain in that state, it is biased DOWNWARD: missed lineups,
+   * chat volume and active managers all come back zero for an unsynced league, so absence of
+   * data reads as evidence of a bad league. A confident 57 on a league we know nothing about
+   * is a measurement nobody took.
+   *
+   * `lib/core-app/todayStrip.ts` already refused to trust this field and gated on
+   * `lastSyncedAt` itself before calling the engine. That gate now lives here, so the three
+   * callers that did NOT compensate -- commissioner-hub, dashboard/nocturne, dashboard/v2 --
+   * inherit it. todayStrip's own check stays as defence in depth.
+   *
+   * Same rule as a "C" trade grade meaning no data: surface the absence, never average it.
+   */
+  const syncedAt = toOptionalDate(league.lastSyncedAt)
+  const syncAgeDays = syncedAt ? (now.getTime() - syncedAt.getTime()) / 86_400_000 : null
   const dataConfidence: CommissionerHealthDataConfidence =
     source === 'dashboard-fallback'
       ? 'low'
-      : rosters.length > 0
-        ? 'high'
-        : 'medium'
+      : rosters.length === 0
+        ? 'low'
+        : syncAgeDays === null
+          ? 'low'
+          : syncAgeDays > STALE_SYNC_DAYS
+            ? 'medium'
+            : 'high'
   const leagueName = String(league.name ?? 'League')
   const summary = health.summary
   const nflDataCoverage = String(league.sport ?? 'NFL').toUpperCase() === 'NFL'
@@ -716,6 +765,7 @@ export async function getCommissionerHubHealthForUser(
         where: { id: { in: leagueIds } },
         select: {
           id: true,
+          lastSyncedAt: true,
           name: true,
           sport: true,
           season: true,

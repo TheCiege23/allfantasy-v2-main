@@ -49,11 +49,22 @@ function planFamilyToSubscriptionPlanId(
   }
 }
 
-/** The plans AF Supreme includes for entitlement checks — it inherits the full tier stack. */
+/**
+ * The plans AF Supreme includes for entitlement checks.
+ *
+ * ⚠ war_room (AF Legacy) WAS REMOVED FROM THIS LIST. Legacy now stands on its own
+ * at $9.99/mo alongside Pro and Commissioner rather than sitting above Supreme,
+ * so Supreme bundles the two general tiers and Legacy is bought separately.
+ *
+ * ⚠ THIS TAKES AN ENTITLEMENT AWAY FROM EXISTING SUPREME SUBSCRIBERS. Anyone on
+ * Supreme today has draft-room and dynasty access through this list and loses it
+ * the moment this deploys. That is a customer-communications decision, not a code
+ * one — if those accounts are to be grandfathered, it has to happen here or in the
+ * entitlement resolution, and it has to happen BEFORE this ships.
+ */
 export const SUPREME_INCLUDED_PLAN_IDS: readonly SubscriptionPlanId[] = [
   "pro",
   "commissioner",
-  "war_room",
 ]
 
 export function isActiveOrGraceStatus(status: EntitlementStatus): boolean {

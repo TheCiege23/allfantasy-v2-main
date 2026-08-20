@@ -84,16 +84,68 @@ function seasonYear(v: unknown): number | null {
   return m ? Number(m[1]) : null
 }
 
+/**
+ * Appends a fresh millisecond cache-buster without disturbing existing query
+ * params — every RI URL here already carries `?RSC_token=`.
+ *
+ * ⚠ THE TOKEN IS IN THAT QUERY STRING. Rolling Insights passes its credential as
+ * a query parameter, so a URL from here must never reach a log, an error message
+ * or a client response. Nothing in this module logs, and it needs to stay that
+ * way.
+ */
+export function cacheBusted(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}_=${Date.now()}`
+}
+
+/**
+ * ⚠ A 304 IS NOT "NO DATA", AND TREATING IT AS SUCH IS WHAT EMPTIED THE SCORES.
+ * This previously did `if (res.status === 304) return null`, rationalised as "an
+ * absence of data, not an error worth escalating". Measured consequence on
+ * production: 3,331 Rolling Insights game rows, only 497 carrying a score.
+ * `schedule-season/NFL` landed once and wrote the games; `live/NFL` then answered
+ * 304 and every score silently became null, while ESPN and TheSportsDB had the
+ * real numbers for the same fixtures.
+ *
+ * What a 304 means here is genuinely DISPUTED between two vendor sources — the
+ * skill repo calls it a cache artefact to defeat, the newer OpenAPI spec declares
+ * a NotModified component meaning "valid request, empty result set". This does
+ * not depend on which is right, because the same handling is correct under both:
+ *
+ *   1. Send no-cache headers AND a fresh millisecond cache-buster every call.
+ *   2. Retry ONCE on a 304, cache-busted again.
+ *   3. Let the caller detect change by hashing the payload, never by status.
+ *
+ * If it is a cache artefact, busting defeats it. If it genuinely means empty, we
+ * pay one extra request and return null as before. Either way this is right.
+ *
+ * `cache: 'no-store'` alone was never sufficient: that governs Next's own fetch
+ * cache, not the upstream CDN's conditional response.
+ */
+const NO_CACHE_HEADERS: Record<string, string> = {
+  'Cache-Control': 'no-cache, no-store, max-age=0',
+  Pragma: 'no-cache',
+}
+
 async function getJson(url: string, headers?: Record<string, string>): Promise<unknown | null> {
-  try {
-    const res = await fetch(url, { cache: 'no-store', headers })
-    // RI answers 304 with an empty body for sports it does not carry; that is an
-    // absence of data, not an error worth escalating.
-    if (res.status === 304) return null
-    if (!res.ok) return null
+  const attempt = async (): Promise<{ status: number; body: unknown | null }> => {
+    const res = await fetch(cacheBusted(url), {
+      cache: 'no-store',
+      headers: { ...NO_CACHE_HEADERS, ...(headers ?? {}) },
+    })
+    if (res.status === 304) return { status: 304, body: null }
+    if (!res.ok) return { status: res.status, body: null }
     const text = await res.text()
-    if (!text.trim()) return null
-    return JSON.parse(text) as unknown
+    if (!text.trim()) return { status: res.status, body: null }
+    return { status: res.status, body: JSON.parse(text) as unknown }
+  }
+
+  try {
+    const first = await attempt()
+    if (first.status !== 304) return first.body
+
+    // Retry once, with a NEW cache-buster (Date.now() has moved on).
+    const second = await attempt()
+    return second.body
   } catch {
     return null
   }
@@ -124,7 +176,34 @@ export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
   const byId = new Map<string, ProviderGame>()
   const q = `?RSC_token=${encodeURIComponent(token)}`
 
-  for (const endpoint of ['schedule-season/NFL', 'live/NFL']) {
+  /*
+   * ⚠ BOTH PATHS WERE MISSING A REQUIRED PATH PARAMETER. This called
+   * `schedule-season/NFL` and `live/NFL`. Per contracts/rolling-insights/
+   * ENDPOINTS.yaml the shapes are:
+   *
+   *   /schedule-season/{season}/{SPORT}   season: "YYYY", the year the season
+   *                                       STARTED — a bare year, not a date
+   *   /live/{date}/{SPORT}                date: "YYYY-MM-DD"
+   *
+   * `/live/{SPORT}` is not an address on this API, which is why player-level box
+   * stats never arrived: the contract calls /live "the PRIMARY game-day endpoint"
+   * and notes "player box lines live here". Measured symptom before this fix —
+   * 3,331 RI game rows on production, only 497 carrying a score, while ESPN and
+   * TheSportsDB held the real numbers for the same fixtures.
+   *
+   * The date is UTC-derived, matching how the rest of this file treats provider
+   * timestamps, and /live "returns started AND finished events for the given
+   * date" so a single call covers the whole slate.
+   */
+  const today = new Date()
+  const liveDate = `${today.getUTCFullYear()}-${String(today.getUTCMonth() + 1).padStart(2, '0')}-${String(today.getUTCDate()).padStart(2, '0')}`
+  const seasonYearForPath = String(
+    // The NFL season is named for the year it STARTED, so January and February
+    // still belong to the previous season's schedule.
+    today.getUTCMonth() + 1 <= 2 ? today.getUTCFullYear() - 1 : today.getUTCFullYear(),
+  )
+
+  for (const endpoint of [`schedule-season/${seasonYearForPath}/NFL`, `live/${liveDate}/NFL`]) {
     const payload = (await getJson(`${base}/${endpoint}${q}`)) as
       | { data?: { NFL?: Record<string, unknown>[] } }
       | null

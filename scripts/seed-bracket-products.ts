@@ -1,6 +1,10 @@
 import { getStripeClient } from '../lib/stripe-client'
+import { assertSafeStripeTarget } from './_assert-safe-seed-target'
 
 async function seedBracketProducts() {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeStripeTarget('seed-bracket-products')
+
   const stripe = await getStripeClient()
 
   const existing = await stripe.products.search({

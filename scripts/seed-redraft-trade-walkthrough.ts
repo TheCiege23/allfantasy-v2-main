@@ -13,6 +13,7 @@
 
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const prisma = new PrismaClient()
 
@@ -287,6 +288,9 @@ export async function seedRedraftTradeWalkthrough() {
 }
 
 async function main() {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeSeedTarget('seed-redraft-trade-walkthrough')
+
   const result = await seedRedraftTradeWalkthrough()
   console.log(JSON.stringify(result, null, 2))
 }

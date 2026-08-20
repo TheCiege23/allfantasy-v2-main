@@ -1,0 +1,530 @@
+--- # ============================================================================
+# TheSportsDB — API Contract
+# NORMATIVE. Do not probe the live API to rediscover any of this.
+#
+# ROLE: metadata, media/artwork, schedules, TV listings, YouTube highlight links.
+# NOT a live-stat source. See README.md.
+#
+# Source: /documentation (authoritative) + live probes 2026-08-16
+# ============================================================================
+
+meta:
+  vendor: TheDataDB Ltd
+  contract_version: 1.0.0
+  captured_at: 2026-08-16
+  timezone: UTC              # site-wide; events carry both UTC and local fields
+  terms_last_updated: 2025-07-01
+
+  role: metadata_media_schedule
+  not_suitable_for:
+    - live fantasy scoring
+    - NFL/NCAAF box scores
+    - play-by-play
+    - drive or possession data
+    - weekly per-game player stat lines
+
+  authority_note: >
+    /documentation is authoritative. The published OpenAPI YAMLs are incomplete
+    (v1 has no rate-limit data and omits 3 endpoints; v2 declares tags with no
+    paths for Filter/All/Schedule/Livescore) and partly stale. Do NOT codegen
+    from the YAML.
+
+# ============================================================================
+versions:
+  v1:
+    base_url: https://www.thesportsdb.com/api/v1/json/{api_key}
+    auth: url_path_segment          # ⚠️ key is IN THE URL — redact in all logs
+    free_key: "123"                 # also accepts "3"
+    style: "*.php endpoints with query params"
+    available_to: [free, premium, business]
+    error_behavior: >
+      ⚠️ Returns HTTP 200 on errors with a body like
+      {"events":[],"Message":"Invalid League ID passed"}. Note capital M.
+      NEVER treat 200 as success without inspecting the body.
+    empty_result: "null (e.g. {\"teams\":null}) — NOT []"
+
+  v2:
+    base_url: https://www.thesportsdb.com/api/v2/json
+    auth: header
+    auth_header: X-API-KEY
+    style: path-segment only (no query params anywhere)
+    available_to: [premium, business]   # premium-only, and the only version being developed
+    error_behavior: standard HTTP status codes (per docs; unverified)
+
+# ============================================================================
+auth:
+  security_rules:
+    - v1 embeds the API key in the URL PATH. Redact it from every log, trace,
+      and error message. Treat any logged URL as a credential leak.
+    - Prefer v2 (header auth) for anything new.
+    - Key must never reach a browser client.
+  env_var: THESPORTSDB_API_KEY
+
+# ============================================================================
+rate_limits:
+  # Three sources disagree. These are the /documentation numbers, which match
+  # the pricing page exactly. The v2 YAML's "1000/day" is stale boilerplate.
+  free_per_minute: 30
+  premium_per_minute: 100
+  business_per_minute: 120
+  breach_response: 429
+  breach_recovery: wait 60 seconds
+
+pricing:
+  free:             { usd_month: 0,  commercial: false, rpm: 30 }
+  single_developer: { usd_month: 9,  commercial: true,  rpm: 100 }
+  small_business:   { usd_month: 20, commercial: true,  rpm: 120, private_key: true }
+  top_self_serve_tier: small_business   # no enterprise tier exists
+  delivery: Patreon or PayPal; requires linked Patreon supporter status
+  refund_window_days: 14
+
+commercial:
+  free_tier_verbatim: >
+    "You may use our API to lookup data and artwork for your development projects.
+    You cannot publish apps to an appstore unless you are a paid subscriber."
+  paid_tier_verbatim: >
+    "You may use our API to develop apps and services as long as you stay within
+    the rate limit. You can use our custom artwork in your projects but must
+    mention us as the source of the data."
+  attribution_required: true
+  attribution_text: '"Data provided by TheSportsDB" + link back'
+  caching_permitted: true      # "You can scrape, copy and modify any content returned from the API"
+  website_scraping_prohibited: true
+  reselling_prohibited: true
+
+# ============================================================================
+# ⚠️ ARTWORK LICENSING — the highest-risk item. See README.md.
+# ============================================================================
+artwork:
+  provenance: '"Most are fan created" (vendor''s own words)'
+  vendor_cannot_grant_rights_it_lacks: true
+  dmca_response_hours: 24        # reactive takedown model; risk sits with you
+
+  per_asset_license_signal:
+    field: strCreativeCommons
+    values: ["Yes", "No"]
+    available_on: [player]       # ⚠️ ONLY on player objects
+    NOT_available_on: [team_badge, team_logo, league_logo, event_art, venue_art]
+
+  policy:
+    team_badge:      { display: allowed_unmodified, modification: forbidden }
+    league_logo:     { display: allowed_unmodified, modification: forbidden }
+    player_headshot: { display: only_if_cc_licensed, note: "strCreativeCommons == Yes" }
+    event_art:       { display: caution, note: "no license signal available" }
+
+  cdn_hosts:
+    # ⚠️ BOTH appear within the SAME response. Normalize at ingestion.
+    - r2.thesportsdb.com
+    - www.thesportsdb.com
+
+  size_suffixes:
+    # Append to any image URL.
+    medium: "/medium"   # 500px
+    small:  "/small"    # 250px
+    tiny:   "/tiny"     # 50px
+    note: "/preview (200px) is mentioned on /free_sports_api but not /documentation. Avoid."
+
+  dimensions:
+    league: { badge: 512x512, logo: 800x310, poster: 680x1000, trophy: 512x512, banner: 1000x185, fanart: 1280x720 }
+    team:   { badge: 512x512, logo: 800x310, equipment: 500x500 }
+    event:  { poster: 680x1000, thumb: 1280x720, fanart: 1280x720 }
+    player: { cutout: 500x500, thumb: 700x700, render: 700x700, fanart: 1280x720, banner: 800x310 }
+
+# ============================================================================
+# LEAGUE IDS — verified live
+# ============================================================================
+league_ids:
+  NFL:            { id: 4391, strLeague: "NFL",              strSport: "American Football" }
+  NCAA_FOOTBALL:  { id: 4479, strLeague: "NCAA Division 1",  strSport: "American Football",
+                    warning: "⚠️ NOT named 'NCAA Football'. Searching that name returns {\"teams\":null}. strFilename prefix is 'NCAA Division 1 Football'." }
+  CFL:            { id: 4405, strLeague: "CFL" }
+  ARENA_FL:       { id: 4470 }
+  INDOOR_FL:      { id: 4471 }
+  AAF:            { id: 4552 }
+  AFL_HISTORIC:   { id: 5482 }
+  NFL_PRO_BOWL:   { id: 5154 }
+  MLB:            { id: 4424 }
+  NBA:            { id: 4387 }
+  EPL:            { id: 4328 }
+  F1:             { id: 4370 }
+
+# ============================================================================
+# AMERICAN FOOTBALL SUPPORT — tested empirically, not assumed
+# ============================================================================
+american_football_support:
+  works:
+    schedule:            { verified: true,  note: "eventsday / eventsseason / eventsnextleague all fine" }
+    event_object:        { verified: true,  note: "scores, venue, weather, officials, artwork" }
+    team_metadata:       { verified: true }
+    player_metadata:     { verified: true }
+    player_season_stats: { verified: true,
+                           endpoint: lookupplayerstats.php,
+                           limitation: "⚠️ SEASON AGGREGATES ONLY. No per-game or weekly lines.",
+                           example: "Jalen Hurts 2024: Passing Yards 2903, Passing TDs 18, Rushing Yards 630",
+                           free_row_limit: 10, premium_row_limit: 10000,
+                           caveat: "Not in the v1 OpenAPI YAML at all. Some duplicate rows observed across seasons." }
+    livescore:           { verified: false, documented: true,
+                           note: "Documented for NFL with NFL as the worked example. 2-minute BATCH refresh, not push.",
+                           caveat: "Exact sport slug unconfirmed (premium-gated). Use /livescore/4391 by league ID — safer." }
+    tv_listings:         { verified: true,  note: "unique to this source" }
+    youtube_highlights:  { verified: true,  note: "game-level YouTube links; see highlights section" }
+
+  does_not_work:
+    # All probed against real NFL events on a working key; a soccer control
+    # returned real data from the same endpoint, proving key/endpoint are fine.
+    event_stats:  { result: "{\"eventstats\":null}", probed_events: [2475349, 2261187],
+                    verdict: "soccer-only. No possession / first downs / total yards." }
+    timeline:     { result: "{\"timeline\":null}",   probed_events: [2475349, 2261187],
+                    verdict: "soccer-only vocabulary (Goal, subst, cards). No TD/FG/XP/safety/2PT." }
+    lineup:       { result: "{\"lineup\":null}",     probed_events: [2475349, 2261187] }
+
+  quarter_scores:
+    available: partially
+    location: "event.strResult"
+    format: HTML-embedded string
+    example: "Philadelphia Eagles Quarter 1:<br>7 7 <br>Quarter 2<br>14 13 <br>Quarter 3<br>3 0 <br>..."
+    warning: "No per-quarter integer fields. Whitespace inconsistent between records. Brittle parse — prefer Rolling Insights."
+    overtime_fields: [intHomeScoreExtra, intAwayScoreExtra]
+
+  status_enum_american_football:
+    # from /docs_api_data; NFL finished games verified to return FT
+    [NS, Q1, Q2, Q3, Q4, OT, HT, FT, AOT, CANC, PST]
+
+# ============================================================================
+# ENDPOINTS — v1
+# ============================================================================
+endpoints_v1:
+  # ---- Search ----
+  searchteams:      { path: /searchteams.php,      params: [t, sname], free: 1, premium: 100,
+                      warning: "⚠️ Free tier only works for the literal string 'Arsenal'." }
+  searchevents:     { path: /searchevents.php,     params: [e, s, d, f], free: 1, premium: 10 }
+  searchfilename:   { path: /searchfilename.php,   params: [e, s], free: 1, premium: 10, in_yaml: false }
+  searchplayers:    { path: /searchplayers.php,    params: [p, t], free: 1, premium: 10 }
+  searchvenues:     { path: /searchvenues.php,     params: [v], free: 1, premium: 10 }
+  searchloves:      { path: /searchloves.php,      params: [u], undocumented: true }
+
+  # ---- Lookup ----
+  lookupleague:      { path: /lookupleague.php,      params: [id], free: 1,  premium: 1 }
+  lookuptable:       { path: /lookuptable.php,       params: [l, s], free: 5, premium: 100,
+                       warning: "Limited to featured SOCCER leagues only." }
+  lookupteam:        { path: /lookupteam.php,        params: [id], free: 1,  premium: 1 }
+  lookupequipment:   { path: /lookupequipment.php,   params: [id], free: 2,  premium: 100 }
+  lookupplayer:      { path: /lookupplayer.php,      params: [id], free: 1,  premium: 1 }
+  lookuphonours:     { path: /lookuphonours.php,     params: [id], free: 5,  premium: 500 }
+  lookupformerteams: { path: /lookupformerteams.php, params: [id], free: 5,  premium: 100 }
+  lookupmilestones:  { path: /lookupmilestones.php,  params: [id], free: 5,  premium: 100 }
+  lookupcontracts:   { path: /lookupcontracts.php,   params: [id], free: 1,  premium: 100 }
+  playerresults:     { path: /playerresults.php,     params: [id], free: 5,  premium: 500, in_yaml: false }
+  lookupplayerstats: { path: /lookupplayerstats.php, params: [id], free: 10, premium: 10000, in_yaml: false,
+                       note: "✅ WORKS FOR NFL — season aggregates only." }
+  lookupevent:       { path: /lookupevent.php,       params: [id], free: 1,  premium: 1 }
+  eventresults:      { path: /eventresults.php,      params: [id], free: 5,  premium: 100,
+                       note: "Ranked-finisher shape (motorsport). NOT a team box score." }
+  lookuplineup:      { path: /lookuplineup.php,      params: [id], free: 5,  premium: 100, nfl: null }
+  lookuptimeline:    { path: /lookuptimeline.php,    params: [id], free: 5,  premium: 100, nfl: null }
+  lookupeventstats:  { path: /lookupeventstats.php,  params: [id], free: 5,  premium: 100, nfl: null }
+  lookuptv:          { path: /lookuptv.php,          params: [id], free: 2,  premium: 100 }
+  lookupvenue:       { path: /lookupvenue.php,       params: [id], free: 1,  premium: 1 }
+
+  # ---- List ----
+  all_sports:         { path: /all_sports.php,         params: [],  free: 2,  premium: 50 }
+  all_countries:      { path: /all_countries.php,      params: [],  free: 50, premium: 500 }
+  all_leagues:        { path: /all_leagues.php,        params: [],  free: 10, premium: 3000 }
+  search_all_leagues: { path: /search_all_leagues.php, params: [c, s], free: 10, premium: 100,
+                        warning: "⚠️ Free tier SILENTLY TRUNCATES — omitted NFL and NCAA Division 1 in a US American-football query." }
+  search_all_seasons: { path: /search_all_seasons.php, params: [id, poster, badge, description], free: 5, premium: 500 }
+  search_all_teams:   { path: /search_all_teams.php,   params: [l, s, c], free: 10, premium: 3000,
+                        verified: "2026-08-17 paid key: l=NFL -> 32 teams, l=NCAA Division 1 -> 260 teams",
+                        note: "⚠️ Keys off strLeague (the NAME), not the numeric idLeague.
+                               THIS is the all-teams-in-a-league endpoint — see lookup_all_teams below.",
+                        fixtures: [v1.search_all_teams.NFL.json, v1.search_all_teams.NCAAF.json] }
+  lookup_all_players: { path: /lookup_all_players.php, params: [id], free: 10, premium: 3000 }
+  # 🛑 DOES NOT EXIST. Probed 2026-08-17 on a paid key: ?id=4391 -> HTTP 404 + an
+  # HTML error page, not JSON. Previously listed here as merely "undocumented",
+  # and GAPS G-08 called it working; neither was ever verified. Use
+  # search_all_teams.php?l=<strLeague>. See GAPS.md R-14.
+  lookup_all_teams:   { path: /lookup_all_teams.php,   params: [id], exists: false, http_status: 404,
+                        superseded_by: search_all_teams }
+
+  # ---- Schedule ----
+  eventsnext:       { path: /eventsnext.php,       params: [id], free: 1,  premium: 10,
+                      warning: "Free key shows HOME events only." }
+  eventslast:       { path: /eventslast.php,       params: [id], free: 1,  premium: 10,
+                      warning: "Free key shows HOME events only." }
+  eventsnextleague: { path: /eventsnextleague.php, params: [id], free: 1,  premium: 20 }
+  eventspastleague: { path: /eventspastleague.php, params: [id], free: 1,  premium: 20 }
+  eventsday:        { path: /eventsday.php,        params: [d, s, l], free: 3, premium: 1500,
+                      note: "l accepts league NAME or ID. Primary schedule endpoint." }
+  eventsseason:     { path: /eventsseason.php,     params: [id, s], free: 15, premium: 3000 }
+  eventstv:         { path: /eventstv.php,         params: [d, s, a, c, id], free: 1, premium: 1500 }
+  eventsround:      { path: /eventsround.php,      params: [id, r, s], undocumented: true, works: true }
+
+  # ---- Video ----
+  eventshighlights: { path: /eventshighlights.php, params: [d, l, s, i], free: 2, premium: 50 }
+
+  # ---- v1 Livescore (superseded by v2) ----
+  # 🛑 Both 404 on a PAID key (probed 2026-08-17) — these v1 paths look RETIRED,
+  # not premium-gated. The earlier free-key readings ([null] / empty body) were
+  # read as gating; a paid key 404s outright. Use v2 /livescore/4391.
+  # See GAPS.md R-15.
+  latest_americanfootball: { path: /latestamericanfootball.php, premium: true, http_status: 404,
+                             retired: probable,
+                             note: "⚠️ Free key returns [null]; PAID key returns 404 + HTML. Use v2 /livescore/4391." }
+  latest_ncaafootball:     { path: /latestncaafootball.php,     premium: true, http_status: 404,
+                             retired: probable,
+                             note: "⚠️ Free key returns empty body; PAID key returns 404 + HTML. Use v2 /livescore/4479." }
+  latest_soccer:           { path: /latestsoccer.php,           premium: true }
+  latest_basketball:       { path: /latestbasketball.php,       premium: true }
+  latest_icehockey:        { path: /latesticehockey.php,        premium: true }
+  latest_baseball:         { path: /latestbaseball.php,         premium: true }
+  latest_ncaabasketball:   { path: /latestncaabasketball.php,   premium: true }
+
+# ============================================================================
+# ENDPOINTS — v2 (premium only, X-API-KEY header, path params only)
+# ============================================================================
+endpoints_v2:
+  search:
+    - { path: "/search/league/{leagueName}", limit: 10 }
+    - { path: "/search/team/{teamName}",     limit: 10 }
+    - { path: "/search/player/{playerName}", limit: 10 }
+    - { path: "/search/event/{eventName}",   limit: 10 }
+    - { path: "/search/venue/{venueName}",   limit: 10 }
+  lookup:
+    - { path: "/lookup/league/{idLeague}" }
+    - { path: "/lookup/team/{idTeam}" }
+    - { path: "/lookup/team_equipment/{idTeam}" }
+    - { path: "/lookup/player/{idPlayer}" }
+    - { path: "/lookup/player_contracts/{idPlayer}" }
+    - { path: "/lookup/player_results/{idPlayer}",   in_yaml: false }
+    - { path: "/lookup/player_honours/{idPlayer}" }
+    - { path: "/lookup/player_milestones/{idPlayer}" }
+    - { path: "/lookup/player_teams/{idPlayer}" }
+    - { path: "/lookup/player_stats/{idPlayer}",     in_yaml: false, note: "✅ works for NFL" }
+    - { path: "/lookup/event/{idEvent}" }
+    - { path: "/lookup/event_lineup/{idEvent}",      nfl: null }
+    - { path: "/lookup/event_results/{idEvent}" }
+    - { path: "/lookup/event_stats/{idEvent}",       nfl: null }
+    - { path: "/lookup/event_timeline/{idEvent}",    nfl: null }
+    - { path: "/lookup/event_tv/{idEvent}",
+        note: "YAML operationId is lookupMotorsportEventBroadcast — misleading, it is generic." }
+    - { path: "/lookup/event_highlights/{idEvent}",
+        note: "Returns the FULL event object, not a dedicated schema. YouTube URL is in strVideo." }
+    - { path: "/lookup/venue/{idVenue}" }
+  list:
+    - { path: "/list/teams/{idLeague}",   limit: 100, note: "also accepts league NAME" }
+    - { path: "/list/seasons/{idLeague}", limit: 100 }
+    - { path: "/list/players/{idTeam}",   limit: 100, note: "also accepts team NAME" }
+    - { path: "/list/seasonposters/{idLeague}", undocumented: true }
+  filter:
+    - { path: "/filter/tv/day/{date}",          limit: 100 }
+    - { path: "/filter/tv/country/{country}",   limit: 100 }
+    - { path: "/filter/tv/sport/{sport}",       limit: 100 }
+    - { path: "/filter/tv/channel/{name}",      limit: 100 }
+    - { path: "/filter/tv/channelid/{id}",      limit: 100 }
+    - { path: "/filter/events/{idLeague}/{season}", undocumented: true }
+    - { path: "/filter/events/day/{date}",          undocumented: true }
+  all:
+    - { path: /all/countries, limit: 500 }
+    - { path: /all/sports,    limit: 500 }
+    - { path: /all/leagues,   limit: 3000 }
+  schedule:
+    - { path: "/schedule/next/league/{id}",     limit: 10 }
+    - { path: "/schedule/previous/league/{id}", limit: 10 }
+    - { path: "/schedule/next/team/{id}",       limit: 10 }
+    - { path: "/schedule/previous/team/{id}",   limit: 10 }
+    - { path: "/schedule/next/venue/{id}",      limit: 10 }
+    - { path: "/schedule/previous/venue/{id}",  limit: 10 }
+    - { path: "/schedule/full/team/{id}",       limit: 250 }
+    - { path: "/schedule/league/{idLeague}/{season}", limit: 3000 }
+  livescore:
+    - { path: "/livescore/{sport}",    limit: 100,
+        note: "sport uses underscores, e.g. American_Football. SLUG UNVERIFIED." }
+    - { path: "/livescore/{idLeague}", limit: 100,
+        note: "✅ PREFER THIS. /livescore/4391 for NFL — avoids the slug ambiguity." }
+    - { path: /livescore/all,        limit: 500 }
+
+  yaml_warning: >
+    The captured v2 YAML defines only 21 paths (search/lookup/list). It declares
+    tags for Filter, All, Schedule, and Livescores but contains NO paths for them.
+    player_stats and player_results are documented in HTML but absent from the YAML.
+    Do not codegen from it.
+
+# ============================================================================
+# RESPONSE OBJECTS
+# All fields are declared type:string in the YAML — including int* fields.
+# Everything returns as JSON strings. Nulls are inconsistently null, "", or absent.
+# ============================================================================
+objects:
+  event:
+    verified_against: NFL event 2261187
+    fields: [idEvent, idAPIfootball, strTimestamp, strEvent, strEventAlternate,
+             strFilename, strSport, idLeague, strLeague, strLeagueBadge, strSeason,
+             strDescriptionEN, strHomeTeam, strAwayTeam, intHomeScore,
+             intHomeScoreExtra, intAwayScoreExtra, intRound, intAwayScore,
+             intSpectators, strOfficial, strWeather, dateEvent, dateEventLocal,
+             strTime, strTimeLocal, strGroup, idHomeTeam, strHomeTeamBadge,
+             idAwayTeam, strAwayTeamBadge, intScore, intScoreVotes, strResult,
+             idVenue, strVenue, strCountry, strCity, strPoster, strSquare,
+             strFanart, strThumb, strBanner, strMap, strTweet1, strVideo,
+             strStatus, strPostponed, strLocked]
+    v2_extra: [strTweet2, strTweet3]
+    quirks:
+      - "Field ORDER is non-obvious: intHomeScore -> intHomeScoreExtra -> intAwayScoreExtra -> intRound -> intAwayScore."
+      - "strLocked is 'locked' on NFL regular season, 'unlocked' on preseason."
+      - "strVideo holds the YouTube highlight URL."
+
+  livescore:
+    fields: [idLiveScore, idEvent, strSport, idLeague, strLeague, idHomeTeam,
+             idAwayTeam, strHomeTeam, strAwayTeam, strHomeTeamBadge,
+             strAwayTeamBadge, intHomeScore, intAwayScore, intEventScore,
+             intEventScoreTotal, strStatus, strProgress, strEventTime,
+             dateEvent, updated]
+    vendor_marked_unused: [idLiveScore, intEventScore, intEventScoreTotal, strStatus]
+    american_football_progress_format: "'mm:ss - Xst/nd/rd/th' OR 'Final'"
+    staleness_field: updated
+    refresh: >
+      2-minute BATCH snapshot, not per-event push. Every row in a response shares
+      an identical `updated` value. Poll `updated` to detect staleness rather than
+      trusting the interval. No webhooks, no streaming.
+
+  team:
+    field_count: 64
+    core: [idTeam, idESPN, idAPIfootball, intLoved, strTeam, strTeamAlternate,
+           strTeamShort, intFormedYear, strSport, strLeague, idLeague,
+           strDivision, idVenue, strStadium, strKeywords, strRSS, strLocation,
+           intStadiumCapacity, strWebsite, strFacebook, strTwitter, strInstagram,
+           strColour1, strColour2, strColour3, strGender, strCountry]
+    media: [strBadge, strLogo, strFanart1, strFanart2, strFanart3, strFanart4,
+            strBanner, strEquipment, strYoutube]
+    multi_league: [strLeague2..strLeague7, idLeague2..idLeague7]
+    descriptions: [strDescriptionEN, DE, FR, CN, IT, JP, RU, ES, PT, SE, NL, HU, NO, IL, PL]
+
+  player:
+    schemas_warning: >
+      ⚠️ THREE DISTINCT SCHEMAS for the same entity:
+      searchplayers.php -> PlayersResponse (small, adds `relevance` float)
+      lookupplayer.php -> FullPlayersResponse (66 fields)
+      lookup_all_players.php -> PlayerResponse
+      Do not assume one shape.
+    search_projection: [idPlayer, idTeam, strPlayer, strTeam, strSport, strThumb,
+                        strCutout, strNationality, dateBorn, strStatus, strGender,
+                        strPosition, relevance]
+    full_core: [idPlayer, idTeam, idTeam2, idTeamNational, idAPIfootball,
+                idPlayerManager, idWikidata, idTransferMkt, idESPN, strNationality,
+                strPlayer, strPlayerAlternate, strTeam, strSport, dateBorn,
+                dateDied, strNumber, dateSigned, strSigning, strWage, strOutfitter,
+                strKit, strAgent, strBirthLocation, strEthnicity, strStatus,
+                strGender, strSide, strPosition, strCollege, strHeight, strWeight]
+    media: [strThumb, strPoster, strCutout, strRender, strBanner, strFanart1,
+            strFanart2, strFanart3, strFanart4]
+    license_field: strCreativeCommons     # ⚠️ "Yes"/"No" — gate headshot display on this
+
+  player_statistics:
+    verified_for_nfl: true
+    fields: [id, idPlayer, idTeam, idLeague, strSport, strPlayer, strTeam,
+             strTeamBadge, strLeague, strLeagueBadge, strStatistic, strValue, strSeason]
+    shape: generic key/value — one row per stat per season
+    limitation: "⚠️ SEASON AGGREGATES ONLY. No weekly / per-game."
+    observed_nfl_stats: ["Passing Yards", "Passing Touchdowns", "Passing Interceptions",
+                         "Rushing Yards", "Rushing Touchdowns", "Fumble"]
+    data_quality_note: "Duplicate rows observed across seasons. Verify per-position coverage."
+
+  event_statistics:
+    fields: [idStatistic, idEvent, idApiFootball, strEvent, strStat, intHome, intAway]
+    casing_trap: "⚠️ idApiFootball here vs idAPIfootball everywhere else. Both live in the same API."
+    nfl: null      # soccer-only in practice
+    observed_strStat_values: ["Shots on Goal", "Shots off Goal", "Total Shots",
+      "Blocked Shots", "Shots insidebox", "Shots outsidebox", "Fouls",
+      "Corner Kicks", "Offsides", "Ball Possession", "Yellow Cards", "Red Cards",
+      "Goalkeeper Saves", "Total passes", "Passes accurate", "Passes %",
+      "expected_goals", "goals_prevented"]
+    note: "No enum in the spec — data-driven. Casing is chaotic (Title/sentence/snake all present)."
+
+  event_timeline:
+    fields: [idTimeline, idEvent, strTimeline, strTimelineDetail, strHome, strEvent,
+             idAPIfootball, idPlayer, strPlayer, strCountry, idAssist, strAssist,
+             intTime, idTeam, strTeam, strComment, dateEvent, strSeason]
+    nfl: null
+    quirk: "strTimelineDetail is overloaded — 'Normal Goal' for goals, but a PLAYER NAME for substitutions."
+
+  event_lineup:
+    fields: [idLineup, idEvent, strEvent, strPosition, strPositionShort,
+             strFormation, strHome, strSubstitute, intSquadNumber, strCutout,
+             idPlayer, strPlayer, idTeam, strTeam, strCountry, strSeason]
+    nfl: null
+    note: "strFormation was null in every observed row."
+
+  event_results:
+    fields: [idResult, idPlayer, strPlayer, idTeam, idEvent, strEvent, strResult,
+             intPosition, intPoints, strDetail, dateEvent, strSeason, strCountry, strSport]
+    shape: ranked-finisher (motorsport / individual sports) — NOT a team box score
+
+  league:
+    core: [idLeague, idAPIfootball, idAPIfootballv3, strSport, strLeague,
+           strLeagueAlternate, intDivision, idCup, strCurrentSeason, intFormedYear,
+           dateFirstEvent, strGender, strCountry, strTvRights, strNaming, strComplete]
+    media: [strFanart1, strFanart2, strFanart3, strFanart4, strBanner, strBadge,
+            strLogo, strPoster, strTrophy]
+    quirk: "strNaming is a template: '{strHomeTeam} vs {strAwayTeam}'."
+    note: "Description-language ORDER differs from team/player objects (IT before CN, PL before IL)."
+
+  venue:
+    fields: [idVenue, idDupe, strVenue, strVenueAlternate, strVenueSponsor,
+             strSport, strDescriptionEN, strArchitect, intCapacity, strCost,
+             strCountry, strLocation, strTimezone, intFormedYear, strFanart1,
+             strFanart2, strFanart3, strFanart4, strThumb, strLogo, strMap,
+             strWebsite, strFacebook, strInstagram, strTwitter, strYoutube, strLocked]
+
+# ============================================================================
+enums:
+  intRound_magic_numbers:
+    125: Quarter-Final
+    150: Semi-Final
+    160: Playoff
+    170: Playoff Semi-Final
+    180: Playoff Final
+    200: Final
+    400: Qualifier
+    500: Pre-Season      # verified: NFL preseason returns "500"
+
+  strStatus_by_sport:
+    American Football: [NS, Q1, Q2, Q3, Q4, OT, HT, FT, AOT, CANC, PST]
+    # /docs_api_data also documents Baseball, Basketball, Soccer, Handball,
+    # Ice Hockey, Rugby, Volleyball enums.
+
+# ============================================================================
+mcp:
+  published_paths:
+    - /api/spec/v1/MCP/index.js
+    - /api/spec/v2/MCP/index.js
+  usable: false
+  verdict: >
+    A 7-line Postman-generated CLI scaffold. No server transport, no tool
+    definitions, no package.json, and the tools/ directory it globs is not
+    published. Cannot be npx'd or pointed at from a client. Generate your own
+    from their Postman collections if you want MCP access.
+  postman_collections:
+    v1: https://www.postman.com/thedatadb/thesportsdb/collection/0t5rbv8
+    v2: https://www.postman.com/thedatadb/thesportsdb/collection/d7hdb1o
+
+# ============================================================================
+open_questions:
+  - id: livescore_sport_slug
+    question: "Exact accepted slug for /livescore/{sport} for American football. Try American_Football."
+    workaround: "Use /livescore/4391 (by league ID) — documented pattern, no ambiguity."
+    blocking: nothing
+  - id: livescore_nfl_actually_populated
+    question: >
+      The static livescore_all.json sample contains zero American Football rows
+      (Ice Hockey, Basketball, Baseball, Soccer only). It is a May 2025 offseason
+      snapshot, so weak evidence — but verify during an NFL game with a real key.
+    blocking: livescore feature
+  - id: player_stats_position_coverage
+    question: "Does lookupplayerstats cover receiving/defensive stats, or mainly QB lines?"
+    blocking: season-stat display
+  - id: annual_lifetime_pricing
+    question: "Annual and Lifetime tier prices (behind a toggle on /pricing)."
+    blocking: nothing
+  - id: artwork_license_clearance
+    question: "Is displaying non-CC player headshots commercially defensible?"
+    blocking: LEGAL — resolve before shipping headshots

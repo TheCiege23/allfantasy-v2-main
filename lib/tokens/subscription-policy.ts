@@ -38,39 +38,56 @@ type SubscriptionTokenPolicyConfig = {
   plans: Record<SubscriptionPlanId, SubscriptionTokenPlanPolicy>
 }
 
+/*
+ * ⚠ SUBSCRIPTIONS GRANT NO TOKENS. This is deliberate and it is the whole model:
+ * a subscription unlocks features outright, and tokens are the pay-per-use path
+ * for people who do not want a subscription. Granting both meant a subscriber
+ * held a currency they had no reason to spend.
+ *
+ * ⚠ discountedTokenSpendPct IS 0 FOR THE SAME REASON. A subscriber discount on
+ * token spend only matters to someone who spends tokens, and a subscriber does
+ * not. Keeping it would have meant a whole column in the cost table, and a
+ * concept on the pricing page, serving nobody.
+ *
+ * ⚠ THESE ZEROES ARE LOAD-BEARING — grantMonthlyCreditsFromInvoice bails on
+ * `!tokenAmount || tokenAmount <= 0`, so 0 here is what actually stops the
+ * invoice.payment_succeeded webhook from crediting anything. Do not "tidy" these
+ * into removed keys; the lookup would return undefined and the guard reads the
+ * same, but the intent would stop being visible.
+ */
 export const SUBSCRIPTION_TOKEN_POLICY_CONFIG: SubscriptionTokenPolicyConfig = {
   model: "mixed_access",
   version: "v1_discounted_tokens",
   plans: {
     pro: {
-      monthlyIncludedPremiumCredits: 250,
-      yearlyIncludedPremiumCredits: 3500,
-      discountedTokenSpendPct: 20,
+      monthlyIncludedPremiumCredits: 0,
+      yearlyIncludedPremiumCredits: 0,
+      discountedTokenSpendPct: 0,
       supportsUnlimitedLowTierInFuture: true,
     },
     commissioner: {
-      monthlyIncludedPremiumCredits: 100,
-      yearlyIncludedPremiumCredits: 1500,
-      discountedTokenSpendPct: 20,
+      monthlyIncludedPremiumCredits: 0,
+      yearlyIncludedPremiumCredits: 0,
+      discountedTokenSpendPct: 0,
       supportsUnlimitedLowTierInFuture: true,
     },
     war_room: {
-      monthlyIncludedPremiumCredits: 300,
-      yearlyIncludedPremiumCredits: 3500,
-      discountedTokenSpendPct: 25,
+      monthlyIncludedPremiumCredits: 0,
+      yearlyIncludedPremiumCredits: 0,
+      discountedTokenSpendPct: 0,
       supportsUnlimitedLowTierInFuture: true,
     },
     supreme: {
-      monthlyIncludedPremiumCredits: 1000,
-      yearlyIncludedPremiumCredits: 15000,
-      discountedTokenSpendPct: 45,
+      monthlyIncludedPremiumCredits: 0,
+      yearlyIncludedPremiumCredits: 0,
+      discountedTokenSpendPct: 0,
       supportsUnlimitedLowTierInFuture: true,
     },
     // Enterprise workspace tier — highest allowances (matches/exceeds Supreme).
     enterprise: {
-      monthlyIncludedPremiumCredits: 1000,
-      yearlyIncludedPremiumCredits: 15000,
-      discountedTokenSpendPct: 45,
+      monthlyIncludedPremiumCredits: 0,
+      yearlyIncludedPremiumCredits: 0,
+      discountedTokenSpendPct: 0,
       supportsUnlimitedLowTierInFuture: true,
     },
   },

@@ -12,10 +12,16 @@
  * gating to authenticated sessions prevents anonymous callers from
  * fan-out-walking provider rate limits.
  *
- * Phase 1: non-persistent. The resolver returns a fresh URL per call without
- * writing back to a `Player.headshotUrl` (no schema field at this branch).
- * Phase 2 should add Prisma persistence + a server-side cache key once the
- * schema lands.
+ * NOT non-persistent, despite what this comment used to say. Phase 2 put a write-through
+ * cache inside `resolveOnce`, so every call through here can persist a `PlayerImage` row —
+ * this route silently became a writer without its callers or this docstring changing.
+ *
+ * It passes no `playerId` (the UI has a name/team/position and sometimes a Sleeper id, never
+ * a canonical `Player.id`), so the resolver DERIVES one. A derived id only equals the stored
+ * `Player.id` when the caller's fields reproduce exactly what the canonical backfill used,
+ * which is often false — that is how this route wrote 215 orphan image rows in production.
+ * `writePrimaryPlayerImage` now refuses ids with no matching `Player`, so the worst case here
+ * is a skipped cache write and a re-resolution next time, not a bogus row.
  */
 
 import { NextResponse, type NextRequest } from 'next/server'

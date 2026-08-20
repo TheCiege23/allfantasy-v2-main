@@ -1,0 +1,290 @@
+/*
+ * AF Core — screen 6, Trades.
+ * Scoped under `.af-core` via the shell; see af-core.css for why.
+ */
+
+.af-tr {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1020px;
+}
+
+/* ── League-specific grading banner ──────────────────────────────────── */
+
+.af-tr-context {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.af-tr-context-body {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+.af-tr-context-body strong {
+  color: var(--text);
+}
+
+/* ── Deadline ────────────────────────────────────────────────────────── */
+
+.af-tr-deadline {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+.af-tr-deadline-why {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* A read deadline, distinguished from the withheld reason beside it. */
+.af-tr-deadline-value {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Inbox / sent ────────────────────────────────────────────────────── */
+
+.af-tr-pending {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+.af-tr-pending-col {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── History ─────────────────────────────────────────────────────────── */
+
+.af-tr-history-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.af-tr-history-title {
+  margin: 0;
+  font-size: 20px;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-tr-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 10px;
+}
+
+.af-tr-card {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-tr-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-tr-when {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-tr-partner {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Sides ───────────────────────────────────────────────────────────── */
+
+.af-tr-sides {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.af-tr-side {
+  flex: 0 0 auto;
+  min-width: 72px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+
+.af-tr-count {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.1;
+}
+
+.af-tr-count-label {
+  margin-top: 2px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-tr-swap {
+  color: var(--faint);
+  font-size: 16px;
+}
+
+/* ── Grade slot ──────────────────────────────────────────────────────── */
+
+/*
+ * The handoff puts a letter grade here. We cannot issue one, so the slot states
+ * that instead of standing empty (which reads as "still loading") or showing a
+ * C (which reads as "average" when it means "no data").
+ */
+.af-tr-grade {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.af-tr-grade-badge {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 800;
+  background: var(--chip);
+  border: 1px dashed var(--chip-line);
+  color: var(--faint);
+}
+
+.af-tr-grade-why {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+.af-tr-unavailable {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-tr-footnote {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-tr-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ── Trade grades (real, per-trade rows) ─────────────────────────────
+ * ⚠ CLASSES ARE `af-tr-graderow*`, NOT `af-tr-grade*`. `.af-tr-grade` already
+ * exists above as the old single-slot placeholder and carries a border-top and
+ * padding — reusing the name silently inherited both onto every row here.
+ */
+
+.af-tr-graderows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.af-tr-graderow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+/*
+ * ⚠ THE "none" STATE IS AN EM DASH, DELIBERATELY NOT A DIMMED LETTER. An ungraded
+ * trade rendered as a faded "C" is exactly the failure the grading engine refuses
+ * to produce, and styling could reintroduce it without touching a line of engine
+ * code.
+ */
+.af-tr-graderow-letter {
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  font-weight: 900;
+  font-size: 15px;
+  background: var(--chip);
+  color: var(--text2);
+}
+.af-tr-graderow-letter[data-grade='A'] { background: var(--good-soft); color: var(--good); }
+.af-tr-graderow-letter[data-grade='B'] { background: var(--good-soft); color: var(--good); }
+.af-tr-graderow-letter[data-grade='D'] { background: var(--bad-soft); color: var(--bad); }
+.af-tr-graderow-letter[data-grade='F'] { background: var(--bad-soft); color: var(--bad); }
+.af-tr-graderow-letter[data-grade='none'] {
+  background: transparent;
+  border: 1px dashed var(--line2);
+  color: var(--faint);
+}
+
+.af-tr-graderow-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+.af-tr-graderow-meta {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--faint);
+}
+.af-tr-graderow-why {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}

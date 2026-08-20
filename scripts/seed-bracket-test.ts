@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { randomUUID } from "crypto"
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const prisma = new PrismaClient()
 
@@ -59,6 +60,9 @@ function generateUsername(index: number): string {
 }
 
 async function main() {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeSeedTarget('seed-bracket-test')
+
   console.log("=== AllFantasy March Madness Stress Test Seeder ===\n")
 
   const nodes = await prisma.bracketNode.findMany({

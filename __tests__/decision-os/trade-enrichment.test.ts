@@ -399,10 +399,12 @@ describe('E.5 (7)+(8) — validation script gating', () => {
     expect(prismaImportIdx).toBeGreaterThan(gateIdx) // prisma is imported only AFTER the gate
   })
 
-  it('refuses the production database host before doing any work', () => {
-    expect(src).toMatch(/refusing production DB/i)
-    expect(src).toContain('ep-spring-tooth')
-    const refuseIdx = src.indexOf('refusing production DB')
+  it('refuses the production database before doing any work', () => {
+    // Delegated to scripts/db-target-identity.cjs. The host literal this used to assert on
+    // ('ep-spring-tooth') is the dev fork, so the old assertion held while the guard was inverted.
+    expect(src).toContain('assertNonProductionDbTarget')
+    expect(src).not.toContain('ep-spring-tooth')
+    const refuseIdx = src.indexOf('assertNonProductionDbTarget')
     const prismaImportIdx = src.indexOf("await import('../lib/prisma')")
     expect(refuseIdx).toBeLessThan(prismaImportIdx) // refusal happens before prisma is pulled
   })

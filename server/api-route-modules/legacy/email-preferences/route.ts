@@ -1,6 +1,7 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 import { sendTradeAlertConfirmationEmail } from '@/lib/resend-client'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", tool: "LegacyEmailPreferences" })(async (req: NextRequest) => {
@@ -19,9 +20,22 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/email-preferences", to
       where: { email },
     })
 
-    // If not on early access list, add them automatically
+    /*
+     * If not on early access list, add them automatically.
+     *
+     * ⚠ THE THIRD WRITER TO EarlyAccessSignup, AND THE EASIEST TO MISS. The
+     * other two live under `app/api/`; this one is a route MODULE under
+     * `server/`, so an audit scoped to `app/` reports the table fully guarded
+     * when it is not. It is public, unauthenticated, and adds ANY address it is
+     * handed, which makes it a wide-open path onto the marketing list.
+     *
+     * Same reserved-domain guard as the other two — see
+     * lib/email/undeliverableDomains.ts for why this is not an env check.
+     * Preferences are still saved below: a test can still exercise the endpoint
+     * end to end, it just does not land on a list we might one day email.
+     */
     let wasAddedToEarlyAccess = false
-    if (!earlyAccess) {
+    if (!earlyAccess && !isUndeliverableEmailDomain(email)) {
       await prisma.earlyAccessSignup.create({
         data: {
           email,

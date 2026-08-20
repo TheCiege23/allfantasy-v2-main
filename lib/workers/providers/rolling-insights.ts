@@ -7,10 +7,11 @@ import {
 import { getRollingInsightsConfigFromEnv } from '@/lib/provider-config'
 
 const DEFAULT_RI_GRAPHQL_URL = 'https://datafeeds.rolling-insights.com/graphql'
-const DEFAULT_RI_REST_BASES = [
-  'https://rest.datafeeds.rolling-insights.com/api/v1',
-  'http://rest.datafeeds.rolling-insights.com/api/v1',
-] as const
+// These are tried in order as fallbacks. A plaintext entry meant that any TLS
+// failure silently downgraded the request — and RSC_token rides in the query
+// string, so the downgrade leaks a long-lived credential. https only.
+// contracts/rolling-insights/ENDPOINTS.yaml: auth.https_required.
+const DEFAULT_RI_REST_BASES = ['https://rest.datafeeds.rolling-insights.com/api/v1'] as const
 const SPORT_PATH: Record<ApiChainSport, string> = {
   nfl: 'nfl',
   mlb: 'mlb',

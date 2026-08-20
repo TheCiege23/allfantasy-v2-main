@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { X_SEARCH_ALLOWED_HANDLES } from '@/lib/news/beatReporterHandles'
 import { xaiChatJson, parseTextFromXaiChatCompletion } from './xai-client';
 import { 
   fetchFantasyCalcValues, 
@@ -194,9 +195,17 @@ IMPORTANT: If a player was RELEASED or CUT, sentiment MUST be "bearish" and this
     temperature: 0.3,
     maxTokens: 2000,
     tools: [
-      { 
-        type: 'x_search', 
+      {
+        /*
+         * ⚠ WITHOUT allowed_x_handles THIS SEARCHES ALL OF X. Whatever the
+         * platform surfaces for a player's name becomes input to a model that
+         * reports injury status and sentiment back into trade recommendations
+         * and draft picks. Fake beat-writer accounts are a fixture of NFL news;
+         * an unfiltered search is how one moves a manager's lineup.
+         */
+        type: 'x_search',
         from_date: fromDate,
+        allowed_x_handles: X_SEARCH_ALLOWED_HANDLES,
       },
       {
         type: 'web_search',

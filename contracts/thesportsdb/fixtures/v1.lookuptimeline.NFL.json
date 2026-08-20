@@ -1,0 +1,23 @@
+{
+  "_probe": {
+    "name": "lookuptimeline.NFL",
+    "endpoint": "lookuptimeline.php",
+    "params": {
+      "id": "2475349"
+    },
+    "why": "R-02 expected NULL",
+    "redacted_url": "https://www.thesportsdb.com/api/v1/json/***REDACTED***/lookuptimeline.php?id=2475349",
+    "captured_at": "2026-08-17T14:43:55.541Z",
+    "season_phase": "preseason",
+    "key_tier": "paid-or-unknown",
+    "http_status": 200,
+    "api_message": null,
+    "top_level_key": "timeline",
+    "returned_null": true,
+    "row_count": 0,
+    "error": null
+  },
+  "response": {
+    "timeline": null
+  }
+}

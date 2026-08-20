@@ -9,6 +9,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -45,7 +46,7 @@ test.describe('@nfl-redraft @league-shell player media fallback', () => {
     // empty state rather than rows — the smoke is "navigating to these tabs
     // does not crash the dashboard, and the 6 core tabs stay visible".
     for (const tabName of ['Roster', 'Players', 'Trades', 'Matchups', 'League', 'Home']) {
-      await page.getByRole('tab', { name: tabName }).click()
+      await clickHydrated(page.getByRole('tab', { name: tabName }))
       await page.getByTestId('nfl-redraft-league-dashboard-harness').waitFor({ state: 'visible', timeout: 5_000 })
     }
 

@@ -144,7 +144,9 @@ describe('commissioner hub health builder', () => {
       ]),
     )
     expect(snapshot.assistantQuestions.find((q) => q.key === 'waiver_run')?.answer).toContain('7 pending claims')
-    expect(snapshot.dataConfidence).toBe('medium')
+    // A league with ZERO rosters is the least-known state there is. This asserted
+    // 'medium' before -- rating the emptiest possible input above the floor.
+    expect(snapshot.dataConfidence).toBe('low')
   })
 
   it('marks dashboard-only snapshots as low confidence fallback data', () => {
@@ -171,6 +173,9 @@ describe('commissioner hub health builder', () => {
       now: NOW,
       league: {
         id: 'league-imported',
+        // Required for 'high'. Without it the league has never been read, and the
+        // metrics below would all be zero-by-absence rather than measured.
+        lastSyncedAt: NOW,
         name: 'Imported Sleeper League',
         sport: 'NFL',
         leagueType: 'redraft',
@@ -202,5 +207,81 @@ describe('commissioner hub health builder', () => {
     expect(snapshot.teamCount).toBe(1)
     expect(snapshot.metrics.activeManagers).toBe(1)
     expect(snapshot.metrics.missedLineups).toBe(0)
+  })
+})
+
+/**
+ * The confidence ladder is a claim about whether anyone has READ this league.
+ *
+ * Regression cover for the production case recorded in `lib/core-app/todayStrip.ts`:
+ * 873 rosters across 69 leagues with `lastSyncedAt` null on all 98, which the engine
+ * reported as "high confidence, 57, DRIFTING". Row count is not readership.
+ */
+describe('commissioner health: confidence reflects readership, not row count', () => {
+  const leagueWith = (over: Record<string, unknown>) => ({
+    id: 'lg-ladder',
+    name: 'Ladder League',
+    sport: 'NFL',
+    leagueType: 'redraft',
+    leagueSize: 12,
+    starters: { QB: 1 },
+    rosters: [
+      {
+        id: 'r1',
+        platformUserId: 'u1',
+        updatedAt: NOW,
+        playerData: { players: ['p1'], starters: ['p1'] },
+      },
+    ],
+    ...over,
+  })
+
+  it('NEVER synced is low, even with roster rows present', () => {
+    const snap = buildCommissionerHealthSnapshot({
+      now: NOW,
+      league: leagueWith({ lastSyncedAt: null }) as never,
+    })
+    expect(snap.dataConfidence).toBe('low')
+  })
+
+  it('synced but stale is medium, not high', () => {
+    const stale = new Date(NOW.getTime() - 8 * 86_400_000) // 8d > the 7d threshold
+    const snap = buildCommissionerHealthSnapshot({
+      now: NOW,
+      league: leagueWith({ lastSyncedAt: stale }) as never,
+    })
+    expect(snap.dataConfidence).toBe('medium')
+  })
+
+  it('recently synced with rosters is high', () => {
+    const snap = buildCommissionerHealthSnapshot({
+      now: NOW,
+      league: leagueWith({ lastSyncedAt: new Date(NOW.getTime() - 3_600_000) }) as never,
+    })
+    expect(snap.dataConfidence).toBe('high')
+  })
+
+  it('a fresh sync does NOT rescue a league with no rosters', () => {
+    const snap = buildCommissionerHealthSnapshot({
+      now: NOW,
+      league: leagueWith({ lastSyncedAt: NOW, rosters: [] }) as never,
+    })
+    expect(snap.dataConfidence).toBe('low')
+  })
+
+  it('accepts an ISO string as well as a Date', () => {
+    const snap = buildCommissionerHealthSnapshot({
+      now: NOW,
+      league: leagueWith({ lastSyncedAt: NOW.toISOString() }) as never,
+    })
+    expect(snap.dataConfidence).toBe('high')
+  })
+
+  it('an unparseable timestamp is treated as never synced, never as fresh', () => {
+    const snap = buildCommissionerHealthSnapshot({
+      now: NOW,
+      league: leagueWith({ lastSyncedAt: 'not-a-date' }) as never,
+    })
+    expect(snap.dataConfidence).toBe('low')
   })
 })

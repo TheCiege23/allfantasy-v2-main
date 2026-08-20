@@ -61,7 +61,7 @@ describe('resolveLifecycleTransitionAfterDraftReset', () => {
 
 describe('LeagueShell tab contract after draft completion', () => {
   it('shouldUseMatchupInsteadOfDraft is true for post_draft', () => {
-    expect(shouldUseMatchupInsteadOfDraft('post_draft')).toBe(true)
+    expect(shouldUseMatchupInsteadOfDraft({ status: 'post_draft' })).toBe(true)
   })
 
   it('applyMatchupPrimaryTab promotes matchup when useMatchup is true', () => {

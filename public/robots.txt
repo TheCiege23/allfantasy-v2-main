@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /api/auth/beta
+
+Sitemap: https://www.allfantasy.ai/sitemap.xml

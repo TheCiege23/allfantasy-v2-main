@@ -1,0 +1,235 @@
+/*
+ * Screen 20a — token centre. Authored on var(--token) throughout.
+ */
+
+.af-tk {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 28px 20px 72px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.af-tk-alerts { display: flex; flex-direction: column; gap: 12px; }
+.af-tk-alerts:empty { display: none; }
+
+.af-tk-head { display: flex; flex-direction: column; gap: 8px; }
+
+.af-tk-title {
+  margin: 0;
+  font: 900 32px/1.1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-tk-sub {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-tk-sub--tight { font-size: 13px; color: var(--muted); }
+
+.af-tk-h2 {
+  margin: 0;
+  font: 900 19px/1.2 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-tk-label {
+  font: 700 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* Numbers are mono per the handoff's own rule. */
+.af-num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Balance ──────────────────────────────────────────────────── */
+.af-tk-balance {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 24px 26px;
+  border-radius: 16px;
+  background: var(--chimmy, var(--surface));
+  border: 1px solid var(--line2);
+}
+
+.af-tk-balance-num {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 40px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--accent);
+}
+.af-tk-balance-num--muted { color: var(--faint); font-size: 22px; }
+
+/* Signed out: a sentence, never a zero — "0" reads as an empty wallet. */
+.af-tk-balance-none {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.af-tk-error {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: var(--bad-soft);
+  border: 1px solid var(--bad);
+  color: var(--text);
+}
+
+/* ── Costs, grouped by band ───────────────────────────────────── */
+.af-tk-costs { display: flex; flex-direction: column; gap: 14px; }
+.af-tk-costs-head { display: flex; flex-direction: column; gap: 5px; }
+
+.af-tk-band {
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  overflow: hidden;
+}
+
+.af-tk-band-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 13px 16px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--line);
+}
+
+.af-tk-band-cost {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--accent);
+  min-width: 3ch;
+}
+
+.af-tk-band-name {
+  font: 800 14px/1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.af-tk-band-count {
+  margin-left: auto;
+  font: 500 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  color: var(--faint);
+}
+
+.af-tk-rules { list-style: none; margin: 0; padding: 0; }
+
+.af-tk-rule {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--line);
+}
+.af-tk-rule:last-child { border-bottom: 0; }
+
+.af-tk-rule-name {
+  font-size: 13px;
+  color: var(--text2);
+  /* Long feature labels must not push the cost off the row. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-tk-rule-cost {
+  margin-left: auto;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* ── Free / packs / recent ────────────────────────────────────── */
+.af-tk-free,
+.af-tk-packs-wrap,
+.af-tk-recent {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 20px 22px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+}
+
+.af-tk-packs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.af-tk-pack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 15px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+
+.af-tk-pack-num { font-size: 23px; font-weight: 800; color: var(--accent); line-height: 1; }
+.af-tk-pack-label {
+  font: 500 10px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-tk-pack-price { margin-top: 6px; font-size: 14px; font-weight: 700; color: var(--text); }
+
+.af-tk-btn {
+  appearance: none;
+  cursor: pointer;
+  margin-top: 8px;
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 700 11.5px/1 'Archivo', system-ui, sans-serif;
+}
+.af-tk-btn:hover { filter: brightness(1.06); }
+.af-tk-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.af-tk-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.af-tk-history { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.af-tk-history li {
+  display: flex;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 13px;
+}
+.af-tk-history li:last-child { border-bottom: 0; }
+.af-tk-hist-label { color: var(--text2); }
+.af-tk-hist-delta { margin-left: auto; font-weight: 700; color: var(--bad); }
+.af-tk-hist-delta[data-up='true'] { color: var(--good); }
+
+.af-tk-empty { margin: 0; font-size: 13px; color: var(--faint); }
+
+@media (max-width: 720px) {
+  .af-tk { padding: 20px 14px 56px; gap: 18px; }
+  .af-tk-title { font-size: 26px; }
+  .af-tk-balance-num { font-size: 32px; }
+  /* Wrapping beats truncating on a narrow screen. */
+  .af-tk-rule-name { white-space: normal; }
+}

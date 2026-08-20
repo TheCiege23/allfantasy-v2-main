@@ -1,6 +1,6 @@
 'use client'
 
-import LegacyStrategyTab from '@/app/af-legacy/components/tabs/LegacyStrategyTab'
+import LegacyStrategyTab from '@/components/legacy/LegacyStrategyTab'
 import { DraftHelperPanel } from '@/components/app/draft-room/DraftHelperPanel'
 import { AFWarRoomPlanSpotlight } from '@/components/monetization/AFWarRoomPlanSpotlight'
 

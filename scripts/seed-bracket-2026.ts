@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto'
 import { prisma } from '../lib/prisma'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const REGIONS = ['East', 'West', 'South', 'Midwest'] as const
 
@@ -92,6 +93,9 @@ type NodeInsert = {
 }
 
 async function seed() {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeSeedTarget('seed-bracket-2026')
+
   console.log('Seeding 2026 bracket nodes...')
 
   const tournament = await (prisma as any).bracketTournament.findUnique({

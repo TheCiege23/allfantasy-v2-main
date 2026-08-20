@@ -115,11 +115,11 @@ interface RestProbeResult {
 }
 
 async function probeRestPlayers(token: string): Promise<RestProbeResult[]> {
+  // http:// variants removed: the contract settles this (auth.https_required),
+  // and probing over plaintext sends RSC_token in the clear to learn nothing.
   const endpoints = [
     'https://rest.datafeeds.rolling-insights.com/api/v1/players/NFL',
-    'http://rest.datafeeds.rolling-insights.com/api/v1/players/NFL',
     'https://rest.datafeeds.rolling-insights.com/api/v1/NFL/players',
-    'http://rest.datafeeds.rolling-insights.com/api/v1/NFL/players',
   ]
 
   const tokenKeys: Array<'RSC_token' | 'rsc_token'> = ['RSC_token', 'rsc_token']

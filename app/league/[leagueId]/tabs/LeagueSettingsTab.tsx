@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { LeagueInvitePanel } from '@/components/core-app/LeagueInvitePanel'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { formatInTimeZone } from 'date-fns-tz'
 import { toast } from 'sonner'
@@ -478,6 +479,21 @@ export function LeagueSettingsTab({
       <div>
       <LeagueSettingsHeader isDirty={dirty} onSaveAll={() => void saveAll()} canEdit={canEdit} />
       <SettingsNav canEdit={canEdit} />
+
+      {/*
+        ⚠ THE INVITE LINK HAD EXACTLY ONE HOME AND IT WAS THE DASHBOARD WE ARE
+        RETIRING. Nothing on a league page rendered it, and Commissioner Hub's
+        "Send Invites" card pointed at /import — the league-import page, not an
+        invite surface. So a commissioner's only working route to their own invite
+        link ran through a screen scheduled for deletion. It belongs here, beside
+        the other things only a commissioner can do.
+      */}
+      {canEdit ? (
+        <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.02] p-4">
+          <h3 className="mb-2 text-[13px] font-semibold text-white/90">Invite managers</h3>
+          <LeagueInvitePanel leagueId={leagueId} />
+        </div>
+      ) : null}
 
       {localSubGate && !gateOptional ? (
         <SubscriptionGateModal

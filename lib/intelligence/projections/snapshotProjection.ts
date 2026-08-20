@@ -38,6 +38,34 @@ export function categorize(type: string): LeagueCategory {
   return 'other'
 }
 
+/**
+ * Pure: true when an event reports that NOTHING happened, and so must not be counted as activity.
+ *
+ * `transaction.waiver.window_processed` is emitted by the redraft waiver engine every time a window
+ * is evaluated, including when it processed no claims at all. The waiver cron runs every five
+ * minutes, so this produced ~288 events per day per active league that all say `processed: 0`. On
+ * production 2026-08-20 that was **7,740 of 7,833 events — 98.8% of the entire event store**.
+ *
+ * Counting them is not merely noisy, it is untrue. `categorize()` maps the type by prefix, so each
+ * one incremented `waiverCount`, and the Decision OS evidence packet built from that snapshot went
+ * on to tell an AI model the league had 687 waiver events when the real number was zero. That is a
+ * fabricated input, and the model cannot know it is fabricated.
+ *
+ * The emitter is fixed at source too (see `lib/redraft/waiverEngine.ts`), but this stays as the
+ * durable guard: it makes the events ALREADY stored harmless without deleting history, and it means
+ * a future emitter that reports a no-op cannot silently inflate a league's behavioural profile.
+ *
+ * Side benefit: because a skipped event no longer touches `lastActivityAt`, an idle league's
+ * `sourceDataVersion` stops churning — so unchanged evidence stops invalidating cached analyses and
+ * paying for needless provider calls.
+ */
+export function isNoOpEvent(event: Pick<DomainEvent, 'type' | 'payload'>): boolean {
+  if (event.type !== 'transaction.waiver.window_processed') return false
+  const processed = (event.payload as { processed?: unknown } | null | undefined)?.processed
+  // Absent `processed` is treated as real: only an explicit zero is provably a no-op.
+  return processed === 0 || processed === '0'
+}
+
 /** Pure: net change to the league's open-trade-proposal count. */
 export function tradeProposalDelta(type: string): number {
   if (type === 'transaction.trade.proposed') return 1
@@ -147,6 +175,9 @@ export async function applyIntelligenceEvent(prisma: PrismaClient, event: Domain
       skipDuplicates: true,
     })
     if (ins.count === 0) return false // already processed — idempotent no-op
+    // Mark it processed but do NOT count it: an event reporting zero activity is not activity, and
+    // the marker still stops the relay re-delivering it forever.
+    if (isNoOpEvent(event)) return true
     await applyLeagueSnapshot(tx, event)
     await applyManagerSnapshot(tx, event)
     return true

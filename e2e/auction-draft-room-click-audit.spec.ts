@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -720,16 +721,16 @@ test.describe('@auction-draft-room click audit', () => {
 
     // Nominate player flow.
     await desktop.getByTestId('draft-player-search-input').fill('Atlas')
-    await desktop.getByTestId('draft-nominate-player-0').click()
+    await clickHydrated(desktop.getByTestId('draft-nominate-player-0'))
     await expect(desktop.getByTestId('draft-pick-confirmation')).toBeVisible()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     expect(mocks.getNominateRequests().length).toBeGreaterThan(0)
     await expect(auctionSpotlight).toContainText('Atlas Runner')
 
     // Bid flow.
     await desktop.getByTestId('auction-bid-input').first().fill('5')
     await expect(desktop.getByTestId('auction-bid-button').first()).toBeEnabled()
-    await desktop.getByTestId('auction-bid-button').first().click()
+    await clickHydrated(desktop.getByTestId('auction-bid-button').first())
     await expect.poll(() => mocks.getBidRequests().length).toBeGreaterThan(0)
     await expect(desktop.getByTestId('auction-highest-bidder').first()).toContainText('Alpha')
 
@@ -753,7 +754,7 @@ test.describe('@auction-draft-room click audit', () => {
     // Timer updates on resync while waiting for nomination.
     const resyncCountBefore = mocks.getResyncHits().length
     const timerBefore = await desktop.getByTestId('auction-nomination-timer').first().innerText()
-    await page.getByTestId('draft-resync-button').click()
+    await clickHydrated(page.getByTestId('draft-resync-button'))
     await expect.poll(() => mocks.getResyncHits().length).toBeGreaterThan(resyncCountBefore)
     await expect
       .poll(async () => desktop.getByTestId('auction-nomination-timer').first().innerText())
@@ -762,16 +763,16 @@ test.describe('@auction-draft-room click audit', () => {
     // AI helper surface opens and recommendation refresh is wired.
     const openAiHelper = desktop.getByTestId('draft-chat-open-ai-helper').first()
     await expect(openAiHelper).toBeVisible()
-    await openAiHelper.click()
+    await clickHydrated(openAiHelper)
     await expect(openAiHelper).toBeVisible()
 
     // Commissioner auction controls are wired.
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
     await expect(page.getByTestId('draft-commissioner-modal')).toBeVisible()
-    await page.getByTestId('draft-commissioner-toggle-auction-auto-nomination').click()
-    await page.getByTestId('draft-commissioner-auction-tick').click()
-    await page.getByTestId('draft-commissioner-resolve-auction').click()
-    await page.getByTestId('draft-commissioner-close').click()
+    await clickHydrated(page.getByTestId('draft-commissioner-toggle-auction-auto-nomination'))
+    await clickHydrated(page.getByTestId('draft-commissioner-auction-tick'))
+    await clickHydrated(page.getByTestId('draft-commissioner-resolve-auction'))
+    await clickHydrated(page.getByTestId('draft-commissioner-close'))
 
     const controlActions = mocks.getControlsRequests().map((entry) => String(entry.action ?? ''))
     expect(controlActions).toContain('auction_tick')

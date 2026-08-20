@@ -1,4 +1,33 @@
 name: Playwright Tests
+
+# ⚠ WHICH OF THESE JOBS ACTUALLY BLOCK A MERGE, AND WHY IT IS NOT ALL OF THEM.
+#
+# Branch protection is invisible from inside the repo, so it is written down
+# here. On `main` these lanes are REQUIRED:
+#
+#   Draft Room Regression
+#   Playwright (retention-engagement)
+#   Playwright (onboarding-activation)
+#   Playwright (referral-growth-db)
+#
+# These three are NOT required, deliberately:
+#
+#   Playwright (core 1/3), (core 2/3), (core 3/3)
+#
+# They have been red on main continuously — 50 failures at last count — so
+# requiring them today would block every merge in the repo rather than protect
+# anything. The four above were measured green on five consecutive completed
+# runs across main and four different feature branches before being added.
+#
+# ⚠ THE POINT OF REQUIRING ANYTHING IS THE REGRESSION THAT GOT THROUGH. When
+# /pricing was rebuilt as PricingV4 it dropped the data-testid contract the
+# monetization suite drives, and the purchase flow silently lost its e2e
+# coverage. Nobody noticed, because the shards were already red and advisory. A
+# suite that never blocks is a suite nobody reads.
+#
+# So: when the core shards go green, add them here AND to branch protection in
+# the same change. Until then, do not assume a green PR means the core lane
+# passed — it means the core lane was not consulted.
 on:
   push:
     branches: [ main, master ]
@@ -107,6 +136,17 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # Every @admin test signs in through POST /api/auth/login, and that route
+        # accepts a password ONLY when ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is
+        # set on the SERVER (app/api/auth/login/route.ts). Neither was set here,
+        # so the route returned 401 to every attempt, the shared helper failed on
+        # `admin login failed`, and the whole @admin tag went red on every run.
+        #
+        # This is not a credential. It is a throwaway value for an ephemeral
+        # server on a CI runner, and it has to match the default the helper posts
+        # (e2e/helpers/admin-timezone-smoke.ts). The real admin password lives in
+        # Vercel's project settings and never appears in this repo.
+        ADMIN_PASSWORD: admin123
       run: npm run test:e2e:core -- --shard=${{ matrix.shard }}
     - name: Run Playwright tests (retention engagement)
       if: matrix.lane == 'retention-engagement'

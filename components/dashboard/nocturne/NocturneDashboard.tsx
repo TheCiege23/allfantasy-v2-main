@@ -269,8 +269,8 @@ function readRank(p: RankPayload | undefined) {
 
 // ── Tools (reference set → real AF Legacy destinations, tier-gated) ───────────
 const TOOLS = [
-  { key: 'waiver', label: 'Waiver Assistant', desc: 'Ranked pickups for every league.', Icon: MousePointerClick, href: '/af-legacy?tab=waiver', premiumOnly: false },
-  { key: 'trade', label: 'Trade Analyzer', desc: 'Fairness scoring on any proposal.', Icon: ArrowLeftRight, href: '/af-legacy?tab=trade', premiumOnly: true },
+  { key: 'waiver', label: 'Waiver Assistant', desc: 'Ranked pickups for every league.', Icon: MousePointerClick, href: '/legacy?tab=waiver', premiumOnly: false },
+  { key: 'trade', label: 'Trade Analyzer', desc: 'Fairness scoring on any proposal.', Icon: ArrowLeftRight, href: '/legacy?tab=trade', premiumOnly: true },
   { key: 'outlook', label: 'Season Outlook', desc: 'Playoff & championship odds.', Icon: LineChart, href: '/af-legacy?tab=pulse', premiumOnly: true },
   { key: 'history', label: 'Trade History', desc: 'Every trade, by week.', Icon: History, href: '/af-legacy?tab=finder', premiumOnly: true },
   { key: 'psych', label: 'Manager Psychology', desc: 'Your play style, decoded.', Icon: Brain, href: '/af-legacy?tab=compare', premiumOnly: true },
@@ -811,6 +811,15 @@ export default function NocturneDashboard({
           {/* Quick actions (reference NavChips): War Room / Commissioner Hub / Ask Chimmy / Communications */}
           {!isVisitor && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+              {/*
+                Entry point to the AF Core redesign. Labelled "preview" on
+                purpose: all nine screens are built, but several sections in them
+                report their data as unavailable because nothing ingests it yet
+                (win probability, projections, trade grades). Sending people there
+                unlabelled would read as the product regressing rather than as a
+                surface still filling in.
+              */}
+              <Link href="/core" className="btn btn-secondary" style={{ fontSize: 12.5 }}><LayoutGrid size={14} />New layout · preview</Link>
               <Link href="/war-room" className="btn btn-secondary" style={{ fontSize: 12.5 }}><Swords size={14} />War Room</Link>
               <Link href="/commissioner-hub" className="btn btn-secondary" style={{ fontSize: 12.5 }}><ShieldCheck size={14} />Commissioner Hub</Link>
               <button type="button" onClick={() => { setCommsTab('chimmy'); setCommsOpen(true) }} className="btn btn-secondary" style={{ fontSize: 12.5 }}><Sparkles size={14} />Ask Chimmy</button>

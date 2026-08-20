@@ -20,6 +20,15 @@
  *      than stored against NULL — the `uniq_player_image_url` constraint spans a nullable
  *      `playerId`, and Postgres does not dedupe NULLs, so NULL-keyed rows would accumulate
  *      one duplicate per resolution forever.
+ *
+ *      A non-null id is NOT on its own evidence of identity. `resolvePlayerHeadshot` derives
+ *      a canonical id from (name, sport, position, team, sleeperId) when the caller has no
+ *      `Player.id` to hand, and `deriveCanonicalPlayerIdentity` switches its whole match key
+ *      depending on whether a sleeperId is present — so the id it produces for a live request
+ *      routinely differs from the one the canonical backfill stored for the same human. That
+ *      produced 215 orphan rows against 443 total in production before this check existed:
+ *      well-formed ids pointing at no `Player`, invisible because `Player.id` carries no FK.
+ *      So the write below verifies the row exists rather than trusting the id's shape.
  */
 
 import { prisma } from '@/lib/prisma'
@@ -143,6 +152,11 @@ export async function writePrimaryPlayerImage(
 
   try {
     return await prisma.$transaction(async (tx) => {
+      // The id must name a real canonical player. Checked inside the transaction so a
+      // concurrent `Player` delete cannot slip a row in behind us.
+      const player = await tx.player.findUnique({ where: { id: playerId }, select: { id: true } })
+      if (!player) return { written: false, demoted: 0, skippedReason: 'unknown_player_id' }
+
       // Demote first: a brief window with zero primaries is safe, two primaries is not.
       const demotion = await tx.playerImage.updateMany({
         where: { playerId, imageType, isPrimary: true, NOT: { url } },

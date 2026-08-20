@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ timeout: 150_000 })
 
@@ -104,7 +105,7 @@ test('shows Soccer grouped card with Standard variant and click-through to leagu
 
   await page.goto('/e2e/dashboard-soccer-grouping')
 
-  await page.getByRole('button', { name: 'My Leagues' }).click()
+  await clickHydrated(page.getByRole('button', { name: 'My Leagues' }))
   await expect(page.locator('text=Loading your connected leagues...')).not.toBeVisible({ timeout: 20_000 })
 
   const soccerSection = page
@@ -118,7 +119,7 @@ test('shows Soccer grouped card with Standard variant and click-through to leagu
   await expect(soccerCard).toContainText('Standard')
   await expect(soccerCard).toHaveAttribute('href', new RegExp(`^/league/${soccerLeagueId}$`))
 
-  await soccerCard.click()
+  await clickHydrated(soccerCard)
   await expect(page).toHaveURL(new RegExp(`/league/${soccerLeagueId}$`), { timeout: 45_000 })
   await expect(page.getByRole('button', { name: 'Overview', exact: true })).toBeVisible({ timeout: 30_000 })
 })

@@ -48,9 +48,26 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
     throw new Error(`Sleeper draft fetch failed: ${dRes.status}`)
   }
 
+  /*
+   * ⚠ FAIL CLOSED ON THE PICKS FETCH. This used to read
+   * `pRes.ok ? await pRes.json() : []`, so a 500 on /picks while /draft returned 200
+   * produced an EMPTY pick list -- which then flowed into the deleteMany below and wiped
+   * every mirrored pick off the board. On a one-minute mirror during a live draft that is
+   * not a hypothetical: one upstream blip blanks the board mid-draft.
+   *
+   * Throwing instead means the mirror skips this tick and the last good board stands.
+   * Stale by a minute beats empty.
+   */
+  if (!pRes.ok) {
+    throw new Error(`Sleeper draft picks fetch failed: ${pRes.status}`)
+  }
+
   const draft = (await dRes.json()) as SleeperDraft
-  const picksRaw = pRes.ok ? ((await pRes.json()) as SleeperPick[]) : []
-  const picks = Array.isArray(picksRaw) ? picksRaw : []
+  const picksRaw = (await pRes.json()) as SleeperPick[]
+  if (!Array.isArray(picksRaw)) {
+    throw new Error('Sleeper draft picks payload was not an array')
+  }
+  const picks = picksRaw
 
   const leagueIdSleeper = draft.league_id != null ? String(draft.league_id) : null
   let usersById: Record<string, { display_name?: string }> = {}
@@ -92,37 +109,53 @@ export async function syncDraftFromSleeper(sleeperDraftId: string, internalDraft
 
     await tx.draftPick.deleteMany({ where: { sessionId: session.id } })
 
-    for (const p of picks) {
-      const overall = typeof p.pick_no === 'number' ? p.pick_no : 0
-      if (overall < 1) continue
-      const meta = p.metadata ?? {}
-      const first = meta.first_name ?? ''
-      const last = meta.last_name ?? ''
-      const playerName = `${first} ${last}`.trim() || (p.player_id ? `Player ${p.player_id}` : 'Unknown')
-      const position = typeof meta.position === 'string' ? meta.position : '—'
-      const team = typeof meta.team === 'string' ? meta.team : null
-      const slot = typeof p.draft_slot === 'number' ? p.draft_slot : 1
-      const round = typeof p.round === 'number' ? p.round : 1
-      const pickedBy = p.picked_by != null ? String(p.picked_by) : null
-      const displayName = pickedBy ? usersById[pickedBy]?.display_name ?? pickedBy : null
-
-      await tx.draftPick.create({
-        data: {
+    const rows = picks
+      .map((p) => {
+        const overall = typeof p.pick_no === 'number' ? p.pick_no : 0
+        if (overall < 1) return null
+        const meta = p.metadata ?? {}
+        const first = meta.first_name ?? ''
+        const last = meta.last_name ?? ''
+        const playerName = `${first} ${last}`.trim() || (p.player_id ? `Player ${p.player_id}` : 'Unknown')
+        const slot = typeof p.draft_slot === 'number' ? p.draft_slot : 1
+        const pickedBy = p.picked_by != null ? String(p.picked_by) : null
+        return {
           sessionId: session.id,
           overall,
-          round,
+          round: typeof p.round === 'number' ? p.round : 1,
           slot,
           roundPick: ((overall - 1) % teams) + 1,
+          /*
+           * ⚠ THIS IS A SLEEPER USER ID, IN A COLUMN NAMED rosterId. `picked_by` identifies
+           * the USER who made the pick, not the roster. The column and its
+           * [sessionId, rosterId] index are named for a roster, so anything grouping by it
+           * is grouping by user. Left as-is because changing the id space here would
+           * silently break every existing consumer -- flagged so the next reader does not
+           * assume the name.
+           */
           rosterId: pickedBy ?? `slot-${slot}`,
-          displayName,
+          displayName: pickedBy ? usersById[pickedBy]?.display_name ?? pickedBy : null,
           playerName,
-          position,
-          team,
+          position: typeof meta.position === 'string' ? meta.position : '—',
+          team: typeof meta.team === 'string' ? meta.team : null,
           playerId: p.player_id != null ? String(p.player_id) : null,
-          source: 'manual',
-          pickedAt: new Date(),
-        },
+          /** Mirrored from an external draft — we did not make this pick. */
+          source: 'sleeper-mirror',
+          /*
+           * ⚠ NULL, NOT `new Date()`. Sleeper's pick payload carries no timestamp, so the
+           * previous code stamped every pick with the sync time and REWROTE it on each
+           * poll. "When was this pick made" then answered "just now" forever, and any
+           * pick-duration reading was fiction. An unknown time is recorded as unknown.
+           */
+          pickedAt: null,
+        }
       })
+      .filter((r): r is NonNullable<typeof r> => r !== null)
+
+    // One statement instead of N sequential inserts inside the transaction: a 15x12 draft
+    // was 180 round-trips holding the transaction open.
+    if (rows.length > 0) {
+      await tx.draftPick.createMany({ data: rows, skipDuplicates: true })
     }
   })
 }

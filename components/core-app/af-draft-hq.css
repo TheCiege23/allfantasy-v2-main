@@ -1,0 +1,229 @@
+/*
+ * AF Core — screen 8, Draft HQ.
+ * Scoped under `.af-core` via the shell; see af-core.css for why.
+ */
+
+.af-dh {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1020px;
+}
+
+/* ── Board settings ──────────────────────────────────────────────────── */
+
+.af-dh-board {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-dh-board-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-dh-title {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.af-dh-status {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-dh-status[data-tone='future'] {
+  background: var(--chip);
+  color: var(--muted);
+}
+.af-dh-status[data-tone='live'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-dh-status[data-tone='warn'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-dh-status[data-tone='done'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.af-dh-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+
+.af-dh-fact {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-dh-fact-value {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.1;
+  text-transform: capitalize;
+}
+.af-dh-fact[data-missing='true'] .af-dh-fact-value {
+  color: var(--faint);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+
+.af-dh-section {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.af-dh-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/*
+ * The "original slots" caption is a correctness statement, not fine print —
+ * without it a traded-away pick reads as still yours — so it sits inline with
+ * the heading rather than being buried under the list.
+ */
+.af-dh-section-note {
+  flex: 1 1 240px;
+  font-size: 10.5px;
+  line-height: 1.45;
+  color: var(--warn);
+}
+
+.af-dh-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+/* ── Pick slots ──────────────────────────────────────────────────────── */
+
+.af-dh-picks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+}
+
+.af-dh-pick {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-dh-pick-label {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: -0.01em;
+}
+
+.af-dh-pick-overall {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* ── Made picks ──────────────────────────────────────────────────────── */
+
+.af-dh-made {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.af-dh-made-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 40px;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--line);
+}
+.af-dh-made-row:last-child {
+  border-bottom: 0;
+}
+
+.af-dh-made-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-dh-made-meta {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* ── Empty ───────────────────────────────────────────────────────────── */
+
+.af-dh-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px dashed var(--line2);
+  background: var(--surface2);
+}
+
+.af-dh-empty-mark {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--faint);
+  line-height: 1;
+}
+
+.af-dh-empty-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-dh-unavailable {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+@media (max-width: 720px) {
+  .af-dh-made-row {
+    flex-wrap: wrap;
+    row-gap: 2px;
+  }
+}

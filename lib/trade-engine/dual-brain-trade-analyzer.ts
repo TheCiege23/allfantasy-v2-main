@@ -1,4 +1,5 @@
 import { openaiChatJson, parseJsonContentFromChatCompletion } from "@/lib/openai-client";
+import { X_SEARCH_ALLOWED_HANDLES } from '@/lib/news/beatReporterHandles'
 import { xaiChatJson, parseTextFromXaiChatCompletion } from "@/lib/xai-client";
 import {
   PEER_REVIEW_PROMPT_CONTRACT,
@@ -171,7 +172,9 @@ async function callProviderForPeerReview(
           maxTokens: PEER_REVIEW_MAX_TOKENS,
           tools: [
             { type: 'web_search', user_location_country: 'US' },
-            { type: 'x_search' },
+            // Same trust boundary as the news aggregator — this output
+            // feeds a trade verdict, so the source of a rumour matters.
+            { type: 'x_search', allowed_x_handles: X_SEARCH_ALLOWED_HANDLES },
           ],
         }),
         timeoutMs,

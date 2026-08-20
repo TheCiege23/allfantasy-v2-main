@@ -22,6 +22,7 @@ import { getRosterTemplate } from '../lib/multi-sport/RosterTemplateService'
 import { getSlotLimitsFromTemplate } from '../lib/roster/LineupTemplateValidation'
 import { buildLineupSectionsFromPicks, type DraftPickForLineup } from '../lib/post-draft/buildStartersFromPicks'
 import { buildPersistedRosterDataFromRosterState } from '../lib/roster/buildPersistedRosterDataFromRosterState'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const prisma = new PrismaClient()
 
@@ -242,6 +243,9 @@ async function seedLeague(opts: SeedLeagueOpts) {
 }
 
 async function main() {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeSeedTarget('seed-redraft-waiver-walkthrough')
+
   const passwordHash = await bcrypt.hash(S3B_WAIVER_SEED.password, 10)
   for (const u of USERS) await upsertUser(u, passwordHash)
 

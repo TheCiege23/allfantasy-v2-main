@@ -268,6 +268,27 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
 
   const timerSeconds = session.timerSeconds ?? 90
   const nextTimerEndAt = computeTimerEndAt(timerSeconds)
+
+  /*
+   * A COMMISSIONER CORRECTION MUST NOT RESUME A PAUSED DRAFT.
+   *
+   * Every successful pick used to write `status: 'in_progress'` and a fresh `timerEndAt`, which is
+   * right for a manager picking on the clock and wrong for the commissioner. A pause is exactly
+   * when corrections happen — reassigning a pick to the manager it should have gone to, fixing a
+   * misdraft — and doing that silently un-paused the draft and started everyone's clock running.
+   * The commissioner then had to notice and re-pause, racing the very managers they paused for.
+   *
+   * `resetTimer()` in DraftSessionService already encodes the correct semantic for this exact
+   * situation — "stay paused; only refresh stored remainder (do not resume)" — and `undoPick`
+   * calls it when a commissioner removes a player. This is that rule applied to the other half of
+   * the pair: reassigning a pick resets the clock the same way removing a player does.
+   *
+   * Resuming stays an explicit commissioner action (resumeDraftSession), never a side effect of a
+   * correction.
+   */
+  const isCommissionerCorrection =
+    input.commissionerOverride === true || input.source === 'commissioner'
+  const keepPaused = isCommissionerCorrection && session.status === 'paused'
   const picksCountAtSubmit = session.picks.length
 
   let pick: any
@@ -318,13 +339,26 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
       })
       await (tx as any).draftSession.update({
         where: { id: session.id },
-        data: {
-          timerEndAt: nextTimerEndAt,
-          pausedRemainingSeconds: null,
-          status: 'in_progress',
-          version: { increment: 1 },
-          updatedAt: new Date(),
-        },
+        data: keepPaused
+          ? {
+              /*
+               * Clock reset, pause preserved: the stored remainder is refreshed to a full timer so
+               * the next manager on the clock gets a whole pick when the commissioner resumes,
+               * and `timerEndAt` stays null because nothing is counting down while paused.
+               */
+              timerEndAt: null,
+              pausedRemainingSeconds: timerSeconds,
+              status: 'paused',
+              version: { increment: 1 },
+              updatedAt: new Date(),
+            }
+          : {
+              timerEndAt: nextTimerEndAt,
+              pausedRemainingSeconds: null,
+              status: 'in_progress',
+              version: { increment: 1 },
+              updatedAt: new Date(),
+            },
       })
       return created
     })

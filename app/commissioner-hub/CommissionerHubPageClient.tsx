@@ -221,7 +221,14 @@ function buildMissionQueue(commLeagues: UserLeague[]): QueueCard[] {
       icon: Mail,
       title: 'Send Invites',
       desc: 'Recruit managers and fill your league roster with one shareable link.',
-      href: '/import',
+      /*
+       * ⚠ THIS POINTED AT /import, WHICH IS THE LEAGUE-IMPORT PAGE. A card
+       * promising "one shareable link" sent commissioners to a screen for
+       * importing a league from Sleeper or ESPN — a different job entirely.
+       * Portfolio now carries the invite link per commissioned league, so this
+       * goes somewhere that can actually produce one.
+       */
+      href: '/core/portfolio',
       priority: 4,
       cardClass:
         'border-violet-500/20 bg-gradient-to-br from-violet-500/[0.06] to-transparent hover:border-violet-500/35',

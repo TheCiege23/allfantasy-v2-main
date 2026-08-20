@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { getPlayFeed } from '@/lib/live/playFeedPresentation'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: live scoring reads the platform feed
@@ -48,6 +49,15 @@ async function sleeperLiveScores(userId: string): Promise<DashboardLiveScore[]> 
   if (!me) return []
 
   const leagues = await prisma.league.findMany({
+    // This query is truncated by `take`, so ordering decides *which* leagues are
+    // covered at all - not merely what order they come back in.
+    // Stable, total ordering: season and id are non-null and id is unique, so
+    // the result set cannot silently reorder between requests. Mirrors
+    // lib/dashboard/get-dashboard-league-list.ts so this set lines up with the
+    // league list the user actually sees. Deliberately not lastSyncedAt: it is
+    // nullable, and Postgres sorts NULLS FIRST on DESC, so never-synced leagues
+    // would sort to the top.
+    orderBy: [{ season: 'desc' }, { name: 'asc' }, { id: 'asc' }],
     where: {
       platform: 'sleeper',
       platformLeagueId: { not: '' },
@@ -235,5 +245,18 @@ export async function GET() {
     return a.leagueName.localeCompare(b.leagueName)
   })
 
-  return NextResponse.json({ scores: results })
+  /*
+   * The play feed rides along with the scores rather than getting its own
+   * route: this repo is at Vercel's hard 2048-route ceiling, and the two are
+   * fetched by the same screen at the same moment anyway. One request, one
+   * render.
+   *
+   * ⚠ THE FEED MUST NEVER BREAK THE SCOREBOARD. Plays are the retention
+   * feature; the score is the product. `getPlayFeed` already swallows its own
+   * errors and returns [], and the catch here is the second belt — a live feed
+   * outage must degrade to "no highlights yet", never to a 500 on the score.
+   */
+  const plays = await getPlayFeed().catch(() => [])
+
+  return NextResponse.json({ scores: results, plays })
 }

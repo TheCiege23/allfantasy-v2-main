@@ -9,6 +9,8 @@ import { TokenBalanceWidget } from "@/components/tokens/TokenBalanceWidget";
 import { resolveCheckoutUrl } from "@/lib/monetization/checkout-client";
 import { trackMetaBrowserEvent } from "@/lib/meta-client";
 import { MonetizationComplianceNotice } from "@/components/monetization/MonetizationComplianceNotice";
+import { LockedFeatureBanner } from "@/components/monetization/LockedFeatureBanner";
+import { CheckoutOutcomePanel } from "@/components/monetization/CheckoutOutcomePanel";
 import { AFProPlanSpotlight } from "@/components/monetization/AFProPlanSpotlight";
 import { AFWarRoomPlanSpotlight } from "@/components/monetization/AFWarRoomPlanSpotlight";
 import { AFSupremeBundleSpotlight } from "@/components/monetization/AFSupremeBundleSpotlight";
@@ -316,6 +318,21 @@ export default function MonetizationPurchaseSurface({
       </div>
 
       <div className="relative mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10">
+        {/*
+          ⚠ BOTH OF THESE SIT ABOVE THE HERO BECAUSE THEY ARE ANSWERS TO QUESTIONS
+          THE USER ARRIVED WITH. Someone returning from Stripe wants to know whether
+          they were charged; someone bounced off a lock wants to know whether they
+          lost their work. Neither should have to scroll past a marketing headline
+          to find out, and both render nothing in the ordinary case.
+        */}
+        <div className="mb-6 flex flex-col gap-4 empty:mb-0">
+          <CheckoutOutcomePanel
+            phase={postPurchaseSync.state.phase}
+            onRetry={postPurchaseSync.retrySync}
+          />
+          <LockedFeatureBanner />
+        </div>
+
         {conversionHero ? (
           <>
             <header className="mb-8 flex flex-col gap-4 border-b border-white/[0.08] pb-8 sm:flex-row sm:items-center sm:justify-between">

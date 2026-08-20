@@ -1,0 +1,387 @@
+/*
+ * AF Core — screen 4, My team · roster.
+ * Scoped under `.af-core` via the shell; see af-core.css for why.
+ */
+
+.af-mt {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 1020px;
+}
+
+/* ── Lock banner ─────────────────────────────────────────────────────── */
+
+.af-mt-lock {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+}
+
+/* An empty starting slot, or an hour to kickoff, is the most expensive state on
+   this screen — so it gets the full --bad treatment rather than a subtle hint. */
+.af-mt-lock[data-urgent='true'] {
+  border-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-mt-lock[data-locked='true'] {
+  opacity: 0.7;
+}
+
+.af-mt-lock-label {
+  color: var(--faint);
+}
+.af-mt-lock[data-urgent='true'] .af-mt-lock-label {
+  color: var(--bad);
+}
+
+.af-mt-lock-time {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.af-mt-lock[data-urgent='true'] .af-mt-lock-time {
+  color: var(--bad);
+}
+
+.af-mt-lock-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-mt-lock-fix {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bad);
+}
+
+/* ── Team header ─────────────────────────────────────────────────────── */
+
+.af-mt-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 16px;
+}
+
+.af-mt-crest {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-weight: 900;
+  font-size: 18px;
+  letter-spacing: -0.02em;
+}
+
+.af-mt-head-text {
+  min-width: 0;
+}
+
+.af-mt-team-name {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.af-mt-head-meta {
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-mt-tiles {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.af-mt-tile {
+  min-width: 92px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-mt-tile-value {
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  line-height: 1.15;
+}
+.af-mt-tile[data-missing='true'] .af-mt-tile-value {
+  color: var(--faint);
+}
+
+.af-mt-tile-why {
+  margin-top: 4px;
+  max-width: 150px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+
+.af-mt-section {
+  padding: 14px 16px;
+}
+
+.af-mt-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.af-mt-section-note {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-mt-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Lineup rows ─────────────────────────────────────────────────────── */
+
+.af-mt-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.af-mt-row:last-child {
+  border-bottom: 0;
+}
+
+/* The handoff's empty-slot state. */
+.af-mt-row[data-empty='true'] {
+  background: var(--bad-soft);
+  border-radius: 10px;
+  border-bottom-color: transparent;
+}
+
+.af-mt-slot {
+  flex: 0 0 auto;
+  width: 46px;
+  text-align: center;
+  padding: 4px 0;
+  border-radius: 7px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+}
+.af-mt-row[data-empty='true'] .af-mt-slot {
+  background: transparent;
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+.af-mt-player {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.af-mt-avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  object-fit: cover;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+.af-mt-avatar--none {
+  display: grid;
+  place-items: center;
+  font-weight: 800;
+  color: var(--faint);
+}
+
+.af-mt-player-text {
+  min-width: 0;
+}
+
+.af-mt-player-name {
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-mt-player-meta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.af-mt-empty-text .af-mt-player-name {
+  color: var(--bad);
+}
+
+/*
+ * ⚠ Needs the `.af-core` prefix to beat `.af-core .af-btn`, which sets the accent
+ * background. Written as a bare `.af-mt-fix` first, this button rendered
+ * accent-cyan on an empty starting slot — the one row on the screen the handoff
+ * wants unmistakably --bad. Verified by reading the computed background.
+ */
+.af-core .af-mt-fix {
+  flex: 0 0 auto;
+  background: var(--bad);
+  color: var(--accent-ink);
+  text-decoration: none;
+}
+
+/* ── Status ──────────────────────────────────────────────────────────── */
+
+.af-mt-status {
+  flex: 0 0 auto;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.af-mt-status[data-tone='ok'] {
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-mt-status[data-tone='warn'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-mt-status[data-tone='bad'] {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+/* "No designation" is deliberately quiet — it is an absence, not a clearance. */
+.af-mt-status[data-tone='none'] {
+  background: var(--chip);
+  color: var(--faint);
+}
+
+.af-mt-unavailable {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-mt-footnote {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+/* Per-slot projection. Right-aligned so the column reads as a column. */
+.af-mt-proj {
+  flex: 0 0 auto;
+  margin-left: auto;
+  min-width: 48px;
+  text-align: right;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+}
+/*
+  ⚠ THE "NO PROJECTION" DASH IS DELIBERATELY QUIET, NOT RED. It is not an error the
+  user caused or can fix — it means our feed does not carry that player. Styling it
+  as a fault would send someone hunting a problem in their own lineup.
+*/
+.af-mt-proj--none {
+  color: var(--faint);
+  font-weight: 500;
+}
+
+.af-mt-projtotal {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.af-mt-projtotal-value {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--ink);
+}
+.af-mt-projtotal-note {
+  margin: 0;
+  flex: 1 1 240px;
+  align-self: center;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-mt-tiles {
+    margin-left: 0;
+    width: 100%;
+  }
+  .af-mt-row {
+    flex-wrap: wrap;
+    row-gap: 8px;
+  }
+  .af-mt-fix {
+    width: 100%;
+  }
+  .af-mt-lock-fix {
+    margin-left: 0;
+  }
+}
+
+/*
+ * Unresolved player — filled slot, failed lookup.
+ *
+ * Deliberately NOT --bad: this is our problem, not a hole in the user's lineup,
+ * and colouring it like an empty FLEX would push them to "fix" a full slot.
+ */
+.af-mt-unresolved .af-mt-player-name {
+  color: var(--muted);
+  font-style: italic;
+}
+.af-mt-unresolved .af-mt-player-meta {
+  color: var(--faint);
+}

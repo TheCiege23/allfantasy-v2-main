@@ -37,6 +37,26 @@ export interface ProviderWeekStatRow {
   playerId: string
   gameId: string | null
   stats: Record<string, number>
+  /**
+   * Defense faced, e.g. "IND".
+   *
+   * ⚠ THIS WAS ALREADY IN THE PROVIDER RESPONSE AND WAS BEING THROWN AWAY. The
+   * fetcher calls api.sleeper.com, whose rows carry `opponent`, `team` and `date`;
+   * the parser kept only player/game/stats. Without opponent, a player's history
+   * cannot answer "how does he do against this defense" — so the single most
+   * requested projection input was being discarded one line after arriving.
+   */
+  opponent: string | null
+  /**
+   * ⚠ THE TEAM AT THE TIME OF THE GAME, NOT THE PLAYER'S CURRENT TEAM. The payload
+   * carries both and they disagree: a 2024 week-5 row for Tank Bigsby has
+   * `team: "JAX"` alongside `player.team: "PHI"`. Taking the nested current team
+   * would file every historical game under whichever roster the player sits on
+   * today, quietly corrupting both sides of an opponent split.
+   */
+  team: string | null
+  /** Kickoff date — the source for month-of-season effects. */
+  gameDate: Date | null
 }
 
 export type WeekFetchFailureKind = 'timeout' | 'http' | 'network'
@@ -104,25 +124,61 @@ export function parseSleeperWeekPayload(payload: unknown): ProviderWeekStatRow[]
   const rows: ProviderWeekStatRow[] = []
   if (!payload || typeof payload !== 'object') return rows
 
-  const push = (playerId: string, gameId: unknown, statsRaw: unknown) => {
+  /** Team codes only — never a full name, never an empty string. */
+  const teamCode = (v: unknown): string | null => {
+    if (typeof v !== 'string') return null
+    const t = v.trim().toUpperCase()
+    return t && t.length <= 8 ? t : null
+  }
+
+  const gameDateOf = (v: unknown): Date | null => {
+    if (typeof v !== 'string' || !v.trim()) return null
+    const d = new Date(`${v.trim()}T00:00:00.000Z`)
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+
+  const push = (
+    playerId: string,
+    gameId: unknown,
+    statsRaw: unknown,
+    context?: { opponent?: unknown; team?: unknown; date?: unknown }
+  ) => {
     const stats = toNumericStats(statsRaw)
     if (!playerId || Object.keys(stats).length === 0) return
     const gid = typeof gameId === 'string' && gameId.trim() ? gameId.trim() : null
-    rows.push({ playerId, gameId: gid, stats })
+    rows.push({
+      playerId,
+      gameId: gid,
+      stats,
+      opponent: teamCode(context?.opponent),
+      team: teamCode(context?.team),
+      gameDate: gameDateOf(context?.date),
+    })
   }
 
   if (Array.isArray(payload)) {
     for (const row of payload) {
       if (!row || typeof row !== 'object') continue
       const rec = row as Record<string, unknown>
-      push(String(rec.player_id ?? rec.playerId ?? ''), rec.game_id ?? rec.gameId, rec.stats ?? rec)
+      push(String(rec.player_id ?? rec.playerId ?? ''), rec.game_id ?? rec.gameId, rec.stats ?? rec, {
+        opponent: rec.opponent,
+        // ⚠ `rec.team`, NOT `rec.player.team` — see ProviderWeekStatRow.team.
+        team: rec.team,
+        date: rec.date,
+      })
     }
     return rows
   }
 
+  // Legacy keyed-object shape (api.sleeper.app). It carries no opponent, so those
+  // rows land with nulls rather than with a guess.
   for (const [playerId, row] of Object.entries(payload as Record<string, unknown>)) {
     const rec = row && typeof row === 'object' ? (row as Record<string, unknown>) : null
-    push(playerId, rec?.game_id ?? rec?.gameId, rec?.stats ?? row)
+    push(playerId, rec?.game_id ?? rec?.gameId, rec?.stats ?? row, {
+      opponent: rec?.opponent,
+      team: rec?.team,
+      date: rec?.date,
+    })
   }
   return rows
 }
@@ -319,6 +375,9 @@ export async function importPlayerGameStatsForWeek(args: {
       // Deterministic per-week gameId keeps re-imports idempotent when the provider omits one.
       gameId: row.gameId ?? `NFL-${args.season}-W${String(args.week).padStart(2, '0')}`,
       statPayload: row.stats,
+      opponent: row.opponent,
+      team: row.team,
+      gameDate: row.gameDate,
     }
   })
 

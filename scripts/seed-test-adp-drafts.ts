@@ -25,6 +25,7 @@
 /** server-only stub is loaded by scripts/_audit-preload.cjs (node --require). */
 
 import { PrismaClient, type Prisma } from '@prisma/client'
+import { assertSafeSeedTarget } from './_assert-safe-seed-target'
 
 const prisma = new PrismaClient()
 
@@ -360,6 +361,9 @@ async function applyOneDraft(
 }
 
 async function main() {
+  // Fail closed before the first write — see scripts/_assert-safe-seed-target.ts.
+  assertSafeSeedTarget('seed-test-adp-drafts')
+
   const args = parseArgs(process.argv.slice(2))
 
   const report: SeedSummary = {
