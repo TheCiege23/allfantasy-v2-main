@@ -15,6 +15,17 @@ import {
 } from "@/scripts/decision-os-ingest-sleeper-activity-helpers"
 import { getLeagueRosters, getLeagueTransactions, getLeagueDrafts, getDraftPicks } from "@/lib/sleeper-client"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import {
+  OutboxRelay,
+  PrismaOutboxStore,
+  inProcessEventBus,
+  createPrismaAuditFeedConsumer,
+  type PrismaLike,
+  type AuditFeedPrisma,
+} from "@/lib/events"
+// Import the consumer DIRECTLY rather than through the `lib/intelligence` barrel — that barrel
+// re-exports server-only-tainted modules. Same reason `scripts/run-outbox-relay.ts` does this.
+import { createIntelligenceSnapshotConsumer } from "@/lib/intelligence/projections/snapshotProjection"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -40,7 +51,7 @@ export const maxDuration = 300
  * `cron-decision-os-activity-ingest`. Runs 07:00 UTC — 30 min before the snapshot-capture walk,
  * so each day's snapshots see that day's ingested activity.
  *
- * ── Aug 2026: THE HANG ────────────────────────────────────────────────────────────────────────
+ * ── Aug 2026, step 1: THE HANG ────────────────────────────────────────────────────────────
  * This job stopped completing after 2026-08-17 and left six `SyncJobRun` rows stuck in `running`
  * with `rows_read: 0` — the giveaway that the row was never UPDATED at all, since `rowsRead` is
  * `discovered`, which is only known once the body returns. Three defects compounded:
@@ -61,18 +72,34 @@ export const maxDuration = 300
  * makes an unreachable Sleeper a counted FAILURE instead of an empty league; each league races a
  * deadline that can never exceed the remaining budget; and `reapAbandonedRuns` closes rows that a
  * future kill still manages to orphan.
+ *
+ * ── Aug 2026, step 2: THE OUTBOX RELAY DRAIN ──────────────────────────────────────────────
+ * Exactly the same bug class this cron was created to fix, one layer down. `event_outbox` held
+ * 7,809 rows in prod and EVERY ONE was still `pending`: the relay that projects them exists, but
+ * its only non-doc caller was `app/api/e2e/run-relay/route.ts` — an e2e-only drain route. Nothing
+ * scheduled it. So `IntelligenceLeagueSnapshot` stayed empty, and because Decision OS resolves its
+ * evidence through that snapshot (`loadLeagueSourceVersion` → `buildLeagueIntelligenceEvidence`),
+ * every three-brain request would have returned an honest `evidence_unavailable`.
+ *
+ * The drain is appended HERE rather than as a new route because this repo does not add API routes
+ * (it sits at Vercel's 2048-route ceiling). Running it after the ingest loop also means any events
+ * this fire just emitted are projected in the same pass.
+ *
+ * Safety: the relay claims rows with a worker id + stale-claim timeout, so an overlapping fire
+ * cannot double-deliver. Both consumers are idempotent (`intelligence_processed_event` /
+ * audit-feed markers with `skipDuplicates`), so a re-drain is a no-op. A relay failure is caught
+ * and reported — it never fails the ingest job that ran before it.
+ *
+ * Why a DAILY drain is enough (measured on prod 2026-08-20): events accrue at ~100–290/day
+ * (7,809 total spanning Jun 28 → Aug 20). One 60s fire drains well over a thousand, so steady
+ * state has ~4x headroom and the accumulated backlog clears in roughly a week of fires. If the
+ * accrual rate climbs materially, give the drain its own more-frequent schedule rather than
+ * widening RELAY_BUDGET_MS into the ingest budget.
  */
 /**
- * Ingest budget. Deliberately 180s rather than the full `maxDuration` — `feat/decision-os-outbox-
- * relay-drain` appends a 60s outbox drain to this same route and needs the tail. Adopting that
- * branch's name AND value here means the two changes never disagree about the budget, so the
- * remaining merge conflicts in this file are textual rather than semantic: each is a union of two
- * additions (this constant block, and the `warnings`/`errors` arrays below). Verified with
- * `git merge-tree` — the conflicts are real, they are just mechanical.
- *
- * The clamp in the loop below also removes that branch's documented overshoot caveat: because no
- * league may run past `ingestDeadline`, the ingest phase cannot exceed 180s, which leaves the
- * relay its full 60s inside `maxDuration` instead of "180 + one league + 60 + one batch".
+ * Ingest budget. Deliberately 180s rather than the full `maxDuration` — the outbox drain below
+ * needs the tail. Both changes that landed in Aug 2026 chose the same name AND value for this, so
+ * they never disagree about the budget.
  */
 const INGEST_BUDGET_MS = 180_000
 /**
@@ -95,6 +122,19 @@ const LEAGUE_DEADLINE_MS = 45_000
  * sequential rounds.
  */
 const WEEK_FETCH_CONCURRENCY = 6
+/**
+ * Reserved tail of the fire for the outbox drain.
+ *
+ * The relay-drain branch originally documented a worst case of "180 + one league + 60 + one
+ * batch" here, because the ingest budget was only checked BETWEEN leagues and could overshoot by
+ * a whole league. The per-league clamp added by the hang fix (`LEAGUE_DEADLINE_MS`, bounded by
+ * the remaining budget) removes that overshoot: the ingest phase cannot exceed 180s, so the relay
+ * genuinely gets its full 60s inside `maxDuration` (300s). Keep that clamp if you raise either
+ * number — without it this comment reverts to the old, looser guarantee.
+ */
+const RELAY_BUDGET_MS = 60_000
+/** Small batches keep the per-batch overshoot past `relayDeadline` correspondingly small. */
+const RELAY_BATCH_SIZE = 100
 const LEAGUE_CAP = 40
 const WEEKS = 18
 
@@ -218,7 +258,12 @@ export async function GET(request: Request) {
       // delegate this environment cannot store activity at all.
       const delegate = (prisma as unknown as { decisionOsImportedActivity?: unknown }).decisionOsImportedActivity
       if (!delegate) {
-        return { storeUnavailable: true, discovered: 0, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0, errors: [] as string[] }
+        return {
+          storeUnavailable: true, discovered: 0, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0,
+          errors: [] as string[],
+          // Keep the shape identical on both return paths so `summary.relay` stays a single type.
+          relay: { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null },
+        }
       }
       const store = new PrismaImportedActivityStore(
         delegate as ConstructorParameters<typeof PrismaImportedActivityStore>[0],
@@ -262,14 +307,58 @@ export async function GET(request: Request) {
           if (errors.length < 5) errors.push(`${league.id}: ${error instanceof Error ? error.message : "unknown_error"}`)
         }
       }
-      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors }
+
+      // ── Outbox drain (see the header note). Bounded by RELAY_BUDGET_MS; whatever is left
+      // stays `pending` and is picked up by the next fire, so a large backlog drains across
+      // days rather than blowing this fire's `maxDuration`.
+      const relayDeadline = startedAt + INGEST_BUDGET_MS + RELAY_BUDGET_MS
+      const relay = { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null }
+      try {
+        const outboxRelay = new OutboxRelay(new PrismaOutboxStore(prisma as unknown as PrismaLike), {
+          // Both durable consumers, matching scripts/run-outbox-relay.ts. NOTE: do NOT use
+          // `getOutboxRelay()` here — the container's default relay is best-effort fan-out with
+          // NO DB consumers, so it would drain the outbox while projecting nothing.
+          consumers: [
+            createPrismaAuditFeedConsumer(prisma as unknown as AuditFeedPrisma),
+            createIntelligenceSnapshotConsumer(prisma as unknown as Parameters<typeof createIntelligenceSnapshotConsumer>[0]),
+          ],
+          bus: inProcessEventBus,
+          batchSize: RELAY_BATCH_SIZE,
+          // Unique per fire so an overlapping run claims different rows instead of double-delivering.
+          workerId: `cron-activity-ingest-${startedAt}`,
+        })
+        const r = await outboxRelay.run({
+          stopWhenEmpty: true,
+          shouldStop: () => Date.now() > relayDeadline,
+        })
+        relay.fetched = r.fetched
+        relay.dispatched = r.dispatched
+        relay.retried = r.retried
+        relay.deadLettered = r.deadLettered
+        relay.relayFailed = r.failed
+      } catch (error) {
+        // Isolated: the ingest above already succeeded and must still be reported as such.
+        relay.relayError = error instanceof Error ? error.message : "relay_failed"
+      }
+
+      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, relay }
     },
     (s) => ({
       rowsRead: s.discovered,
-      rowsWritten: s.created + s.updated,
+      // Projected events are real writes too — count them so the relay's progress is visible
+      // in SyncJobRun telemetry rather than hidden inside the ingest job's numbers.
+      rowsWritten: s.created + s.updated + s.relay.dispatched,
       rowsSkipped: s.skippedForTime,
-      errors: s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.errors,
-      warnings: s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : [],
+      errors: [
+        ...(s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.errors),
+        // A relay failure must be visible, not swallowed by the isolating catch above.
+        ...(s.relay.relayError ? [`outbox_relay: ${s.relay.relayError}`] : []),
+      ],
+      warnings: [
+        ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
+        // Dead-lettered rows will never be retried by the relay — they need a human.
+        ...(s.relay.deadLettered > 0 ? [`${s.relay.deadLettered} outbox events dead-lettered`] : []),
+      ],
     }),
   )
 
@@ -282,6 +371,7 @@ export async function GET(request: Request) {
     processed: summary.processed,
     failed: summary.failed,
     skippedForTime: summary.skippedForTime,
+    relay: summary.relay,
     created: summary.created,
     updated: summary.updated,
     errors: summary.errors,
