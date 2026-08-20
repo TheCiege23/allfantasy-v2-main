@@ -33,6 +33,12 @@ import MissionControlCard from '@/components/decision-os/MissionControlCard'
 import LeagueAnalyticsCard from '@/components/decision-os/LeagueAnalyticsCard'
 import LeagueContextCard from '@/components/decision-os/LeagueContextCard'
 import CommissionerCommandCenterSection from '@/components/decision-os/CommissionerCommandCenterSection'
+// 11a — mission control. Aliased because `@/components/decision-os/MissionControlCard`
+// is already imported above under a similar name and they are unrelated surfaces.
+import CommishMissionControl from '@/components/commish/MissionControl'
+import { GlobalBroadcastModal, type GlobalBroadcastPayload } from '@/app/dashboard/components/chat/GlobalBroadcastModal'
+import '@/components/core-app/af-core.css'
+import '@/components/core-app/af-commish.css'
 import {
   decisionOsToneClasses,
   decisionOsHealthStatusToneClasses,
@@ -792,6 +798,14 @@ export default function CommissionerHubPageClient({
   // returns to the overview. This is a pure rename of the SOURCE of `representativeLeagueId` — every
   // existing fetch/render below that already depends on it is unchanged.
   const [selectedLeagueId, setSelectedLeagueId] = useState<string | null>(null)
+  /*
+   * 11a's "Send @everyone". This is an ENTRY POINT into the existing broadcast
+   * flow, never a second implementation of it — `GlobalBroadcastModal` owns the
+   * league picker, the composer and the confirmation, and `/api/chat/global-broadcast`
+   * owns the permission check. Two send paths is how a commissioner ends up with
+   * two different sets of rules about who receives what.
+   */
+  const [broadcastOpen, setBroadcastOpen] = useState(false)
   const representativeLeagueId = selectedLeagueId
   const [managerIntelligence, setManagerIntelligence] = useState<ManagerIntelligencePayload | null>(null)
   useEffect(() => {
@@ -963,6 +977,36 @@ export default function CommissionerHubPageClient({
             </div>
           </div>
         </section>
+
+        {/* ── 11a Mission control ──────────────────────────────────────────────
+             The cross-league attention queue, ranked by severity rather than grouped by
+             league. Sits directly under the hero because it answers the only question a
+             commissioner opens this page with: what needs me right now. Renders nothing
+             when the user commissions no leagues. ── */}
+        <CommishMissionControl
+          leagues={leagues}
+          snapshots={managedHealthSnapshots}
+          onBroadcast={commissionerLeagues.length > 0 ? () => setBroadcastOpen(true) : undefined}
+        />
+
+        <GlobalBroadcastModal
+          isOpen={broadcastOpen}
+          onClose={() => setBroadcastOpen(false)}
+          commissionerLeagues={commissionerLeagues.map((l) => ({
+            id: l.id,
+            name: l.name,
+            teamCount: l.teamCount,
+          }))}
+          onSend={async (payload: GlobalBroadcastPayload) => {
+            const res = await fetch('/api/chat/global-broadcast', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            })
+            const json = (await res.json().catch(() => ({}))) as { error?: string }
+            if (!res.ok) throw new Error(json.error ?? 'Broadcast failed')
+          }}
+        />
 
         {/* ── Multi-League Overview (Phase OS-B1) — the default landing view; selecting a league
              below reveals League Focus further down the page, unchanged from before this phase. ── */}

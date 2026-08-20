@@ -57,5 +57,6 @@ Legend:
 - Deterministic decisions: 100% (AI is explanation-only, never in the verdict path)
 - Sport logic in core: 0% (enforced)
 - Explainable decisions: 100% (four answers, no model exposure)
-- Telemetry: ~90% — **`decision.validator_parity` seam exists but is not yet production-wired on any slice** (consistent debt; close on one slice before scaling)
+- Telemetry: ~90% — `decision.validator_parity` **is production-wired, on the lineup slice only**: `/api/today/lineup-actions` → `runLineupShadowForSummary` → `runLineupShadow` (`lineup/shadow.ts:171`), gated by `DECISION_OS_LINEUP_SHADOW`. It has not scaled past that one slice — trade shadow emits `decision.shadow_parity` alone.
+  - ⚠ **Emission is not retention.** Both parity events are only queryable once `scripts/sql/20260820_decision_parity_record.sql` is applied. Before that they reach `console.log` and a per-invocation in-memory array capped at 500 that resets on every cold start — so `summarizeFlipReadiness` could never accumulate the ≥50 comparisons its own gate requires, and no surface could ever flip. Check `eventSource` on `/api/admin/decision-os/parity-readiness`: if it reads `in_memory`, the `readiness` beside it is meaningless.
 - Legacy removed: 0% (by design — all decisions are Hybrid/shadow; no cutover yet)

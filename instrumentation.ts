@@ -44,6 +44,25 @@ export async function register(): Promise<void> {
   } catch {
     // Optional; do not block startup
   }
+  // Decision OS parity telemetry -> durable storage.
+  //
+  // Without a registered sink, `emitDecisionTelemetry` falls through to console.log and the
+  // evidence the flip gate needs goes to the log drain, where nothing can query it. The in-memory
+  // debug store it reads instead is per-invocation and capped at 500 entries, so the gate could
+  // never reach the >=50 comparisons it requires.
+  //
+  // Safe before the migration is applied: the sink's write is fire-and-forget with a swallowed
+  // rejection, so a missing table changes nothing.
+  try {
+    const [{ registerDecisionTelemetrySink }, { createDurableParitySink }] = await Promise.all([
+      import("./lib/decision-os/core/telemetry"),
+      import("./lib/decision-os/core/parity/durableParityStore"),
+    ]);
+    registerDecisionTelemetrySink(createDurableParitySink());
+  } catch {
+    // Telemetry must never block startup.
+  }
+
   // Do not import BullMQ workers here — webpack bundles instrumentation.ts and would pull
   // bullmq/ioredis (Node-only: path, child_process, …) into the build and fail.
   // Run workers via `scripts/start-worker.ts` or a dedicated Node process:
