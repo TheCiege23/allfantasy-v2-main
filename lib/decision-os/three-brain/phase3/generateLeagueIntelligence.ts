@@ -4,6 +4,7 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { buildLeagueIntelligenceEvidence } from '../phase2/leagueEvidenceResolver'
 import { runManagedIntelligence } from '../phase2/intelligenceService'
 import { createManagedIntelligenceDeps } from '../phase2/realAdapters'
+import { isAiSpendDisabledError } from '@/lib/ai/aiSpendGuard'
 import type { IntelligenceTool } from '../phase2/types'
 import type { ThreeBrainDecisionResult } from '../types'
 
@@ -97,7 +98,18 @@ export async function generateLeagueIntelligence(input: {
     return outcome(unsupported ? 'unsupported_scope' : 'evidence_unavailable', evidence.reason)
   }
 
-  const response = await runManagedIntelligence(evidence.ctx, createManagedIntelligenceDeps({ prisma: db }))
+  let response
+  try {
+    response = await runManagedIntelligence(evidence.ctx, createManagedIntelligenceDeps({ prisma: db }))
+  } catch (error) {
+    // The global spend switch is a payment state, not a fault. Map it to the same `denied` shape the
+    // entitlement path uses so the route answers 402 and the client can offer the upgrade or token
+    // route, rather than showing a user a generic server error for a deliberate business decision.
+    if (isAiSpendDisabledError(error)) {
+      return outcome('denied', 'ai_spend_disabled')
+    }
+    throw error
+  }
 
   if (response.status === 'denied') {
     return outcome('denied', response.denyReason ?? 'denied')

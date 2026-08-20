@@ -4,7 +4,8 @@ import { prisma as defaultPrisma } from '@/lib/prisma'
 import { buildLeagueIntelligenceEvidence } from '../phase2/leagueEvidenceResolver'
 import { computeIntelligenceRequestIdentity } from '../phase2/requestIdentity'
 import { classifyStoredRun, resolveFreshnessPolicy } from '../phase2/freshnessPolicy'
-import { PrismaIntelligenceResultStore } from '../phase2/realAdapters'
+import { PrismaIntelligenceResultStore, realFeatureChecker, realLeagueChecker } from '../phase2/realAdapters'
+import { resolveIntelligenceAccess } from '../phase2/entitlementPolicy'
 import type { FreshnessClass, IntelligenceTool } from '../phase2/types'
 import type { ThreeBrainDecisionResult } from '../types'
 
@@ -44,6 +45,12 @@ export type LeagueIntelligenceStatus =
   | 'unsupported_scope'
   /** A prior run failed. `reason` carries the category, never the provider's raw error. */
   | 'failed'
+  /**
+   * An analysis may exist, but this user is not entitled to SEE it. Distinct from `not_generated`
+   * on purpose: the honest answer is "this is behind the paywall", not "there is nothing here", and
+   * a client should offer the upgrade rather than a generate button that would be refused.
+   */
+  | 'locked'
 
 export type LeagueIntelligenceRead = {
   status: LeagueIntelligenceStatus
@@ -125,6 +132,18 @@ async function readLeagueIntelligenceUnsafe(input: {
   //    here. Deriving it from the evidence (not from request params) is what makes changed league
   //    data miss the cache instead of serving a stale answer under a matching key.
   const identity = computeIntelligenceRequestIdentity(evidence.ctx)
+
+  // 2b) ENTITLEMENT. Generating is already gated, but reading has to be gated too — otherwise a
+  // user who generated while entitled (or whose plan later lapsed) keeps reading AI output for
+  // free forever. Checked BEFORE the store read so an unentitled caller never even loads the row.
+  const access = await resolveIntelligenceAccess({
+    ctx: evidence.ctx,
+    featureChecker: realFeatureChecker,
+    leagueChecker: realLeagueChecker,
+  })
+  if (!access.ok) {
+    return empty('locked', access.denyReason, identity.versionTag)
+  }
 
   // 3) DB-first read. No claim, no lease, no provider call.
   const store = new PrismaIntelligenceResultStore(db)

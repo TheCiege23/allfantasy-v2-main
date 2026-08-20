@@ -1,4 +1,5 @@
 import { getXaiConfigFromEnv } from '@/lib/provider-config'
+import { assertAiSpendAllowed } from '@/lib/ai/aiSpendGuard'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string }
 
@@ -104,6 +105,9 @@ export async function xaiChatJson(opts: {
   /** Cancels the underlying fetch. A signalled call bypasses the cache. */
   signal?: AbortSignal
 }) : Promise<XaiChatJsonResult> {
+  // Before the cache lookup as well as the call: a cache MISS goes straight to the provider, so
+  // guarding only the uncached path would still spend on the first request after a restart.
+  assertAiSpendAllowed('xai-client.xaiChatJson')
   if (opts.skipCache || opts.signal) return _xaiChatJsonUncached(opts)
   const key = cacheKey('xai-chat', opts.messages, opts.model, opts.temperature)
   return cachedFetch(key, 1800, () => _xaiChatJsonUncached(opts))

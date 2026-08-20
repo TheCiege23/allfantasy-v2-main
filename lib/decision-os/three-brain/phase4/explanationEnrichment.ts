@@ -130,8 +130,17 @@ export function enrichDecisionExplanation<TAction = unknown>(input: {
   decision: Decision<TAction>
   /** The persisted analysis, or null when none exists. */
   result: ThreeBrainDecisionResult | null
-  /** Freshness from the read layer. Only `ready`/`stale` may enrich. */
-  status: 'ready' | 'stale' | 'generating' | 'not_generated' | 'evidence_unavailable' | 'unsupported_scope' | 'failed'
+  /** Freshness from the read layer. Only `ready`/`stale` may enrich — `locked` (paywalled) must not,
+   *  so an unentitled user never receives AI prose even if a run exists for them. */
+  status:
+    | 'ready'
+    | 'stale'
+    | 'generating'
+    | 'not_generated'
+    | 'evidence_unavailable'
+    | 'unsupported_scope'
+    | 'failed'
+    | 'locked'
 }): EnrichmentOutcome<TAction> {
   const { decision, result, status } = input
 
