@@ -56,9 +56,23 @@ function resolveSport(param: string | null): "NFL" | "NCAAF" {
   return "NFL"
 }
 
+/**
+ * `?sport=all` runs BOTH sports in one fire, which is what lets a single weekly cron entry
+ * replace the two that used to exist (`import-schedules` for NFL and `import-schedules?sport=NCAAF`
+ * an hour later). Anything else keeps the previous single-sport behaviour exactly.
+ *
+ * Order matters: NFL first, so if the 300s budget runs out it is the college sweep that is cut
+ * short — the same priority the two separate entries expressed by running NFL an hour earlier.
+ */
+function resolveSports(param: string | null): Array<"NFL" | "NCAAF"> {
+  if (param?.toLowerCase() === "all") return ["NFL", "NCAAF"]
+  return [resolveSport(param)]
+}
+
 async function handle(req: NextRequest) {
   const url = new URL(req.url)
-  const sport = resolveSport(url.searchParams.get("sport"))
+  const sports = resolveSports(url.searchParams.get("sport"))
+  const sport = sports[0]
   const season = url.searchParams.get("season") ?? undefined
   const source = (url.searchParams.get("source") ?? "all").toLowerCase()
 
@@ -67,7 +81,7 @@ async function handle(req: NextRequest) {
   const diagnostics: Record<string, unknown> = {}
 
   try {
-    if ((source === "all" || source === "rolling_insights") && sport === "NFL") {
+    if ((source === "all" || source === "rolling_insights") && sports.includes("NFL")) {
       try {
         const riCount = await syncNFLScheduleToDb({ season })
         results.rolling_insights = { synced: riCount, sport: "NFL" }
@@ -77,10 +91,18 @@ async function handle(req: NextRequest) {
     }
 
     if (source === "all" || source === "api_sports") {
-      clearAPISportsDiagnostics()
-      const asCount = await syncAPISportsGamesToDb({ season, sport })
-      results.api_sports = { synced: asCount, sport }
-      diagnostics.api_sports = getAPISportsDiagnostics()
+      // Per-sport isolation: a provider failure on one sport must not abandon the other, which is
+      // a behaviour the two separate cron entries got for free by being separate fires.
+      for (const s of sports) {
+        clearAPISportsDiagnostics()
+        try {
+          const asCount = await syncAPISportsGamesToDb({ season, sport: s })
+          results[`api_sports_${s}`] = { synced: asCount, sport: s }
+        } catch (err) {
+          results[`api_sports_${s}`] = { error: String(err).slice(0, 120), sport: s }
+        }
+        diagnostics[`api_sports_${s}`] = getAPISportsDiagnostics()
+      }
     }
 
     /*
