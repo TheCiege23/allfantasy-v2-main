@@ -73,7 +73,15 @@ const FIELD_BY_PROVIDER: Partial<
   espn: {
     label: 'ESPN league ID',
     placeholder: '123456',
-    help: 'Public leagues import directly. Private leagues use the browser extension — we never ask for your ESPN password.',
+    /*
+     * ⚠ "Public leagues import directly" WAS NOT TRUE, and it cost a real user a
+     * long detour. ESPN import is gated on finding YOUR team in the league, which
+     * commissionerGate resolves from the SWID cookie -- so a connected ESPN account
+     * is required for every ESPN league, public ones included. The old copy sent
+     * people to type an ID that could not work, and the failure then pointed at
+     * League Sync rather than at the settings page that actually fixes it.
+     */
+    help: 'Connect ESPN once under Settings → Connected Accounts, then paste a league ID here. We read the league as you — we never ask for your ESPN password.',
   },
 }
 
@@ -98,6 +106,21 @@ const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
  */
 function needsConnectionSetup(message: string): boolean {
   return /\b(link|connect|reconnect)\b/i.test(message)
+}
+
+/**
+ * Per-league outcome of a bulk run, in the user's terms. "Already imported" is a
+ * success state, not a failure — the league is present and was not overwritten.
+ */
+const BULK_STATUS_LABEL: Record<
+  'importing' | 'done' | 'exists' | 'needs-attestation' | 'failed',
+  string
+> = {
+  importing: 'Importing…',
+  done: 'Imported',
+  exists: 'Already imported',
+  'needs-attestation': 'Needs your confirmation',
+  failed: 'Failed',
 }
 
 /**
@@ -324,6 +347,29 @@ export function ImportV4({
         attested ? { accepted: true } : undefined
       )
       if (!res.ok) {
+        /**
+         * ⚠ COMMIT CAN DEMAND AN ATTESTATION THAT PREVIEW DID NOT. The commit route
+         * passes `requireCommissioner: true`; preview does not. Its comment calls
+         * that a no-op for non-Sleeper providers, but it is not: checkEspn returns
+         * `isCommissioner: undefined` whenever the viewer is absent from ESPN's own
+         * commissioner list, and undefined is not false -- the gate asks for the
+         * attestation instead.
+         *
+         * runPreview has always routed that to the confirm panel. This did not, so
+         * an ESPN member who is not a detected commissioner reached "Ready to
+         * import", pressed the button, and was returned to an empty screen with a
+         * sentence they could not act on -- the confirm panel they needed only ever
+         * appeared on the preview path. Observed in production: preview 200, commit
+         * 403, no league created.
+         */
+        if (res.requiresAttestation) {
+          setPhase({
+            k: 'attest',
+            sourceId,
+            message: res.error || 'Confirm you are authorized to import this league.',
+          })
+          return
+        }
         setError(res.error || 'We could not finish that import.')
         setPhase({ k: 'idle' })
         return
@@ -344,6 +390,68 @@ export function ImportV4({
     },
     [provider]
   )
+
+  /**
+   * ── Bulk import ("Import all") ──────────────────────────────────────────────
+   *
+   * Restores a capability the previous flow had and this screen shipped without:
+   * components/unified-import-ui/LeagueImportFlow.tsx has had `runBulkImport`
+   * throughout. Someone with 55 discovered Sleeper leagues had to press Import 55
+   * times here.
+   *
+   * ⚠ SEQUENTIAL, THROUGH THE SAME COMMIT CALL AS A SINGLE IMPORT. Not a new
+   * endpoint and not a parallel fan-out: identical commissioner gate, identical
+   * normalisation and backfill. Running these concurrently would multiply provider
+   * calls and races for no benefit the user can see.
+   *
+   * ⚠ EVERY OUTCOME IS REPORTED. imported / already imported / needs commissioner
+   * confirmation / failed. A league already present is NOT an error and is never
+   * overwritten -- reporting it as failed would push people to re-import leagues
+   * that are already fine.
+   */
+  type BulkStatus = 'importing' | 'done' | 'exists' | 'needs-attestation' | 'failed'
+  const [bulkRunning, setBulkRunning] = useState(false)
+  const [bulkDone, setBulkDone] = useState(false)
+  const [bulkStatus, setBulkStatus] = useState<Record<string, BulkStatus>>({})
+
+  const runBulkImport = useCallback(async () => {
+    if (bulkRunning || leagues.length === 0) return
+    setBulkRunning(true)
+    setBulkDone(false)
+    setBulkStatus({})
+    setError(null)
+    for (const league of leagues) {
+      setBulkStatus((prev) => ({ ...prev, [league.sourceId]: 'importing' }))
+      const res = await submitImportCreation(provider, league.sourceId, '')
+      /*
+       * Attestation is deliberately NOT auto-accepted here. The server asks for it
+       * when someone imports a league they do not commission, and answering that on
+       * their behalf across dozens of leagues would be attesting to something they
+       * never read. Those are surfaced for a one-by-one decision instead.
+       */
+      const status: BulkStatus = res.ok
+        ? 'done'
+        : res.status === 409
+          ? 'exists'
+          : res.requiresAttestation
+            ? 'needs-attestation'
+            : 'failed'
+      setBulkStatus((prev) => ({ ...prev, [league.sourceId]: status }))
+    }
+    setBulkRunning(false)
+    setBulkDone(true)
+  }, [bulkRunning, leagues, provider])
+
+  const bulkCounts = (() => {
+    const v = Object.values(bulkStatus)
+    return {
+      done: v.filter((s) => s === 'done').length,
+      exists: v.filter((s) => s === 'exists').length,
+      needsAttestation: v.filter((s) => s === 'needs-attestation').length,
+      failed: v.filter((s) => s === 'failed').length,
+      processed: v.filter((s) => s !== 'importing').length,
+    }
+  })()
 
   /*
    * ⚠ DESIGN-PREVIEW ESCAPE HATCH, NOT THE DEFAULT. `?state=` renders the static
@@ -503,8 +611,19 @@ export function ImportV4({
                       Connect Yahoo →
                     </a>
                   ) : (
-                    <Link href="/leagues" className="af-im-error-link">
-                      Connect your accounts in League Sync →
+                    /*
+                      ESPN is fixed in Settings → Connected Accounts, where the
+                      cookie form lives -- not in League Sync. Sending an ESPN user
+                      to /leagues gave them a page with no ESPN control on it, which
+                      is how a solvable setup step read as "import is broken".
+                    */
+                    <Link
+                      href={provider === 'espn' ? '/settings' : '/leagues'}
+                      className="af-im-error-link"
+                    >
+                      {provider === 'espn'
+                        ? 'Connect ESPN in Settings →'
+                        : 'Connect your accounts in League Sync →'}
                     </Link>
                   )
                 ) : null}
@@ -526,6 +645,39 @@ export function ImportV4({
             <span className="af-chip af-num">{leagues.length}</span>
           </header>
 
+          {/*
+            Import all. Only worth offering when there is more than one, and hidden
+            once a single import has taken over the screen.
+          */}
+          {leagues.length > 1 ? (
+            <div className="af-im-bulk">
+              <button
+                type="button"
+                className="af-btn af-im-bulk-btn"
+                disabled={bulkRunning || phase.k === 'previewing' || phase.k === 'committing'}
+                onClick={() => void runBulkImport()}
+              >
+                {bulkRunning
+                  ? `Importing… ${bulkCounts.processed} of ${leagues.length}`
+                  : `Import all (${leagues.length})`}
+              </button>
+              {bulkDone ? (
+                <p className="af-im-bulk-summary" role="status">
+                  {[
+                    bulkCounts.done ? `${bulkCounts.done} imported` : null,
+                    bulkCounts.exists ? `${bulkCounts.exists} already imported` : null,
+                    bulkCounts.needsAttestation
+                      ? `${bulkCounts.needsAttestation} need you to confirm you can import them — do those individually`
+                      : null,
+                    bulkCounts.failed ? `${bulkCounts.failed} failed` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
           <ul className="af-im-league-list">
             {leagues.map((l) => {
               const busy =
@@ -540,14 +692,23 @@ export function ImportV4({
                         .join(' · ')}
                     </span>
                   </span>
-                  <button
-                    type="button"
-                    className="af-btn af-btn--ghost af-im-league-btn"
-                    disabled={busy}
-                    onClick={() => void runPreview(l.sourceId)}
-                  >
-                    {busy ? 'Reading…' : 'Import'}
-                  </button>
+                  {bulkStatus[l.sourceId] ? (
+                    <span
+                      className={`af-im-league-status af-im-league-status--${bulkStatus[l.sourceId]}`}
+                      role="status"
+                    >
+                      {BULK_STATUS_LABEL[bulkStatus[l.sourceId]]}
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      className="af-btn af-btn--ghost af-im-league-btn"
+                      disabled={busy || bulkRunning}
+                      onClick={() => void runPreview(l.sourceId)}
+                    >
+                      {busy ? 'Reading…' : 'Import'}
+                    </button>
+                  )}
                 </li>
               )
             })}
@@ -632,6 +793,16 @@ export function ImportV4({
                 Open your league
               </Link>
             ) : null}
+            {/*
+              ⚠ THE ONLY WAY BACK TO THE FORM. Both other actions navigate AWAY, so
+              anyone with a second league to add had to leave and re-enter /import,
+              and anyone whose ESPN league ID needed correcting could not retype it
+              at all -- the field is not rendered in this phase. Reported as "it
+              doesn't even let me input the league ID again".
+            */}
+            <button type="button" className="af-btn af-btn--ghost" onClick={reset}>
+              Import another league
+            </button>
             {/*
               ⚠ THE RETURN PATH IS OFFERED, NOT FORCED. Someone who arrived from
               create-league came here to finish THAT flow and would otherwise be
