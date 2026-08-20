@@ -117,3 +117,32 @@ export function getYahooStateCookieDomain(host: string | null | undefined): stri
   if (bare === 'allfantasy.ai' || bare.endsWith('.allfantasy.ai')) return '.allfantasy.ai'
   return undefined
 }
+
+/**
+ * Build the URL the Yahoo callback returns the user to.
+ *
+ * ⚠ `returnTo` USUALLY ALREADY HAS A QUERY STRING. `/import?provider=yahoo` is the
+ * normal case, because that is the screen the user started from. The callback used
+ * to append its outcome with a bare template literal -- `${returnTo}?yahoo_error=x`
+ * -- which produced `/import?provider=yahoo?yahoo_error=x`. A second `?` is not a
+ * separator, so the parser read `provider` as the whole tail `yahoo?yahoo_error=x`,
+ * failed to match it against a known provider, and fell back to Sleeper.
+ *
+ * The user asked to connect Yahoo and was shown their Sleeper leagues, with no
+ * error anywhere on the page. The SUCCESS path had the identical bug, so a working
+ * Yahoo connect landed on the wrong provider too.
+ *
+ * Empty values are dropped rather than emitted as `key=`, so a missing Yahoo
+ * description does not put a blank param on the URL.
+ */
+export function buildYahooReturnUrl(
+  returnTo: string,
+  appUrl: string,
+  params: Record<string, string | undefined>
+): string {
+  const url = new URL(returnTo, appUrl)
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== '') url.searchParams.set(key, value)
+  }
+  return url.toString()
+}

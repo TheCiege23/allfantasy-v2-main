@@ -56,6 +56,16 @@ export default async function ImportPage({
   const initialLeagueSourceId =
     pickQuery(sp, "leagueId") || pickQuery(sp, "sourceId");
 
+  /*
+   * The Yahoo callback has always written `yahoo_error` here and nothing has ever
+   * read it, so a failed connect returned a page that looked completely normal --
+   * no error, and (because the callback also built a malformed URL) the Sleeper
+   * form. The cause was only ever visible in the server log. Surface it.
+   */
+  const yahooError = pickQuery(sp, "yahoo_error");
+  const yahooErrorDesc = pickQuery(sp, "yahoo_error_desc");
+  const yahooConnected = pickQuery(sp, "yahoo_connected") === "1";
+
   const session = (await getServerSession(authOptions as never)) as {
     user?: { id?: string };
   } | null;
@@ -76,6 +86,9 @@ export default async function ImportPage({
       initialAccount={initialSleeperUsername}
       initialLeagueSourceId={initialLeagueSourceId}
       returnTo={returnTo}
+      yahooError={yahooError}
+      yahooErrorDesc={yahooErrorDesc}
+      yahooConnected={yahooConnected}
     />
   );
 }
