@@ -32,6 +32,43 @@ export default defineConfig({
   /* Screenshot snapshot directory — committed baselines live here. */
   snapshotDir: './e2e/__snapshots__',
 
+  /*
+   * ⚠ THE DEFAULT 30s TEST TIMEOUT IS SHORTER THAN ONE COLD ROUTE COMPILE.
+   *
+   * The suite runs against `next dev`, which compiles a route the first time it
+   * is requested. Measured on /pricing from a clean dist dir: 32.5s to
+   * domContentLoaded. Playwright's default per-test timeout is 30s, so a test
+   * that is the first to touch a route loses the race before its first
+   * assertion runs — and when the test times out Playwright aborts the
+   * in-flight navigation, which surfaces as `page.goto: net::ERR_ABORTED` or
+   * `ERR_CONNECTION_RESET`. Both appear throughout the core-shard logs and read
+   * as the server having crashed, which it had not.
+   *
+   * Specs that set their own describe-level timeout keep it; this only raises
+   * the floor for the ones that never did.
+   *
+   * ⚠ 60s, NOT 90s, AND THE FIRST ATTEMPT AT 90s COST MORE THAN IT SAVED.
+   * Measured across two CI runs: raising the floor let genuinely-broken tests
+   * run to the new ceiling instead of failing fast, and `retries: 2` means every
+   * one of them pays it three times. Six timeouts at 90s x 3 attempts is 27
+   * minutes of pure waiting where 30s would have been 9 — and total wall time
+   * went from 96.6m to 113.6m between those runs even though failures fell.
+   *
+   * 60s still clears a cold compile (the worst measured was /pricing at 32.5s,
+   * and globalSetup now precompiles the 33 busiest routes anyway), while
+   * costing a third less on every test that is simply broken. The floor exists
+   * for tests losing a compile race, not to give broken ones more room.
+   */
+  timeout: 60_000,
+
+  /*
+   * Compile the busiest routes once, before any test is on the clock. Without
+   * this the first test to reach each route pays its compile inside its own
+   * timeout, which is both the flake above and a large part of why the core
+   * shards run over an hour.
+   */
+  globalSetup: './e2e/global-setup.ts',
+
   /* Visual-diff threshold applied to all toHaveScreenshot() calls in this config. */
   expect: {
     toHaveScreenshot: {

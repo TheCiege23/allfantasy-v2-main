@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -306,7 +307,7 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
 }
 
 async function openDraftRoomHarness(page: Page) {
-  await page.getByTestId('draft-enter-room-button').click()
+  await clickHydrated(page.getByTestId('draft-enter-room-button'))
   await expect(page.getByTestId('draft-room-shell')).toBeVisible()
 }
 
@@ -320,18 +321,18 @@ test.describe('@draft-asset-pipeline click audit', () => {
     const desktop = page.getByTestId('draft-desktop-layout')
 
     await desktop.getByTestId('draft-player-search-input').fill('Broken Image Back')
-    await desktop.getByTestId('draft-player-card-0').click()
+    await clickHydrated(desktop.getByTestId('draft-player-card-0'))
     await expect(desktop.getByTestId('draft-selected-player-panel')).toBeVisible()
-    await desktop.getByTestId('draft-clear-selected-player').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-selected-player'))
 
-    await desktop.getByTestId('draft-queue-add-0').click()
+    await clickHydrated(desktop.getByTestId('draft-queue-add-0'))
     await expect(desktop.getByTestId('draft-queue-item-0')).toContainText('Broken Image Back')
 
     await expect(desktop.getByTestId('draft-player-card-0-headshot-fallback')).toBeVisible({ timeout: 15_000 })
     await expect(desktop.getByTestId('draft-player-card-0-team-logo-fallback')).toBeVisible({ timeout: 15_000 })
 
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-2')).toContainText('Broken Image Back')
 
     await expect(page.getByText(/sleeperId|ffcPlayerId|external_source_id/i)).toHaveCount(0)

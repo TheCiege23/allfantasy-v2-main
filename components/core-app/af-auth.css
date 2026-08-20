@@ -18,10 +18,25 @@
   background-repeat: no-repeat;
 }
 
+/*
+ * Full-width row, not a bare brand lockup: the handoff moves the opposite-mode
+ * cross-link ("Already have an account? Sign in") out of the card and up here,
+ * so this has to span the same width the card occupies for the link to land at
+ * the right edge.
+ */
 .af-au-brand {
   display: flex;
   align-items: center;
+  gap: 12px;
+  width: 100%;
+  max-width: 460px;
+}
+
+.af-au-home {
+  display: inline-flex;
+  align-items: center;
   gap: 9px;
+  text-decoration: none;
 }
 
 /* The wordmark is an <a> to "/" — it is the only way home from auth. Colour and
@@ -125,8 +140,12 @@
   font-family: inherit;
   outline: none;
 }
+/* The handoff specifies the ring explicitly: a 3px --accent-soft halo outside a
+   1px --accent border. Both halves matter — the border alone is a 1px colour
+   change that is easy to miss when tabbing. */
 .af-au-field input:focus {
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .af-au-field input::placeholder {
   color: var(--faint);
@@ -276,4 +295,116 @@
   .af-au-oauth-grid {
     grid-template-columns: 1fr;
   }
+}
+
+
+/* ── Step bar ─────────────────────────────────────────────────────────
+ * Three segments, the first filled. See StepBar in AuthV4.tsx for why this is
+ * a static indicator rather than a driven stepper today.
+ */
+.af-au-steps {
+  display: flex;
+  gap: 6px;
+}
+
+.af-au-step {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line2);
+}
+.af-au-step[data-done='true'] {
+  background: var(--accent);
+}
+
+/* ── Password reveal ──────────────────────────────────────────────────── */
+
+.af-au-pw {
+  position: relative;
+  display: flex;
+}
+
+/* Room for the toggle so a long password never runs underneath it. */
+.af-au-pw input {
+  padding-right: 68px;
+}
+
+.af-au-pw-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 8px;
+  /*
+   * 44px tap target, matching the minimum the rest of this file enforces on
+   * mobile rows. It measured 46x23 first time round — wide enough, half the
+   * required height. The box is transparent at rest so growing it costs nothing
+   * visually; it is centred so the label still reads as sitting on the field.
+   */
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 8px;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.af-au-pw-toggle:hover {
+  color: var(--text);
+  background: var(--chip);
+}
+.af-au-pw-toggle:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* The field wrapper is a <div> now (a <label> cannot contain the toggle button
+   without the click also toggling focus into the input), so the label text needs
+   the spacing the flex column used to give it. */
+.af-au-field > .af-label {
+  display: block;
+  margin-bottom: 6px;
+}
+
+/* ── Client-only boot shell ───────────────────────────────────────────
+ * The whole server response for /login and /signup. Previously hardcoded
+ * #080611 + white text, which flashed near-black at a light-mode reader before
+ * the form painted. Tokens instead, so it matches whatever mode is active.
+ */
+.af-au-boot {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 16px;
+  background: var(--bg);
+  background-image: var(--hero);
+  background-repeat: no-repeat;
+  color: var(--text);
+}
+
+.af-au-boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.af-au-boot-wordmark {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-au-boot-note {
+  font-size: 13px;
+  color: var(--muted);
 }

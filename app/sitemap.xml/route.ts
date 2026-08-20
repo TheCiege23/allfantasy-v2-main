@@ -4,11 +4,22 @@ import { DISCOVERY_LEAGUES_SLUGS } from '@/lib/seo-landing/discovery-leagues-pag
 import { playerSlug } from '@/lib/core-app/playerSlug'
 
 /*
- * Cached rather than recomputed per crawl. The player block below is a few
- * thousand rows, and a sitemap is fetched by every bot that finds robots.txt —
- * without this each one is a table scan.
+ * ⚠ force-dynamic, AND `revalidate` HERE WAS A LIVE BUG. Adding `revalidate`
+ * alone made this route STATICALLY PRERENDERED at build time, where Prisma has
+ * no database to talk to — so the player query returned nothing, the fail-soft
+ * catch below swallowed it, and production served a sitemap with 40 static URLs
+ * and ZERO of the 3,242 player pages it was added to publish. It failed exactly
+ * as designed: silently, with a valid document.
+ *
+ * Confirmed on production before changing it: the route answered
+ * `X-Vercel-Cache: HIT` even for a URL with a cache-busting query string, which
+ * a dynamic route cannot do — it was fully static.
+ *
+ * Rendering per request restores database access. The CDN cache is kept via the
+ * Cache-Control header on the response instead, so a crawl still does not cost a
+ * query per bot.
  */
-export const revalidate = 3600
+export const dynamic = 'force-dynamic'
 
 /**
  * A sitemap has a hard 50,000-URL / 50MB ceiling per file, and we are nowhere
@@ -159,6 +170,12 @@ export async function GET() {
   return new Response(sitemap, {
     headers: {
       'Content-Type': 'application/xml',
+      /*
+       * The caching `revalidate` used to provide, without the build-time
+       * prerender that broke it. s-maxage is what Vercel's CDN honours;
+       * stale-while-revalidate keeps a crawl fast while a new copy is built.
+       */
+      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
     },
   })
 }
