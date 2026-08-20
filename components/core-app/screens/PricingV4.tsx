@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useGeoRestriction } from '@/lib/geo/useGeoRestriction'
 import { resolveCheckoutUrl } from '@/lib/monetization/checkout-client'
@@ -103,6 +104,61 @@ function money(n: number): string {
   return Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`
 }
 
+/** Same mark as the landing nav, so the two public pages share one brand lockup. */
+function Shield() {
+  return (
+    <svg width="26" height="28" viewBox="0 0 28 30" aria-hidden focusable="false">
+      <path
+        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
+        fill="var(--accent-soft)"
+        stroke="var(--accent)"
+        strokeWidth="1.5"
+      />
+      <text
+        x="14"
+        y="19"
+        textAnchor="middle"
+        fill="var(--accent)"
+        style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}
+      >
+        AF
+      </text>
+    </svg>
+  )
+}
+
+/**
+ * ⚠ THE COMPLIANCE ANSWER IS VERBATIM FROM THE HANDOFF AND MUST STAY THAT WAY —
+ * build rule 5. The WA block and the HI/ID/MT/NV restriction are real
+ * geo-restrictions enforced by useGeoRestriction, not filler copy.
+ *
+ * ⚠ NO TOKEN-ALLOWANCE OR TOKEN-DISCOUNT CLAIM APPEARS HERE. The handoff's trust
+ * strip promises "every plan discounts token costs on top: 20% on Pro and
+ * Commissioner, 25% on Legacy, 45% on Supreme". Every one of those is 0 in
+ * lib/tokens/subscription-policy.ts, and that file notes the zeroes are
+ * load-bearing — grantMonthlyCreditsFromInvoice bails on <= 0, so they are what
+ * actually stops the Stripe webhook crediting anything. Printing the discounts
+ * would advertise a product that was deliberately withdrawn.
+ */
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: 'What stays free?',
+    a: "Every league, live score and standing. Imports are unlimited and there's no trial clock on them.",
+  },
+  {
+    q: 'Do you take league dues?',
+    a: "No. League dues and payouts are handled on FanCred — AllFantasy never holds your league's money.",
+  },
+  {
+    q: 'Can I cancel?',
+    a: 'Any time, from Settings → Billing. Purchases follow the pricing shown at checkout and the applicable refund policy.',
+  },
+  {
+    q: 'Is this gambling?',
+    a: 'No. 100% season-long fantasy — no sportsbook, no daily fantasy. Not available in WA; paid leagues restricted in HI, ID, MT, NV.',
+  },
+]
+
 export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   const [interval, setInterval] = useState<Interval>('month')
   const [pendingSku, setPendingSku] = useState<string | null>(null)
@@ -122,6 +178,16 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
     [plans]
   )
 
+  /*
+   * Only lanes that are actually sold yearly. A plan with no yearly SKU has no
+   * annual price to show, and rendering it with a dash would read as "free
+   * yearly" rather than "not sold that way".
+   */
+  const yearlyLanes = useMemo(
+    () => ordered.filter((p) => p.yearlySku != null && p.yearlyPrice != null),
+    [ordered]
+  )
+
   async function startCheckout(sku: string, productType: 'subscription' | 'token_pack') {
     setError(null)
     setPendingSku(sku)
@@ -136,6 +202,30 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
 
   return (
     <div className="af-core af-pr">
+      {/*
+        ⚠ THIS PAGE HAD NO NAVIGATION AT ALL. Measured on the live page: zero
+        <nav> elements and zero links to "/". A visitor who arrived here could
+        not get back to the site, could not sign in, and could not reach Terms
+        or Privacy — the only <footer> was the Stripe disclaimer paragraph. The
+        handoff draws this 62px header and it is the fix.
+
+        The wordmark is the way home, matching the auth screens.
+      */}
+      <nav className="af-pr-nav" aria-label="Main">
+        <Link href="/" className="af-pr-brand">
+          <Shield />
+          <span className="af-pr-wordmark">Pricing</span>
+        </Link>
+        <div className="af-pr-nav-right">
+          <Link href="/login" className="af-pr-nav-link">
+            Sign in
+          </Link>
+          <Link href="/signup" className="af-pr-nav-cta">
+            Start free
+          </Link>
+        </div>
+      </nav>
+
       {/*
         Answers to questions the visitor arrived with, above the pitch. Both render
         nothing in the ordinary case.
@@ -281,6 +371,47 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         })}
       </div>
 
+      {/*
+        ── Yearly, beside the tokens card ─────────────────────────
+        The handoff pairs these two as a 2-up row, and they answer the two
+        questions the grid above leaves open: "what if I pay once a year" and
+        "what if I do not want a subscription at all".
+
+        ⚠ NO TOKEN COUNTS ON THE YEARLY CARDS. The handoff prints an allowance
+        under each one (3,500 / 1,500 / 15,000 / 3,500) and captions the panel
+        "tokens are granted for the whole year up front". Yearly grants are 0 for
+        every plan, exactly like the monthly ones — see the FAQS note above. The
+        prices here are real and come from the catalog; the token lines are not,
+        so they are absent rather than transcribed.
+      */}
+      <div className="af-pr-row">
+        {yearlyLanes.length > 0 ? (
+          <section className="af-pr-yearly">
+            <div className="af-pr-tokens-head">
+              <h2 className="af-pr-h2">Yearly, if you&rsquo;d rather pay once</h2>
+              <p className="af-pr-sub af-pr-sub--tight">
+                The same plans billed annually. Every figure below is what the card is
+                charged.
+              </p>
+            </div>
+            <div className="af-pr-yearly-grid">
+              {yearlyLanes.map((plan) => (
+                <div key={plan.planFamily} className="af-pr-yearly-card">
+                  <span className="af-pr-yearly-name">{plan.name}</span>
+                  <span className="af-pr-yearly-price">{money(plan.yearlyPrice as number)}</span>
+                  {plan.savings ? (
+                    <span className="af-pr-yearly-save af-num">
+                      {money(plan.savings.effectiveMonthly)}/mo · save {plan.savings.savedPct}%
+                    </span>
+                  ) : (
+                    <span className="af-pr-yearly-save af-pr-yearly-save--empty" aria-hidden />
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
       {/* ── Tokens ─────────────────────────────────────────────── */}
       <section className="af-pr-tokens">
         <div className="af-pr-tokens-head">
@@ -310,13 +441,36 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           ))}
         </div>
       </section>
+      </div>
 
+      {/* ── FAQ ────────────────────────────────────────────────── */}
+      <section className="af-pr-faq" aria-labelledby="af-pr-faq-h">
+        <h2 className="af-pr-h2" id="af-pr-faq-h">
+          Before you decide
+        </h2>
+        <div className="af-pr-faq-grid">
+          {FAQS.map((f) => (
+            <article key={f.q} className="af-pr-faq-item">
+              <h3 className="af-pr-faq-q">{f.q}</h3>
+              <p className="af-pr-faq-a">{f.a}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      {/*
+        Trust strip + closing CTA, as drawn — minus the token-discount sentence,
+        which describes percentages that are all 0. What is left is true and is
+        the part a hesitating buyer actually needs.
+      */}
       <footer className="af-pr-foot">
         <p>
-          Checkout is handled by Stripe — we never see your card details. Cancel any time from
-          Settings → Billing. League dues and payouts are handled on FanCred, separately from your
-          AllFantasy subscription.
+          Checkout is handled by Stripe — we never see your card details. League dues and payouts
+          are handled on FanCred, separately from your AllFantasy subscription.
         </p>
+        <Link href="/signup" className="af-pr-foot-cta">
+          Start free
+        </Link>
       </footer>
     </div>
   )
