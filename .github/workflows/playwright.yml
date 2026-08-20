@@ -1,4 +1,33 @@
 name: Playwright Tests
+
+# ⚠ WHICH OF THESE JOBS ACTUALLY BLOCK A MERGE, AND WHY IT IS NOT ALL OF THEM.
+#
+# Branch protection is invisible from inside the repo, so it is written down
+# here. On `main` these lanes are REQUIRED:
+#
+#   Draft Room Regression
+#   Playwright (retention-engagement)
+#   Playwright (onboarding-activation)
+#   Playwright (referral-growth-db)
+#
+# These three are NOT required, deliberately:
+#
+#   Playwright (core 1/3), (core 2/3), (core 3/3)
+#
+# They have been red on main continuously — 50 failures at last count — so
+# requiring them today would block every merge in the repo rather than protect
+# anything. The four above were measured green on five consecutive completed
+# runs across main and four different feature branches before being added.
+#
+# ⚠ THE POINT OF REQUIRING ANYTHING IS THE REGRESSION THAT GOT THROUGH. When
+# /pricing was rebuilt as PricingV4 it dropped the data-testid contract the
+# monetization suite drives, and the purchase flow silently lost its e2e
+# coverage. Nobody noticed, because the shards were already red and advisory. A
+# suite that never blocks is a suite nobody reads.
+#
+# So: when the core shards go green, add them here AND to branch protection in
+# the same change. Until then, do not assume a green PR means the core lane
+# passed — it means the core lane was not consulted.
 on:
   push:
     branches: [ main, master ]
