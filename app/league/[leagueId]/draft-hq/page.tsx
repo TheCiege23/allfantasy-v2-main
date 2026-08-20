@@ -7,6 +7,9 @@ import { getDraftOrderModeAndLotteryConfig } from '@/lib/draft-lottery/lotteryCo
 import { previewLotteryOdds } from '@/lib/draft-lottery/WeightedDraftLotteryEngine'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
+import { computeNeeds } from '@/lib/draft-helper/RecommendationEngine'
+import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
+import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import DraftHQ, { type DraftHQData } from '@/components/draft-hq/DraftHQ'
 
 /**
@@ -154,6 +157,55 @@ export default async function DraftHQPage({
     }
   }
 
+  /*
+   * Positional need, from the same engine the draft room and autopick use — no second opinion.
+   *
+   * ⚠ THE ENGINE'S SCALE IS INVERTED FROM THE ONE WE DISPLAY. `computeNeeds` returns HIGH = big
+   * need (unfilled starter ~88, filled 10). The handoff's bars read the other way: low is a hole,
+   * high is solved. Rendering the raw value under a low-is-bad ramp would paint a manager's
+   * emptiest position green, so it is converted to `100 - need` here, once, at the boundary.
+   *
+   * ⚠ IT IS WITHHELD RATHER THAN GUESSED WHEN THE ROSTER CANNOT BE RESOLVED. `Roster.playerData`
+   * stores player IDS; positions come from a join, and this repo has real id-space hazards. A
+   * failed join looks exactly like an empty roster, which would score EVERY position as a hole and
+   * tell a manager their strongest slot is bare. So the bars render only when the join actually
+   * resolved players.
+   */
+  let positionalNeed: DraftHQData['positionalNeed'] = null
+  if (viewerRoster) {
+    const rosterRow = await prisma.roster
+      .findUnique({ where: { id: viewerRoster.id }, select: { playerData: true } })
+      .catch(() => null)
+    const playerIds = rosterRow ? getRosterPlayerIds(rosterRow.playerData) : []
+
+    if (playerIds.length > 0) {
+      const [players, template] = await Promise.all([
+        prisma.player
+          .findMany({ where: { id: { in: playerIds } }, select: { position: true } })
+          .catch(() => [] as { position: string }[]),
+        getEffectiveLeagueRosterTemplate(leagueId).catch(() => null),
+      ])
+
+      // A join that resolved nothing is missing data, not an empty roster.
+      if (players.length > 0) {
+        const rosterSlots = (template?.template?.slots ?? []).flatMap(
+          (slot: { slot?: string; starterCount?: number }) =>
+            Array.from({ length: Number(slot.starterCount) || 0 }, () => String(slot.slot ?? '')),
+        )
+        const sport = String(league.sport ?? 'NFL')
+        const needs = computeNeeds(players, rosterSlots, false, [], sport, false)
+        const rows = Object.entries(needs)
+          .map(([position, need]) => ({ position, solved: Math.round(100 - need) }))
+          .sort((a, b) => a.solved - b.solved)
+        positionalNeed = {
+          rows,
+          resolvedPlayers: players.length,
+          rosterSize: playerIds.length,
+        }
+      }
+    }
+  }
+
   const data: DraftHQData = {
     leagueId,
     leagueName: league.name ?? 'Your league',
@@ -177,6 +229,7 @@ export default async function DraftHQPage({
       ? { id: lastMock.id, createdAt: lastMock.createdAt.toISOString(), rounds: lastMock.rounds }
       : null,
     pickInventory,
+    positionalNeed,
     viewerHasRoster: Boolean(viewerRoster),
   }
 

@@ -55,6 +55,15 @@ export type DraftHQData = {
   viewerHasRoster: boolean
   /** Slots this manager holds, traded picks included. Empty when the order isn't set yet. */
   pickInventory: { label: string; round: number; acquiredFrom: string | null }[]
+  /**
+   * Per-position strength, already INVERTED from the engine's need scale: high = solved,
+   * low = hole. Null when the roster could not be resolved — never a guess.
+   */
+  positionalNeed: {
+    rows: { position: string; solved: number }[]
+    resolvedPlayers: number
+    rosterSize: number
+  } | null
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -78,7 +87,7 @@ function relativeDay(iso: string): string {
 }
 
 export default function DraftHQ({ data }: { data: DraftHQData }) {
-  const { lottery, queue, settings, lastMock, pickInventory } = data
+  const { lottery, queue, settings, lastMock, pickInventory, positionalNeed } = data
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-5 px-4 py-6">
@@ -275,16 +284,52 @@ export default function DraftHQ({ data }: { data: DraftHQData }) {
             </Link>
           </Card>
 
+          {positionalNeed && positionalNeed.rows.length > 0 ? (
+            <Card title="Positional need">
+              <ul className="space-y-2" data-testid="positional-need">
+                {positionalNeed.rows.map((r) => (
+                  <li key={r.position} className="flex items-center gap-3">
+                    <span className="w-10 shrink-0 font-mono text-[11px] font-bold uppercase tracking-[0.1em] text-white/50">
+                      {r.position}
+                    </span>
+                    <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.07]">
+                      <span
+                        className={`block h-full rounded-full ${
+                          r.solved >= 80
+                            ? 'bg-emerald-400'
+                            : r.solved >= 45
+                              ? 'bg-amber-400'
+                              : 'bg-rose-400'
+                        }`}
+                        style={{ width: `${Math.max(0, Math.min(100, r.solved))}%` }}
+                      />
+                    </span>
+                    <span className="w-7 shrink-0 text-right font-mono text-[11px] tabular-nums text-white/70">
+                      {r.solved}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-3 text-xs text-white/40">
+                Higher is better covered. Built from your roster against this league&apos;s starting
+                slots — the same need model the draft room and autopick use.
+                {positionalNeed.resolvedPlayers < positionalNeed.rosterSize
+                  ? ` ${positionalNeed.resolvedPlayers} of ${positionalNeed.rosterSize} rostered players matched.`
+                  : ''}
+              </p>
+            </Card>
+          ) : null}
+
           <Card title="Not computed yet">
             {/*
               Naming the gaps beats leaving four empty rectangles the reader has to interpret.
               Same principle as the standings source note.
             */}
             <p className="text-xs leading-relaxed text-white/50">
-              Per-player confidence scores and positional-need bars aren&apos;t wired yet. Both come
-              from the recommendation engine, which needs the live player pool loaded — and the
-              score would drive the sort order as well as the colour, so we&apos;d rather show
-              nothing than a number we can&apos;t stand behind.
+              Per-player confidence scores aren&apos;t wired yet — those need the full draft pool
+              scored, and the number would drive the queue&apos;s sort order as well as its colour,
+              so we&apos;d rather show nothing than a figure we can&apos;t stand behind.
+              {positionalNeed ? '' : ' Positional need is hidden here because your roster couldn’t be resolved.'}
             </p>
           </Card>
         </aside>
