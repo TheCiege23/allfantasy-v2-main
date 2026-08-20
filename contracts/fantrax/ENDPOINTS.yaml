@@ -1,0 +1,190 @@
+--- # ============================================================================
+# Fantrax — API Contract
+# NORMATIVE. Do not probe the live API to rediscover any of this.
+#
+# ROLE: full league import for Fantrax-hosted leagues — leagues, rosters,
+# standings, matchups, draft picks and draft results. Also a player-id map and
+# ADP, for NFL *and NCAAF*.
+#
+# Source: https://www.fantrax.com/developer (v1.8 Beta) + live probes 2026-08-20
+# ============================================================================
+
+meta:
+  vendor: Fantrax Games Inc.
+  contract_version: 1.0.0
+  captured_at: 2026-08-20
+  doc_version: "1.8 (Beta)"
+  base_url: https://www.fantrax.com/fxea/general
+
+  role: league_import
+  confidence: medium
+
+  authority_note: >
+    The vendor page self-describes as "a draft document that has basic usage
+    information", so field-level shapes are LOWER confidence than the endpoint
+    list. Endpoint names, parameters and the auth model were read directly from
+    that page; the two unauthenticated endpoints were additionally probed live
+    and their responses committed under fixtures/. Everything requiring a
+    userSecretId is documented but NOT probed — see GAPS.md.
+
+# ----------------------------------------------------------------------------
+# AUTH
+# ----------------------------------------------------------------------------
+auth:
+  model: user_secret
+  parameter: userSecretId
+  obtained_from: >
+    Shown on the Fantrax User Profile screen. The account holder copies it; there
+    is no OAuth flow, no app registration, no developer key, and no approval
+    process. One string is the entire credential.
+
+  scope: >
+    Identifies the USER, not an application. It is only required by getLeagues;
+    every league-scoped endpoint takes a leagueId instead and needs no secret.
+
+  # ⚠⚠ SECURITY — READ BEFORE WRITING A CLIENT ⚠⚠
+  transport_hazard: >
+    userSecretId may be sent as a QUERY STRING parameter. That is the same class
+    of hazard this repo already documents for the Rolling Insights RSC_token:
+    naive URL logging leaks a long-lived credential into logs, error messages and
+    traces. PREFER THE POST BODY, which the API also accepts. If a URL carrying
+    it is ever constructed, redact before logging and never log a full request
+    URL. It must never appear in client responses or committed fixtures.
+
+  revocation: unknown   # see GAPS.md — no documented rotate/revoke behaviour
+
+# ----------------------------------------------------------------------------
+# TRANSPORT
+# ----------------------------------------------------------------------------
+transport:
+  methods: [GET, POST]
+  note: >
+    Every endpoint accepts either a GET with a query string or a POST with a JSON
+    body. Responses are JSON.
+  request_content_type: application/json   # for POST
+  auth_placement_preference: post_body     # see transport_hazard above
+
+# ----------------------------------------------------------------------------
+# ENDPOINTS
+# ----------------------------------------------------------------------------
+endpoints:
+
+  getPlayerIds:
+    path: /getPlayerIds
+    auth_required: false
+    params:
+      sport: {required: true, values: [NFL, MLB, NHL, NBA, NCAAF, NCAAB, PGA, NASCAR, EPL]}
+    returns: >
+      The Fantrax player-id map. Every other endpoint identifies players by these
+      ids, so this is the join key for the whole integration.
+    probed: 2026-08-20
+    observed:
+      status: 200
+      size_bytes: 1335426    # NFL — large; cache it, do not fetch per request
+    confidence: high
+
+  getAdp:
+    path: /getAdp
+    auth_required: false
+    params:
+      sport: {required: true, values: [NFL, MLB, NHL, NBA, NCAAF, NCAAB, PGA, NASCAR, EPL]}
+      position: {required: false}
+      start: {required: false}
+      limit: {required: false}
+      order: {required: false, example: NAME}
+    returns: Average draft position per player.
+    probed: 2026-08-20
+    fixture: fixtures/getAdp.NFL.QB.json
+    observed_shape: >
+      A bare JSON ARRAY (not an envelope) of
+      {ADP_PPR: number, pos: string, name: "Last, First", id: string}.
+      ⚠ `name` is "Last, First" — do NOT join on it. Join on `id`. This repo has
+      already been burned by name-joins; see the player-id hazard memory.
+      ⚠ NFL results include college prospects (e.g. a 2026 college QB appeared in
+      an NFL ADP probe), so an NFL query is not necessarily NFL-only.
+    confidence: high
+
+  getLeagues:
+    path: /getLeagues
+    auth_required: true
+    params:
+      userSecretId: {required: true, secret: true}
+    returns: >
+      The user's leagues — name and id of each, plus the name(s) and id(s) of
+      their team(s) in each. This is the DISCOVERY endpoint: it makes Fantrax
+      behave like Sleeper (one identifier in, a list of leagues back) rather than
+      requiring a league id to be found by hand.
+    probed: false     # requires a real user's secret — see GAPS.md
+    confidence: medium
+
+  getLeagueInfo:
+    path: /getLeagueInfo
+    auth_required: false
+    params:
+      leagueId: {required: true}
+      excludePlayerInfo: {required: false, type: boolean, note: "true omits playerInfo; smaller response"}
+    returns: >
+      Team names/ids, matchups, player info, and the league's configuration.
+      scoringSystem.type indicates the format (ROTISSERIE among the values).
+      For head-to-head leagues a `playoffs` element describes the playoff setup,
+      including whether playoffs are used.
+    probed: false
+    confidence: medium
+
+  getDraftPicks:
+    path: /getDraftPicks
+    auth_required: false
+    params:
+      leagueId: {required: true}
+    returns: Future and current draft picks in the league.
+    probed: false
+    confidence: medium
+    note: >
+      Worth attention — pick TRADES are the gap that forces Draft HQ to label its
+      pick inventory "original slots" for Sleeper. If this returns traded picks,
+      Fantrax can say something Sleeper cannot.
+
+  getDraftResults:
+    path: /getDraftResults
+    auth_required: false
+    params:
+      leagueId: {required: true}
+    returns: >
+      Draft results, retrievable LIVE DURING A DRAFT. For an auction draft in
+      progress the response also carries the live bidding state.
+    probed: false
+    confidence: medium
+
+  getTeamRosters:
+    path: /getTeamRosters
+    auth_required: false
+    params:
+      leagueId: {required: true}
+      period: {required: false, note: "lineup period; omitted = current"}
+    returns: >
+      All rosters, including salary and contract data where the league uses them.
+    probed: false
+    confidence: medium
+
+  getStandings:
+    path: /getStandings
+    auth_required: false
+    params:
+      leagueId: {required: true}
+    returns: Current standings — rank and record data.
+    probed: false
+    confidence: medium
+
+  getMatchupScores:
+    path: /getMatchupScores
+    auth_required: false
+    params:
+      leagueId: {required: true}
+      period: {required: false, note: "scoring period; omitted = current"}
+    returns: >
+      Head-to-head matchup scores for a scoring period, matching the Matchup
+      screen. Category leagues include a categories list of stat values;
+      points leagues include a categories list per scoring category. Each team
+      also carries gamesPlayed for its active players.
+    probed: false
+    confidence: medium
