@@ -100,6 +100,37 @@ function needsConnectionSetup(message: string): boolean {
   return /\b(link|connect|reconnect)\b/i.test(message)
 }
 
+/**
+ * Where Yahoo's OAuth round-trip starts, and where it comes back to. `returnTo`
+ * carries the provider so the user lands on the Yahoo tab they chose rather than
+ * the default Sleeper one.
+ */
+const YAHOO_CONNECT_HREF = `/api/auth/yahoo?returnTo=${encodeURIComponent('/import?provider=yahoo')}`
+
+/**
+ * Yahoo's own description is the useful half. "This application is not authorized to
+ * perform this action" names the exact missing permission and is actionable in the
+ * Yahoo console; `user_fetch_failed` is actionable by nobody. Prefer Yahoo's words,
+ * and only fall back to our own when it gave none.
+ */
+function describeYahooError(code: string, description?: string): string {
+  if (description) return description
+  switch (code) {
+    case 'not_configured':
+      return 'Yahoo is not configured on this deployment yet.'
+    case 'invalid_state':
+      return 'That Yahoo sign-in expired before it finished. Please try again.'
+    case 'no_code':
+      return 'Yahoo did not send back an authorisation code. Please try again.'
+    case 'token_failed':
+      return 'Yahoo would not exchange that sign-in for a token. Please try again.'
+    case 'user_fetch_failed':
+      return 'Yahoo signed you in, but would not share your fantasy account.'
+    default:
+      return `Yahoo returned an error: ${code}`
+  }
+}
+
 function ReadOnlyPromise() {
   return (
     <p className="af-im-promise">
@@ -141,6 +172,11 @@ export type ImportV4Props = {
   initialLeagueSourceId?: string
   /** Where "not now" goes back to. Validated by the server as a relative path. */
   returnTo?: string
+  /** Outcome of a Yahoo OAuth round-trip, read off the query by the server. */
+  yahooError?: string
+  /** Yahoo's own sentence, when it gave one. Far more useful than the code. */
+  yahooErrorDesc?: string
+  yahooConnected?: boolean
 }
 
 export function ImportV4({
@@ -149,6 +185,9 @@ export function ImportV4({
   initialAccount,
   initialLeagueSourceId,
   returnTo,
+  yahooError,
+  yahooErrorDesc,
+  yahooConnected,
 }: ImportV4Props) {
   const [provider, setProvider] = useState<ImportProvider>(defaultProvider ?? 'sleeper')
   const [account, setAccount] = useState(initialAccount ?? '')
@@ -179,7 +218,22 @@ export function ImportV4({
       if (!res.ok) {
         // The service already translates the gate's codes into sentences a person
         // can act on ("Connect Yahoo in League Sync…"), so it is surfaced as-is.
-        setError(res.error || 'We could not look up leagues for that account.')
+        const message = res.error || 'We could not look up leagues for that account.'
+        /**
+         * Yahoo takes no identifier, so "not connected yet" is not a mistake the user
+         * made -- it is simply the next step, and the only next step. Rendering that
+         * sentence with a second link to click turned connecting Yahoo into a
+         * three-screen errand: pick Yahoo, press Connect, read an error, press
+         * another Connect. Send them straight to Yahoo instead.
+         *
+         * Only for yahoo: Sleeper and ESPN failures are genuinely actionable on this
+         * screen (wrong username, expired ESPN cookie), so those still surface.
+         */
+        if (provider === 'yahoo' && needsConnectionSetup(message)) {
+          window.location.href = YAHOO_CONNECT_HREF
+          return
+        }
+        setError(message)
         setPhase({ k: 'idle' })
         return
       }
@@ -309,6 +363,24 @@ export function ImportV4({
         </p>
       </header>
 
+      {/*
+        The outcome of a Yahoo round-trip. Both of these were previously written to
+        the query string and read by nothing, so a failed connect looked identical
+        to never having tried.
+      */}
+      {yahooError ? (
+        <div className="af-im-error" role="alert">
+          <p className="af-im-error-text">{describeYahooError(yahooError, yahooErrorDesc)}</p>
+          <a className="af-im-error-link" href={YAHOO_CONNECT_HREF}>
+            Try connecting Yahoo again →
+          </a>
+        </div>
+      ) : yahooConnected ? (
+        <div className="af-im-note" role="status">
+          <p>Yahoo is connected. Your Yahoo leagues are listed below.</p>
+        </div>
+      ) : null}
+
       {/* ── Step 1: provider picker ─────────────────────────────────── */}
       <section className="af-im-card">
         <h2 className="af-label">Where do you already play?</h2>
@@ -425,7 +497,7 @@ export function ImportV4({
                       intercept it.
                     */
                     <a
-                      href="/api/auth/yahoo?returnTo=%2Fimport%3Fprovider%3Dyahoo"
+                      href={YAHOO_CONNECT_HREF}
                       className="af-im-error-link"
                     >
                       Connect Yahoo →
