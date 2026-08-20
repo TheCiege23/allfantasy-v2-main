@@ -83,6 +83,27 @@ export async function readLeagueIntelligence(input: {
   decisionType: string
   connectedGroupId?: string | null
 }): Promise<LeagueIntelligenceRead> {
+  // NEVER THROW. The routes that call this document a degraded-safe contract — "a pipeline failure
+  // returns honest nulls, not a 500" — and this block is what makes that true for the intelligence
+  // half. Without it a transient DB error while resolving OPTIONAL, additive analysis would take down
+  // the deterministic payload beside it, which is the part the surface actually needs.
+  try {
+    return await readLeagueIntelligenceUnsafe(input)
+  } catch {
+    // `evidence_unavailable` is the honest user-facing status (we cannot show analysis); the distinct
+    // reason keeps it diagnosable and stops a resolver fault from masquerading as "this league has no data".
+    return empty('evidence_unavailable', 'resolver_error', null)
+  }
+}
+
+async function readLeagueIntelligenceUnsafe(input: {
+  db?: PrismaLike
+  leagueId: string
+  userId: string
+  tool: IntelligenceTool
+  decisionType: string
+  connectedGroupId?: string | null
+}): Promise<LeagueIntelligenceRead> {
   const db = input.db ?? defaultPrisma
 
   // 1) Rebuild the evidence that defines this request's identity. This is also the honest gate:
