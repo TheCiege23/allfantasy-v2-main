@@ -15,6 +15,7 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
+import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import { deriveOutstandingIssues } from '@/lib/core-app/outstandingIssues'
@@ -193,6 +194,14 @@ export default async function DashboardPage({
      * the all-leagues dashboard rather than erroring: the loader returns null
      * for both cases, and a dead link should land somewhere useful.
      */
+    /*
+     * Derived ONCE, for both branches. 3a's whole top section is this list, and
+     * 3b needs the same derivation to split its own league's issues from the
+     * count of everything outside it. Running it twice would let the two screens
+     * disagree about how many issues exist.
+     */
+    const { issues: issuesAll } = deriveOutstandingIssues({ leagues: playedLeagues })
+
     if (selectedLeagueId) {
       const leagueHome = await getLeagueHomeData(selectedLeagueId, userId).catch(() => null)
       if (leagueHome) {
@@ -204,7 +213,7 @@ export default async function DashboardPage({
          * and it also supplies this league's own issues so 3b can render its one
          * urgent action instead of leaving the row empty.
          */
-        const { issues: allIssues } = deriveOutstandingIssues({ leagues: playedLeagues })
+        const allIssues = issuesAll
         const thisLeagueIssues = allIssues.filter((i) => i.leagueId === leagueHome.league.id)
         const otherIssues = allIssues.filter((i) => i.leagueId !== leagueHome.league.id).length
         return (
@@ -220,17 +229,15 @@ export default async function DashboardPage({
     }
 
     return (
-      <DashboardV2
+      <Dashboard3A
+        issues={issuesAll}
         data={dash34}
-        weekLabel={dash34?.weekLabel ?? null}
         career={career}
-        portfolio={portfolio}
-        drafts={drafts}
         week={week}
-        nowIso={now.toISOString()}
+        weekLabel={dash34?.weekLabel ?? null}
         planName={planName}
-        syncedLabel={syncAge.stale ? null : syncAge.label}
         commissionerCount={playedLeagues.filter((l) => Boolean(l.isCommissioner)).length}
+        nowLabel={syncAge.stale ? null : syncAge.label}
       />
     )
   } catch (error) {
