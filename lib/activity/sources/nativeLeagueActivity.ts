@@ -3,9 +3,9 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 import { resolvePlayerNamesForSport } from "@/lib/roster/resolvePlayerNames"
 import type { ActivityFeedItem, ActivityLeagueEntry, ActivitySourceContext } from "@/lib/activity/types"
+import { isNativePlatform } from "@/lib/league/isNativeLeague"
 
-/** Platform strings that identify a NATIVE AllFantasy league (a real DB `League` row, not an import). */
-const NATIVE_PLATFORMS = new Set(["allfantasy", "af", "manual", "native", ""])
+
 /** Only surface recent native events — matches the ~2-week window the Sleeper source uses. */
 const LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000
 /** Per-event-type cap so one busy league can't dominate the merged feed or the query cost. */
@@ -18,7 +18,7 @@ function truncate(text: string, max = MAX_DESCRIPTION): string {
 }
 
 function isNativeLeague(league: ActivityLeagueEntry): boolean {
-  return Boolean(league.id) && NATIVE_PLATFORMS.has(String(league.platform ?? "").toLowerCase())
+  return Boolean(league.id) && isNativePlatform(league.platform)
 }
 
 /**
