@@ -97,7 +97,7 @@ function getLegacyDashboardUrl(): string {
 }
 
 function getTradeAnalysisUrl(transactionId?: string): string {
-  const baseUrl = `${getBaseUrl()}/af-legacy?tab=notifications`;
+  const baseUrl = `${getBaseUrl()}/settings`;
   return transactionId
     ? `${baseUrl}&trade=${encodeURIComponent(transactionId)}`
     : baseUrl;

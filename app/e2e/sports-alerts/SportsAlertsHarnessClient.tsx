@@ -35,7 +35,7 @@ function buildSportsNotifications(): PlatformNotification[] {
       read: false,
       createdAt,
       meta: {
-        actionHref: "/af-legacy?tab=players&playerId=player-12",
+        actionHref: "/af-rankings&playerId=player-12",
         actionLabel: "Open player",
         playerId: "player-12",
         playerName: "Player X",

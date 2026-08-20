@@ -301,7 +301,20 @@ function buildPositionTargets(
   return targets
 }
 
-function computeNeeds(
+/**
+ * Per-position need, 0–100, where HIGH MEANS BIG NEED: an unfilled starter slot scores 88+, a
+ * position below its ideal depth scores 42+, and a filled position scores 10.
+ *
+ * ⚠ EXPORTED FOR DRAFT HQ, AND THE DIRECTION IS A TRAP. Any surface that renders this as a
+ * "positional strength" bar has to INVERT it first — showing the raw value with a
+ * low-is-bad/high-is-good colour ramp paints a manager's biggest hole green. Draft HQ converts to
+ * `100 - need` and labels the result "solved" for exactly this reason.
+ *
+ * Exported rather than copied: `computeDraftPlayerRankings` returns these needs too, but bails
+ * with null on an empty player pool, and a planning screen should not have to load and score a
+ * full draft pool just to know it is thin at RB.
+ */
+export function computeNeeds(
   roster: { position: string }[],
   rosterSlots: string[],
   isSF: boolean,

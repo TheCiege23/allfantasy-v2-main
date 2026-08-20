@@ -6,5 +6,5 @@
 /** Base URL for legacy app with player context. */
 export function getPlayerPageHref(playerName: string): string {
   const q = encodeURIComponent(playerName.trim());
-  return `/af-legacy?tab=players&q=${q}`;
+  return `/af-rankings&q=${q}`;
 }

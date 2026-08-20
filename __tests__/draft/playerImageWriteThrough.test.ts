@@ -16,6 +16,16 @@ const prismaMock = vi.hoisted(() => ({
     updateMany: vi.fn(),
   },
   sportsPlayer: { findMany: vi.fn(async () => []) },
+  /*
+   * `playerImageStore` verifies the Player row EXISTS before writing an image — the fix for
+   * orphaned images, which came from writes against derived ids pointing at no Player (Player.id
+   * carries no FK, so nothing caught them). That check runs inside the transaction as
+   * `tx.player.findUnique`, and wireTransaction hands the callback this same object as `tx`, so
+   * the delegate has to live here. Without it every write threw "Cannot read properties of
+   * undefined (reading 'findUnique')", was swallowed into skippedReason, and these tests failed
+   * on a missing mock rather than on the write contract they describe.
+   */
+  player: { findUnique: vi.fn() },
   $transaction: vi.fn(),
 }))
 
@@ -47,6 +57,8 @@ function wireTransaction() {
 beforeEach(() => {
   vi.clearAllMocks()
   wireTransaction()
+  // Default: the player exists, so the existence guard passes and the write proceeds.
+  prismaMock.player.findUnique.mockResolvedValue({ id: 'player-1' })
   prismaMock.playerImage.findFirst.mockResolvedValue(null)
   prismaMock.playerImage.updateMany.mockResolvedValue({ count: 0 })
   prismaMock.playerImage.create.mockResolvedValue({ id: 'img-1' })
@@ -274,7 +286,19 @@ describe('resolvePlayerHeadshot — write-through behaviour', () => {
     expect(result.servedStale).toBe(true)
   })
 
-  it('is unchanged for callers that pass no playerId (back-compat)', async () => {
+  /*
+   * This test used to assert that a caller passing no playerId never touched the image store.
+   * That expectation was superseded on purpose by the Phase 2 cache key: the live callers
+   * (Roster/Waivers/Trades/Matchups via PlayerHeadshot.tsx) send name/team/position and never a
+   * canonical Player.id, so under the old rule the cache read was ALWAYS skipped and every
+   * headshot paid for the full provider chain. The resolver now derives the same deterministic id
+   * the PlayerImage rows are keyed by, which is what actually reaches them — including the ~88%
+   * keyed with no Sleeper id at all.
+   *
+   * Deriving an id to READ is safe; deriving one to WRITE is what orphaned images. That direction
+   * is held by the existence guard inside writePrimaryPlayerImage, covered above.
+   */
+  it('consults the cache via a derived id when the caller passes no playerId', async () => {
     nflProviderMock.resolveNflRedraftCanonicalHeadshot.mockResolvedValue({
       imageUrl: HEADSHOT,
       source: 'sportsdb',
@@ -284,8 +308,8 @@ describe('resolvePlayerHeadshot — write-through behaviour', () => {
     const result = await resolvePlayerHeadshot({ name: 'Ja’Marr Chase', sport: 'NFL' })
 
     expect(result.imageUrl).toBe(HEADSHOT)
-    expect(prismaMock.playerImage.findFirst).not.toHaveBeenCalled()
-    expect(prismaMock.playerImage.create).not.toHaveBeenCalled()
+    // The cache IS consulted — that is the point of the derived key.
+    expect(prismaMock.playerImage.findFirst).toHaveBeenCalled()
   })
 
   it('skipCache forces a live resolution even when a fresh row exists', async () => {
