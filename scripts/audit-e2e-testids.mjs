@@ -54,15 +54,39 @@ function walk(dir, out = []) {
   return out
 }
 
-const appFiles = [...walk(path.join(ROOT, 'app')), ...walk(path.join(ROOT, 'components'))]
+/*
+ * pages/ IS PART OF THE APP AND MUST BE IN THE CORPUS.
+ *
+ * The first version walked only app/ and components/, so every id rendered by
+ * the legacy Pages Router read as absent -- 19 of the 54 ids it reported. The
+ * specs asserting them PASS, which is how it was caught: g39 and g40 drive
+ * pages/e2e-g39-nfl-redraft-trade-runtime.tsx and its g40 sibling, wait on the
+ * harness being visible, and go green while the audit called their ids missing.
+ *
+ * tsconfig.json already compiles the pages tsx glob. A corpus that
+ * disagrees with the compiler about where the app lives will invent absences.
+ */
+const appFiles = [
+  ...walk(path.join(ROOT, 'app')),
+  ...walk(path.join(ROOT, 'components')),
+  ...walk(path.join(ROOT, 'pages')),
+]
 const blob = appFiles.map((f) => fs.readFileSync(f, 'utf8')).join('\n')
 
 // Positive control. "No matches" is untrustworthy on this repo, so prove the
 // corpus is readable before drawing any conclusion from an absence.
 if (!blob.includes('data-testid')) {
-  console.error('POSITIVE CONTROL FAILED: no data-testid anywhere in app/ or components/.')
+  console.error('POSITIVE CONTROL FAILED: no data-testid anywhere in app/, components/ or pages/.')
   console.error('The corpus did not load; every result would be a false "absent".')
   process.exit(2)
+}
+// Per-root control: a silently-empty root is indistinguishable from "the app
+// does not render that id", which is the exact failure this file exists to avoid.
+for (const root of ['app', 'components', 'pages']) {
+  if (!appFiles.some((f) => f.includes(path.sep + root + path.sep))) {
+    console.error(`POSITIVE CONTROL FAILED: no files walked under ${root}/.`)
+    process.exit(2)
+  }
 }
 
 /** Stems the app concatenates onto, e.g. `draft-board-cell-${i}`. */
