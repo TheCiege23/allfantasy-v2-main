@@ -7,6 +7,21 @@ import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/pla
 import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBanner'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
+// af-core.css carries the .af-core token layer (--surface, --line, --chip, --text2 …)
+// that every rule in af-pricing.css reads. AfCoreShell imports it for screens inside
+// the shell; this one renders standalone at /pricing, so without this line the whole
+// token layer is missing. Measured on the live page before this fix: 11 of the 20
+// tokens af-pricing.css consumes computed to the EMPTY STRING — --surface, --surface2,
+// --line, --line2, --text2, --chip, --chip-line, --accent-ink, --good-soft, --warn-soft
+// and --chimmy — while --accent fell through to the unrelated #2563EB in
+// app/globals.css instead of the design's #22d3ee teal. Plan cards painted with
+// background rgba(0,0,0,0) and no border, the checkout buttons rendered as unfilled
+// transparent rectangles, and in dark mode the page background computed to pure black
+// rather than #06070f. Must precede af-pricing.css so the tokens exist before use.
+//
+// Same failure, same fix as LandingV4.tsx and AuthV4.tsx — both of which carry the
+// equivalent note. This screen was simply missed when those two were repaired.
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-pricing.css'
 
 /**
@@ -29,6 +44,16 @@ import '@/components/core-app/af-pricing.css'
  *    claim about behaviour and there are currently zero subscribers, so it would be
  *    fabricated social proof. "Best value" is arithmetic anyone can check: Supreme
  *    is $19.99 against $24.98 for Pro and Commissioner bought separately.
+ *    (Re-confirmed by the owner 2026-08-19 against handoff 18a build rule 2, which
+ *    asks for MOST POPULAR on Commissioner. The departure stands.)
+ *
+ * ⚠ THE ROOT ELEMENT MUST CARRY `af-core` AS WELL AS `af-pr`. This is the second
+ * half of the token fix described at the af-core.css import above, and it is easy
+ * to do one without the other: af-core.css declares the palette on the `.af-core`
+ * SCOPE rather than at :root — deliberately, so the handoff cannot repaint the
+ * rest of the product — so importing the stylesheet without also naming the class
+ * leaves every var() in af-pricing.css still resolving to nothing. This screen
+ * shipped with neither half.
  */
 
 export type PricingPlan = {
@@ -110,7 +135,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   }
 
   return (
-    <div className="af-pr">
+    <div className="af-core af-pr">
       {/*
         Answers to questions the visitor arrived with, above the pitch. Both render
         nothing in the ordinary case.
