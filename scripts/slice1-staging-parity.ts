@@ -20,6 +20,7 @@ import { toCanonicalPlayerData } from '../lib/decision-os/lineup/canonicalAdapte
 import { buildProductionCanonicalValidatorDep } from '../lib/decision-os/lineup/deps'
 import { registerDecisionTelemetrySink } from '../lib/decision-os/core/telemetry'
 import type { LineupActionSummaryPayload } from '../lib/lineup-actions/types'
+import { assertNonProductionDbTarget, describeDbTarget, resolveDatabaseUrlFromDisk } from './_db-target-identity'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -49,9 +50,9 @@ function legacySummaryFor(leagueId: string): LineupActionSummaryPayload {
 
 ;(async () => {
   const prisma = new PrismaClient()
-  const host = (() => { try { return new URL((process.env.DATABASE_URL ?? '').replace(/^postgres(ql)?:\/\//, 'http://')).host } catch { return '?' } })()
-  console.log(`Slice 1 staging parity — DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) { console.error('REFUSING to run against the production host.'); process.exit(2) }
+  const dbTargetUrl = resolveDatabaseUrlFromDisk()
+  console.log(`Slice 1 staging parity — DB target: ${describeDbTarget(dbTargetUrl)}`)
+  assertNonProductionDbTarget({ script: 'slice1-staging-parity', url: dbTargetUrl, action: 'seeds and mutates league rows', exitCode: 2 })
 
   const events: { event: string; flags?: Record<string, unknown> }[] = []
   registerDecisionTelemetrySink((e) => events.push(e as never))

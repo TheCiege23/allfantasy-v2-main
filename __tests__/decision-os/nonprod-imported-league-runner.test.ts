@@ -27,8 +27,11 @@ describe('ADR-DOS-F0: both scripts gate the database the same way the conformanc
       // DB-gated: import the gate helper and short-circuit (SKIPPED) before touching prisma.
       expect(`${path}:hasDatabaseUrl`).toBe(`${path}:${src.includes('hasDatabaseUrl') ? 'hasDatabaseUrl' : 'MISSING'}`)
       expect(`${path}:SKIP`).toBe(`${path}:${/SKIPPED/.test(src) ? 'SKIP' : 'MISSING'}`)
-      // Prod host hard-refusal.
-      expect(`${path}:prodmarker`).toBe(`${path}:${src.includes('ep-spring-tooth') ? 'prodmarker' : 'MISSING'}`)
+      // Prod hard-refusal, delegated to scripts/db-target-identity.cjs. The literal these scripts
+      // used to carry ('ep-spring-tooth') named the dev FORK, not production, so an assertion that
+      // the marker was present passed for as long as the guard was pointed at the wrong database.
+      expect(`${path}:guard`).toBe(`${path}:${src.includes('assertNonProductionDbTarget') ? 'guard' : 'MISSING'}`)
+      expect(`${path}:no-stale-marker`).toBe(`${path}:${src.includes('ep-spring-tooth') ? 'STALE_MARKER' : 'no-stale-marker'}`)
       // The prisma singleton is imported dynamically AFTER the gate (so the skip/refuse path never
       // evaluates it): there must be no top-of-file static `import ... '@/lib/prisma'` / `'../lib/prisma'`.
       expect(`${path}:no-static-prisma`).toBe(
@@ -37,10 +40,11 @@ describe('ADR-DOS-F0: both scripts gate the database the same way the conformanc
     }
   })
 
-  it('the prod-host refusal regex actually catches a prod URL (positive control)', () => {
-    const refuse = (host: string) => host.includes('ep-spring-tooth')
-    expect(refuse('ep-spring-tooth-12345.us-east-2.aws.neon.tech')).toBe(true)
-    expect(refuse('ep-winter-salad-67890.us-east-2.aws.neon.tech')).toBe(false)
+  // Positive control exercising the REAL guard rather than a local re-implementation of it.
+  it('the shipped guard actually refuses the real production database (positive control)', async () => {
+    const { isProductionDbTarget } = await import('@/scripts/_db-target-identity')
+    expect(isProductionDbTarget('postgresql://u:p@ep-curly-block-ad0dlt9o.c-2.us-east-1.aws.neon.tech/neondb')).toBe(true)
+    expect(isProductionDbTarget('postgresql://u:p@ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech/neondb')).toBe(false)
   })
 })
 
