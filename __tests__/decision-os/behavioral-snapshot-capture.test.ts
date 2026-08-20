@@ -207,7 +207,7 @@ describe('Decision OS Increment 5 — behavioral snapshot capture + trend histor
 
     it('a real Sleeper trade produces a league snapshot with the correct trade count and BOTH managers, including the external-only one', async () => {
       const activityStore = new InMemoryImportedActivityStore()
-      await ingestSleeperImportedActivity({ leagueId: 'sleeper_league_1', transactions: [tradeTx], rosters }, identityIndex, activityStore)
+      await ingestSleeperImportedActivity({ providerLeagueId: 'sleeper_league_1', transactions: [tradeTx], rosters }, identityIndex, activityStore)
 
       const persisted = activityStore.snapshot()
       const eventRows: ImportedActivityEventRow[] = persisted.map((r) => ({

@@ -21,8 +21,8 @@
  */
 import crypto from 'node:crypto'
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { assertNonProductionDbTarget, describeDbTarget } from './_db-target-identity'
 
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
 let failures = 0
 const checks: Array<{ name: string; ok: boolean; detail: string }> = []
@@ -32,14 +32,6 @@ const check = (name: string, ok: boolean, detail = '') => {
   if (!ok) failures++
 }
 
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
-}
 
 // ── Capture ALL stdout for the secret-leak grep (step 4e) ──────────────────
 const capturedLines: string[] = []
@@ -54,11 +46,14 @@ console.log = (...args: unknown[]) => {
     origLog('CROSS_LEAGUE_VALIDATION SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    origLog(`CROSS_LEAGUE_VALIDATION REFUSED — resolved host looks like PRODUCTION (${host}). Aborting.`)
-    process.exit(0)
-  }
+  const dbTargetUrl = resolveDatabaseUrl()
+  const host = describeDbTarget(dbTargetUrl)
+  assertNonProductionDbTarget({
+    script: 'cross-league-player-physical-validation',
+    url: dbTargetUrl,
+    action: 'runs cross-league validation queries',
+    exitCode: 0,
+  })
   console.log(`Cross-League Player Intelligence physical validation — DB host: ${host}`)
 
   // Safety check passed — NOW it's safe to import repo modules.

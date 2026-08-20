@@ -109,10 +109,64 @@ export function buildSyncJobRunPayload(
 type SyncJobRunModel = {
   create: (args: { data: Record<string, unknown> }) => Promise<{ id: string }>
   update: (args: { where: { id: string }; data: Record<string, unknown> }) => Promise<unknown>
+  updateMany: (args: { where: Record<string, unknown>; data: Record<string, unknown> }) => Promise<{ count: number }>
 }
 
 function getModel(): SyncJobRunModel | null {
   return (prisma as unknown as { syncJobRun?: SyncJobRunModel }).syncJobRun ?? null
+}
+
+/**
+ * A `running` row older than this is not running — it is abandoned.
+ *
+ * The longest `maxDuration` any route in this repo declares is 300s, and the platform hard-kills
+ * a function at that ceiling. 30 minutes is therefore ~6x the longest possible legitimate run,
+ * which keeps the reaper clear of any live invocation even under heavy retry/queueing.
+ */
+const ABANDONED_AFTER_MS = 30 * 60_000
+
+/**
+ * Why this exists (Aug 2026): `withSyncJobRun` writes a `running` row up front and closes it in
+ * its own `try/catch`. That covers a job that THROWS — but not a job that is killed. When Vercel
+ * terminates a function at `maxDuration`, no user code runs afterwards: no catch, no `finally`,
+ * no `finishRun`. The row stays `running` forever.
+ *
+ * `cron-decision-os-activity-ingest` accumulated six such rows. They are not merely untidy —
+ * they actively DOWNGRADE the alarm. `computeJobHealth` in `productionHealthCore.ts` checks
+ * `runningTooLong` BEFORE its freshness branches, so a permanently-`running` job reports
+ * `warning` ("appears stuck") and can never escalate to the `failed` that a >210h-old last
+ * success would otherwise produce. A dead job shows amber indefinitely instead of red.
+ *
+ * Reaping converts those rows to `failed`, which restores the normal failed/very-stale
+ * escalation. Scoped to a single `jobName` so one job can never disturb another's telemetry,
+ * and driven off `startedAt` so it needs no heartbeat column.
+ *
+ * Returns the number of rows reaped (0 when the model is unavailable or nothing was stale).
+ */
+export async function reapAbandonedRuns(
+  jobName: string,
+  options: { now?: number; abandonedAfterMs?: number } = {},
+): Promise<number> {
+  const model = getModel()
+  if (!model || typeof model.updateMany !== "function") return 0
+  const now = options.now ?? Date.now()
+  const abandonedAfterMs = options.abandonedAfterMs ?? ABANDONED_AFTER_MS
+  const cutoff = new Date(now - abandonedAfterMs)
+  try {
+    const { count } = await model.updateMany({
+      where: { jobName, status: "running", startedAt: { lt: cutoff } },
+      data: {
+        status: "failed",
+        errorMessage:
+          "abandoned: run never reported a terminal status (function killed at maxDuration, or the process died). Marked failed by the stale-run reaper.",
+        completedAt: new Date(now),
+      },
+    })
+    return count ?? 0
+  } catch {
+    // Telemetry maintenance is best-effort — it must never break the job that triggered it.
+    return 0
+  }
 }
 
 /** Best-effort: write the initial `running` row. Returns its id or null. */
@@ -169,6 +223,12 @@ export async function withSyncJobRun<T>(
   extract?: (result: T) => SyncJobOutcome,
 ): Promise<T> {
   const startedAt = Date.now()
+  // Close out any previous invocation of THIS job that was killed before it could report a
+  // terminal status (see `reapAbandonedRuns`). Doing it here rather than from a dedicated route
+  // means every instrumented job self-heals on its next fire — this repo sits at Vercel's
+  // 2048-route ceiling, so a new maintenance endpoint is not an option. Best-effort by design:
+  // a reaper failure must never stop the job from running.
+  await reapAbandonedRuns(ctx.jobName)
   const id = await startRun(ctx)
   try {
     const result = await fn()

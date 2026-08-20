@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma'
 import { SPORT_SLUGS, TOOL_SLUGS } from '@/lib/seo-landing/config'
 import { DISCOVERY_LEAGUES_SLUGS } from '@/lib/seo-landing/discovery-leagues-pages'
 import { playerSlug } from '@/lib/core-app/playerSlug'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 /*
  * ⚠ force-dynamic, AND `revalidate` HERE WAS A LIVE BUG. Adding `revalidate`
@@ -29,7 +30,15 @@ export const dynamic = 'force-dynamic'
 const MAX_PLAYER_URLS = 20000
 
 export async function GET() {
-  const baseUrl = 'https://allfantasy.ai'
+  /*
+   * ⚠ THE APEX WAS WRONG, AND IT MADE EVERY URL IN THIS FILE POINT AT A REDIRECT.
+   * lib/site-public-origin.ts defines the canonical origin as
+   * https://www.allfantasy.ai ("default www", in its own comment), and the apex
+   * 307s to it — so all 3,242 player URLs and every static entry here were
+   * submitted as redirects. Read from the helper so this file cannot drift from
+   * the host the app actually serves and redirects to.
+   */
+  const baseUrl = getPublicSiteOrigin()
 
   const staticPages = [
     { path: 'blog', priority: '0.8', changefreq: 'weekly' },
