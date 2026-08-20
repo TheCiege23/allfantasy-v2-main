@@ -96,7 +96,18 @@ async function ingestOneLeague(
   const validDraftPicks = draftPicks.filter((p): p is NonNullable<typeof p> => p !== null)
 
   const result = await ingestSleeperImportedActivity(
-    { leagueId: league.id, transactions, draftPicks: validDraftPicks, rosters, draftPicksOccurredAt },
+    {
+      // `providerLeagueId` is Sleeper's own id (the same one every fetch above used); `afLeagueId`
+      // is AllFantasy's canonical `League.id`. Passing `league.id` as the provider id was the
+      // Aug 2026 column-misuse bug: it wrote the canonical uuid into `providerLeagueId`, left
+      // `afLeagueId` NULL on all 6,429 rows, and baked the uuid into the idempotency key.
+      providerLeagueId: sourceLeagueId,
+      afLeagueId: league.id,
+      transactions,
+      draftPicks: validDraftPicks,
+      rosters,
+      draftPicksOccurredAt,
+    },
     identityIndex,
     store,
   )
