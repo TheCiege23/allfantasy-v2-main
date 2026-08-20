@@ -3,21 +3,38 @@ name: Playwright Tests
 # ⚠ WHICH OF THESE JOBS ACTUALLY BLOCK A MERGE, AND WHY IT IS NOT ALL OF THEM.
 #
 # Branch protection is invisible from inside the repo, so it is written down
-# here. On `main` these lanes are REQUIRED:
+# here. VERIFIED against the API on 2026-08-20 — exactly ONE check is required:
 #
 #   Draft Room Regression
-#   Playwright (retention-engagement)
-#   Playwright (onboarding-activation)
-#   Playwright (referral-growth-db)
+#
+# An earlier version of this comment also listed retention-engagement,
+# onboarding-activation and referral-growth-db as required. They are not, and
+# have not been for some time. Read the API, not this file, when it matters:
+#   gh api repos/OWNER/REPO/branches/main/protection --jq .required_status_checks
+#
+# Those three DO pass reliably and still run on every PR — they are advisory but
+# honest, which is the useful kind.
 #
 # These three are NOT required, deliberately:
 #
 #   Playwright (core 1/3), (core 2/3), (core 3/3)
 #
-# They have been red on main continuously — 50 failures at last count — so
-# requiring them today would block every merge in the repo rather than protect
-# anything. The four above were measured green on five consecutive completed
-# runs across main and four different feature branches before being added.
+# They have been red on main continuously — 50 failures at last count, and all
+# three still failed on the run that merged #517 on 2026-08-20 — so requiring
+# them today would block every merge in the repo rather than protect anything.
+#
+# ⚠ AND AS OF 2026-08-20 THEY NO LONGER RUN ON PULL REQUESTS. See `pr:` in the
+# matrix below. They are the heaviest jobs in the repo by a wide margin — three
+# runners, a 180-minute timeout each, and a full multi-browser install versus
+# chromium-only for every other lane — and they were the dominant cause of a
+# runner queue that pushed a required check to 36 minutes of waiting before it
+# could even start. Paying that on every PR bought nothing: the lane was already
+# red, already advisory, and already ignored.
+#
+# They still run nightly and on demand, so the failure count stays visible and a
+# fix can be verified without a PR. This is a HOLDING PATTERN, not a fix. The
+# right end state is unchanged: make them green, then put them back on PRs AND
+# into branch protection in the same change.
 #
 # ⚠ THE POINT OF REQUIRING ANYTHING IS THE REGRESSION THAT GOT THROUGH. When
 # /pricing was rebuilt as PricingV4 it dropped the data-testid contract the
@@ -35,6 +52,13 @@ on:
     # No `branches:` filter on purpose. Filtering PR runs to base
     # main/master silently skipped every stacked PR (a PR based on
     # another branch), so those merged with no real check coverage.
+  # Nightly full sweep. This is where the core shards still run: keeping them on
+  # a schedule means their failure count stays visible after they stopped
+  # running per-PR, instead of the lane quietly disappearing.
+  schedule:
+    - cron: '0 6 * * *'
+  # So a fix to the core shards can be verified on demand without opening a PR.
+  workflow_dispatch:
 jobs:
   test:
     name: Playwright (${{ matrix.label }})
@@ -42,31 +66,47 @@ jobs:
     # Bracket key matches matrix include (required for this workflow file).
     timeout-minutes: ${{ matrix['job-timeout'] }}
     runs-on: ubuntu-latest
+    # `pr: false` lanes are skipped on pull_request and run on push/schedule/dispatch instead.
+    # Skipped is not failed — none of these lanes is a required check, so a skip cannot block a
+    # merge. See the header for why the core shards were taken off the PR path.
+    if: ${{ github.event_name != 'pull_request' || matrix.pr }}
     strategy:
       fail-fast: false
       matrix:
         include:
+          # ── nightly only ──────────────────────────────────────────────────
+          # Red continuously, not required, and by far the most expensive jobs
+          # here: 3x the runners, 180m timeouts, and a full multi-browser install.
           - label: 'core 1/3'
             lane: core-shard-1
             shard: '1/3'
             job-timeout: 180
+            pr: false
           - label: 'core 2/3'
             lane: core-shard-2
             shard: '2/3'
             job-timeout: 180
+            pr: false
           - label: 'core 3/3'
             lane: core-shard-3
             shard: '3/3'
             job-timeout: 180
+            pr: false
+          # ── every PR ──────────────────────────────────────────────────────
+          # Green and reliable, chromium-only, 60m. Cheap enough to be worth
+          # running on every change.
           - label: retention-engagement
             lane: retention-engagement
             job-timeout: 60
+            pr: true
           - label: onboarding-activation
             lane: onboarding-activation
             job-timeout: 60
+            pr: true
           - label: referral-growth-db
             lane: referral-growth-db
             job-timeout: 60
+            pr: true
     services:
       postgres:
         image: postgres:16

@@ -47,7 +47,19 @@
     "pages/**/*.tsx",
     ".next/types/**/*.ts",
     ".next-dev-local/types/**/*.ts",
-    ".next-playwright-3101/types/**/*.ts"
+    ".next-playwright-3101/types/**/*.ts",
+    ".next-playwright-3199/types/**/*.ts",
+    ".next-verify-dash34/types/**/*.ts",
+    ".next-playwright-3191/types/**/*.ts",
+    ".next-playwright-3192/types/**/*.ts",
+    ".next-playwright-3193/types/**/*.ts",
+    ".next-playwright-3194/types/**/*.ts",
+    ".next-playwright-3195/types/**/*.ts",
+    ".next-playwright-3196/types/**/*.ts",
+    ".next-playwright-3197/types/**/*.ts",
+    ".next-playwright-3198/types/**/*.ts",
+    ".next-playwright-3200/types/**/*.ts",
+    ".next-playwright-3211/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
