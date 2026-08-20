@@ -5,14 +5,25 @@
  * is zero-config in Next.js — no import or image optimization needed for
  * video/poster; use next/image for raster images.
  *
- * ASSET CHECKLIST — upload these files to activate:
- * ✅  /videos/world-cup/af-world-cup-hero.mp4             (exists)
+ * ASSET CHECKLIST — upload these files to activate.
+ *
+ * ⚠ TWO OF THESE WERE MARKED (exists) AND DO NOT. Checked against public/ and
+ * against production, where both 404. A checklist that reports a missing file as
+ * present is worse than no checklist, because it is the thing someone consults
+ * before deciding whether an asset needs uploading.
+ *
+ * ⬜  /videos/world-cup/af-world-cup-hero.mp4             (MISSING — was marked exists)
  * ✅  /images/brackets/world-cup/af-world-cup-hero-poster.jpg (exists)
  * ✅  /images/brackets/world-cup/af-world-cup-logo.png    (exists)
- * ✅  /images/brackets/world-cup/world-cup-bracket-template.png (exists)
+ * ⬜  /images/brackets/world-cup/world-cup-bracket-template.png (MISSING — was marked exists; nothing reads bracketTemplateSrc today)
  * ⬜  /images/brackets/world-cup/world-cup-trophy-stadium.jpg
  * ⬜  /images/brackets/world-cup/world-cup-bracket-preview.jpg
  * ⬜  /images/brackets/world-cup/world-cup-ai-strategy.jpg
+ *
+ * The missing hero video is NOT currently a visible defect: WorldCupHeroMedia
+ * falls back to the poster, which does exist, and fires its
+ * onFallbackShown analytics event when it does. So the landing page has been
+ * quietly serving the poster rather than the video.
  *
  * Components fall back to heroPosterSrc when a preferred asset is missing.
  */
