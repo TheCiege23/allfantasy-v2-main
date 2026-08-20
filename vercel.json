@@ -1,4 +1,9 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "wip/phase38-rescue": false
+    }
+  },
   "crons": [
     {
       "path": "/api/cron/fantasy-os-exec-sync",
