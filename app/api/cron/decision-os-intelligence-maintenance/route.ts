@@ -48,10 +48,12 @@ function maintenanceEnabled(): boolean {
 /**
  * Lineup shadow sweep — a SECOND, INDEPENDENT feature sharing this schedule.
  *
- * Deliberately evaluated BEFORE the `maintenanceEnabled()` early return, and behind its own flag.
- * `DECISION_OS_MAINTENANCE_ENABLED` is not set in production, so this route currently answers
- * `maintenance_disabled` on all ~144 daily invocations — anything placed after that return would
- * be permanently inert, which is the exact class of bug this sweep exists to fix.
+ * Deliberately evaluated BEFORE the `maintenanceEnabled()` early return, and behind its own flag,
+ * so the two features cannot silently gate each other. `DECISION_OS_MAINTENANCE_ENABLED` is absent
+ * from the committed `.env.production` but IS set in the Vercel dashboard — a live authenticated
+ * call to the deployed route returns `enabled: true`. That is exactly why the placement matters:
+ * whether maintenance runs is an operator setting that can change without a code change, and the
+ * sweep must not inherit it in either direction.
  *
  * Folded into this route rather than given its own: the repo is at Vercel's route ceiling and
  * carries a standing rule against new API routes, and this needs a clock, not an endpoint.
