@@ -397,3 +397,67 @@
     width: 100%;
   }
 }
+
+/* ── Bulk import ("Import all") ──────────────────────────────────────────── */
+
+.af-im-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-im-bulk-btn {
+  flex: 0 0 auto;
+}
+
+.af-im-bulk-summary {
+  margin: 0;
+  flex: 1 1 240px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/*
+ * Per-league outcome replaces the row's button once bulk has touched it. Sized to
+ * the button it stands in for so the list does not reflow as statuses land.
+ */
+.af-im-league-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.af-im-league-status--done {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+/* Already imported is a success, not a failure -- the league is present and was
+   not overwritten. Muted rather than green so it does not read as new work. */
+.af-im-league-status--exists {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.af-im-league-status--needs-attestation {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.af-im-league-status--failed {
+  border-color: var(--bad);
+  color: var(--bad);
+}
