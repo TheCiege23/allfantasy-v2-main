@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated, waitForHydrated } from './helpers/hydration'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -205,6 +206,14 @@ async function waitForPricingReady(page: Page) {
   await expect(page.getByText('Loading pricing catalog...')).toHaveCount(0, { timeout: 20_000 })
   await expect(page.getByTestId('pricing-subscription-cta-af_pro_monthly')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeVisible({ timeout: 20_000 })
+  /*
+   * ⚠ VISIBLE IS NOT CLICKABLE. Both assertions above pass on the server-rendered
+   * markup, before React attaches onClick — measured at 65ms early on a cold dev
+   * server. Every test in this file treats this function as "the page is ready to
+   * drive", so the hydration wait belongs here rather than at each call site.
+   * See e2e/helpers/hydration.ts.
+   */
+  await waitForHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
 }
 
 test.describe('@monetization checkout click audit', () => {
@@ -238,7 +247,7 @@ test.describe('@monetization checkout click audit', () => {
     await waitForPricingReady(page)
     await expect(page.getByTestId('pricing-subscription-cta-af_pro_monthly')).toBeVisible()
 
-    await page.getByTestId('pricing-subscription-cta-af_pro_monthly').click()
+    await clickHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
     await page.waitForURL('**/e2e/subscription-checkout-success')
 
     expect(checkoutBody).toMatchObject({
@@ -278,7 +287,7 @@ test.describe('@monetization checkout click audit', () => {
     await waitForPricingReady(page)
     await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeVisible()
 
-    await page.getByTestId('pricing-token-cta-af_tokens_10').click()
+    await clickHydrated(page.getByTestId('pricing-token-cta-af_tokens_10'))
     await page.waitForURL('**/e2e/token-checkout-success')
 
     expect(checkoutBody).toMatchObject({
@@ -300,14 +309,39 @@ test.describe('@monetization checkout click audit', () => {
 
     await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
     await waitForPricingReady(page)
-    await page.getByTestId('pricing-subscription-cta-af_pro_monthly').click()
+    await clickHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
 
     await expect(page.getByText('Checkout is temporarily unavailable for this plan.')).toBeVisible()
     await expect(page).toHaveURL(/\/pricing/)
     await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeVisible()
   })
 
+  /*
+   * ⚠ THIS TEST'S REAL BUG WAS HYDRATION, NOT ANY OF ITS ASSERTIONS.
+   *
+   * It stalled on `waitForURL` partway through its eleven SKUs and looked like a
+   * navigation problem. It was not: the click landed on a CTA that was visible
+   * and enabled but not yet wired up, so nothing happened and the wait ran to
+   * the timeout. With clickHydrated it completes in about 90 seconds.
+   *
+   * The assertions were separately wrong and are also fixed: the testids
+   * (restored on PricingV4), the plan label (the af_war_room_* plan renders as
+   * "AF Legacy"), and the billing-interval toggle — the only route to a yearly
+   * SKU, because the "Yearly, if you'd rather pay once" section carries no CTA.
+   */
   test('full product matrix CTAs map to correct checkout routes', async ({ page }) => {
+    /*
+     * The heaviest test in this file by a wide margin: eleven checkout round
+     * trips (eight subscription SKUs, three token packs), each one a full
+     * navigation to the mocked success page and back through page.goto —
+     * eleven cold compiles of /pricing on the dev server the suite runs
+     * against. Measured locally, it clears the first few SKUs comfortably and
+     * then runs out of the 180s the describe block sets for every test here.
+     *
+     * Raised for THIS test only rather than for the file, so the other tests
+     * keep a tight bound and a genuine hang still fails fast.
+     */
+    test.setTimeout(600_000)
     await mockPricingApis(page)
     const seenSubscriptionSkus = new Set<string>()
     const seenTokenSkus = new Set<string>()
@@ -364,18 +398,46 @@ test.describe('@monetization checkout click audit', () => {
     await waitForPricingReady(page)
     await expect(page.getByRole('heading', { name: 'AF Pro' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'AF Commissioner' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'AF War Room' })).toBeVisible()
+    /*
+     * ⚠ "AF Legacy" IS THE af_war_room_* PLAN. The display name was rebranded and
+     * the SKU was not, so the catalog still says `af_war_room_monthly` while the
+     * card says AF Legacy. This asserted the old label and could never match.
+     * Do not "correct" the SKUs below to af_legacy_* — they are the real ones.
+     */
+    await expect(page.getByRole('heading', { name: 'AF Legacy' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'AF Supreme' })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Continue with Stripe — Monthly' })).toHaveCount(4)
-    await expect(page.getByRole('button', { name: 'Continue with Stripe — Yearly' })).toHaveCount(4)
-    await expect(page.getByText('AllFantasy AI Tokens (5)')).toBeVisible()
-    await expect(page.getByText('AllFantasy AI Tokens (10)')).toBeVisible()
-    await expect(page.getByText('AllFantasy AI Tokens (25)')).toBeVisible()
+    /*
+     * ⚠ REWRITTEN FOR THE SHIPPED /pricing, WHICH IS A TOGGLE, NOT A MATRIX.
+     *
+     * This asserted eight always-visible buttons labelled "Continue with Stripe
+     * — Monthly/Yearly", which is what the previous surface
+     * (components/monetization/MonetizationPurchaseSurface.tsx) rendered.
+     * PricingV4 shows FOUR plan cards at a time behind a billing-interval
+     * toggle, labelled "Choose AF Pro" and so on, and its "Yearly, if you'd
+     * rather pay once" section is display-only — it prints annual prices and
+     * carries no CTA. So the toggle is the ONLY route to a yearly SKU, and a
+     * test that never touches it cannot reach half the product matrix.
+     */
+    const billingInterval = page.getByRole('group', { name: 'Billing interval' })
+    await expect(billingInterval.getByRole('button', { name: 'Monthly' })).toBeVisible()
+    await expect(billingInterval.getByRole('button', { name: 'Yearly' })).toBeVisible()
+    for (const sku of tokenSkus) {
+      await expect(page.getByTestId(`pricing-token-cta-${sku}`)).toBeVisible()
+    }
 
     for (const sku of subscriptionSkus) {
+      /*
+       * Re-selected every iteration on purpose: each CTA navigates to checkout
+       * and the test comes back through page.goto, which remounts the screen at
+       * its 'month' default. Toggling once outside the loop would silently buy
+       * four monthly plans and report a pass.
+       */
+      if (sku.endsWith('_yearly')) {
+        await billingInterval.getByRole('button', { name: 'Yearly' }).click()
+      }
       const cta = page.getByTestId(`pricing-subscription-cta-${sku}`)
       await expect(cta).toBeEnabled()
-      await cta.click()
+      await clickHydrated(cta)
       await page.waitForURL('**/e2e/checkout-success?sku=*')
       await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
       await waitForPricingReady(page)
@@ -384,7 +446,7 @@ test.describe('@monetization checkout click audit', () => {
     for (const sku of tokenSkus) {
       const cta = page.getByTestId(`pricing-token-cta-${sku}`)
       await expect(cta).toBeEnabled()
-      await cta.click()
+      await clickHydrated(cta)
       await page.waitForURL('**/e2e/checkout-success?sku=*')
       await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
       await waitForPricingReady(page)
@@ -395,6 +457,16 @@ test.describe('@monetization checkout click audit', () => {
   })
 
   test('purchase entry pages render and checkout CTAs remain wired', async ({ page }) => {
+    /*
+     * Four separate entry pages, each a first-visit compile on the dev server the
+     * suite runs against, each followed by waitForPricingReady. Measured: this
+     * cleared /upgrade, /commissioner-upgrade and /pro and then timed out
+     * NAVIGATING to /all-access — `waiting until "domcontentloaded"` never
+     * resolved — rather than failing an assertion on it. That is compile time,
+     * not a missing CTA, so the bound is raised instead of the page being
+     * dropped from the list.
+     */
+    test.setTimeout(420_000)
     await mockPricingApis(page)
     const recordedReturnPaths: string[] = []
 
@@ -432,10 +504,21 @@ test.describe('@monetization checkout click audit', () => {
       })
     })
 
+    /*
+     * ⚠ /war-room WAS REMOVED FROM THIS LIST BECAUSE IT STOPPED BEING A PURCHASE
+     * PAGE, AND THAT IS WORTH KNOWING RATHER THAN JUST DELETING.
+     *
+     * It rendered components/monetization/MonetizationPurchaseSurface once
+     * (added by a7292d5ba, changed by 26e635b7c) and now renders a marketing
+     * page with no checkout CTA on it at all — so the AF Legacy / af_war_room_*
+     * plan has no dedicated purchase entry page any more, only /pricing. The
+     * assertions below are a real contract for the four that remain, all of
+     * which still render that surface; keeping a fifth that cannot satisfy them
+     * made the whole test red and hid the other four.
+     */
     const entryPages = [
       { url: '/upgrade?plan=pro', returnPath: '/upgrade' },
       { url: '/commissioner-upgrade', returnPath: '/commissioner-upgrade' },
-      { url: '/war-room', returnPath: '/war-room' },
       { url: '/pro', returnPath: '/pro' },
       { url: '/all-access', returnPath: '/all-access' },
     ]
@@ -453,7 +536,7 @@ test.describe('@monetization checkout click audit', () => {
       await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeVisible()
       await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeEnabled()
 
-      await page.getByTestId('pricing-subscription-cta-af_pro_monthly').click()
+      await clickHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
       await page.waitForURL('**/e2e/entry-checkout-success')
     }
 

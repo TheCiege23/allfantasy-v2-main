@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -351,30 +352,30 @@ test.describe('@devy-draft-room click audit', () => {
     await expect(desktop).toContainText('Ohio State')
 
     // Promotion markers show in pro pool cards.
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Legacy Promote')
     await expect(desktop).toContainText('Promoted')
 
     // Deterministic eligibility blocks pro player in a devy round.
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('Pro')
     await desktop.getByTestId('draft-player-search-input').fill('Atlas Runner')
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(page.getByText(/devy-only/i)).toBeVisible()
 
     // Devy slot drafting works in devy round.
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('Devy')
     await desktop.getByTestId('draft-player-search-input').fill('Future Star')
-    await desktop.getByTestId('draft-player-button-0').click()
-    await desktop.getByTestId('draft-confirm-pick-button').click()
+    await clickHydrated(desktop.getByTestId('draft-player-button-0'))
+    await clickHydrated(desktop.getByTestId('draft-confirm-pick-button'))
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('Future Star')
     await expect(desktop.getByTestId('draft-board-cell-1')).toContainText('D')
 
     // No dead devy toggles/filters.
-    await desktop.getByTestId('draft-clear-filters').click()
+    await clickHydrated(desktop.getByTestId('draft-clear-filters'))
     await desktop.getByTestId('draft-pool-filter').selectOption('All')
     await expect(desktop.getByTestId('draft-pool-filter')).toBeVisible()
   })
@@ -393,15 +394,15 @@ test.describe('@devy-draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-player-panel')).toBeVisible()
     await expect(desktop.getByTestId('draft-pool-filter')).toHaveCount(0)
 
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
     const modal = page.getByTestId('draft-commissioner-modal')
     await expect(modal).toBeVisible()
 
-    await modal.getByTestId('draft-commissioner-toggle-devy-enabled').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-toggle-devy-enabled'))
     await modal.getByTestId('draft-commissioner-input-devy-rounds').fill('2, 4, 10')
-    await modal.getByTestId('draft-commissioner-save-devy-config').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-save-devy-config'))
     await expect(modal.getByTestId('draft-commissioner-devy-config-message')).toContainText(/saved/i)
-    await modal.getByTestId('draft-commissioner-close').click()
+    await clickHydrated(modal.getByTestId('draft-commissioner-close'))
 
     await expect(desktop.getByTestId('draft-pool-filter')).toBeVisible()
   })

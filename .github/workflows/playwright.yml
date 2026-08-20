@@ -107,6 +107,17 @@ jobs:
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         NEXTAUTH_SECRET: ci-nextauth-secret
         NEXTAUTH_URL: http://localhost:3000
+        # Every @admin test signs in through POST /api/auth/login, and that route
+        # accepts a password ONLY when ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is
+        # set on the SERVER (app/api/auth/login/route.ts). Neither was set here,
+        # so the route returned 401 to every attempt, the shared helper failed on
+        # `admin login failed`, and the whole @admin tag went red on every run.
+        #
+        # This is not a credential. It is a throwaway value for an ephemeral
+        # server on a CI runner, and it has to match the default the helper posts
+        # (e2e/helpers/admin-timezone-smoke.ts). The real admin password lives in
+        # Vercel's project settings and never appears in this repo.
+        ADMIN_PASSWORD: admin123
       run: npm run test:e2e:core -- --shard=${{ matrix.shard }}
     - name: Run Playwright tests (retention engagement)
       if: matrix.lane == 'retention-engagement'

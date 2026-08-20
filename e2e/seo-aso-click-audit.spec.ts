@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test"
+import { clickHydrated } from "./helpers/hydration"
 
 test.describe("@growth seo + aso click audit", () => {
   test.describe.configure({ timeout: 240_000 })
@@ -19,24 +20,26 @@ test.describe("@growth seo + aso click audit", () => {
     expect(liShareHref ?? "").toContain("linkedin.com/sharing/share-offsite/")
     expect(xShareHref ?? "").toContain(encodeURIComponent("https://allfantasy.ai/tools/trade-analyzer"))
 
-    await page.getByTestId("tool-landing-install-link").click()
+    await clickHydrated(page.getByTestId("tool-landing-install-link"))
     await expect(page).toHaveURL(/\/install$/, { timeout: 20_000 })
     await expect(page.getByTestId("install-open-tools-hub")).toBeVisible()
 
-    await page.getByTestId("install-open-tools-hub").click()
+    await clickHydrated(page.getByTestId("install-open-tools-hub"))
     await expect(page).toHaveURL(/\/tools-hub$/, { timeout: 20_000 })
 
     await page.goto("/tools/trade-analyzer", { waitUntil: "domcontentloaded" })
-    await page.getByTestId("tool-landing-sport-link-fantasy-football").click()
+    await clickHydrated(page.getByTestId("tool-landing-sport-link-fantasy-football"))
     await expect(page).toHaveURL(/\/sports\/fantasy-football$/, { timeout: 20_000 })
 
     await expect(page.getByTestId("sport-landing-install-link")).toBeVisible()
-    await page.getByTestId("sport-landing-feature-link-trade-analyzer").click()
+    await clickHydrated(page.getByTestId("sport-landing-feature-link-trade-analyzer"))
     await expect(page).toHaveURL(/\/trade-analyzer$/, { timeout: 20_000 })
 
     await page.goto("/sports/fantasy-football", { waitUntil: "domcontentloaded" })
-    await page.getByTestId("sport-landing-bracket-link").click()
-    await expect(page).toHaveURL(/\/bracket$/, { timeout: 20_000 })
+    await clickHydrated(page.getByTestId("sport-landing-bracket-link"))
+    // The link is href="/brackets" (plural) in SportLandingClient.tsx; the
+    // anchored /bracket$ pattern could never match it.
+    await expect(page).toHaveURL(/\/brackets$/, { timeout: 20_000 })
   })
 
   test("metadata and structured data load for indexable SEO/ASO pages", async ({ request }) => {
