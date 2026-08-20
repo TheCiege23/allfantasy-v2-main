@@ -6,6 +6,7 @@ import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { getPlayerDetail, getRelatedPlayers, resolvePublicPlayer } from '@/lib/core-app/playerFinder'
 import { parsePlayerSlug, playerPath, playerSlug } from '@/lib/core-app/playerSlug'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import Link from 'next/link'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -42,7 +43,12 @@ import type { UserLeague } from '@/app/dashboard/types'
  */
 export const revalidate = 900
 
-const SITE = 'https://allfantasy.ai'
+/*
+ * Canonical origin from the shared helper, not a literal. Hardcoding the apex
+ * here pointed every canonical, OG url and JSON-LD @id at a host that 307s to
+ * www — see lib/site-public-origin.ts, which is the single source of truth.
+ */
+const SITE = getPublicSiteOrigin()
 
 // The repo types route params as a Promise and awaits them: forward-compatible
 // with Next 15, and awaiting a non-promise is a no-op on 14.

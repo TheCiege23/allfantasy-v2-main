@@ -3,6 +3,7 @@ import Link from 'next/link'
 
 import { prisma } from '@/lib/prisma'
 import { playerPath } from '@/lib/core-app/playerSlug'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
 
@@ -21,7 +22,12 @@ import '@/components/core-app/af-player-finder.css'
  */
 export const revalidate = 3600
 
-const SITE = 'https://allfantasy.ai'
+/*
+ * Canonical origin from the shared helper, not a literal. Hardcoding the apex
+ * here pointed every canonical, OG url and JSON-LD @id at a host that 307s to
+ * www — see lib/site-public-origin.ts, which is the single source of truth.
+ */
+const SITE = getPublicSiteOrigin()
 
 /*
  * The fantasy-relevant positions, in the order a lineup is set. Everything else
