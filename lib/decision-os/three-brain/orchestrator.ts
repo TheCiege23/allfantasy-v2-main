@@ -15,6 +15,7 @@
  * never mutates the returned result.
  */
 import { getProvider as realGetProvider } from '@/lib/ai-orchestration/provider-registry'
+import { assertAiSpendAllowed } from '@/lib/ai/aiSpendGuard'
 import type { AIModelRole } from '@/lib/unified-ai/types'
 import type { ProviderChatRequest, ProviderChatResult } from '@/lib/ai-orchestration/types'
 import { recordLlmUsage } from '@/lib/telemetry/llm-usage'
@@ -159,10 +160,21 @@ function defaultAnthropicClient(): ThreeBrainProviderClient {
   if (!_anthropicClient) _anthropicClient = createAnthropicThreeBrainClient()
   return _anthropicClient
 }
-const defaultGetProvider: ThreeBrainProviderGetter = (role) =>
-  role === 'anthropic'
+/**
+ * Resolves the REAL provider clients — the only path here that can spend money.
+ *
+ * The spend guard belongs here rather than at the top of `runThreeBrainAnalysis`: callers may inject
+ * `opts.getProvider` (tests, replay, parity harnesses) and those issue no outbound request, so
+ * refusing them would block legitimate zero-cost work while protecting nothing. Guarding the real
+ * resolver means money still cannot move without the switch, and everything that was never going to
+ * spend is unaffected.
+ */
+const defaultGetProvider: ThreeBrainProviderGetter = (role) => {
+  assertAiSpendAllowed('three-brain.defaultGetProvider')
+  return role === 'anthropic'
     ? defaultAnthropicClient()
     : (realGetProvider(role as AIModelRole) as ThreeBrainProviderClient)
+}
 
 /**
  * Race the provider call against a hard per-provider timeout AND an external cancellation signal. Never rejects.
@@ -442,6 +454,9 @@ export async function runThreeBrainAnalysis(
   packet: DecisionOSEvidencePacket,
   opts: RunThreeBrainOptions = {},
 ): Promise<ThreeBrainDecisionResult> {
+  // One analysis is up to three provider calls (DeepSeek ∥ Grok → OpenAI synthesis → optional
+  // Claude review). The spend guard sits inside `defaultGetProvider` so it gates the REAL clients
+  // without refusing an injected no-cost provider — see the note there.
   const getProvider = opts.getProvider ?? defaultGetProvider
   const timeoutMs = opts.perProviderTimeoutMs ?? DEFAULT_TIMEOUT_MS
   const cancelGraceMs = opts.cancelGraceMs ?? DEFAULT_CANCEL_GRACE_MS

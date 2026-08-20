@@ -3,9 +3,9 @@ import "server-only"
 import { prisma } from "@/lib/prisma"
 import { resolvePlayerNamesForSport } from "@/lib/roster/resolvePlayerNames"
 import type { ActivityFeedItem, ActivityLeagueEntry, ActivitySourceContext } from "@/lib/activity/types"
+import { isNativePlatform } from "@/lib/league/isNativeLeague"
 
-/** Platform strings that identify a NATIVE AllFantasy league (a real DB `League` row, not an import). */
-const NATIVE_PLATFORMS = new Set(["allfantasy", "af", "manual", "native", ""])
+
 /** Only surface recent native events — matches the ~2-week window the Sleeper source uses. */
 const LOOKBACK_MS = 14 * 24 * 60 * 60 * 1000
 /** Per-event-type cap so one busy league can't dominate the merged feed or the query cost. */
@@ -18,7 +18,7 @@ function truncate(text: string, max = MAX_DESCRIPTION): string {
 }
 
 function isNativeLeague(league: ActivityLeagueEntry): boolean {
-  return Boolean(league.id) && NATIVE_PLATFORMS.has(String(league.platform ?? "").toLowerCase())
+  return Boolean(league.id) && isNativePlatform(league.platform)
 }
 
 /**
@@ -113,13 +113,27 @@ export async function collectNativeLeagueActivity(ctx: ActivitySourceContext): P
           isPrivate: false,
           createdAt: { gte: since },
           NOT: [{ source: "draft" }, { source: { startsWith: "tribe_" } }],
-          OR: [{ messageSubtype: "global_broadcast" }, { type: "text", messageSubtype: null }],
+          /*
+           * ⚠ COMMISSIONER BROADCASTS WERE FALLING THROUGH THIS FILTER ENTIRELY.
+           * `/api/commissioner/broadcast` writes its message with `type: "broadcast"` and leaves
+           * `messageSubtype` null, so it matched neither arm: not `global_broadcast` (that is the
+           * ADMIN-wide broadcast from /api/chat/global-broadcast, a different thing), and not
+           * `type: "text"`. The loop below is titled "Commissioner announcements + league chat"
+           * and was silently carrying none of the former — every @everyone a commissioner sent
+           * was invisible in the activity feed.
+           */
+          OR: [
+            { messageSubtype: "global_broadcast" },
+            { type: "broadcast" },
+            { type: "text", messageSubtype: null },
+          ],
         },
         select: {
           id: true,
           leagueId: true,
           message: true,
           messageSubtype: true,
+          type: true,
           createdAt: true,
           user: { select: { displayName: true, username: true, email: true } },
         },
@@ -213,7 +227,10 @@ export async function collectNativeLeagueActivity(ctx: ActivitySourceContext): P
 
     // Commissioner announcements + league chat.
     for (const chat of chats) {
-      const isAnnouncement = chat.messageSubtype === "global_broadcast"
+      // Both kinds of broadcast read as announcements: the admin-wide one and a commissioner's
+      // league @everyone. They differ in who can send, not in how the feed should present them.
+      const isAnnouncement =
+        chat.messageSubtype === "global_broadcast" || chat.type === "broadcast"
       const poster = chat.user?.displayName || chat.user?.username || chat.user?.email || "A manager"
       const description = isAnnouncement ? truncate(chat.message) : truncate(`${poster}: ${chat.message}`)
       items.push({

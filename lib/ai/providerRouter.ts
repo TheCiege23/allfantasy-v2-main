@@ -354,6 +354,10 @@ export async function routeTextCall(args: {
   preferredAnthropicModel?: string
   profile?: ProviderProfile
 }): Promise<RouterResult> {
+  // NOTE: the spend guard is NOT here. It lives in the provider clients this router delegates to
+  // (`lib/openai-client`, `lib/xai-client`, `lib/deepseek-client`) — the point where a request
+  // actually leaves. Guarding the router instead would refuse callers that inject or mock a client
+  // and would therefore never have spent anything.
   const order = getProviderOrder()
   const attempts: string[] = []
 
