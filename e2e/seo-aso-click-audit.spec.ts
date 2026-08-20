@@ -37,7 +37,9 @@ test.describe("@growth seo + aso click audit", () => {
 
     await page.goto("/sports/fantasy-football", { waitUntil: "domcontentloaded" })
     await clickHydrated(page.getByTestId("sport-landing-bracket-link"))
-    await expect(page).toHaveURL(/\/bracket$/, { timeout: 20_000 })
+    // The link is href="/brackets" (plural) in SportLandingClient.tsx; the
+    // anchored /bracket$ pattern could never match it.
+    await expect(page).toHaveURL(/\/brackets$/, { timeout: 20_000 })
   })
 
   test("metadata and structured data load for indexable SEO/ASO pages", async ({ request }) => {

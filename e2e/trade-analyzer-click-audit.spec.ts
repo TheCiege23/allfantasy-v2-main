@@ -84,7 +84,15 @@ async function mockTradeEvaluator(page: Page): Promise<AnalyzeAuditContext> {
 }
 
 async function settleTradeEvaluator(page: Page) {
-  await expect(page.getByRole("heading", { name: "AF Trade Analyzer" })).toBeVisible()
+  /*
+   * ⚠ THE HEADING IS "Trade Hub". /trade-evaluator renders
+   * <h1>Trade Hub</h1> (app/trade-evaluator/page.tsx). "AF Trade Analyzer"
+   * survives only as a tile title in app/components/LegacyTutorial.tsx, so this
+   * assertion could never match and every test routed through this helper died
+   * on it. Same shape as "AF War Room" now rendering as "AF Legacy": the product
+   * was renamed and the test was not.
+   */
+  await expect(page.getByRole("heading", { name: "Trade Hub" })).toBeVisible()
   await page.waitForLoadState("domcontentloaded")
 }
 
@@ -170,17 +178,28 @@ test.describe("@shell trade analyzer click audit", () => {
     await gotoWithRetry(page, "/trade-evaluator")
     await settleTradeEvaluator(page)
 
-    const sportOptionValues = await page.locator('label:has-text("Sport") + select option').evaluateAll((nodes) =>
-      nodes.map((node) => (node as HTMLOptionElement).value)
-    )
-    expect(sportOptionValues).toEqual(["NFL", "NHL", "NBA", "MLB", "NCAAF", "NCAAB", "SOCCER"])
+    /*
+     * ⚠ TWO THINGS WERE WRONG HERE AND ONLY ONE WAS VISIBLE. The selector used
+     * an ADJACENT-SIBLING combinator (`label + select`) while the select is a
+     * CHILD of its label, so it matched nothing and this asserted against an
+     * empty array. Fixing that exposed the second: the expected order had NBA
+     * and NHL transposed. The order comes from SUPPORTED_SPORTS in
+     * lib/sport-scope.ts, which is NFL, NBA, NHL, MLB, NCAAF, NCAAB, SOCCER.
+     */
+    const sportOptionValues = await page
+      .getByTestId("trade-sport-select")
+      .locator("option")
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value))
+    expect(sportOptionValues).toEqual(["NFL", "NBA", "NHL", "MLB", "NCAAF", "NCAAB", "SOCCER"])
 
     const canEvaluateTrade = await fillMinimalTrade(page)
     test.skip(
       !canEvaluateTrade,
       "Trade form remained disabled in this environment despite retry fallbacks."
     )
-    const sportSelect = page.locator("select#trade-sport:visible")
+    // `select#trade-sport` does not exist on this page — there is no such id
+    // anywhere in app/trade-evaluator/page.tsx. Same testid as above.
+    const sportSelect = page.getByTestId("trade-sport-select")
     await sportSelect.selectOption("SOCCER")
     await expect(sportSelect).toHaveValue("SOCCER")
     await clickHydrated(page.getByTestId("trade-evaluate-button"))

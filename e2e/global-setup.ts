@@ -23,27 +23,60 @@ import type { FullConfig } from '@playwright/test'
  * to /login or times out is ignored: the point is only to have webpack compile
  * it. If the whole warm-up fails, the suite runs exactly as it does today, just
  * slower. Global setup must never be the reason a shard goes red.
- *
- * The list is the routes the specs actually hit most, not every route in the
- * app — warming all ~280 pages would cost far more than it saves.
  */
 
+/*
+ * ⚠ DERIVED FROM WHAT THE SUITE ACTUALLY VISITS, NOT GUESSED. Counted from
+ * `page.goto(...)` across e2e/*.spec.ts — the suite touches 110 distinct static
+ * routes, and this is the head of that distribution plus the handful the
+ * checkout and SEO-landing flows navigate INTO (which never appear in a goto
+ * because a click gets there). Comments are the goto count.
+ *
+ * The tail is deliberately not warmed. Compiling all 110 would cost more up
+ * front than it saves, and a route visited once still gets 90s of test timeout
+ * to compile in.
+ */
 const WARM_ROUTES = [
   '/',
+  '/settings', // 47
+  '/e2e/draft-room', // 15
+  '/league', // 15
+  '/dashboard', // 10
+  '/admin', // 7
+  '/e2e/dashboard-soccer-grouping', // 7
+  '/tools-hub', // 7
+  '/pricing', // 6
+  '/e2e/subscription-entitlement', // 5
+  '/messages', // 5
+  '/e2e/mock-draft-room', // 4
+  '/e2e/monetization-in-context', // 4
+  '/e2e/post-purchase-sync', // 4
+  '/tokens', // 4
+  '/af-legacy', // 3
+  '/create-league', // 3
+  '/e2e/admin-dashboard', // 3
+  '/e2e/commissioner', // 3
+  '/e2e/matchups', // 3
+  '/tools/trade-analyzer', // 2
+  '/trade-evaluator', // 2
   '/login',
   '/signup',
-  '/pricing',
-  '/tokens',
-  '/dashboard',
   '/players',
   '/trade-analyzer',
+  /*
+   * Reached by CLICK rather than goto, so they never show up in the counts —
+   * and each one is a destination an assertion waits 20s for. /install is the
+   * case that proved it: the click fired, the route was compiling, and
+   * `toHaveURL(/\/install$/)` timed out while the browser was still on the
+   * page it started from.
+   */
+  '/install',
+  '/sports/fantasy-football',
+  '/bracket',
   '/upgrade',
   '/pro',
   '/all-access',
   '/commissioner-upgrade',
-  '/waiver-ai',
-  '/admin',
-  '/discover/leagues',
 ]
 
 /** Generous: this is a cold webpack compile, not a request against a warm app. */
