@@ -26,6 +26,7 @@ import {
 // Import the consumer DIRECTLY rather than through the `lib/intelligence` barrel — that barrel
 // re-exports server-only-tainted modules. Same reason `scripts/run-outbox-relay.ts` does this.
 import { createIntelligenceSnapshotConsumer } from "@/lib/intelligence/projections/snapshotProjection"
+import { projectImportedManagerSnapshots } from "@/lib/intelligence/projections/importedManagerProjection"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -263,6 +264,7 @@ export async function GET(request: Request) {
           errors: [] as string[],
           // Keep the shape identical on both return paths so `summary.relay` stays a single type.
           relay: { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null },
+          managerProjection: { managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null },
         }
       }
       const store = new PrismaImportedActivityStore(
@@ -341,18 +343,43 @@ export async function GET(request: Request) {
         relay.relayError = error instanceof Error ? error.message : "relay_failed"
       }
 
-      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, relay }
+      // ── Manager coverage for imported leagues ──────────────────────────────────────────────
+      // `applyManagerSnapshot` only writes when a DomainEvent carries a user/commissioner actor
+      // WITH an actorId and a leagueId. On prod 2026-08-20 that was true of 2 events, because 24 of
+      // the 26 user-attributed events were registrations with no leagueId -- so exactly ONE
+      // `intelligence_manager_snapshot` row existed. `IntelligenceQueryService` reads that table and
+      // feeds Chimmy grounding and the StoryEngine, so both were grounded on a single manager.
+      //
+      // The managers were never missing, only unprojected: imported activity carries
+      // `normalized.managerKeys` on every row -- 534 (league, manager) pairs across 42 leagues.
+      //
+      // Runs here because this cron already owns imported activity, and adding a route is not an
+      // option at the 2048-route ceiling. Idempotent (absolute tallies, not increments), and it
+      // skips any league that already has native snapshots, so it cannot overwrite first-party data.
+      const managerProjection = { managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null }
+      try {
+        const r = await projectImportedManagerSnapshots(prisma as never)
+        managerProjection.managersWritten = r.managersWritten
+        managerProjection.leaguesConsidered = r.leaguesConsidered
+        managerProjection.leaguesSkippedNative = r.leaguesSkippedNative
+      } catch (error) {
+        // Isolated for the same reason as the relay: ingest already succeeded.
+        managerProjection.error = error instanceof Error ? error.message : "manager_projection_failed"
+      }
+
+      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, relay, managerProjection }
     },
     (s) => ({
       rowsRead: s.discovered,
       // Projected events are real writes too — count them so the relay's progress is visible
       // in SyncJobRun telemetry rather than hidden inside the ingest job's numbers.
-      rowsWritten: s.created + s.updated + s.relay.dispatched,
+      rowsWritten: s.created + s.updated + s.relay.dispatched + s.managerProjection.managersWritten,
       rowsSkipped: s.skippedForTime,
       errors: [
         ...(s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.errors),
         // A relay failure must be visible, not swallowed by the isolating catch above.
         ...(s.relay.relayError ? [`outbox_relay: ${s.relay.relayError}`] : []),
+        ...(s.managerProjection.error ? [`manager_projection: ${s.managerProjection.error}`] : []),
       ],
       warnings: [
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
@@ -372,6 +399,7 @@ export async function GET(request: Request) {
     failed: summary.failed,
     skippedForTime: summary.skippedForTime,
     relay: summary.relay,
+    managerProjection: summary.managerProjection,
     created: summary.created,
     updated: summary.updated,
     errors: summary.errors,
