@@ -71,6 +71,9 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: 20.19.0
+        # Restore the npm cache. Without this every job in every run re-downloaded all ~685
+        # packages from the registry before it could start doing anything useful.
+        cache: 'npm'
     - name: Install dependencies
       run: npm ci
     - name: Run foundation apply branch tests
@@ -187,6 +190,9 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: 20.19.0
+        # Restore the npm cache. Without this every job in every run re-downloaded all ~685
+        # packages from the registry before it could start doing anything useful.
+        cache: 'npm'
     - name: Install dependencies
       run: npm ci
     - name: Prepare DB schema
