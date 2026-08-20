@@ -120,6 +120,18 @@ export type LeagueHomeData = {
   draftHq: SectionState<{ headline: string; detail: string }>
   commissioner: SectionState<{ openCount: number }>
   buzz: SectionState<Array<{ id: string; actor: string; text: string; at: Date | null }>>
+  /*
+   * 3b draws a "Rivalry radar · this league" panel: head-to-head record against
+   * each opponent, plus when that manager is usually active. Neither is stored.
+   * `LeagueMatchup` carries no per-opponent history for imported leagues, and
+   * nothing records manager session times at all — the handoff's "he's usually
+   * on Sun 10a–12p" has no source anywhere in the schema.
+   *
+   * Declared here rather than omitted from the screen so it stays on the
+   * standing inventory of what needs an engine, and so the panel says what is
+   * missing instead of the section quietly not existing.
+   */
+  rivalry: UnavailableSection
   syncAge: { label: string; stale: boolean }
 }
 
@@ -437,6 +449,11 @@ export async function getLeagueHomeData(
         }
       : { available: false, reason: 'no draft has been set up for this league' },
     commissioner: { available: false, reason: 'votes and commissioner tasks are not ingested for imported leagues' },
+    rivalry: {
+      available: false,
+      reason:
+        'head-to-head history is not ingested for imported leagues, and nothing records when a manager is usually online',
+    },
     buzz: preSeason
       ? { available: false, reason: 'no league activity yet — trades and waivers start after the draft' }
       : { available: false, reason: 'league transactions are not ingested for this platform yet' },
