@@ -4,6 +4,12 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { buildRosterLabelMap } from '@/lib/scoring-engine/resolveTeamLabels'
+import {
+  computeAllPlay,
+  computeStreaks,
+  formatAllPlay,
+  formatStreak,
+} from '@/lib/standings/seasonForm'
 
 export async function GET(
   req: NextRequest,
@@ -40,13 +46,26 @@ export async function GET(
   const sp = req.nextUrl.searchParams
   const season = Math.max(2000, Math.min(2100, Number(sp.get('season')) || league.season))
 
-  const [rows, labels] = await Promise.all([
+  /*
+   * Streak and all-play (standings 9a) are DERIVED from the same weekly results the standings
+   * themselves are built from — never stored, never estimated. `TeamWeekResult` is the only
+   * source; when a league has no processed weeks the helpers return empty maps and the columns
+   * render a dash rather than a zero that would read as a real record.
+   */
+  const [rows, labels, weekResults] = await Promise.all([
     prisma.fantasyStanding.findMany({
       where: { leagueId, season },
       orderBy: [{ rank: 'asc' }],
     }),
     buildRosterLabelMap(leagueId),
+    prisma.teamWeekResult.findMany({
+      where: { leagueId, season },
+      select: { week: true, rosterId: true, totalPoints: true, winLoss: true },
+    }),
   ])
+
+  const streaks = computeStreaks(weekResults)
+  const allPlay = computeAllPlay(weekResults)
 
   const standings = rows.map((r) => ({
     rosterId: r.rosterId,
@@ -61,7 +80,35 @@ export async function GET(
     categoryWinsFor: r.categoryWinsFor ?? 0,
     categoryLossesFor: r.categoryLossesFor ?? 0,
     categoryTiesFor: r.categoryTiesFor ?? 0,
+    streak: formatStreak(streaks.get(r.rosterId)),
+    allPlay: formatAllPlay(allPlay.get(r.rosterId)),
   }))
 
-  return NextResponse.json({ season, standings, scoringMode })
+  /*
+   * Which row is the viewer's. Drives the "you" highlight in the 9a table; null when the viewer
+   * is a commissioner/owner with no roster of their own, in which case no row is highlighted
+   * rather than an arbitrary one.
+   *
+   * ⚠ Keyed on `Roster.platformUserId`, which in this schema holds the AF user id — it is the
+   * same column `resolveLeagueMembership` uses as its canonical roster-membership predicate
+   * (NOT NULL, unique per league). `Roster` has no `userId`, and `LeagueTeam.platformUserId` is
+   * the nullable lookalike that must never be used for identity.
+   */
+  const viewerRosterId =
+    (await prisma.roster.findFirst({
+      where: { leagueId, platformUserId: session.user.id },
+      select: { id: true },
+    }))?.id ?? null
+
+  /*
+   * Playoff-cut position, for the divider row. Read from league settings when present; the table
+   * omits the divider entirely rather than assuming a conventional top-6.
+   */
+  const playoffTeams =
+    league.settings && typeof league.settings === 'object' && !Array.isArray(league.settings)
+      ? Number((league.settings as Record<string, unknown>).playoff_teams)
+      : NaN
+  const playoffCut = Number.isFinite(playoffTeams) && playoffTeams > 0 ? playoffTeams : null
+
+  return NextResponse.json({ season, standings, scoringMode, viewerRosterId, playoffCut })
 }
