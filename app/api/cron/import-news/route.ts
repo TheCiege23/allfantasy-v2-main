@@ -38,9 +38,19 @@ async function handle(req: NextRequest) {
         .filter(Boolean)
     : undefined
 
-  // `?full=1` runs the NewsAPI passes too. Scheduled hourly; the */15 run is
-  // ESPN-only so NewsAPI stays inside its quota. See syncEspnNewsOnly().
-  const full = ['1', 'true', 'yes'].includes((url.searchParams.get('full') ?? '').toLowerCase())
+  // `full` runs the NewsAPI passes on top of ESPN. NewsAPI has a quota, so it must stay at
+  // roughly hourly while ESPN stays at */15.
+  //
+  // This used to need TWO cron entries (a */15 ESPN-only one and a separate hourly `?full=1`).
+  // Instead the single */15 cron now decides for itself: the first fire of each hour does the
+  // full pass, the other three are ESPN-only. Same two behaviours, same cadences, one schedule.
+  //
+  // An explicit `?full=` still wins, so manual/admin invocation can force either mode.
+  const fullParam = url.searchParams.get('full')
+  const full =
+    fullParam === null
+      ? new Date().getUTCMinutes() < 15
+      : ['1', 'true', 'yes'].includes(fullParam.toLowerCase())
 
   const startedAt = Date.now()
 

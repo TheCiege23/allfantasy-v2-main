@@ -3,4 +3,4 @@ Allow: /
 Disallow: /admin
 Disallow: /api/auth/beta
 
-Sitemap: https://allfantasy.ai/sitemap.xml
+Sitemap: https://www.allfantasy.ai/sitemap.xml
