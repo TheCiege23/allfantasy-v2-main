@@ -35,6 +35,20 @@ on:
     # No `branches:` filter on purpose. Filtering PR runs to base
     # main/master silently skipped every stacked PR (a PR based on
     # another branch), so those merged with no real check coverage.
+# Cancel a PR's previous Playwright run when the branch is updated.
+#
+# Branch protection requires a PR to be up to date with main before it can merge, so every merge
+# forces an update on every other open PR — and without this, each update started a fresh 7-job run
+# while the superseded one kept running to completion. With a dozen PRs open, those runs starved
+# each other for runners: the jobs themselves were fine, but the required lanes listed at the top
+# of this file sat queued behind the core shards, which nothing required and which do not gate them.
+#
+# cancel-in-progress is scoped to pull_request on purpose. Pushes to main must always run to
+# completion — cancelling those would leave main's status ambiguous, which is worse than the cost.
+concurrency:
+  group: playwright-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Playwright (${{ matrix.label }})
@@ -86,11 +100,19 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: 20.19.0
+        # Restore the npm cache. Without this every job in every run re-downloaded all ~685
+        # packages from the registry before it could start doing anything useful.
+        cache: 'npm'
     - name: Install dependencies
       run: npm ci
     - name: Run foundation apply branch tests
       if: matrix.lane == 'referral-growth-db'
       run: npm run test:foundation-apply-branches
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ startsWith(matrix.lane, 'core-shard-') && 'all' || 'chromium' }}-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Browsers
       if: startsWith(matrix.lane, 'core-shard-')
       run: npx playwright install --with-deps
@@ -202,6 +224,9 @@ jobs:
     - uses: actions/setup-node@v4
       with:
         node-version: 20.19.0
+        # Restore the npm cache. Without this every job in every run re-downloaded all ~685
+        # packages from the registry before it could start doing anything useful.
+        cache: 'npm'
     - name: Install dependencies
       run: npm ci
     - name: Prepare DB schema
@@ -214,6 +239,11 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npm run db:foundation:apply
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Chromium
       run: npx playwright install --with-deps chromium
     - name: Prepare DB schema for draft-room regression
