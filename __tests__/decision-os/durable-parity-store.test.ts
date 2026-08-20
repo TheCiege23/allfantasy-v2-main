@@ -33,7 +33,7 @@ describe('durable parity store — what gets written', () => {
     expect(rows).toHaveLength(2)
   })
 
-  it('ignores non-parity telemetry entirely', async () => {
+  it('does not PERSIST non-parity telemetry', async () => {
     // These are high-frequency and have no bearing on the flip decision; persisting them would be
     // write amplification with no consumer.
     const { rows, sink } = sinkWithCapture()
@@ -42,6 +42,46 @@ describe('durable parity store — what gets written', () => {
     sink(ev('decision.adopted'))
     await new Promise((r) => setTimeout(r, 0))
     expect(rows).toHaveLength(0)
+  })
+
+  it('but re-emits them to the log drain rather than swallowing them', async () => {
+    // REGRESSION GUARD. `emitDecisionTelemetry` is `if (sink) sink(p) else console.log(p)`, so a
+    // registered sink is treated as having handled the event and the console.log never runs. In
+    // production `recordDecisionTelemetryDebugEvent` is a no-op (DECISION_OS_DEBUG_TELEMETRY is
+    // unset), which makes that console.log the ONLY path for events this sink does not store.
+    //
+    // Shipping the bare `return` this replaced silently deleted decision.issued / adopted /
+    // resolved / live_enrichment from production observability. The assertion above passes either
+    // way -- "not persisted" was never the same claim as "not lost", which is exactly why that
+    // test did not catch it.
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const { sink } = sinkWithCapture()
+      sink(ev('decision.issued'))
+      sink(ev('decision.adopted'))
+      sink(ev('decision.resolved'))
+      sink(ev('decision.live_enrichment'))
+      expect(spy).toHaveBeenCalledTimes(4)
+      expect(spy.mock.calls[0][0]).toBe('[decision-os]')
+      expect(JSON.parse(spy.mock.calls[0][1] as string).event).toBe('decision.issued')
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it('does NOT also log the parity events it persists', async () => {
+    // Their durable row replaces the log line; emitting both would double-count them for anyone
+    // reading the drain.
+    const spy = vi.spyOn(console, 'log').mockImplementation(() => {})
+    try {
+      const { rows, sink } = sinkWithCapture()
+      sink(ev('decision.shadow_parity', { agreement: true }))
+      await new Promise((r) => setTimeout(r, 0))
+      expect(rows).toHaveLength(1)
+      expect(spy).not.toHaveBeenCalled()
+    } finally {
+      spy.mockRestore()
+    }
   })
 
   it('lifts surface/league/user out of flags into columns the gate groups by', async () => {

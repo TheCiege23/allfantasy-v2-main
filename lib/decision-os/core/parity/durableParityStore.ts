@@ -65,7 +65,24 @@ function str(v: unknown, max = 64): string | null {
  */
 export function createDurableParitySink(db: PrismaLike = defaultPrisma): DecisionTelemetrySink {
   return (event: DecisionTelemetryEvent) => {
-    if (!isParityEvent(event.event)) return
+    if (!isParityEvent(event.event)) {
+      // MUST NOT be a bare `return`. `emitDecisionTelemetry` is written as
+      //
+      //     if (sink) sink(payload)
+      //     else console.log('[decision-os]', ...)
+      //
+      // so a registered sink is treated as having HANDLED the event, and the console.log
+      // fallback never runs. `recordDecisionTelemetryDebugEvent` is a no-op unless
+      // DECISION_OS_DEBUG_TELEMETRY=true, which production does not set -- so that console.log
+      // is the ONLY production path for the events this sink does not persist.
+      //
+      // Registering this sink therefore silently removed decision.issued / adopted / resolved /
+      // live_enrichment from the production log drain: four event types' observability traded
+      // for two events' durability. Re-emitting them here restores the prior output byte for
+      // byte, and keeps this sink additive rather than a replacement.
+      console.log('[decision-os]', JSON.stringify(event))
+      return
+    }
     const flags = (event.flags ?? {}) as Record<string, unknown>
     // The delegate is absent until the migration is applied. Reaching for `.create` on undefined
     // would throw SYNCHRONOUSLY, before any `.catch` could attach — which would put a telemetry
