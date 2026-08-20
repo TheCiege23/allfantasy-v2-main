@@ -11,6 +11,9 @@
  *
  *   DATABASE_URL=<non-prod db> npx tsx scripts/decision-os-world-conformance.ts [leagueId ...]
  *
+ * Refuses production unless ALLOW_PROD_READONLY=1 is set for the run (it performs no writes, so
+ * inspecting real prod data is allowed, but only deliberately).
+ *
  * With explicit league ids it validates exactly those (e.g. theciege24's imported Sleeper league).
  * With none, it auto-discovers a few real leagues (recently-synced imported provider leagues + a
  * couple of native AF leagues). Skips cleanly (exit 0) when no DATABASE_URL is configured, so it is
@@ -18,6 +21,7 @@
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
 import type { CanonicalWorld } from '../lib/decision-os/world/facts'
+import { assertNonProductionDbTarget, describeDbTarget } from './_db-target-identity'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
@@ -25,14 +29,6 @@ const check = (name: string, ok: boolean, detail = '') => {
   if (!ok) failures++
 }
 
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
-}
 
 ;(async () => {
   // Gate BEFORE importing anything that pulls the prisma singleton (which throws without a DB URL).
@@ -41,11 +37,23 @@ function hostOf(url: string | null): string {
     process.exit(0)
   }
 
-  const host = hostOf(resolveDatabaseUrl())
-  console.log(`Phase D.2 world conformance — READ-ONLY (find* only) — DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) {
-    console.log('⚠️  This is the PRODUCTION host. Proceeding because this script is strictly read-only (no writes).')
-  }
+  // This script used to WARN and proceed on production. It could not actually do that — the host
+  // literal it tested named the dev fork, so the warning never fired on the real production
+  // database and prod runs happened silently. Now it refuses by default like the rest of the
+  // family, with an explicit per-run opt-in: it performs no writes (find* only, asserted by its
+  // test), so inspecting real production data stays possible, but only as a deliberate act.
+  //
+  //     ALLOW_PROD_READONLY=1 npx tsx scripts/decision-os-world-conformance.ts
+  const dbTargetUrl = resolveDatabaseUrl()
+  const host = describeDbTarget(dbTargetUrl)
+  console.log(`Phase D.2 world conformance — READ-ONLY (find* only) — DB target: ${host}`)
+  assertNonProductionDbTarget({
+    script: 'decision-os-world-conformance',
+    url: dbTargetUrl,
+    action: 'reads canonical world facts',
+    exitCode: 0,
+    readOnlyProdOptIn: true,
+  })
 
   // Dynamic imports AFTER the DB gate so the skip path never evaluates the prisma singleton.
   const { prisma } = await import('../lib/prisma')

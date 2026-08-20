@@ -24,7 +24,10 @@
  *
  * Safety, mirroring every existing `scripts/decision-os-*-nonprod.ts` script exactly:
  *   - Skips cleanly without a DATABASE_URL.
- *   - Hard-refuses the production DB host (`ep-spring-tooth`).
+ *   - Hard-refuses production, and any target not positively recognised as safe, via
+ *     `assertNonProductionDbTarget` (scripts/_db-target-identity.ts → db-target-identity.cjs).
+ *     Production is the (endpoint, database) pair `ep-curly-block-ad0dlt9o`/`neondb`; this file
+ *     used to name `ep-spring-tooth` — the dev fork — so the refusal never fired.
  *   - Requires an EXPLICIT, already-imported AF league id — no auto-discovery, no production
  *     league enumeration, ever.
  *   - Read-only against AF-native tables (`League`, `LeagueTeam`, `Roster`, `UserProfile`) — this
@@ -65,8 +68,7 @@ import {
   collectRosterOwnerIds,
   shouldWarnPossibleSilentFetchFailure,
 } from './decision-os-ingest-sleeper-activity-helpers'
-
-const PROD_HOST_MARKER = 'ep-spring-tooth'
+import { assertNonProductionDbTarget, describeDbTarget } from './_db-target-identity'
 
 function arg(name: string): string | undefined {
   const hit = process.argv.slice(2).find((a) => a.startsWith(`--${name}=`))
@@ -74,26 +76,19 @@ function arg(name: string): string | undefined {
 }
 const hasFlag = (name: string) => process.argv.slice(2).includes(`--${name}`)
 
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
-}
-
 ;(async () => {
   if (!hasDatabaseUrl()) {
     console.log('SLEEPER_ACTIVITY_INGEST SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run this.')
     process.exit(0)
   }
   const dbUrl = resolveDatabaseUrl()
-  const host = hostOf(dbUrl)
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host. This runner writes activity rows and must NEVER touch production.`)
-    process.exit(1)
-  }
+  const host = describeDbTarget(dbUrl)
+  assertNonProductionDbTarget({
+    script: 'decision-os-ingest-sleeper-activity-nonprod',
+    url: dbUrl,
+    action: 'writes DecisionOsImportedActivity rows',
+    exitCode: 1,
+  })
 
   // Deliberately named `--afLeagueId=` (not `--league=`, which the sibling
   // `decision-os-import-sleeper-nonprod.ts` uses for the SLEEPER SOURCE league id — the opposite
