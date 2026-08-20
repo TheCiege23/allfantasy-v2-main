@@ -24,13 +24,13 @@
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
 import {
-  hostOf,
-  isProductionHost,
+  describeTarget,
   parseExplicitLeagueIds,
   parseManagerId,
   formatCheckLine,
   type ConformanceCheckResult,
 } from './decision-os-suite-conformance-helpers'
+import { assertNonProductionDbTarget } from './_db-target-identity'
 
 const results: ConformanceCheckResult[] = []
 function check(name: string, ok: boolean, detail = ''): void {
@@ -45,11 +45,13 @@ function check(name: string, ok: boolean, detail = ''): void {
     process.exit(0)
   }
   const dbUrl = resolveDatabaseUrl()
-  const host = hostOf(dbUrl)
-  if (isProductionHost(dbUrl)) {
-    console.error(`REFUSED: resolved DB host (${host}) is the PRODUCTION host. This is a read-only, non-prod-only check.`)
-    process.exit(1)
-  }
+  const host = describeTarget(dbUrl)
+  assertNonProductionDbTarget({
+    script: 'decision-os-suite-conformance',
+    url: dbUrl,
+    action: 'runs a read-only, non-prod-only conformance check',
+    exitCode: 1,
+  })
 
   const leagueIds = parseExplicitLeagueIds(process.argv.slice(2))
   if (leagueIds.length === 0) {

@@ -16,6 +16,7 @@ import { PrismaOutboxStore, OutboxRelay, createPrismaAuditFeedConsumer, type Pri
 import { createIntelligenceSnapshotConsumer } from '../lib/intelligence/projections/snapshotProjection'
 import { IntelligenceQueryService } from '../lib/intelligence/IntelligenceQueryService'
 import { buildCommissionerGrounding, detectCommissionerIntelligenceIntent } from '../lib/intelligence/chimmy/commissionerGrounding'
+import { assertNonProductionDbTarget, describeDbTarget, resolveDatabaseUrlFromDisk } from './_db-target-identity'
 
 let failures = 0
 function check(name: string, ok: boolean, detail = '') {
@@ -25,9 +26,9 @@ function check(name: string, ok: boolean, detail = '') {
 
 ;(async () => {
   const prisma = new PrismaClient()
-  const host = (() => { try { return new URL((process.env.DATABASE_URL ?? '').replace(/^postgres(ql)?:\/\//, 'http://')).host } catch { return '?' } })()
-  console.log(`G15.11 live proof — DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) { console.error('REFUSING to run the seeding proof against the production host.'); process.exit(2) }
+  const dbTargetUrl = resolveDatabaseUrlFromDisk()
+  console.log(`G15.11 live proof — DB target: ${describeDbTarget(dbTargetUrl)}`)
+  assertNonProductionDbTarget({ script: 'g15-11-live-proof', url: dbTargetUrl, action: 'seeds proof data', exitCode: 2 })
 
   // before
   console.log(JSON.stringify({

@@ -56,8 +56,10 @@ export function toImportedActivityCreateInput(record: PersistedActivityRecord): 
   return {
     externalSourceKey: record.naturalKey,
     provider: record.provider,
+    // `record.leagueId` is the PROVIDER's league id; the AF canonical id travels separately as
+    // `afLeagueId`. Writing the canonical id here corrupts both this column and the natural key.
     providerLeagueId: record.leagueId,
-    afLeagueId: null, // AF-league mapping is Increment 4 — null, not fabricated
+    afLeagueId: record.afLeagueId ?? null, // null when the provider league maps to no AF league — never fabricated
     activityType: record.activityType,
     providerEventId: null,
     occurredAt: new Date(record.occurredAt),
@@ -107,6 +109,7 @@ export class PrismaImportedActivityStore implements ImportedActivityStore {
       naturalKey: row.externalSourceKey,
       provider: row.provider as PersistedActivityRecord['provider'],
       leagueId: row.providerLeagueId,
+      afLeagueId: row.afLeagueId,
       activityType: row.activityType as PersistedActivityRecord['activityType'],
       occurredAt: row.occurredAt.toISOString(),
       managerKeys,
