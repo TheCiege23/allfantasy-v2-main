@@ -23,7 +23,7 @@ export default function FantasyNewsHarnessClient() {
     [feedType]
   )
   const playerName = query || (feedType === "player" ? "Josh Allen" : "KC")
-  const playerLink = `/af-legacy?tab=players&q=${encodeURIComponent(playerName)}`
+  const playerLink = `/af-rankings&q=${encodeURIComponent(playerName)}`
 
   const handleShare = async () => {
     const payload = {
