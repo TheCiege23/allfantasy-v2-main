@@ -783,6 +783,116 @@ model DecisionIntelligenceRun {
   @@map("decision_intelligence_runs")
 }
 
+/// Phase 3A — CANONICAL DECISION record (shadow-only). The single normalized persistence sink for the versioned
+/// canonical decision envelope (lib/decision-os/canonical). Written ONLY via the shadow boundary
+/// (shadowPersistDecisions) when DECISION_OS_CANONICAL_SHADOW_ENABLED === 'true'; dormant otherwise. Provider-
+/// agnostic, read-only w.r.t. imported platforms. Separate from decision_intelligence_runs (which stores AI RUN
+/// state, not individual decisions).
+model CanonicalDecision {
+  id                   String    @id @default(cuid())
+  contractVersion      String    @map("contract_version") @db.VarChar(16)
+  decisionId           String    @unique @map("decision_id") @db.VarChar(191)
+  fingerprint          String    @map("fingerprint") @db.VarChar(191)
+  userId               String?   @map("user_id")
+  leagueId             String?   @map("league_id")
+  connectedFranchiseId String?   @map("connected_franchise_id")
+  sourcePlatform       String?   @map("source_platform") @db.VarChar(24)
+  sport                String    @db.VarChar(16)
+  season               Int?
+  period               String?   @db.VarChar(32)
+  category             String    @db.VarChar(48)
+  subtype              String?   @db.VarChar(48)
+  subjectKey           String?   @map("subject_key") @db.VarChar(191)
+  scope                String    @db.VarChar(16)
+  audience             String    @db.VarChar(16)
+  headline             String    @db.VarChar(300)
+  explanation          String    @db.Text
+  recommendedAction    String?   @map("recommended_action") @db.Text
+  evidence             Json?
+  confidencePct        Int?      @map("confidence_pct")
+  severity             String    @db.VarChar(16)
+  urgency              String    @db.VarChar(16)
+  priorityScore        Int?      @map("priority_score")
+  expectedImpact       String?   @map("expected_impact") @db.Text
+  players              Json?
+  teamRef              String?   @map("team_ref")
+  source               Json?
+  sourceExecutionPolicy String   @default("external_read_only") @map("source_execution_policy") @db.VarChar(32)
+  sourceReadOnly       Boolean   @default(true) @map("source_read_only")
+  dataAsOf             DateTime? @map("data_as_of")
+  generatedAt          DateTime  @map("generated_at")
+  staleAt              DateTime? @map("stale_at")
+  freshness            String    @db.VarChar(16)
+  entitlementTier      String    @map("entitlement_tier") @db.VarChar(24)
+  tokenCostClass       String    @map("token_cost_class") @db.VarChar(24)
+  status               String    @default("active") @db.VarChar(16)
+  suppressionReason    String?   @map("suppression_reason") @db.VarChar(128)
+  conflictGroupKey     String?   @map("conflict_group_key") @db.VarChar(191)
+  supersedesDecisionId String?   @map("supersedes_decision_id") @db.VarChar(191)
+  producer             String    @db.VarChar(64)
+  producerVersion      String    @map("producer_version") @db.VarChar(32)
+  runId                String?   @map("run_id")
+  extensions           Json?
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  revisions            CanonicalDecisionRevision[]
+
+  @@index([userId, category])
+  @@index([leagueId, category])
+  @@index([sport, season])
+  @@index([status, severity])
+  @@index([connectedFranchiseId])
+  @@index([runId])
+  @@index([conflictGroupKey])
+  @@index([sourcePlatform])
+  @@index([generatedAt])
+  @@index([staleAt])
+  @@map("canonical_decisions")
+}
+
+/// Immutable, append-only audit history for a canonical decision (Phase 3A). The `canonical_decisions` row holds
+/// CURRENT state; each RUN appends exactly one revision here so a re-run never silently overwrites prior generated
+/// content or run linkage. OCCURRENCE IDENTITY is (decisionId, runId) — DB-enforced unique, at most one revision
+/// per run. `contentHash` is a NON-identity integrity field (order-normalized content, timestamps excluded) used
+/// only to detect a same-run write with materially different content (first occurrence preserved, never
+/// overwritten). `runId` is required (the shadow boundary rejects null-runId decisions). It is a deliberate SOFT
+/// link (no FK) to a producing run — a canonical decision can be produced by brains other than the three-brain
+/// DecisionIntelligenceRun pipeline, so runId is not guaranteed to reference a decision_intelligence_runs row.
+/// DORMANT in Phase 3A — written only via the flag-gated shadow boundary; read by nothing live.
+model CanonicalDecisionRevision {
+  id                   String    @id @default(cuid())
+  decisionId           String    @map("decision_id") @db.VarChar(191)
+  runId                String    @map("run_id") @db.VarChar(191)
+  contentHash          String    @map("content_hash") @db.VarChar(64)
+  producer             String    @db.VarChar(64)
+  producerVersion      String    @map("producer_version") @db.VarChar(32)
+  status               String    @db.VarChar(16)
+  supersedesDecisionId String?   @map("supersedes_decision_id") @db.VarChar(191)
+  headline             String    @db.VarChar(300)
+  explanation          String    @db.Text
+  recommendedAction    String?   @map("recommended_action") @db.Text
+  evidence             Json?
+  confidencePct        Int?      @map("confidence_pct")
+  priorityScore        Int?      @map("priority_score")
+  severity             String    @db.VarChar(16)
+  urgency              String    @db.VarChar(16)
+  source               Json?
+  dataAsOf             DateTime? @map("data_as_of")
+  generatedAt          DateTime  @map("generated_at")
+  staleAt              DateTime? @map("stale_at")
+  freshness            String    @db.VarChar(16)
+  extensions           Json?
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  decision CanonicalDecision @relation(fields: [decisionId], references: [decisionId], onDelete: Cascade)
+
+  @@unique([decisionId, runId])
+  @@index([decisionId, createdAt])
+  @@index([runId])
+  @@map("canonical_decision_revisions")
+}
+
 /// Unified sync/ingestion job telemetry for DB-first observability.
 model SyncJobRun {
   id           String    @id @default(cuid())
