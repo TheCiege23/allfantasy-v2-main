@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server'
 
 import { createManagedIntelligenceDeps } from '@/lib/decision-os/three-brain/phase2/realAdapters'
 import { runIntelligenceMaintenance } from '@/lib/decision-os/three-brain/phase2/maintenanceRunner'
+import {
+  runLineupShadowSweep,
+  shadowSweepEnabled,
+  productionSweepDeps,
+} from '@/lib/decision-os/lineup/shadowSweep'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -40,13 +45,35 @@ function maintenanceEnabled(): boolean {
   return process.env.DECISION_OS_MAINTENANCE_ENABLED === 'true'
 }
 
+/**
+ * Lineup shadow sweep — a SECOND, INDEPENDENT feature sharing this schedule.
+ *
+ * Deliberately evaluated BEFORE the `maintenanceEnabled()` early return, and behind its own flag.
+ * `DECISION_OS_MAINTENANCE_ENABLED` is not set in production, so this route currently answers
+ * `maintenance_disabled` on all ~144 daily invocations — anything placed after that return would
+ * be permanently inert, which is the exact class of bug this sweep exists to fix.
+ *
+ * Folded into this route rather than given its own: the repo is at Vercel's route ceiling and
+ * carries a standing rule against new API routes, and this needs a clock, not an endpoint.
+ *
+ * Never throws (the sweep swallows its own failures), so it cannot turn a scheduled job red over
+ * telemetry work.
+ */
+async function sweepLineupShadow() {
+  return runLineupShadowSweep(productionSweepDeps(), { enabled: shadowSweepEnabled() })
+}
+
 export async function GET(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+
+  const sweep = await sweepLineupShadow()
+
   if (!maintenanceEnabled()) {
-    // Authenticated but disabled → inert success. Do NOT touch the DB, runner, providers, tokens, or freshness.
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled' })
+    // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
+    // providers, tokens, or freshness. The sweep above is gated separately and reports its own state.
+    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep })
   }
   try {
     // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
@@ -57,10 +84,10 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result })
+    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed' },
+      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep },
       { status: 500 },
     )
   }
