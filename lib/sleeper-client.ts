@@ -1,5 +1,51 @@
 const SLEEPER_API_BASE = 'https://api.sleeper.app/v1'; // db-first-exception: centralized provider client used by ingestion and controlled wrappers
 
+/**
+ * Aug 2026 — every call in this module used a bare `fetch()` with no timeout.
+ *
+ * Node's undici applies no total-request deadline: its `headersTimeout`/`bodyTimeout` default to
+ * 300s, and the body timer RESETS on each received chunk, so a peer that accepts the connection
+ * and then trickles or stalls bytes holds the request open indefinitely. On a Vercel function
+ * with `maxDuration = 300` the platform kills the invocation before undici ever gives up — and a
+ * platform kill runs no user code, so `finally` blocks, catch handlers and telemetry writers
+ * never execute. That is exactly how `cron-decision-os-activity-ingest` left six `SyncJobRun`
+ * rows stuck in `running`: the per-league `try/catch` below can only fire once a fetch SETTLES.
+ *
+ * `lib/league-import/sleeper/SleeperLeagueFetchService.ts` already hardened its own copy of this
+ * (12s timeout + retries), but that helper is module-private and the ingestion path never used
+ * it. `SLEEPER_FETCH_TIMEOUT_MS` matches its 12s so the two agree.
+ */
+const SLEEPER_FETCH_TIMEOUT_MS = 12_000;
+/** The `/players/{sport}` map is a multi-megabyte payload — it needs a wider window than 12s. */
+const SLEEPER_PLAYER_MAP_TIMEOUT_MS = 45_000;
+
+/**
+ * `fetch` with a hard deadline. Rejects with a `TimeoutError` DOMException once `timeoutMs`
+ * elapses, which each caller's existing `catch` turns into its documented empty/null value —
+ * except for callers that opt into `strict` (see `unwrapStrict`), which need to tell "Sleeper
+ * had no data" apart from "we could not reach Sleeper".
+ */
+function sleeperFetch(url: string, timeoutMs: number = SLEEPER_FETCH_TIMEOUT_MS): Promise<Response> {
+  return fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+}
+
+/**
+ * Opt-in honesty for callers that record telemetry. The default behaviour of every getter here is
+ * to swallow failures and return `[]`/`null`, which makes a timed-out league indistinguishable
+ * from a genuinely empty one — a job that reports "processed 40 leagues, 0 rows" when in truth it
+ * reached none of them. Passing `{ strict: true }` re-throws instead, so the caller can count the
+ * league as failed rather than silently clean.
+ */
+export type SleeperReadOptions = { strict?: boolean };
+
+class SleeperUnavailableError extends Error {
+  constructor(label: string, cause: unknown) {
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`sleeper_unavailable:${label}: ${detail}`);
+    this.name = 'SleeperUnavailableError';
+  }
+}
+
 export interface SleeperUser {
   user_id: string;
   username: string;
@@ -127,7 +173,7 @@ export interface SleeperPlayoffBracket {
 
 export async function getSleeperUser(username: string): Promise<SleeperUser | null> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/user/${username}`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/user/${username}`);
     if (!response.ok) return null;
     return await response.json();
   } catch {
@@ -140,7 +186,7 @@ export async function getSleeperUser(username: string): Promise<SleeperUser | nu
 export async function resolveSleeperUser(userIdentifier: string): Promise<{ username: string; userId: string } | null> {
   try {
     // The Sleeper API accepts both username and user_id in the same endpoint
-    const response = await fetch(`${SLEEPER_API_BASE}/user/${userIdentifier}`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/user/${userIdentifier}`);
     if (!response.ok) return null;
     const user = await response.json() as SleeperUser;
     if (!user?.user_id || !user?.username) return null;
@@ -159,7 +205,7 @@ export async function getUserLeagues(
   season: string
 ): Promise<SleeperLeague[]> {
   const url = `${SLEEPER_API_BASE}/user/${userId}/leagues/${sport}/${season}`;
-  const response = await fetch(url);
+  const response = await sleeperFetch(url);
 
   if (!response.ok) {
     throw new Error(`Sleeper getUserLeagues failed (${response.status}) for ${sport} ${season}`);
@@ -173,19 +219,25 @@ export async function getUserLeagues(
   return data as SleeperLeague[];
 }
 
-export async function getLeagueRosters(leagueId: string): Promise<SleeperRoster[]> {
+export async function getLeagueRosters(leagueId: string, opts?: SleeperReadOptions): Promise<SleeperRoster[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/rosters`);
-    if (!response.ok) return [];
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/rosters`);
+    if (!response.ok) {
+      if (opts?.strict && response.status !== 404) {
+        throw new SleeperUnavailableError('rosters', new Error(`HTTP ${response.status}`));
+      }
+      return [];
+    }
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (opts?.strict) throw error instanceof SleeperUnavailableError ? error : new SleeperUnavailableError('rosters', error);
     return [];
   }
 }
 
 export async function getLeagueUsers(leagueId: string): Promise<SleeperUser[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/users`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/users`);
     if (!response.ok) return [];
     return await response.json();
   } catch {
@@ -195,7 +247,7 @@ export async function getLeagueUsers(leagueId: string): Promise<SleeperUser[]> {
 
 export async function getLeagueMatchups(leagueId: string, week: number): Promise<SleeperMatchup[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/matchups/${week}`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/matchups/${week}`);
     if (!response.ok) return [];
     return await response.json();
   } catch {
@@ -205,7 +257,7 @@ export async function getLeagueMatchups(leagueId: string, week: number): Promise
 
 export async function getPlayoffBracket(leagueId: string): Promise<SleeperPlayoffBracket[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/winners_bracket`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/winners_bracket`);
     if (!response.ok) return [];
     return await response.json();
   } catch {
@@ -215,7 +267,7 @@ export async function getPlayoffBracket(leagueId: string): Promise<SleeperPlayof
 
 export async function getLosersBracket(leagueId: string): Promise<SleeperPlayoffBracket[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/losers_bracket`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/losers_bracket`);
     if (!response.ok) return [];
     return await response.json();
   } catch {
@@ -225,7 +277,7 @@ export async function getLosersBracket(leagueId: string): Promise<SleeperPlayoff
 
 export async function getLeagueInfo(leagueId: string): Promise<SleeperLeague | null> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}`);
     if (!response.ok) return null;
     return await response.json();
   } catch {
@@ -257,7 +309,7 @@ export interface SleeperDraftPick {
 
 export async function getTradedDraftPicks(leagueId: string): Promise<SleeperDraftPick[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/traded_picks`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/traded_picks`);
     if (!response.ok) return [];
     return await response.json();
   } catch {
@@ -265,22 +317,34 @@ export async function getTradedDraftPicks(leagueId: string): Promise<SleeperDraf
   }
 }
 
-export async function getLeagueDrafts(leagueId: string): Promise<any[]> {
+export async function getLeagueDrafts(leagueId: string, opts?: SleeperReadOptions): Promise<any[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/drafts`);
-    if (!response.ok) return [];
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/drafts`);
+    if (!response.ok) {
+      if (opts?.strict && response.status !== 404) {
+        throw new SleeperUnavailableError('drafts', new Error(`HTTP ${response.status}`));
+      }
+      return [];
+    }
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (opts?.strict) throw error instanceof SleeperUnavailableError ? error : new SleeperUnavailableError('drafts', error);
     return [];
   }
 }
 
-export async function getDraftPicks(draftId: string): Promise<any[]> {
+export async function getDraftPicks(draftId: string, opts?: SleeperReadOptions): Promise<any[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/draft/${draftId}/picks`);
-    if (!response.ok) return [];
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/draft/${draftId}/picks`);
+    if (!response.ok) {
+      if (opts?.strict && response.status !== 404) {
+        throw new SleeperUnavailableError('draft_picks', new Error(`HTTP ${response.status}`));
+      }
+      return [];
+    }
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (opts?.strict) throw error instanceof SleeperUnavailableError ? error : new SleeperUnavailableError('draft_picks', error);
     return [];
   }
 }
@@ -309,7 +373,7 @@ export async function getAllPlayers(): Promise<Record<string, SleeperPlayer>> {
   }
   
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/players/nfl`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/players/nfl`, SLEEPER_PLAYER_MAP_TIMEOUT_MS);
     if (!response.ok) return cachedPlayers || {};
     const data = await response.json();
     cachedPlayers = data;
@@ -326,7 +390,7 @@ export async function getPlayersBySport(sport: string = 'nfl'): Promise<Record<s
   }
 
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/players/${sport}`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/players/${sport}`, SLEEPER_PLAYER_MAP_TIMEOUT_MS);
     if (!response.ok) return {};
     return await response.json();
   } catch {
@@ -342,7 +406,7 @@ export interface SleeperNflState {
 
 export async function getNflState(): Promise<SleeperNflState | null> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/state/nfl`);
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/state/nfl`);
     if (!response.ok) return null;
     return await response.json();
   } catch {
@@ -385,13 +449,22 @@ export interface SleeperTransaction {
 
 export async function getLeagueTransactions(
   leagueId: string,
-  week: number
+  week: number,
+  opts?: SleeperReadOptions
 ): Promise<SleeperTransaction[]> {
   try {
-    const response = await fetch(`${SLEEPER_API_BASE}/league/${leagueId}/transactions/${week}`);
-    if (!response.ok) return [];
+    const response = await sleeperFetch(`${SLEEPER_API_BASE}/league/${leagueId}/transactions/${week}`);
+    if (!response.ok) {
+      if (opts?.strict && response.status !== 404) {
+        throw new SleeperUnavailableError(`transactions_week_${week}`, new Error(`HTTP ${response.status}`));
+      }
+      return [];
+    }
     return await response.json();
-  } catch {
+  } catch (error) {
+    if (opts?.strict) {
+      throw error instanceof SleeperUnavailableError ? error : new SleeperUnavailableError(`transactions_week_${week}`, error);
+    }
     return [];
   }
 }
@@ -410,7 +483,7 @@ export async function getTrendingPlayers(
   limit: number = 25,
 ): Promise<SleeperTrendingPlayer[]> {
   try {
-    const response = await fetch(
+    const response = await sleeperFetch(
       `${SLEEPER_API_BASE}/players/${sport}/trending/${type}?lookback_hours=${lookbackHours}&limit=${limit}`,
     );
     if (!response.ok) return [];
@@ -459,7 +532,7 @@ async function getCachedSleeperPlayersMap(sport: string = 'nfl'): Promise<Record
     return sleeperPlayersCache.data;
   }
   try {
-    const res = await fetch(`${SLEEPER_API_BASE}/players/${sport}`);
+    const res = await sleeperFetch(`${SLEEPER_API_BASE}/players/${sport}`, SLEEPER_PLAYER_MAP_TIMEOUT_MS);
     if (!res.ok) return null;
     const data = await res.json();
     sleeperPlayersCache = { data, ts: Date.now() };

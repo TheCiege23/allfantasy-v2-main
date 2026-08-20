@@ -219,7 +219,10 @@ function hostOf(url: string | null): string {
     // Ingest — the existing, unchanged Phase A pipeline: emitter → normalizer → writer → store.
     const result = await ingestSleeperImportedActivity(
       {
-        leagueId,
+        // Sleeper's own id for the fetches/ids; `leagueId` here is AllFantasy's canonical League.id
+        // (the script's --afLeagueId argument), which belongs in `afLeagueId`, not the provider column.
+        providerLeagueId: sourceLeagueId,
+        afLeagueId: leagueId,
         transactions,
         draftPicks: validDraftPicks,
         rosters,

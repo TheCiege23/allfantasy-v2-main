@@ -30,7 +30,20 @@ export type ImportedActivityType = 'trade' | 'waiver' | 'roster_move' | 'draft_p
  */
 export interface RawImportedActivity {
   provider: ImportProvider
+  /**
+   * The PROVIDER's own league id (Sleeper `league_id`, Yahoo `league_key`, …) — NOT AllFantasy's
+   * canonical `League.id`. This is the value persisted to `DecisionOsImportedActivity.providerLeagueId`
+   * AND folded into the idempotency key by {@link deriveActivityNaturalKey}, so passing the canonical
+   * id here silently corrupts both the column and the dedupe key. Use {@link afLeagueId} for the
+   * canonical id.
+   */
   leagueId: string
+  /**
+   * AllFantasy's canonical `League.id`, when this provider league is mapped to one. Null/undefined for
+   * a genuinely external league with no AF row — never fabricated. Deliberately NOT part of the natural
+   * key: mapping an already-ingested league to an AF league must not change its idempotency key.
+   */
+  afLeagueId?: string | null
   activityType: ImportedActivityType
   /** Provider's own stable id for this event (Sleeper `transaction_id`, draft pick id, …). Required for idempotency. */
   providerEventId: string | null | undefined
@@ -47,7 +60,10 @@ export interface NormalizedImportedActivity {
   skipped: false
   naturalKey: string
   provider: ImportProvider
+  /** The PROVIDER's league id (see {@link RawImportedActivity.leagueId}). Part of `naturalKey`. */
   leagueId: string
+  /** AllFantasy canonical `League.id` when mapped, else null. Never part of `naturalKey`. */
+  afLeagueId: string | null
   activityType: ImportedActivityType
   occurredAt: string
   /** Resolved manager keys (af_id when present, else provider stable_key). Order-stable, de-duped. */
@@ -161,6 +177,8 @@ export function normalizeImportedActivity(
     naturalKey: deriveActivityNaturalKey(raw.provider, raw.leagueId, raw.activityType, providerEventId),
     provider: raw.provider,
     leagueId: raw.leagueId,
+    // Carried through, never derived: an unmapped provider league stays honestly null.
+    afLeagueId: raw.afLeagueId ?? null,
     activityType: raw.activityType,
     occurredAt: new Date(occurredAt).toISOString(),
     managerKeys,

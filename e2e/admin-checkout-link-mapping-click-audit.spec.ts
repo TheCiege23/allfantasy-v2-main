@@ -2,7 +2,29 @@ import { expect, test } from "@playwright/test"
 
 test.describe.configure({ timeout: 120_000 })
 
-test.describe("@admin checkout-link mapping click audit", () => {
+/*
+ * ⚠ RETIRED, NOT FLAKY, AND NOT FIXABLE BY A SELECTOR. The panel this drives no
+ * longer exists.
+ *
+ * `AdminCheckoutLinkMappingPanel.tsx` was removed on 2026-04-26 by 25db02263 —
+ * an admin restructure that deleted 261 files and added 118, and which also
+ * rewrote app/admin/page.tsx. The removal was clean (nothing imports the panel,
+ * so there is no dangling reference to repair); the feature was dropped and this
+ * spec was never retired with it. Verified: none of
+ * `admin-checkout-link-mapping-panel`, `-missing-count`, `-row-*` or `-refresh`
+ * appear anywhere under app/ or components/.
+ *
+ * ⚠ WHAT IS NO LONGER COVERED, WHICH IS THE PART THAT MATTERS. This was the only
+ * automated check that every purchasable SKU maps to a valid Stripe checkout
+ * link, and that the admin surface surfaces the ones that do not. Pricing
+ * display-vs-charge drift is a problem this repo has had before. Nothing has
+ * replaced that check in the UI; scripts/verify-stripe-price-parity is the
+ * closest thing and it is not run from here.
+ *
+ * Skipped rather than deleted so the gap stays visible in the suite. Delete this
+ * file only alongside a decision that the diagnostic is not coming back.
+ */
+test.describe.skip("@admin checkout-link mapping click audit", () => {
   test("providers tab renders checkout-link diagnostics and refreshes", async ({ page }) => {
     let mappingRequests = 0
 

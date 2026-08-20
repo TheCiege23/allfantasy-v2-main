@@ -51,6 +51,28 @@ export const maxDuration = 300
  * `cron-decision-os-activity-ingest`. Runs 07:00 UTC — 30 min before the snapshot-capture walk,
  * so each day's snapshots see that day's ingested activity.
  *
+ * ── Aug 2026, step 1: THE HANG ────────────────────────────────────────────────────────────
+ * This job stopped completing after 2026-08-17 and left six `SyncJobRun` rows stuck in `running`
+ * with `rows_read: 0` — the giveaway that the row was never UPDATED at all, since `rowsRead` is
+ * `discovered`, which is only known once the body returns. Three defects compounded:
+ *
+ *   1. Every `lib/sleeper-client.ts` call was a bare `fetch()` with no timeout. Node applies no
+ *      total-request deadline, so one stalled Sleeper connection hangs forever.
+ *   2. The time budget was only ever checked BETWEEN leagues. Nothing bounded the work INSIDE
+ *      `ingestOneLeague`, so a single hung league could never be skipped — the budget check it
+ *      was supposed to hit was on the far side of the await that never resolved.
+ *   3. Once the invocation blew past `maxDuration`, Vercel killed it. A platform kill runs no
+ *      user code, so `withSyncJobRun`'s catch never fired and the `running` row was never closed.
+ *
+ * The likely trigger is Sleeper throttling: one fire issued up to 40 x 21 = 840 requests, with
+ * the 18 transaction weeks fired as one concurrent burst per league. That is why the weeks are
+ * now walked in bounded chunks rather than all at once.
+ *
+ * Fixes: `sleeperFetch` gives every provider call a 12s `AbortSignal.timeout`; `strict: true`
+ * makes an unreachable Sleeper a counted FAILURE instead of an empty league; each league races a
+ * deadline that can never exceed the remaining budget; and `reapAbandonedRuns` closes rows that a
+ * future kill still manages to orphan.
+ *
  * ── Aug 2026, step 2: THE OUTBOX RELAY DRAIN ──────────────────────────────────────────────
  * Exactly the same bug class this cron was created to fix, one layer down. `event_outbox` held
  * 7,809 rows in prod and EVERY ONE was still `pending`: the relay that projects them exists, but
@@ -74,18 +96,78 @@ export const maxDuration = 300
  * accrual rate climbs materially, give the drain its own more-frequent schedule rather than
  * widening RELAY_BUDGET_MS into the ingest budget.
  */
+/**
+ * Ingest budget. Deliberately 180s rather than the full `maxDuration` — the outbox drain below
+ * needs the tail. Both changes that landed in Aug 2026 chose the same name AND value for this, so
+ * they never disagree about the budget.
+ */
 const INGEST_BUDGET_MS = 180_000
 /**
- * Reserved tail of the fire for the outbox drain. INGEST + RELAY must stay under `maxDuration`
- * (300s) INCLUDING overshoot: both budgets are checked at a boundary (per-league / per-batch),
- * never mid-unit, so each can run over by one unit. Worst case ≈ 180 + one league + 60 + one
- * batch, which stays clear of 300s. Keep that headroom if you raise either number.
+ * Hard ceiling on one league. Backstop for pathology only: a healthy league takes ~1.5s (the last
+ * good run did 40 leagues in 59s), and the worst honest case is a handful of 12s fetch timeouts.
+ *
+ * Always clamped to the budget that is actually left (see `leagueDeadline`), so a slow league
+ * cannot push the ingest phase past `INGEST_BUDGET_MS` at all. That zero-overshoot property is
+ * what leaves the relay drain its full 60s tail inside `maxDuration`.
+ *
+ * The loop's own budget check is deliberately left in its original
+ * `Date.now() - startedAt > INGEST_BUDGET_MS` shape: that makes the line byte-identical to the
+ * one the relay-drain branch produces, so it auto-merges instead of conflicting.
+ */
+const LEAGUE_DEADLINE_MS = 45_000
+/**
+ * Transaction weeks fetched at once. Was all 18 — a burst that, multiplied across 40 leagues,
+ * is the most plausible reason Sleeper began stalling this caller. Sleeper documents no public
+ * rate limit; 6 keeps the peak in-flight count per league modest while still costing only three
+ * sequential rounds.
+ */
+const WEEK_FETCH_CONCURRENCY = 6
+/**
+ * Reserved tail of the fire for the outbox drain.
+ *
+ * The relay-drain branch originally documented a worst case of "180 + one league + 60 + one
+ * batch" here, because the ingest budget was only checked BETWEEN leagues and could overshoot by
+ * a whole league. The per-league clamp added by the hang fix (`LEAGUE_DEADLINE_MS`, bounded by
+ * the remaining budget) removes that overshoot: the ingest phase cannot exceed 180s, so the relay
+ * genuinely gets its full 60s inside `maxDuration` (300s). Keep that clamp if you raise either
+ * number — without it this comment reverts to the old, looser guarantee.
  */
 const RELAY_BUDGET_MS = 60_000
 /** Small batches keep the per-batch overshoot past `relayDeadline` correspondingly small. */
 const RELAY_BATCH_SIZE = 100
 const LEAGUE_CAP = 40
 const WEEKS = 18
+
+/** Map with a bounded number of in-flight promises, preserving input order. */
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < items.length; i += limit) {
+    out.push(...(await Promise.all(items.slice(i, i + limit).map(fn))))
+  }
+  return out
+}
+
+/**
+ * Reject if `promise` has not settled by `deadline`.
+ *
+ * This abandons the pending work rather than cancelling it — but every provider call underneath
+ * now carries its own `AbortSignal.timeout`, so the abandoned work unwinds on its own instead of
+ * living on. The race is the guarantee that the LOOP keeps moving, which is precisely what defect
+ * (2) above cost us.
+ */
+async function withDeadline<T>(promise: Promise<T>, deadline: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`deadline_exceeded:${label}`)), Math.max(0, deadline - Date.now()))
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
 
 function authorizeCron(request: Request): boolean {
   const secret = process.env.CRON_SECRET
@@ -108,7 +190,10 @@ async function ingestOneLeague(
 ): Promise<{ created: number; updated: number; skipped: number }> {
   const sourceLeagueId = league.platformLeagueId as string
 
-  const rosters = await getLeagueRosters(sourceLeagueId)
+  // `strict` so an unreachable Sleeper throws instead of returning `[]`. Without it a timed-out
+  // league is indistinguishable from a genuinely empty one, and the job reports a clean
+  // "processed" for a league it never actually read.
+  const rosters = await getLeagueRosters(sourceLeagueId, { strict: true })
   if (rosters.length === 0) return { created: 0, updated: 0, skipped: 0 }
 
   const ownerIds = collectRosterOwnerIds(rosters)
@@ -120,11 +205,13 @@ async function ingestOneLeague(
   const identityIndex = buildManagerIdentityIndex(mappings)
 
   const rawTransactions = (
-    await Promise.all(buildWeekRange(WEEKS).map((week) => getLeagueTransactions(sourceLeagueId, week)))
+    await mapWithConcurrency(buildWeekRange(WEEKS), WEEK_FETCH_CONCURRENCY, (week) =>
+      getLeagueTransactions(sourceLeagueId, week, { strict: true }),
+    )
   ).flat()
   const transactions = rawTransactions.map(mapSleeperTransactionToRaw)
 
-  const drafts = await getLeagueDrafts(sourceLeagueId)
+  const drafts = await getLeagueDrafts(sourceLeagueId, { strict: true })
   let draftPicks: ReturnType<typeof mapSleeperDraftPickResponseItem>[] = []
   let draftPicksOccurredAt: string | null = null
   if (drafts.length > 0) {
@@ -132,14 +219,25 @@ async function ingestOneLeague(
     const draftId = getDraftId(draft)
     draftPicksOccurredAt = resolveDraftOccurredAt(draft)
     if (draftId) {
-      const rawPicks = await getDraftPicks(draftId)
+      const rawPicks = await getDraftPicks(draftId, { strict: true })
       draftPicks = rawPicks.map((p) => mapSleeperDraftPickResponseItem(p, draftId, league.season?.toString()))
     }
   }
   const validDraftPicks = draftPicks.filter((p): p is NonNullable<typeof p> => p !== null)
 
   const result = await ingestSleeperImportedActivity(
-    { leagueId: league.id, transactions, draftPicks: validDraftPicks, rosters, draftPicksOccurredAt },
+    {
+      // `providerLeagueId` is Sleeper's own id (the same one every fetch above used); `afLeagueId`
+      // is AllFantasy's canonical `League.id`. Passing `league.id` as the provider id was the
+      // Aug 2026 column-misuse bug: it wrote the canonical uuid into `providerLeagueId`, left
+      // `afLeagueId` NULL on all 6,429 rows, and baked the uuid into the idempotency key.
+      providerLeagueId: sourceLeagueId,
+      afLeagueId: league.id,
+      transactions,
+      draftPicks: validDraftPicks,
+      rosters,
+      draftPicksOccurredAt,
+    },
     identityIndex,
     store,
   )
@@ -190,13 +288,17 @@ export async function GET(request: Request) {
       let created = 0
       let updated = 0
       const errors: string[] = []
+      const ingestDeadline = startedAt + INGEST_BUDGET_MS
       for (const league of leagues) {
         if (Date.now() - startedAt > INGEST_BUDGET_MS) {
           skippedForTime += 1
           continue
         }
+        // Clamped to whatever budget is actually left, so no single league can carry the ingest
+        // phase past `ingestDeadline`. That keeps the phase's overshoot at zero.
+        const leagueDeadline = Math.min(Date.now() + LEAGUE_DEADLINE_MS, ingestDeadline)
         try {
-          const r = await ingestOneLeague(league, store)
+          const r = await withDeadline(ingestOneLeague(league, store), leagueDeadline, "league_ingest")
           processed += 1
           created += r.created
           updated += r.updated

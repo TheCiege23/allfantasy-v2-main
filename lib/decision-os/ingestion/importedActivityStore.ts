@@ -26,7 +26,10 @@ import type { ImportedActivityType, NormalizedImportedActivity } from './importe
 export interface PersistedActivityRecord {
   naturalKey: string
   provider: ImportProvider
+  /** The PROVIDER's league id → `DecisionOsImportedActivity.providerLeagueId`. Part of `naturalKey`. */
   leagueId: string
+  /** AllFantasy canonical `League.id` when mapped → `afLeagueId`. Null when unmapped; never fabricated. */
+  afLeagueId?: string | null
   activityType: ImportedActivityType
   occurredAt: string
   managerKeys: string[]
@@ -55,6 +58,7 @@ export function toPersistedActivityRecord(n: NormalizedImportedActivity): Persis
     naturalKey: n.naturalKey,
     provider: n.provider,
     leagueId: n.leagueId,
+    afLeagueId: n.afLeagueId ?? null,
     activityType: n.activityType,
     occurredAt: n.occurredAt,
     managerKeys: [...n.managerKeys],
