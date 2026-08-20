@@ -6,6 +6,20 @@ on:
     # No `branches:` filter on purpose. Filtering PR runs to base
     # main/master silently skipped every stacked PR (a PR based on
     # another branch), so those merged with no real check coverage.
+# Cancel a PR's previous Playwright run when the branch is updated.
+#
+# Branch protection requires a PR to be up to date with main before it can merge, so every merge
+# forces an update on every other open PR — and without this, each update started a fresh 7-job run
+# while the superseded one kept running to completion. With a dozen PRs open, those runs starved
+# each other for runners: the jobs themselves were fine, but `Draft Room Regression` (~6 min, and
+# the ONLY required check) sat queued behind shards it does not depend on.
+#
+# cancel-in-progress is scoped to pull_request on purpose. Pushes to main must always run to
+# completion — cancelling those would leave main's status ambiguous, which is worse than the cost.
+concurrency:
+  group: playwright-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   test:
     name: Playwright (${{ matrix.label }})
