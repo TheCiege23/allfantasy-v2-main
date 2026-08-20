@@ -66,7 +66,7 @@ describe('Decision OS Increment 4 — Sleeper imported-activity emitter', () => 
     it('end to end: emit → normalize → write → persisted row → BehavioralEvent → league facts', async () => {
       const store = new InMemoryImportedActivityStore()
       const result = await ingestSleeperImportedActivity(
-        { leagueId: 'sleeper_league_1', transactions: [tradeTx], rosters },
+        { providerLeagueId: 'sleeper_league_1', transactions: [tradeTx], rosters },
         identityIndex,
         store,
       )
@@ -94,7 +94,7 @@ describe('Decision OS Increment 4 — Sleeper imported-activity emitter', () => 
     it('end to end for a waiver claim', async () => {
       const store = new InMemoryImportedActivityStore()
       const result = await ingestSleeperImportedActivity(
-        { leagueId: 'sleeper_league_1', transactions: [waiverTx], rosters },
+        { providerLeagueId: 'sleeper_league_1', transactions: [waiverTx], rosters },
         identityIndex,
         store,
       )
@@ -112,10 +112,61 @@ describe('Decision OS Increment 4 — Sleeper imported-activity emitter', () => 
     })
   })
 
+  describe('league-id column semantics (Aug 2026 column-misuse regression)', () => {
+    it('writes the PROVIDER league id to providerLeagueId and the AF canonical id to afLeagueId', async () => {
+      const store = new InMemoryImportedActivityStore()
+      await ingestSleeperImportedActivity(
+        {
+          providerLeagueId: '1314303191852011520', // Sleeper's own numeric id
+          afLeagueId: '06c5191c-d920-4936-9a15-d0e2669d3537', // AllFantasy League.id
+          transactions: [tradeTx],
+          rosters,
+        },
+        identityIndex,
+        store,
+      )
+
+      // The natural key is PROVIDER-scoped: the canonical uuid must never appear in it.
+      const persisted = await store.getByNaturalKey('dos:act:sleeper:1314303191852011520:trade:txn_trade_1')
+      expect(persisted).not.toBeNull()
+      expect(persisted!.leagueId).toBe('1314303191852011520')
+      expect(persisted!.afLeagueId).toBe('06c5191c-d920-4936-9a15-d0e2669d3537')
+      expect(persisted!.naturalKey).not.toContain('06c5191c-d920-4936-9a15-d0e2669d3537')
+    })
+
+    it('leaves afLeagueId null for an external-only league rather than fabricating one', async () => {
+      const store = new InMemoryImportedActivityStore()
+      await ingestSleeperImportedActivity(
+        { providerLeagueId: 'sleeper_league_1', transactions: [tradeTx], rosters },
+        identityIndex,
+        store,
+      )
+      const persisted = await store.getByNaturalKey('dos:act:sleeper:sleeper_league_1:trade:txn_trade_1')
+      expect(persisted!.afLeagueId).toBeNull()
+    })
+
+    it('mapping a league to an AF id later does NOT change the idempotency key (converges, never duplicates)', async () => {
+      const store = new InMemoryImportedActivityStore()
+      const base = { providerLeagueId: 'sleeper_league_1', transactions: [tradeTx], rosters }
+
+      const first = await ingestSleeperImportedActivity(base, identityIndex, store)
+      expect(first.writer.created).toBe(1)
+
+      // Same payload, now with the AF mapping resolved — must UPDATE the same row, not insert a new one.
+      const second = await ingestSleeperImportedActivity({ ...base, afLeagueId: 'af-league-uuid' }, identityIndex, store)
+      expect(second.writer.created).toBe(0)
+      expect(second.writer.updated).toBe(1)
+      expect(await store.count()).toBe(1)
+
+      const persisted = await store.getByNaturalKey('dos:act:sleeper:sleeper_league_1:trade:txn_trade_1')
+      expect(persisted!.afLeagueId).toBe('af-league-uuid')
+    })
+  })
+
   describe('idempotent repeated ingestion (Do #10)', () => {
     it('re-ingesting the same Sleeper payload converges to a stable row count', async () => {
       const store = new InMemoryImportedActivityStore()
-      const input = { leagueId: 'sleeper_league_1', transactions: [tradeTx, waiverTx], rosters }
+      const input = { providerLeagueId: 'sleeper_league_1', transactions: [tradeTx, waiverTx], rosters }
 
       const run1 = await ingestSleeperImportedActivity(input, identityIndex, store)
       expect(run1.writer.created).toBe(2)
@@ -135,7 +186,7 @@ describe('Decision OS Increment 4 — Sleeper imported-activity emitter', () => 
   describe('external-only managers remain supported (Do #11)', () => {
     it('a waiver by a manager with no AllFantasy account persists and is attributable', async () => {
       const store = new InMemoryImportedActivityStore()
-      await ingestSleeperImportedActivity({ leagueId: 'L', transactions: [waiverTx], rosters }, identityIndex, store)
+      await ingestSleeperImportedActivity({ providerLeagueId: 'L', transactions: [waiverTx], rosters }, identityIndex, store)
       const persisted = await store.getByNaturalKey('dos:act:sleeper:L:waiver:txn_waiver_1')
       expect(persisted?.managerKeys).toEqual(['sleeper:user:sleeper_owner_2'])
       expect(persisted?.hasExternalOnlyManager).toBe(true)
@@ -181,7 +232,7 @@ describe('Decision OS Increment 4 — Sleeper imported-activity emitter', () => 
       const pick: SleeperDraftPickRaw = { round: 1, roster_id: 1, player_id: '4046', pick_no: 1, draft_id: 'draft_123', picked_by: 'sleeper_owner_1' }
       const store = new InMemoryImportedActivityStore()
       const result = await ingestSleeperImportedActivity(
-        { leagueId: 'L', draftPicks: [pick], rosters, draftPicksOccurredAt: null },
+        { providerLeagueId: 'L', draftPicks: [pick], rosters, draftPicksOccurredAt: null },
         identityIndex,
         store,
       )
@@ -196,7 +247,7 @@ describe('Decision OS Increment 4 — Sleeper imported-activity emitter', () => 
       const pick: SleeperDraftPickRaw = { round: 1, roster_id: 1, player_id: '4046', pick_no: 1, draft_id: 'draft_123', picked_by: 'sleeper_owner_1' }
       const store = new InMemoryImportedActivityStore()
       const result = await ingestSleeperImportedActivity(
-        { leagueId: 'L', draftPicks: [pick], rosters, draftPicksOccurredAt: '2025-08-01T00:00:00.000Z' },
+        { providerLeagueId: 'L', draftPicks: [pick], rosters, draftPicksOccurredAt: '2025-08-01T00:00:00.000Z' },
         identityIndex,
         store,
       )
