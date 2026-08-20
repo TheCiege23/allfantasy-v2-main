@@ -113,13 +113,27 @@ export async function collectNativeLeagueActivity(ctx: ActivitySourceContext): P
           isPrivate: false,
           createdAt: { gte: since },
           NOT: [{ source: "draft" }, { source: { startsWith: "tribe_" } }],
-          OR: [{ messageSubtype: "global_broadcast" }, { type: "text", messageSubtype: null }],
+          /*
+           * ⚠ COMMISSIONER BROADCASTS WERE FALLING THROUGH THIS FILTER ENTIRELY.
+           * `/api/commissioner/broadcast` writes its message with `type: "broadcast"` and leaves
+           * `messageSubtype` null, so it matched neither arm: not `global_broadcast` (that is the
+           * ADMIN-wide broadcast from /api/chat/global-broadcast, a different thing), and not
+           * `type: "text"`. The loop below is titled "Commissioner announcements + league chat"
+           * and was silently carrying none of the former — every @everyone a commissioner sent
+           * was invisible in the activity feed.
+           */
+          OR: [
+            { messageSubtype: "global_broadcast" },
+            { type: "broadcast" },
+            { type: "text", messageSubtype: null },
+          ],
         },
         select: {
           id: true,
           leagueId: true,
           message: true,
           messageSubtype: true,
+          type: true,
           createdAt: true,
           user: { select: { displayName: true, username: true, email: true } },
         },
@@ -213,7 +227,10 @@ export async function collectNativeLeagueActivity(ctx: ActivitySourceContext): P
 
     // Commissioner announcements + league chat.
     for (const chat of chats) {
-      const isAnnouncement = chat.messageSubtype === "global_broadcast"
+      // Both kinds of broadcast read as announcements: the admin-wide one and a commissioner's
+      // league @everyone. They differ in who can send, not in how the feed should present them.
+      const isAnnouncement =
+        chat.messageSubtype === "global_broadcast" || chat.type === "broadcast"
       const poster = chat.user?.displayName || chat.user?.username || chat.user?.email || "A manager"
       const description = isAnnouncement ? truncate(chat.message) : truncate(`${poster}: ${chat.message}`)
       items.push({
