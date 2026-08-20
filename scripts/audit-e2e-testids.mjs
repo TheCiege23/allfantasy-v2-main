@@ -104,16 +104,118 @@ if (wrong.length > 0) {
 }
 console.log(`validation: ${PRESENT.length + ABSENT.length}/${PRESENT.length + ABSENT.length} hand-checked ids correct`)
 
+// ---- skipped regions --------------------------------------------------------
+/*
+ * An id referenced only from a skipped test is NOT outstanding work -- that file
+ * has already been triaged and the assertion never runs. Counting them made the
+ * first version of this report overstate the backlog by 24%: of 68 absent ids, 9
+ * sat inside token-system's `test.describe.skip` (retired deliberately, with the
+ * reasoning written into the file) and 7 more belonged to a spec that PASSES.
+ * Someone working the list top-down would have opened a file whose verdict was
+ * already recorded in a comment directly above the tests.
+ *
+ * Skipped ids are reported SEPARATELY rather than dropped. Dropping them would
+ * hide a real signal: if a skipped spec's ids reappear in the app, that is the
+ * cue to unskip it.
+ */
+const NL = String.fromCharCode(10)
+const EOL = NL
+const BACKSLASH = String.fromCharCode(92)
+const SKIP_CALL = /\b(?:test|it|describe)(?:\.describe)?\.skip\s*\(/g
+
+function skippedRanges(src) {
+  const ranges = []
+  for (const m of src.matchAll(SKIP_CALL)) {
+    /*
+     * The body is the block after the ARROW, not the first brace found.
+     * `test.skip('name', async ({ page }) => {` opens and closes a brace in its
+     * destructured parameter first, so taking brace #1 as the body produced a
+     * range one line long -- which silently reported 57 already-skipped ids in
+     * admin-dashboard-click-audit as outstanding work. Both pins below exist
+     * because of that bug.
+     */
+    let quote = null
+    let lineComment = false
+    let blockComment = false
+    let arrow = -1
+    for (let i = m.index; i < src.length && arrow < 0; i++) {
+      const c = src[i]
+      const n = src[i + 1]
+      if (lineComment) { if (c === NL) lineComment = false; continue }
+      if (blockComment) { if (c === '*' && n === '/') { blockComment = false; i++ } continue }
+      if (quote) {
+        if (c === BACKSLASH) i++
+        else if (c === quote) quote = null
+        continue
+      }
+      if (c === '/' && n === '/') { lineComment = true; i++; continue }
+      if (c === '/' && n === '*') { blockComment = true; i++; continue }
+      if (c === '"' || c === "'" || c === '`') { quote = c; continue }
+      if (c === '=' && n === '>') arrow = i + 1
+    }
+    if (arrow < 0) continue
+
+    let depth = 0
+    let body = -1
+    quote = null
+    lineComment = false
+    blockComment = false
+    for (let i = arrow; i < src.length; i++) {
+      const c = src[i]
+      const n = src[i + 1]
+      if (lineComment) { if (c === NL) lineComment = false; continue }
+      if (blockComment) { if (c === '*' && n === '/') { blockComment = false; i++ } continue }
+      if (quote) {
+        if (c === BACKSLASH) i++
+        else if (c === quote) quote = null
+        continue
+      }
+      if (c === '/' && n === '/') { lineComment = true; i++; continue }
+      if (c === '/' && n === '*') { blockComment = true; i++; continue }
+      if (c === '"' || c === "'" || c === '`') { quote = c; continue }
+      if (c === '{') {
+        depth++
+        if (body < 0) body = i
+      } else if (c === '}') {
+        depth--
+        if (body >= 0 && depth === 0) { ranges.push([m.index, i]); break }
+      }
+    }
+  }
+  return ranges
+}
+const inRanges = (ranges, i) => ranges.some(([a, b]) => i >= a && i <= b)
+
 // ---- audit -----------------------------------------------------------------
 const e2eDir = path.join(ROOT, 'e2e')
+const TESTID = /getByTestId\(\s*["']([^"']+)["']/g
 const refs = new Map() // testid -> Set<spec>
+const skippedOnly = new Map() // testid -> Set<spec>, seen ONLY inside skipped tests
 for (const fn of fs.readdirSync(e2eDir)) {
   if (!fn.endsWith('.spec.ts')) continue
   const src = fs.readFileSync(path.join(e2eDir, fn), 'utf8')
-  for (const m of src.matchAll(/getByTestId\(\s*["']([^"']+)["']/g)) {
-    if (!refs.has(m[1])) refs.set(m[1], new Set())
-    refs.get(m[1]).add(fn)
+  const skipped = skippedRanges(src)
+  for (const m of src.matchAll(TESTID)) {
+    const target = inRanges(skipped, m.index) ? skippedOnly : refs
+    if (!target.has(m[1])) target.set(m[1], new Set())
+    target.get(m[1]).add(fn)
   }
+}
+// An id asserted in BOTH a live and a skipped test is live work, not skipped.
+for (const tid of refs.keys()) skippedOnly.delete(tid)
+
+// Pin, in the same spirit as the validation set above: token-system is entirely
+// `test.describe.skip`, so none of its ids may be reported as outstanding.
+const PINS = [
+  'tokens-pricing-clear-filters', // token-system: the whole describe is skipped
+  'admin-overview-refresh', // admin-dashboard: inside a test.skip, past the ({ page }) braces
+]
+for (const PIN of PINS) if (refs.has(PIN) || !skippedOnly.has(PIN)) {
+  console.error(
+    `skip detection is wrong: ${PIN} sits inside token-system's test.describe.skip,` +
+      ' so it must classify as skipped, not as outstanding.',
+  )
+  process.exit(1)
 }
 
 const missing = [...refs.entries()].filter(([tid]) => !appHas(tid))
@@ -132,6 +234,19 @@ console.log('\nspecs asking for UI that does not exist:')
 for (const [spec, ids] of [...perSpec.entries()].sort((a, b) => b[1].length - a[1].length)) {
   console.log(`  ${spec.padEnd(52)} ${String(ids.length).padStart(2)}`)
   if (LIST) for (const id of ids.sort()) console.log(`        ${id}`)
+}
+
+const missingSkipped = [...skippedOnly.entries()].filter(([tid]) => !appHas(tid))
+if (missingSkipped.length) {
+  const bySpec = new Map()
+  for (const [tid, specs] of missingSkipped)
+    for (const sp of specs) bySpec.set(sp, [...(bySpec.get(sp) || []), tid])
+  console.log(EOL + `already skipped, not outstanding : ${missingSkipped.length}`)
+  for (const [spec, ids] of [...bySpec.entries()].sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`  ${spec.padEnd(52)} ${String(ids.length).padStart(2)}`)
+    if (LIST) for (const id of ids.sort()) console.log(`        ${id}`)
+  }
+  console.log('  ^ these tests do not run. Read the comment above them before touching.')
 }
 
 console.log(
