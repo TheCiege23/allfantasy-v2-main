@@ -32,6 +32,31 @@ export default defineConfig({
   /* Screenshot snapshot directory — committed baselines live here. */
   snapshotDir: './e2e/__snapshots__',
 
+  /*
+   * ⚠ THE DEFAULT 30s TEST TIMEOUT IS SHORTER THAN ONE COLD ROUTE COMPILE.
+   *
+   * The suite runs against `next dev`, which compiles a route the first time it
+   * is requested. Measured on /pricing from a clean dist dir: 32.5s to
+   * domContentLoaded. Playwright's default per-test timeout is 30s, so a test
+   * that is the first to touch a route loses the race before its first
+   * assertion runs — and when the test times out Playwright aborts the
+   * in-flight navigation, which surfaces as `page.goto: net::ERR_ABORTED` or
+   * `ERR_CONNECTION_RESET`. Both appear throughout the core-shard logs and read
+   * as the server having crashed, which it had not.
+   *
+   * Specs that set their own describe-level timeout keep it; this only raises
+   * the floor for the ones that never did.
+   */
+  timeout: 90_000,
+
+  /*
+   * Compile the busiest routes once, before any test is on the clock. Without
+   * this the first test to reach each route pays its compile inside its own
+   * timeout, which is both the flake above and a large part of why the core
+   * shards run over an hour.
+   */
+  globalSetup: './e2e/global-setup.ts',
+
   /* Visual-diff threshold applied to all toHaveScreenshot() calls in this config. */
   expect: {
     toHaveScreenshot: {
