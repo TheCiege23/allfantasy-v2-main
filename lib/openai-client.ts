@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { getOpenAIConfigFromEnv } from '@/lib/provider-config'
+import { assertAiSpendAllowed } from '@/lib/ai/aiSpendGuard'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 
 export type OpenAIConfig = {
@@ -21,6 +22,9 @@ export function getOpenAIConfig(): OpenAIConfig {
 let _client: OpenAI | null = null
 
 export function getOpenAIClient(): OpenAI {
+  // Every call, not just construction — the client is a module singleton, so gating only the
+  // `new OpenAI(...)` branch would let one cached before the switch was turned off keep spending.
+  assertAiSpendAllowed('openai-client')
   if (!_client) {
     const { apiKey, baseUrl } = getOpenAIConfig()
     _client = new OpenAI({

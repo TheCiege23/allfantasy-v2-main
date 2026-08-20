@@ -397,7 +397,7 @@ export const TOOL_CONFIG: Record<ToolSlug, ToolConfig> = {
     headline: 'AI Draft Assistant',
     benefitSummary:
       'Draft with AI support: rankings, strategy, and Chimmy answering your questions in real time.',
-    openToolHref: '/af-legacy?tab=mock-draft',
+    openToolHref: '/legacy?tab=mock-draft',
     examples: [
       'Real-time draft rankings and suggestions',
       'Chimmy AI for draft questions',

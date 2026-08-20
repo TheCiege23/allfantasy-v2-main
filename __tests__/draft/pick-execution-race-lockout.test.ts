@@ -44,9 +44,15 @@ describe('validatePickSubmission — Commit M structured codes', () => {
     }
   })
 
-  it('accepts both `in_progress` and `paused` (paused is allowed for commissioner correction)', () => {
+  it('accepts `in_progress`, and `paused` ONLY for a commissioner override', () => {
     expect(validatePickSubmission({ ...baseInput, sessionStatus: 'in_progress' }).valid).toBe(true)
-    expect(validatePickSubmission({ ...baseInput, sessionStatus: 'paused' }).valid).toBe(true)
+    // A manager cannot pick into a paused draft — that is what the pause is for.
+    expect(validatePickSubmission({ ...baseInput, sessionStatus: 'paused' }).valid).toBe(false)
+    // The commissioner can, because corrections are made while paused.
+    expect(
+      validatePickSubmission({ ...baseInput, sessionStatus: 'paused', commissionerOverride: true })
+        .valid,
+    ).toBe(true)
   })
 
   it('refuses with DRAFT_PICK_NOT_ON_CLOCK when roster is not on the clock', () => {

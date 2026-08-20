@@ -2,9 +2,28 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
+/*
+ * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING — the same omission that shipped on the landing
+ * page and again on LeagueHome. This screen's root is <div className="af-core af-im">, and the
+ * `.af-core` token layer (--surface, --line, --accent, --text2 …) plus the shared primitives it
+ * carries (.af-platform, .af-btn, .af-label, .af-chip, .af-readonly, .af-num) all live in
+ * af-core.css. af-import.css defines only the `af-im-*` rules on top of them.
+ *
+ * Without this import nothing throws and nothing 404s: every var() resolves to nothing, so the
+ * platform cards paint transparent with 0px borders, the buttons lose their chrome and render as
+ * bare text, and the screen reads as a broken/older design. It looked FINE whenever the user
+ * arrived by client-side navigation from a screen that had already imported af-core.css (AuthV4,
+ * LandingV4, PricingV4 …) and broken on a direct load or hard refresh of /import — which is what
+ * made it appear to "keep reverting".
+ *
+ * It has to be a JS import, not an `@import` inside af-import.css: per app/layout.tsx, an @import
+ * inside a route-bundled CSS file is dropped whenever another af-*.css is concatenated ahead of it.
+ */
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-import.css'
 import {
   IMPORT_PROVIDER_UI_OPTIONS,
+  getImportProviderLabel,
   isImportProviderAvailable,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
@@ -198,12 +217,31 @@ function describeYahooError(code: string, description?: string): string {
   }
 }
 
+/**
+ * 6a build rule 2: the read / never-do split IS the trust contract for the whole import flow, and
+ * it has to appear on this first screen rather than being discovered later. It replaces the older
+ * one-line promise, which said the same thing but only in the abstract — "we only read your league
+ * history" does not tell anyone whether we can set their lineup.
+ *
+ * The two halves are deliberately concrete and symmetrical: every item on the right is a thing a
+ * competitor's integration CAN do, which is what makes the left column mean anything.
+ */
 function ReadOnlyPromise() {
   return (
-    <p className="af-im-promise">
-      <span className="af-readonly">Read-only</span>
-      We only read your league history — no passwords, no posting, ever.
-    </p>
+    <div className="af-im-trust">
+      <div className="af-im-trust-col">
+        <span className="af-label af-im-trust-read">What we read</span>
+        <p className="af-im-trust-body">
+          Teams · rosters · matchups · scoring settings · past seasons
+        </p>
+      </div>
+      <div className="af-im-trust-col">
+        <span className="af-label af-im-trust-never">What we never do</span>
+        <p className="af-im-trust-body">
+          Set lineups · make trades · post in chat · ask for your platform password
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -264,6 +302,9 @@ export function ImportV4({
   const [error, setError] = useState<string | null>(null)
 
   const selectable = isImportProviderAvailable(provider)
+  // Provider display name comes from the shared config, never a local literal — the same
+  // reason availability does (see the header note).
+  const providerLabel = getImportProviderLabel(provider)
   const field = FIELD_BY_PROVIDER[provider]
   const canDiscover = supportsImportProviderDiscovery(provider)
   // Yahoo has no identifier at all; Sleeper falls back to the linked account.
@@ -602,10 +643,11 @@ export function ImportV4({
 
       <header className="af-im-head">
         <span className="af-label">Connect your league to AllFantasy</span>
-        <h1 className="af-im-title">Where do you already play?</h1>
+        <h1 className="af-im-title">Connect your league in seconds.</h1>
         <p className="af-im-sub">
-          Pick a platform and we&rsquo;ll pull in your real rosters, matchups and scoring. Nothing
-          you do here changes anything on that platform.
+          Pick your platform and drop in your Sleeper username or league ID. We build a read-only
+          copy of your real teams, matchups and scoring &mdash; AllFantasy analyzes your league but
+          never changes anything on the external platform.
         </p>
       </header>
 
@@ -629,8 +671,10 @@ export function ImportV4({
 
       {/* ── Step 1: provider picker ─────────────────────────────────── */}
       <section className="af-im-card">
-        <h2 className="af-label">Where do you already play?</h2>
-
+        {/*
+          The section heading used to repeat the h1 verbatim ("Where do you already play?"),
+          so the page asked the same question twice in a row. 6a asks it once, in the h1.
+        */}
         <div className="af-im-providers">
           {IMPORT_PROVIDER_UI_OPTIONS.map((opt) => {
             const available = opt.available
@@ -725,6 +769,16 @@ export function ImportV4({
                   ? 'Find my leagues'
                   : 'Connect'}
             </button>
+
+            {/*
+              6a: the account line that sits directly under the connect action. The promise it
+              makes ("read-only, no password, ever") is the same one the trust card below spells
+              out, and it belongs here because this is the moment someone decides to type.
+            */}
+            <p className="af-im-account-note">
+              <span aria-hidden>🔒</span> Create a free account to connect your{' '}
+              {providerLabel} league — read-only, no password, ever.
+            </p>
 
             {phase.k === 'discovering' ? <Working label="Looking up your leagues…" /> : null}
 

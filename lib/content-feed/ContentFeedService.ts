@@ -289,7 +289,7 @@ function buildAiInsightPlaceholders(userId: string | null): ContentFeedItem[] {
       type: "ai_insight",
       title: "AI trade tip",
       body: "Use the Trade Analyzer to compare offers and get fairness scores for your league.",
-      href: "/af-legacy?tab=trade-center",
+      href: "/legacy?tab=trade",
       sport: null,
       leagueId: null,
       leagueName: null,

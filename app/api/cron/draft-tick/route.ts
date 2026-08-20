@@ -37,7 +37,18 @@ function isEnabled(): boolean {
 }
 
 export async function GET(request: NextRequest) {
-  if (!requireCronAuth(request)) {
+  /*
+   * ⚠ NAME `CRON_SECRET` EXPLICITLY. `requireCronAuth` resolves
+   * `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`, and
+   * LEAGUE_CRON_SECRET is set in production — so a BARE call compares Vercel's
+   * `Authorization: Bearer $CRON_SECRET` against the wrong variable and 401s
+   * every time. This route is scheduled `* * * * *`, so that was 1,440 failed
+   * invocations a day. Same fix as #289 / #304 on the other cron routes.
+   *
+   * The 401 also fired BEFORE the DRAFT_TICK_CRON_ENABLED check below, so the
+   * response could not distinguish "not authorised" from "deliberately inert".
+   */
+  if (!requireCronAuth(request, 'CRON_SECRET')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
