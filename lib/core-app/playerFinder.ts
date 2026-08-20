@@ -300,16 +300,45 @@ export async function getPlayerDetail(
     .findMany({
       where: { sport: row.sport, playerName: { equals: row.name, mode: 'insensitive' } },
       orderBy: { season: 'desc' },
-      take: 5,
+      take: 10,
       select: { season: true, stats: true },
     })
     .catch(() => [])
 
+  /*
+   * ONE ROW PER SEASON, MERGED ACROSS PROVIDERS.
+   *
+   * `playerSeasonStats` holds a row per (player, season, provider), and the
+   * providers carry different stat vocabularies for the same year - measured on
+   * Brock Purdy, 2024 arrives twice: `sacks / fumbles / completions /
+   * games_played` from one and `Passing Yards / Rushing Yards / Passing
+   * Touchdowns` from another. Rendered raw that printed "2024" twice with
+   * different numbers under each, which reads as a bug, and it also threw
+   * React's duplicate-key warning because the season was the list key.
+   *
+   * Merged rather than de-duplicated by picking a winner: both rows are real
+   * statistics for that season, and choosing one would silently drop whichever
+   * vocabulary the reader came for. Earlier rows win a key collision because the
+   * query is `season desc` and provider rows are otherwise unordered - a stable
+   * rule, so the same page renders the same way twice.
+   *
+   * `take` is 10 rather than 5 because the cap now counts provider rows, not
+   * seasons; five seasons of a two-provider player needed ten.
+   */
+  const bySeason = new Map<string, Record<string, string>>()
+  for (const s of stats) {
+    const merged = bySeason.get(s.season) ?? {}
+    for (const [k, v] of Object.entries((s.stats ?? {}) as Record<string, string>)) {
+      if (!(k in merged)) merged[k] = v
+    }
+    bySeason.set(s.season, merged)
+  }
+
   const seasonStats: SectionState<Array<{ season: string; stats: Record<string, string> }>> =
-    stats.length > 0
+    bySeason.size > 0
       ? {
           available: true,
-          data: stats.map((s) => ({ season: s.season, stats: (s.stats ?? {}) as Record<string, string> })),
+          data: [...bySeason.entries()].map(([season, stats]) => ({ season, stats })),
         }
       : { available: false, reason: 'no season statistics ingested for this player' }
 
@@ -412,4 +441,101 @@ export async function getPlayerDetail(
     },
     freshness: { label: age.label, stale: age.stale },
   }
+}
+
+/**
+ * Resolve a public `/players/{slug}` URL to a player we can render.
+ *
+ * The slug carries sport + sleeperId (see lib/core-app/playerSlug.ts for why
+ * neither the name nor externalId can be the key). One athlete has one row per
+ * ingest source, so this picks between them deterministically instead of letting
+ * the planner decide: prefer a row that actually carries a team and a position
+ * over a bare stub, then the freshest. Without the explicit order the same URL
+ * rendered "Justin Jefferson, WR, MIN" and "Justin Jefferson, no team" on
+ * alternating requests.
+ *
+ * `canonicalSlug` is returned so the page can redirect a URL whose name head has
+ * gone stale — a player changing their listed name must not orphan an already
+ * indexed link.
+ */
+export async function resolvePublicPlayer(
+  sport: string,
+  sleeperId: string
+): Promise<{ playerReference: string; name: string; sport: string; sleeperId: string } | null> {
+  const rows = await prisma.sportsPlayer
+    .findMany({
+      where: {
+        sport,
+        // The column stores `TB` for team defences while the slug is lowercased.
+        sleeperId: { equals: sleeperId, mode: 'insensitive' },
+      },
+      orderBy: [{ fetchedAt: 'desc' }],
+      select: {
+        externalId: true,
+        name: true,
+        sport: true,
+        sleeperId: true,
+        team: true,
+        position: true,
+      },
+    })
+    .catch(() => [])
+
+  if (rows.length === 0) return null
+
+  const best =
+    rows.find((r) => r.team != null && r.position != null) ??
+    rows.find((r) => r.position != null) ??
+    rows[0]
+  if (!best || !best.sleeperId) return null
+
+  return {
+    playerReference: `${best.sport}:${best.externalId}`,
+    name: best.name,
+    sport: best.sport,
+    sleeperId: best.sleeperId,
+  }
+}
+
+/**
+ * Teammates at the same position, for the public player page.
+ *
+ * ⚠ THIS IS AN SEO STRUCTURE PROBLEM BEFORE IT IS A UX ONE. Every
+ * `/players/{slug}` page is otherwise a leaf: the sitemap points at it and
+ * nothing else does, so the crawler reaches thousands of pages that link to no
+ * other page. Same-team, same-position players are the genuinely related set —
+ * they are the ones a reader comparing a start/sit decision actually wants — so
+ * the internal link graph and the useful link are the same link.
+ *
+ * DISTINCT on sleeperId because one athlete has one row per ingest source; six
+ * "Justin Jefferson" rows would render as six identical suggestions.
+ */
+export async function getRelatedPlayers(
+  sport: string,
+  team: string | null,
+  position: string | null,
+  excludeSleeperId: string,
+  limit = 6
+): Promise<Array<{ name: string; sport: string; sleeperId: string; position: string | null }>> {
+  if (!team || !position) return []
+
+  const rows = await prisma.sportsPlayer
+    .findMany({
+      where: {
+        sport,
+        team,
+        position,
+        sleeperId: { not: null },
+        NOT: { sleeperId: { equals: excludeSleeperId, mode: 'insensitive' } },
+      },
+      distinct: ['sleeperId'],
+      orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
+      take: limit,
+      select: { name: true, sport: true, sleeperId: true, position: true },
+    })
+    .catch(() => [])
+
+  return rows.flatMap((r) =>
+    r.sleeperId ? [{ name: r.name, sport: r.sport, sleeperId: r.sleeperId, position: r.position }] : []
+  )
 }

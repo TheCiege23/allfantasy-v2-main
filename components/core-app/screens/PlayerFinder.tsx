@@ -46,6 +46,19 @@ export type PlayerFinderProps = {
   matches: PlayerMatch[]
   detail: PlayerDetail | null
   leagueCount: number
+  /**
+   * False on the public `/players/{slug}` surface when nobody is signed in.
+   *
+   * ⚠ THIS CHANGES WHY A SECTION IS EMPTY, WHICH IS THE WHOLE POINT. The
+   * per-league loaders are handed no user and no league ids, so they correctly
+   * report that they cannot cross-reference — but "we have no platform id for
+   * this player" is a statement about our ingest, and to a signed-out visitor
+   * the true statement is "you are not signed in". Showing the ingest reason to
+   * a stranger reads as a broken product rather than as a locked door.
+   *
+   * Defaults to true so every existing signed-in call site is unchanged.
+   */
+  signedIn?: boolean
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -77,9 +90,33 @@ function StatTile({
   )
 }
 
-export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFinderProps) {
+/**
+ * The signed-out replacement for a per-league section's reason.
+ *
+ * One sentence, and it names what is behind the door rather than just asking for
+ * a sign-in — the sections it covers are the reason this page is worth an
+ * account at all.
+ */
+const SIGN_IN_REASON =
+  'Sign in to see which of your leagues roster him, what slot he is in, and what he is worth under each league’s own scoring.'
+
+export function PlayerFinder({
+  query,
+  matches,
+  detail,
+  leagueCount,
+  signedIn = true,
+}: PlayerFinderProps) {
+  /*
+   * Swap the ingest-level reason for the sign-in one on exactly the sections
+   * that are gated. Everything else on this screen — bio, injury, projection,
+   * season statistics — is public sports data and keeps its real reason.
+   */
+  const gatedReason = (state: SectionState<unknown> | { available: false; reason: string }) =>
+    !signedIn ? SIGN_IN_REASON : (state as { reason: string }).reason
+
   return (
-    <div className="af-core af-pf af-pf--2a">
+    <div className="af-core af-pf af-pf--2a" data-public={!signedIn}>
       {/* ── Search rail (360px) ─────────────────────────────────────── */}
       {/*
         The rail owns the search, the matches and the live-data promise. h1 is
@@ -106,12 +143,21 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
           </button>
         </label>
         <p className="af-pf-search-note">
-          Searches every platform you have connected at once. Stats and injuries come from ingested
-          sports data — never an invented number.
+          {signedIn
+            ? 'Searches every platform you have connected at once. Stats and injuries come from ingested sports data — never an invented number.'
+            : 'One search covers Sleeper, ESPN and Yahoo at once. Connect a league to see your own slots and matchups; stats and injuries come from ingested sports data — never an invented number.'}
         </p>
       </form>
 
-        {/* ── Matches ───────────────────────────────────────────────── */}
+        {/*
+          ── Matches ─────────────────────────────────────────────────
+          Suppressed entirely on the public page, where there is no query and
+          nothing to match: a "MATCHES · 0" header above "type at least two
+          characters" is the search box restating itself, and on a page a
+          stranger landed on from Google it reads as a failed search they never
+          ran.
+        */}
+        {signedIn || matches.length > 0 ? (
         <section className="af-card af-pf-matches">
           <header className="af-pf-section-head">
             <h2 className="af-label">Matches · {matches.length}</h2>
@@ -146,6 +192,7 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
             </ul>
           )}
         </section>
+        ) : null}
 
         {/*
           The live-data promise is pinned to the foot of the rail, where the
@@ -191,11 +238,13 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
                     .join(' · ')}
                 </div>
                 <div className="af-pf-line af-pf-rostered">
-                  {detail.leagues.available
-                    ? detail.leagues.data.length > 0
-                      ? `on ${detail.leagues.data.length} of your ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'}`
-                      : `not on any of your ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'}`
-                    : 'cross-league lookup unavailable'}
+                  {!signedIn
+                    ? 'Sign in to see him across your leagues'
+                    : detail.leagues.available
+                      ? detail.leagues.data.length > 0
+                        ? `on ${detail.leagues.data.length} of your ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'}`
+                        : `not on any of your ${leagueCount} ${leagueCount === 1 ? 'league' : 'leagues'}`
+                      : 'cross-league lookup unavailable'}
                 </div>
               </div>
 
@@ -376,14 +425,29 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
             ) : !detail.impact.available ? (
               <section className="af-pf-block">
                 <h3 className="af-label">What this means for your teams</h3>
-                <Unavailable reason={detail.impact.reason} />
+                <Unavailable reason={gatedReason(detail.impact)} />
+                {!signedIn ? (
+                  <Link href="/signup" className="af-btn af-pf-signin">
+                    Connect a league — it is free
+                  </Link>
+                ) : null}
               </section>
             ) : null}
 
             {/* ── Every platform, every league ──────────────────────── */}
             <section className="af-pf-block">
               <h3 className="af-label">Every platform, every league</h3>
-              {detail.leagues.available ? (
+              {/*
+                ⚠ SIGNED OUT, "AVAILABLE WITH ZERO ROWS" IS NOT AN ANSWER. The
+                loader is handed an empty league list and correctly returns an
+                empty array marked available — but rendering that as "he is not
+                rostered in any league you have connected" tells a stranger a
+                fact about leagues they do not have. The signed-out branch is
+                checked first for that reason.
+              */}
+              {!signedIn ? (
+                <Unavailable reason={SIGN_IN_REASON} />
+              ) : detail.leagues.available ? (
                 detail.leagues.data.length === 0 ? (
                   <p className="af-pf-unavailable">
                     He is not rostered in any league you have connected.
@@ -423,7 +487,7 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
                   </table>
                 )
               ) : (
-                <Unavailable reason={detail.leagues.reason} />
+                <Unavailable reason={gatedReason(detail.leagues)} />
               )}
             </section>
 
@@ -452,7 +516,7 @@ export function PlayerFinder({ query, matches, detail, leagueCount }: PlayerFind
             {/* ── Recommended moves ─────────────────────────────────── */}
             <section className="af-pf-block">
               <h3 className="af-label">Recommended moves</h3>
-              <Unavailable reason={detail.recommendedMoves.reason} />
+              <Unavailable reason={gatedReason(detail.recommendedMoves)} />
               <p className="af-pf-readonly-note">
                 When these land they will name the platform and screen — you make the change there.
                 AllFantasy only reads your leagues.

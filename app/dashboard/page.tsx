@@ -17,6 +17,7 @@ import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import { deriveOutstandingIssues } from '@/lib/core-app/outstandingIssues'
 import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
@@ -195,10 +196,24 @@ export default async function DashboardPage({
     if (selectedLeagueId) {
       const leagueHome = await getLeagueHomeData(selectedLeagueId, userId).catch(() => null)
       if (leagueHome) {
-        const otherIssues = playedLeagues.filter((l) => l.id !== leagueHome.league.id).length
+        /*
+         * ⚠ THIS COUNTED LEAGUES, NOT ISSUES, UNDER A PROP CALLED
+         * `otherLeagueIssueCount` — so a user with 60 imported leagues and
+         * nothing wrong anywhere read "59 more issues live outside this league".
+         * `deriveOutstandingIssues` is the same derivation /core already runs,
+         * and it also supplies this league's own issues so 3b can render its one
+         * urgent action instead of leaving the row empty.
+         */
+        const { issues: allIssues } = deriveOutstandingIssues({ leagues: playedLeagues })
+        const thisLeagueIssues = allIssues.filter((i) => i.leagueId === leagueHome.league.id)
+        const otherIssues = allIssues.filter((i) => i.leagueId !== leagueHome.league.id).length
         return (
           <div className="af-core af-lh-shell">
-            <LeagueHome data={leagueHome} otherLeagueIssueCount={otherIssues} />
+            <LeagueHome
+              data={leagueHome}
+              otherLeagueIssueCount={otherIssues}
+              issues={thisLeagueIssues}
+            />
           </div>
         )
       }

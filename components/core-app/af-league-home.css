@@ -1,13 +1,17 @@
 /*
- * AF Core — screen 2, the league-selected dashboard.
+ * AF Core — screen 3b, the league-selected dashboard.
  * Scoped under `.af-core` via the shell; see af-core.css for why.
+ *
+ * Layout follows the 3b screenshot: identity header, full-width season timeline,
+ * then `1fr | 372px`. Everything collapses to one column at 1080px, which is the
+ * point the 372px side column stops leaving the main column a usable width.
  */
 
 .af-lh {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-width: 1080px;
+  max-width: 1280px;
 }
 
 /* ── League identity ─────────────────────────────────────────────────── */
@@ -17,6 +21,10 @@
   align-items: flex-start;
   gap: 16px;
   flex-wrap: wrap;
+}
+
+.af-lh-ident {
+  min-width: 0;
 }
 
 .af-lh-name {
@@ -45,31 +53,34 @@
   text-transform: uppercase;
 }
 
-.af-lh-back {
+.af-lh-headside {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
   margin-left: auto;
+}
+
+.af-lh-back {
   text-decoration: none;
 }
 
-.af-lh-elsewhere {
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--surface2);
-  font-size: 12px;
-  color: var(--muted);
-}
+/* ── Panels ──────────────────────────────────────────────────────────── */
 
-/* ── Sections ────────────────────────────────────────────────────────── */
-
-.af-lh-section {
+.af-lh-panel {
   padding: 14px;
 }
 
-.af-lh-section-head {
+/*
+ * Commissioner Hub carries a --warn edge in the design because it is the "needs
+ * a decision" colour. The tone is on the panel, not on a nested chip, so the
+ * whole card reads as flagged at a glance.
+ */
+.af-lh-panel[data-tone='warn'] {
+  border-color: var(--warn);
+}
+
+.af-lh-panel-head {
   display: flex;
   align-items: baseline;
   gap: 10px;
@@ -77,11 +88,11 @@
   margin-bottom: 10px;
 }
 
-.af-lh-section-title {
+.af-lh-panel-title {
   margin: 0;
 }
 
-.af-lh-section-help {
+.af-lh-panel-help {
   margin-left: auto;
   font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
@@ -91,9 +102,43 @@
   color: var(--accent);
 }
 
+/* "YOU ARE HERE · WEEK 12" — a chip in the design, not a bare label. */
+.af-lh-here {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+}
+
+.af-lh-scope {
+  color: var(--muted);
+  text-transform: none;
+  letter-spacing: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
 .af-lh-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: minmax(0, 1fr) 372px;
+  gap: 12px;
+  align-items: start;
+}
+
+.af-lh-main,
+.af-lh-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.af-lh-two {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -107,6 +152,25 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--muted);
+}
+
+.af-lh-cardlink {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+.af-lh-cardlink:hover {
+  text-decoration: underline;
+}
+
+/* The matchup strip keeps the --chimmy ground from the design even while it is
+   reporting that it has no scores — the frame is the layout, not the claim. */
+.af-lh-matchup {
+  background: var(--chimmy);
+  border-color: var(--accent-line);
 }
 
 /*
@@ -135,15 +199,83 @@
   color: var(--muted);
 }
 
+/* ── The one urgent action ───────────────────────────────────────────── */
+
+.af-lh-urgent {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+}
+
+.af-lh-urgent-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--bad-soft);
+  color: var(--bad);
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-weight: 800;
+}
+.af-lh-urgent[data-severity='warn'] .af-lh-urgent-glyph {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-lh-urgent[data-severity='info'] .af-lh-urgent-glyph {
+  background: var(--chip);
+  color: var(--muted);
+}
+
+.af-lh-urgent-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.af-lh-urgent-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-lh-urgent-meta {
+  margin: 3px 0 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.af-lh-urgent-cta {
+  flex: none;
+  text-decoration: none;
+}
+
 /* ── Season timeline ─────────────────────────────────────────────────── */
+
+/*
+ * The timeline is the only full-width panel, and its stage columns need the
+ * room: at the default panel padding a seven-stage season squeezed each column
+ * under its 116px minimum and the row scrolled on a desktop screen.
+ */
+.af-lh-timeline-panel {
+  padding: 14px 16px 16px;
+}
 
 .af-timeline {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
-  gap: 4px;
+  gap: 10px;
   overflow-x: auto;
+  /* The current stage and the next deadline stay in frame when this scrolls. */
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
 }
 
 .af-timeline-stage {
@@ -151,35 +283,21 @@
   min-width: 116px;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 10px 10px 10px 0;
-  border-top: 2px solid var(--line2);
-  position: relative;
+  gap: 6px;
+  scroll-snap-align: start;
 }
 
-.af-timeline-stage[data-state='past'] {
-  border-top-color: var(--line2);
-  opacity: 0.55;
-}
-.af-timeline-stage[data-state='now'] {
-  border-top-color: var(--accent);
-}
-.af-timeline-stage[data-state='future'] {
-  border-top-color: var(--line);
-}
-
-.af-timeline-dot {
-  position: absolute;
-  top: -5px;
-  left: 0;
-  width: 8px;
-  height: 8px;
+/* 6px bar over the label, per the handoff's stage table. */
+.af-timeline-bar {
+  height: 6px;
   border-radius: 999px;
   background: var(--line2);
 }
-.af-timeline-stage[data-state='now'] .af-timeline-dot {
+.af-timeline-stage[data-state='past'] .af-timeline-bar {
+  background: var(--good);
+}
+.af-timeline-stage[data-state='now'] .af-timeline-bar {
   background: var(--accent);
-  box-shadow: 0 0 0 4px var(--accent-soft);
 }
 
 .af-timeline-label {
@@ -188,7 +306,8 @@
   color: var(--text2);
 }
 .af-timeline-stage[data-state='now'] .af-timeline-label {
-  color: var(--text);
+  color: var(--accent);
+  font-weight: 800;
 }
 .af-timeline-when {
   color: var(--faint);
@@ -265,20 +384,84 @@
   font-weight: 800;
   color: var(--text2);
 }
+.af-buzz-text {
+  min-width: 0;
+}
 
-/* ── Read-only reminder ──────────────────────────────────────────────── */
+/* ── Chimmy / read-only ──────────────────────────────────────────────── */
+
+.af-lh-chimmy-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
 
 .af-lh-readonly-note {
-  margin: 2px 0 0;
+  margin: 8px 0 0;
   font-size: 12px;
+  line-height: 1.5;
   color: var(--faint);
 }
 
+/* ── All leagues footer ──────────────────────────────────────────────── */
+
+.af-lh-elsewhere {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 12px 14px;
+}
+.af-lh-elsewhere-text {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.af-lh-elsewhere .af-lh-cardlink {
+  margin-top: 0;
+  margin-left: auto;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+/* 372px + a usable main column stops fitting here. */
+@media (max-width: 1080px) {
+  .af-lh-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 @media (max-width: 720px) {
+  .af-lh-name {
+    font-size: 22px;
+  }
+  .af-lh-headside {
+    margin-left: 0;
+    width: 100%;
+  }
   .af-lh-back {
+    margin-left: auto;
+  }
+  .af-lh-panel-help {
     margin-left: 0;
   }
-  .af-lh-section-help {
+  /* Draft HQ and Commissioner Hub stack rather than becoming two 150px cards. */
+  .af-lh-two {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /*
+   * The urgent card goes column so the CTA is a full-width 44px target, which is
+   * how the mobile frame draws it.
+   */
+  .af-lh-urgent {
+    flex-wrap: wrap;
+  }
+  .af-lh-urgent-cta {
+    width: 100%;
+    min-height: 44px;
+  }
+  .af-lh-elsewhere .af-lh-cardlink {
     margin-left: 0;
   }
 }
