@@ -10,6 +10,7 @@ import type { Prisma } from "@prisma/client"
 import { prisma } from "@/lib/prisma"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
+import { normalizeSensitivity, TANKING_BENCH_GAP_POINTS } from "./sensitivity"
 
 export type TankingEvidence = {
   rosterId: string
@@ -58,6 +59,15 @@ async function runClaudeTankingPrompt(input: {
 } | null> {
   const key = process.env.ANTHROPIC_API_KEY?.trim()
   if (!key) return null
+  /*
+   * ⚠ ONE try/catch AROUND THE WHOLE CALL. Identical bug to the one fixed in
+   * CollusionDetectionEngine: `client.messages.create()` was unguarded and only
+   * the trailing JSON.parse had a catch, so any API failure aborted the entire
+   * weekly tanking scan instead of falling back to the caller's deterministic
+   * verdict. The model id below currently returns 404, so with a key configured
+   * that failure was certain, not occasional.
+   */
+  try {
   const client = new Anthropic({ apiKey: key })
   const user = `League: ${input.leagueId}. Week ${input.weekNumber}.
 Team: ${input.evidence.teamName} (${input.evidence.currentRecord.wins}-${input.evidence.currentRecord.losses}, eliminated: ${input.evidence.eliminatedFromPlayoffs}).
@@ -85,15 +95,18 @@ Respond ONLY with JSON: {
   const raw = text.text.trim()
   const jsonMatch = raw.match(/\{[\s\S]*\}/)
   if (!jsonMatch) return null
-  try {
-    return JSON.parse(jsonMatch[0]) as {
-      verdict: "clean" | "suspicious" | "likely_tanking"
-      confidence: number
-      severity: "low" | "medium" | "high"
-      summary: string
-      redFlags: string[]
-    }
-  } catch {
+  return JSON.parse(jsonMatch[0]) as {
+    verdict: "clean" | "suspicious" | "likely_tanking"
+    confidence: number
+    severity: "low" | "medium" | "high"
+    summary: string
+    redFlags: string[]
+  }
+  } catch (err) {
+    console.warn(
+      "[integrity] tanking AI pass unavailable, falling back to deterministic scoring:",
+      err instanceof Error ? err.message : String(err),
+    )
     return null
   }
 }
@@ -127,12 +140,59 @@ function parseLineupSnapshots(raw: unknown): { rosterId: string; starters: { pla
   return out
 }
 
+/**
+ * Player ids -> display names.
+ *
+ * ⚠ WITHOUT THIS THE CARD ACCUSES A NUMBER. `TankingEvidence.startedPlayerName`
+ * was assigned `st.playerId` — the raw lineup-snapshot id — so the commissioner
+ * -facing sentence rendered as "started 6080 (OUT) at 0.0 projected over a bench
+ * option at 12.4". The single most damning line on the flag was unreadable, and
+ * a commissioner cannot verify an accusation against a player they cannot
+ * identify. Ids arrive in whichever shape the source platform used, so both the
+ * sleeper id and the externalId are tried; anything that does not resolve keeps
+ * its id rather than inventing a name.
+ */
+async function resolvePlayerNames(ids: string[], sport: string): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.map((i) => i.trim()).filter(Boolean))]
+  if (unique.length === 0) return new Map()
+  const rows = await prisma.sportsPlayer
+    .findMany({
+      where: { sport, OR: [{ sleeperId: { in: unique } }, { externalId: { in: unique } }] },
+      select: { externalId: true, sleeperId: true, name: true },
+    })
+    .catch(() => [] as Array<{ externalId: string; sleeperId: string | null; name: string }>)
+  const byId = new Map<string, string>()
+  for (const r of rows) {
+    if (r.sleeperId && !byId.has(r.sleeperId)) byId.set(r.sleeperId, r.name)
+    if (!byId.has(r.externalId)) byId.set(r.externalId, r.name)
+  }
+  return byId
+}
+
 export async function scanWeekForTanking(leagueId: string, weekNumber: number): Promise<TankingScanResult> {
   const scannedAt = new Date().toISOString()
   const settings = await prisma.leagueIntegritySettings.findUnique({ where: { leagueId } })
   if (!settings?.tankingMonitorEnabled) {
     return { leagueId, weekNumber, flags: [], scannedAt }
   }
+
+  /*
+   * ⚠ THE SUB-RULES AND THE START WEEK ARE REAL GATES, NOT LABELS. Every field
+   * below was saved by the settings rail and read by nothing until now; a
+   * commissioner who unticked "benching significantly better projections" still
+   * got bench-pattern flags. See lib/integrity/sensitivity.ts.
+   *
+   * `tankingStartWeek` is the one a commissioner will notice first: early-season
+   * lineup mistakes are incompetence, not tanking, and flagging week 2 trains
+   * everyone to ignore the queue. Null means "no floor", which is the column
+   * default and the previous behaviour.
+   */
+  if (typeof settings.tankingStartWeek === "number" && weekNumber < settings.tankingStartWeek) {
+    return { leagueId, weekNumber, flags: [], scannedAt }
+  }
+  const benchGapPoints = TANKING_BENCH_GAP_POINTS[normalizeSensitivity(settings.tankingSensitivity)]
+  const checkIllegalLineups = settings.tankingIllegalLineupCheck !== false
+  const checkBenchPattern = settings.tankingBenchPatternCheck !== false
 
   const matchups = await prisma.redraftMatchup.findMany({
     where: { leagueId, week: weekNumber },
@@ -144,7 +204,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
 
   const league = await prisma.league.findFirst({
     where: { id: leagueId },
-    select: { playoffStartWeek: true },
+    select: { playoffStartWeek: true, sport: true },
   })
   const playoffWeek = league?.playoffStartWeek ?? 15
   const weeksUntilPlayoffs = Math.max(0, playoffWeek - weekNumber)
@@ -159,7 +219,21 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
       if (!side) continue
       const roster = side.roster
       const parsed = parseLineupSnapshots(side.snap)
-      const block = parsed.find((p) => p.rosterId === roster.id) ?? parsed[0]
+      /*
+       * ⚠ NO FALLBACK TO `parsed[0]`, EVER. This read `?? parsed[0]`, so a roster
+       * with no snapshot block of its own was analysed using whichever block
+       * happened to be FIRST in the array — another manager's lineup — and the
+       * resulting flag was then filed against THIS roster.
+       *
+       * Measured against a seeded league: one genuinely suspicious lineup
+       * produced EIGHT tanking flags, seven of them naming managers who had done
+       * nothing, each citing bench points they never left on a bench. This is an
+       * integrity surface; a fabricated accusation of cheating is the single
+       * worst output it can produce. A roster we have no lineup card for gets no
+       * claim made about it.
+       */
+      const block = parsed.find((p) => p.rosterId === roster.id)
+      if (!block) continue
       const suspicious: TankingEvidence["illegalOrSuspiciousStarters"] = []
       let pointsLeft = 0
       if (block) {
@@ -170,6 +244,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
           const out =
             status.includes("OUT") || status.includes("IR") || status === "DOUBTFUL" || status === "D"
           if (out) {
+            if (!checkIllegalLineups) continue
             suspicious.push({
               slotPosition: "FLEX",
               startedPlayerId: st.playerId,
@@ -179,7 +254,7 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
               benchedBetterOptionProjection: benchBest > stProj ? benchBest : undefined,
               startedPlayerProjection: stProj,
             })
-          } else if (benchBest - stProj >= 5) {
+          } else if (checkBenchPattern && benchBest - stProj >= benchGapPoints) {
             pointsLeft += benchBest - stProj
             suspicious.push({
               slotPosition: "FLEX",
@@ -192,6 +267,19 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
             })
           }
         }
+      }
+
+      if (suspicious.length === 0) continue
+
+      // Resolve ids to names before the evidence is persisted, so the stored
+      // payload is readable rather than needing a second lookup at render time.
+      const nameById = await resolvePlayerNames(
+        suspicious.map((x) => x.startedPlayerName),
+        String(league?.sport ?? "NFL"),
+      )
+      for (const row of suspicious) {
+        const resolved = nameById.get(row.startedPlayerName)
+        if (resolved) row.startedPlayerName = resolved
       }
 
       const eliminated = roster.isEliminated === true
@@ -209,8 +297,6 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
         redFlags: [],
       }
 
-      if (suspicious.length === 0) continue
-
       const ai = await runClaudeTankingPrompt({ leagueId, weekNumber, evidence })
       const verdict = ai?.verdict ?? "suspicious"
       const confidence = ai?.confidence ?? 0.5
@@ -219,6 +305,19 @@ export async function scanWeekForTanking(leagueId: string, weekNumber: number): 
 
       if (verdict === "suspicious" || verdict === "likely_tanking") {
         const summary = ai?.summary ?? "Lineup card shows starters in worse health or projection than bench alternatives."
+        /*
+         * ⚠ ONE OPEN TANKING CASE PER MANAGER. The collusion engine already
+         * refuses to re-flag a trade that has an open flag; this path had no such
+         * check, so every weekly scan stacked another identical card onto the
+         * commissioner's queue for a manager they had not gotten to yet. Same
+         * intent as the collusion dedupe: a flag is a case to resolve, not a log
+         * line.
+         */
+        const alreadyOpen = await prisma.integrityFlag.findFirst({
+          where: { leagueId, flagType: "tanking", status: "open", affectedRosterIds: { has: roster.id } },
+          select: { id: true },
+        })
+        if (alreadyOpen) continue
         const row = await prisma.integrityFlag.create({
           data: {
             leagueId,

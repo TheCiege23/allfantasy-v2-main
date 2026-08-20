@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma"
 import { normalizeToSupportedSport } from "@/lib/sport-scope"
 
 import { notifyCommissionerOfFlag } from "./integrityNotifier"
+import { COLLUSION_VALUE_GAP_PCT, normalizeSensitivity } from "./sensitivity"
 
 export type CollusionEvidence = {
   tradeTransactionId: string
@@ -134,7 +135,7 @@ async function valueOffers(
     externalIds.length > 0
       ? await prisma.sportsPlayer.findMany({
           where: { sport: sportStr, externalId: { in: externalIds } },
-          select: { externalId: true, name: true, position: true, fetchedAt: true },
+          select: { externalId: true, name: true, position: true, fetchedAt: true, sleeperId: true },
         })
       : []
 
@@ -147,7 +148,7 @@ async function valueOffers(
             sport: sportStr,
             OR: nameHints.map((name) => ({ name: { equals: name, mode: "insensitive" as const } })),
           },
-          select: { externalId: true, name: true, position: true, fetchedAt: true },
+          select: { externalId: true, name: true, position: true, fetchedAt: true, sleeperId: true },
           orderBy: { fetchedAt: "desc" },
         })
       : []
@@ -158,17 +159,49 @@ async function valueOffers(
     if (!byNameLower.has(k)) byNameLower.set(k, r)
   }
 
-  const resolvedIds = new Set<string>([...byExt.keys()])
-  for (const r of nameFetched) resolvedIds.add(r.externalId)
+  /*
+   * ⚠ THE ADP JOIN NEEDS THE `${sport}:` PREFIX, AND WITHOUT IT NOTHING EVER
+   * MATCHED. `SportsPlayer.externalId` and `SportsPlayerRecord.id` are written in
+   * the same loop of `lib/sleeper/SleeperPlayerSeedService.ts` from the same
+   * source id, in two different shapes:
+   *
+   *     SportsPlayer.externalId  = player.playerId            -> "4017"
+   *     SportsPlayerRecord.id    = `${sport}:${player.playerId}` -> "NFL:4017"
+   *
+   * This function looked records up by the bare externalId, so the query matched
+   * zero rows — measured: 0 hits across a 4,000-id sample. Every player therefore
+   * fell through to `estimatedValueFromAdp(undefined)`, which is a flat 270 for
+   * everyone. A player-for-player trade valued out exactly even no matter who was
+   * in it, `valueDifferentialPct` was always 0, and the engine could not flag a
+   * lopsided trade at all. Only pick-bearing trades ever produced a differential,
+   * which is why `integrity_flags` is empty in production.
+   *
+   * The canonical key is the SLEEPER id, not the externalId: externalId also
+   * carries already-prefixed shapes from other importers (`sleeper:13599`,
+   * `tsdb_...`), which would build a nonsense `NFL:sleeper:13599`. So the sleeper
+   * id is preferred and the bare externalId is only a fallback for rows that have
+   * none.
+   */
+  const recordKeyFor = (row: { externalId: string; sleeperId?: string | null }): string | null => {
+    const raw = row.sleeperId?.trim() || (/^[0-9]+$/.test(row.externalId) ? row.externalId : '')
+    return raw ? `${String(recSport)}:${raw}` : null
+  }
 
+  const keyByExternalId = new Map<string, string>()
+  for (const r of [...byExt.values(), ...nameFetched]) {
+    const key = recordKeyFor(r)
+    if (key) keyByExternalId.set(r.externalId, key)
+  }
+
+  const recordIds = [...new Set(keyByExternalId.values())]
   const recordRows =
-    resolvedIds.size > 0
+    recordIds.length > 0
       ? await prisma.sportsPlayerRecord.findMany({
-          where: { sport: String(recSport), id: { in: [...resolvedIds] } },
+          where: { sport: String(recSport), id: { in: recordIds } },
           select: { id: true, adp: true },
         })
       : []
-  const adpByPlayerId = new Map(recordRows.map((r) => [r.id, r.adp]))
+  const adpByRecordId = new Map(recordRows.map((r) => [r.id, r.adp]))
 
   for (const p of playerPieces) {
     let sp = p.externalId ? byExt.get(p.externalId) : undefined
@@ -181,14 +214,28 @@ async function valueOffers(
           sport: sportStr,
           OR: [{ externalId: p.externalId }, { sleeperId: p.externalId }],
         },
-        select: { externalId: true, name: true, position: true, fetchedAt: true },
+        select: { externalId: true, name: true, position: true, fetchedAt: true, sleeperId: true },
         orderBy: { fetchedAt: "desc" },
       })
-      if (one) sp = one
+      if (one) {
+        sp = one
+        // This late resolution missed the bulk key-building pass above, so register
+        // its record key too — otherwise it silently falls back to the flat default.
+        const key = recordKeyFor(one)
+        if (key && !keyByExternalId.has(one.externalId)) {
+          keyByExternalId.set(one.externalId, key)
+          const late = await prisma.sportsPlayerRecord.findUnique({
+            where: { id: key },
+            select: { id: true, adp: true },
+          })
+          if (late) adpByRecordId.set(late.id, late.adp)
+        }
+      }
     }
 
     const playerKey = sp?.externalId ?? p.externalId
-    const adp = playerKey ? adpByPlayerId.get(playerKey) : undefined
+    const recordKey = playerKey ? keyByExternalId.get(playerKey) : undefined
+    const adp = recordKey ? adpByRecordId.get(recordKey) : undefined
     const estimatedValue = sp ? estimatedValueFromAdp(adp) : 45
 
     rows.push({
@@ -227,6 +274,21 @@ async function runClaudeCollusionPrompt(payload: {
   const key = process.env.ANTHROPIC_API_KEY?.trim()
   if (!key) return null
 
+  /*
+   * ⚠ EVERYTHING FROM HERE IS INSIDE ONE try/catch, AND IT USED NOT TO BE. The
+   * `client.messages.create()` call was unguarded — only the trailing
+   * `JSON.parse` had a catch — so ANY API failure (auth, rate limit, network, a
+   * retired model id) propagated out of this helper, out of
+   * `scanTradeForCollusion`, and aborted the whole scan.
+   *
+   * That is not hypothetical: measured 2026-08-20, the model id below returns
+   * `404 not_found_error: model: claude-sonnet-4-20250514`. With an
+   * ANTHROPIC_API_KEY configured, every collusion scan therefore threw, every
+   * time. This helper is explicitly optional — the caller already falls back to
+   * a deterministic verdict when it returns null — so a failure here must
+   * degrade to that path, never take the scan down with it.
+   */
+  try {
   const client = new Anthropic({ apiKey: key })
   const user = `League: ${payload.leagueId}. Trade analysis:
 Team1 (${payload.evidence.team1.wins}-${payload.evidence.team1.losses}, playoff contender: ${payload.evidence.isPlayoffContender.team1}) gives: ${JSON.stringify(payload.evidence.assetsTeam1Gave)}
@@ -255,21 +317,34 @@ Respond ONLY with JSON: {
   const raw = text.text.trim()
   const jsonMatch = raw.match(/\{[\s\S]*\}/)
   if (!jsonMatch) return null
-  try {
-    return JSON.parse(jsonMatch[0]) as {
-      verdict: "clean" | "suspicious" | "likely_collusion"
-      confidence: number
-      severity: "low" | "medium" | "high"
-      summary: string
-      redFlags: string[]
-    }
-  } catch {
+  return JSON.parse(jsonMatch[0]) as {
+    verdict: "clean" | "suspicious" | "likely_collusion"
+    confidence: number
+    severity: "low" | "medium" | "high"
+    summary: string
+    redFlags: string[]
+  }
+  } catch (err) {
+    console.warn(
+      "[integrity] collusion AI pass unavailable, falling back to deterministic scoring:",
+      err instanceof Error ? err.message : String(err),
+    )
     return null
   }
 }
 
 export async function scanTradeForCollusion(leagueId: string, tradeTransactionId: string): Promise<CollusionScanResult> {
   const scannedAt = new Date().toISOString()
+  /*
+   * The commissioner's own sensitivity setting. Read here rather than assumed:
+   * this row was written by the settings rail on every save since the table
+   * existed, and until now nothing consumed it -- see lib/integrity/sensitivity.ts.
+   * `medium` (the column default, and the value for every league that never
+   * touched the control) resolves to the 35% gap this function used to hardcode,
+   * so wiring it up is a no-op for anyone who has not deliberately moved it.
+   */
+  const settings = await prisma.leagueIntegritySettings.findUnique({ where: { leagueId } })
+  const gapPct = COLLUSION_VALUE_GAP_PCT[normalizeSensitivity(settings?.collusionSensitivity)]
   const trade = await prisma.redraftLeagueTrade.findFirst({
     where: { id: tradeTransactionId, leagueId },
     include: {
@@ -357,8 +432,8 @@ export async function scanTradeForCollusion(leagueId: string, tradeTransactionId
     evidence.redFlags = [...new Set([...evidence.redFlags, ...ai.redFlags])]
   }
 
-  const verdict = ai?.verdict ?? (valueDifferentialPct >= 35 ? "suspicious" : "clean")
-  const confidence = ai?.confidence ?? (valueDifferentialPct >= 35 ? 0.55 : 0.2)
+  const verdict = ai?.verdict ?? (valueDifferentialPct >= gapPct ? "suspicious" : "clean")
+  const confidence = ai?.confidence ?? (valueDifferentialPct >= gapPct ? 0.55 : 0.2)
   const severity = ai?.severity ?? (valueDifferentialPct >= 40 ? "high" : valueDifferentialPct >= 25 ? "medium" : "low")
 
   const flags: CollusionScanResult["flags"] = []
