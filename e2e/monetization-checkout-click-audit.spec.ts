@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated, waitForHydrated } from './helpers/hydration'
 
 test.describe.configure({ timeout: 180_000 })
 
@@ -205,6 +206,14 @@ async function waitForPricingReady(page: Page) {
   await expect(page.getByText('Loading pricing catalog...')).toHaveCount(0, { timeout: 20_000 })
   await expect(page.getByTestId('pricing-subscription-cta-af_pro_monthly')).toBeVisible({ timeout: 20_000 })
   await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeVisible({ timeout: 20_000 })
+  /*
+   * ⚠ VISIBLE IS NOT CLICKABLE. Both assertions above pass on the server-rendered
+   * markup, before React attaches onClick — measured at 65ms early on a cold dev
+   * server. Every test in this file treats this function as "the page is ready to
+   * drive", so the hydration wait belongs here rather than at each call site.
+   * See e2e/helpers/hydration.ts.
+   */
+  await waitForHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
 }
 
 test.describe('@monetization checkout click audit', () => {
@@ -238,7 +247,7 @@ test.describe('@monetization checkout click audit', () => {
     await waitForPricingReady(page)
     await expect(page.getByTestId('pricing-subscription-cta-af_pro_monthly')).toBeVisible()
 
-    await page.getByTestId('pricing-subscription-cta-af_pro_monthly').click()
+    await clickHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
     await page.waitForURL('**/e2e/subscription-checkout-success')
 
     expect(checkoutBody).toMatchObject({
@@ -278,7 +287,7 @@ test.describe('@monetization checkout click audit', () => {
     await waitForPricingReady(page)
     await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeVisible()
 
-    await page.getByTestId('pricing-token-cta-af_tokens_10').click()
+    await clickHydrated(page.getByTestId('pricing-token-cta-af_tokens_10'))
     await page.waitForURL('**/e2e/token-checkout-success')
 
     expect(checkoutBody).toMatchObject({
@@ -300,7 +309,7 @@ test.describe('@monetization checkout click audit', () => {
 
     await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
     await waitForPricingReady(page)
-    await page.getByTestId('pricing-subscription-cta-af_pro_monthly').click()
+    await clickHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
 
     await expect(page.getByText('Checkout is temporarily unavailable for this plan.')).toBeVisible()
     await expect(page).toHaveURL(/\/pricing/)
@@ -308,26 +317,19 @@ test.describe('@monetization checkout click audit', () => {
   })
 
   /*
-   * ⚠ fixme, NOT skip: the assertions below are now correct for the shipped
-   * page and this SHOULD pass. It does not yet, and the remaining reason is not
-   * understood well enough to claim a fix.
+   * ⚠ THIS TEST'S REAL BUG WAS HYDRATION, NOT ANY OF ITS ASSERTIONS.
    *
-   * What was wrong and is now fixed: the testids (restored on PricingV4), the
-   * plan label (the af_war_room_* plan renders as "AF Legacy"), and the
-   * billing-interval toggle, which is the only route to a yearly SKU because the
-   * "Yearly, if you'd rather pay once" section carries no CTA.
+   * It stalled on `waitForURL` partway through its eleven SKUs and looked like a
+   * navigation problem. It was not: the click landed on a CTA that was visible
+   * and enabled but not yet wired up, so nothing happened and the wait ran to
+   * the timeout. With clickHydrated it completes in about 90 seconds.
    *
-   * What still fails: the checkout loop stalls on `waitForURL` partway through
-   * the eleven SKUs. Verified NOT the cause — no error state renders, the button
-   * is enabled and clickable, `startCheckout` posts the shape the mock expects
-   * ({ sku, returnPath }) to the endpoint the mock intercepts, and the geo
-   * `blocked` flag is false. Needs a run with `--trace on` to see which
-   * iteration stalls and whether the navigation is fired at all.
-   *
-   * Left executable and marked fixme rather than deleted so the next person
-   * starts from the fixed assertions instead of the old ones.
+   * The assertions were separately wrong and are also fixed: the testids
+   * (restored on PricingV4), the plan label (the af_war_room_* plan renders as
+   * "AF Legacy"), and the billing-interval toggle — the only route to a yearly
+   * SKU, because the "Yearly, if you'd rather pay once" section carries no CTA.
    */
-  test.fixme('full product matrix CTAs map to correct checkout routes', async ({ page }) => {
+  test('full product matrix CTAs map to correct checkout routes', async ({ page }) => {
     /*
      * The heaviest test in this file by a wide margin: eleven checkout round
      * trips (eight subscription SKUs, three token packs), each one a full
@@ -435,7 +437,7 @@ test.describe('@monetization checkout click audit', () => {
       }
       const cta = page.getByTestId(`pricing-subscription-cta-${sku}`)
       await expect(cta).toBeEnabled()
-      await cta.click()
+      await clickHydrated(cta)
       await page.waitForURL('**/e2e/checkout-success?sku=*')
       await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
       await waitForPricingReady(page)
@@ -444,7 +446,7 @@ test.describe('@monetization checkout click audit', () => {
     for (const sku of tokenSkus) {
       const cta = page.getByTestId(`pricing-token-cta-${sku}`)
       await expect(cta).toBeEnabled()
-      await cta.click()
+      await clickHydrated(cta)
       await page.waitForURL('**/e2e/checkout-success?sku=*')
       await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
       await waitForPricingReady(page)
@@ -534,7 +536,7 @@ test.describe('@monetization checkout click audit', () => {
       await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeVisible()
       await expect(page.getByTestId('pricing-token-cta-af_tokens_10')).toBeEnabled()
 
-      await page.getByTestId('pricing-subscription-cta-af_pro_monthly').click()
+      await clickHydrated(page.getByTestId('pricing-subscription-cta-af_pro_monthly'))
       await page.waitForURL('**/e2e/entry-checkout-success')
     }
 
