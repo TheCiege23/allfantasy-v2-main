@@ -327,15 +327,40 @@ async function routeMiddleware(request: NextRequest) {
     return legacyRedirect
   }
 
-  /** Signed-in users should land on the fantasy shell hub, not the marketing homepage. */
+  /*
+   * ⚠ `/` NO LONGER REDIRECTS ANYONE TO /dashboard, AND THAT IS THE FIX FOR
+   * "TYPING allfantasy.ai SHOWS THE LOGIN PAGE".
+   *
+   * This branch used to send any request carrying `token.sub` to /dashboard. The
+   * trouble is that three different places each decided "signed in" differently:
+   *
+   *   here                       `token.sub`                  — set by next-auth ALWAYS
+   *   app/page.tsx               `session.user`               — always truthy alongside a token
+   *   app/dashboard/page.tsx     `session.user.id` non-empty  — only set by the jwt callback
+   *
+   * `token.id` is assigned in exactly one place (lib/auth.ts, `token.id = user.id`)
+   * and only on the sign-in event. Any session token that predates that line, or
+   * any refresh where `user` is absent, therefore carries `sub` WITHOUT `id`. Such
+   * a visitor was redirected here to /dashboard, rejected there for having no
+   * usable id, and forwarded to /login — so entering the domain produced a login
+   * form, permanently, because every reload of `/` repeated the trip. Reproduced
+   * end to end: `/` → `/dashboard` → `/login`, two redirects, title "Sign In".
+   *
+   * Serving the marketing page unconditionally removes the trip entirely. A
+   * signed-in reader is offered their dashboard by the landing nav instead of
+   * being redirected into it — see app/page.tsx.
+   *
+   * The guest-trial cookie still has to be cleared for an authenticated visitor,
+   * which the redirect used to do on its way out; it now rides on the pass-through
+   * response at the end of this function.
+   */
+  let clearGuestTrialOnPassThrough = false
   if (pathname === "/" || pathname === "") {
     const authSecret = resolveAuthSecret()
     if (authSecret) {
       const token = await getToken({ req: request, secret: authSecret })
       if (token?.sub) {
-        const url = request.nextUrl.clone()
-        url.pathname = "/dashboard"
-        return clearGuestTrialCookie(request, NextResponse.redirect(url))
+        clearGuestTrialOnPassThrough = true
       }
     }
   }
@@ -439,6 +464,12 @@ async function routeMiddleware(request: NextRequest) {
   }
 
   const response = nextWithRouteHeaders(request, pathname)
+  // Carried over from the `/` → /dashboard redirect this replaced: an
+  // authenticated visitor's trial token is invalidated even though they are no
+  // longer being redirected anywhere. No-op when the cookie is absent.
+  if (clearGuestTrialOnPassThrough) {
+    clearGuestTrialCookie(request, response)
+  }
   if (country === "US" && region) {
     response.headers.set("x-user-state", region.toUpperCase())
   }
