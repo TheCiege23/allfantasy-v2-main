@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -87,72 +88,6 @@ function getSlotForOverall(overall: number, teamCount: number): { round: number;
   }
 }
 
-async function openCommissionerControls(page: Page) {
-  const dedicatedGear = page.getByTestId('draft-open-commissioner-controls')
-  const primaryCta = page.getByTestId('draft-topbar-commissioner-primary')
-  const modal = page.getByTestId('draft-commissioner-modal')
-  const overlay = page.getByTestId('draft-commissioner-overlay')
-  const dialogFallback = page.getByRole('dialog', { name: /Commissioner control center/i })
-
-  const isControlsVisible = async () =>
-    (await modal.isVisible().catch(() => false)) ||
-    (await dialogFallback.isVisible().catch(() => false)) ||
-    (await overlay.isVisible().catch(() => false))
-
-  const assertControlsVisible = async () => {
-    const modalVisible = await modal.isVisible().catch(() => false)
-    const dialogVisible = await dialogFallback.isVisible().catch(() => false)
-    if (!modalVisible && !dialogVisible) {
-      await expect(dialogFallback).toBeVisible({ timeout: 15_000 })
-      return
-    }
-    if (modalVisible) {
-      await expect(modal).toBeVisible({ timeout: 15_000 })
-      return
-    }
-    await expect(dialogFallback).toBeVisible({ timeout: 15_000 })
-  }
-
-  /** When `onOpenDraftRoomSettings` is set, the header gear is draft settings — use primary CTA or overflow instead. */
-  const clickCommissionerEntry = async () => {
-    if ((await dedicatedGear.count()) > 0) {
-      await dedicatedGear.click()
-      return
-    }
-    if ((await primaryCta.count()) > 0) {
-      await primaryCta.click()
-      return
-    }
-    await page.keyboard.press('Escape').catch(() => {})
-    const menu = page.getByTestId('draft-topbar-menu')
-    if (!(await menu.isVisible().catch(() => false))) {
-      await page.getByTestId('draft-topbar-menu-toggle').click()
-    }
-    await expect(menu).toBeVisible({ timeout: 10_000 })
-    await page.getByTestId('draft-topbar-open-settings').click()
-  }
-
-  if (await isControlsVisible()) {
-    await assertControlsVisible()
-    return
-  }
-
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    if (await isControlsVisible()) {
-      await assertControlsVisible()
-      return
-    }
-    await clickCommissionerEntry()
-    await expect.poll(async () => await isControlsVisible(), { timeout: 10_000 }).toBe(true)
-    if (await isControlsVisible()) {
-      await assertControlsVisible()
-      return
-    }
-    await page.waitForTimeout(200)
-  }
-
-  await assertControlsVisible()
-}
 
 async function clickDraftTopbarAction(page: Page, testId: string) {
   const action = page.getByTestId(testId).first()

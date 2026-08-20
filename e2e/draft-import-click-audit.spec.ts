@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clickHydrated } from './helpers/hydration'
+import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -331,7 +332,7 @@ test.describe('@draft-import click audit', () => {
     await openDraftRoomHarness(page)
     const desktop = page.getByTestId('draft-desktop-layout')
 
-    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
+    await openCommissionerControls(page)
     const modal = page.getByTestId('draft-commissioner-modal')
     await expect(modal).toBeVisible()
     await clickHydrated(modal.getByTestId('draft-commissioner-open-import'))
@@ -396,7 +397,7 @@ test.describe('@draft-import click audit', () => {
     await page.goto(`/e2e/draft-room?leagueId=${leagueId}&sport=NFL`)
     await openDraftRoomHarness(page)
 
-    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
+    await openCommissionerControls(page)
     const modal = page.getByTestId('draft-commissioner-modal')
     await clickHydrated(modal.getByTestId('draft-commissioner-open-import'))
     await expect(modal.getByTestId('draft-import-flow-root')).toBeVisible()
