@@ -5,13 +5,20 @@
  * Layout follows the 3b screenshot: identity header, full-width season timeline,
  * then `1fr | 372px`. Everything collapses to one column at 1080px, which is the
  * point the 372px side column stops leaving the main column a usable width.
+ *
+ * ⚠ NO max-width, AND THE HANDOFF'S "Frame 1280x980" IS NOT AN INSTRUCTION TO
+ * ADD ONE. Measured on a 2560px screen: /dashboard renders its modules 2196px
+ * wide with `max-width: none` all the way down, while this screen capped at
+ * 1280 and gave its main column 896px. Those are two STATES OF THE SAME ROUTE —
+ * picking a league from the all-leagues dashboard shrank the content to roughly
+ * a third of the width, which reads as a bug rather than as a design. Restored
+ * here when 3a's rewrite of this file conflicted with #522, which fixed it.
  */
 
 .af-lh {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-width: 1280px;
 }
 
 /* ── League identity ─────────────────────────────────────────────────── */
@@ -480,16 +487,20 @@
   padding: 20px 22px 60px;
 }
 
+/*
+ * Fills the shell, like /dashboard does. The 372px side column stays fixed, so
+ * every extra pixel goes to the main column rather than to empty margins.
+ */
 .af-core.af-lh-shell .af-lh {
-  max-width: 1280px;
-  margin: 0 auto;
+  width: 100%;
 }
 
 @media (max-width: 860px) {
   .af-core.af-lh-shell {
     padding: 16px;
   }
-}
+}
+
 
 /* ---- Matchup strip contents (was an empty frame) -------------------------- */
 .af-lh-mrow { display: flex; align-items: center; gap: 18px; }

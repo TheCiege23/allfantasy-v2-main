@@ -1,5 +1,6 @@
 import OpenAI from 'openai'
 import { getDeepSeekConfigFromEnv } from '@/lib/provider-config'
+import { assertAiSpendAllowed } from '@/lib/ai/aiSpendGuard'
 import { cachedFetch, cacheKey } from '@/lib/api-cache'
 
 let deepseekClient: OpenAI | null = null
@@ -7,6 +8,9 @@ let deepseekClient: OpenAI | null = null
 function getDeepSeekClient(): OpenAI | null {
   const cfg = getDeepSeekConfigFromEnv()
   if (!cfg) return null
+  // Checked after config resolution but before the client exists: no config already means no spend,
+  // and this is the last point before a real client is handed out.
+  assertAiSpendAllowed('deepseek-client')
   if (!deepseekClient) {
     deepseekClient = new OpenAI({
       apiKey: cfg.apiKey,

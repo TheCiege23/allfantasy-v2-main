@@ -50,7 +50,7 @@ describe('/api/decision-os/manager-intelligence route contract', () => {
     expect(resolveManagerIntelligencePayloadMock).not.toHaveBeenCalled()
   })
 
-  it('calls the composition with the leagueId and the SESSION user id as managerId, returns the payload as-is', async () => {
+  it('returns the deterministic payload intact, with the three-brain block ADDED beside it', async () => {
     const fakePayload = { leagueTrend: { available: false }, managerDna: null, recommendations: null }
     resolveManagerIntelligencePayloadMock.mockResolvedValue(fakePayload)
 
@@ -58,9 +58,27 @@ describe('/api/decision-os/manager-intelligence route contract', () => {
 
     expect(res.status).toBe(200)
     const body = await res.json()
-    expect(body).toEqual(fakePayload)
+    // Phase 3: `intelligence` is ADDITIVE. The deterministic half is the contract and must survive
+    // byte-for-byte — a client that ignores the new key is unaffected.
+    expect(body).toMatchObject(fakePayload)
     expect(resolveManagerIntelligencePayloadMock).toHaveBeenCalledWith({ leagueId: 'L1', managerId: 'u1' })
     expect(authorizeLeagueReadMock).toHaveBeenCalledWith('L1', 'u1')
+  })
+
+  it('still returns 200 with the deterministic payload when the intelligence resolver THROWS', async () => {
+    // The degraded-safe contract: optional, additive analysis must never take down the deterministic
+    // payload beside it. This test drives the real resolver against a prisma mock with no `league`
+    // delegate, which is exactly how it fails in the wild (transient DB fault).
+    const fakePayload = { leagueTrend: { available: false }, managerDna: null, recommendations: null }
+    resolveManagerIntelligencePayloadMock.mockResolvedValue(fakePayload)
+
+    const res = await GET(req('http://localhost/api/decision-os/manager-intelligence?leagueId=L1'))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body).toMatchObject(fakePayload)
+    expect(body.intelligence.status).toBe('evidence_unavailable')
+    expect(body.intelligence.result).toBeNull()
   })
 
   // Phase OS-C6.1: real per-league membership authorization coverage — closes the `leagueTrend`
