@@ -35,6 +35,7 @@ import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
 import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
 import { DraftRightDockTabs } from '@/components/app/draft-room/DraftRightDockTabs'
+import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
   ResultsRosterPanel,
   type ResultsRosterPanelTeam,
@@ -4504,6 +4505,21 @@ export function DraftRoomPageClient({
               data-testid="draft-right-dock"
             >
               <DraftRightDockTabs
+                /*
+                 * 8b's "Draft activity" card. DraftPickActivityStrip was fully built and exported
+                 * from the barrel, but nothing ever mounted it — the live room had no activity
+                 * feed at all. It needs only picks + slotOrder, both of which already drive the
+                 * board, so this is a wire-up rather than a new feature.
+                 */
+                activityBody={
+                  <div className="flex h-full min-h-0 flex-col overflow-auto">
+                    <DraftPickActivityStrip
+                      picks={session?.picks ?? []}
+                      slotOrder={session?.slotOrder ?? []}
+                      presentationVariant={presentationVariant}
+                    />
+                  </div>
+                }
                 queueBody={<div className="flex h-full min-h-0 flex-col overflow-auto bg-[linear-gradient(180deg,rgba(7,14,28,0.65),rgba(6,12,24,0.88))] px-1 py-1">{queueStackNode}</div>}
                 rosterBody={
                   <ResultsRosterPanel
