@@ -11,6 +11,7 @@ import Link from 'next/link'
  */
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-3a.css'
+import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { CareerData } from '@/lib/core-app/career'
 import type { WeekAllData } from '@/lib/core-app/weekAll'
@@ -279,6 +280,18 @@ export function Dashboard3A({
             ) : null}
           </span>
         </div>
+
+        {/*
+          ⚠ COMPLIANCE, NOT DECORATION — carried over from DashboardV2 deliberately.
+          This screen replaced DashboardV2 on the no-league branch of /dashboard, and
+          DashboardV2 was the only thing rendering this notice there: Dashboard3A sits
+          OUTSIDE AfCoreShell (see the af-core.css note above), and AfCoreShell is the
+          only other renderer. Dropping it would have kept advertising the plan chip in
+          the topbar directly above, in states where we have determined we cannot sell.
+          See GeoRestrictionNotice's own header — it renders nothing until the state is
+          known, so it costs nothing when there is no restriction.
+        */}
+        <GeoRestrictionNotice />
 
         <div className="af3a-body">
           <div className="af3a-col-main">
