@@ -2,12 +2,17 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { createPlayoffBracketChallengeClient } from "@/lib/playoffs/playoffClientApi"
 
-export default function PlayoffCreateForm() {
+type Props = {
+  initialSport?: "nba" | "nhl"
+}
+
+export default function PlayoffCreateForm({ initialSport }: Props = {}) {
   const router = useRouter()
   const [name, setName] = useState("Championship Chase")
-  const [sport, setSport] = useState<"nba" | "nhl">("nba")
+  const [sport, setSport] = useState<"nba" | "nhl">(initialSport ?? "nba")
   const [isTestMode, setIsTestMode] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -22,9 +27,12 @@ export default function PlayoffCreateForm() {
           seasonYear: new Date().getUTCFullYear(),
           isTestMode,
         })
-        router.push(`/brackets/playoffs/${result.challengeId}`)
+        toast.success(`${result.name} created.`)
+        router.push(result.redirectUrl ?? `/brackets/leagues/${result.challengeId}`)
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to create playoff challenge")
+        const message = err instanceof Error ? err.message : "Unable to create playoff challenge"
+        setError(message)
+        toast.error(message)
       }
     })
   }
@@ -64,7 +72,7 @@ export default function PlayoffCreateForm() {
         disabled={isPending || name.trim().length < 2}
         className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-bold text-white transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isPending ? "Creating..." : "Create Bracket"}
+        {isPending ? "Creating..." : "Create Pool"}
       </button>
     </div>
   )

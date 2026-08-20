@@ -57,17 +57,21 @@ function chipTone(state: IntelligenceChipState | 'loading'): string {
   return 'bg-white/15'
 }
 
-function formatShortAgo(iso: string): string {
-  const t = new Date(iso).getTime()
-  if (Number.isNaN(t)) return 'Updated'
-  const sec = Math.max(0, Math.round((Date.now() - t) / 1000))
-  if (sec < 45) return 'just now'
+function formatShortAgo(
+  iso: string,
+  t: (key: string) => string,
+  tInterpolate: (key: string, vars: Record<string, string | number>) => string,
+): string {
+  const ts = new Date(iso).getTime()
+  if (Number.isNaN(ts)) return t('dashboard.aiTools.freshness.updated')
+  const sec = Math.max(0, Math.round((Date.now() - ts) / 1000))
+  if (sec < 45) return t('dashboard.aiTools.freshness.justNow')
   const min = Math.floor(sec / 60)
-  if (min < 60) return `${min}m ago`
+  if (min < 60) return tInterpolate('dashboard.aiTools.freshness.minAgo', { n: min })
   const h = Math.floor(min / 60)
-  if (h < 24) return `${h}h ago`
+  if (h < 24) return tInterpolate('dashboard.aiTools.freshness.hourAgo', { n: h })
   const d = Math.floor(h / 24)
-  return `${d}d ago`
+  return tInterpolate('dashboard.aiTools.freshness.dayAgo', { n: d })
 }
 
 /**
@@ -289,14 +293,14 @@ export function AIToolsGrid({
       const insight = `${summary} · Risk ${risk}/100`
       const freshness: FreshnessBadge = json.degraded
         ? { status: 'stale', label: 'Partial data' }
-        : { status: 'recent', label: formatShortAgo(json.computedAt) }
+        : { status: 'recent', label: formatShortAgo(json.computedAt, t, tInterpolate) }
       setInjuryPreview({ insight, freshness })
     } catch {
       // keep prior preview if any
     } finally {
       setInjuryPreviewLoading(false)
     }
-  }, [leagueId, resolvedLeague])
+  }, [leagueId, resolvedLeague, t, tInterpolate])
 
   const loadWarRoomGridPreview = useCallback(async () => {
     if (!leagueId) {
@@ -344,14 +348,14 @@ export function AIToolsGrid({
       const insight = `${n} queued action${n === 1 ? '' : 's'} · Command ${pri}/100`
       const freshness: FreshnessBadge = json.overview.degraded
         ? { status: 'stale', label: 'Partial data' }
-        : { status: 'recent', label: formatShortAgo(json.computedAt) }
+        : { status: 'recent', label: formatShortAgo(json.computedAt, t, tInterpolate) }
       setWarRoomPreview({ insight, freshness })
     } catch {
       /* keep prior preview */
     } finally {
       setWarRoomPreviewLoading(false)
     }
-  }, [leagueId, resolvedLeague])
+  }, [leagueId, resolvedLeague, t, tInterpolate])
 
   const loadMatchupGridPreview = useCallback(async () => {
     if (!leagueId) {
@@ -397,14 +401,14 @@ export function AIToolsGrid({
       const insight = `${edgeStr} · ${winStr}`
       const freshness: FreshnessBadge = json.degraded
         ? { status: 'stale', label: 'Partial data' }
-        : { status: 'recent', label: formatShortAgo(json.computedAt) }
+        : { status: 'recent', label: formatShortAgo(json.computedAt, t, tInterpolate) }
       setMatchupPreview({ insight, freshness })
     } catch {
       /* keep prior */
     } finally {
       setMatchupPreviewLoading(false)
     }
-  }, [leagueId, resolvedLeague])
+  }, [leagueId, resolvedLeague, t, tInterpolate])
 
   const loadLongTermGridPreview = useCallback(async () => {
     if (!leagueId) {
@@ -435,14 +439,14 @@ export function AIToolsGrid({
       const st = a.signals.shortTermStrengthIndex
       const lt = a.signals.longTermAssetIndex
       const insight = `${cls} · short ${st} · long ${lt}`
-      const freshness: FreshnessBadge = { status: 'recent', label: formatShortAgo(a.computedAt) }
+      const freshness: FreshnessBadge = { status: 'recent', label: formatShortAgo(a.computedAt, t, tInterpolate) }
       setLongTermPreview({ insight, freshness })
     } catch {
       /* keep prior */
     } finally {
       setLongTermPreviewLoading(false)
     }
-  }, [leagueId])
+  }, [leagueId, t, tInterpolate])
 
   useEffect(() => {
     setInjuryPreview(null)
@@ -468,15 +472,32 @@ export function AIToolsGrid({
   }, [loadLongTermGridPreview])
 
   const toolConfigs = useMemo(() => {
+    const freshnessLabelMap: Record<string, string> = {
+      Live: t('dashboard.aiTools.freshness.live'),
+      New: t('dashboard.aiTools.freshness.new'),
+      Ready: t('dashboard.aiTools.freshness.ready'),
+      '6m ago': tInterpolate('dashboard.aiTools.freshness.minAgo', { n: 6 }),
+      '12m ago': tInterpolate('dashboard.aiTools.freshness.minAgo', { n: 12 }),
+      '1h ago': tInterpolate('dashboard.aiTools.freshness.hourAgo', { n: 1 }),
+    }
     return TOOL_CONFIGS.map((c) => {
-      let row = c
+      let row: AIToolCardConfig & { id: ToolId } = {
+        ...c,
+        title: t(`dashboard.aiTools.tool.${c.id}.title`),
+        subtitle: t(`dashboard.aiTools.tool.${c.id}.subtitle`),
+        insight: t(`dashboard.aiTools.tool.${c.id}.insight`),
+        freshness: {
+          ...c.freshness,
+          label: freshnessLabelMap[c.freshness.label] ?? c.freshness.label,
+        },
+      }
       if (c.id === 'injury' && leagueId) {
         if (injuryPreviewLoading && !injuryPreview) {
           row = {
             ...row,
             status: 'loading' as const,
-            insight: 'Syncing injury intelligence…',
-            freshness: { status: 'live' as const, label: 'Syncing' },
+            insight: t('dashboard.aiTools.preview.loading.injury'),
+            freshness: { status: 'live' as const, label: t('dashboard.aiTools.freshness.syncing') },
           }
         } else if (injuryPreview) {
           row = {
@@ -492,8 +513,8 @@ export function AIToolsGrid({
           row = {
             ...row,
             status: 'loading' as const,
-            insight: 'Building command queue…',
-            freshness: { status: 'live' as const, label: 'Syncing' },
+            insight: t('dashboard.aiTools.preview.loading.warRoom'),
+            freshness: { status: 'live' as const, label: t('dashboard.aiTools.freshness.syncing') },
           }
         } else if (warRoomPreview) {
           row = {
@@ -509,8 +530,8 @@ export function AIToolsGrid({
           row = {
             ...row,
             status: 'loading' as const,
-            insight: 'Computing matchup board…',
-            freshness: { status: 'live' as const, label: 'Syncing' },
+            insight: t('dashboard.aiTools.preview.loading.matchup'),
+            freshness: { status: 'live' as const, label: t('dashboard.aiTools.freshness.syncing') },
           }
         } else if (matchupPreview) {
           row = {
@@ -526,8 +547,8 @@ export function AIToolsGrid({
           row = {
             ...row,
             status: 'loading' as const,
-            insight: 'Building long-term outlook…',
-            freshness: { status: 'live' as const, label: 'Syncing' },
+            insight: t('dashboard.aiTools.preview.loading.longTerm'),
+            freshness: { status: 'live' as const, label: t('dashboard.aiTools.freshness.syncing') },
           }
         } else if (longTermPreview) {
           row = {
@@ -541,6 +562,8 @@ export function AIToolsGrid({
       return row
     })
   }, [
+    t,
+    tInterpolate,
     leagueId,
     injuryPreview,
     injuryPreviewLoading,

@@ -13,3 +13,4 @@ export {
   type ProtectedNavState,
 } from "./ProtectedNavResolver"
 export { showAdminNav, getAdminNavItem } from "./AdminNavVisibilityResolver"
+export { isBracketProductSurfacePath } from "./isBracketProductSurfacePath"

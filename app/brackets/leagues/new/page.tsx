@@ -112,8 +112,36 @@ export default function NewBracketLeaguePage() {
     setLoading(true)
 
     const returnTo = `/brackets/leagues/new?sport=${encodeURIComponent(sport)}&challengeType=${encodeURIComponent(challengeType)}`
+    const normalizedSport = sport.toLowerCase()
+    const isPlayoffSport = normalizedSport === "nba" || normalizedSport === "nhl"
 
     try {
+      // ── NBA / NHL + Playoff Challenge → new PlayoffBracketChallenge system ──
+      if (isPlayoffSport && challengeType === "playoff_challenge") {
+        const res = await fetch("/api/brackets/playoffs", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: name.trim(),
+            sport: normalizedSport as "nba" | "nhl",
+            seasonYear: season,
+            isTestMode: false,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          if (data.error === "UNAUTHENTICATED") {
+            router.push(`/login?callbackUrl=${encodeURIComponent(returnTo)}`)
+            return
+          }
+          setError(data.error ?? "Failed to create pool")
+          return
+        }
+        router.push(data.redirectUrl || `/brackets/leagues/${data.challengeId}`)
+        return
+      }
+
+      // ── All other sports (NCAAB, NFL, MLB, SOCCER…) → legacy BracketLeague ──
       const res = await fetch("/api/bracket/leagues", {
         method: "POST",
         headers: { "content-type": "application/json" },

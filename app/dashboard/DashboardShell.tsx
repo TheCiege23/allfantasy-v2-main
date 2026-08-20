@@ -526,7 +526,7 @@ export function DashboardShell({
   return (
     <AppShell
       layoutMode="balanced-three-panel"
-      rootClassName="h-[calc(100dvh-8.5rem)] min-h-0 lg:h-[calc(100dvh-3.5rem)]"
+      rootClassName="h-[calc(100dvh-7rem)] min-h-0 lg:h-[calc(100dvh-3.5rem)]"
       rootProps={{ 'data-dashboard-user-id': userId }}
       rightRailCollapsed={myLeaguesRail.collapsed}
       onRightRailExpand={() => myLeaguesRail.setCollapsed(false)}

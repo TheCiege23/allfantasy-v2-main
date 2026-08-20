@@ -93,8 +93,8 @@ const WorldCupInviteJoinPanel = forwardRef<
     if (blocked) {
       toast.error(
         blocked === "full"
-          ? "This league is full."
-          : "This league is closed to new players."
+          ? "This pool is full."
+          : "This pool is closed to new players."
       )
       return
     }
@@ -129,7 +129,7 @@ const WorldCupInviteJoinPanel = forwardRef<
     <div data-testid="world-cup-invite-join-panel" className="rounded-xl border border-white/10 bg-white/[0.03] p-3 sm:p-4">
       <h3 className="text-[11px] font-bold uppercase tracking-wide text-white/45">{title}</h3>
       <p className="mt-1 text-xs text-white/45">
-        Enter the invite code from your commissioner. Password-protected leagues require the join password set in league
+        Enter the invite code from your commissioner. Password-protected pools require the join password set in pool
         settings.
       </p>
       <div className="mt-3 flex min-w-0 flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -163,7 +163,7 @@ const WorldCupInviteJoinPanel = forwardRef<
             Host: {preview.ownerName} · {preview.participantCount} playing · {preview.visibility}
           </p>
           {preview.joinPreview?.joinBlockedReason === "full" ? (
-            <p className="mt-2 text-xs font-bold text-rose-200">This league is full.</p>
+            <p className="mt-2 text-xs font-bold text-rose-200">This pool is full.</p>
           ) : null}
           {preview.joinPreview?.joinBlockedReason === "locked_no_late_join" ? (
             <p className="mt-2 text-xs font-bold text-rose-200">
@@ -194,7 +194,7 @@ const WorldCupInviteJoinPanel = forwardRef<
             onClick={() => void join()}
             className="mt-4 inline-flex w-full items-center justify-center rounded-xl bg-cyan-300 py-2.5 text-xs font-black text-black disabled:opacity-40"
           >
-            {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : "Join league"}
+            {joining ? <Loader2 className="h-4 w-4 animate-spin" /> : "Join Pool"}
           </button>
         </div>
       ) : null}

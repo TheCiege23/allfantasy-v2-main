@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Sparkles } from 'lucide-react'
 import type { AiTimeContextPayload } from '@/lib/time-engine/types'
 import type { TradesDashboardResponse, WaiverDashboardResponse } from '@/app/dashboard/dashboardStripApiTypes'
 import type { TodayActionsEngineResponse } from '@/lib/today-actions-engine'
@@ -878,13 +879,29 @@ export function DashboardOverview({
         />
 
         <section className="space-y-3">
-          <div>
-            <p className="text-[12px] font-semibold uppercase tracking-wider text-white/30">
-              {t('dashboard.overview.leagueIntelligenceTitle')}
-            </p>
-            <p className="mt-1 max-w-xl text-[11px] leading-snug text-white/45">
-              {t('dashboard.overview.leagueIntelligenceSubtitle')}
-            </p>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <span
+                aria-hidden
+                className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-violet-400/30 bg-gradient-to-br from-violet-500/15 to-cyan-500/12 text-violet-200"
+              >
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-[12px] font-black uppercase tracking-[0.14em] text-white">
+                  {t('dashboard.overview.leagueIntelligenceTitle')}
+                </p>
+                <p className="mt-1 max-w-xl text-[11px] leading-snug text-white/50">
+                  {t('dashboard.overview.leagueIntelligenceSubtitle')}
+                </p>
+              </div>
+            </div>
+            {leagues.length > 0 ? (
+              <span className="inline-flex h-6 items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 text-[10px] font-bold uppercase tracking-wider text-violet-200">
+                <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-violet-300" />
+                {t('dashboard.overview.liveData')}
+              </span>
+            ) : null}
           </div>
 
           {leagues.length > 1 ? (

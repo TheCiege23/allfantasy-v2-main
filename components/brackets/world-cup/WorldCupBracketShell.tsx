@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { ArrowLeft, ArrowUp, Bot, Check, ChevronLeft, ClipboardList, Loader2, PlayCircle, RefreshCw, Settings, Share2, Sparkles, Trophy, Users } from "lucide-react"
+import { ArrowLeft, ArrowUp, Bot, Check, ChevronLeft, ClipboardList, Copy, Loader2, PlayCircle, Plus, RefreshCw, Settings, Share2, Sparkles, Trophy, Users } from "lucide-react"
 import { toast } from "sonner"
 import type { WorldCupAiBuilderProgress, WorldCupAiStrategy, WorldCupChallengeView, WorldCupMatchView, WorldCupPickView } from "@/lib/world-cup/types"
 import { isWorldCupChallengeLocked } from "@/lib/world-cup/worldCupBracketBuilder"
@@ -64,9 +64,10 @@ import WorldCupLeaderboardInsights from "./WorldCupLeaderboardInsights"
 import WorldCupLiveScoreTicker from "./WorldCupLiveScoreTicker"
 import WorldCupBracketSettingsPanel from "./WorldCupBracketSettingsPanel"
 import WorldCupCommissionerBrainPanel from "./WorldCupCommissionerBrainPanel"
-type Tab = "picks" | "leaderboard" | "rules" | "invite" | "settings" | "commissioner"
+type Tab = "home" | "picks" | "leaderboard" | "rules" | "invite" | "settings" | "commissioner"
 const BASE_TABS: Array<{ id: Tab; label: string; icon: typeof ClipboardList }> = [
-  { id: "picks", label: "Picks", icon: ClipboardList },
+  { id: "home", label: "Home", icon: Trophy },
+  { id: "picks", label: "My Brackets", icon: ClipboardList },
   { id: "leaderboard", label: "Leaderboard", icon: Trophy },
   { id: "rules", label: "Rules", icon: Users },
   { id: "invite", label: "Invite", icon: Share2 },
@@ -279,13 +280,16 @@ export default function WorldCupBracketShell({
   const router = useRouter()
   const normalizedInitialView = normalizeWorldCupView(initialView ?? challenge)
   const initialEntries = entryClientsFromInitialView(normalizedInitialView)
+  const shouldAutoSelectInitialEntry = defaultTab === "picks" || Boolean(initialEntryId) || initialGuidedOpen
   const initialSelectedEntryId =
-    initialEntryId && initialEntries.some((entry) => entry.id === initialEntryId)
-      ? initialEntryId
-      : normalizedInitialView.activeEntry?.id &&
-          initialEntries.some((entry) => entry.id === normalizedInitialView.activeEntry?.id)
-        ? normalizedInitialView.activeEntry.id
-        : initialEntries[0]?.id ?? null
+    shouldAutoSelectInitialEntry
+      ? initialEntryId && initialEntries.some((entry) => entry.id === initialEntryId)
+        ? initialEntryId
+        : normalizedInitialView.activeEntry?.id &&
+            initialEntries.some((entry) => entry.id === normalizedInitialView.activeEntry?.id)
+          ? normalizedInitialView.activeEntry.id
+          : initialEntries[0]?.id ?? null
+      : null
   const [view, setView] = useState(normalizedInitialView)
   const [tab, setTab] = useState<Tab>(() => {
     if (
@@ -555,6 +559,11 @@ export default function WorldCupBracketShell({
         // Seed initial view picks only when they belong to the exact active entry,
         // then hydrate the selected entry from the entry-detail API below.
         if (rows.length > 0) {
+          if (!shouldAutoSelectInitialEntry) {
+            setSelectedEntryId(null)
+            persistSelectedEntryId(null)
+            return
+          }
           const storedEntryId =
             typeof window !== "undefined"
               ? window.localStorage.getItem(getSelectedEntryStorageKey(challengeId))
@@ -579,7 +588,7 @@ export default function WorldCupBracketShell({
       })
       .catch(() => toast.error("Failed to load bracket entries"))
       .finally(() => setIsEntriesLoading(false))
-  }, [challengeId, persistSelectedEntryId, initialEntryId, normalizedInitialView.activeEntry?.id])
+  }, [challengeId, persistSelectedEntryId, initialEntryId, normalizedInitialView.activeEntry?.id, shouldAutoSelectInitialEntry])
 
   // ── Entry management callbacks ───────────────────────────────────────────
   const handleCreateEntry = useCallback(async () => {
@@ -590,6 +599,7 @@ export default function WorldCupBracketShell({
       markEntryPicksLoaded(entry.id, [])
       setSelectedEntryId(entry.id)
       persistSelectedEntryId(entry.id)
+      setTab("picks")
       toast.success(`Created "${entry.name}"`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to create bracket")
@@ -601,6 +611,7 @@ export default function WorldCupBracketShell({
   const handleSelectEntry = useCallback((entryId: string) => {
     setSelectedEntryId(entryId)
     persistSelectedEntryId(entryId)
+    setTab("picks")
   }, [persistSelectedEntryId])
 
   useEffect(() => {
@@ -1097,7 +1108,17 @@ export default function WorldCupBracketShell({
       const msg = `${modeLabel}: ${data.matchesUpdated} matches updated, ${data.pickableMatchesAfter} pickable, ${data.unresolvedMatchesAfter} unresolved`
       setSimulationResult(msg)
       if (!simulationDryRun) {
-        await refreshChallengeView()
+        if (response.view) {
+          applyChallengeView(normalizeWorldCupView(response.view))
+          try {
+            const refreshedEntries = await listWorldCupBracketEntries(challengeId)
+            setEntries(refreshedEntries)
+          } catch {
+            // The refreshed challenge view is enough to update fixture readiness.
+          }
+        } else {
+          await refreshChallengeView()
+        }
       }
       toast.success(simulationDryRun ? "Seed Test Fixtures dry run complete" : "Test fixtures seeded successfully")
     } catch (err) {
@@ -1157,6 +1178,32 @@ export default function WorldCupBracketShell({
     !isLocked &&
     (view.isOwner || view.isAdmin) &&
     (guidedPicksState === "fixtures_not_synced" || guidedPicksState === "fixtures_not_ready")
+
+  const participantCount = view.leaderboard.length > 0
+    ? new Set(view.leaderboard.map((row) => row.userId)).size
+    : view.participant
+      ? 1
+      : 0
+  const inviteUrl = view.challenge.inviteUrl ||
+    (view.challenge.inviteCode
+      ? `/join/bracket/${view.challenge.inviteCode}`
+      : "")
+  const fixturesReadyLabel =
+    guidedPicksState === "ready"
+      ? `${projectedPickableMatchCount} pickable matchup${projectedPickableMatchCount === 1 ? "" : "s"} ready`
+      : guidedPicksState === "fixtures_not_synced"
+        ? "Fixtures have not been synced yet"
+        : "Fixtures loaded, but teams are still placeholders"
+
+  async function copyPoolInvite() {
+    if (!inviteUrl) return
+    const absoluteUrl =
+      inviteUrl.startsWith("http") || typeof window === "undefined"
+        ? inviteUrl
+        : `${window.location.origin}${inviteUrl}`
+    await navigator.clipboard?.writeText(absoluteUrl)
+    toast.success("Invite link copied")
+  }
 
   useEffect(() => {
     if (!initialGuidedOpen || guidedAutoOpenedRef.current) return
@@ -1641,7 +1688,7 @@ export default function WorldCupBracketShell({
 
           {!isLocked && guidedPicksState === "fixtures_not_synced" && (
             <div className="px-4 pb-3 text-center text-[11px] text-white/50">
-              <p>Picks open after World Cup fixtures are synced or test fixtures are seeded for this challenge.</p>
+              <p>Picks open after World Cup fixtures are synced or test fixtures are seeded for this pool.</p>
               {showSeedTestFixturesCta && (
                 <div className="mt-2 flex justify-center">
                   <button
@@ -1760,7 +1807,7 @@ export default function WorldCupBracketShell({
                   </div>
                   <div className="grid grid-cols-2 gap-2 text-white/55 sm:grid-cols-4">
                     <span>Participants: {integrityReport.stats.participants}</span>
-                    <span>Entries: {integrityReport.stats.entries}</span>
+                    <span>Brackets: {integrityReport.stats.entries}</span>
                     <span>Matches: {integrityReport.stats.matches}</span>
                     <span>Picks: {integrityReport.stats.picks}</span>
                   </div>
@@ -2072,6 +2119,195 @@ export default function WorldCupBracketShell({
       )}
 
       <main className="min-h-0 px-2 pb-24 pt-3 sm:px-4 sm:pb-8">
+        {tab === "home" ? (
+          <div className="mx-auto max-w-5xl space-y-4 px-2 pb-28 sm:pb-8">
+            <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0">
+                  <p className="text-[11px] font-black uppercase tracking-[0.18em] text-cyan-200/70">
+                    World Cup Pool Dashboard
+                  </p>
+                  <h2 className="mt-1 truncate text-2xl font-black text-white">
+                    {view.challenge.name}
+                  </h2>
+                  <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
+                    Manage invites, brackets, leaderboard, and fixture readiness before opening a personal bracket.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={copyPoolInvite}
+                    disabled={!inviteUrl}
+                    className="inline-flex items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-black text-cyan-100 disabled:opacity-40"
+                  >
+                    <Copy className="h-4 w-4" />
+                    Copy Invite
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTab("invite")}
+                    className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-4 py-2 text-sm font-bold text-white/75"
+                  >
+                    <Share2 className="h-4 w-4" />
+                    Invite Panel
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <PoolStatCard label="Participants" value={`${participantCount}/${view.challenge.maxParticipants}`} />
+                <PoolStatCard label="My Brackets" value={`${entries.length}/${view.challenge.maxEntriesPerParticipant}`} />
+                <PoolStatCard label="Leaderboard Brackets" value={String(view.leaderboard.length)} />
+                <PoolStatCard label="Fixture Status" value={guidedPicksState === "ready" ? "Ready" : "Not Ready"} tone={guidedPicksState === "ready" ? "ready" : "warn"} />
+              </div>
+            </section>
+
+            <section className="grid gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)]">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-black text-white">My Brackets</h3>
+                    <p className="mt-1 text-xs text-white/45">
+                      Create or open your personal bracket when you are ready to make picks.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleCreateEntry}
+                    disabled={isLocked || isCreatingEntry || entries.length >= view.challenge.maxEntriesPerParticipant}
+                    className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-4 py-2 text-xs font-black text-black disabled:cursor-not-allowed disabled:opacity-45"
+                  >
+                    {isCreatingEntry ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                    {isCreatingEntry ? "Creating..." : "Create My Bracket"}
+                  </button>
+                </div>
+
+                {isEntriesLoading ? (
+                  <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-white/45">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading entries...
+                  </div>
+                ) : entries.length > 0 ? (
+                  <div className="space-y-2">
+                    {entries.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        onClick={() => handleSelectEntry(entry.id)}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-3 py-3 text-left hover:bg-white/[0.06]"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-black text-white">{entry.name}</div>
+                          <div className="mt-1 text-xs text-white/45">
+                            {entry.isComplete ? "Complete" : "Not complete"} · {entry.totalScore} pts · {entry.rank ? `Rank #${entry.rank}` : "Unranked"}
+                          </div>
+                        </div>
+                        <span className="shrink-0 rounded-lg bg-cyan-300 px-3 py-1.5 text-xs font-black text-black">
+                          Open Bracket
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-dashed border-white/15 bg-black/20 p-6 text-center">
+                    <Trophy className="mx-auto h-8 w-8 text-cyan-200/50" />
+                    <p className="mt-3 text-sm font-black text-white">No brackets created yet</p>
+                    <p className="mt-1 text-xs text-white/45">
+                      Create your personal bracket first, then you can make picks once fixtures are ready.
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <h3 className="text-base font-black text-white">Fixture Readiness</h3>
+                  <p className="mt-1 text-sm text-white/55">{fixturesReadyLabel}</p>
+                  <div className="mt-3 rounded-xl border border-white/10 bg-black/25 p-3 text-xs text-white/50">
+                    {guidedPicksState === "ready" ? (
+                      <p>Round of 32 matchups have teams and can be picked. Test fixtures are marked as test data when used.</p>
+                    ) : (
+                      <p>
+                        Picks stay blocked while matchups are placeholders like Group Winner or Winner Match. Sync official fixtures when available, or seed test fixtures for local QA.
+                      </p>
+                    )}
+                  </div>
+                  {(view.isOwner || view.isAdmin) ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {showSeedTestFixturesCta ? (
+                        <button
+                          type="button"
+                          onClick={() => void handleLoadTestFixtures()}
+                          disabled={isLoadingTestFixtures || isSimulating}
+                          className="rounded-lg border border-amber-400/60 bg-amber-900/40 px-3 py-2 text-xs font-bold text-amber-100 hover:bg-amber-900/60 disabled:opacity-50"
+                        >
+                          {isLoadingTestFixtures ? "Seeding..." : "Seed Test Fixtures"}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => void runSyncFixtures()}
+                        disabled={isSyncing}
+                        className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-bold text-white/75 disabled:opacity-50"
+                      >
+                        {isSyncing ? "Syncing..." : "Sync Fixtures"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTab("settings")}
+                        className="rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-bold text-white/75"
+                      >
+                        Commissioner Settings
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                <div className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+                  <h3 className="text-base font-black text-white">Leaderboard Preview</h3>
+                  {view.leaderboard.length > 0 ? (
+                    <div className="mt-3 space-y-2">
+                      {view.leaderboard.slice(0, 5).map((row) => (
+                        <div key={row.entryId} className="flex items-center justify-between rounded-lg bg-black/20 px-3 py-2 text-xs">
+                          <span className="min-w-0 truncate text-white/70">#{row.rank} {row.entryName}</span>
+                          <span className="font-black text-cyan-100">{row.totalScore} pts</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-2 rounded-lg border border-white/10 bg-black/20 px-3 py-3 text-xs text-white/40">
+                      No scored brackets yet. Brackets appear here after users create them and scoring begins.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setTab("leaderboard")}
+                    className="mt-3 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs font-bold text-white/70"
+                  >
+                    Open Full Leaderboard
+                  </button>
+                </div>
+
+                <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[0.06] p-4">
+                  <h3 className="text-base font-black text-cyan-100">AI Simulation Preview</h3>
+                  <p className="mt-1 text-xs leading-5 text-cyan-100/70">
+                    AI previews unlock after fixture teams are available. Commissioner simulation tools are gated to test/simulation mode and never represent official production results.
+                  </p>
+                  {(view.isOwner || view.isAdmin) ? (
+                    <button
+                      type="button"
+                      onClick={() => setTab("commissioner")}
+                      className="mt-3 rounded-lg border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-xs font-bold text-cyan-100"
+                    >
+                      Open Commissioner AI Tools
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            </section>
+          </div>
+        ) : null}
         {tab === "picks" ? (
           selectedEntry ? (
             <section id="world-cup-bracket" className="space-y-3">
@@ -2287,6 +2523,29 @@ function JumpButton({ label, onClick, disabled }: { label: string; onClick: () =
     >
       {label}
     </button>
+  )
+}
+
+function PoolStatCard({
+  label,
+  value,
+  tone = "default",
+}: {
+  label: string
+  value: string
+  tone?: "default" | "ready" | "warn"
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-3">
+      <div className="text-[10px] font-black uppercase tracking-widest text-white/35">{label}</div>
+      <div
+        className={`mt-1 text-xl font-black ${
+          tone === "ready" ? "text-emerald-200" : tone === "warn" ? "text-amber-200" : "text-white"
+        }`}
+      >
+        {value}
+      </div>
+    </div>
   )
 }
 

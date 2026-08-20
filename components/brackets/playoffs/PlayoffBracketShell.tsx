@@ -1,7 +1,7 @@
 "use client"
 
-import { useMemo, useState, useTransition } from "react"
-import { useRouter } from "next/navigation"
+import { useEffect, useMemo, useState, useTransition } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { RefreshCw, Trophy, Plus, Link2, Clipboard, Settings2, ArrowRightCircle } from "lucide-react"
 import { toast } from "sonner"
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
@@ -9,13 +9,17 @@ import {
   createPlayoffBracketEntryClient,
   getPlayoffBracketViewClient,
 } from "@/lib/playoffs/playoffClientApi"
+import { PLAYOFF_DASHBOARD_LEADERBOARD_DOM_ID } from "@/lib/playoffs/playoffBracketDataSource"
 
 type Props = {
   initialView: PlayoffChallengeView
+  /** When user opens `?tab=leaderboard`, hoist standings so they are not buried below the fold */
+  leaderboardFirst?: boolean
 }
 
-export default function PlayoffBracketShell({ initialView }: Props) {
+export default function PlayoffBracketShell({ initialView, leaderboardFirst = false }: Props) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [view, setView] = useState(initialView)
   const [refreshing, startRefreshing] = useTransition()
   const [creatingEntry, startCreatingEntry] = useTransition()
@@ -67,6 +71,33 @@ export default function PlayoffBracketShell({ initialView }: Props) {
     [entries]
   )
 
+  const leaderboardTabActive = searchParams.get("tab") === "leaderboard"
+
+  useEffect(() => {
+    const tab = searchParams.get("tab")
+    const hash =
+      typeof window !== "undefined"
+        ? decodeURIComponent(window.location.hash.replace(/^#/, ""))
+        : ""
+    const wantsLeaderboard = tab === "leaderboard" || hash === PLAYOFF_DASHBOARD_LEADERBOARD_DOM_ID
+    if (!wantsLeaderboard) return
+
+    const run = () => {
+      const target = document.getElementById(PLAYOFF_DASHBOARD_LEADERBOARD_DOM_ID)
+      if (!target) return
+      target.scrollIntoView({ behavior: leaderboardFirst ? "auto" : "smooth", block: "start" })
+      if (typeof target.focus === "function") {
+        try {
+          target.focus({ preventScroll: true })
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+
+    requestAnimationFrame(() => requestAnimationFrame(run))
+  }, [searchParams, leaderboardFirst])
+
   function handleRefresh() {
     startRefreshing(async () => {
       const latest = await getPlayoffBracketViewClient(safeChallenge.id)
@@ -113,8 +144,8 @@ export default function PlayoffBracketShell({ initialView }: Props) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-5 p-4 sm:p-6">
-      <section className="rounded-3xl border border-slate-300 bg-[linear-gradient(130deg,#fff7ed_0%,#ecfeff_45%,#eef2ff_100%)] p-6 shadow-[0_20px_50px_rgba(30,41,59,0.15)]">
+    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-5 p-4 sm:p-6">
+      <section className="order-10 rounded-3xl border border-slate-300 bg-[linear-gradient(130deg,#fff7ed_0%,#ecfeff_45%,#eef2ff_100%)] p-6 shadow-[0_20px_50px_rgba(30,41,59,0.15)]">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">{safeChallenge.name}</h1>
@@ -146,7 +177,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         </div>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.25fr_1fr]">
+      <section className={`grid gap-4 lg:grid-cols-[1.25fr_1fr] ${leaderboardFirst ? "order-30" : "order-20"}`}>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">League Details</h2>
           <dl className="mt-3 grid grid-cols-2 gap-3 text-sm text-slate-700">
@@ -225,7 +256,7 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         </article>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+      <section className={`grid gap-4 lg:grid-cols-[1fr_1fr] ${leaderboardFirst ? "order-40" : "order-30"}`}>
         <article className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
           <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Participants</h2>
           <p className="mt-1 text-sm text-slate-600">
@@ -269,8 +300,28 @@ export default function PlayoffBracketShell({ initialView }: Props) {
         </article>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm" data-testid="playoff-dashboard-leaderboard">
-        <h2 className="text-sm font-black uppercase tracking-wide text-slate-700">Leaderboard</h2>
+      <section
+        id={PLAYOFF_DASHBOARD_LEADERBOARD_DOM_ID}
+        tabIndex={-1}
+        aria-labelledby="playoff-dashboard-leaderboard-heading"
+        className={`rounded-2xl border bg-white p-4 shadow-sm outline-none transition scroll-mt-24 focus-visible:ring-2 focus-visible:ring-sky-500/50 ${leaderboardFirst ? "order-20" : "order-40"} ${
+          leaderboardTabActive ? "border-sky-400/55 ring-1 ring-sky-500/25" : "border-slate-200"
+        }`}
+        data-testid="playoff-dashboard-leaderboard"
+      >
+        <div className="border-b border-slate-100 pb-2">
+          <h2
+            id="playoff-dashboard-leaderboard-heading"
+            className={`font-black uppercase tracking-wide text-slate-900 ${leaderboardTabActive ? "text-base sm:text-lg" : "text-sm"}`}
+          >
+            Pool Leaderboard
+          </h2>
+          <p className="mt-1 text-xs font-medium text-slate-600">
+            {leaderboardTabActive
+              ? "You are viewing standings for every bracket entry in this pool."
+              : "Standings by pick count across all bracket entries in this pool."}
+          </p>
+        </div>
         {leaderboardRows.length === 0 ? (
           <p className="mt-2 text-sm text-slate-600">No leaderboard entries yet.</p>
         ) : (

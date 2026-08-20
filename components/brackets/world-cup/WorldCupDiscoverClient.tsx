@@ -52,7 +52,7 @@ export default function WorldCupDiscoverClient() {
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        toast.error((data as { error?: string }).error || "Could not load leagues")
+        toast.error((data as { error?: string }).error || "Could not load pools")
         return
       }
       setChallenges((data as { challenges?: DiscoverCardApi[] }).challenges ?? [])
@@ -81,13 +81,13 @@ export default function WorldCupDiscoverClient() {
           href="/brackets/world-cup"
           className="rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-bold text-white/60 hover:text-white"
         >
-          ← World Cup hub
+          ← World Cup Pools
         </Link>
         <Link
           href="/brackets/world-cup/create"
           className="rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-black"
         >
-          Create league
+          Create Pool
         </Link>
       </div>
 
@@ -95,17 +95,17 @@ export default function WorldCupDiscoverClient() {
         <div className="mb-3 inline-flex rounded-xl bg-cyan-300/15 p-3 text-cyan-200">
           <Compass className="h-7 w-7" />
         </div>
-        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Discover public leagues</h1>
+        <h1 className="text-2xl font-black tracking-tight sm:text-3xl">Discover public pools</h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-white/55">
-          Browse public World Cup bracket pools. Join opens Bracket 1 with no picks — we drop you into the guided picker
-          when the league allows new players and isn&apos;t full.
+          Browse public World Cup bracket pools. Join a pool first, then create or open your personal bracket when the
+          pool allows new players and isn&apos;t full.
         </p>
       </header>
 
       <div ref={joinAnchorRef}>
         <WorldCupInviteJoinPanel
           ref={joinPanelRef}
-          title="Join with invite code (private leagues)"
+          title="Join with invite code (private pools)"
           onPreviewLoaded={() =>
             joinAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
           }
@@ -154,14 +154,14 @@ export default function WorldCupDiscoverClient() {
         {loading ? (
           <div className="flex items-center gap-2 py-16 text-sm text-white/45">
             <Loader2 className="h-5 w-5 animate-spin" />
-            Loading public leagues…
+            Loading public pools…
           </div>
         ) : challenges.length === 0 ? (
           <div
             data-testid="world-cup-discover-empty"
             className="rounded-xl border border-dashed border-white/15 bg-white/[0.02] px-6 py-12 text-center text-sm text-white/45"
           >
-            No public leagues match your filters. Try another season or clear search — or join a private league with an
+            No public pools match your filters. Try another season or clear search — or join a private pool with an
             invite code above.
           </div>
         ) : (

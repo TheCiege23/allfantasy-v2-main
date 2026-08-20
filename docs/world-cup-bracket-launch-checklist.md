@@ -13,6 +13,9 @@ npx prisma validate
 # Prisma client generation (stop dev server first on Windows)
 npx prisma generate
 
+# Windows clean retry if Prisma DLL is locked
+powershell -ExecutionPolicy Bypass -File scripts/prisma-generate-win.ps1 -CleanLockedProcesses
+
 # TypeScript check
 npm run typecheck
 
@@ -23,7 +26,8 @@ npm run lint
 npm run build
 ```
 
-> **Windows note:** `npx prisma generate` may fail with `EPERM` if the Next.js dev server is holding the Prisma engine DLL. Stop the dev server (`Ctrl+C`), run `npx prisma generate`, then restart.
+> **Windows note:** `npx prisma generate` may fail with `EPERM` if the Next.js dev server, Prisma Studio, Prisma MCP, or another Node process is holding the Prisma engine DLL. Stop the dev server (`Ctrl+C`) first. If it still fails, run `powershell -ExecutionPolicy Bypass -File scripts/prisma-generate-win.ps1 -CleanLockedProcesses`; this stops local Node/Prisma processes, removes `node_modules\.prisma\client`, and reruns generate.
+> If Windows still locks `query_engine-windows.dll.node`, run generate from a clean terminal after fully closing Cursor/VS Code, or rely on CI/Linux/Vercel generate output for deploy confidence.
 
 ---
 
@@ -33,14 +37,18 @@ npm run build
 |----------|---------|
 | `DATABASE_URL` | Supabase/Postgres pooler connection string |
 | `DIRECT_URL` | Supabase direct connection (for migrations) |
-| `NEXTAUTH_URL` | App base URL (e.g. `http://localhost:3000`) |
+| `NEXTAUTH_URL` | Production app base URL. Must not be localhost in Vercel production. |
+| `NEXT_PUBLIC_APP_URL` | Public production app URL used for invite/callback-safe links. Must match `NEXTAUTH_URL` origin. |
+| `APP_URL` / `PUBLIC_SITE_URL` | If set, must use the same production HTTPS origin as `NEXTAUTH_URL`; never localhost or `127.0.0.1` in Vercel production. |
 | `NEXTAUTH_SECRET` | NextAuth JWT secret |
 | `OPENAI_API_KEY` | Required for AI matchup previews and AI bracket builder |
-| `API_SPORTS_KEY` _(optional)_ | API-Sports key for live fixture sync (ingestion only, alias: `API_FOOTBALL_KEY`) |
-| `WORLD_CUP_DATA_PROVIDER` _(optional)_ | Provider selection: `mock` \| `apifootball` \| `sportsdata` \| `manual` — defaults to `mock` |
+| `WORLD_CUP_DATA_PROVIDER` | Provider selection: `apifootball` for production official data. `mock` is local/dev only. |
+| `API_SPORTS_KEY` | API-Sports key for teams, fixtures, live scores, and standings when `WORLD_CUP_DATA_PROVIDER=apifootball` (aliases: `API_FOOTBALL_KEY`, `APISPORTS_FOOTBALL_KEY`). |
+| `WORLD_CUP_CRON_SECRET` | Server-side secret for scheduled World Cup sync and readiness routes; send as `Authorization: Bearer <secret>` or `x-cron-secret`. |
+| `WORLD_CUP_BEST_THIRD_MAPPING_CONFIRMED` | Keep `false` until the official best-third Round of 32 mapping table is configured. |
 | `SPORTSDATA_API_KEY` _(optional)_ | SportsData.io key — required only when `WORLD_CUP_DATA_PROVIDER=sportsdata` |
 
-> All API calls must go through ingestion scripts/cron jobs via `worldCupDataSyncService.ts`, **never** directly from user-facing routes.
+> Provider keys are server-only. Do not create `NEXT_PUBLIC_*` API provider key variables. All provider calls must go through authenticated admin routes, ingestion scripts, or cron jobs via `worldCupDataSyncService.ts` and `worldCupGroupStageResultService.ts`, never directly from user-facing client routes.
 
 ---
 
@@ -187,7 +195,7 @@ No dedicated public discovery page has been built yet.
 | Official team and fixture seed import wiring | `worldCupSeedData.ts` has helpers; import script not yet built |
 | Real sports API sync (API-Sports / api-football) | Provider abstraction built; set `WORLD_CUP_DATA_PROVIDER=apifootball` + `API_SPORTS_KEY` to enable |
 | SportsData.io endpoint mapping | Scaffold in place; endpoints must be verified against subscription |
-| Scheduled live score update approach | Architecture review needed (cron vs. Supabase Realtime) |
+| Scheduled sync approach | Use Vercel Cron or trusted server cron to call the routes below with an authenticated/admin execution path and `CRON_SECRET` where applicable |
 | POST `/admin/repair` dry-run endpoint | Optional; deferred |
 | Paid prize / legal compliance if paid pools are enabled | Must be reviewed before enabling paid entry |
 | `npx prisma generate` on Windows dev server | Stop dev server before running |
@@ -211,6 +219,8 @@ curl -X POST /api/brackets/world-cup/admin/sync-teams \
   -H "Content-Type: application/json" \
   -d '{"provider":"apifootball"}'
 ```
+
+This writes `WorldCupTeam.groupName` when the provider includes Group A-L assignment. Production launch requires 48 official teams with exactly 4 teams in each group; the response reports `officialGroupsReady`, `groupsAssigned`, and `incompleteGroups`.
 
 ### Sync Fixtures (per-challenge)
 
@@ -241,3 +251,75 @@ curl -X POST /api/brackets/world-cup/{challengeId}/admin/sync-live \
 ```
 
 **Recommended schedule during tournament:** Call the live-scores route every 2–5 minutes while matches are in progress. The mock provider is safe for local dev and returns empty results without crashing.
+
+### Sync Group Standings / Results (per-challenge)
+
+```bash
+curl -X POST /api/brackets/world-cup/{challengeId}/admin/sync-group-standings \
+  -H "Content-Type: application/json" \
+  -d '{"provider":"apifootball"}'
+```
+
+This applies provider group standings into `WorldCupGroupTeam.actualRank`, `points`, `goalDifference`, and `goalsFor`, derives the eight actual third-place advancers, and recalculates the leaderboard. Manual admin result entry remains the fallback through:
+
+- `POST /api/brackets/world-cup/{challengeId}/admin/group-results`
+- `POST /api/brackets/world-cup/{challengeId}/admin/third-place-results`
+
+### Scheduled Production Sync Path
+
+Run these jobs in order:
+
+1. Teams/groups: call global Sync Teams before launch and whenever FIFA group assignments change.
+2. Fixtures: call per-challenge Sync Fixtures after fixtures are official and after provider schedule corrections.
+3. Live scores: call Sync Live Scores every 2-5 minutes while matches are active; include leaderboard recalculation.
+4. Group standings/results: call Sync Group Standings after group tables are official or at a controlled cadence late in group-stage matchdays.
+5. Leaderboard recalculation: call Recalculate after official result ingestion, or rely on result ingestion routes that recalculate automatically.
+
+The scheduled endpoint is:
+
+```bash
+curl -X POST /api/brackets/world-cup/cron/sync \
+  -H "Authorization: Bearer $WORLD_CUP_CRON_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"job":"live","provider":"apifootball","recalculate":true}'
+```
+
+Supported `job` values: `teams`, `fixtures`, `live`, `standings`, `recalculate`, `all`. Pass `challengeId` for a single pool, or omit it to process open/locked/live World Cup pools in a bounded batch.
+
+Vercel cron calls this endpoint with GET. `vercel.json` includes scheduled GET jobs for teams, fixtures, standings, live scores, and recalculation. The endpoint still requires `WORLD_CUP_CRON_SECRET` through Vercel cron auth headers / shared cron auth; do not expose provider keys in cron paths.
+
+Readiness diagnostic:
+
+```bash
+curl /api/brackets/world-cup/admin/readiness \
+  -H "Authorization: Bearer $WORLD_CUP_CRON_SECRET"
+```
+
+The readiness response exposes only non-secret status: provider name, provider/API key presence booleans, production-safe origin booleans, group completeness, fixture count, standings sync status, live route availability, and best-third mapping confirmation.
+
+### Production Deployment Safety Checklist
+
+- [ ] Set Vercel production envs: `NEXTAUTH_URL`, `NEXT_PUBLIC_APP_URL`, `APP_URL` or `PUBLIC_SITE_URL` if used, `DATABASE_URL`, `DIRECT_URL`, `NEXTAUTH_SECRET`, `WORLD_CUP_DATA_PROVIDER`, provider API key, `WORLD_CUP_CRON_SECRET`, `WORLD_CUP_BEST_THIRD_MAPPING_CONFIRMED`.
+- [ ] Confirm no production origin env uses `localhost`, `127.0.0.1`, or `http://`.
+- [ ] Run `npx prisma migrate deploy`.
+- [ ] Run `npx prisma generate`.
+- [ ] Run `npx prisma validate`.
+- [ ] Run `npx vitest run world-cup`.
+- [ ] Verify `/api/brackets/world-cup/admin/readiness` as admin or with cron secret.
+- [ ] Verify cron sync with a safe job: `GET /api/brackets/world-cup/cron/sync?job=teams&provider=apifootball` or `job=standings`.
+- [ ] Verify production invite join flow on the production origin.
+- [ ] Verify copied/generated invites do not contain localhost or `127.0.0.1`.
+- [ ] Verify bracket lock deadline behavior for group rankings, third-place picks, knockout picks, and finalized entries.
+
+### Admin Click Audit
+
+| Operation | UI handler | API route | Permission check | Success state | Error state |
+|-----------|------------|-----------|------------------|---------------|-------------|
+| Sync teams | `runSyncTeams` in `WorldCupBracketShell` | `POST /api/brackets/world-cup/admin/sync-teams` | Site admin via `getWorldCupAdminState` | Toast + Teams sync result row, readiness summary | Toast error |
+| Sync fixtures | `runSyncFixtures` in `WorldCupBracketShell` | `POST /api/brackets/world-cup/{challengeId}/admin/sync-fixtures` | Owner/admin via `assertWorldCupManager` | Toast + Fixtures sync result row | Toast error |
+| Sync live | `runSyncLive` in `WorldCupBracketShell` | `POST /api/brackets/world-cup/{challengeId}/admin/sync-live` | Owner/admin via `assertWorldCupManager` | Toast + Live sync result row + view refresh | Toast error |
+| Group standings/results | `runSyncGroupStandings` in `WorldCupBracketShell`; manual API fallback | `POST /api/brackets/world-cup/{challengeId}/admin/sync-group-standings`; `POST /admin/group-results` | Owner/admin via `assertWorldCupManager` | Toast + Standings sync result row + view refresh | Toast/API error |
+| Third-place results | API-only manual fallback | `POST /api/brackets/world-cup/{challengeId}/admin/third-place-results` | Owner/admin via `assertWorldCupManager` | JSON result + refreshed view | JSON error |
+| Recalculate leaderboard | `runOwnerAction("recalculate")` and leaderboard tab action | `POST /api/brackets/world-cup/{challengeId}/recalculate` | Owner/admin via `assertWorldCupManager` | View refresh / leaderboard result | Non-OK response, no broad UI replacement in this slice |
+
+Round of 32 population from official group results is intentionally service-gated. Do not enable a UI button until FIFA publishes/validates the best-third matchup table and an explicit mapping is configured.

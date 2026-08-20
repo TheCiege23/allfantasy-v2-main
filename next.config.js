@@ -8,10 +8,13 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 })
 
 const isProd = process.env.NODE_ENV === 'production';
+const disableDiagInstrumentation = process.env.AF_NEXT_DIAG_DISABLE_INSTRUMENTATION === '1';
+const disableDiagSwcMinify = process.env.AF_NEXT_DIAG_DISABLE_SWC_MINIFY === '1';
 
 const nextConfig = {
   reactStrictMode: true,
   distDir: process.env.AF_NEXT_DIST_DIR || (isProd ? '.next' : '.next-dev-local'),
+  ...(disableDiagSwcMinify ? { swcMinify: false } : {}),
 
   // Skip in-build type-check and lint passes — they OOM in Vercel's build container
   // on this codebase size. TypeScript errors are caught in local pre-deploy checks.
@@ -49,7 +52,9 @@ const nextConfig = {
   },
 
   experimental: {
-    instrumentationHook: process.env.NODE_ENV === 'production' || process.env.AF_ENABLE_DEV_INSTRUMENTATION === '1',
+    instrumentationHook:
+      !disableDiagInstrumentation &&
+      (process.env.NODE_ENV === 'production' || process.env.AF_ENABLE_DEV_INSTRUMENTATION === '1'),
     outputFileTracingIncludes: {
       "/api/**": ["./data/**"],
     },

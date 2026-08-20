@@ -37,6 +37,7 @@ export async function POST(request: Request, context: { params: { challengeId: s
     const view = await getPlayoffBracketView({
       challengeId: params.data.challengeId,
       user: auth.user,
+      requestedEntryId: params.data.entryId,
     })
 
     return NextResponse.json({

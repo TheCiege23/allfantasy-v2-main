@@ -1,7 +1,19 @@
 import "server-only"
 import { prisma } from "@/lib/prisma"
+import {
+  indexSeriesByNumber,
+  isValidPlayoffPickTeamName,
+  pickTeamNameBySeriesId,
+} from "./playoffBracketProjection"
 import { buildPlayoffTemplate, getPlayoffRoundOrder } from "./playoffTemplate"
-import type { PlayoffChallengeListItem, PlayoffChallengeView, PlayoffCreateResponse, PlayoffSport } from "./types"
+import type {
+  PlayoffChallengeListItem,
+  PlayoffChallengeView,
+  PlayoffCreateResponse,
+  PlayoffPickView,
+  PlayoffSeriesView,
+  PlayoffSport,
+} from "./types"
 
 type SessionUser = {
   id?: string | null
@@ -311,6 +323,9 @@ export async function getPlayoffBracketView(input: {
       startsAt: toIso(series.startsAt),
       nextSeriesNumber: series.nextSeriesNumber,
       nextSeriesSlot: series.nextSeriesSlot,
+      /** Required client-side so dependent rounds resolve picks from feeders; never omit */
+      sourceSeriesHome: series.sourceSeriesHome ?? null,
+      sourceSeriesAway: series.sourceSeriesAway ?? null,
     })),
     picks: picks.map((pick: any) => ({
       id: pick.id,
@@ -440,21 +455,80 @@ export async function savePlayoffBracketPick(input: {
     throw new Error("Entry not found")
   }
 
-  const series = await (prisma as any).playoffBracketSeries.findUnique({
-    where: { id: input.seriesId },
-    select: {
-      id: true,
-      challengeId: true,
-      homeTeamName: true,
-      awayTeamName: true,
-    },
-  })
+  const [challengeSeriesRows, existingPicks] = await Promise.all([
+    (prisma as any).playoffBracketSeries.findMany({
+      where: { challengeId: input.challengeId },
+      select: {
+        id: true,
+        round: true,
+        roundIndex: true,
+        seriesNumber: true,
+        conference: true,
+        homeSeed: true,
+        awaySeed: true,
+        homeTeamName: true,
+        awayTeamName: true,
+        winnerTeamName: true,
+        bestOf: true,
+        status: true,
+        startsAt: true,
+        nextSeriesNumber: true,
+        nextSeriesSlot: true,
+        sourceSeriesHome: true,
+        sourceSeriesAway: true,
+      },
+    }),
+    (prisma as any).playoffBracketPick.findMany({
+      where: { entryId: input.entryId },
+      select: {
+        id: true,
+        entryId: true,
+        seriesId: true,
+        pickTeamName: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    }),
+  ])
 
-  if (!series || series.challengeId !== input.challengeId) {
-    throw new Error("Series not found")
+  function mapPlayoffSeriesView(row: (typeof challengeSeriesRows)[number]): PlayoffSeriesView {
+    return {
+      id: row.id,
+      round: row.round,
+      roundIndex: row.roundIndex,
+      seriesNumber: row.seriesNumber,
+      conference: row.conference,
+      homeSeed: row.homeSeed,
+      awaySeed: row.awaySeed,
+      homeTeamName: row.homeTeamName,
+      awayTeamName: row.awayTeamName,
+      winnerTeamName: row.winnerTeamName,
+      bestOf: row.bestOf,
+      status: row.status,
+      startsAt: toIso(row.startsAt),
+      nextSeriesNumber: row.nextSeriesNumber ?? null,
+      nextSeriesSlot: row.nextSeriesSlot ?? null,
+      sourceSeriesHome: row.sourceSeriesHome ?? null,
+      sourceSeriesAway: row.sourceSeriesAway ?? null,
+    }
   }
 
-  if (![series.homeTeamName, series.awayTeamName].includes(input.pickTeamName)) {
+  const seriesViews = challengeSeriesRows.map(mapPlayoffSeriesView)
+  const seriesByNum = indexSeriesByNumber(seriesViews)
+  const pickViewsForEntry: PlayoffPickView[] = existingPicks.map((pick: any) => ({
+    id: pick.id,
+    entryId: pick.entryId,
+    seriesId: pick.seriesId,
+    pickTeamName: pick.pickTeamName,
+    createdAt: toIso(pick.createdAt) ?? new Date().toISOString(),
+    updatedAt: toIso(pick.updatedAt) ?? new Date().toISOString(),
+  }))
+  const pickIdx = pickTeamNameBySeriesId(pickViewsForEntry)
+  const pickTargetSeries = seriesViews.find((item) => item.id === input.seriesId)
+  if (!pickTargetSeries) {
+    throw new Error("Series not found")
+  }
+  if (!isValidPlayoffPickTeamName(pickTargetSeries, input.pickTeamName, seriesByNum, pickIdx)) {
     throw new Error("Pick team must be one of the teams in this series")
   }
 

@@ -74,8 +74,8 @@ export function RightControlPanel({
                 type="button"
                 onClick={onRailCollapse}
                 className="hidden md:inline-flex h-8 w-8 items-center justify-center rounded-lg border border-white/[0.08] bg-white/[0.04] text-white/80 transition hover:bg-white/[0.08]"
-                aria-label="Collapse My Leagues"
-                title="Collapse My Leagues"
+                aria-label={t('dashboard.right.collapseMyLeagues')}
+                title={t('dashboard.right.collapseMyLeagues')}
                 data-testid="myleagues-rail-collapse"
               >
                 <ChevronRight className="h-4 w-4" aria-hidden />
@@ -86,8 +86,8 @@ export function RightControlPanel({
               onClick={() => router.push('/create-league')}
               data-testid="dashboard-right-create-league"
               className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-cyan-400/30 bg-cyan-500/10 text-cyan-200 transition hover:border-cyan-400/45 hover:bg-cyan-500/20"
-              aria-label="Create League"
-              title="Create League"
+              aria-label={t('dashboard.right.createLeague')}
+              title={t('dashboard.right.createLeague')}
             >
               <PlusCircle className="h-4 w-4" />
             </button>
@@ -106,7 +106,7 @@ export function RightControlPanel({
         {hideLeagueList ? (
           <div className="flex flex-1 min-h-0 min-w-0 flex-col items-center justify-start px-3 py-4 text-center">
             <p className="text-[11px] text-white/35">
-              League list hidden. Use <span className="text-cyan-200">Create</span> or <span className="text-white/70">Import</span> above to add a league.
+              {t('dashboard.right.leagueListHidden')}
             </p>
           </div>
         ) : (
@@ -185,7 +185,7 @@ export function RightControlPanel({
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-white/80 transition hover:bg-white/[0.06] hover:text-white"
               >
-                <User className="h-3.5 w-3.5" /> Profile
+                <User className="h-3.5 w-3.5" /> {t('dashboard.right.profile')}
               </button>
               <button
                 type="button"
@@ -198,7 +198,7 @@ export function RightControlPanel({
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-white/80 transition hover:bg-white/[0.06] hover:text-white"
               >
-                <Settings className="h-3.5 w-3.5" /> Settings
+                <Settings className="h-3.5 w-3.5" /> {t('dashboard.right.settings')}
               </button>
               <button
                 type="button"
@@ -210,7 +210,7 @@ export function RightControlPanel({
                 }}
                 className="flex w-full items-center gap-2 border-t border-white/[0.06] px-3 py-2 text-left text-[13px] text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
               >
-                <LogOut className="h-3.5 w-3.5" /> Sign Out
+                <LogOut className="h-3.5 w-3.5" /> {t('dashboard.right.signOut')}
               </button>
             </div>
           ) : null}

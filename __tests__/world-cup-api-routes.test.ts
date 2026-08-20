@@ -97,6 +97,7 @@ describe("World Cup API catch-all route", () => {
     expect(body.challengeId).toBe("wc1")
     expect(body.id).toBe("wc1")
     expect(body.challenge?.id).toBe("wc1")
+    expect(body.redirectUrl).toBe("/brackets/world-cup/wc1")
     expect(body.inviteCode).toBe("INVITE")
     expect(body.inviteUrl).toContain("INVITE")
   })
@@ -152,6 +153,8 @@ describe("World Cup API catch-all route", () => {
     )
 
     expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.redirectUrl).toBe("/brackets/world-cup/wc1")
     expect(createChallengeMock).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "World Cup",

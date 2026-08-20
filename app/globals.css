@@ -412,12 +412,24 @@ html[data-mode="light"] .mode-readable [class*="bg-[#1a1a2e]"],
 html[data-mode="light"] .mode-readable [class*="from-[#07071a]"],
 html[data-mode="light"] .mode-readable [class*="from-[#0a0a0f]"],
 html[data-mode="light"] .mode-readable [class*="from-[#0d0d17]"],
+html[data-mode="light"] .mode-readable [class*="from-[#0c0d24]"],
+html[data-mode="light"] .mode-readable [class*="from-[#0d0922]"],
+html[data-mode="light"] .mode-readable [class*="from-[#091522]"],
+html[data-mode="light"] .mode-readable [class*="from-[#1a0c1a]"],
 /* gradient via-stops */
 html[data-mode="light"] .mode-readable [class*="via-[#0d0d17]"],
+html[data-mode="light"] .mode-readable [class*="via-[#0a0e22]"],
+html[data-mode="light"] .mode-readable [class*="via-[#0a0c20]"],
+html[data-mode="light"] .mode-readable [class*="via-[#091420]"],
+html[data-mode="light"] .mode-readable [class*="via-[#0e0a18]"],
 /* gradient to-stops */
 html[data-mode="light"] .mode-readable [class*="to-[#0d0d1f]"],
 html[data-mode="light"] .mode-readable [class*="to-[#0f0f1a]"],
-html[data-mode="light"] .mode-readable [class*="to-[#0d1117]"] {
+html[data-mode="light"] .mode-readable [class*="to-[#0d1117]"],
+html[data-mode="light"] .mode-readable [class*="to-[#0d091e]"],
+html[data-mode="light"] .mode-readable [class*="to-[#080f20]"],
+html[data-mode="light"] .mode-readable [class*="to-[#0a1818]"],
+html[data-mode="light"] .mode-readable [class*="to-[#0d0915]"] {
   background-color: color-mix(in srgb, var(--panel) 94%, transparent) !important;
   background-image: none !important;
 }

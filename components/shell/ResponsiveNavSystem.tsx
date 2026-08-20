@@ -309,7 +309,17 @@ export function ResponsiveNavSystem({
         onOpenSearch={() => setSearchOpen(true)}
       />
       <SearchOverlay open={searchOpen} onClose={() => setSearchOpen(false)} />
-      <div className={isAuthenticated ? "pb-20 lg:pb-0" : undefined}>{children}</div>
+      <div
+        className={
+          isAuthenticated
+            ? pathname.startsWith("/dashboard")
+              ? "pb-14 lg:pb-0"
+              : "pb-20 lg:pb-0"
+            : undefined
+        }
+      >
+        {children}
+      </div>
       {isAuthenticated ? (
         <>
           {showShortcutHint ? (

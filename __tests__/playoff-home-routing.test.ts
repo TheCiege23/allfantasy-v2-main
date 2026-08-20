@@ -29,13 +29,23 @@ describe("playoff home card routing", () => {
     ).toBe("open")
   })
 
-  it("falls back to /brackets when no NHL challenge exists", () => {
+  it("falls back to /brackets/nba when no NBA challenge exists", () => {
+    const href = routing.resolvePlayoffCardHref({
+      sport: "NBA",
+      playoffBySport: new Map(),
+    })
+
+    expect(href).toBe("/brackets/nba")
+    expect(routing.resolvePlayoffCardMode({ sport: "NBA", playoffBySport: new Map() })).toBe("create")
+  })
+
+  it("falls back to /brackets/nhl when no NHL challenge exists", () => {
     const href = routing.resolvePlayoffCardHref({
       sport: "NHL",
       playoffBySport: new Map(),
     })
 
-    expect(href).toBe("/brackets")
+    expect(href).toBe("/brackets/nhl")
     expect(routing.resolvePlayoffCardMode({ sport: "NHL", playoffBySport: new Map() })).toBe("create")
   })
 
@@ -63,17 +73,17 @@ describe("playoff home card routing", () => {
     expect(href).toBe("/brackets/leagues/league-nhl")
   })
 
-  it("resolves My Pools Soccer card href to canonical route using persisted pool id", () => {
+  it("keeps legacy Soccer pool cards on the legacy recovery route", () => {
     const href = routing.resolveMyPoolCardHref({
-      poolId: "league-soccer-1",
+      poolId: "cd580d45-f664-42fc-9871-657e7e737703",
       sport: "SOCCER",
       challengeType: "playoff_challenge",
       bracketType: null,
       playoffBySport: new Map(),
     })
 
-    expect(href).toBe("/brackets/leagues/league-soccer-1")
-    expect(href).not.toContain("sport=soccer")
+    expect(href).toBe("/brackets/leagues/cd580d45-f664-42fc-9871-657e7e737703")
+    expect(href).not.toContain("/brackets/world-cup/")
   })
 
   it("uses provided pool id for legacy NBA league instead of playoff challenge id", () => {

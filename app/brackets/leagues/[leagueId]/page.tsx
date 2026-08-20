@@ -104,7 +104,7 @@ export default async function BracketLeagueDetailPage({
   searchParams,
 }: {
   params: { leagueId: string }
-  searchParams?: { entryId?: string }
+  searchParams?: { entryId?: string; tab?: string }
 }) {
   console.warn("[brackets/leagues] loading leagueId", { leagueId: params.leagueId })
 
@@ -169,13 +169,17 @@ export default async function BracketLeagueDetailPage({
           challengeId: playoffView.challenge.id,
         })
       }
-      return <PlayoffBracketShell initialView={playoffView} />
+      return <PlayoffBracketShell initialView={playoffView} leaderboardFirst={searchParams?.tab === "leaderboard"} />
     }
 
     console.warn("[brackets/leagues] checking legacy league", { leagueId: params.leagueId })
     const existingLeague = await (prisma as any).bracketLeague.findUnique({
       where: { id: params.leagueId },
-      select: { id: true },
+      select: {
+        id: true,
+        name: true,
+        tournament: { select: { sport: true } },
+      },
     })
 
     if (existingLeague?.id) {
@@ -187,20 +191,30 @@ export default async function BracketLeagueDetailPage({
       console.warn("[brackets/leagues] legacy BracketLeague UUID — rendering recovery UI (loop-guard)", {
         leagueId: params.leagueId,
       })
+
+      // Build a smart "Create New Playoff Pool" href that pre-fills the sport
+      // when the related tournament has a known sport value.
+      const sport = typeof existingLeague.tournament?.sport === "string" ? existingLeague.tournament.sport.toUpperCase() : ""
+      const knownSports = ["NBA", "NHL"]
+      const createHref = knownSports.includes(sport)
+        ? `/brackets/leagues/new?sport=${sport}&challengeType=playoff_challenge`
+        : `/brackets/leagues/new?challengeType=playoff_challenge`
+
       return (
         <main className="mx-auto max-w-3xl p-6">
           <div className="rounded-xl border border-slate-300 bg-white p-6 text-center shadow-sm">
-            <h1 className="text-xl font-semibold text-slate-900">This pool has been migrated</h1>
+            <h1 className="text-xl font-semibold text-slate-900">This pool uses the older bracket format</h1>
             <p className="mt-2 text-sm text-slate-600">
-              This bracket pool is no longer accessible via this route. Please return to Brackets
-              home to find your pools.
+              This pool was created before the new NBA/NHL playoff bracket engine was enabled. Please
+              create a new playoff pool to use live scoring, team logos, pick advancement, and the
+              trophy bracket.
             </p>
             <div className="mt-4 flex items-center justify-center gap-3">
               <Link href="/brackets" className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700">
-                Back to Brackets
+                Back to My Pools
               </Link>
-              <Link href="/brackets/leagues/new" className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">
-                Create Pool
+              <Link href={createHref} className="rounded-lg bg-slate-900 px-3 py-2 text-sm text-white">
+                Create New Playoff Pool
               </Link>
             </div>
           </div>

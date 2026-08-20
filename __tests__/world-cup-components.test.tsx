@@ -29,6 +29,22 @@ vi.mock("next/navigation", () => ({
   }),
 }))
 
+vi.mock("next-auth", () => ({
+  getServerSession: vi.fn(),
+}))
+
+vi.mock("@/lib/world-cup", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/world-cup")>()
+  return {
+    ...actual,
+    getWorldCupChallengeView: vi.fn(async () => null),
+  }
+})
+
+vi.mock("@/lib/world-cup/adminPage", () => ({
+  hasWorldCupAdminPageSession: vi.fn(() => false),
+}))
+
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
     <a href={href}>{children}</a>
@@ -120,6 +136,23 @@ describe("World Cup commissioner UI modules", () => {
   it("loads commissioner brain panel module", async () => {
     const m = await import("@/components/brackets/world-cup/WorldCupCommissionerBrainPanel")
     expect(m.default).toBeDefined()
+  })
+})
+
+describe("WorldCup pool route recovery", () => {
+  it("shows a friendly recovery UI when a World Cup pool id is not found", async () => {
+    const Page = (await import("@/app/brackets/world-cup/[bracketId]/page")).default
+    render(
+      await Page({
+        params: { bracketId: "legacy-bracket-league-id" },
+        searchParams: {},
+      })
+    )
+
+    expect(screen.getByText("World Cup pool not found")).toBeInTheDocument()
+    expect(screen.getByText(/old bracket system or deleted/i)).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: /Back to World Cup Pools/i })).toHaveAttribute("href", "/brackets/world-cup")
+    expect(screen.getByRole("link", { name: /Create New World Cup Pool/i })).toHaveAttribute("href", "/brackets/world-cup/create")
   })
 })
 

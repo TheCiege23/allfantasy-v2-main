@@ -87,30 +87,63 @@ export function RankingsCard({
   if (loading) {
     return (
       <div
-        className="h-64 animate-pulse rounded-2xl border border-cyan-500/15 bg-gradient-to-br from-[#0a1228]/80 to-[#070a14]"
+        className="relative h-64 overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-[#0c1126] via-[#0a0e22] to-[#0d091e] p-5"
         data-testid="dashboard-rankings-card-skeleton"
-      />
+        aria-busy="true"
+        aria-label={t('dashboard.rankings.loadingAria')}
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-cyan-500/10 blur-3xl"
+        />
+        <div className="relative flex items-center gap-3">
+          <div className="h-12 w-12 animate-pulse rounded-xl bg-white/[0.06]" />
+          <div className="flex-1 space-y-2">
+            <div className="h-3 w-24 animate-pulse rounded bg-white/[0.06]" />
+            <div className="h-7 w-16 animate-pulse rounded bg-white/[0.06]" />
+          </div>
+        </div>
+        <div className="relative mt-6 h-2 w-full animate-pulse rounded-full bg-white/[0.05]" />
+        <div className="relative mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="h-12 animate-pulse rounded-lg bg-white/[0.04]" />
+          ))}
+        </div>
+      </div>
     )
   }
 
   if (!data?.imported || (!data.rank && data.xpTotal == null)) {
     return (
-      <div className="rounded-2xl border border-white/8 border-l-2 border-l-cyan-500 bg-[#0c0c1e] p-5">
-        <div className="text-2xl">🏆</div>
-        <p className="mt-3 text-sm font-semibold text-white">{t('dashboard.rankings.emptyTitle')}</p>
-        <p className="mt-1 text-xs text-white/40">{t('dashboard.rankings.emptyBody')}</p>
+      <div
+        className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-[#0c1126] via-[#0a0e22] to-[#0d091e] p-5"
+        data-testid="dashboard-rankings-card-empty"
+      >
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-cyan-500/12 blur-3xl"
+        />
+        <div className="relative flex items-center gap-3">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-400/30 bg-gradient-to-br from-amber-500/15 to-cyan-500/10 text-2xl">
+            🏆
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-bold text-white">{t('dashboard.rankings.emptyTitle')}</p>
+            <p className="mt-0.5 text-[11px] leading-snug text-white/55">{t('dashboard.rankings.emptyBody')}</p>
+          </div>
+        </div>
         {onImportNow ? (
           <button
             type="button"
             onClick={onImportNow}
-            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-cyan-300 transition-colors hover:text-cyan-200"
+            className="relative mt-4 inline-flex items-center gap-1 rounded-xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 to-sky-500/15 px-3 py-2 text-[12px] font-bold text-cyan-100 transition hover:border-cyan-400/55 hover:from-cyan-500/22 hover:to-sky-500/22"
           >
             {t('dashboard.rankings.importNow')} <ArrowRight className="h-4 w-4" />
           </button>
         ) : (
           <Link
             href="/import"
-            className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-cyan-300 transition-colors hover:text-cyan-200"
+            className="relative mt-4 inline-flex items-center gap-1 rounded-xl border border-cyan-400/35 bg-gradient-to-r from-cyan-500/15 to-sky-500/15 px-3 py-2 text-[12px] font-bold text-cyan-100 transition hover:border-cyan-400/55 hover:from-cyan-500/22 hover:to-sky-500/22"
           >
             {t('dashboard.rankings.importNow')} <ArrowRight className="h-4 w-4" />
           </Link>

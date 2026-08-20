@@ -14,6 +14,7 @@ These must be set in **Vercel → Project Settings → Environment Variables →
 | `DIRECT_URL` | Non-pooled Postgres for Prisma Migrate | `postgresql://user:pw@ep-xxx.us-east-1.aws.neon.tech/neondb?sslmode=require` |
 | `NEXTAUTH_SECRET` | Session encryption key — **min 16 chars, never the placeholder** | `openssl rand -base64 32` |
 | `NEXTAUTH_URL` | Canonical app URL used by NextAuth callbacks | `https://www.allfantasy.ai` |
+| `NEXT_PUBLIC_APP_URL` | Public app URL used for invite links and same-origin auth returns | `https://www.allfantasy.ai` |
 
 > Provider aliases accepted for `DATABASE_URL`: `POSTGRES_PRISMA_URL`, `POSTGRES_URL`, `POSTGRES_URL_NON_POOLING`, `NEON_DATABASE_URL`. The first valid `postgres://` or `postgresql://` URL wins.
 
@@ -44,6 +45,10 @@ Missing values degrade features but do not block startup. The health route expos
 | `ROLLING_INSIGHTS_CLIENT_ID` + `_SECRET` | NFL/multi-sport data (Set 1) | — |
 | `ROLLING_INSIGHTS_CLIENT_ID2` + `_SECRET2` | Non-NFL sports (Set 2) | — |
 | `CLEARSPORTS_API_KEY` + `CLEARSPORTS_API_BASE` | Player projections / news | — |
+| `WORLD_CUP_DATA_PROVIDER` | World Cup official data provider | Production should use `apifootball`; `mock` is local/dev only |
+| `API_SPORTS_KEY` / `API_FOOTBALL_KEY` / `APISPORTS_FOOTBALL_KEY` | API-Football provider key for World Cup teams, fixtures, live scores, and standings | Server-only; never `NEXT_PUBLIC_*` |
+| `WORLD_CUP_CRON_SECRET` | Secret for World Cup scheduled sync/readiness routes | Send as `Authorization: Bearer <secret>` or `x-cron-secret` |
+| `WORLD_CUP_BEST_THIRD_MAPPING_CONFIRMED` | Enables confirmed best-third mapping readiness flag | Keep `false` until FIFA mapping is configured |
 
 ---
 
@@ -56,11 +61,17 @@ Run top-to-bottom before every production push.
 - [ ] **Database URL** — `DATABASE_URL` (or alias) set in Vercel Production env; uses a **pooled** URL
 - [ ] **Direct URL** — `DIRECT_URL` set to the **non-pooled** URL for Prisma Migrate
 - [ ] **Auth secrets** — `NEXTAUTH_SECRET` ≥32 random bytes, `NEXTAUTH_URL` = `https://www.allfantasy.ai`
+- [ ] **Public app origin** — `NEXT_PUBLIC_APP_URL` and `APP_URL`/`PUBLIC_SITE_URL` use production HTTPS, not localhost or `127.0.0.1`
+- [ ] **World Cup official data** — `WORLD_CUP_DATA_PROVIDER=apifootball`, provider API key set server-side, `WORLD_CUP_CRON_SECRET` set
 - [ ] **Prisma migration** — run `npx prisma migrate deploy` against the production database before cutting traffic (see [Migrate flow](#prisma-migrate-flow))
 - [ ] **Sentry DSN** — `NEXT_PUBLIC_SENTRY_DSN` set for error tracking (or knowingly absent)
 - [ ] **Redis** — `UPSTASH_REDIS_REST_URL` + `UPSTASH_REDIS_REST_TOKEN` set if distributed draft locks are required
 - [ ] **Deploy** — trigger Vercel deploy; wait for "Ready" status
 - [ ] **Health check** — `GET https://www.allfantasy.ai/api/health` → `ok:true`, `database.connected:true`, `env.valid:true`
+- [ ] **World Cup readiness** — `GET /api/brackets/world-cup/admin/readiness` as admin or cron secret → provider configured, groups complete, fixtures loaded, standings synced
+- [ ] **World Cup cron smoke** — call `GET /api/brackets/world-cup/cron/sync?job=teams&provider=apifootball` or `job=standings` with `Authorization: Bearer $WORLD_CUP_CRON_SECRET`; verify `ok:true`
+- [ ] **World Cup production invite** — create/copy an invite on the production origin; verify no `localhost` or `127.0.0.1` appears
+- [ ] **World Cup locks** — verify tournament lock deadline/effective first kickoff locks group-stage, third-place, and knockout edits as expected
 - [ ] **Smoke test** — create a league, complete a draft pick, verify waiver run in the UI
 - [ ] **Sentry** — confirm no new error bursts in the first 10 minutes
 - [ ] **Rollback plan** — previous Vercel deployment URL noted for instant revert
@@ -119,11 +130,16 @@ npx prisma migrate status
 # 3. Apply pending migrations (idempotent; safe to re-run)
 npx prisma migrate deploy
 
-# 4. Verify
+# 4. Generate and validate Prisma client/schema
+npx prisma generate
+npx prisma validate
+
+# 5. Verify
 npx prisma db execute --stdin <<< "SELECT COUNT(*) FROM _prisma_migrations WHERE applied_steps_count = 1;"
 ```
 
 > **Never run `prisma migrate dev` in production.** It creates new migration files and can prompt interactively.
+> If Windows keeps locking `query_engine-windows.dll.node`, rerun `npx prisma generate` from a clean terminal after fully closing Cursor/VS Code, or use CI/Linux/Vercel generate output as deploy confidence.
 
 ---
 
@@ -149,6 +165,7 @@ ANALYZE=true npm run build
 - `RESEND_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY`, `XAI_API_KEY`
 - `UPSTASH_REDIS_REST_TOKEN`, `REDIS_URL`
 - `LEAGUE_AUTH_ENCRYPTION_KEY`, `LEAGUE_CRON_SECRET`
+- `WORLD_CUP_CRON_SECRET`, `API_SPORTS_KEY`, `API_FOOTBALL_KEY`, `APISPORTS_FOOTBALL_KEY`, `SPORTSDATA_API_KEY`
 
 ---
 

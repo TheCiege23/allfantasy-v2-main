@@ -25,7 +25,7 @@ export default function WorldCupInvitePanel({ view }: { view: WorldCupChallengeV
   const inviteCode = challenge.inviteCode ?? null
 
   const shareMessage =
-    `Join my AllFantasy World Cup Bracket Challenge "${challenge.name}"! ` +
+    `Join my AllFantasy World Cup Bracket Pool "${challenge.name}"! ` +
     `Make up to ${challenge.maxEntriesPerParticipant} brackets, use AI matchup previews, and compete on the live leaderboard. ` +
     inviteUrl
 
@@ -64,11 +64,11 @@ export default function WorldCupInvitePanel({ view }: { view: WorldCupChallengeV
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-6 pb-28 sm:pb-8">
-      {/* League metadata */}
+      {/* Pool metadata */}
       <div className="mb-5 rounded-xl border border-white/10 bg-white/[0.04] p-4">
-        <h2 className="mb-3 text-base font-black text-white">League Details</h2>
+        <h2 className="mb-3 text-base font-black text-white">Pool Details</h2>
         <div className="space-y-2">
-          <MetaRow label="League" value={challenge.name} />
+          <MetaRow label="Pool" value={challenge.name} />
           <MetaRow
             label="Privacy"
             value={challenge.visibility === "public" ? "Public" : "Private — invite only"}
@@ -96,7 +96,7 @@ export default function WorldCupInvitePanel({ view }: { view: WorldCupChallengeV
           {isLocked && (
             <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.07] bg-amber-300/[0.07] px-3 py-2 text-xs font-bold text-amber-300">
               <Lock className="h-3 w-3" />
-              This league is locked. Picks can no longer be edited.
+              This pool is locked. Picks can no longer be edited.
             </div>
           )}
         </div>
@@ -170,7 +170,7 @@ export default function WorldCupInvitePanel({ view }: { view: WorldCupChallengeV
           <Users className="mx-auto mb-3 h-8 w-8 text-white/20" />
           <p className="text-sm font-bold text-white/50">Invite link not available</p>
           <p className="mt-1 text-xs text-white/30">
-            The league owner or admin can regenerate an invite link from the challenge settings.
+            The pool owner or admin can regenerate an invite link from pool settings.
           </p>
         </div>
       )}

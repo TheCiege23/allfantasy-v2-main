@@ -10,8 +10,7 @@ import NotificationBell from "@/components/shared/NotificationBell"
 import WalletSummaryBadge from "@/components/shared/WalletSummaryBadge"
 import LanguageToggle from "@/components/i18n/LanguageToggle"
 import { UserMenuDropdown } from "@/components/navigation/UserMenuDropdown"
-import { getPrimaryNavItems } from "@/lib/navigation"
-import { showAdminNav } from "@/lib/navigation"
+import { getPrimaryNavItems, isBracketProductSurfacePath, showAdminNav } from "@/lib/navigation"
 import { isNavItemActive } from "@/lib/shell"
 import { getPrimaryChimmyEntry } from "@/lib/ai-product-layer"
 import { getCommandPaletteShortcut } from "@/lib/search"
@@ -40,6 +39,8 @@ export default function GlobalTopNav({
 }: Props) {
   const pathname = usePathname()
   const currentPath = pathname ?? ""
+  /** Bracket product uses BracketTopNav; hiding this row avoids triple-stacked nav. */
+  const hidePrimaryQuickLinksRow = isBracketProductSurfacePath(currentPath)
   const chimmyEntry = getPrimaryChimmyEntry({ source: "top_bar" })
   const primaryItems = getPrimaryNavItems(isAdmin)
   const shortcutLabel = getCommandPaletteShortcut()
@@ -163,26 +164,29 @@ export default function GlobalTopNav({
           </div>
         </div>
 
-        {isAuthenticated && (
-        <div className="flex gap-1 overflow-x-auto pb-1">
-          {primaryItems.map((item) => {
-            const active = item.href === "/admin" ? currentPath.startsWith("/admin") : isNavItemActive(currentPath, item.href)
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={cn("whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] transition sm:px-3 sm:text-xs")}
-                aria-current={active ? "page" : undefined}
-                style={active
-                  ? { background: "var(--text)", color: "var(--bg)" }
-                  : { background: "color-mix(in srgb, var(--panel2) 80%, transparent)", color: "var(--muted)" }}
-              >
-                {item.label}
-              </Link>
-            )
-          })}
-        </div>
-        )}
+        {isAuthenticated && !hidePrimaryQuickLinksRow ? (
+          <div className="flex gap-1 overflow-x-auto pb-1">
+            {primaryItems.map((item) => {
+              const active =
+                item.href === "/admin" ? currentPath.startsWith("/admin") : isNavItemActive(currentPath, item.href)
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className={cn("whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] transition sm:px-3 sm:text-xs")}
+                  aria-current={active ? "page" : undefined}
+                  style={
+                    active
+                      ? { background: "var(--text)", color: "var(--bg)" }
+                      : { background: "color-mix(in srgb, var(--panel2) 80%, transparent)", color: "var(--muted)" }
+                  }
+                >
+                  {item.label}
+                </Link>
+              )
+            })}
+          </div>
+        ) : null}
       </div>
     </header>
   )

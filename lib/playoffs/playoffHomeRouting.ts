@@ -2,7 +2,7 @@ import type { SupportedSport } from "@/lib/sport-scope"
 
 type PlayoffChallengeRef = {
   challengeId: string
-  sport: "nba" | "nhl"
+  sport: string
 }
 
 type MyPoolCardInput = {
@@ -20,6 +20,9 @@ export function resolvePlayoffCardHref(input: {
   try {
     const normalizedSport = String(input?.sport ?? "").toLowerCase()
     if (!normalizedSport) return "/brackets"
+    if (normalizedSport === "soccer" || normalizedSport === "fifa" || normalizedSport === "world_cup") {
+      return "/brackets/world-cup/create"
+    }
 
     const bySport = input?.playoffBySport
     const existing = bySport instanceof Map ? bySport.get(normalizedSport) : undefined
@@ -27,8 +30,12 @@ export function resolvePlayoffCardHref(input: {
       return `/brackets/leagues/${existing.challengeId}`
     }
 
-    if (normalizedSport === "nba" || normalizedSport === "nhl") {
-      return "/brackets"
+    if (normalizedSport === "nhl") {
+      return "/brackets/nhl"
+    }
+
+    if (normalizedSport === "nba") {
+      return "/brackets/nba"
     }
 
     return "/brackets"

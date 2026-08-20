@@ -3,6 +3,7 @@
 import type { HTMLAttributes, MouseEvent } from 'react'
 import Link from 'next/link'
 import { Star, Trash2 } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { LeagueAvatar } from '@/app/dashboard/components/LeagueAvatar'
 import { buildLeagueFormatLabel, buildStatusConfig } from '@/lib/leagues/leagueFormatLabel'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -54,6 +55,7 @@ export function LeagueSidebarCard({
   compact = false,
   inlineDashboardSelect = false,
 }: LeagueSidebarCardProps) {
+  const { t, tInterpolate } = useLanguage()
   const formatLabel = buildLeagueFormatLabel({
     format: league.format,
     scoring: league.scoring,
@@ -86,7 +88,7 @@ export function LeagueSidebarCard({
             <button
               type="button"
               onClick={(e) => onRefresh?.(e, league.id)}
-              title="Refresh from Sleeper"
+              title={t('league.card.refreshFromSleeper')}
               className={[
                 'flex h-5 w-5 items-center justify-center rounded-full text-[10px] transition-all',
                 isRefreshing
@@ -95,7 +97,7 @@ export function LeagueSidebarCard({
                     ? 'bg-green-500/20 text-green-400'
                     : 'bg-white/[0.06] text-white/35 opacity-0 hover:bg-white/[0.12] hover:text-white group-hover:opacity-100',
               ].join(' ')}
-              aria-label="Refresh league from Sleeper"
+              aria-label={t('league.card.refreshFromSleeperAria')}
             >
               {isRefreshing ? (
                 <span className="h-2.5 w-2.5 animate-spin rounded-full border border-cyan-400 border-t-transparent" />
@@ -112,14 +114,14 @@ export function LeagueSidebarCard({
               data-testid="dashboard-league-delete"
               onClick={(e) => onDelete(e, league.id)}
               disabled={isDeleting}
-              title="Remove from My Leagues"
+              title={t('league.card.removeFromMyLeagues')}
               className={[
                 'flex h-5 w-5 items-center justify-center rounded-full border border-transparent text-white/35 transition-all',
                 'hover:border-red-500/35 hover:bg-red-500/15 hover:text-red-300',
                 'opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
                 isDeleting ? 'cursor-wait opacity-100' : '',
               ].join(' ')}
-              aria-label="Remove league from My Leagues"
+              aria-label={t('league.card.removeFromMyLeaguesAria')}
             >
               {isDeleting ? (
                 <span className="h-2.5 w-2.5 animate-spin rounded-full border border-red-400 border-t-transparent" />
@@ -141,7 +143,7 @@ export function LeagueSidebarCard({
             ]
               .filter(Boolean)
               .join(' ')}
-            aria-label="Reorder"
+            aria-label={t('league.card.reorder')}
           >
             <span className="flex flex-col items-center gap-0 text-[8px] leading-[0.7]">
               <span>⋮</span>
@@ -187,7 +189,7 @@ export function LeagueSidebarCard({
               {rosterIssueCount > 0 ? (
                 <span
                   className="min-w-[1.125rem] shrink-0 rounded-full bg-amber-500/95 px-1 py-0.5 text-center text-[9px] font-extrabold text-[#050814]"
-                  title="Roster or lineup issues"
+                  title={t('league.card.rosterIssues')}
                   data-testid={`league-sidebar-roster-issues-${league.id}`}
                 >
                   {rosterIssueCount > 99 ? '99+' : rosterIssueCount}
@@ -196,24 +198,24 @@ export function LeagueSidebarCard({
               {league.isCommissioner ? (
                 <span
                   className="shrink-0 rounded-full border border-amber-500/30 bg-amber-500/15 px-1 py-0.5 text-[8px] font-bold text-amber-300"
-                  title="You are Commissioner"
+                  title={t('league.card.youAreCommissioner')}
                 >
                   COMM
                 </span>
               ) : null}
               {league.isPaid ? (
                 <span className="shrink-0 rounded border border-emerald-500/25 bg-emerald-500/10 px-1 py-0.5 text-[8px] font-semibold text-emerald-400">
-                  Paid
+                  {t('league.card.paid')}
                 </span>
               ) : (
                 <span className="shrink-0 rounded bg-white/[0.05] px-1 py-0.5 text-[8px] font-medium text-white/25">
-                  Free
+                  {t('league.card.free')}
                 </span>
               )}
             </div>
 
             <p className="truncate text-[11px] leading-tight text-white/45">
-              {formatLabel || `${sportLabel} · ${league.teamCount}-Team`}
+              {formatLabel || `${sportLabel} · ${tInterpolate('league.card.teamSuffix', { count: league.teamCount })}`}
             </p>
 
             <div className="flex min-w-0 items-center gap-1.5">
@@ -238,7 +240,7 @@ export function LeagueSidebarCard({
             className={`shrink-0 text-white/35 transition hover:text-white/80 ${
               compact ? 'self-center p-0.5' : 'self-start pt-2 text-sm leading-none'
             }`}
-            aria-label={isFavorite ? 'Remove favorite' : 'Add favorite'}
+            aria-label={isFavorite ? t('league.card.removeFavorite') : t('league.card.addFavorite')}
           >
             {compact ? (
               <Star

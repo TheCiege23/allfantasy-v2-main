@@ -9,6 +9,8 @@ export type PlayoffSeriesSlot = "home" | "away"
 export type PlayoffConference = "east" | "west" | "finals"
 
 export type PlayoffChallengeView = {
+  /** Present when authenticated; drives entry scoping vs requestedEntryId. */
+  viewerUserId?: string | null
   challenge: {
     id: string
     name: string
@@ -17,19 +19,35 @@ export type PlayoffChallengeView = {
     seasonYear: number
     status: string
     isTestMode: boolean
+    visibility: "private" | "public"
+    maxParticipants: number
+    maxEntriesPerParticipant: number
+    scoringStyle: string
+    lockRule: string
+    inviteCode: string
+    inviteUrl: string
     createdAt: string
     updatedAt: string
   }
+  participants: Array<{
+    userId: string
+    displayName: string
+    entryCount: number
+  }>
   activeEntry: {
     id: string
     name: string
     userId: string
+    pickCount: number
+    isComplete: boolean
     createdAt: string
   } | null
   entries: Array<{
     id: string
     name: string
     userId: string
+    pickCount: number
+    isComplete: boolean
     createdAt: string
   }>
   series: PlayoffSeriesView[]
@@ -53,6 +71,10 @@ export type PlayoffSeriesView = {
   startsAt: string | null
   nextSeriesNumber: number | null
   nextSeriesSlot: PlayoffSeriesSlot | null
+  /** Prior series supplying the home participant (seriesNumber); null when round-1 matchup. */
+  sourceSeriesHome: number | null
+  /** Prior series supplying the away participant (seriesNumber); null when round-1 matchup. */
+  sourceSeriesAway: number | null
 }
 
 export type PlayoffPickView = {
@@ -70,7 +92,23 @@ export type BuildPlayoffTemplateInput = {
   isTestMode?: boolean
 }
 
-export type PlayoffTemplateSeries = Omit<PlayoffSeriesView, "id"> & {
-  sourceSeriesHome: number | null
-  sourceSeriesAway: number | null
+export type PlayoffCreateResponse = {
+  challengeId: string
+  entryId: string | null
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
 }
+
+export type PlayoffChallengeListItem = {
+  challengeId: string
+  sport: PlayoffSport
+  name: string
+  redirectUrl: string
+  seasonYear: number
+  participantCount: number
+  entryCount: number
+  inviteCode: string
+}
+
+export type PlayoffTemplateSeries = Omit<PlayoffSeriesView, "id">

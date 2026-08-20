@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { ChevronLeft } from 'lucide-react'
 import { useMemo } from 'react'
 import ChimmyChatShell from '@/components/chimmy/ChimmyChatShell'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { usePlayerComparisonUI } from '@/components/player-comparison-ui'
 import { buildAiPlayerCompareToolUrl } from '@/lib/chimmy-actions/aiPlayerComparisonBridge'
@@ -18,6 +19,7 @@ export function ChimmyChatPageClient(props: {
 }) {
   const sport = useMemo(() => normalizeToSupportedSport(props.sport), [props.sport])
   const { openComparison } = usePlayerComparisonUI()
+  const { t } = useLanguage()
 
   return (
     <main className="mode-surface flex h-[calc(100dvh-8.5rem)] min-h-0 flex-col px-3 py-4 sm:px-6 sm:py-6 lg:h-[calc(100dvh-3.5rem)]">
@@ -28,7 +30,7 @@ export function ChimmyChatPageClient(props: {
           data-testid="chimmy-chat-back-link"
         >
           <ChevronLeft className="h-4 w-4 shrink-0" aria-hidden />
-          Back to Chimmy
+          {t('chimmy.chat.backToChimmy')}
         </Link>
         <div className="flex min-h-0 flex-1 flex-col">
         <ChimmyChatShell

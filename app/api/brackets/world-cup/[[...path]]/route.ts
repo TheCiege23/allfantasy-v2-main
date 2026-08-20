@@ -94,6 +94,10 @@ function getPath(context: WorldCupRouteContext) {
   return context.params.path ?? []
 }
 
+function toWorldCupChallengeRedirectUrl(challengeId: string) {
+  return `/brackets/world-cup/${encodeURIComponent(challengeId)}`
+}
+
 async function createChallenge(request: Request) {
   const auth = await requireWorldCupApiUser()
   if (!auth.ok) return auth.response
@@ -135,6 +139,7 @@ async function createChallenge(request: Request) {
     id: challengeId,
     inviteCode: result.inviteCode,
     inviteUrl: result.inviteUrl,
+    redirectUrl: toWorldCupChallengeRedirectUrl(challengeId),
     challenge: { id: challengeId },
   })
 }

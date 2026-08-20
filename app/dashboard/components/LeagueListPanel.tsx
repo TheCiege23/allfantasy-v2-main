@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { LeagueSidebarCard } from '@/components/league/LeagueSidebarCard'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { UserLeague } from '../types'
 
 const FAVORITES_KEY = 'af-league-favorites'
@@ -83,6 +84,7 @@ export function LeagueListPanel({
   onLeagueRemoved,
 }: LeagueListPanelProps) {
   const router = useRouter()
+  const { t } = useLanguage()
   const [search, setSearch] = useState('')
   const [refreshing, setRefreshing] = useState<Record<string, boolean>>({})
   const [refreshed, setRefreshed] = useState<Record<string, boolean>>({})
@@ -313,7 +315,7 @@ export function LeagueListPanel({
               type="text"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search leagues..."
+              placeholder={t('dashboard.leagueList.searchPlaceholder')}
               className="ml-2 w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
             />
           </div>
@@ -394,9 +396,9 @@ export function LeagueListPanel({
           <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 px-3 py-6 text-center">
             <p className="text-2xl">🏆</p>
             <div>
-              <p className="text-sm font-semibold text-white/75">No leagues yet</p>
+              <p className="text-sm font-semibold text-white/75">{t('dashboard.leagueList.noLeaguesYet')}</p>
               <p className="mt-1 text-[11px] text-white/40">
-                Create a league or import one to get started
+                {t('dashboard.leagueList.noLeaguesHint')}
               </p>
             </div>
             <div className="flex w-full flex-col gap-1.5">
@@ -405,26 +407,26 @@ export function LeagueListPanel({
                 onClick={() => router.push('/create-league')}
                 className="rounded-xl bg-cyan-500/20 px-3 py-2 text-xs font-semibold text-cyan-300 transition hover:bg-cyan-500/30"
               >
-                + Create League
+                {t('dashboard.leagueList.createLeague')}
               </button>
               <button
                 type="button"
                 onClick={() => router.push('/import?returnTo=/dashboard')}
                 className="rounded-xl border border-white/[0.08] px-3 py-2 text-xs font-semibold text-white/50 transition hover:border-white/20 hover:text-white/70"
               >
-                Import a League
+                {t('dashboard.leagueList.importLeague')}
               </button>
               <button
                 type="button"
                 onClick={() => router.push('/find-league')}
                 className="text-[11px] text-white/30 transition hover:text-white/50"
               >
-                Find a league to join
+                {t('dashboard.leagueList.findLeague')}
               </button>
             </div>
           </div>
         ) : (
-          <div className="px-3 py-10 text-center text-sm text-white/45">No leagues match your search.</div>
+          <div className="px-3 py-10 text-center text-sm text-white/45">{t('dashboard.leagueList.noMatches')}</div>
         )}
       </div>
     </div>

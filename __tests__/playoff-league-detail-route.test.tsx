@@ -91,14 +91,67 @@ describe("/brackets/leagues/[leagueId] detail route", () => {
     expect(screen.queryByText("Create Bracket Challenge Pool")).not.toBeInTheDocument()
   })
 
-  it("redirects to league dashboard for existing non-playoff pool", async () => {
+  it("shows recovery UI for legacy bracket pool (loop-guard: does NOT redirect to /league/[id])", async () => {
     getPlayoffBracketViewMock.mockResolvedValue(null)
-    bracketLeagueFindUniqueMock.mockResolvedValue({ id: "league-123" })
+    bracketLeagueFindUniqueMock.mockResolvedValue({ id: "league-123", sport: null, name: "Old Pool" })
     const mod = await import("@/app/brackets/leagues/[leagueId]/page")
 
-    await mod.default({ params: { leagueId: "league-123" }, searchParams: {} })
+    const element = await mod.default({ params: { leagueId: "league-123" }, searchParams: {} })
+    render(element as React.ReactElement)
 
-    expect(redirectMock).toHaveBeenCalledWith("/league/league-123")
+    // Must NOT redirect back to /league/[id] — that would create an infinite loop
+    expect(redirectMock).not.toHaveBeenCalled()
+    // Must show accurate copy describing the older format, not a false "migrated" claim
+    expect(screen.getByText("This pool uses the older bracket format")).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Create New Playoff Pool" })).toBeInTheDocument()
+    expect(screen.getByRole("link", { name: "Back to My Pools" })).toBeInTheDocument()
+  })
+
+  it("recovery UI create button links to sport-prefilled URL for NBA pool", async () => {
+    getPlayoffBracketViewMock.mockResolvedValue(null)
+    bracketLeagueFindUniqueMock.mockResolvedValue({
+      id: "league-nba",
+      name: "NBA Old Pool",
+      tournament: { sport: "NBA" },
+    })
+    const mod = await import("@/app/brackets/leagues/[leagueId]/page")
+
+    const element = await mod.default({ params: { leagueId: "league-nba" }, searchParams: {} })
+    render(element as React.ReactElement)
+
+    const createLink = screen.getByRole("link", { name: "Create New Playoff Pool" }) as HTMLAnchorElement
+    expect(createLink.href).toContain("sport=NBA")
+    expect(createLink.href).toContain("challengeType=playoff_challenge")
+  })
+
+  it("recovery UI create button links to sport-prefilled URL for NHL pool", async () => {
+    getPlayoffBracketViewMock.mockResolvedValue(null)
+    bracketLeagueFindUniqueMock.mockResolvedValue({
+      id: "league-nhl",
+      name: "NHL Old Pool",
+      tournament: { sport: "NHL" },
+    })
+    const mod = await import("@/app/brackets/leagues/[leagueId]/page")
+
+    const element = await mod.default({ params: { leagueId: "league-nhl" }, searchParams: {} })
+    render(element as React.ReactElement)
+
+    const createLink = screen.getByRole("link", { name: "Create New Playoff Pool" }) as HTMLAnchorElement
+    expect(createLink.href).toContain("sport=NHL")
+    expect(createLink.href).toContain("challengeType=playoff_challenge")
+  })
+
+  it("recovery UI create button falls back to generic URL for unknown sport", async () => {
+    getPlayoffBracketViewMock.mockResolvedValue(null)
+    bracketLeagueFindUniqueMock.mockResolvedValue({ id: "league-ncaa", sport: "NCAAB", name: "March Madness" })
+    const mod = await import("@/app/brackets/leagues/[leagueId]/page")
+
+    const element = await mod.default({ params: { leagueId: "league-ncaa" }, searchParams: {} })
+    render(element as React.ReactElement)
+
+    const createLink = screen.getByRole("link", { name: "Create New Playoff Pool" }) as HTMLAnchorElement
+    expect(createLink.href).not.toContain("sport=NCAAB")
+    expect(createLink.href).toContain("challengeType=playoff_challenge")
   })
 
   it("shows friendly not-found state for missing pool", async () => {

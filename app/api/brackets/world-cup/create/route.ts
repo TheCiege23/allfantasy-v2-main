@@ -54,6 +54,10 @@ function serializeCreateError(error: unknown) {
   }
 }
 
+function toWorldCupChallengeRedirectUrl(challengeId: string) {
+  return `/brackets/world-cup/${encodeURIComponent(challengeId)}`
+}
+
 export async function POST(request: Request) {
   console.info("[world-cup/create] route reached")
 
@@ -130,12 +134,18 @@ export async function POST(request: Request) {
   try {
     const result = await createWorldCupBracketChallenge(normalized)
     const challengeId = result.challengeId ?? (result as { id?: string }).id
+    if (!challengeId) {
+      console.error("[world-cup/create] service returned no challengeId", result)
+      return NextResponse.json({ error: "Bracket created but ID could not be determined. Please refresh." }, { status: 500 })
+    }
+    const redirectUrl = toWorldCupChallengeRedirectUrl(challengeId)
 
     return NextResponse.json({
       ok: true,
       ...result,
       id: challengeId,
       challenge: { id: challengeId },
+      redirectUrl,
     })
   } catch (error) {
     console.error("[world-cup/create] failed", serializeCreateError(error))

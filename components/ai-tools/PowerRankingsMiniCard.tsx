@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ChevronRight, Crown, Loader2, RefreshCw } from 'lucide-react'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import type { UserLeague } from '@/app/dashboard/types'
 import type { PowerRankingsDashboardResult } from '@/lib/power-rankings-dashboard/types'
 import { isSupportedSport } from '@/lib/sport-scope'
@@ -25,6 +26,7 @@ export function PowerRankingsMiniCard({
   /** Dashboard tool league — shared with Global AI Tools grid */
   selectedLeagueId: string | null
 }) {
+  const { t, tInterpolate } = useLanguage()
   const leagueId = selectedLeagueId ?? ''
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -113,19 +115,23 @@ export function PowerRankingsMiniCard({
   if (leagues.length === 0) {
     return (
       <div
-        className="rounded-2xl border border-white/[0.08] bg-[#0a0f18] p-4"
+        className="relative overflow-hidden rounded-2xl border border-violet-500/15 bg-gradient-to-br from-[#0c0d24] via-[#0a0e22] to-[#0d091e] p-4"
         data-testid="power-rankings-mini-empty"
       >
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-violet-500/30 bg-violet-500/10">
-            <Crown className="h-4 w-4 text-violet-300" />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-violet-500/10 blur-2xl"
+        />
+        <div className="relative flex items-center gap-2.5">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-400/35 bg-gradient-to-br from-violet-500/20 to-cyan-500/10 text-violet-200 shadow-[0_0_12px_-4px_rgba(168,85,247,0.5)]">
+            <Crown className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-[14px] font-bold text-[#e8eaf6]">Power Rankings</p>
-            <p className="text-[11px] text-[#5c6480]">League standings and momentum</p>
+            <p className="text-[14px] font-bold text-white">{t('dashboard.miniCard.power.title')}</p>
+            <p className="text-[11px] text-white/50">{t('dashboard.miniCard.power.subtitle')}</p>
           </div>
         </div>
-        <p className="mt-3 text-[12px] text-[#8b93ab]">Import or join a league to see live power rankings.</p>
+        <p className="relative mt-3 text-[12px] text-white/55">{t('dashboard.miniCard.power.empty')}</p>
       </div>
     )
   }
@@ -137,17 +143,21 @@ export function PowerRankingsMiniCard({
 
   return (
     <div
-      className="rounded-2xl border border-white/[0.08] bg-gradient-to-br from-[#0a0f18] to-[#070b12] p-4"
+      className="relative overflow-hidden rounded-2xl border border-violet-500/15 bg-gradient-to-br from-[#0c0d24] via-[#0a0e22] to-[#0d091e] p-4 transition hover:border-violet-400/30 hover:shadow-[0_8px_28px_-12px_rgba(168,85,247,0.45)]"
       data-testid="power-rankings-mini-card"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-12 -top-12 h-32 w-32 rounded-full bg-violet-500/10 blur-3xl"
+      />
+      <div className="relative flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full border border-violet-500/30 bg-violet-500/10">
-            <Crown className="h-4 w-4 text-violet-300" />
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-violet-400/35 bg-gradient-to-br from-violet-500/20 to-cyan-500/10 text-violet-200 shadow-[0_0_12px_-4px_rgba(168,85,247,0.5)]">
+            <Crown className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-[14px] font-bold leading-none text-[#e8eaf6]">Power Rankings</p>
-            <p className="mt-1 text-[11px] leading-none text-[#5c6480]">League standings and momentum</p>
+            <p className="text-[14px] font-bold leading-none text-white">{t('dashboard.miniCard.power.title')}</p>
+            <p className="mt-1 text-[11px] leading-none text-white/50">{t('dashboard.miniCard.power.subtitle')}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -155,87 +165,108 @@ export function PowerRankingsMiniCard({
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-[#2e3347] bg-[#121725] text-[#9ba3bf] transition hover:border-violet-500/35 hover:text-white disabled:opacity-50"
-            aria-label="Refresh power rankings"
+            className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 bg-white/[0.04] text-white/70 transition hover:border-violet-400/40 hover:bg-violet-500/10 hover:text-violet-200 disabled:opacity-50"
+            aria-label={t('dashboard.miniCard.power.refreshAria')}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      <div className="mt-3 min-h-[52px]">
+      <div className="relative mt-3 min-h-[64px]">
         {loading && !data ? (
-          <div className="flex items-center gap-2 text-[12px] text-[#5c6480]">
-            <Loader2 className="h-4 w-4 animate-spin text-violet-400" />
-            Loading standings…
+          <div className="space-y-2">
+            <div className="flex items-center gap-2 text-[12px] text-white/55">
+              <Loader2 className="h-4 w-4 animate-spin text-violet-300" />
+              {t('dashboard.miniCard.power.loading')}
+            </div>
+            <div className="h-3 w-2/3 animate-pulse rounded bg-white/[0.05]" />
+            <div className="h-8 w-1/3 animate-pulse rounded bg-white/[0.05]" />
           </div>
         ) : error ? (
-          <p className="text-[12px] text-amber-200/90">{error}</p>
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2">
+            <p className="text-[12px] font-semibold text-amber-200">{error}</p>
+            <button
+              type="button"
+              onClick={() => void load()}
+              className="mt-1 text-[11px] font-bold text-amber-100/90 underline-offset-2 hover:underline"
+            >
+              {t('dashboard.miniCard.common.retry')}
+            </button>
+          </div>
         ) : data?.ok && data.analysisScope === 'league' ? (
           <>
-            <p className="text-[11px] text-[#7a8199]">
-              <span className="text-white/80">{data.leagueName || 'League'}</span>
+            <p className="text-[11px] text-white/55">
+              <span className="text-white/85">{data.leagueName || t('dashboard.miniCard.common.leagueFallback')}</span>
               {data.degraded ? (
-                <span className="ml-1.5 rounded border border-amber-500/30 px-1 text-[9px] font-bold uppercase text-amber-200/90">
-                  Partial
+                <span className="ml-1.5 rounded border border-amber-500/35 bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-amber-200">
+                  {t('dashboard.miniCard.common.partial')}
                 </span>
               ) : (
-                <span className="ml-1.5 rounded border border-emerald-500/25 px-1 text-[9px] font-bold uppercase text-emerald-200/85">
-                  Live
+                <span className="ml-1.5 rounded border border-emerald-500/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-bold uppercase text-emerald-300">
+                  {t('dashboard.miniCard.common.live')}
                 </span>
               )}
             </p>
             {my ? (
-              <div className="mt-2 flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-bold uppercase tracking-wide text-violet-300/80">Your rank</p>
-                  <p className="text-[26px] font-black tabular-nums leading-none text-white/95">#{my.rank}</p>
-                  <p className="mt-0.5 truncate text-[12px] font-semibold text-white/80">{my.teamName}</p>
+              <div className="mt-2.5 flex flex-wrap items-end justify-between gap-3 rounded-xl border border-violet-500/20 bg-gradient-to-br from-violet-500/[0.08] via-transparent to-cyan-500/[0.05] px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-violet-300/80">{t('dashboard.miniCard.power.yourRank')}</p>
+                  <p className="text-[28px] font-black tabular-nums leading-none text-white drop-shadow-[0_0_10px_rgba(168,85,247,0.35)]">
+                    #{my.rank}
+                  </p>
+                  <p className="mt-1 truncate text-[12px] font-semibold text-white/85">{my.teamName}</p>
                 </div>
                 <div className="text-right">
-                  <p className="text-[10px] uppercase text-[#5c6480]">vs prior</p>
+                  <p className="text-[10px] uppercase tracking-wider text-white/45">{t('dashboard.miniCard.power.vsPrior')}</p>
                   <p
-                    className={`text-[16px] font-bold tabular-nums ${
-                      (delta ?? 0) > 0 ? 'text-emerald-300' : (delta ?? 0) < 0 ? 'text-red-300' : 'text-white/40'
+                    className={`text-[18px] font-black tabular-nums ${
+                      (delta ?? 0) > 0
+                        ? 'text-emerald-300 drop-shadow-[0_0_6px_rgba(52,211,153,0.35)]'
+                        : (delta ?? 0) < 0
+                          ? 'text-rose-300 drop-shadow-[0_0_6px_rgba(244,63,94,0.35)]'
+                          : 'text-white/45'
                     }`}
                   >
                     {deltaText}
                   </p>
-                  <p className="text-[11px] text-cyan-200/85">Power {my.powerScore.toFixed(1)}</p>
+                  <p className="mt-0.5 inline-flex items-center gap-1 rounded-full border border-cyan-400/25 bg-cyan-500/8 px-1.5 py-0.5 text-[10px] font-bold text-cyan-200">
+                    {tInterpolate('dashboard.miniCard.power.powerLabel', { score: my.powerScore.toFixed(1) })}
+                  </p>
                 </div>
               </div>
             ) : (
-              <p className="mt-2 text-[12px] text-[#8b93ab]">
-                Claim a team in this league to see &quot;your&quot; rank here. Full leaderboard is in the tool.
+              <p className="mt-2 text-[12px] text-white/55">
+                {t('dashboard.miniCard.power.claim')}
               </p>
             )}
-            <p className="mt-2 text-[10px] text-[#5c6480]">
-              Updated {new Date(data.computedAt).toLocaleString()}
-              {data.week != null ? ` · Week ${data.week}` : ''}
+            <p className="mt-2 text-[10px] text-white/35">
+              {tInterpolate('dashboard.miniCard.common.updated', { when: new Date(data.computedAt).toLocaleString() })}
+              {data.week != null ? tInterpolate('dashboard.miniCard.power.weekSuffix', { week: data.week }) : ''}
             </p>
             {my && snapshotTrail != null && snapshotTrail.length >= 2 ? (
-              <p className="mt-1.5 text-[10px] leading-snug text-[#7a8199]" data-testid="power-rankings-mini-trail">
-                <span className="font-semibold text-[#8b93ab]">Saved rank trail (DB): </span>
+              <p className="mt-1.5 text-[10px] leading-snug text-white/55" data-testid="power-rankings-mini-trail">
+                <span className="font-semibold text-white/70">{t('dashboard.miniCard.power.trailLabel')}</span>
                 {snapshotTrail.map((n) => `#${n}`).join(' → ')}
               </p>
             ) : my && snapshotTrail != null && snapshotTrail.length === 1 ? (
-              <p className="mt-1.5 text-[10px] text-[#5c6480]">
-                One snapshot stored — more history appears as rankings are saved each week.
+              <p className="mt-1.5 text-[10px] text-white/40">
+                {t('dashboard.miniCard.power.singleSnapshot')}
               </p>
             ) : null}
           </>
         ) : (
-          <p className="text-[12px] text-[#8b93ab]">Select a league above to load rankings.</p>
+          <p className="text-[12px] text-white/55">{t('dashboard.miniCard.power.selectLeague')}</p>
         )}
       </div>
 
       <button
         type="button"
         onClick={openPowerRankingsModal}
-        className="mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-violet-500/25 bg-violet-500/[0.08] py-2.5 text-[12px] font-semibold text-violet-100 transition hover:border-violet-400/45 hover:bg-violet-500/[0.12]"
+        className="relative mt-3 flex w-full items-center justify-center gap-1 rounded-xl border border-violet-400/30 bg-gradient-to-r from-violet-500/15 to-cyan-500/12 py-2.5 text-[12px] font-bold text-violet-100 transition hover:border-violet-400/50 hover:from-violet-500/22 hover:to-cyan-500/18"
         data-testid="power-rankings-mini-open-full"
       >
-        Open full power rankings
+        {t('dashboard.miniCard.power.openFull')}
         <ChevronRight className="h-4 w-4" />
       </button>
     </div>

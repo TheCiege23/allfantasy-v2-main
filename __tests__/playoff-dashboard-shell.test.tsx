@@ -4,6 +4,7 @@ import PlayoffBracketShell from "@/components/brackets/playoffs/PlayoffBracketSh
 import type { PlayoffChallengeView } from "@/lib/playoffs/types"
 
 const pushMock = vi.hoisted(() => vi.fn())
+const useSearchParamsMock = vi.hoisted(() => vi.fn(() => new URLSearchParams()))
 const createPlayoffBracketEntryClientMock = vi.hoisted(() => vi.fn())
 const getPlayoffBracketViewClientMock = vi.hoisted(() => vi.fn())
 const savePlayoffBracketPickClientMock = vi.hoisted(() => vi.fn())
@@ -12,6 +13,7 @@ const toastSuccessMock = vi.hoisted(() => vi.fn())
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => useSearchParamsMock(),
 }))
 
 vi.mock("@/lib/playoffs/playoffClientApi", () => ({
@@ -77,7 +79,16 @@ function buildView(overrides: Partial<PlayoffChallengeView> = {}): PlayoffChalle
 describe("PlayoffBracketShell dashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    useSearchParamsMock.mockImplementation(() => new URLSearchParams())
     getPlayoffBracketViewClientMock.mockResolvedValue(buildView())
+  })
+
+  it("shows leaderboard tab context copy when opened with tab=leaderboard", () => {
+    useSearchParamsMock.mockImplementation(() => new URLSearchParams("tab=leaderboard"))
+
+    render(<PlayoffBracketShell initialView={buildView()} />)
+
+    expect(screen.getByText(/You are viewing standings for every bracket entry in this pool/i)).toBeInTheDocument()
   })
 
   it("renders NBA dashboard title and does not show NCAA label", () => {
@@ -85,6 +96,28 @@ describe("PlayoffBracketShell dashboard", () => {
 
     expect(screen.getByRole("heading", { name: "NBA Playoff Bracket" })).toBeInTheDocument()
     expect(screen.queryByText("NCAA Bracket")).not.toBeInTheDocument()
+  })
+
+  it("scrolls leaderboard anchor into view when tab=leaderboard is present", async () => {
+    useSearchParamsMock.mockImplementationOnce(() => new URLSearchParams("tab=leaderboard"))
+    const scrollSpy = vi.fn()
+    HTMLElement.prototype.scrollIntoView = scrollSpy as unknown as typeof HTMLElement.prototype.scrollIntoView
+
+    render(<PlayoffBracketShell initialView={buildView()} />)
+
+    await waitFor(() => expect(scrollSpy).toHaveBeenCalled())
+  })
+
+  it("uses tighter flex order when leaderboardFirst is requested", () => {
+    render(<PlayoffBracketShell initialView={buildView()} leaderboardFirst />)
+
+    expect(screen.getByTestId("playoff-dashboard-leaderboard").className).toContain("order-20")
+  })
+
+  it("keeps leaderboard after middle sections when not promoted", () => {
+    render(<PlayoffBracketShell initialView={buildView()} />)
+
+    expect(screen.getByTestId("playoff-dashboard-leaderboard").className).toContain("order-40")
   })
 
   it("renders NHL dashboard title", () => {
@@ -133,6 +166,7 @@ describe("PlayoffBracketShell dashboard", () => {
 
     expect(screen.getByRole("heading", { name: "Participants" })).toBeInTheDocument()
     expect(screen.getByRole("heading", { name: "My Brackets / Entries" })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Pool Leaderboard" })).toBeInTheDocument()
     expect(screen.getByTestId("playoff-dashboard-leaderboard")).toBeInTheDocument()
     expect(screen.getByTestId("playoff-fill-bracket-cta")).toHaveTextContent("Create Your First Bracket")
   })

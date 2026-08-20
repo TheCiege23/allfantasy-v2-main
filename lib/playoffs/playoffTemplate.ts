@@ -1,3 +1,9 @@
+/**
+ * Playoff template tree used when creating `PlayoffBracketSeries` rows.
+ * **Data provenance:** see `playoffBracketDataSource.ts` — default pools are template/lab, not official
+ * postseason seeding until provider sync overwrites series rows.
+ */
+
 import type { BuildPlayoffTemplateInput, PlayoffRoundKey, PlayoffTemplateSeries } from "./types"
 
 const ROUND_ORDER: PlayoffRoundKey[] = [
@@ -17,10 +23,23 @@ const NHL_TEAMS = {
   west: ["Stars", "Avalanche", "Canucks", "Oilers", "Jets", "Kings", "Golden Knights", "Predators"],
 } as const
 
-function resolveSeedName(sport: BuildPlayoffTemplateInput["sport"], conference: "east" | "west", seed: number, isTestMode: boolean) {
-  if (!isTestMode) return `${conference.toUpperCase()}${seed}`
+const CONF_SEED_SUFFIX: Record<"east" | "west", string> = { east: "E", west: "W" }
+
+/** Template-only: append conference seed badge so Round 1 teams read as e.g. "Celtics (E1)". */
+export function formatPlayoffTemplateTeamWithSeed(teamName: string, conference: "east" | "west", seed: number): string {
+  const tag = CONF_SEED_SUFFIX[conference]
+  const safeSeed = Number.isFinite(seed) && seed > 0 ? Math.floor(seed) : seed
+  return `${teamName} (${tag}${safeSeed})`
+}
+
+/**
+ * Readable test franchises for MVP template/lab brackets (live API not wired yet).
+ * Round 1 names include conference seed badges for QA clarity until official sync merges.
+ */
+function resolveSeedName(sport: BuildPlayoffTemplateInput["sport"], conference: "east" | "west", seed: number) {
   const bySport = sport === "nba" ? NBA_TEAMS : NHL_TEAMS
-  return bySport[conference][seed - 1] ?? `${conference.toUpperCase()}${seed}`
+  const label = bySport[conference][seed - 1] ?? `${conference.toUpperCase()}${seed}`
+  return formatPlayoffTemplateTeamWithSeed(label, conference, seed)
 }
 
 function createSeries(data: PlayoffTemplateSeries): PlayoffTemplateSeries {
@@ -32,8 +51,6 @@ export function getPlayoffRoundOrder(): PlayoffRoundKey[] {
 }
 
 export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffTemplateSeries[] {
-  const isTestMode = Boolean(input.isTestMode)
-
   return [
     createSeries({
       round: "round_1",
@@ -42,8 +59,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "east",
       homeSeed: 1,
       awaySeed: 8,
-      homeTeamName: resolveSeedName(input.sport, "east", 1, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "east", 8, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "east", 1),
+      awayTeamName: resolveSeedName(input.sport, "east", 8),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",
@@ -60,8 +77,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "east",
       homeSeed: 4,
       awaySeed: 5,
-      homeTeamName: resolveSeedName(input.sport, "east", 4, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "east", 5, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "east", 4),
+      awayTeamName: resolveSeedName(input.sport, "east", 5),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",
@@ -78,8 +95,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "east",
       homeSeed: 2,
       awaySeed: 7,
-      homeTeamName: resolveSeedName(input.sport, "east", 2, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "east", 7, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "east", 2),
+      awayTeamName: resolveSeedName(input.sport, "east", 7),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",
@@ -96,8 +113,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "east",
       homeSeed: 3,
       awaySeed: 6,
-      homeTeamName: resolveSeedName(input.sport, "east", 3, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "east", 6, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "east", 3),
+      awayTeamName: resolveSeedName(input.sport, "east", 6),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",
@@ -114,8 +131,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "west",
       homeSeed: 1,
       awaySeed: 8,
-      homeTeamName: resolveSeedName(input.sport, "west", 1, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "west", 8, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "west", 1),
+      awayTeamName: resolveSeedName(input.sport, "west", 8),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",
@@ -132,8 +149,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "west",
       homeSeed: 4,
       awaySeed: 5,
-      homeTeamName: resolveSeedName(input.sport, "west", 4, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "west", 5, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "west", 4),
+      awayTeamName: resolveSeedName(input.sport, "west", 5),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",
@@ -150,8 +167,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "west",
       homeSeed: 2,
       awaySeed: 7,
-      homeTeamName: resolveSeedName(input.sport, "west", 2, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "west", 7, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "west", 2),
+      awayTeamName: resolveSeedName(input.sport, "west", 7),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",
@@ -168,8 +185,8 @@ export function buildPlayoffTemplate(input: BuildPlayoffTemplateInput): PlayoffT
       conference: "west",
       homeSeed: 3,
       awaySeed: 6,
-      homeTeamName: resolveSeedName(input.sport, "west", 3, isTestMode),
-      awayTeamName: resolveSeedName(input.sport, "west", 6, isTestMode),
+      homeTeamName: resolveSeedName(input.sport, "west", 3),
+      awayTeamName: resolveSeedName(input.sport, "west", 6),
       winnerTeamName: null,
       bestOf: 7,
       status: "scheduled",

@@ -31,6 +31,7 @@ import {
   CHIMMY_PREMIUM_CTA_LABEL,
 } from '@/lib/chimmy-chat/response-copy'
 import { getChimmyFeatureFlags } from '@/lib/chimmy-chat/feature-flags'
+import { useLanguage } from '@/components/i18n/LanguageProviderClient'
 import {
   getVoiceConfig,
   playChimmyVoice,
@@ -177,6 +178,7 @@ export default function ChimmyChatShell({
   enableSpeechInput = true,
   className = '',
 }: ChimmyChatShellProps) {
+  const { t } = useLanguage()
   const [messages, setMessages] = useState<ChimmyChatMessage[]>([
     buildGreetingMessage(),
   ])
@@ -489,7 +491,7 @@ export default function ChimmyChatShell({
     recognition.onend = () => setIsListening(false)
     recognition.onerror = () => {
       setIsListening(false)
-      toast.error('Voice input failed. Try again.')
+      toast.error(t('chimmy.shell.voiceInputFailed'))
     }
     recognition.onresult = (e: any) => {
       const t = e?.results?.[0]?.[0]?.transcript?.trim() || ''
@@ -526,7 +528,7 @@ export default function ChimmyChatShell({
 
   const handleVoiceToggle = useCallback(() => {
     if (ttsUnavailable) {
-      toast.warning('Voice unavailable — check ElevenLabs API key in settings')
+      toast.warning(t('chimmy.shell.voiceUnavailable'))
       return
     }
     const nextEnabled = !voiceConfig.enabled
@@ -668,12 +670,12 @@ export default function ChimmyChatShell({
   const handleSpeechInputToggle = useCallback(() => {
     if (!enableSpeechInput) return
     if (speechInputUnavailable) {
-      toast.error('Voice input is unavailable on this browser.')
+      toast.error(t('chimmy.shell.voiceInputUnsupported'))
       return
     }
     const recognition = recognitionRef.current
     if (!recognition) {
-      toast.error('Voice input is unavailable on this browser.')
+      toast.error(t('chimmy.shell.voiceInputUnsupported'))
       return
     }
     try {
@@ -683,9 +685,9 @@ export default function ChimmyChatShell({
         recognition.start()
       }
     } catch {
-      toast.error('Could not start voice input.')
+      toast.error(t('chimmy.shell.voiceInputStartFailed'))
     }
-  }, [enableSpeechInput, isListening, speechInputUnavailable])
+  }, [enableSpeechInput, isListening, speechInputUnavailable, t])
 
   const runSend = useCallback(
     async (
@@ -1003,7 +1005,7 @@ export default function ChimmyChatShell({
           <div className="min-w-0">
             <h2 className="font-semibold text-white truncate">Chimmy</h2>
             <p className="text-[10px] sm:text-xs text-white/50 truncate">
-              Calm, evidence-based fantasy assistant
+              {t('chimmy.shell.subtitle')}
             </p>
           </div>
           {onClose && (
@@ -1012,7 +1014,7 @@ export default function ChimmyChatShell({
               onClick={onClose}
               data-testid="chimmy-close-button"
               className="ml-auto shrink-0 rounded-lg border border-white/20 bg-white/5 p-2 text-white/70 hover:bg-white/10 min-h-[44px] min-w-[44px] flex items-center justify-center"
-              aria-label="Close panel"
+              aria-label={t('chimmy.shell.closePanel')}
             >
               <X className="h-5 w-5" />
             </button>
@@ -1023,9 +1025,9 @@ export default function ChimmyChatShell({
           <button
             onClick={() => setShowSaveDialog(true)}
             disabled={messages.length <= 1 || isTyping}
-            title="Save conversation"
+            title={t('chimmy.shell.saveConversation')}
             className="rounded-lg border border-white/20 bg-white/5 p-2 text-white/70 hover:bg-white/10 hover:text-white/90 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors"
-            aria-label="Save conversation"
+            aria-label={t('chimmy.shell.saveConversation')}
           >
             <Save className="h-5 w-5" />
           </button>
@@ -1033,13 +1035,13 @@ export default function ChimmyChatShell({
           {/* Load conversation button */}
           <button
             onClick={() => setShowHistorySidebar(!showHistorySidebar)}
-            title="Load conversation from history"
+            title={t('chimmy.shell.loadHistory')}
             className={`rounded-lg border ${
               showHistorySidebar
                 ? 'border-cyan-500/30 bg-cyan-600/20 text-cyan-400'
                 : 'border-white/20 bg-white/5 text-white/70 hover:bg-white/10 hover:text-white/90'
             } p-2 min-h-[44px] min-w-[44px] flex items-center justify-center transition-colors`}
-            aria-label="Load conversation from history"
+            aria-label={t('chimmy.shell.loadHistory')}
           >
             <History className="h-5 w-5" />
           </button>
@@ -1074,7 +1076,7 @@ export default function ChimmyChatShell({
           onChange={handleAssistantModeChange}
         />
         <label className="flex flex-col gap-1 min-w-[120px] flex-1 sm:flex-none">
-          <span className="text-[10px] uppercase tracking-wide text-white/45">Sport</span>
+          <span className="text-[10px] uppercase tracking-wide text-white/45">{t('chimmy.shell.sport')}</span>
           <select
             data-testid="chimmy-scope-sport"
             className="rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1088,7 +1090,7 @@ export default function ChimmyChatShell({
               }
             }}
           >
-            <option value="all">All sports</option>
+            <option value="all">{t('chimmy.shell.allSports')}</option>
             {SUPPORTED_SPORTS.map((s) => (
               <option key={s} value={s}>
                 {s}
@@ -1097,7 +1099,7 @@ export default function ChimmyChatShell({
           </select>
         </label>
         <label className="flex flex-col gap-1 min-w-[160px] flex-[2] sm:flex-none sm:min-w-[220px]">
-          <span className="text-[10px] uppercase tracking-wide text-white/45">League</span>
+          <span className="text-[10px] uppercase tracking-wide text-white/45">{t('chimmy.shell.league')}</span>
           <select
             data-testid="chimmy-scope-league"
             className="max-w-full rounded-lg border border-white/15 bg-[#040915] px-2 py-1.5 text-xs text-white/90 focus:outline-none focus:ring-1 focus:ring-cyan-500/40"
@@ -1111,7 +1113,7 @@ export default function ChimmyChatShell({
               }
             }}
           >
-            <option value="all">All leagues</option>
+            <option value="all">{t('chimmy.shell.allLeagues')}</option>
             {filteredLeagues.map((l) => (
               <option key={l.id} value={l.id}>
                 {(l.name || 'League').slice(0, 48)} ({normalizeToSupportedSport(l.sport)})
@@ -1122,7 +1124,7 @@ export default function ChimmyChatShell({
       </div>
 
       <div className="flex items-center justify-between border-b border-white/10 bg-[#080f22] px-3 py-1.5 text-[11px] text-white/45">
-        <span>Auto trade eval</span>
+        <span>{t('chimmy.shell.autoTradeEval')}</span>
         <button
           type="button"
           onClick={toggleAutoTradeEval}
@@ -1131,17 +1133,17 @@ export default function ChimmyChatShell({
               ? 'border-cyan-400/30 bg-cyan-500/15 text-cyan-200'
               : 'border-white/15 bg-white/[0.03] text-white/50'
           }`}
-          aria-label="Toggle auto trade evaluation messages"
+          aria-label={t('chimmy.shell.autoTradeEvalToggle')}
           data-testid="chimmy-shell-auto-trade-eval-toggle"
           disabled={!autoTradeEvalReady}
         >
-          {autoTradeEvalEnabled ? 'On' : 'Off'}
+          {autoTradeEvalEnabled ? t('chimmy.shell.on') : t('chimmy.shell.off')}
         </button>
       </div>
 
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-5">
         <InContextMonetizationCard
-          title="Chimmy message access"
+          title={t('chimmy.shell.messageAccessTitle')}
           featureId="ai_chat"
           tokenRuleCodes={['ai_chimmy_chat_message']}
           className="mb-2"
@@ -1194,7 +1196,7 @@ export default function ChimmyChatShell({
       <div className="flex-shrink-0 space-y-2 border-t border-white/10 bg-white/[0.03] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4">
         {isTyping && (
           <p className="text-[11px] text-white/55" data-testid="chimmy-loading-state">
-            Chimmy is preparing a response...
+            {t('chimmy.shell.preparingResponse')}
           </p>
         )}
         {inlineError && (
@@ -1204,7 +1206,7 @@ export default function ChimmyChatShell({
         )}
         {imagePreview && (
           <div className="flex items-center gap-2 p-2 rounded-xl bg-white/5">
-            <img src={imagePreview} alt="Message preview" className="w-14 h-14 object-cover rounded-lg" />
+            <img src={imagePreview} alt={t('chimmy.shell.messagePreviewAlt')} className="w-14 h-14 object-cover rounded-lg" />
             <button
               type="button"
               onClick={() => {
@@ -1212,26 +1214,26 @@ export default function ChimmyChatShell({
                 setImageFile(null)
               }}
               className="text-xs text-red-300 hover:text-red-200"
-              aria-label="Remove image"
+              aria-label={t('chimmy.shell.removeImage')}
             >
-              Remove
+              {t('chimmy.shell.remove')}
             </button>
           </div>
         )}
 
         {showPlayLastReplyBar && lastAssistantMessage ? (
           <div className="flex items-center justify-between gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-2">
-            <span className="text-[11px] text-white/55">Voice off — tap to hear the latest reply</span>
+            <span className="text-[11px] text-white/55">{t('chimmy.shell.voiceOffHint')}</span>
             <button
               type="button"
               onClick={() => void handlePlayVoice(lastAssistantMessage.content, lastAssistantMessage.id)}
               disabled={ttsLoading}
               data-testid="chimmy-play-last-reply"
-              aria-label="Play last Chimmy reply"
+              aria-label={t('chimmy.shell.playLastReplyAria')}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-cyan-400/35 bg-cyan-500/15 px-2.5 py-1.5 text-xs font-medium text-cyan-100 transition hover:bg-cyan-500/25 disabled:opacity-50 min-h-[36px]"
             >
               <Volume2 className="h-4 w-4" aria-hidden />
-              Play last reply
+              {t('chimmy.shell.playLastReply')}
             </button>
           </div>
         ) : null}
@@ -1246,7 +1248,7 @@ export default function ChimmyChatShell({
               onChange={handleImageUpload}
               data-testid="chimmy-image-upload-input"
               className="hidden"
-              aria-label="Upload image for Chimmy message"
+              aria-label={t('chimmy.shell.uploadImageAria')}
             />
           </label>
 
@@ -1260,10 +1262,10 @@ export default function ChimmyChatShell({
                 sendMessage()
               }
             }}
-            placeholder="Ask about trades, waivers, drafts, or your league…"
+            placeholder={t('chimmy.chat.inputPlaceholder')}
             className="flex-1 min-w-0 rounded-xl border border-white/20 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/40 focus:border-cyan-500/40 focus:outline-none disabled:opacity-50"
             disabled={isTyping}
-            aria-label="Message"
+            aria-label={t('chimmy.shell.messageAria')}
             data-testid="chimmy-message-input"
           />
 
@@ -1273,7 +1275,7 @@ export default function ChimmyChatShell({
             disabled={isTyping || (!input.trim() && !imageFile)}
             data-testid="chimmy-send-button"
             className="flex-shrink-0 w-11 h-11 rounded-xl bg-cyan-500/20 border border-cyan-400/30 flex items-center justify-center text-cyan-200 hover:bg-cyan-500/30 disabled:opacity-50 min-h-[44px]"
-            aria-label="Send message"
+            aria-label={t('chimmy.shell.sendMessageAria')}
           >
             {isTyping ? <Loader2 className="h-5 w-5 animate-spin" /> : <Send className="h-5 w-5" />}
           </button>
@@ -1287,7 +1289,7 @@ export default function ChimmyChatShell({
                 data-testid="chimmy-start-sit-tool-link"
                 className="text-cyan-300/90 hover:text-cyan-100 underline underline-offset-2"
               >
-                Start A vs B tool
+                {t('chimmy.shell.startSitToolLink')}
               </Link>
             ) : null}
             <button
@@ -1295,9 +1297,9 @@ export default function ChimmyChatShell({
               onClick={handleCopyResponse}
               data-testid="chimmy-copy-response-button"
               className="hover:text-white/60"
-              aria-label="Copy response"
+              aria-label={t('chimmy.shell.copyResponse')}
             >
-              Copy response
+              {t('chimmy.shell.copyResponse')}
             </button>
             {showRetry && (
               <button
@@ -1306,10 +1308,10 @@ export default function ChimmyChatShell({
                 disabled={retryLoading}
                 data-testid="chimmy-retry-button"
                 className="inline-flex items-center gap-1 hover:text-white/60 disabled:opacity-50"
-                aria-label="Retry"
+                aria-label={t('chimmy.shell.retry')}
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${retryLoading ? 'animate-spin' : ''}`} />
-                Retry
+                {t('chimmy.shell.retry')}
               </button>
             )}
           </div>
@@ -1320,7 +1322,7 @@ export default function ChimmyChatShell({
               data-testid="chimmy-save-conversation-button"
               className="hover:text-white/60"
             >
-              Save conversation
+              {t('chimmy.shell.saveConversation')}
             </button>
           )}
         </div>

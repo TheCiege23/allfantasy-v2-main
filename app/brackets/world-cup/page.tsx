@@ -7,7 +7,7 @@ import { listUserWorldCupChallenges } from "@/lib/world-cup"
 export const dynamic = "force-dynamic"
 
 type SessionUser = { id?: string | null; email?: string | null; name?: string | null }
-type WorldCupChallengeSummary = {
+type WorldCupPoolSummary = {
   id: string
   name: string
   seasonYear: number
@@ -18,8 +18,8 @@ type WorldCupChallengeSummary = {
 }
 
 const FEATURE_BULLETS = [
-  { icon: Users, text: "Create private or public World Cup bracket leagues." },
-  { icon: Users, text: "Up to 100 users per league." },
+  { icon: Users, text: "Create private or public World Cup bracket pools." },
+  { icon: Users, text: "Up to 100 users per pool." },
   { icon: Trophy, text: "Up to 5 brackets per user — compete with multiple strategies." },
   { icon: Trophy, text: "NCAA-style scoring — more points for later rounds." },
   { icon: Sparkles, text: "Full-screen guided pick builder with AI matchup previews." },
@@ -32,7 +32,7 @@ const FEATURE_BULLETS = [
 export default async function WorldCupBracketsPage() {
   const session = (await getServerSession(authOptions as any)) as { user?: SessionUser } | null
   const userId = session?.user?.id ?? null
-  const challenges: WorldCupChallengeSummary[] = userId
+  const pools: WorldCupPoolSummary[] = userId
     ? await listUserWorldCupChallenges(userId)
     : []
 
@@ -52,7 +52,7 @@ export default async function WorldCupBracketsPage() {
               href="/brackets/world-cup/discover"
               className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-400/15"
             >
-              Discover public leagues
+              Discover public pools
             </Link>
             {userId && (
               <Link
@@ -67,7 +67,7 @@ export default async function WorldCupBracketsPage() {
               className="inline-flex items-center gap-2 rounded-lg bg-cyan-300 px-4 py-2 text-sm font-black text-black"
             >
               <Plus className="h-4 w-4" />
-              Create Challenge
+              Create Pool
             </Link>
           </div>
         </div>
@@ -78,7 +78,7 @@ export default async function WorldCupBracketsPage() {
             <Globe2 className="h-7 w-7" />
           </div>
           <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
-            World Cup Bracket Challenge
+            World Cup Bracket Pools
           </h1>
           <p className="mt-3 max-w-2xl text-base leading-7 text-white/60">
             Create an NCAA-style bracket pool for the FIFA World Cup. Invite friends, make picks,
@@ -102,13 +102,13 @@ export default async function WorldCupBracketsPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-black text-black"
             >
               <Plus className="h-4 w-4" />
-              Create World Cup Bracket League
+              Create World Cup Pool
             </Link>
             <Link
               href="/brackets/world-cup/discover"
               className="inline-flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-2.5 text-sm font-bold text-cyan-100 hover:bg-cyan-400/15"
             >
-              Discover public leagues
+              Discover public pools
             </Link>
             {userId && (
               <Link
@@ -121,29 +121,29 @@ export default async function WorldCupBracketsPage() {
           </div>
         </header>
 
-        {/* Your challenges */}
+        {/* Your pools */}
         <section>
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-black uppercase tracking-[0.16em] text-white/45">
-              Your World Cup Challenges
+              Your World Cup Pools
             </h2>
-            <span className="text-xs text-white/35">{challenges.length} joined</span>
+            <span className="text-xs text-white/35">{pools.length} joined</span>
           </div>
 
           {userId ? (
-            challenges.length > 0 ? (
+            pools.length > 0 ? (
               <div className="grid gap-3">
-                {challenges.map((challenge) => {
-                  const isLocked = challenge.status === "locked" || challenge.status === "final"
+                {pools.map((pool) => {
+                  const isLocked = pool.status === "locked" || pool.status === "final"
                   return (
                     <Link
-                      key={challenge.id}
-                      href={`/brackets/world-cup/${challenge.id}`}
+                      key={pool.id}
+                      href={`/brackets/world-cup/${pool.id}`}
                       className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] p-4 hover:bg-white/[0.07]"
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="truncate font-black text-white">{challenge.name}</span>
+                          <span className="truncate font-black text-white">{pool.name}</span>
                           {isLocked && (
                             <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.06] px-2 py-0.5 text-[10px] font-bold text-white/40">
                               <Lock className="h-2.5 w-2.5" />
@@ -152,12 +152,12 @@ export default async function WorldCupBracketsPage() {
                           )}
                         </div>
                         <div className="mt-1 text-xs text-white/45">
-                          {challenge.seasonYear} · {challenge.participantCount} participant{challenge.participantCount !== 1 ? "s" : ""}
+                          {pool.seasonYear} · {pool.participantCount} participant{pool.participantCount !== 1 ? "s" : ""}
                         </div>
                       </div>
                       <div className="ml-4 shrink-0 text-right text-xs text-white/45">
-                        <div className="font-black text-cyan-200">{challenge.totalScore} pts</div>
-                        <div>{challenge.rank ? `Rank #${challenge.rank}` : "Unranked"}</div>
+                        <div className="font-black text-cyan-200">{pool.totalScore} pts</div>
+                        <div>{pool.rank ? `Rank #${pool.rank}` : "Unranked"}</div>
                       </div>
                     </Link>
                   )
@@ -169,9 +169,9 @@ export default async function WorldCupBracketsPage() {
                   <Globe2 className="h-6 w-6 text-cyan-200" />
                 </div>
                 <div>
-                  <p className="font-black text-white">No challenges yet</p>
+                  <p className="font-black text-white">No World Cup pools yet</p>
                   <p className="mt-1 text-sm text-white/45">
-                    You haven't joined a World Cup bracket challenge yet.
+                    You haven't joined a World Cup bracket pool yet.
                   </p>
                   <p className="mt-1 text-xs text-white/30">
                     Create one and invite friends, or ask for an invite code.
@@ -182,14 +182,14 @@ export default async function WorldCupBracketsPage() {
                   className="inline-flex items-center gap-2 rounded-xl bg-cyan-300 px-5 py-2.5 text-sm font-black text-black"
                 >
                   <Plus className="h-4 w-4" />
-                  Create World Cup Bracket League
+                  Create World Cup Pool
                 </Link>
               </div>
             )
           ) : (
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-6">
               <p className="text-sm text-white/60">
-                Sign in to create or join a World Cup bracket challenge.
+                Sign in to create or join a World Cup bracket pool.
               </p>
               <Link
                 href="/login?next=/brackets/world-cup"

@@ -8,7 +8,7 @@ const MAX_ENTRIES = 5
 
 export default function WorldCupBracketCreateModal() {
   const router = useRouter()
-  const [name, setName] = useState("World Cup Bracket Challenge")
+  const [name, setName] = useState("World Cup Bracket Pool")
   const [visibility, setVisibility] = useState<"private" | "public">("private")
   const [lockStrategy, setLockStrategy] = useState<"per_match" | "tournament_start">("tournament_start")
   const [includeThirdPlace, setIncludeThirdPlace] = useState(false)
@@ -20,7 +20,7 @@ export default function WorldCupBracketCreateModal() {
   const [error, setError] = useState<string | null>(null)
 
   // Client-side validation
-  const nameError = !name.trim() ? "League name cannot be blank." : null
+  const nameError = !name.trim() ? "Pool name cannot be blank." : null
   const maxUsersError = maxUsers < 2 || maxUsers > MAX_USERS ? `Must be between 2 and ${MAX_USERS}.` : null
   const maxEntriesError = maxEntries < 1 || maxEntries > MAX_ENTRIES ? `Must be between 1 and ${MAX_ENTRIES}.` : null
   const hasErrors = Boolean(nameError || maxUsersError || maxEntriesError)
@@ -52,7 +52,7 @@ export default function WorldCupBracketCreateModal() {
       const data = await res.json().catch(() => ({}))
 
       if (res.status === 401) {
-        throw new Error("Please sign in to create a bracket.")
+        throw new Error("Please sign in to create a World Cup pool.")
       }
       if (!res.ok) {
         throw new Error(data?.error ?? `Request failed (${res.status})`)
@@ -65,13 +65,18 @@ export default function WorldCupBracketCreateModal() {
         (data?.challenge as any)?.challengeId
 
       if (!createdId) {
-        throw new Error("Bracket was created but the server did not return an ID. Please refresh the page.")
+        throw new Error("Pool was created but the server did not return an ID. Please refresh the page.")
       }
 
+      const redirectUrl =
+        typeof data?.redirectUrl === "string" && data.redirectUrl.startsWith("/brackets/world-cup/")
+          ? data.redirectUrl
+          : `/brackets/world-cup/${createdId}`
+
       setStatus("opening")
-      router.push(`/brackets/world-cup/${createdId}${seedTestFixtures ? "?guided=1" : ""}`)
+      router.push(redirectUrl)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create bracket")
+      setError(err instanceof Error ? err.message : "Failed to create pool")
       setStatus("idle")
     } finally {
       setLoading(false)
@@ -83,7 +88,7 @@ export default function WorldCupBracketCreateModal() {
       ? "Creating…"
       : status === "opening"
         ? "Created, opening…"
-        : "Create Challenge"
+        : "Create Pool"
 
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-[#05070b] text-white">
@@ -97,7 +102,7 @@ export default function WorldCupBracketCreateModal() {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div>
-          <h1 className="text-lg font-black">Create World Cup Bracket League</h1>
+          <h1 className="text-lg font-black">Create World Cup Pool</h1>
           <p className="text-xs text-white/45">2026 FIFA World Cup · NCAA-style bracket pool</p>
         </div>
       </header>
@@ -116,10 +121,10 @@ export default function WorldCupBracketCreateModal() {
               </div>
             </div>
 
-            {/* League name */}
+            {/* Pool name */}
             <div>
               <label className="block text-xs font-black uppercase tracking-[0.16em] text-white/45">
-                League Name
+                Pool Name
               </label>
               <input
                 value={name}
@@ -179,7 +184,7 @@ export default function WorldCupBracketCreateModal() {
                 />
                 {maxUsersError
                   ? <p className="mt-1 text-[11px] text-rose-300">{maxUsersError}</p>
-                  : <p className="mt-1 text-[11px] text-white/35">Maximum {MAX_USERS} per league</p>}
+                  : <p className="mt-1 text-[11px] text-white/35">Maximum {MAX_USERS} per pool</p>}
               </div>
               <div>
                 <label className="block text-xs font-black uppercase tracking-[0.16em] text-white/45">
@@ -263,7 +268,7 @@ export default function WorldCupBracketCreateModal() {
               <span>
                 <span className="block">Seed Test Fixtures</span>
                 <span className="mt-0.5 block text-[11px] font-medium leading-5 text-amber-100/70">
-                  Adds mock Round of 32 teams, flags, kickoff times, and venues so this league is pickable immediately.
+                  Adds mock Round of 32 teams, flags, kickoff times, and venues so this pool is pickable immediately.
                 </span>
               </span>
             </label>
@@ -271,7 +276,7 @@ export default function WorldCupBracketCreateModal() {
             {status === "opening" && !error && (
               <div className="flex items-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/10 p-3 text-sm text-cyan-100">
                 <CheckCircle className="h-4 w-4 shrink-0" />
-                Created bracket, opening…
+                Created pool, opening…
               </div>
             )}
 
