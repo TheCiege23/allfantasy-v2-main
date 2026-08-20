@@ -79,6 +79,11 @@ jobs:
     - name: Run foundation apply branch tests
       if: matrix.lane == 'referral-growth-db'
       run: npm run test:foundation-apply-branches
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ startsWith(matrix.lane, 'core-shard-') && 'all' || 'chromium' }}-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Browsers
       if: startsWith(matrix.lane, 'core-shard-')
       run: npx playwright install --with-deps
@@ -205,6 +210,11 @@ jobs:
         DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
         DIRECT_URL: postgresql://postgres:postgres@127.0.0.1:5432/allfantasy_ci
       run: npm run db:foundation:apply
+    - name: Cache Playwright browsers
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-chromium-${{ hashFiles('package-lock.json') }}
     - name: Install Playwright Chromium
       run: npx playwright install --with-deps chromium
     - name: Prepare DB schema for draft-room regression
