@@ -73,7 +73,15 @@ const FIELD_BY_PROVIDER: Partial<
   espn: {
     label: 'ESPN league ID',
     placeholder: '123456',
-    help: 'Public leagues import directly. Private leagues use the browser extension — we never ask for your ESPN password.',
+    /*
+     * ⚠ "Public leagues import directly" WAS NOT TRUE, and it cost a real user a
+     * long detour. ESPN import is gated on finding YOUR team in the league, which
+     * commissionerGate resolves from the SWID cookie -- so a connected ESPN account
+     * is required for every ESPN league, public ones included. The old copy sent
+     * people to type an ID that could not work, and the failure then pointed at
+     * League Sync rather than at the settings page that actually fixes it.
+     */
+    help: 'Connect ESPN once under Settings → Connected Accounts, then paste a league ID here. We read the league as you — we never ask for your ESPN password.',
   },
 }
 
@@ -339,6 +347,29 @@ export function ImportV4({
         attested ? { accepted: true } : undefined
       )
       if (!res.ok) {
+        /**
+         * ⚠ COMMIT CAN DEMAND AN ATTESTATION THAT PREVIEW DID NOT. The commit route
+         * passes `requireCommissioner: true`; preview does not. Its comment calls
+         * that a no-op for non-Sleeper providers, but it is not: checkEspn returns
+         * `isCommissioner: undefined` whenever the viewer is absent from ESPN's own
+         * commissioner list, and undefined is not false -- the gate asks for the
+         * attestation instead.
+         *
+         * runPreview has always routed that to the confirm panel. This did not, so
+         * an ESPN member who is not a detected commissioner reached "Ready to
+         * import", pressed the button, and was returned to an empty screen with a
+         * sentence they could not act on -- the confirm panel they needed only ever
+         * appeared on the preview path. Observed in production: preview 200, commit
+         * 403, no league created.
+         */
+        if (res.requiresAttestation) {
+          setPhase({
+            k: 'attest',
+            sourceId,
+            message: res.error || 'Confirm you are authorized to import this league.',
+          })
+          return
+        }
         setError(res.error || 'We could not finish that import.')
         setPhase({ k: 'idle' })
         return
@@ -580,8 +611,19 @@ export function ImportV4({
                       Connect Yahoo →
                     </a>
                   ) : (
-                    <Link href="/leagues" className="af-im-error-link">
-                      Connect your accounts in League Sync →
+                    /*
+                      ESPN is fixed in Settings → Connected Accounts, where the
+                      cookie form lives -- not in League Sync. Sending an ESPN user
+                      to /leagues gave them a page with no ESPN control on it, which
+                      is how a solvable setup step read as "import is broken".
+                    */
+                    <Link
+                      href={provider === 'espn' ? '/settings' : '/leagues'}
+                      className="af-im-error-link"
+                    >
+                      {provider === 'espn'
+                        ? 'Connect ESPN in Settings →'
+                        : 'Connect your accounts in League Sync →'}
                     </Link>
                   )
                 ) : null}
@@ -751,6 +793,16 @@ export function ImportV4({
                 Open your league
               </Link>
             ) : null}
+            {/*
+              ⚠ THE ONLY WAY BACK TO THE FORM. Both other actions navigate AWAY, so
+              anyone with a second league to add had to leave and re-enter /import,
+              and anyone whose ESPN league ID needed correcting could not retype it
+              at all -- the field is not rendered in this phase. Reported as "it
+              doesn't even let me input the league ID again".
+            */}
+            <button type="button" className="af-btn af-btn--ghost" onClick={reset}>
+              Import another league
+            </button>
             {/*
               ⚠ THE RETURN PATH IS OFFERED, NOT FORCED. Someone who arrived from
               create-league came here to finish THAT flow and would otherwise be
