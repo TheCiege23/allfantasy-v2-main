@@ -24,6 +24,19 @@ tmp-*
 *.log
 *.txt
 
+# ...EXCEPT robots.txt, which is a runtime asset and not a build log.
+#
+# The `*.txt` rule above silently broke /robots.txt in production for two
+# different implementations. It excluded public/robots.txt, and before that it
+# excluded app/robots.txt/route.ts -- because the ROUTE DIRECTORY is itself
+# named robots.txt and matches the pattern. Both 404d in production while
+# returning 200 locally, because .vercelignore only applies to the deploy
+# upload. /sitemap.xml was unaffected the whole time: .xml is not ignored.
+#
+# Everything else this rule catches is a genuine build log -- build-output.txt,
+# tsc-full.txt, .tmp/*.txt -- so the rule stays and only this one is restored.
+!public/robots.txt
+
 # Optional non-runtime docs/assets
 artifacts
 design-refs

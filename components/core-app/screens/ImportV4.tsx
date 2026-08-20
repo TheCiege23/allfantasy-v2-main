@@ -45,6 +45,50 @@ import type { ImportProvider } from '@/lib/league-import/types'
 
 export type ImportPreviewState = 'pick' | 'connecting' | 'result'
 
+/** Same lockup as the landing, pricing and auth screens. */
+function Shield() {
+  return (
+    <svg width="26" height="28" viewBox="0 0 28 30" aria-hidden focusable="false">
+      <path
+        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
+        fill="var(--accent-soft)"
+        stroke="var(--accent)"
+        strokeWidth="1.5"
+      />
+      <text
+        x="14"
+        y="19"
+        textAnchor="middle"
+        fill="var(--accent)"
+        style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}
+      >
+        AF
+      </text>
+    </svg>
+  )
+}
+
+/**
+ * The auth → connect → choose-leagues progress bar (handoffs 4b/4c/4d).
+ *
+ * Presentational only: the caller derives `current` from real phase, so this
+ * cannot drift from what the screen is actually showing.
+ */
+function StepBar({ current, total }: { current: number; total: number }) {
+  return (
+    <div className="af-im-steps" role="group" aria-label={`Step ${current} of ${total}`}>
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className="af-im-step"
+          data-done={i < current ? 'true' : undefined}
+          aria-hidden
+        />
+      ))}
+    </div>
+  )
+}
+
 type DiscoveredLeague = {
   sourceId: string
   name: string
@@ -414,13 +458,43 @@ export function ImportV4({
   const [bulkDone, setBulkDone] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<Record<string, BulkStatus>>({})
 
+  /*
+   * ── Which discovered leagues to bring in (handoff 4d) ──────────────────────
+   *
+   * The design puts a checkbox on every row and labels the button with the live
+   * count. This sits ON TOP of the bulk machinery below rather than replacing
+   * it: same sequential `submitImportCreation` loop, same per-league outcome
+   * reporting, just over a chosen subset instead of everything.
+   *
+   * ⚠ EVERYTHING DEFAULTS CHECKED, WHICH DEPARTS FROM 4d BUILD RULE 1. That rule
+   * says archived leagues default unchecked — and it is a good rule. But the
+   * discovery payload is `{ sourceId, name, sport?, season?, totalTeams? }` with
+   * NO archived or status field, so there is nothing to test. Inferring it from
+   * `season` would be a guess, and a wrong guess silently drops a league the
+   * user wanted while the button still reads as if it took everything. Defaulting
+   * checked fails in the recoverable direction: the rows are visible and
+   * unticking one takes a single click. Restore the rule the moment discovery
+   * carries a real status.
+   */
+  const [excluded, setExcluded] = useState<Record<string, true>>({})
+  const selectedLeagues = leagues.filter((l) => !excluded[l.sourceId])
+
+  const toggleLeague = useCallback((sourceId: string) => {
+    setExcluded((prev) => {
+      const next = { ...prev }
+      if (next[sourceId]) delete next[sourceId]
+      else next[sourceId] = true
+      return next
+    })
+  }, [])
+
   const runBulkImport = useCallback(async () => {
-    if (bulkRunning || leagues.length === 0) return
+    if (bulkRunning || selectedLeagues.length === 0) return
     setBulkRunning(true)
     setBulkDone(false)
     setBulkStatus({})
     setError(null)
-    for (const league of leagues) {
+    for (const league of selectedLeagues) {
       setBulkStatus((prev) => ({ ...prev, [league.sourceId]: 'importing' }))
       const res = await submitImportCreation(provider, league.sourceId, '')
       /*
@@ -440,7 +514,7 @@ export function ImportV4({
     }
     setBulkRunning(false)
     setBulkDone(true)
-  }, [bulkRunning, leagues, provider])
+  }, [bulkRunning, selectedLeagues, provider])
 
   const bulkCounts = (() => {
     const v = Object.values(bulkStatus)
@@ -460,14 +534,78 @@ export function ImportV4({
    */
   const forcedState = state && state !== 'pick' ? state : null
 
+  /*
+   * Which of the three journey segments are filled, derived rather than typed.
+   *
+   * Reaching this screen at all means sign-up is behind you, so the floor is 2.
+   * Once discovery has returned leagues the reader is on 4d ("choose leagues"),
+   * which the handoff draws as all three filled.
+   */
+  const stepsFilled = leagues.length > 0 ? 3 : 2
+
+  /*
+   * The header chip becomes "<PLATFORM> CONNECTED" on 4d, per the handoff. Only
+   * claimed once discovery has actually returned that provider's leagues —
+   * saying "connected" before anything came back would be asserting a state we
+   * have not observed.
+   */
+  const connectedLabel =
+    leagues.length > 0
+      ? `${(IMPORT_PROVIDER_UI_OPTIONS.find((o) => o.provider === provider)?.label ?? provider).toUpperCase()} CONNECTED`
+      : null
+
   return (
     <div className="af-core af-im">
+      {/*
+        ── Top bar, per handoffs 4c/4d ──────────────────────────────────
+        Brand left; on the right the READ-ONLY chip that every signed-in screen
+        carries, and an escape hatch. 4c build rule 5: this step is never a
+        forced gate, so "Skip for now" has to stay reachable — someone who
+        arrived here from sign-up must be able to reach the product without
+        connecting a platform first.
+      */}
+      <div className="af-im-topbar">
+        <Link href="/" className="af-im-brand" aria-label="AllFantasy — home">
+          <Shield />
+          <span className="af-im-wordmark">AllFantasy</span>
+        </Link>
+        <div className="af-im-topbar-right">
+          {connectedLabel ? (
+            <span className="af-im-connected af-num">{connectedLabel}</span>
+          ) : (
+            <span
+              className="af-im-readonly af-num"
+              title="We only ever read from your platform. Nothing here changes your lineup, roster or league."
+            >
+              Read-only
+            </span>
+          )}
+          <Link href="/dashboard" className="af-im-skip">
+            Skip for now
+          </Link>
+        </div>
+      </div>
+
+      {/*
+        ⚠ STEP 2 OF 3, AND THE STEPS ARE REAL. The handoff defines an
+        auth → connect → choose-leagues journey (4b → 4c → 4d): sign-up fills
+        one segment, this screen two, and the league picker below fills all
+        three. `stepsFilled` is derived from the live phase rather than being
+        typed per branch, so the bar cannot claim a step the screen is not on.
+
+        The sign-up screen draws its own copy of this bar (AuthV4). Unifying
+        them into one shared component is worth doing once both have landed —
+        deliberately not done here, because AuthV4 sits on a different unmerged
+        branch and a shared file would collide.
+      */}
+      <StepBar current={stepsFilled} total={3} />
+
       <header className="af-im-head">
         <span className="af-label">Connect your league to AllFantasy</span>
-        <h1 className="af-im-title">Connect your league in seconds.</h1>
+        <h1 className="af-im-title">Where do you already play?</h1>
         <p className="af-im-sub">
-          Pick your platform and drop in your username or league ID. We build a read-only copy of
-          your real rosters, matchups and scoring.
+          Pick a platform and we&rsquo;ll pull in your real rosters, matchups and scoring. Nothing
+          you do here changes anything on that platform.
         </p>
       </header>
 
@@ -651,15 +789,28 @@ export function ImportV4({
           */}
           {leagues.length > 1 ? (
             <div className="af-im-bulk">
+              {/*
+                ⚠ THE LABEL COUNTS WHAT IS TICKED, NOT WHAT WAS FOUND (4d build
+                rule 3). A button reading "Import 4 leagues" beside three ticked
+                boxes is the kind of small lie that costs trust at the last step
+                of a funnel — and this IS the last step.
+              */}
               <button
                 type="button"
                 className="af-btn af-im-bulk-btn"
-                disabled={bulkRunning || phase.k === 'previewing' || phase.k === 'committing'}
+                disabled={
+                  bulkRunning ||
+                  selectedLeagues.length === 0 ||
+                  phase.k === 'previewing' ||
+                  phase.k === 'committing'
+                }
                 onClick={() => void runBulkImport()}
               >
                 {bulkRunning
-                  ? `Importing… ${bulkCounts.processed} of ${leagues.length}`
-                  : `Import all (${leagues.length})`}
+                  ? `Importing… ${bulkCounts.processed} of ${selectedLeagues.length}`
+                  : selectedLeagues.length === 0
+                    ? 'Pick at least one league'
+                    : `Import ${selectedLeagues.length} ${selectedLeagues.length === 1 ? 'league' : 'leagues'}`}
               </button>
               {bulkDone ? (
                 <p className="af-im-bulk-summary" role="status">
@@ -683,7 +834,27 @@ export function ImportV4({
               const busy =
                 (phase.k === 'previewing' || phase.k === 'committing') && phase.sourceId === l.sourceId
               return (
-                <li key={l.sourceId} className="af-im-league">
+                <li
+                  key={l.sourceId}
+                  className="af-im-league"
+                  data-picked={!excluded[l.sourceId] && leagues.length > 1 ? 'true' : undefined}
+                >
+                  {/*
+                    Only offered when there is more than one league — a lone
+                    result has nothing to choose between, and a checkbox there
+                    would imply the single "Import" button below it might not
+                    apply to it.
+                  */}
+                  {leagues.length > 1 ? (
+                    <input
+                      type="checkbox"
+                      className="af-im-league-check"
+                      checked={!excluded[l.sourceId]}
+                      disabled={bulkRunning || Boolean(bulkStatus[l.sourceId])}
+                      onChange={() => toggleLeague(l.sourceId)}
+                      aria-label={`Include ${l.name} in the import`}
+                    />
+                  ) : null}
                   <span className="af-im-league-main">
                     <span className="af-im-league-name">{l.name}</span>
                     <span className="af-im-league-meta af-num">

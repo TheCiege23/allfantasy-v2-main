@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe('@ai unified ai interface click audit', () => {
   test.describe.configure({ mode: 'serial', timeout: 180_000 })
@@ -265,7 +266,7 @@ test.describe('@ai unified ai interface click audit', () => {
       )
       .toBeTruthy()
 
-    await page.getByTestId('unified-ai-quick-chip-trade').click()
+    await clickHydrated(page.getByTestId('unified-ai-quick-chip-trade'))
     await expect(page.getByTestId('unified-ai-prompt-input')).toHaveValue(/fairness/i)
     await page.getByTestId('unified-ai-sport-selector').selectOption('SOCCER')
     await page.getByTestId('ai-mode-selector').selectOption('consensus')
@@ -278,9 +279,9 @@ test.describe('@ai unified ai interface click audit', () => {
     for (let attempt = 0; attempt < 3; attempt += 1) {
       if (await primaryResultPanel.isVisible().catch(() => false)) break
       if (await errorState.isVisible().catch(() => false)) {
-        await errorState.getByRole('button', { name: 'Retry' }).click()
+        await clickHydrated(errorState.getByRole('button', { name: 'Retry' }))
       } else {
-        await page.getByTestId('unified-ai-run-button').click()
+        await clickHydrated(page.getByTestId('unified-ai-run-button'))
       }
       await page.waitForTimeout(300)
     }
@@ -288,12 +289,12 @@ test.describe('@ai unified ai interface click audit', () => {
     await expect(primaryResultPanel).toBeVisible({ timeout: 10_000 })
     await expect(primaryResultPanel.getByText(/slightly favorable/i).first()).toBeVisible()
 
-    await primaryResultPanel.getByTestId('unified-ai-explanation-toggle-button').click()
+    await clickHydrated(primaryResultPanel.getByTestId('unified-ai-explanation-toggle-button'))
     await expect(primaryResultPanel.getByTestId('unified-ai-explanation-toggle-button')).toContainText(/Collapse|Expand/i)
     const copyButton = page.getByTestId('unified-ai-copy-button').first()
     await expect(copyButton).toBeEnabled()
-    await copyButton.click()
-    await page.getByTestId('unified-ai-save-result-button').first().click()
+    await clickHydrated(copyButton)
+    await clickHydrated(page.getByTestId('unified-ai-save-result-button').first())
     await expect.poll(() => historySaveCalls).toBe(1)
     await expect(page.getByTestId('unified-ai-save-success-text')).toBeVisible()
 
@@ -301,21 +302,21 @@ test.describe('@ai unified ai interface click audit', () => {
       .poll(async () => page.evaluate(() => ((window as any).__copiedTexts as string[]).length))
       .toBeGreaterThan(0)
 
-    await page.getByTestId('ai-provider-compare-button').first().click()
+    await clickHydrated(page.getByTestId('ai-provider-compare-button').first())
     await expect.poll(() => compareCalls).toBe(1)
     await expect(primaryResultPanel.getByTestId('ai-compare-providers-toggle-button').first()).toBeVisible()
-    await primaryResultPanel.getByTestId('ai-compare-providers-toggle-button').first().click()
+    await clickHydrated(primaryResultPanel.getByTestId('ai-compare-providers-toggle-button').first())
     await expect(primaryResultPanel.getByText('OpenAI response').first()).toBeVisible()
 
     await page.getByTestId('unified-ai-regenerate-button').first().click({ force: true })
     await expect(primaryResultPanel).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
-    await page.getByTestId('unified-ai-mobile-drawer-open-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-mobile-drawer-open-button'))
     await expect(page.getByTestId('unified-ai-mobile-drawer-close-button')).toBeVisible()
-    await page.getByTestId('unified-ai-mobile-drawer-close-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-mobile-drawer-close-button'))
 
-    await page.getByTestId('unified-ai-back-button').click()
+    await clickHydrated(page.getByTestId('unified-ai-back-button'))
     const promptInput = page.getByTestId('unified-ai-prompt-input')
     await expect(promptInput).toBeVisible()
     if ((await promptInput.inputValue()).length > 0) {
@@ -352,7 +353,7 @@ test.describe('@ai unified ai interface click audit', () => {
       )
       .toBe(true)
     if (await historyItem.isVisible().catch(() => false)) {
-      await page.getByTestId('ai-history-delete-button-saved-1').click()
+      await clickHydrated(page.getByTestId('ai-history-delete-button-saved-1'))
       await expect(emptyState).toBeVisible()
     }
 

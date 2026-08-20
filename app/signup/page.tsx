@@ -1,4 +1,3 @@
-import nextDynamic from "next/dynamic";
 import { AuthPageShell } from "@/components/auth/AuthPageShell";
 import { ClientOnlyAuthPage } from "@/components/auth/ClientOnlyAuthPage";
 import { AuthV4 } from "@/components/core-app/screens/AuthV4";
