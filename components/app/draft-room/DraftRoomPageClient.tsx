@@ -4699,6 +4699,39 @@ export function DraftRoomPageClient({
                             ) : null}
                           </div>
                           <p className="text-[11px] text-white/70">{recommendationResult.recommendation.reason}</p>
+                          {/*
+                            WAIT-OR-TAKE, FROM A SIGNAL THE ROOM WAS ALREADY FETCHING AND BINNING.
+                            /api/draft/live-brain runs a deterministic pass every cycle and returns
+                            `waitOrTakeNow` alongside a blended combined-ADP view. The client kept
+                            the whole envelope only to light a "Live Brain live" badge -- the one
+                            question a manager actually has on the clock ("can I wait on him?") was
+                            computed, sent over the wire, and dropped.
+
+                            Shown ONLY when the brain's top pick is the same player this card is
+                            recommending. The two run different passes and can disagree; attaching
+                            one player's wait signal to another player's name would be worse than
+                            showing nothing.
+                          */}
+                          {liveBrainEnvelope?.pickRecommendation &&
+                          liveBrainEnvelope.pickRecommendation.playerName.toLowerCase() ===
+                            recommendationResult.recommendation.player.name.toLowerCase() ? (
+                            <p
+                              data-testid="draft-bottom-chimmy-wait-or-take"
+                              className={`text-[11px] font-semibold ${
+                                liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'take_now'
+                                  ? 'text-emerald-300'
+                                  : liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'safe_to_wait'
+                                    ? 'text-white/60'
+                                    : 'text-rose-300'
+                              }`}
+                            >
+                              {liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'take_now'
+                                ? 'Take him now — he is unlikely to last.'
+                                : liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'safe_to_wait'
+                                  ? 'Safe to wait — he should still be here next turn.'
+                                  : 'He will not return — this is your turn or never.'}
+                            </p>
+                          ) : null}
                           {/* 8b requires the disclosure: the product analyses, the manager picks. */}
                           <p className="text-[10px] text-white/45">
                             You make the pick — AllFantasy never drafts for you.
