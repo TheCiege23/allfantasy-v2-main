@@ -35,6 +35,7 @@ import { useDraftHelperFloatingState } from '@/hooks/useDraftHelperFloatingState
 import { DraftTeamPanel } from '@/components/app/draft-room/DraftTeamPanel'
 import { WarRoomPopup } from '@/components/app/draft-room/WarRoomPopup'
 import { DraftRightDockTabs } from '@/components/app/draft-room/DraftRightDockTabs'
+import { DraftPickActivityStrip } from '@/components/app/draft-room/DraftPickActivityStrip'
 import {
   ResultsRosterPanel,
   type ResultsRosterPanelTeam,
@@ -4504,6 +4505,21 @@ export function DraftRoomPageClient({
               data-testid="draft-right-dock"
             >
               <DraftRightDockTabs
+                /*
+                 * 8b's "Draft activity" card. DraftPickActivityStrip was fully built and exported
+                 * from the barrel, but nothing ever mounted it — the live room had no activity
+                 * feed at all. It needs only picks + slotOrder, both of which already drive the
+                 * board, so this is a wire-up rather than a new feature.
+                 */
+                activityBody={
+                  <div className="flex h-full min-h-0 flex-col overflow-auto">
+                    <DraftPickActivityStrip
+                      picks={session?.picks ?? []}
+                      slotOrder={session?.slotOrder ?? []}
+                      presentationVariant={presentationVariant}
+                    />
+                  </div>
+                }
                 queueBody={<div className="flex h-full min-h-0 flex-col overflow-auto bg-[linear-gradient(180deg,rgba(7,14,28,0.65),rgba(6,12,24,0.88))] px-1 py-1">{queueStackNode}</div>}
                 rosterBody={
                   <ResultsRosterPanel
@@ -4643,27 +4659,97 @@ export function DraftRoomPageClient({
                           </div>
                         </div>
                       ) : recommendationResult?.recommendation ? (
+                        /*
+                         * 8b's Chimmy card, built from data the room ALREADY had.
+                         *
+                         * The engine returns confidence alongside the player and the reason, and
+                         * this panel was dropping it — the one number that tells a manager how
+                         * hard to lean on the suggestion. It is the same RecommendationEngine
+                         * score Draft HQ shows, so 8a and 8b cannot disagree (8b build rule 2).
+                         *
+                         * ≥80 reads good, below reads borderline — the handoff's own thresholds.
+                         *
+                         * Copy says Chimmy, never "AI" (8b build rule 6). Scoped to this panel on
+                         * purpose: __tests__/no-ai-customer-copy.test.ts guards app/dashboard only
+                         * and its header calls widening that scan "a surface-by-surface decision,
+                         * not an auto-apply". Renaming the whole draft client is that decision,
+                         * and it is not this change.
+                         */
                         <div className="mt-2 space-y-2 rounded-lg border border-cyan-400/20 bg-cyan-500/10 p-3">
-                          <p className="text-sm font-semibold text-white">
-                            {recommendationResult.recommendation.player.name}
-                            <span className="ml-1 text-cyan-100/80">
-                              {recommendationResult.recommendation.player.position}
-                              {recommendationResult.recommendation.player.team ? ` - ${recommendationResult.recommendation.player.team}` : ''}
-                            </span>
-                          </p>
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="text-sm font-semibold text-white">
+                              {recommendationResult.recommendation.player.name}
+                              <span className="ml-1 text-cyan-100/80">
+                                {recommendationResult.recommendation.player.position}
+                                {recommendationResult.recommendation.player.team ? ` - ${recommendationResult.recommendation.player.team}` : ''}
+                              </span>
+                            </p>
+                            {Number.isFinite(recommendationResult.recommendation.confidence) ? (
+                              <span
+                                data-testid="draft-bottom-chimmy-confidence"
+                                className={`shrink-0 rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${
+                                  recommendationResult.recommendation.confidence >= 80
+                                    ? 'border-emerald-400/40 bg-emerald-500/15 text-emerald-200'
+                                    : 'border-amber-400/40 bg-amber-500/15 text-amber-200'
+                                }`}
+                                title="How strongly this league's scoring and your roster holes support the pick"
+                              >
+                                CONF {Math.round(recommendationResult.recommendation.confidence)}
+                              </span>
+                            ) : null}
+                          </div>
                           <p className="text-[11px] text-white/70">{recommendationResult.recommendation.reason}</p>
+                          {/*
+                            WAIT-OR-TAKE, FROM A SIGNAL THE ROOM WAS ALREADY FETCHING AND BINNING.
+                            /api/draft/live-brain runs a deterministic pass every cycle and returns
+                            `waitOrTakeNow` alongside a blended combined-ADP view. The client kept
+                            the whole envelope only to light a "Live Brain live" badge -- the one
+                            question a manager actually has on the clock ("can I wait on him?") was
+                            computed, sent over the wire, and dropped.
+
+                            Shown ONLY when the brain's top pick is the same player this card is
+                            recommending. The two run different passes and can disagree; attaching
+                            one player's wait signal to another player's name would be worse than
+                            showing nothing.
+                          */}
+                          {liveBrainEnvelope?.pickRecommendation &&
+                          liveBrainEnvelope.pickRecommendation.playerName.toLowerCase() ===
+                            recommendationResult.recommendation.player.name.toLowerCase() ? (
+                            <p
+                              data-testid="draft-bottom-chimmy-wait-or-take"
+                              className={`text-[11px] font-semibold ${
+                                liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'take_now'
+                                  ? 'text-emerald-300'
+                                  : liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'safe_to_wait'
+                                    ? 'text-white/60'
+                                    : 'text-rose-300'
+                              }`}
+                            >
+                              {liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'take_now'
+                                ? 'Take him now — he is unlikely to last.'
+                                : liveBrainEnvelope.pickRecommendation.waitOrTakeNow === 'safe_to_wait'
+                                  ? 'Safe to wait — he should still be here next turn.'
+                                  : 'He will not return — this is your turn or never.'}
+                            </p>
+                          ) : null}
+                          {/* 8b requires the disclosure: the product analyses, the manager picks. */}
+                          <p className="text-[10px] text-white/45">
+                            You make the pick — AllFantasy never drafts for you.
+                          </p>
                           <button
                             type="button"
                             onClick={() => setMobileTab('helper')}
                             className="rounded border border-cyan-300/35 bg-cyan-500/12 px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-cyan-100 hover:bg-cyan-500/20"
                             data-testid="draft-bottom-ai-open-helper"
                           >
-                            Open Full AI Panel
+                            Ask Chimmy
                           </button>
                         </div>
                       ) : (
                         <div className="mt-2 rounded-lg border border-white/12 bg-black/25 p-3">
-                          <p className="text-white/65">No recommendation yet. AI updates when draft context changes.</p>
+                          <p className="text-white/65">
+                            No recommendation yet. Chimmy updates when the draft context changes.
+                          </p>
                         </div>
                       )}
                     </div>

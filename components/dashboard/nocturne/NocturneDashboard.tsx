@@ -269,8 +269,8 @@ function readRank(p: RankPayload | undefined) {
 
 // ── Tools (reference set → real AF Legacy destinations, tier-gated) ───────────
 const TOOLS = [
-  { key: 'waiver', label: 'Waiver Assistant', desc: 'Ranked pickups for every league.', Icon: MousePointerClick, href: '/af-legacy?tab=waiver', premiumOnly: false },
-  { key: 'trade', label: 'Trade Analyzer', desc: 'Fairness scoring on any proposal.', Icon: ArrowLeftRight, href: '/af-legacy?tab=trade', premiumOnly: true },
+  { key: 'waiver', label: 'Waiver Assistant', desc: 'Ranked pickups for every league.', Icon: MousePointerClick, href: '/legacy?tab=waiver', premiumOnly: false },
+  { key: 'trade', label: 'Trade Analyzer', desc: 'Fairness scoring on any proposal.', Icon: ArrowLeftRight, href: '/legacy?tab=trade', premiumOnly: true },
   { key: 'outlook', label: 'Season Outlook', desc: 'Playoff & championship odds.', Icon: LineChart, href: '/af-legacy?tab=pulse', premiumOnly: true },
   { key: 'history', label: 'Trade History', desc: 'Every trade, by week.', Icon: History, href: '/af-legacy?tab=finder', premiumOnly: true },
   { key: 'psych', label: 'Manager Psychology', desc: 'Your play style, decoded.', Icon: Brain, href: '/af-legacy?tab=compare', premiumOnly: true },

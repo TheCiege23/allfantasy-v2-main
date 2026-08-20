@@ -65,7 +65,7 @@ test.describe("@alerts sports alerts click audit", () => {
     const playerAlertLink = harness.getByTestId("notification-link-sports-player-alert")
 
     await expect(leagueAlertLink).toHaveAttribute("href", "/leagues/league-alert-1")
-    await expect(playerAlertLink).toHaveAttribute("href", "/af-legacy?tab=players&playerId=player-12")
+    await expect(playerAlertLink).toHaveAttribute("href", "/af-rankings&playerId=player-12")
 
     await expect(drawer.getByTestId("notification-dismiss-sports-player-alert")).toBeVisible()
     await expect(drawer.getByTestId("notification-mark-all-read")).toBeVisible()

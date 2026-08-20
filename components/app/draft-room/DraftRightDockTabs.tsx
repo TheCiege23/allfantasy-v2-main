@@ -20,7 +20,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 
-export type DraftRightDockTab = 'queue' | 'roster' | 'war_room' | 'chat'
+export type DraftRightDockTab = 'queue' | 'roster' | 'war_room' | 'activity' | 'chat'
 
 const TAB_PREF_KEY = 'af:draft-right-dock-active-tab'
 
@@ -28,6 +28,11 @@ export interface DraftRightDockTabsProps {
   queueBody: ReactNode
   rosterBody: ReactNode
   warRoomBody?: ReactNode
+  /**
+   * 8b's third right-column card. Optional so the tab only appears where a body is supplied —
+   * same pattern warRoomBody already uses.
+   */
+  activityBody?: ReactNode
   chatBody: ReactNode
   /** Default tab when no preference stored. Spec calls for "Queue". */
   defaultTab?: DraftRightDockTab
@@ -42,6 +47,7 @@ const BASE_TABS: ReadonlyArray<{ id: DraftRightDockTab; label: string }> = [
   { id: 'queue', label: 'Queue' },
   { id: 'roster', label: 'Roster' },
   { id: 'war_room', label: 'AF Legacy' },
+  { id: 'activity', label: 'Activity' },
   { id: 'chat', label: 'Chat' },
 ]
 
@@ -49,6 +55,7 @@ export function DraftRightDockTabs({
   queueBody,
   rosterBody,
   warRoomBody = null,
+  activityBody = null,
   chatBody,
   defaultTab = 'queue',
   activeTabOverride = null,
@@ -61,7 +68,14 @@ export function DraftRightDockTabs({
   useEffect(() => {
     try {
       const v = window.localStorage.getItem(TAB_PREF_KEY)
-      if (v === 'queue' || v === 'roster' || v === 'war_room' || v === 'chat') setActiveTab(v)
+      if (
+        v === 'queue' ||
+        v === 'roster' ||
+        v === 'war_room' ||
+        v === 'activity' ||
+        v === 'chat'
+      )
+        setActiveTab(v)
     } catch {
       /* ignore */
     }
@@ -76,9 +90,23 @@ export function DraftRightDockTabs({
     }
   }, [activeTab])
 
-  const tabs = warRoomBody ? BASE_TABS : BASE_TABS.filter((tab) => tab.id !== 'war_room')
+  /*
+   * A tab is offered only when its body exists. Without this an "Activity" tab would appear for
+   * every caller and open onto nothing — and a stored preference could restore the reader into
+   * that empty tab on their next visit.
+   */
+  const tabs = BASE_TABS.filter(
+    (tab) =>
+      (tab.id !== 'war_room' || Boolean(warRoomBody)) &&
+      (tab.id !== 'activity' || Boolean(activityBody)),
+  )
   const rawEffectiveTab = activeTabOverride ?? activeTab
-  const effectiveTab = !warRoomBody && rawEffectiveTab === 'war_room' ? defaultTab : rawEffectiveTab
+  /*
+   * A stored preference can point at a tab this caller does not offer — someone who last used
+   * Activity in a league that has it, opening one that does not. Fall back rather than render an
+   * empty dock.
+   */
+  const effectiveTab = tabs.some((t) => t.id === rawEffectiveTab) ? rawEffectiveTab : defaultTab
 
   const onSelect = useCallback((id: DraftRightDockTab) => {
     setActiveTab(id)
@@ -96,7 +124,10 @@ export function DraftRightDockTabs({
         role="tablist"
         aria-label="Draft right dock tabs"
         data-testid={`${testIdBase}-tablist`}
-        className={`grid shrink-0 ${warRoomBody ? 'grid-cols-4' : 'grid-cols-3'} border-b border-white/[0.05] bg-[#101a30]`}
+        /* Column count follows the tabs actually rendered — it was hardcoded 3-or-4 and would
+           have squeezed or stranded a column as soon as a fifth tab existed. */
+        style={{ gridTemplateColumns: `repeat(${tabs.length}, minmax(0, 1fr))` }}
+        className="grid shrink-0 border-b border-white/[0.05] bg-[#101a30]" 
       >
         {tabs.map((tab) => {
           const isActive = effectiveTab === tab.id
@@ -161,6 +192,20 @@ export function DraftRightDockTabs({
         >
           {rosterBody}
         </div>
+        {activityBody ? (
+          <div
+            role="tabpanel"
+            id={`${testIdBase}-panel-activity`}
+            aria-labelledby={`${testIdBase}-tab-activity`}
+            data-testid={`${testIdBase}-panel-activity`}
+            aria-hidden={effectiveTab !== 'activity'}
+            className={
+              effectiveTab === 'activity' ? 'flex h-full min-h-0 flex-col overflow-hidden' : 'hidden'
+            }
+          >
+            {activityBody}
+          </div>
+        ) : null}
         {warRoomBody ? (
           <div
             role="tabpanel"

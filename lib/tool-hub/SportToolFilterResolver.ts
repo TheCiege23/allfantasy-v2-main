@@ -52,7 +52,7 @@ const HREF_TOOL_ALIASES: Record<string, ToolSlug> = {
   '/social-pulse': 'social-pulse',
   '/career-share': 'career-share',
   '/season-strategy': 'season-strategy',
-  '/af-legacy?tab=mock-draft': 'ai-draft-assistant',
+  '/legacy?tab=mock-draft': 'ai-draft-assistant',
   '/app/simulation-lab': 'matchup-simulator',
   '/matchup-simulator': 'matchup-simulator',
   '/app/power-rankings': 'power-rankings',
