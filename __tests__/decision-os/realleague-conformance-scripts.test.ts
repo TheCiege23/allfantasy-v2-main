@@ -23,9 +23,12 @@ describe('ADR-DOS-F1: each conformance script gates + refuses prod like the trad
       // DB gate + clean skip.
       expect(src).toContain('hasDatabaseUrl')
       expect(src).toMatch(/SKIPPED \(no DATABASE_URL\)/)
-      // Prod host hard-refusal.
-      expect(src).toContain('ep-spring-tooth')
-      expect(src).toMatch(/refusing production DB host/i)
+      // Prod hard-refusal, delegated to the single source of truth. Asserting the delegation
+      // rather than a host literal is deliberate: the literal these scripts used to carry named
+      // the dev fork, so a "contains the marker" assertion passed while the guard was inverted.
+      expect(src).toContain('assertNonProductionDbTarget')
+      expect(src).toContain("from './_db-target-identity'")
+      expect(src).not.toContain('ep-spring-tooth')
       // Prisma imported dynamically AFTER the gate — no top-level static prisma import.
       expect(/^import\s+[^\n]*\bprisma\b[^\n]*from\s+['"][^'"]*lib\/prisma['"]/m.test(src)).toBe(false)
       expect(src).toMatch(/await import\(['"][^'"]*lib\/prisma['"]\)/)
@@ -42,9 +45,13 @@ describe('ADR-DOS-F1: each conformance script gates + refuses prod like the trad
     })
   }
 
-  it('the prod-host refusal regex actually catches a prod URL (positive control)', () => {
-    const refuse = (host: string) => host.includes('ep-spring-tooth')
-    expect(refuse('ep-spring-tooth-12345.aws.neon.tech')).toBe(true)
-    expect(refuse('ep-winter-salad-67890.aws.neon.tech')).toBe(false)
+  // Positive control exercising the REAL guard. The previous version of this test declared its own
+  // local `refuse()` and asserted against that, so it proved nothing about the shipped scripts.
+  it('the shipped guard actually refuses the real production database (positive control)', async () => {
+    const { isProductionDbTarget } = await import('@/scripts/_db-target-identity')
+    expect(isProductionDbTarget('postgresql://u:p@ep-curly-block-ad0dlt9o.c-2.us-east-1.aws.neon.tech/neondb')).toBe(true)
+    expect(isProductionDbTarget('postgresql://u:p@ep-curly-block-ad0dlt9o-pooler.c-2.us-east-1.aws.neon.tech/neondb')).toBe(true)
+    expect(isProductionDbTarget('postgresql://u:p@ep-muddy-leaf-adigvvph-pooler.c-2.us-east-1.aws.neon.tech/neondb')).toBe(false)
+    expect(isProductionDbTarget('postgresql://u:p@ep-winter-salad-ad34lce8.c-2.us-east-1.aws.neon.tech/neondb')).toBe(false)
   })
 })

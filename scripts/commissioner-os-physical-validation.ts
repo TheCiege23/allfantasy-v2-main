@@ -17,17 +17,9 @@
  * Cleans up every row it creates (and only those rows) in a final try/finally, regardless of outcome.
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { assertNonProductionDbTarget, describeDbTarget } from './_db-target-identity'
 
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
-}
 
 // ── Captured stdout (for the final secret-leak grep) ───────────────────────────────────────────
 const capturedLines: string[] = []
@@ -53,11 +45,14 @@ function check(name: string, ok: boolean, detail = '') {
     origLog('COMMISSIONER_OS_PHYSICAL_VALIDATION SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    origLog(`COMMISSIONER_OS_PHYSICAL_VALIDATION SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  const dbTargetUrl = resolveDatabaseUrl()
+  const host = describeDbTarget(dbTargetUrl)
+  assertNonProductionDbTarget({
+    script: 'commissioner-os-physical-validation',
+    url: dbTargetUrl,
+    action: 'runs physical-validation queries',
+    exitCode: 0,
+  })
   log(`Commissioner OS physical validation — DB host: ${host}`)
 
   const { prisma } = await import('../lib/prisma')

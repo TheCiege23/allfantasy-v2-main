@@ -32,10 +32,12 @@
 -- HOST CHECK -- READ THIS
 -- Production is endpoint `ep-curly-block-ad0dlt9o` (branch br-withered-shadow-adur64u9, db
 -- `neondb`). `ep-spring-tooth-adaoi9x1` is the DEV CLONE (branch br-restless-unit-adhut4n4,
--- named "claude-dashboard-local-dev"). Roughly 20 guard scripts in this repo, including
--- scripts/prisma-cli-guard.cjs and scripts/backfill-franchise-seasons.ts, have PROD_HOST_MARKER
--- set to 'ep-spring-tooth' and therefore guard the WRONG host. Do not trust them; confirm the
--- endpoint yourself before running this:
+-- named "claude-dashboard-local-dev").
+--
+-- FIXED 2026-08-20: the ~20 guard scripts this note warned about had PROD_HOST_MARKER set to
+-- 'ep-spring-tooth' and so guarded the WRONG host. They now all delegate to
+-- scripts/db-target-identity.cjs, which keys on the (endpoint, database) PAIR and fails closed.
+-- Confirm the endpoint yourself anyway before running this:
 --     SELECT current_setting('neon.endpoint_id'), current_database();
 --
 -- `last_*` COLUMNS ARE INTENTIONALLY NOT BACKFILLED
