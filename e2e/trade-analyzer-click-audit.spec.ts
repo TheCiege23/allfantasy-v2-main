@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
+import { clickHydrated } from "./helpers/hydration"
 
 type AnalyzeAuditContext = {
   analyzeCalls: number
@@ -83,7 +84,15 @@ async function mockTradeEvaluator(page: Page): Promise<AnalyzeAuditContext> {
 }
 
 async function settleTradeEvaluator(page: Page) {
-  await expect(page.getByRole("heading", { name: "AF Trade Analyzer" })).toBeVisible()
+  /*
+   * ⚠ THE HEADING IS "Trade Hub". /trade-evaluator renders
+   * <h1>Trade Hub</h1> (app/trade-evaluator/page.tsx). "AF Trade Analyzer"
+   * survives only as a tile title in app/components/LegacyTutorial.tsx, so this
+   * assertion could never match and every test routed through this helper died
+   * on it. Same shape as "AF War Room" now rendering as "AF Legacy": the product
+   * was renamed and the test was not.
+   */
+  await expect(page.getByRole("heading", { name: "Trade Hub" })).toBeVisible()
   await page.waitForLoadState("domcontentloaded")
 }
 
@@ -122,8 +131,8 @@ async function fillMinimalTrade(page: Page): Promise<boolean> {
     if (await evaluateButton.isEnabled()) return true
 
     if ((await senderAddPickButton.isEnabled()) && (await receiverAddPickButton.isEnabled())) {
-      await senderAddPickButton.click()
-      await receiverAddPickButton.click()
+      await clickHydrated(senderAddPickButton)
+      await clickHydrated(receiverAddPickButton)
       if (await evaluateButton.isEnabled()) return true
     }
 
@@ -169,39 +178,50 @@ test.describe("@shell trade analyzer click audit", () => {
     await gotoWithRetry(page, "/trade-evaluator")
     await settleTradeEvaluator(page)
 
-    const sportOptionValues = await page.locator('label:has-text("Sport") + select option').evaluateAll((nodes) =>
-      nodes.map((node) => (node as HTMLOptionElement).value)
-    )
-    expect(sportOptionValues).toEqual(["NFL", "NHL", "NBA", "MLB", "NCAAF", "NCAAB", "SOCCER"])
+    /*
+     * ⚠ TWO THINGS WERE WRONG HERE AND ONLY ONE WAS VISIBLE. The selector used
+     * an ADJACENT-SIBLING combinator (`label + select`) while the select is a
+     * CHILD of its label, so it matched nothing and this asserted against an
+     * empty array. Fixing that exposed the second: the expected order had NBA
+     * and NHL transposed. The order comes from SUPPORTED_SPORTS in
+     * lib/sport-scope.ts, which is NFL, NBA, NHL, MLB, NCAAF, NCAAB, SOCCER.
+     */
+    const sportOptionValues = await page
+      .getByTestId("trade-sport-select")
+      .locator("option")
+      .evaluateAll((nodes) => nodes.map((node) => (node as HTMLOptionElement).value))
+    expect(sportOptionValues).toEqual(["NFL", "NBA", "NHL", "MLB", "NCAAF", "NCAAB", "SOCCER"])
 
     const canEvaluateTrade = await fillMinimalTrade(page)
     test.skip(
       !canEvaluateTrade,
       "Trade form remained disabled in this environment despite retry fallbacks."
     )
-    const sportSelect = page.locator("select#trade-sport:visible")
+    // `select#trade-sport` does not exist on this page — there is no such id
+    // anywhere in app/trade-evaluator/page.tsx. Same testid as above.
+    const sportSelect = page.getByTestId("trade-sport-select")
     await sportSelect.selectOption("SOCCER")
     await expect(sportSelect).toHaveValue("SOCCER")
-    await page.getByTestId("trade-evaluate-button").click()
+    await clickHydrated(page.getByTestId("trade-evaluate-button"))
 
     await expect.poll(() => state.analyzeCalls).toBe(1)
     await expect(page.getByText("Fairness Score", { exact: true })).toBeVisible()
     await expect(page.getByTestId("trade-ai-explanation-link")).toHaveAttribute("href", /\/messages\?tab=ai/)
     await expect(page.getByTestId("trade-ai-explanation-link")).toHaveAttribute("href", /sport=SOCCER/)
 
-    await page.getByTestId("trade-result-tab-breakdown").click()
+    await clickHydrated(page.getByTestId("trade-result-tab-breakdown"))
     await expect(page.getByText("Current vs Future Value Lens")).toBeVisible()
     await expect(page.getByTestId("trade-propose-flow-link")).toHaveAttribute("href", /\/trade-finder\?context=analyzer&sport=SOCCER/)
 
-    await page.getByTestId("trade-result-tab-outlook").click()
-    await page.getByTestId("trade-outlook-current-toggle").click()
+    await clickHydrated(page.getByTestId("trade-result-tab-outlook"))
+    await clickHydrated(page.getByTestId("trade-outlook-current-toggle"))
     await expect(page.getByRole("heading", { name: "End of Season Projection" })).toBeVisible()
-    await page.getByTestId("trade-outlook-future-toggle").click()
+    await clickHydrated(page.getByTestId("trade-outlook-future-toggle"))
     await expect(page.getByRole("heading", { name: "Dynasty Outlook" })).toBeVisible()
 
     await page.getByLabel("sender player 1 name").fill("Amon-Ra St. Brown")
     await expect(page.getByText("Inputs changed. Re-run analysis to refresh this result.")).toBeVisible()
-    await page.getByTestId("trade-evaluate-button").click()
+    await clickHydrated(page.getByTestId("trade-evaluate-button"))
     await expect.poll(() => state.analyzeCalls).toBe(2)
     await expect(page.getByText("Inputs changed. Re-run analysis to refresh this result.")).toHaveCount(0)
 
@@ -218,23 +238,23 @@ test.describe("@shell trade analyzer click audit", () => {
     const addSenderPlayerButton = page.getByTestId("trade-add-player-sender")
     await expect(addSenderPlayerButton).toBeVisible()
     await expect(addSenderPlayerButton).toBeEnabled()
-    await addSenderPlayerButton.click()
+    await clickHydrated(addSenderPlayerButton)
 
     const addSenderPickButton = page.getByTestId("trade-add-pick-sender")
     await expect(addSenderPickButton).toBeVisible()
     await expect(addSenderPickButton).toBeEnabled()
-    await addSenderPickButton.click()
+    await clickHydrated(addSenderPickButton)
 
     await page.locator("input#trade-sender-manager-name:visible").fill("Team Alpha")
     await page.locator("input#trade-receiver-manager-name:visible").fill("Team Beta")
-    await page.getByTestId("trade-swap-sides-button").click()
+    await clickHydrated(page.getByTestId("trade-swap-sides-button"))
     await expect(page.getByTestId("trade-swap-sides-button")).toBeVisible()
 
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByTestId("trade-evaluate-button")).toBeVisible()
     await expect(page.getByTestId("trade-swap-sides-button")).toBeVisible()
 
-    await page.getByTestId("trade-reset-button").click()
+    await clickHydrated(page.getByTestId("trade-reset-button"))
     await expect(page.getByText("Add players and picks to both sides")).toBeVisible()
     await expect(page.getByTestId("trade-evaluate-button")).toBeDisabled()
   })

@@ -346,9 +346,21 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 <p className="af-pr-save af-pr-save--empty" aria-hidden />
               )}
 
+              {/*
+                ⚠ THE data-testid IS A CONTRACT, NOT DECORATION. The monetization
+                e2e suite drives every purchase path through
+                `pricing-subscription-cta-{sku}` and `pricing-token-cta-{sku}` —
+                the ids the previous /pricing surface
+                (components/monetization/MonetizationPurchaseSurface.tsx) emitted.
+                This screen replaced that surface and kept the behaviour but not
+                the ids, so 18 checkout tests started failing on "element(s) not
+                found" and the purchase flow lost its coverage silently. The
+                shards were already red for other reasons, so nothing surfaced it.
+              */}
               <button
                 type="button"
                 className="af-pr-cta"
+                data-testid={sku ? `pricing-subscription-cta-${sku}` : undefined}
                 disabled={!sku || blocked || pendingSku === sku}
                 onClick={() => sku && startCheckout(sku, 'subscription')}
               >
@@ -432,6 +444,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
               <button
                 type="button"
                 className="af-pr-cta af-pr-cta--small"
+                data-testid={`pricing-token-cta-${pack.sku}`}
                 disabled={blocked || pendingSku === pack.sku}
                 onClick={() => startCheckout(pack.sku, 'token_pack')}
               >

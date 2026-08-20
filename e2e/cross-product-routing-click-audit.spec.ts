@@ -166,7 +166,9 @@ test.describe("@db @routing cross-product routing click audit", () => {
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 })
 
     await page.goto("/admin?tab=overview")
-    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fadmin%3Ftab%3Doverview/, {
+    // See admin-dashboard-click-audit: /admin redirects to its own
+    // /admin-login, not the app's /login.
+    await expect(page).toHaveURL(/\/admin-login\?next=(%2F|\/)admin/, {
       timeout: 20_000,
     })
 

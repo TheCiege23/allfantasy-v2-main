@@ -159,7 +159,9 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
           */
           <span className="af-tk-balance-none">{t('tokens.v4.balanceUnavailable')}</span>
         ) : (
-          <span className="af-tk-balance-num">{balance.toLocaleString()}</span>
+          <span className="af-tk-balance-num" data-testid="tokens-balance-display">
+            {balance.toLocaleString()}
+          </span>
         )}
       </section>
 
@@ -217,9 +219,19 @@ export function TokenCentreV4({ packs }: TokenCentreV4Props) {
               </span>
               <span className="af-tk-pack-label">{t('tokens.v4.packTokens')}</span>
               <span className="af-tk-pack-price af-num">${p.amountUsd.toFixed(2)}</span>
+              {/*
+                The token suite drives every purchase through
+                `tokens-buy-cta-{sku}` and reads the balance from
+                `tokens-balance-display` — the ids the previous /tokens surface
+                emitted. This screen replaced it and kept both behaviours but
+                neither id, so the buy path lost its e2e hook. Restored here; the
+                rest of that suite needs UI this screen does not have, which the
+                spec now says out loud rather than failing on.
+              */}
               <button
                 type="button"
                 className="af-tk-btn"
+                data-testid={`tokens-buy-cta-${p.sku}`}
                 disabled={pendingSku === p.sku}
                 onClick={() => buy(p.sku)}
               >

@@ -42,6 +42,113 @@ import { resolveLoginErrorMessage } from '@/lib/auth/AuthErrorMessageResolver'
 
 export type AuthMode = 'signin' | 'signup'
 
+/** Shared with the landing and pricing navs, so all three public surfaces match. */
+function Shield() {
+  return (
+    <svg width="26" height="28" viewBox="0 0 28 30" aria-hidden focusable="false">
+      <path
+        d="M14 1.5 26 6v10.5c0 6.4-5 10.6-12 12.5-7-1.9-12-6.1-12-12.5V6l12-4.5Z"
+        fill="var(--accent-soft)"
+        stroke="var(--accent)"
+        strokeWidth="1.5"
+      />
+      <text
+        x="14"
+        y="19"
+        textAnchor="middle"
+        fill="var(--accent)"
+        style={{ font: '900 10px Archivo, sans-serif', letterSpacing: '0.02em' }}
+      >
+        AF
+      </text>
+    </svg>
+  )
+}
+
+/**
+ * The three-segment progress bar from handoff 4b.
+ *
+ * ⚠ THE THREE STEPS ARE REAL, BUT ONLY THE FIRST IS WIRED TODAY. The handoff
+ * defines /signup as step 1 of an "auth → connect → choose-leagues" journey
+ * (4b → 4c → 4d), and both later surfaces exist: /import is the connect screen
+ * and league selection follows it. What does NOT exist yet is the routing —
+ * SignUp still hands off to `callbackUrl` (/dashboard by default) rather than
+ * into the journey, and neither later screen draws this bar.
+ *
+ * So this is deliberately a static indicator of where the reader is, not a
+ * driven stepper. Whoever wires the journey should lift `current` to a prop and
+ * render the same component on 4c and 4d — handoff build rule 1 requires the
+ * indicator to persist across all three and reflect the true step.
+ */
+function StepBar({ current, total }: { current: number; total: number }) {
+  return (
+    <div
+      className="af-au-steps"
+      role="group"
+      aria-label={`Step ${current} of ${total}`}
+    >
+      {Array.from({ length: total }, (_, i) => (
+        <span
+          key={i}
+          className="af-au-step"
+          data-done={i < current ? 'true' : undefined}
+          aria-hidden
+        />
+      ))}
+    </div>
+  )
+}
+
+/**
+ * Password field with a reveal control, per the handoff.
+ *
+ * ⚠ THE TOGGLE IS A <button type="button">. Inside a <form> a bare <button>
+ * defaults to type="submit", so revealing the password would submit the form —
+ * on sign-up that means an attempted registration on a half-filled form.
+ */
+function PasswordField({
+  label,
+  value,
+  onChange,
+  autoComplete,
+  placeholder,
+  minLength,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  autoComplete: string
+  placeholder: string
+  minLength?: number
+}) {
+  const [shown, setShown] = useState(false)
+  return (
+    <div className="af-au-pw">
+      <input
+        name="password"
+        type={shown ? 'text' : 'password'}
+        autoComplete={autoComplete}
+        minLength={minLength}
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
+      />
+      <button
+        type="button"
+        className="af-au-pw-toggle"
+        onClick={() => setShown((s) => !s)}
+        // The control's own name has to change with its state, or a screen
+        // reader announces "show password" on a field already showing it.
+        aria-label={shown ? 'Hide password' : 'Show password'}
+        aria-pressed={shown}
+      >
+        {shown ? 'Hide' : 'Show'}
+      </button>
+    </div>
+  )
+}
+
 const PROVIDERS: { id: SocialProvider; label: string }[] = [
   { id: 'google', label: 'Google' },
   { id: 'apple', label: 'Apple' },
@@ -134,9 +241,6 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
           <h1 className="af-au-title">Welcome back</h1>
           <p className="af-au-sub">Sign in to your leagues.</p>
         </div>
-        <span className="af-au-switch">
-          New here? <Link href="/signup">Create account</Link>
-        </span>
       </header>
 
       <form className="af-au-form" onSubmit={onSubmit}>
@@ -152,22 +256,21 @@ function SignIn({ callbackUrl }: { callbackUrl: string }) {
           />
         </label>
 
-        <label className="af-au-field">
+        <div className="af-au-field">
           <span className="af-au-field-head">
             <span className="af-label">Password</span>
             <Link href="/forgot-password" className="af-au-forgot">
               Forgot password?
             </Link>
           </span>
-          <input
-            name="password"
-            type="password"
+          <PasswordField
+            label="Password"
+            value={password}
+            onChange={setPassword}
             autoComplete="current-password"
             placeholder="••••••••••"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
           />
-        </label>
+        </div>
 
         {error ? (
           <p className="af-au-error" role="alert">
@@ -278,14 +381,13 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
 
   return (
     <div className="af-au-card">
+      {/* Sign-in has no step bar — it is not part of the 3-step journey. */}
+      <StepBar current={1} total={3} />
       <header className="af-au-head">
         <div>
           <h1 className="af-au-title">Create your account</h1>
           <p className="af-au-sub">Step 1 of 3 · free forever for players.</p>
         </div>
-        <span className="af-au-switch">
-          Already have an account? <Link href="/login">Sign in</Link>
-        </span>
       </header>
 
       <form className="af-au-form" onSubmit={onSubmit}>
@@ -311,17 +413,17 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           />
         </label>
 
-        <label className="af-au-field">
+        <div className="af-au-field">
           <span className="af-label">Password</span>
-          <input
-            type="password"
+          <PasswordField
+            label="Password"
+            value={password}
+            onChange={setPassword}
             autoComplete="new-password"
             minLength={8}
             placeholder="8+ characters"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
           />
-        </label>
+        </div>
 
         <label className="af-au-check">
           <input
@@ -382,10 +484,28 @@ export function AuthV4({ mode }: { mode: AuthMode }) {
         the page (verified: no a[href="/"] in the DOM). The handoff's top bar is
         brand-left, cross-link-right, and the brand is the home affordance.
       */}
+      {/*
+        Top bar: brand left, the opposite-mode cross-link right. The handoff puts
+        the cross-link here rather than inside the card, and that is the better
+        place for it — it is reachable before the reader has scrolled or started
+        filling anything in, and it stays put as the card grows.
+      */}
       <div className="af-au-brand">
-        <Link href="/" className="af-au-wordmark" aria-label="AllFantasy — back to home">
-          AllFantasy
+        <Link href="/" className="af-au-home" aria-label="AllFantasy — back to home">
+          <Shield />
+          <span className="af-au-wordmark">AllFantasy</span>
         </Link>
+        <span className="af-au-switch">
+          {mode === 'signup' ? (
+            <>
+              Already have an account? <Link href="/login">Sign in</Link>
+            </>
+          ) : (
+            <>
+              New here? <Link href="/signup">Create account</Link>
+            </>
+          )}
+        </span>
       </div>
       {/*
         ⚠ THE SUSPENSE BOUNDARY IS NOT DECORATION — IT KEEPS THE FORM USABLE.
