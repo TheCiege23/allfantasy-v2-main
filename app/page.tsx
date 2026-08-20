@@ -14,9 +14,11 @@ import {
 } from '@/lib/i18n/landing-copy'
 import {
   buildSeoMeta,
+  getFAQPageSchema,
   getSoftwareApplicationSchema,
   getWebPageSchema,
 } from '@/lib/seo'
+import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
 
 /**
  * Landing page (Nocturne "1a" design). Replaces the legacy scrollytelling
@@ -53,7 +55,9 @@ export async function generateMetadata({
   searchParams?: HomeSearchParams
 }): Promise<Metadata> {
   const lang = resolveLandingLang(searchParams?.lang)
-  const copy = getLandingCopy(lang)
+  // The metadata strings quote no price, but getLandingCopy now requires the
+  // range so no caller can render the copy without the live catalog behind it.
+  const copy = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
 
   return buildSeoMeta({
     title: copy.meta.title,
@@ -121,9 +125,25 @@ export default async function HomePage({
     redirect('/dashboard')
   }
 
+  /*
+   * FAQPage structured data, built from the SAME array the page renders.
+   *
+   * The handoff requires the visible answers and the structured FAQ data to stay
+   * in sync. Deriving the schema from `copy.faq.items` rather than maintaining a
+   * second list makes that true by construction — including the cost answer,
+   * whose figures come from the catalog, so the rich result cannot advertise a
+   * price the checkout no longer charges.
+   *
+   * Unlike the two schemas above this cannot be a module constant: it is
+   * language-dependent, and a Spanish page emitting English Q&A would be worse
+   * than emitting none.
+   */
+  const copy = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
+  const faqSchema = getFAQPageSchema(copy.faq.items)
+
   return (
     <>
-      <PageJsonLd schemas={[HOME_WEBPAGE_SCHEMA, HOME_SOFTWARE_APP_SCHEMA]} />
+      <PageJsonLd schemas={[HOME_WEBPAGE_SCHEMA, HOME_SOFTWARE_APP_SCHEMA, faqSchema]} />
       <Suspense fallback={null}>
         <LandingInviteCapture />
       </Suspense>
