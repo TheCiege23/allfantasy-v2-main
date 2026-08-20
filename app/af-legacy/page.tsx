@@ -1,6 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react'
+import { GracefulImage } from '@/components/media/GracefulImage'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { XP_PER_LEVEL, TIERS } from "@/lib/ranking/config"
@@ -5337,13 +5338,25 @@ function AFLegacyContent() {
                                   </li>
                                 </ul>
                                 
-                                <div className="rounded-2xl overflow-hidden border border-white/10 mb-5">
-                                  <img 
-                                    src="/attached_assets/image_1770140689327.png" 
-                                    alt="How to find Fantrax User ID" 
-                                    className="w-full"
-                                  />
-                                </div>
+                                {/*
+                                  ⚠ THIS SCREENSHOT IS MISSING FROM public/ AND
+                                  404s IN PRODUCTION. It was a bare <img>, so it
+                                  rendered the browser's broken-image glyph
+                                  inside a bordered box — in a help modal, in the
+                                  middle of someone connecting a Fantrax league.
+                                  The three numbered steps above say the same
+                                  thing in words, so the picture is supplementary
+                                  and hiding it leaves the modal usable.
+                                  GracefulImage drops the frame too; hiding only
+                                  the image would leave an empty bordered box
+                                  that looks equally broken.
+                                */}
+                                <GracefulImage
+                                  src="/attached_assets/image_1770140689327.png"
+                                  alt="How to find Fantrax User ID"
+                                  wrapperClassName="rounded-2xl overflow-hidden border border-white/10 mb-5"
+                                  className="w-full"
+                                />
                                 
                                 <div className="flex justify-end gap-3">
                                   <button onClick={() => setShowFantraxHelp(false)} className="px-4 py-2 rounded-xl text-sm text-white/60 hover:text-white transition">
