@@ -77,7 +77,13 @@ function isFiniteEpochMs(n: unknown): n is number {
 /** Convert Sleeper transactions (trades / waivers / free-agent moves) into raw imported activity. */
 export function emitSleeperTransactionActivity(
   transactions: readonly SleeperTransactionRaw[],
-  ctx: { leagueId: string; rosterOwnerMap: ReadonlyMap<number, string | null> },
+  ctx: {
+    /** Sleeper's own `league_id` — NOT AllFantasy's canonical `League.id` (that is `afLeagueId`). */
+    leagueId: string
+    /** AllFantasy canonical `League.id` when this Sleeper league is mapped to one, else null. */
+    afLeagueId?: string | null
+    rosterOwnerMap: ReadonlyMap<number, string | null>
+  },
 ): { raws: RawImportedActivity[]; skipped: SleeperEmitterSkip[] } {
   const raws: RawImportedActivity[] = []
   const skipped: SleeperEmitterSkip[] = []
@@ -102,6 +108,7 @@ export function emitSleeperTransactionActivity(
     raws.push({
       provider: 'sleeper',
       leagueId: ctx.leagueId,
+      afLeagueId: ctx.afLeagueId ?? null,
       activityType,
       providerEventId,
       // Sleeper's `created` is an epoch-ms real timestamp; never substituted when absent/invalid.
@@ -128,7 +135,10 @@ export function emitSleeperTransactionActivity(
 export function emitSleeperDraftPickActivity(
   picks: readonly SleeperDraftPickRaw[],
   ctx: {
+    /** Sleeper's own `league_id` — NOT AllFantasy's canonical `League.id` (that is `afLeagueId`). */
     leagueId: string
+    /** AllFantasy canonical `League.id` when this Sleeper league is mapped to one, else null. */
+    afLeagueId?: string | null
     rosterOwnerMap: ReadonlyMap<number, string | null>
     /** Real timestamp for these picks if known (e.g. draft start_time); never invented if absent. */
     occurredAt: string | null
@@ -151,6 +161,7 @@ export function emitSleeperDraftPickActivity(
     raws.push({
       provider: 'sleeper',
       leagueId: ctx.leagueId,
+      afLeagueId: ctx.afLeagueId ?? null,
       activityType: 'draft_pick',
       providerEventId,
       occurredAt: ctx.occurredAt,
@@ -180,7 +191,16 @@ export interface SleeperIngestionResult {
  */
 export async function ingestSleeperImportedActivity(
   input: {
-    leagueId: string
+    /**
+     * Sleeper's own `league_id` (e.g. "1314303191852011520"). Deliberately NOT named `leagueId`:
+     * this entry point previously took an ambiguous `leagueId`, and BOTH production call sites
+     * passed AllFantasy's canonical `League.id` instead — writing the canonical uuid into
+     * `providerLeagueId` and into the `externalSourceKey` idempotency key. The explicit name makes
+     * that mistake a type error rather than a silent data corruption.
+     */
+    providerLeagueId: string
+    /** AllFantasy canonical `League.id` when this Sleeper league is mapped to one; null if external-only. */
+    afLeagueId?: string | null
     transactions?: readonly SleeperTransactionRaw[]
     draftPicks?: readonly SleeperDraftPickRaw[]
     rosters?: readonly SleeperRosterRaw[]
@@ -193,11 +213,13 @@ export async function ingestSleeperImportedActivity(
   const rosterOwnerMap = buildRosterOwnerMap(input.rosters ?? [])
 
   const txResult = emitSleeperTransactionActivity(input.transactions ?? [], {
-    leagueId: input.leagueId,
+    leagueId: input.providerLeagueId,
+    afLeagueId: input.afLeagueId ?? null,
     rosterOwnerMap,
   })
   const pickResult = emitSleeperDraftPickActivity(input.draftPicks ?? [], {
-    leagueId: input.leagueId,
+    leagueId: input.providerLeagueId,
+    afLeagueId: input.afLeagueId ?? null,
     rosterOwnerMap,
     occurredAt: input.draftPicksOccurredAt ?? null,
   })
