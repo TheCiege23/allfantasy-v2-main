@@ -7,6 +7,7 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { getPlayerDetail, getRelatedPlayers, resolvePublicPlayer } from '@/lib/core-app/playerFinder'
 import { parsePlayerSlug, playerPath, playerSlug } from '@/lib/core-app/playerSlug'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+import { getOgImageUrl } from '@/lib/seo/SocialShareMetadataService'
 import Link from 'next/link'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -131,19 +132,26 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
     title,
     description,
     alternates: { canonical: url },
+    /*
+     * ⚠ ALWAYS AN IMAGE, BECAUSE DECLARING `openGraph` REPLACES THE PARENT'S.
+     * Next does not deep-merge metadata objects, so omitting `images` here left
+     * a player with no headshot on file with NO og:image at all rather than
+     * inheriting the site default. Most players do have a cutout; the ones that
+     * do not were previewing as a bare text card.
+     */
     openGraph: {
       type: 'profile',
       url,
       title,
       description,
       siteName: 'AllFantasy',
-      ...(player?.imageUrl ? { images: [{ url: player.imageUrl, alt: identity.name }] } : {}),
+      images: [{ url: player?.imageUrl || getOgImageUrl(), alt: identity.name }],
     },
     twitter: {
-      card: player?.imageUrl ? 'summary_large_image' : 'summary',
+      card: 'summary_large_image',
       title,
       description,
-      ...(player?.imageUrl ? { images: [player.imageUrl] } : {}),
+      images: [player?.imageUrl || getOgImageUrl()],
     },
   }
 }

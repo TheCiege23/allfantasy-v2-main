@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { prisma } from '@/lib/prisma'
 import { playerPath } from '@/lib/core-app/playerSlug'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+import { getOgImageUrl } from '@/lib/seo/SocialShareMetadataService'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
 
@@ -51,6 +52,21 @@ export const metadata: Metadata = {
     title: 'NFL Players – Fantasy Stats, Injuries & Projections – AllFantasy',
     description:
       'Every NFL player AllFantasy tracks, by position. Projections, injury designations and season statistics.',
+    /*
+     * ⚠ DECLARING `openGraph` WITHOUT `images` DROPS THE SITE DEFAULT ENTIRELY.
+     * Next REPLACES the openGraph object from a parent rather than deep-merging
+     * it, so this page shipped with NO og:image at all — verified on production,
+     * where /players returned no og:image tag while /tools-hub returned the
+     * default. Any link to this page previewed as a bare text card.
+     */
+    images: [{ url: getOgImageUrl(), alt: 'AllFantasy' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'NFL Players – Fantasy Stats, Injuries & Projections – AllFantasy',
+    description:
+      'Every NFL player AllFantasy tracks, by position. Projections, injury designations and season statistics.',
+    images: [getOgImageUrl()],
   },
 }
 
