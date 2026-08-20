@@ -3,13 +3,12 @@
  * Probes SportsNews and examines PlayerNewsRecord playerId namespace.
  */
 import { PrismaClient } from '@prisma/client'
+import { assertNonProductionDbTarget } from './_db-target-identity'
 
 const prisma = new PrismaClient({ log: [] })
 
 void (async () => {
-  const host = process.env.DATABASE_URL?.match(/@([^/]+)\//)?.[1] ?? 'unknown'
-  console.log(`DB host: ${host}`)
-  if (host.includes('ep-spring-tooth')) { console.error('HARD REFUSE'); process.exit(1) }
+  assertNonProductionDbTarget({ script: 'probe-news-coverage2', action: 'reads coverage counts' })
 
   // SportsNews
   const snTotal = await prisma.sportsNews.count()
