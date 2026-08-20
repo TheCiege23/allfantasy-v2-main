@@ -64,6 +64,14 @@ export type DraftHQData = {
     resolvedPlayers: number
     rosterSize: number
   } | null
+  /**
+   * Per-queue-row confidence from the recommendation engine, keyed by queue row id.
+   * `unavailable` carries WHY, because "no score" and "pool still warming" are different
+   * answers and a manager deserves to know which one they are looking at.
+   */
+  queueConfidence:
+    | { status: 'ready'; scores: Record<string, number>; matched: number; total: number }
+    | { status: 'unavailable'; reason: 'no_queue' | 'pool_cold' | 'pool_empty' }
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -87,7 +95,8 @@ function relativeDay(iso: string): string {
 }
 
 export default function DraftHQ({ data }: { data: DraftHQData }) {
-  const { lottery, queue, settings, lastMock, pickInventory, positionalNeed } = data
+  const { lottery, queue, settings, lastMock, pickInventory, positionalNeed, queueConfidence } =
+    data
 
   return (
     <div className="mx-auto max-w-[1200px] space-y-5 px-4 py-6">
@@ -235,10 +244,44 @@ export default function DraftHQ({ data }: { data: DraftHQData }) {
                         </span>
                       ) : null}
                     </span>
+                    {/*
+                      Handoff: >=80 reads good, below reads borderline. A player the pool did not
+                      match shows a dash rather than inheriting a neighbour's number.
+                    */}
+                    {queueConfidence.status === 'ready' ? (
+                      <span
+                        data-testid={`queue-confidence-${q.id}`}
+                        className={`shrink-0 font-mono text-xs font-bold tabular-nums ${
+                          queueConfidence.scores[q.id] == null
+                            ? 'text-white/25'
+                            : queueConfidence.scores[q.id] >= 80
+                              ? 'text-emerald-400'
+                              : 'text-amber-400'
+                        }`}
+                      >
+                        {queueConfidence.scores[q.id] ?? '—'}
+                      </span>
+                    ) : null}
                   </li>
                 ))}
               </ol>
             )}
+            {queue.length > 0 && queueConfidence.status === 'ready' ? (
+              <p className="mt-3 text-xs text-white/40">
+                Confidence is this league&apos;s scoring and your roster holes, from the same engine
+                the draft room uses.
+                {queueConfidence.matched < queueConfidence.total
+                  ? ` ${queueConfidence.matched} of ${queueConfidence.total} matched the current player pool.`
+                  : ''}
+              </p>
+            ) : null}
+            {queue.length > 0 && queueConfidence.status === 'unavailable' &&
+            queueConfidence.reason === 'pool_cold' ? (
+              <p className="mt-3 text-xs text-white/40">
+                Confidence scores aren&apos;t ready — the player pool is still warming up. They
+                appear next time you open this page.
+              </p>
+            ) : null}
           </Card>
         </div>
 
@@ -326,9 +369,8 @@ export default function DraftHQ({ data }: { data: DraftHQData }) {
               Same principle as the standings source note.
             */}
             <p className="text-xs leading-relaxed text-white/50">
-              Per-player confidence scores aren&apos;t wired yet — those need the full draft pool
-              scored, and the number would drive the queue&apos;s sort order as well as its colour,
-              so we&apos;d rather show nothing than a figure we can&apos;t stand behind.
+              Chimmy&apos;s draft verdict isn&apos;t here — that&apos;s a generated read on your
+              roster, and we only generate it on demand rather than on every page view.
               {positionalNeed ? '' : ' Positional need is hidden here because your roster couldn’t be resolved.'}
             </p>
           </Card>

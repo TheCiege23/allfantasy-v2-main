@@ -10,6 +10,12 @@ import { resolvePickOwner } from '@/lib/live-draft-engine/PickOwnershipResolver'
 import { computeNeeds } from '@/lib/draft-helper/RecommendationEngine'
 import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
+import { computeDraftPlayerRankings } from '@/lib/draft-helper/RecommendationEngine'
+import {
+  checkDraftPoolCacheFast,
+  triggerDraftPoolPrewarmBackground,
+} from '@/lib/draft-room/ensureDraftPoolReady'
+import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import DraftHQ, { type DraftHQData } from '@/components/draft-hq/DraftHQ'
 
 /**
@@ -172,6 +178,10 @@ export default async function DraftHQPage({
    * resolved players.
    */
   let positionalNeed: DraftHQData['positionalNeed'] = null
+  let rosterPlayers: { position: string }[] = []
+  let rosterSlots: string[] = []
+  const sport = String(league.sport ?? 'NFL')
+
   if (viewerRoster) {
     const rosterRow = await prisma.roster
       .findUnique({ where: { id: viewerRoster.id }, select: { playerData: true } })
@@ -186,13 +196,14 @@ export default async function DraftHQPage({
         getEffectiveLeagueRosterTemplate(leagueId).catch(() => null),
       ])
 
+      rosterPlayers = players
+      rosterSlots = (template?.template?.slots ?? []).flatMap(
+        (slot: { slot?: string; starterCount?: number }) =>
+          Array.from({ length: Number(slot.starterCount) || 0 }, () => String(slot.slot ?? '')),
+      )
+
       // A join that resolved nothing is missing data, not an empty roster.
       if (players.length > 0) {
-        const rosterSlots = (template?.template?.slots ?? []).flatMap(
-          (slot: { slot?: string; starterCount?: number }) =>
-            Array.from({ length: Number(slot.starterCount) || 0 }, () => String(slot.slot ?? '')),
-        )
-        const sport = String(league.sport ?? 'NFL')
         const needs = computeNeeds(players, rosterSlots, false, [], sport, false)
         const rows = Object.entries(needs)
           .map(([position, need]) => ({ position, solved: Math.round(100 - need) }))
@@ -201,6 +212,81 @@ export default async function DraftHQPage({
           rows,
           resolvedPlayers: players.length,
           rosterSize: playerIds.length,
+        }
+      }
+    }
+  }
+
+  /*
+   * Queue confidence, from the same engine that scores the live draft room.
+   *
+   * CONFIDENCE IS POOL-RELATIVE, SO THE WHOLE POOL IS REQUIRED. The score is
+   * `55 + totalScore * 0.6`, and totalScore folds in VORP (needs a replacement level), tier
+   * dropoff (needs the tier structure) and an ADP edge whose fallback is the player's rank WITHIN
+   * the pool. Scoring ten queued players in isolation returns numbers that look exactly like real
+   * ones and mean nothing.
+   *
+   * ONLY WHEN THE POOL IS ALREADY WARM. Building it cold is the expensive path the draft room
+   * prewarms in the background for good reason, and a planning screen must not pay that on a page
+   * view. Cold means: start the same background prewarm the room uses, and say the scores are not
+   * ready yet. Never block, never invent.
+   */
+  let queueConfidence: DraftHQData['queueConfidence'] = { status: 'unavailable', reason: 'no_queue' }
+  if (queue.length > 0 && rosterPlayers.length > 0) {
+    const readiness = await checkDraftPoolCacheFast(leagueId).catch(() => null)
+    if (!readiness?.warm) {
+      triggerDraftPoolPrewarmBackground(leagueId)
+      queueConfidence = { status: 'unavailable', reason: 'pool_cold' }
+    } else {
+      const pool = await getResolvedDraftPoolForLeague(leagueId).catch(() => null)
+      const available = (pool?.entries ?? []).map((e) => ({
+        name: e.name,
+        position: e.position,
+        team: e.team,
+        adp: e.adp ?? null,
+        byeWeek: e.byeWeek ?? null,
+      }))
+
+      const ranked =
+        available.length > 0
+          ? computeDraftPlayerRankings({
+              available,
+              teamRoster: rosterPlayers,
+              rosterSlots,
+              // Pre-draft: score from this manager's own first slot, which is what a queue is for.
+              round: pickInventory[0]?.round ?? 1,
+              pick: 1,
+              totalTeams: league.leagueSize ?? 12,
+              sport,
+              isDynasty: String(league.leagueType ?? '').toLowerCase() === 'dynasty',
+            })
+          : null
+
+      if (!ranked) {
+        queueConfidence = { status: 'unavailable', reason: 'pool_empty' }
+      } else {
+        /*
+         * Matched on the engine's OWN key (name|position|team, lowercased) so this screen and the
+         * draft room agree on what counts as the same player. A queued player whose team has since
+         * changed simply will not match, which shows a dash — the right answer — rather than
+         * borrowing someone else's score.
+         */
+        const byKey = new Map(ranked.scored.map((r) => [ranked.playerKey(r.player), r.confidence]))
+        const scores: Record<string, number> = {}
+        for (const q of queue) {
+          const key = ranked.playerKey({
+            name: q.playerName ?? '',
+            position: q.position ?? '',
+            team: q.team ?? '',
+          })
+          const c = byKey.get(key)
+          if (typeof c === 'number') scores[q.id] = Math.round(c)
+        }
+        queueConfidence = {
+          status: 'ready',
+          scores,
+          matched: Object.keys(scores).length,
+          total: queue.length,
         }
       }
     }
@@ -230,6 +316,7 @@ export default async function DraftHQPage({
       : null,
     pickInventory,
     positionalNeed,
+    queueConfidence,
     viewerHasRoster: Boolean(viewerRoster),
   }
 
