@@ -17,6 +17,7 @@ import {
 } from "@/lib/connected-accounts"
 import { ConnectedIdentityRenderer } from "@/components/connected-accounts/ConnectedIdentityRenderer"
 import { EspnCookieConnection } from "@/components/settings/EspnCookieConnection"
+import { FantraxConnection } from "@/components/settings/FantraxConnection"
 import type { SettingsProfile } from "./settings-types"
 
 const IMPORT_PLATFORM_IDS = ["yahoo", "espn", "mfl", "fleaflicker", "fantrax"] as const
@@ -447,6 +448,7 @@ export function ConnectedAccountsSettingsSection({
                 </Link>
               </div>
               {id === "espn" && <EspnCookieConnection />}
+              {id === "fantrax" && <FantraxConnection />}
             </li>
           ))}
         </ul>

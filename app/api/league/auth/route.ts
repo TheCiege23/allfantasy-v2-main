@@ -50,6 +50,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'MFL requires an API key' }, { status: 400 });
     }
 
+    /*
+     * Fantrax authenticates with the userSecretId from the account holder's Fantrax
+     * profile screen, stored in the same encrypted apiKey column. Validated here so an
+     * empty submission fails loudly instead of upserting a row that reports "connected"
+     * while holding nothing -- which is the exact shape of bug that made a Sleeper sync
+     * return HTTP 200 while doing no work.
+     */
+    if (normalizedPlatform === 'fantrax' && !apiKey) {
+      return NextResponse.json({ error: 'Fantrax requires your Secret ID' }, { status: 400 });
+    }
+
     if (normalizedPlatform === 'yahoo' && !oauthToken) {
       return NextResponse.json({ error: 'Yahoo requires an OAuth token' }, { status: 400 });
     }
