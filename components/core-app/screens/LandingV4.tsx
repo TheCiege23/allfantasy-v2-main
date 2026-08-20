@@ -126,7 +126,10 @@ function Shield() {
   )
 }
 
-export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang } = {}) {
+export function LandingV4({
+  lang = DEFAULT_LANDING_LANG,
+  signedIn = false,
+}: { lang?: LandingLang; signedIn?: boolean } = {}) {
   /*
    * ⚠ THE PRICES ARE READ FROM THE CATALOG HERE, NOT TYPED INTO THE COPY.
    *
@@ -140,6 +143,20 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
    * await — so it is free to do inside a server component.
    */
   const c = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
+
+  /*
+   * Every "sign up" affordance on this page has a second meaning once the reader
+   * already has an account. `/` now serves this page to signed-in visitors too
+   * (it used to redirect them to /dashboard, which is what made the domain land
+   * people on /login — see app/page.tsx), so "Get started free" pointing at
+   * /signup would be asking a customer to register twice.
+   *
+   * Defined once and used for all three CTAs — nav, hero and pricing band — so
+   * they cannot drift into disagreeing about who the reader is.
+   */
+  const primaryCta = signedIn
+    ? { href: '/dashboard', label: c.nav.goToDashboard }
+    : { href: '/signup', label: c.nav.getStarted }
 
   return (
     /*
@@ -174,7 +191,8 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
 
         <div className="af-lp-nav-right">
           <LangSwitch lang={lang} label={c.nav.langLabel} />
-          <Link href="/login">{c.nav.signIn}</Link>
+          {/* "Sign in" is noise to someone already signed in. */}
+          {signedIn ? null : <Link href="/login">{c.nav.signIn}</Link>}
           {/* Partners points at the B2B screen, which is served by the
               /core catch-all as the `partners` segment — no extra route. It was
               previously an in-page #business anchor, which became a dead link
@@ -184,8 +202,8 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
             {c.nav.partners}
             <span className="af-lp-api-chip af-num">API</span>
           </Link>
-          <Link href="/signup" className="af-btn af-lp-cta">
-            {c.nav.getStarted}
+          <Link href={primaryCta.href} className="af-btn af-lp-cta">
+            {primaryCta.label}
           </Link>
         </div>
       </nav>
@@ -201,8 +219,8 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
           </h1>
           <p className="af-lp-sub">{c.hero.sub}</p>
           <div className="af-lp-hero-ctas">
-            <Link href="/signup" className="af-btn af-lp-cta-lg">
-              {c.hero.ctaPrimary}
+            <Link href={primaryCta.href} className="af-btn af-lp-cta-lg">
+              {signedIn ? primaryCta.label : c.hero.ctaPrimary}
             </Link>
             <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">
               {c.hero.ctaSecondary}
@@ -310,8 +328,8 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
             <p className="af-lp-pricing-body">{c.pricing.body}</p>
           </div>
           <div className="af-lp-pricing-ctas">
-            <Link href="/signup" className="af-btn">
-              {c.pricing.ctaPrimary}
+            <Link href={primaryCta.href} className="af-btn">
+              {signedIn ? primaryCta.label : c.pricing.ctaPrimary}
             </Link>
             <Link href="/pricing" className="af-btn af-btn--ghost">
               {c.pricing.ctaSecondary}

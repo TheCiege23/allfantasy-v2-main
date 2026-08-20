@@ -46,6 +46,8 @@ export type LandingCopy = {
     pricing: string
     forCommissioners: string
     signIn: string
+    /** Primary CTA when the reader is already signed in. */
+    goToDashboard: string
     partners: string
     getStarted: string
     langLabel: string
@@ -97,6 +99,7 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
     pricing: 'Pricing',
     forCommissioners: 'For commissioners',
     signIn: 'Sign in',
+    goToDashboard: 'Go to dashboard',
     partners: 'Partners',
     getStarted: 'Get started free',
     langLabel: 'Language',
@@ -223,6 +226,7 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
     pricing: 'Precios',
     forCommissioners: 'Para comisionados',
     signIn: 'Iniciar sesión',
+    goToDashboard: 'Ir al panel',
     partners: 'Socios',
     getStarted: 'Empieza gratis',
     langLabel: 'Idioma',
