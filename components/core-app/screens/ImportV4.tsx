@@ -2,6 +2,24 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
+/*
+ * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING — the same omission that shipped on the landing
+ * page and again on LeagueHome. This screen's root is <div className="af-core af-im">, and the
+ * `.af-core` token layer (--surface, --line, --accent, --text2 …) plus the shared primitives it
+ * carries (.af-platform, .af-btn, .af-label, .af-chip, .af-readonly, .af-num) all live in
+ * af-core.css. af-import.css defines only the `af-im-*` rules on top of them.
+ *
+ * Without this import nothing throws and nothing 404s: every var() resolves to nothing, so the
+ * platform cards paint transparent with 0px borders, the buttons lose their chrome and render as
+ * bare text, and the screen reads as a broken/older design. It looked FINE whenever the user
+ * arrived by client-side navigation from a screen that had already imported af-core.css (AuthV4,
+ * LandingV4, PricingV4 …) and broken on a direct load or hard refresh of /import — which is what
+ * made it appear to "keep reverting".
+ *
+ * It has to be a JS import, not an `@import` inside af-import.css: per app/layout.tsx, an @import
+ * inside a route-bundled CSS file is dropped whenever another af-*.css is concatenated ahead of it.
+ */
+import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-import.css'
 import {
   IMPORT_PROVIDER_UI_OPTIONS,
