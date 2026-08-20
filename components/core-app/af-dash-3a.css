@@ -379,3 +379,52 @@
   .af3a-urgent { flex-wrap: wrap; }
   .af3a-btn { width: 100%; min-height: 44px; }
 }
+
+/* ── Win probability on a matchup card ────────────────────────────────────── */
+.af3a-win { color: var(--warn); font-weight: 800; }
+
+/* ── Rivalry radar ────────────────────────────────────────────────────────── */
+.af3a-rivals { display: grid; gap: 4px; }
+.af3a-rival { display: flex; align-items: center; gap: 11px; padding: 9px 4px; }
+.af3a-rival-av {
+  display: grid; place-items: center;
+  width: 30px; height: 30px; flex: none;
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text2);
+  font: 800 12px/1 'Archivo', system-ui, sans-serif;
+}
+.af3a-rival-body { min-width: 0; flex: 1; }
+.af3a-rival-body b { display: block; font: 700 13px/1.3 'Archivo', system-ui, sans-serif; }
+.af3a-rival-body em {
+  color: var(--muted);
+  font: 400 11px/1.35 'Archivo', system-ui, sans-serif;
+  font-style: normal;
+}
+.af3a-rival > b { font: 800 13px/1 'JetBrains Mono', monospace; white-space: nowrap; }
+
+/* ── Player exposure ──────────────────────────────────────────────────────── */
+.af3a-exposure { display: grid; gap: 9px; }
+.af3a-exp { display: flex; align-items: center; gap: 10px; }
+.af3a-exp-name {
+  width: 108px; flex: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 13px/1.3 'Archivo', system-ui, sans-serif;
+}
+.af3a-exp-name em { color: var(--muted); font-style: normal; font-size: 11px; }
+.af3a-exp-bar {
+  flex: 1; min-width: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af3a-exp-bar > span { display: block; height: 100%; border-radius: 999px; }
+.af3a-exp-full { background: var(--accent); }
+.af3a-exp-part { background: var(--warn); }
+.af3a-exp-count { flex: none; color: var(--text2); font: 700 11px/1 'JetBrains Mono', monospace; }
+.af3a-exp-note {
+  margin-top: 11px;
+  color: var(--muted);
+  font: 400 12px/1.5 'Archivo', system-ui, sans-serif;
+}

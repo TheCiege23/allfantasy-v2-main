@@ -16,6 +16,8 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
+import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
+import { getMatchupData } from '@/lib/core-app/matchup'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import { deriveOutstandingIssues } from '@/lib/core-app/outstandingIssues'
@@ -228,9 +230,44 @@ export default async function DashboardPage({
       }
     }
 
+    /*
+     * The three panels 3a first shipped as "no engine exists". Each is real; see
+     * lib/core-app/dash3aPanels.ts for why that claim was wrong.
+     *
+     * Bounded deliberately. Exposure and rivals read every played league, but the
+     * win probability is resolved ONLY for the leagues whose cards are actually
+     * rendered — getMatchupData runs several queries per league, and pricing 60
+     * of them to display four would be work nobody sees.
+     */
+    const matchupLeagueIds = playedLeagues.slice(0, 4).map((l) => l.id)
+    const [exposure, rivals, matchups] = await Promise.all([
+      getCrossLeagueExposure(userId, playedLeagues.map((l) => l.id)).catch(() => null),
+      getRivalRecords(userId, playedLeagues.map((l) => l.id)).catch(() => null),
+      Promise.all(
+        matchupLeagueIds.map((id) =>
+          getMatchupData(id, userId)
+            .then((m) => ({ id, m }))
+            .catch(() => ({ id, m: null })),
+        ),
+      ),
+    ])
+
+    /*
+     * Only leagues whose BOTH lineups priced land here. An absent entry renders no
+     * percentage at all rather than a hedged one — a greyed-out probability still
+     * reads as a probability.
+     */
+    const winProb: Record<string, number> = {}
+    for (const { id, m } of matchups) {
+      if (m?.winProbability.available) winProb[id] = m.winProbability.data.pWin
+    }
+
     return (
       <Dashboard3A
         issues={issuesAll}
+        exposure={exposure}
+        rivals={rivals}
+        winProb={winProb}
         data={dash34}
         career={career}
         week={week}

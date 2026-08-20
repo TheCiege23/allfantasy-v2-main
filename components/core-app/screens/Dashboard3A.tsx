@@ -15,6 +15,7 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import type { CareerData } from '@/lib/core-app/career'
 import type { WeekAllData } from '@/lib/core-app/weekAll'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
+import type { ExposureData, RivalsData, PanelState } from '@/lib/core-app/dash3aPanels'
 
 /**
  * Screen 3a — Dashboard, all leagues.
@@ -43,21 +44,29 @@ import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
  *   NAME — then `WeekAllData.rows` for the rest, which is scored history without
  *   an opponent. A league appears once.
  *
- *   NOT REAL, AND SAID SO IN WORDS —
- *     - WIN PROBABILITY on the matchup cards. Neither source has projections or
- *       players-left-to-play, so the design's "71% win" has nothing behind it. 3b
- *       reached the same conclusion about the same number. It is the most
- *       authoritative-looking figure on the screen and inventing it is the one
- *       thing the handoff's own build rule forbids.
- *     - PLAYER EXPOSURE ("J. Jefferson · 4 of 4"). Needs per-roster player rows
- *       joined across leagues. `PortfolioData` is league inventory, not players.
- *     - RIVALRY RADAR. No head-to-head history exists, and nothing records when a
- *       manager is usually online.
+ *   ALSO REAL, AFTER A CORRECTION. This screen first shipped declaring win
+ *   probability, player exposure and rivalry records to be engines nobody had
+ *   built. ALL THREE CLAIMS WERE WRONG:
+ *     - WIN PROBABILITY is implemented in `lib/projections/winProbability.ts` and
+ *       already rendered by the per-league Matchup screen. It prices both lineups
+ *       from stored starters against `fantasy_projections`.
+ *     - PLAYER EXPOSURE comes from `Roster.playerData` across your claimed teams,
+ *       resolved to names the way `dash34` already does.
+ *     - RIVALRY RECORDS come from `WeeklyMatchup.matchupId`, which pairs the two
+ *       rosters in a week — so the opponent, and every past meeting, is stored.
+ *   See `lib/core-app/dash3aPanels.ts`. `matchupProjections.ts` carries the same
+ *   lesson in its own header: writing "we don't have this" over data that is
+ *   sitting there is its own kind of lie, and a more expensive one than a gap,
+ *   because nobody goes back to check.
  *
- * Each unbacked panel renders its frame with the reason inside rather than being
- * dropped, so the screen matches the design AND is honest about what is waiting
- * on an engine. A greyed-out "71%" still reads as a win probability, which is
- * why there is no greyed-out 71% here.
+ *   STILL HONESTLY MISSING, and narrowed to what is actually absent —
+ *     - WHEN A RIVAL IS USUALLY ONLINE. Nothing records it.
+ *     - PER-PLAYER WEEKLY SCORING for imported leagues, which is why a win
+ *       probability resolves per league rather than for every card.
+ *
+ * Panels that genuinely have no source keep their frame and state the reason,
+ * rather than rendering a greyed-out number — a greyed-out 71% still reads as a
+ * win probability.
  */
 
 export type Dashboard3AProps = {
@@ -71,6 +80,16 @@ export type Dashboard3AProps = {
   commissionerCount?: number
   /** Server-rendered clock, so the header does not hydrate to a different time. */
   nowLabel?: string | null
+  /** Cross-league roster share. Real — see lib/core-app/dash3aPanels.ts. */
+  exposure?: PanelState<ExposureData> | null
+  /** Head-to-head records from stored weekly results. */
+  rivals?: PanelState<RivalsData> | null
+  /**
+   * Win probability per league id, for the leagues on the matchup cards. Absent
+   * entries are leagues whose lineups could not both be priced — the card simply
+   * shows no probability rather than a hedged one.
+   */
+  winProb?: Record<string, number> | null
 }
 
 const SEV_CLASS: Record<CoreIssue['severity'], string> = {
@@ -124,6 +143,9 @@ export function Dashboard3A({
   tokensLeft = null,
   commissionerCount = 0,
   nowLabel = null,
+  exposure = null,
+  rivals = null,
+  winProb = null,
 }: Dashboard3AProps) {
   const now = new Date()
   const openCount = issues.length
@@ -356,13 +378,21 @@ export function Dashboard3A({
                       <div className="af3a-match-body">
                         <h4>{m.leagueName}</h4>
                         {/*
-                          The design also puts a win% on this card. Neither source
-                          carries projections or players-left-to-play, so there is
-                          nothing to derive it from — and "71% win" is the most
-                          authoritative-looking number on the screen. The opponent is
-                          real when the loader knows it; the probability never is.
+                          Win probability shows ONLY for leagues where both lineups
+                          priced against fantasy_projections. A league that resolves
+                          shows a real number; one that does not shows nothing at all.
+                          Never a hedged or greyed-out percentage — that still reads
+                          as a probability, which is the failure this avoids.
                          */}
-                        <p>{m.note}</p>
+                        <p>
+                          {m.note}
+                          {winProb?.[m.key] != null ? (
+                            <>
+                              {' · '}
+                              <b className="af3a-win">{Math.round(winProb[m.key] * 100)}% win</b>
+                            </>
+                          ) : null}
+                        </p>
                       </div>
                       <div className="af3a-match-score">
                         <b className={`af3a-mono ${m.you >= m.them ? 'af3a-good' : 'af3a-bad'}`}>
@@ -459,19 +489,44 @@ export function Dashboard3A({
             </section>
 
             {/*
-              RIVALRY RADAR — frame kept, contents replaced by the reason. There is
-              no head-to-head store and nothing records when a manager is usually
-              online, so every figure in the design ("2–4 all-time", "usually on Sun
-              10a–12p") would be invented. 3b reached the same conclusion.
+              RIVALRY RADAR — real. WeeklyMatchup.matchupId pairs the two rosters in
+              a week, so every past meeting is stored and the record is counted, not
+              estimated. The design also shows when a rival is usually online; nothing
+              records that, so it is the one line omitted rather than guessed.
              */}
             <section className="af3a-card">
               <header className="af3a-cardhead">
                 <span className="af3a-label">RIVALRY RADAR</span>
+                <Help left>
+                  <b>Who actually beats you.</b>
+                  Counted from every scored week stored for leagues where you have
+                  claimed a team. Ranked by losses to them, not by how often you play.
+                </Help>
               </header>
-              <p className="af3a-reason">
-                Head-to-head records are not stored yet, so there is no honest way to
-                say who your rivals are. Needs a per-matchup opponent history.
-              </p>
+              {rivals?.available ? (
+                <div className="af3a-rivals">
+                  {rivals.data.rows.map((r) => (
+                    <div key={r.key} className="af3a-rival">
+                      <span className="af3a-rival-av">{r.name.slice(0, 1).toUpperCase()}</span>
+                      <span className="af3a-rival-body">
+                        <b>{r.name}</b>
+                        <em>
+                          {r.meetings} {r.meetings === 1 ? 'meeting' : 'meetings'}
+                          {r.sharedLeagues > 1 ? ` · ${r.sharedLeagues} leagues` : ''}
+                          {r.lastResult ? ` · last: ${r.lastResult}` : ''}
+                        </em>
+                      </span>
+                      <b className={`af3a-mono ${r.wins >= r.losses ? 'af3a-good' : 'af3a-bad'}`}>
+                        {r.wins}–{r.losses}
+                      </b>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="af3a-reason">
+                  {rivals?.reason ?? 'Head-to-head records have not been read yet.'}
+                </p>
+              )}
             </section>
           </div>
         </div>
@@ -479,19 +534,49 @@ export function Dashboard3A({
         {/* ── Bottom three-up ────────────────────────────────────────────── */}
         <div className="af3a-bottom">
           {/*
-            PORTFOLIO & EXPOSURE — the design shows player-level roster share
-            ("J. Jefferson · 4 of 4"). That needs per-roster player rows joined
-            across every league; PortfolioData is league inventory, not players.
+            PORTFOLIO & EXPOSURE — real. Counts EVERY rostered player, not just
+            starters: the question is how much of your season rides on one player,
+            and a bench stash is still exposure.
            */}
           <section className="af3a-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">PORTFOLIO &amp; EXPOSURE</span>
+              <Help>
+                <b>How many of your rosters hold the same player.</b>
+                Read from the rosters imported for teams you have claimed. Four of four
+                means every roster we could read has them.
+              </Help>
             </header>
-            <p className="af3a-reason">
-              Player exposure needs every roster read as players, not as leagues. The
-              roster rows are not joined across leagues yet, so there is no share to
-              show.
-            </p>
+            {exposure?.available ? (
+              <>
+                <div className="af3a-exposure">
+                  {exposure.data.rows.map((row) => (
+                    <div key={row.playerId} className="af3a-exp">
+                      <span className="af3a-exp-name">
+                        {row.name}
+                        {row.position ? <em> {row.position}</em> : null}
+                      </span>
+                      <span className="af3a-exp-bar">
+                        <span
+                          className={row.count === row.of ? 'af3a-exp-full' : 'af3a-exp-part'}
+                          style={{ width: `${Math.round((row.count / Math.max(1, row.of)) * 100)}%` }}
+                        />
+                      </span>
+                      <span className="af3a-exp-count af3a-mono">
+                        {row.count} of {row.of}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {exposure.data.note ? (
+                  <p className="af3a-exp-note">{exposure.data.note}</p>
+                ) : null}
+              </>
+            ) : (
+              <p className="af3a-reason">
+                {exposure?.reason ?? 'Roster exposure has not been read yet.'}
+              </p>
+            )}
             <Link className="af3a-cardlink" href="/portfolio">Open Portfolio →</Link>
           </section>
 

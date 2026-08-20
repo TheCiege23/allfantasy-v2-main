@@ -1,6 +1,8 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getMatchupData } from '@/lib/core-app/matchup'
+import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDraftHqAll } from './draftHqAll'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveLeagueStage, isPreDraftOrDrafting } from '@/lib/league-stage/leagueStage'
@@ -116,7 +118,23 @@ export type LeagueHomeData = {
   preSeason: boolean
   standings: SectionState<LeagueStanding[]>
   timeline: SectionState<SeasonStage[]>
-  matchup: UnavailableSection
+  /*
+   * ⚠ THIS WAS `UnavailableSection` AND ITS REASON WAS FALSE. It read "no weekly
+   * matchup or scoring data ingested for imported leagues" while
+   * `lib/core-app/matchup.ts` was already resolving exactly that for the Matchup
+   * screen: WeeklyMatchup rows for the week, both lineups priced against
+   * fantasy_projections, and a real win probability. Promoting it is the move
+   * this file's own UnavailableSection comment prescribes — the compiler then
+   * finds every screen that has to handle real data.
+   */
+  matchup: SectionState<{
+    week: number
+    season: number
+    you: { name: string; points: number }
+    opponent: { name: string; points: number }
+    /** Absent when both lineups could not be priced. Never a hedged number. */
+    winProbability: { pWin: number; detail: string; confidence: string } | null
+  }>
   draftHq: SectionState<{ headline: string; detail: string }>
   commissioner: SectionState<{ openCount: number }>
   buzz: SectionState<Array<{ id: string; actor: string; text: string; at: Date | null }>>
@@ -131,7 +149,22 @@ export type LeagueHomeData = {
    * standing inventory of what needs an engine, and so the panel says what is
    * missing instead of the section quietly not existing.
    */
-  rivalry: UnavailableSection
+  /*
+   * ⚠ ALSO PROMOTED. Head-to-head IS stored: `WeeklyMatchup.matchupId` pairs the
+   * two rosters inside a week, so every past meeting is recoverable. What is
+   * genuinely missing is only WHEN a manager is usually online — so that single
+   * line is dropped rather than guessed.
+   */
+  rivalry: SectionState<
+    Array<{
+      key: string
+      name: string
+      wins: number
+      losses: number
+      meetings: number
+      lastResult: string | null
+    }>
+  >
   syncAge: { label: string; stale: boolean }
 }
 
@@ -385,6 +418,74 @@ export async function getLeagueHomeData(
   ]).catch(() => null)
   const draftRow = draftAll?.rows?.[0] ?? null
 
+  /*
+   * Both of these were previously hardcoded as unavailable with reasons that were
+   * not true. Reusing the SAME resolvers the other screens use, rather than a
+   * second query, so two surfaces cannot disagree about one league's matchup.
+   */
+  const [matchupData, rivalData] = await Promise.all([
+    preSeason ? Promise.resolve(null) : getMatchupData(league.id, userId).catch(() => null),
+    preSeason ? Promise.resolve(null) : getRivalRecords(userId, [league.id]).catch(() => null),
+  ])
+
+  const resolvedMatchup: LeagueHomeData['matchup'] = preSeason
+    ? { available: false, reason: 'no matchups yet \u2014 this league has not drafted' }
+    : matchupData?.sides.available && matchupData.week.available
+      ? {
+          available: true,
+          data: {
+            week: matchupData.week.data.week,
+            season: matchupData.week.data.season,
+            you: {
+              name: matchupData.sides.data.you.teamName,
+              points: matchupData.sides.data.you.points,
+            },
+            opponent: {
+              name: matchupData.sides.data.opponent.teamName,
+              points: matchupData.sides.data.opponent.points,
+            },
+            /*
+             * Carried only when the engine actually produced one. A matchup whose
+             * lineups could not both be priced shows scores and NO percentage,
+             * rather than a hedged one — a hedged probability still reads as a
+             * probability.
+             */
+            winProbability: matchupData.winProbability.available
+              ? {
+                  pWin: matchupData.winProbability.data.pWin,
+                  detail: matchupData.winProbability.data.detail,
+                  confidence: matchupData.winProbability.data.confidence,
+                }
+              : null,
+          },
+        }
+      : {
+          available: false,
+          // The resolver's OWN reason, not a blanket claim about ingestion.
+          reason:
+            (matchupData && !matchupData.sides.available ? matchupData.sides.reason : null) ??
+            'no weekly result is stored for this league yet',
+        }
+
+  const resolvedRivalry: LeagueHomeData['rivalry'] = preSeason
+    ? { available: false, reason: 'no head-to-head yet \u2014 this league has not drafted' }
+    : rivalData?.available
+      ? {
+          available: true,
+          data: rivalData.data.rows.map((r) => ({
+            key: r.key,
+            name: r.name,
+            wins: r.wins,
+            losses: r.losses,
+            meetings: r.meetings,
+            lastResult: r.lastResult,
+          })),
+        }
+      : {
+          available: false,
+          reason: rivalData?.reason ?? 'no scored weeks are stored for this league yet',
+        }
+
   return {
     stage,
     preSeason,
@@ -408,11 +509,7 @@ export async function getLeagueHomeData(
     timeline: preSeason
       ? { available: false, reason: 'the season timeline starts once this league drafts' }
       : buildTimeline(currentWeek, league.settings),
-    // Live matchup needs per-week scoring for imported leagues, which no writer
-    // produces today. The handoff's 71% win probability would be fabricated.
-    matchup: preSeason
-      ? { available: false, reason: 'no matchups yet — this league has not drafted' }
-      : { available: false, reason: 'no weekly matchup or scoring data ingested for imported leagues' },
+    matchup: resolvedMatchup,
     /*
      * ⚠ THIS REASON WAS STALE. It said "pick inventory and lottery odds are not
      * ingested", which is true of the handoff's LOTTERY ODDS and false of the
@@ -449,11 +546,7 @@ export async function getLeagueHomeData(
         }
       : { available: false, reason: 'no draft has been set up for this league' },
     commissioner: { available: false, reason: 'votes and commissioner tasks are not ingested for imported leagues' },
-    rivalry: {
-      available: false,
-      reason:
-        'head-to-head history is not ingested for imported leagues, and nothing records when a manager is usually online',
-    },
+    rivalry: resolvedRivalry,
     buzz: preSeason
       ? { available: false, reason: 'no league activity yet — trades and waivers start after the draft' }
       : { available: false, reason: 'league transactions are not ingested for this platform yet' },
