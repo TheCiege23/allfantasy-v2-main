@@ -25,9 +25,28 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
 }[] = [
   { provider: 'sleeper', label: 'Sleeper', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
   { provider: 'espn', label: 'ESPN', available: true, supportedSports: ['NFL'] },
-  // yahoo discovery lists leagues from the user's CONNECTED Yahoo account (OAuth
-  // use_login=1) — no account identifier input; requires Yahoo connected in League Sync.
-  { provider: 'yahoo', label: 'Yahoo', available: true, supportsDiscovery: true, supportedSports: ['NFL'] },
+  // yahoo: FALSE because YAHOO refuses the app, not because anything here is unfinished.
+  //
+  // The OAuth round-trip is correct and verified end to end in production on 2026-08-20:
+  // redirect_uri registered and matching, `fspt-r` requested, token exchange SUCCEEDS. The
+  // very next call, GET /fantasy/v2/users;use_login=1, comes back:
+  //     "This application is not authorized to perform this action."
+  //
+  // Everything on our side of that line was eliminated one at a time:
+  //   - client id / secret / redirect_uri — proven correct, because the token exchange passed
+  //   - a stale grant predating the permission — the grant was revoked and re-approved, with a
+  //     consent screen shown (a 25-second round trip, versus the 1-second silent replays
+  //     before it). Fresh token, identical refusal.
+  //   - the app's own API permission — "Fantasy Sports - Read" is ticked and persists a reload
+  //
+  // So this is Yahoo declining to grant the app fantasy access. Leaving it selectable meant
+  // every user who picked Yahoo hit a guaranteed dead end, which is worse than saying plainly
+  // that we cannot offer it.
+  //
+  // ⚠ KEEP THE CODE. It is correct and tested. If Yahoo ever approves the app this is a flag
+  // flip, not a rebuild — do not delete lib/yahoo/** or the callback on the assumption it is
+  // dead.
+  { provider: 'yahoo', label: 'Yahoo', available: false, supportsDiscovery: true, supportedSports: ['NFL'] },
   // fantrax: STILL false, but the stated reason is out of date — corrected here so the
   // next person does not re-diagnose a bug that was already fixed.
   //
@@ -38,6 +57,12 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   // fresh upload is no longer orphaned, and the gate (which still fails closed on a null or
   // foreign appUserId) should no longer reject its own uploads.
   //
+  // Verified live 2026-08-20: BOTH routes exist and answer 401 (auth required), not 404 —
+  // POST /api/legacy/fantrax (dispatched from app/api/legacy/[...path]/route.ts, pattern
+  // ["fantrax"]) and POST /api/league/import/fantrax/preview. A working multi-CSV upload UI
+  // also already exists, on app/af-legacy/page.tsx. So the pipeline is reachable today; the
+  // old reason "upload pipeline is not accepting new leagues" was wrong on both counts.
+  //
   // What is NOT yet done, and is what this flag is waiting on:
   //   1. an end-to-end run — upload a CSV as a real account, then import it — which is the
   //      bar the reconciliation guard sets, deliberately, because "the adapter is registered"
@@ -45,6 +70,8 @@ export const IMPORT_PROVIDER_UI_OPTIONS: {
   //   2. ImportV4 has no FIELD_BY_PROVIDER entry for fantrax and it does not support
   //      discovery, so selecting it today renders neither a field nor a discover button:
   //      selectable and impossible to finish. The field needs adding WITH the flip, not after.
+  //      ⚠ And it cannot be a text field: this provider takes UPLOADED CSV EXPORTS, so the
+  //      flip needs a file input, not the one-line entry the other providers use.
   { provider: 'fantrax', label: 'Fantrax', available: false, supportedSports: ['NFL', 'NCAAF'] },
   // mfl: real adapter, but no credential-entry UI exists anywhere for the API key a private league needs.
   { provider: 'mfl', label: 'MyFantasyLeague (MFL)', available: false, supportedSports: ['NFL'] },

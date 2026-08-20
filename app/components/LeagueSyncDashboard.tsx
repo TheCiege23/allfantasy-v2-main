@@ -512,18 +512,25 @@ export default function LeagueSyncDashboard() {
                 <option value="fantrax">Fantrax</option>
               </select>
 
-              {platform === 'yahoo' && !yahooConnected ? (
-                <div className="mb-4">
-                  <p className="text-sm text-slate-300 mb-3">
-                    Connect your Yahoo account first, then enter your league key to sync.
+              {/*
+                ⚠ YAHOO IS NOT CONNECTABLE, AND THE BUTTON MUST NOT SAY OTHERWISE.
+                Yahoo refuses this app fantasy access: OAuth completes, then the first
+                fantasy call returns "This application is not authorized to perform this
+                action" -- with a freshly re-approved grant and the permission ticked on
+                the app. Verified end to end 2026-08-20. Offering the button here sent
+                people through a full Yahoo sign-in to reach a guaranteed failure.
+                Single source of truth is provider-ui-config; this mirrors it.
+              */}
+              {platform === 'yahoo' ? (
+                <div className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4">
+                  <p className="text-sm text-amber-200">
+                    Yahoo has not granted us access to their fantasy data, so Yahoo leagues
+                    cannot be synced right now. There is nothing to fix on your side.
                   </p>
-                  <a
-                    href="/api/league/yahoo-auth"
-                    className="w-full py-3 bg-purple-600 hover:bg-purple-500 rounded-xl font-semibold transition-colors flex items-center justify-center gap-2"
-                  >
-                    <ExternalLink className="w-4 h-4" />
-                    Connect Yahoo Account
-                  </a>
+                  <p className="mt-2 text-sm text-slate-300">
+                    Sleeper works with just your username, and ESPN works once you connect it
+                    in Settings.
+                  </p>
                 </div>
               ) : (
                 <>

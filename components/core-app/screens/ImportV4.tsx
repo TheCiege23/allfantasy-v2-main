@@ -87,7 +87,20 @@ const FIELD_BY_PROVIDER: Partial<
 
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
-  fantrax: 'Upload pipeline is not accepting new leagues yet.',
+  /*
+   * ⚠ SAY WHOSE LIMITATION IT IS. Yahoo is not "coming soon" -- that would imply a date we
+   * control. Yahoo declines to grant this app fantasy access: the OAuth round-trip succeeds
+   * and the very next fantasy call returns "This application is not authorized to perform
+   * this action", with a freshly re-approved grant and the permission ticked on the app.
+   * Leaving it selectable sent every Yahoo user into a guaranteed dead end.
+   */
+  yahoo: 'Yahoo has not granted this app access to their fantasy data. There is nothing to fix on your side, and we cannot import Yahoo leagues until they do.',
+  /*
+   * The old line, "Upload pipeline is not accepting new leagues yet", was wrong twice over:
+   * both Fantrax routes answer 401 rather than 404, and a working multi-CSV upload already
+   * exists on the legacy importer. What is missing is an upload control on THIS screen.
+   */
+  fantrax: 'Fantrax leagues are uploaded as CSV exports rather than connected, and this screen cannot take an upload yet.',
   mfl: 'Private MFL leagues need an API key, and there is no way to enter one yet.',
   fleaflicker: 'No connected path from this flow yet.',
 }
