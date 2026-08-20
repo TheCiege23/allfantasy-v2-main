@@ -209,37 +209,19 @@
   background: var(--surface);
 }
 
-.af-search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/*
+ * The search field primitive moved to af-core.css.
+ *
+ * It is used by two surfaces that do NOT share this stylesheet: the shell's
+ * topbar, and Player Finder's search rail - which renders at /players/{slug}
+ * OUTSIDE AfCoreShell and so never loads this file. Measured before moving it:
+ * on the public page `.af-search` computed to `display:block` with no border and
+ * no radius, and the input painted as a raw white browser control. Only the
+ * topbar's own sizing stays here.
+ */
+.af-shell .af-search {
   flex: 0 1 380px;
-  min-width: 0;
   height: 36px;
-  padding: 0 12px;
-  border-radius: 10px;
-  border: 1px solid var(--line2);
-  background: var(--surface2);
-}
-.af-search-icon {
-  color: var(--faint);
-  font-size: 12px;
-}
-.af-search-input {
-  flex: 1 1 auto;
-  min-width: 0;
-  background: transparent;
-  border: 0;
-  outline: none;
-  color: var(--text);
-  font-size: 13px;
-}
-.af-search-input::placeholder {
-  color: var(--faint);
-}
-.af-search-kbd {
-  font-size: 10px;
-  color: var(--faint);
 }
 
 .af-topbar-right {
