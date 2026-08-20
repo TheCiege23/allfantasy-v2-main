@@ -3,6 +3,28 @@ const path = require('path')
 const { spawn } = require('child_process')
 const { patchManifestRace } = require('./patch-manifest-race.cjs')
 
+/**
+ * Does NODE_OPTIONS already pin a heap size?
+ *
+ * ⚠ NODE ACCEPTS BOTH SPELLINGS AND THIS CHECK USED TO SEE ONLY ONE.
+ * `--max-old-space-size` and `--max_old_space_size` are the same flag to V8. The guards below
+ * matched only the hyphenated form, so a Vercel env var written with underscores looked like
+ * "nothing configured" — and this script appended its own value AFTER it. Node honours the LAST
+ * occurrence, so an explicitly configured heap was silently overridden by this default.
+ *
+ * Observed on a production build, 8-core / 16 GB machine:
+ *   nodeOptions=--max_old_space_size=14979 --max-old-space-size=6144
+ * The 14979 was deliberate and sized for that box. The build died of heap OOM at ~5.2 GB — capped
+ * by the 6144 appended here — and the failed deploy blocked everything behind it.
+ *
+ * (The 6144 comment below still describes a 4-core/8 GB machine. The builder is now 8-core/16 GB,
+ * so that default is stale as well; fixing the guard lets the env var carry the real value without
+ * needing this file to track the hardware.)
+ */
+function hasExplicitHeapSize(nodeOptions) {
+  return /--max[-_]old[-_]space[-_]size=/.test(nodeOptions || '')
+}
+
 const repoRoot = process.cwd()
 const backupRoot = path.join(repoRoot, '.next-build-disabled-routes')
 const MANIFEST_FILE = 'manifest.json'
@@ -473,7 +495,7 @@ function runTypecheckBeforeBuild() {
         stdio: 'inherit',
         env: {
           ...process.env,
-          NODE_OPTIONS: process.env.NODE_OPTIONS?.includes('--max-old-space-size=')
+          NODE_OPTIONS: hasExplicitHeapSize(process.env.NODE_OPTIONS)
             ? process.env.NODE_OPTIONS
             : [process.env.NODE_OPTIONS, '--max-old-space-size=4096'].filter(Boolean).join(' '),
         },
@@ -759,7 +781,7 @@ async function run() {
      * Still overridable: an explicit NODE_OPTIONS --max-old-space-size wins, so this can be tuned
      * from Vercel env vars without a deploy.
      */
-    NODE_OPTIONS: process.env.NODE_OPTIONS?.includes('--max-old-space-size=')
+    NODE_OPTIONS: hasExplicitHeapSize(process.env.NODE_OPTIONS)
       ? process.env.NODE_OPTIONS
       : [process.env.NODE_OPTIONS, '--max-old-space-size=6144'].filter(Boolean).join(' '),
   }
