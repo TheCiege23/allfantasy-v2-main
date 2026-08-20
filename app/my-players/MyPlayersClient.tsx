@@ -12,6 +12,10 @@
  * no-matches/error states honestly rather than collapsing them into one.
  */
 import { useEffect, useMemo, useState } from 'react'
+import ExposureAudit from '@/components/exposure/ExposureAudit'
+import type { ExposureRow } from '@/components/exposure/ExposureTable'
+import '@/components/core-app/af-core.css'
+import '@/components/core-app/af-commish.css'
 
 interface LeagueRecommendationLite {
   id: string
@@ -103,6 +107,34 @@ const ROSTER_STATUS_LABEL: Record<string, string> = {
 
 type SortKey = 'action_urgency' | 'exposure' | 'name' | 'injury_severity' | 'bye_week' | 'league_count'
 
+/**
+ * Portfolio item -> 12b audit row.
+ *
+ * ⚠ `identityConfidence` DECIDES WHETHER A NAME IS SHOWN. 'unresolved' means the
+ * roster carries an id we could not map to a player, and the audit's footer
+ * promises we show the slot rather than a guess. `displayName` is often a
+ * best-effort placeholder in that state, so it must not be trusted as a name.
+ */
+function toExposureRow(item: CrossLeaguePlayerPortfolioItem): ExposureRow {
+  const e = item.exposure
+  return {
+    playerId: item.canonicalPlayerId,
+    name: item.displayName || null,
+    position: item.position,
+    team: item.professionalTeam,
+    leagueCount: e.leagueCount,
+    leagueNames: item.leagueAppearances.map((a) => a.leagueName).filter(Boolean),
+    startingCount: e.starterCount,
+    benchCount: e.benchCount,
+    // The design's bar has three segments; taxi is a reserve slot, so it rides with IR.
+    irTaxiCount: e.injuredReserveCount + e.taxiCount,
+    // 0-1: `leagueIds.size / connectedLeagueIds.size` in crossLeaguePlayerPortfolio.
+    exposurePercent: e.percentageOfUserLeagues,
+    injuryStatus: item.injury?.status ?? null,
+    identityResolved: item.identityConfidence !== 'unresolved',
+  }
+}
+
 export function MyPlayersClient() {
   const [data, setData] = useState<PortfolioApiResponse | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -114,6 +146,12 @@ export function MyPlayersClient() {
   const [actionOnly, setActionOnly] = useState(false)
   const [sort, setSort] = useState<SortKey>('action_urgency')
   const [selected, setSelected] = useState<CrossLeaguePlayerPortfolioItem | null>(null)
+  /*
+   * 12b. `/my-players` is the destination DashboardV2 already labels "Full
+   * exposure audit"; until now it only had the card list. Both views read the
+   * one payload below, so they cannot disagree about a player's league count.
+   */
+  const [view, setView] = useState<'players' | 'audit'>('players')
 
   useEffect(() => {
     let active = true
@@ -156,13 +194,40 @@ export function MyPlayersClient() {
       <h1 className="text-xl font-semibold text-white">My Players</h1>
       <p className="mt-1 text-sm text-white/50">Every player you roster across every connected league, in one place.</p>
 
+      <div className="mt-4 flex gap-2" role="tablist" aria-label="My players views">
+        {([
+          { id: 'players' as const, label: 'Players' },
+          { id: 'audit' as const, label: 'Exposure audit' },
+        ]).map((v) => (
+          <button
+            key={v.id}
+            type="button"
+            role="tab"
+            aria-selected={view === v.id}
+            onClick={() => setView(v.id)}
+            className={
+              view === v.id
+                ? 'rounded-full border border-cyan-400/40 bg-cyan-400/15 px-3.5 py-1.5 text-sm font-bold text-cyan-200'
+                : 'rounded-full border border-white/10 bg-white/[0.03] px-3.5 py-1.5 text-sm font-semibold text-white/60'
+            }
+          >
+            {v.label}
+          </button>
+        ))}
+      </div>
+
       {data && data.unsupportedSports.length > 0 ? (
         <p className="mt-3 text-xs text-white/40">
           Schedule/bye data isn&apos;t available yet for: {data.unsupportedSports.join(', ')}.
         </p>
       ) : null}
 
-      <div className="mt-6 flex flex-wrap items-center gap-2">
+      {/*
+        ⚠ CONDITIONAL RENDER, NOT THE `hidden` ATTRIBUTE. `[hidden]` sets
+        `display:none` at low specificity and Tailwind's `flex` utility overrides
+        it — the players filter bar stayed on screen over the audit table.
+      */}
+      <div className="mt-6 flex flex-wrap items-center gap-2" style={{ display: view === 'players' ? undefined : 'none' }}>
         <input
           type="text"
           placeholder="Search players..."
@@ -223,7 +288,26 @@ export function MyPlayersClient() {
         </select>
       </div>
 
-      <div className="mt-4">
+      {view === 'audit' ? (
+        <div className="mt-5">
+          {isLoading ? (
+            <p className="text-sm text-white/50">Loading your rosters…</p>
+          ) : error ? (
+            <p className="text-sm text-red-300">{error}</p>
+          ) : !data || data.items.length === 0 ? (
+            <p className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-center text-sm text-white/50">
+              No connected leagues found yet. Import or create a league to see your exposure here.
+            </p>
+          ) : (
+            <ExposureAudit
+              rows={data.items.map(toExposureRow)}
+              connectedLeagueCount={data.connectedLeagueCount}
+            />
+          )}
+        </div>
+      ) : null}
+
+      <div className="mt-4" style={{ display: view === 'players' ? undefined : 'none' }}>
         {isLoading ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3" aria-busy="true">
             {[0, 1, 2, 3, 4, 5].map((i) => (
@@ -249,7 +333,9 @@ export function MyPlayersClient() {
         )}
       </div>
 
-      {selected ? <PlayerDetailDrawer item={selected} onClose={() => setSelected(null)} /> : null}
+      {selected && view === 'players' ? (
+        <PlayerDetailDrawer item={selected} onClose={() => setSelected(null)} />
+      ) : null}
     </main>
   )
 }

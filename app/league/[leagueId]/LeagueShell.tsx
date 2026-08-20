@@ -66,6 +66,7 @@ import type { LeagueSeasonSnapshot } from '@/lib/league/sort-teams-standings'
 import type { LeagueDashboardView } from '@/app/league/[leagueId]/league-dashboard-types'
 import AppShell from '@/app/components/AppShell'
 import { LeftChatPanel } from '@/app/dashboard/components/LeftChatPanel'
+import LeagueChatSurface, { isAfHostedPlatform } from '@/components/chat/LeagueChatSurface'
 import { RightControlPanel } from '@/app/dashboard/components/RightControlPanel'
 import type { UserLeague, UserLeagueTeam } from '@/app/dashboard/types'
 import {
@@ -1431,6 +1432,7 @@ export function LeagueShell({
             <LeagueTabRouter
               activeTab={activeTab}
               tabDefs={tabDefs}
+              importedLeagueCount={leagueList.filter((l) => !isAfHostedPlatform(l.platform)).length}
               leagueId={league.id}
               selectedLeague={selectedLeague}
               userTeam={userTeam}
@@ -1732,6 +1734,7 @@ function LeagueTabRouter({
   isPredraftLifecycle,
   draftDateIso,
   hasActiveRedraftSeason,
+  importedLeagueCount,
 }: {
   activeTab: string
   tabDefs: TabDef[]
@@ -1754,6 +1757,8 @@ function LeagueTabRouter({
   isPredraftLifecycle: boolean
   draftDateIso: string | null
   hasActiveRedraftSeason: boolean
+  /** Imported (non AF-hosted) leagues this user has — 10a's "chat is AF-only" note. */
+  importedLeagueCount: number
 }) {
   const router = useRouter()
   const tab = tabDefs.find((t) => t.id === activeTab)
@@ -2068,18 +2073,24 @@ function LeagueTabRouter({
         />
       )
     case 'league_chat':
+      /*
+       * 10a. This case used to render a card telling the reader that chat was
+       * somewhere else — a tab that, when clicked, pointed at another control.
+       * It now renders the real `LeagueChatPanel`, which already existed in full
+       * and was reachable only through a component nothing imported. Imported
+       * leagues get an explicit "chat lives on your source platform" state
+       * rather than an empty room; see LeagueChatSurface for why.
+       */
       return (
-        <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 lg:px-6" data-testid="g32-league-chat-tab">
-          <section className="rounded-3xl border border-[#ff3d81]/15 bg-white/[0.035] p-5">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-[#ffb8d1]" aria-hidden />
-              <h2 className="text-xl font-black text-white">League Chat</h2>
-            </div>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-white/55">
-              League chat is visible in the left panel on desktop and opens from the chat button on mobile. Use it for
-              draft coordination, announcements, and quick league guide questions.
-            </p>
-          </section>
+        <div className="flex min-h-0 flex-1 flex-col" data-testid="g32-league-chat-tab">
+          <LeagueChatSurface
+            leagueId={leagueId}
+            leagueName={selectedLeague.name ?? 'League'}
+            platform={selectedLeague.platform}
+            isCommissioner={isCommissioner}
+            teamCount={selectedLeague.teamCount ?? null}
+            importedLeagueCount={importedLeagueCount}
+          />
         </div>
       )
     case 'commissioner':

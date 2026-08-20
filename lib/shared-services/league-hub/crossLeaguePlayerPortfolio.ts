@@ -39,6 +39,7 @@
  * `sleeperId`.
  */
 import { prisma } from '@/lib/prisma'
+import { OVEREXPOSED_THRESHOLD } from './exposureThreshold'
 import { resolveLinkedPlatformUserIds, type ComputeUserPlayerExposureResult } from '../game-day/UserPlayerExposureService'
 import { getNormalizedLineupSections, type RosterSectionKey } from '@/lib/roster/LineupTemplateValidation'
 import { resolvePlayers } from '@/lib/shared-services/player-identity'
@@ -773,7 +774,12 @@ function toRef(item: CrossLeaguePlayerPortfolioItem): ChimmyCrossLeaguePlayerRef
   }
 }
 
-const OVEREXPOSED_THRESHOLD = 0.5
+/*
+ * Moved to ./exposureThreshold so the 12b client table can share it without
+ * importing this module — which pulls in prisma. Re-exported here so existing
+ * server-side importers keep working.
+ */
+export { OVEREXPOSED_THRESHOLD }
 const HIGH_INJURY_STATUSES: InjuryStatus[] = ['out', 'ir', 'suspended', 'doubtful', 'questionable']
 
 /**
