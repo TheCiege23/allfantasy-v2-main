@@ -15813,6 +15813,37 @@ model CommissionerSuccession {
 }
 
 /// Lifecycle event log — fire-and-forget telemetry for retention, renewal rate, churn analytics.
+/// Durable parity telemetry — the evidence the shadow-mode flip gate is defined on.
+///
+/// `summarizeFlipReadiness` flips a surface at >=95% agreement over >=50 REAL comparisons, but it
+/// read an in-memory array capped at 500 entries. On Vercel each invocation has its own memory, so
+/// it started empty on every cold start and could never accumulate 50 comparisons. This is where
+/// that evidence is kept instead.
+///
+/// Append-only. Nothing reads it as state; pruning old rows is safe (see the manual migration).
+model DecisionParityRecord {
+  id           String   @id @default(cuid())
+  /// 'decision.shadow_parity' | 'decision.validator_parity'. Other telemetry is high-frequency and
+  /// has no bearing on the flip decision, so it is deliberately not stored.
+  event        String   @db.VarChar(64)
+  decisionType String   @db.VarChar(64)
+  /// The gate is evaluated PER SURFACE, so this is part of the grouping key, not a detail in flags.
+  surface      String?  @db.VarChar(64)
+  decisionId   String?  @db.VarChar(64)
+  leagueId     String?  @db.VarChar(64)
+  userId       String?  @db.VarChar(64)
+  /// NULL means the event carried no agreement signal — a comparison WITHOUT a verdict. Those are
+  /// reported separately and must never count as agreement, which a non-null default would do.
+  agreement    Boolean?
+  flags        Json?
+  recordedAt   DateTime @default(now())
+
+  @@index([decisionType, surface, recordedAt])
+  @@index([event, recordedAt])
+  @@index([leagueId, recordedAt])
+  @@map("decision_parity_record")
+}
+
 model LifecycleTelemetryRecord {
   id         String                      @id @default(cuid())
   eventKind  LifecycleTelemetryEventKind
