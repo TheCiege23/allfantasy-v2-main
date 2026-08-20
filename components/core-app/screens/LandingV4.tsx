@@ -5,6 +5,7 @@ import {
   LANDING_LANGS,
   type LandingLang,
 } from '@/lib/i18n/landing-copy'
+import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
 // AfCoreShell imports it for every screen inside the shell — but this one renders
 // standalone at `/`, so without this line every `var(--surface)` and `var(--line)`
@@ -48,6 +49,17 @@ const PLATFORMS = [
   { name: 'Yahoo', state: 'live' as const },
   { name: 'MFL · Fantrax', state: 'soon' as const },
 ]
+
+/*
+ * The uplift figure in the hero card's summary strip.
+ *
+ * Illustrative, like the four example leagues above it — the card is labelled
+ * "example" in its own header for exactly this reason. It is a constant rather
+ * than two typed-out strings because the handoff shows the number twice, in the
+ * sentence and again as the large figure beside it, and those are the two places
+ * a later edit would change one and miss the other.
+ */
+const EXAMPLE_UPLIFT = '+13.0'
 
 // Hrefs are language-independent; the descriptions come from the copy module.
 const NETWORK_HREFS: Record<string, string> = {
@@ -114,8 +126,37 @@ function Shield() {
   )
 }
 
-export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang } = {}) {
-  const c = getLandingCopy(lang)
+export function LandingV4({
+  lang = DEFAULT_LANDING_LANG,
+  signedIn = false,
+}: { lang?: LandingLang; signedIn?: boolean } = {}) {
+  /*
+   * ⚠ THE PRICES ARE READ FROM THE CATALOG HERE, NOT TYPED INTO THE COPY.
+   *
+   * This page quoted "paid plans run $9.99–$29.99/mo" in both languages. $29.99
+   * was AF Legacy's price before it dropped to $9.99, so the top of that range
+   * had not been real for some time — on the page most new visitors see first.
+   * getLandingCopy now REQUIRES the range, so the strings cannot be rendered
+   * without the live catalog and the next price change reaches them for free.
+   *
+   * This is a plain synchronous read of a committed constant — no database, no
+   * await — so it is free to do inside a server component.
+   */
+  const c = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
+
+  /*
+   * Every "sign up" affordance on this page has a second meaning once the reader
+   * already has an account. `/` now serves this page to signed-in visitors too
+   * (it used to redirect them to /dashboard, which is what made the domain land
+   * people on /login — see app/page.tsx), so "Get started free" pointing at
+   * /signup would be asking a customer to register twice.
+   *
+   * Defined once and used for all three CTAs — nav, hero and pricing band — so
+   * they cannot drift into disagreeing about who the reader is.
+   */
+  const primaryCta = signedIn
+    ? { href: '/dashboard', label: c.nav.goToDashboard }
+    : { href: '/signup', label: c.nav.getStarted }
 
   return (
     /*
@@ -132,14 +173,26 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
         </Link>
 
         <div className="af-lp-nav-links">
+          {/*
+            ⚠ ALL THREE OF THESE WERE BROKEN AND TWO WERE SILENT ABOUT IT.
+            `#how` pointed at the hero — measured, it scrolled to y=74, i.e. the
+            top of the page you are already on — so "How it works" did nothing.
+            The id now sits on the three-reasons section, which is the content
+            that actually answers it. `#faq` was labelled "For commissioners"
+            and landed on "Questions managers ask", which has no commissioner
+            content; this page is player-only by handoff rule 1, so there is
+            nothing here to link to and it now goes to /pricing, where AF
+            Commissioner is a real tier with its own described feature list.
+          */}
           <a href="#how">{c.nav.how}</a>
           <a href="#pricing">{c.nav.pricing}</a>
-          <a href="#faq">{c.nav.forCommissioners}</a>
+          <Link href="/pricing">{c.nav.forCommissioners}</Link>
         </div>
 
         <div className="af-lp-nav-right">
           <LangSwitch lang={lang} label={c.nav.langLabel} />
-          <Link href="/login">{c.nav.signIn}</Link>
+          {/* "Sign in" is noise to someone already signed in. */}
+          {signedIn ? null : <Link href="/login">{c.nav.signIn}</Link>}
           {/* Partners points at the B2B screen, which is served by the
               /core catch-all as the `partners` segment — no extra route. It was
               previously an in-page #business anchor, which became a dead link
@@ -149,14 +202,14 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
             {c.nav.partners}
             <span className="af-lp-api-chip af-num">API</span>
           </Link>
-          <Link href="/signup" className="af-btn af-lp-cta">
-            {c.nav.getStarted}
+          <Link href={primaryCta.href} className="af-btn af-lp-cta">
+            {primaryCta.label}
           </Link>
         </div>
       </nav>
 
       {/* ── Hero ────────────────────────────────────────────────────── */}
-      <header className="af-lp-hero" id="how">
+      <header className="af-lp-hero">
         <div className="af-lp-hero-text">
           <span className="af-lp-eyebrow af-num">{c.hero.eyebrow}</span>
           <h1 className="af-lp-h1">
@@ -166,8 +219,8 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
           </h1>
           <p className="af-lp-sub">{c.hero.sub}</p>
           <div className="af-lp-hero-ctas">
-            <Link href="/signup" className="af-btn af-lp-cta-lg">
-              {c.hero.ctaPrimary}
+            <Link href={primaryCta.href} className="af-btn af-lp-cta-lg">
+              {signedIn ? primaryCta.label : c.hero.ctaPrimary}
             </Link>
             <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">
               {c.hero.ctaSecondary}
@@ -210,11 +263,25 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
             </div>
           ))}
           <div className="af-lp-card-foot">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="af-lp-card-foot-avatar"
+              src="/images/chimmy-avatar.png"
+              alt=""
+              width={30}
+              height={30}
+              loading="lazy"
+            />
             <span className="af-lp-card-foot-text">
-              {c.hero.cardFootBefore}
-              <strong>+13.0</strong>
-              {c.hero.cardFootAfter}
+              <strong className="af-lp-card-foot-title">
+                {c.hero.cardFootBefore}
+                {EXAMPLE_UPLIFT}
+              </strong>
+              <span className="af-lp-card-foot-meta">{c.hero.cardFootMeta}</span>
             </span>
+            {/* Same constant as the sentence above it, so the headline figure and
+                the one written into the copy line cannot drift apart. */}
+            <span className="af-lp-card-foot-value af-num">{EXAMPLE_UPLIFT}</span>
           </div>
         </aside>
       </header>
@@ -236,7 +303,7 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
       </section>
 
       {/* ── Three reasons ───────────────────────────────────────────── */}
-      <section className="af-lp-reasons">
+      <section className="af-lp-reasons" id="how">
         <h2 className="af-lp-h2">{c.reasons.h2}</h2>
         <div className="af-lp-reason-grid">
           {c.reasons.items.map((r) => (
@@ -255,27 +322,40 @@ export function LandingV4({ lang = DEFAULT_LANDING_LANG }: { lang?: LandingLang 
 
       {/* ── Pricing line ────────────────────────────────────────────── */}
       <section className="af-lp-pricing" id="pricing">
-        <h2 className="af-lp-h2">{c.pricing.h2}</h2>
-        <p className="af-lp-pricing-body">{c.pricing.body}</p>
-        <div className="af-lp-pricing-ctas">
-          <Link href="/signup" className="af-btn">
-            {c.pricing.ctaPrimary}
-          </Link>
-          <Link href="/pricing" className="af-btn af-btn--ghost">
-            {c.pricing.ctaSecondary}
-          </Link>
+        <div className="af-lp-pricing-inner">
+          <div className="af-lp-pricing-copy">
+            <h2 className="af-lp-h2">{c.pricing.h2}</h2>
+            <p className="af-lp-pricing-body">{c.pricing.body}</p>
+          </div>
+          <div className="af-lp-pricing-ctas">
+            <Link href={primaryCta.href} className="af-btn">
+              {signedIn ? primaryCta.label : c.pricing.ctaPrimary}
+            </Link>
+            <Link href="/pricing" className="af-btn af-btn--ghost">
+              {c.pricing.ctaSecondary}
+            </Link>
+          </div>
         </div>
       </section>
 
       {/* ── FAQ ─────────────────────────────────────────────────────── */}
       <section className="af-lp-faq" id="faq">
         <h2 className="af-lp-h2">{c.faq.h2}</h2>
-        <div className="af-lp-faq-list">
+        {/*
+          ⚠ OPEN CARDS IN A 2×2 GRID, NOT <details> ACCORDIONS — this is what
+          the handoff draws, and the reason is not only visual. Three of these
+          four answers are the ones a hesitant visitor needs BEFORE deciding
+          ("is this gambling?", "what does it cost?"), and an accordion hides
+          every one of them behind a click. The same four Q&A pairs are also
+          emitted as FAQPage structured data from app/page.tsx, off this exact
+          array, so the copy and the schema cannot drift apart.
+        */}
+        <div className="af-lp-faq-grid">
           {c.faq.items.map((f) => (
-            <details key={f.q} className="af-lp-faq-item">
-              <summary className="af-lp-faq-q">{f.q}</summary>
+            <article key={f.q} className="af-lp-faq-item">
+              <h3 className="af-lp-faq-q">{f.q}</h3>
               <p className="af-lp-faq-a">{f.a}</p>
-            </details>
+            </article>
           ))}
         </div>
       </section>

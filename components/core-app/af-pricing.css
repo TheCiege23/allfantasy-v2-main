@@ -294,13 +294,34 @@
   color: var(--text);
 }
 
+/* Now carries the closing CTA beside the text, so it is a row rather than a
+   lone paragraph. max-width moves to the <p> — the strip itself spans the page
+   so the button can sit at the right edge. */
 .af-pr-foot {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
   border-top: 1px solid var(--line);
   padding-top: 16px;
   font-size: 12px;
   line-height: 1.55;
   color: var(--faint);
+}
+
+.af-pr-foot p {
+  margin: 0;
   max-width: 76ch;
+}
+
+.af-pr-foot .af-pr-foot-cta {
+  margin-left: auto;
+}
+
+@media (max-width: 780px) {
+  .af-pr-foot .af-pr-foot-cta {
+    margin-left: 0;
+  }
 }
 
 /* ── Responsive ───────────────────────────────────────────────── */
@@ -313,4 +334,192 @@
   .af-pr-desc { min-height: 0; }
   /* Stacked, the reserved row is dead space rather than an alignment aid. */
   .af-pr-save--empty { display: none; }
+}
+
+/* ── Header ──────────────────────────────────────────────────────
+ * The page shipped with no navigation of any kind — measured live, zero <nav>
+ * elements and zero links to "/". Handoff 18a draws this 62px bar; it is the
+ * only way off the page other than the browser's back button.
+ */
+.af-pr-nav {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  height: 62px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-pr-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+
+.af-pr-wordmark {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-pr-brand:hover .af-pr-wordmark {
+  color: var(--accent);
+}
+
+.af-pr-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.af-pr-nav-link {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text2);
+  text-decoration: none;
+}
+.af-pr-nav-link:hover {
+  color: var(--text);
+}
+
+.af-pr-nav-cta {
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* ── Yearly + tokens, as a 2-up row ──────────────────────────────── */
+
+.af-pr-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.af-pr-yearly {
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.af-pr-yearly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.af-pr-yearly-card {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+}
+
+.af-pr-yearly-name {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-pr-yearly-price {
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-pr-yearly-save {
+  font-size: 11px;
+  color: var(--good);
+}
+/* Holds the row height so cards with and without a saving still line up. */
+.af-pr-yearly-save--empty {
+  min-height: 14px;
+}
+
+/* ── FAQ ─────────────────────────────────────────────────────────── */
+
+.af-pr-faq {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-pr-faq-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.af-pr-faq-item {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+
+.af-pr-faq-q {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--text);
+}
+
+.af-pr-faq-a {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Trust strip ─────────────────────────────────────────────────── */
+
+.af-pr-foot-cta {
+  flex: none;
+  padding: 10px 20px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13.5px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .af-pr-faq-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 940px) {
+  /* The yearly panel and the token card stop fitting side by side well before
+     the 780px card-stack breakpoint. */
+  .af-pr-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 780px) {
+  .af-pr-faq-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
