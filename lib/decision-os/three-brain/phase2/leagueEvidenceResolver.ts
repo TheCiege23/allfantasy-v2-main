@@ -33,6 +33,7 @@ import { buildEvidencePacket } from '../evidencePacket'
 import type { DecisionOSSignal, VerifiedDecisionFact } from '../types'
 import { resolveFreshnessPolicy } from './freshnessPolicy'
 import { loadLeagueSourceVersion, type CurrentEvidenceResolver } from './dbEvidenceRehydration'
+import { loadImportedActivityEvidence } from './importedActivityEvidence'
 import type { IntelligenceRequestContext, IntelligenceRunRecord, IntelligenceTool } from './types'
 
 type PrismaLike = typeof defaultPrisma
@@ -84,19 +85,30 @@ export async function buildLeagueIntelligenceEvidence(input: {
   })) as LeagueRow | null
   if (!league) return { ok: false, reason: 'evidence_unavailable' }
 
-  // The authoritative behavioral/activity snapshot (source-version signal). Absent → we have no current
-  // behavioral evidence to analyze → refuse honestly rather than refresh from nothing.
+  // PREFERRED SOURCE — the native behavioural snapshot, projected from in-app `DomainEvent`s.
   const source = await loadLeagueSourceVersion(db, input.leagueId)
-  if (!source) return { ok: false, reason: 'evidence_unavailable' }
+  const snap = source
+    ? await db.intelligenceLeagueSnapshot.findUnique({
+        where: { leagueId: input.leagueId },
+        select: {
+          totalEvents: true, tradeCount: true, waiverCount: true, lineupCount: true, draftCount: true,
+          scoringCount: true, governanceCount: true, openTradeProposals: true,
+        },
+      })
+    : null
 
-  const snap = await db.intelligenceLeagueSnapshot.findUnique({
-    where: { leagueId: input.leagueId },
-    select: {
-      totalEvents: true, tradeCount: true, waiverCount: true, lineupCount: true, draftCount: true,
-      scoringCount: true, governanceCount: true, openTradeProposals: true,
-    },
-  })
-  if (!snap) return { ok: false, reason: 'evidence_unavailable' }
+  // FALLBACK — imported leagues emit almost no native events, so they never produce a snapshot and
+  // could never reach this stage. Measured on production 2026-08-20: 4 of 98 leagues resolved
+  // evidence, while 42 leagues had 6,436 rows of real imported behaviour sitting one join away.
+  //
+  // Native is preferred where it exists: it is first-party, it includes governance and scoring the
+  // provider never exposes, and it is what the freshness policy was calibrated against. This runs
+  // ONLY when native is absent, so a league that works today cannot regress onto this path.
+  const imported = snap ? null : await loadImportedActivityEvidence(db, input.leagueId)
+
+  // Neither source has anything. Refuse — the honest answer, and the one that keeps a model from
+  // being handed an empty packet to improvise over.
+  if (!snap && !imported) return { ok: false, reason: 'evidence_unavailable' }
 
   const rosterCount = await db.roster.count({ where: { leagueId: input.leagueId } })
 
@@ -109,19 +121,44 @@ export async function buildLeagueIntelligenceEvidence(input: {
   const freshnessState: 'fresh' | 'aging' | 'stale' = syncBad ? 'stale' : 'fresh'
 
   // Signals + facts are derived ONLY from persisted content, so unchanged evidence → identical fingerprint.
-  const signals: Array<Omit<DecisionOSSignal, 'id'> & { id?: string }> = [
-    { id: 'sig-activity', kind: 'league_activity', summary: `total_events=${snap.totalEvents}`, severity: 'info' },
-    { id: 'sig-trades', kind: 'trade_activity', summary: `trades=${snap.tradeCount} open_proposals=${snap.openTradeProposals}`, severity: snap.openTradeProposals > 0 ? 'warning' : 'info' },
-    { id: 'sig-transactions', kind: 'transaction_activity', summary: `waivers=${snap.waiverCount} lineups=${snap.lineupCount}`, severity: 'info' },
-    { id: 'sig-governance', kind: 'governance_activity', summary: `governance=${snap.governanceCount} scoring=${snap.scoringCount}`, severity: 'info' },
-  ]
+  //
+  // The two branches are kept SEPARATE rather than normalised into one shape on purpose. Imported
+  // categories do not mean the same things as native ones — a provider `roster_move` is an add/drop,
+  // not a starting-lineup change, so folding it into `lineupCount` would overstate lineup engagement
+  // to a model that cannot tell the difference. Each source describes itself in its own terms.
+  const signals: Array<Omit<DecisionOSSignal, 'id'> & { id?: string }> = snap
+    ? [
+        { id: 'sig-activity', kind: 'league_activity', summary: `total_events=${snap.totalEvents}`, severity: 'info' },
+        { id: 'sig-trades', kind: 'trade_activity', summary: `trades=${snap.tradeCount} open_proposals=${snap.openTradeProposals}`, severity: snap.openTradeProposals > 0 ? 'warning' : 'info' },
+        { id: 'sig-transactions', kind: 'transaction_activity', summary: `waivers=${snap.waiverCount} lineups=${snap.lineupCount}`, severity: 'info' },
+        { id: 'sig-governance', kind: 'governance_activity', summary: `governance=${snap.governanceCount} scoring=${snap.scoringCount}`, severity: 'info' },
+      ]
+    : [
+        { id: 'sig-activity', kind: 'league_activity', summary: `imported_activity_total=${imported!.total} managers=${imported!.managerCount}`, severity: 'info' },
+        { id: 'sig-trades', kind: 'trade_activity', summary: `imported_trades=${imported!.trades}`, severity: 'info' },
+        { id: 'sig-transactions', kind: 'transaction_activity', summary: `imported_waivers=${imported!.waivers} roster_moves=${imported!.rosterMoves}`, severity: 'info' },
+        { id: 'sig-draft', kind: 'draft_activity', summary: `imported_draft_picks=${imported!.draftPicks}`, severity: 'info' },
+      ]
+
   const facts: Array<Omit<VerifiedDecisionFact, 'id'> & { id?: string }> = [
     { id: 'fact-scoring', label: 'Scoring preset', value: league.scoringPresetId ?? league.scoring ?? 'unknown', source: 'league.settings' },
     { id: 'fact-season', label: 'Season', value: String(league.season), source: 'league' },
     { id: 'fact-status', label: 'League status', value: `${league.status ?? 'unknown'}/${league.syncStatus ?? 'unknown'}`, source: 'league' },
     { id: 'fact-settings-version', label: 'Settings snapshot version', value: String(league.settingsSnapshotVersion ?? 0), source: 'league' },
     { id: 'fact-rosters', label: 'Rosters', value: String(rosterCount), source: 'roster' },
-    { id: 'fact-drafts', label: 'Draft events', value: String(snap.draftCount), source: 'intelligence_league_snapshot' },
+    snap
+      ? { id: 'fact-drafts', label: 'Draft events', value: String(snap.draftCount), source: 'intelligence_league_snapshot' }
+      : { id: 'fact-drafts', label: 'Draft picks (imported)', value: String(imported!.draftPicks), source: 'decision_os_imported_activity' },
+    // The `source` here is load-bearing, not decorative: it is how a reader — human or model — can
+    // tell replayed provider history from behaviour performed inside this product.
+    ...(snap
+      ? []
+      : [{
+          id: 'fact-evidence-origin',
+          label: 'Evidence origin',
+          value: 'imported provider history (no native in-app activity recorded for this league)',
+          source: 'decision_os_imported_activity',
+        }]),
   ]
 
   const packet = buildEvidencePacket({
@@ -136,18 +173,33 @@ export async function buildLeagueIntelligenceEvidence(input: {
     signals,
     facts,
     freshness: { state: freshnessState },
-    missingInformation: isLive ? [] : ['live_game_data_not_available_from_persisted_evidence'],
+    missingInformation: [
+      ...(isLive ? [] : ['live_game_data_not_available_from_persisted_evidence']),
+      // Say what this evidence CANNOT tell you. A provider replay has no record of lineup
+      // decisions, governance actions or scoring changes, so their absence here means "not
+      // observable", never "did not happen" — a distinction a model will not infer on its own.
+      ...(snap
+        ? []
+        : [
+            'native_in_app_activity_not_available_for_imported_league',
+            'lineup_governance_and_scoring_activity_not_observable_from_provider_history',
+          ]),
+    ],
   })
+
+  // Whichever source supplied the evidence must also supply the version, or a change in the data
+  // that was actually READ would not invalidate a cached analysis built from it.
+  const sourceDataVersion = snap ? source!.version : imported!.version
 
   const ctx: IntelligenceRequestContext = {
     tool: input.tool,
     userId: input.userId,
     packet,
     connectedGroupId: input.connectedGroupId ?? null,
-    sourceDataVersion: source.version,
+    sourceDataVersion,
     isImportedLeague: league.importedAt != null, // imported → analyze only, never write
   }
-  return { ok: true, ctx, sourceDataVersion: source.version, isLive }
+  return { ok: true, ctx, sourceDataVersion, isLive }
 }
 
 /** The registered production resolver. Supports the behavioral/managerial tools it can rebuild from persisted

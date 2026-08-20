@@ -1,6 +1,26 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { DraftValidationOrchestrator } from '@/lib/draft/validation/DraftValidationOrchestrator'
 import { prisma } from '@/lib/prisma'
+import { getEffectiveLeagueRosterTemplate } from '@/lib/league/getEffectiveLeagueRosterTemplate'
+
+/*
+ * Check 3 (roster slots) no longer reads `League.starters` directly — it delegates to the shared
+ * `getEffectiveLeagueRosterTemplate`, which resolves LeagueRosterConfig / starters /
+ * settings.rosterPositions / sport-specific configs. Unmocked, that helper hits delegates this
+ * suite does not stub, so the check fell into its catch and reported "Could not resolve roster
+ * template" — which is why the all-checks-pass case failed while every failure case still passed.
+ * A stale mock against the old contract, not a validation bug.
+ */
+vi.mock('@/lib/league/getEffectiveLeagueRosterTemplate', () => ({
+  getEffectiveLeagueRosterTemplate: vi.fn(async () => ({
+    hasPersistedRosterSchema: true,
+    template: {
+      slots: [
+        { starterCount: 9, benchCount: 6, reserveCount: 1, taxiCount: 0, devyCount: 0 },
+      ],
+    },
+  })),
+}))
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -22,6 +42,14 @@ describe('Pre-Draft Validation', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    // clearAllMocks wipes the factory implementation too, so the passing default is re-set here
+    // and individual tests override it to describe an unconfigured roster.
+    vi.mocked(getEffectiveLeagueRosterTemplate).mockResolvedValue({
+      hasPersistedRosterSchema: true,
+      template: {
+        slots: [{ starterCount: 9, benchCount: 6, reserveCount: 1, taxiCount: 0, devyCount: 0 }],
+      },
+    } as never)
   })
 
   /**
@@ -118,12 +146,15 @@ describe('Pre-Draft Validation', () => {
 
     it('returns canStartDraft=false when roster shape is empty', async () => {
       setHappyPathMocks()
-      ;(prisma.league.findUnique as any).mockResolvedValue({
-        id: leagueId,
-        rosterSize: 0,
-        starters: {},
-        scoring: 'half_ppr',
-      })
+      /*
+       * "Empty roster shape" is now expressed through the shared template resolver, not through
+       * `League.starters`. Setting starters: {} no longer means anything to this check — the
+       * orchestrator asks getEffectiveLeagueRosterTemplate and fails when nothing is persisted.
+       */
+      vi.mocked(getEffectiveLeagueRosterTemplate).mockResolvedValue({
+        hasPersistedRosterSchema: false,
+        template: { slots: [] },
+      } as never)
 
       const report = await DraftValidationOrchestrator.validateDraft(leagueId, draftId)
 
