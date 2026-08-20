@@ -1,6 +1,32 @@
 import { prisma } from '@/lib/prisma'
 import { SPORT_SLUGS, TOOL_SLUGS } from '@/lib/seo-landing/config'
 import { DISCOVERY_LEAGUES_SLUGS } from '@/lib/seo-landing/discovery-leagues-pages'
+import { playerSlug } from '@/lib/core-app/playerSlug'
+
+/*
+ * ⚠ force-dynamic, AND `revalidate` HERE WAS A LIVE BUG. Adding `revalidate`
+ * alone made this route STATICALLY PRERENDERED at build time, where Prisma has
+ * no database to talk to — so the player query returned nothing, the fail-soft
+ * catch below swallowed it, and production served a sitemap with 40 static URLs
+ * and ZERO of the 3,242 player pages it was added to publish. It failed exactly
+ * as designed: silently, with a valid document.
+ *
+ * Confirmed on production before changing it: the route answered
+ * `X-Vercel-Cache: HIT` even for a URL with a cache-busting query string, which
+ * a dynamic route cannot do — it was fully static.
+ *
+ * Rendering per request restores database access. The CDN cache is kept via the
+ * Cache-Control header on the response instead, so a crawl still does not cost a
+ * query per bot.
+ */
+export const dynamic = 'force-dynamic'
+
+/**
+ * A sitemap has a hard 50,000-URL / 50MB ceiling per file, and we are nowhere
+ * near it — but the player set is the only unbounded block here, so it is capped
+ * explicitly rather than left to grow into a silent truncation by Google.
+ */
+const MAX_PLAYER_URLS = 20000
 
 export async function GET() {
   const baseUrl = 'https://allfantasy.ai'
@@ -68,6 +94,59 @@ export async function GET() {
     // ignore
   }
 
+  /*
+   * Public player pages — `/players/{name}-{sport}-{sleeperId}`.
+   *
+   * ⚠ THE FILTERS ARE THE INDEXING POLICY, NOT A PERFORMANCE TWEAK.
+   *
+   *   sleeperId NOT NULL   is what makes a player addressable at all: the slug
+   *                        is keyed on it, because a name is not a person (two
+   *                        different NFL players are called Justin Jefferson)
+   *                        and an externalId is a per-source row, not a person.
+   *                        See lib/core-app/playerSlug.ts.
+   *   team NOT NULL        keeps never-rostered rows out of the index. A page
+   *                        about a player with no team, no stats and no injury
+   *                        is a thin page, and thousands of them is the classic
+   *                        way to get a whole section deprioritised rather than
+   *                        just those pages.
+   *
+   * ⚠ DO NOT ADD `status` HERE. It reads like the missing "is he active" filter
+   * and the sources disagree with reality: Ben Roethlisberger, retired since
+   * 2022, is `Active` on his sleeper row, while Bo Nix — a starting QB — is
+   * `INACT` on rolling_insights and `Questionable` on sleeper. Filtering on it
+   * would drop current starters from the index and keep retired players in it.
+   *
+   * DISTINCT on sleeperId because one athlete has one row per ingest source —
+   * Justin Jefferson the WR appears six times across sleeper, thesportsdb,
+   * rolling_insights and backfill. Without it the sitemap would submit the same
+   * canonical URL six times.
+   */
+  let playerUrls = ''
+  try {
+    const players = await prisma.sportsPlayer.findMany({
+      where: { sleeperId: { not: null }, team: { not: null }, position: { not: null } },
+      distinct: ['sleeperId'],
+      orderBy: [{ sleeperId: 'asc' }, { fetchedAt: 'desc' }],
+      take: MAX_PLAYER_URLS,
+      select: { name: true, sport: true, sleeperId: true },
+    })
+
+    playerUrls = players
+      .map((p) => playerSlug(p))
+      .filter((slug): slug is string => Boolean(slug))
+      .map(
+        (slug) => `<url>
+    <loc>${baseUrl}/players/${slug}</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.7</priority>
+  </url>`
+      )
+      .join('\n  ')
+  } catch {
+    // A sitemap that omits the player block still validates; one that 500s does
+    // not get read at all.
+  }
+
   const staticUrls = staticPages
     .map(
       (p) => `<url>
@@ -85,11 +164,18 @@ export async function GET() {
   ${toolUrls}
   ${discoveryLeaguesUrls}
   ${blogUrls}
+  ${playerUrls}
 </urlset>`
 
   return new Response(sitemap, {
     headers: {
       'Content-Type': 'application/xml',
+      /*
+       * The caching `revalidate` used to provide, without the build-time
+       * prerender that broke it. s-maxage is what Vercel's CDN honours;
+       * stale-while-revalidate keeps a crawl fast while a new copy is built.
+       */
+      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
     },
   })
 }

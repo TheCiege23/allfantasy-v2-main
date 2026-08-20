@@ -403,6 +403,10 @@ export default async function AfCorePage({
         <LeagueHome
           data={leagueHome}
           otherLeagueIssueCount={issues.filter((i) => i.leagueId !== leagueHome.league.id).length}
+          // 3b renders one urgent action. Already sorted by severity then
+          // deadline inside deriveOutstandingIssues, so the head of this list is
+          // the row the screen shows.
+          issues={issues.filter((i) => i.leagueId === leagueHome.league.id)}
         />
       ) : activeKey === 'my-team' ? (
         myTeam ? (

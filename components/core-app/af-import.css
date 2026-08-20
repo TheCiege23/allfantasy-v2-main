@@ -461,3 +461,120 @@
   border-color: var(--bad);
   color: var(--bad);
 }
+
+/* ── Top bar + step indicator (handoffs 4c / 4d) ──────────────────────
+ * The connect screen is step 2 of the auth → connect → choose-leagues journey,
+ * so it carries the same brand lockup and progress bar as sign-up.
+ */
+.af-im-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-im-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+
+.af-im-wordmark {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-im-brand:hover .af-im-wordmark {
+  color: var(--accent);
+}
+
+.af-im-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* The read-only promise, stated in the chrome rather than only in body copy —
+   it is the single most reassuring fact about this screen. */
+.af-im-readonly {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: help;
+}
+
+/* Swaps in once discovery has actually returned leagues — see connectedLabel. */
+.af-im-connected {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--good);
+  background: var(--good-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--good);
+}
+
+.af-im-skip {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  text-decoration: none;
+  /* 44px touch row on mobile. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.af-im-skip:hover {
+  color: var(--text);
+}
+
+.af-im-steps {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.af-im-step {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line2);
+}
+.af-im-step[data-done='true'] {
+  background: var(--accent);
+}
+
+/* ── League selection (handoff 4d) ────────────────────────────────────── */
+
+.af-im-league-check {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.af-im-league-check:disabled {
+  cursor: default;
+}
+
+/* A ticked row is going to be imported — worth showing at a glance when the
+   list is long, without shouting. */
+.af-im-league[data-picked='true'] {
+  border-color: var(--accent-line);
+}
