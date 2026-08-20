@@ -16,7 +16,6 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 const getLeagueMatchups = vi.fn()
 const upsert = vi.fn()
 
-vi.mock('server-only', () => ({}))
 vi.mock('@/lib/sleeper-client', () => ({
   getLeagueMatchups: (...a: unknown[]) => getLeagueMatchups(...a),
 }))

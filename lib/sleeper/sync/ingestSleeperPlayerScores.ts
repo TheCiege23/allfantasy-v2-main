@@ -1,5 +1,16 @@
-import 'server-only'
-
+/*
+ * ⚠ NO `import 'server-only'` HERE, DELIBERATELY, AND ITS SIBLINGS DO THE SAME.
+ * `backfillSleeperDraftIds.ts` and `sleeperHostedDraftHistory.ts` both omit it
+ * for the same reason: these modules are invoked by scripts as well as by server
+ * code, and `server-only` throws the moment a plain Node/tsx process imports
+ * them. It bought nothing here — this module has no client caller and could not
+ * acquire one without also importing prisma — and it cost the backfill script
+ * the ability to reuse the writer instead of duplicating it.
+ *
+ * ⚠ THE TEST SUITE WOULD NOT HAVE CAUGHT THIS. vitest stubs `server-only`, so
+ * all nine tests passed with the import present. `npx tsx` is the honest control
+ * for whether a lib module is script-importable.
+ */
 import { prisma } from '@/lib/prisma'
 import { getLeagueMatchups } from '@/lib/sleeper-client'
 
@@ -115,7 +126,18 @@ export async function ingestSleeperPlayerScoresForWeek(
     // pairs them with `starters_points`. Membership is all we need here.
     const starterIds = new Set(Array.isArray(m.starters) ? m.starters : [])
 
-    for (const [playerId, raw] of Object.entries(pointsByPlayer)) {
+    /*
+     * ⚠ READ AS `unknown`, NOT AS THE DECLARED `number`. `SleeperMatchup` types
+     * `players_points` as Record<string, number>, but that is a claim about the
+     * provider rather than a guarantee about the bytes on the wire — nothing
+     * validates the payload at the boundary. Trusting the declared type made
+     * `raw === ''` unreachable-by-type and tsc rejected it, which is the compiler
+     * correctly pointing out that the guard and the type disagree. The runtime is
+     * the one that decides, so the value is widened here and narrowed below.
+     */
+    const rawEntries = Object.entries(pointsByPlayer) as Array<[string, unknown]>
+
+    for (const [playerId, raw] of rawEntries) {
       /*
        * ⚠ THE ABSENCE CHECK HAS TO COME BEFORE THE COERCION, AND MY FIRST VERSION
        * DID NOT. `Number(null)` is 0 and `Number.isFinite(0)` is true, so guarding
