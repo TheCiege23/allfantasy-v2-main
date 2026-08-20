@@ -94,12 +94,37 @@ const stems = new Set()
 for (const m of blob.matchAll(/`([a-zA-Z0-9_-]{4,})\$\{/g)) stems.add(m[1])
 for (const m of blob.matchAll(/["']([a-zA-Z0-9_-]{4,})["']\s*\+/g)) stems.add(m[1])
 
+/*
+ * Prefixes the app declares as a PROP, then concatenates onto in the child.
+ *
+ * This is the composition style the stem rule above cannot see. The literal
+ * never sits next to a `${`, because the two halves live in different files:
+ *
+ *   <ReferralShareBar testIdPrefix="referral-share" />        // components/settings
+ *   data-testid={`${testIdPrefix}-${key}`}                    // components/referral
+ *
+ * A declared testIdPrefix is authoritative, so unlike the inferred stems above
+ * these need no hyphen-count guard -- they are not a guess about what might be a
+ * stem, they are the app saying so. The id must still start with `prefix-`.
+ *
+ * 18 of the ids this audit reported were this class, including all seven in
+ * viral-league-invite, whose two tests pass.
+ */
+const prefixStems = new Set()
+for (const m of blob.matchAll(/testIdPrefix\s*[=:]\s*["']([a-zA-Z0-9_-]+)["']/g)) prefixStems.add(m[1])
+
 const appHas = (tid) =>
   blob.includes(tid) ||
-  [...stems].some((s) => tid.startsWith(s) && (s.match(/-/g) ?? []).length >= 2)
+  [...stems].some((s) => tid.startsWith(s) && (s.match(/-/g) ?? []).length >= 2) ||
+  [...prefixStems].some((p) => tid.startsWith(p + '-'))
 
 // ---- validation ------------------------------------------------------------
 const PRESENT = [
+  // Corrected: this was pinned ABSENT. components/referral/ReferralShareBar.tsx
+  // lists { key: 'twitter' } in CHANNELS and renders `${testIdPrefix}-${key}`,
+  // with ReferralSection passing testIdPrefix="referral-share". Settled by
+  // running it: referral-system-click-audit clicks this id and passes.
+  'referral-share-twitter',
   'discovery-format-bracket',
   'content-feed-article-link-blog_soccer_1',
   'draft-board-cell-1',
@@ -109,7 +134,6 @@ const PRESENT = [
 const ABSENT = [
   'dashboard-global-empty-state',
   'draft-selected-player-panel',
-  'referral-share-twitter',
   'trade-ai-explanation-link',
   'draft-open-commissioner-controls',
 ]
