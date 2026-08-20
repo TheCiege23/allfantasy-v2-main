@@ -31,9 +31,12 @@
  *    without writing. You must pass `--confirm` to make it write.
  *  - Prints the resolved target as `endpoint/database (label)` -- never a connection string -- via
  *    the same identity module every other guard in this repo uses.
- *  - Targeting PRODUCTION additionally requires `ALLOW_PROD_REBUILD=1`. Unlike the `*-nonprod.ts`
- *    scripts, this one is *allowed* to run against production -- that is its whole purpose -- so the
- *    gate is an explicit acknowledgement rather than a refusal.
+ *  - Targeting PRODUCTION additionally requires `ALLOW_PROD_REBUILD=1`, but ONLY to write. The
+ *    census runs against production without it: reading counts is harmless, and production is the
+ *    one target whose numbers an operator actually needs to see before deciding. Gating the read
+ *    behind the same flag forced them to assert they accept a destructive window just to look.
+ *    Unlike the `*-nonprod.ts` scripts this one is *allowed* to touch production -- that is its
+ *    whole purpose -- so the flag is an acknowledgement of the write, not a refusal.
  *  - Refuses a target it cannot identify at all, so a typo in DATABASE_URL cannot quietly rebuild
  *    something unexpected.
  *
@@ -102,16 +105,10 @@ void (async () => {
     process.exit(1)
   }
 
-  if (target.kind === 'production' && process.env.ALLOW_PROD_REBUILD !== '1') {
-    console.error(
-      `\nREFUSED: this is PRODUCTION and ALLOW_PROD_REBUILD is not set.\n` +
-        `  Rebuilding is a legitimate production operation, but it deletes every snapshot row first\n` +
-        `  and Decision OS answers evidence_unavailable until the replay finishes.\n` +
-        `  Re-run with ALLOW_PROD_REBUILD=1 once you accept that window.\n`,
-    )
-    process.exit(1)
-  }
-
+  // NOTE: the production gate is deliberately NOT here. It guards the WRITE, below, not the read.
+  // Putting it in front of the census made the dry run refuse on production — which is exactly the
+  // target whose numbers an operator most needs to see, and it forced them to assert they accept a
+  // destructive window just to look. A read-only census earns no such assertion.
   const prisma = new PrismaClient()
   try {
     const before = await census(prisma, 'BEFORE')
@@ -127,9 +124,25 @@ void (async () => {
       console.log(
         `\nDRY RUN — nothing was written. This would delete ${before.league} league snapshot(s), ` +
           `${before.manager} manager snapshot(s) and ${before.processed} processed-event marker(s), ` +
-          `then replay ${before.events} event(s).\n  Re-run with --confirm to do it.`,
+          `then replay ${before.events} event(s).`,
+      )
+      console.log(
+        target.kind === 'production'
+          ? '  To do it: re-run with --confirm and ALLOW_PROD_REBUILD=1.'
+          : '  Re-run with --confirm to do it.',
       )
       return
+    }
+
+    // The write gate. Reached only with --confirm, so the census above is always available.
+    if (target.kind === 'production' && process.env.ALLOW_PROD_REBUILD !== '1') {
+      console.error(
+        `\nREFUSED: this is PRODUCTION and ALLOW_PROD_REBUILD is not set.\n` +
+          `  Rebuilding is a legitimate production operation, but it deletes every snapshot row first\n` +
+          `  and Decision OS answers evidence_unavailable until the replay finishes.\n` +
+          `  The census above is accurate — re-run with ALLOW_PROD_REBUILD=1 once you accept that window.\n`,
+      )
+      process.exit(1)
     }
 
     console.log(`\nRebuilding (batchSize=${batchSize})… snapshots are unavailable until this finishes.`)
