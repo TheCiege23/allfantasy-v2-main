@@ -280,16 +280,58 @@
   color: var(--good);
 }
 
+/*
+ * Chimmy summary strip. The handoff gives it three parts on one row — avatar,
+ * a two-line sentence, and the uplift repeated large on the right — rather than
+ * the single muted line this used to be. The big figure is the point of the
+ * card: it is what the four rows above it add up to.
+ */
 .af-lp-card-foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   padding: 12px 16px;
   border-top: 1px solid var(--line);
   background: var(--surface2);
 }
+
+.af-lp-card-foot-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  /* Sits on --surface2, so it needs its own edge to read as a token rather than
+     as part of the background. */
+  border: 1px solid var(--line2);
+}
+
 .af-lp-card-foot-text {
-  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* min-width:0 lets the flex child shrink instead of forcing the row wider than
+     the card at narrow widths. */
+  min-width: 0;
+}
+
+.af-lp-card-foot-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-lp-card-foot-meta {
+  font-size: 11px;
   color: var(--muted);
 }
-.af-lp-card-foot-text strong {
+
+.af-lp-card-foot-value {
+  margin-left: auto;
+  flex: none;
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
   color: var(--good);
 }
 
@@ -407,11 +449,30 @@
   color: var(--muted);
 }
 
+/*
+ * Heading and body on the left, the CTA pair pushed right — the handoff draws
+ * this band as one row, not a stack. It falls back to stacked under 860px,
+ * where the two halves no longer fit side by side.
+ */
+.af-lp-pricing-inner {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+.af-lp-pricing-copy {
+  flex: 1 1 420px;
+  min-width: 0;
+}
+
 .af-lp-pricing-ctas {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
-  margin-top: 20px;
+  /* margin-left:auto is what pushes the pair to the right edge; the old rule had
+     a top margin instead because the CTAs sat under the body copy. */
+  margin-left: auto;
 }
 .af-lp-pricing-ctas a {
   text-decoration: none;
@@ -419,12 +480,18 @@
 
 /* ── FAQ ─────────────────────────────────────────────────────────────── */
 
-.af-lp-faq-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+/*
+ * ⚠ A GRID OF OPEN CARDS, NOT A COLUMN OF ACCORDIONS. These four answers are
+ * the ones a visitor wants before deciding — including "is this gambling?" and
+ * "what does it cost?" — and an accordion puts a click in front of every one.
+ * The old rule also capped the list at 820px, which left the right half of the
+ * section empty on desktop.
+ */
+.af-lp-faq-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
   margin-top: 22px;
-  max-width: 820px;
 }
 
 .af-lp-faq-item {
@@ -434,10 +501,13 @@
   background: var(--surface);
 }
 
+/* Now an <h3>, so the margin the UA gives headings has to go — the card supplies
+   its own padding and the answer below supplies the gap. */
 .af-lp-faq-q {
-  cursor: pointer;
+  margin: 0;
   font-weight: 700;
   font-size: 14.5px;
+  line-height: 1.4;
   color: var(--text);
 }
 
@@ -752,6 +822,11 @@
   .af-lp-cap-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+  /* The band's two halves stop fitting side by side well before the 720px
+     breakpoint, so it stacks here and the CTA pair returns to the left. */
+  .af-lp-pricing-ctas {
+    margin-left: 0;
+  }
   .af-lp-b2b-head,
   .af-lp-b2b-bottom {
     grid-template-columns: minmax(0, 1fr);
@@ -773,8 +848,18 @@
     overflow-x: auto;
     gap: 16px;
   }
+  /*
+   * ⚠ MUST WRAP, OR THE PRIMARY CTA IS CUT IN HALF. This row holds the language
+   * switch, Sign in, Partners and "Get started free", and at nowrap on a 375px
+   * frame it measured 393px wide inside an .af-lp that clips at 375 — so the
+   * right-hand ~18px of the one button the page exists to get pressed was
+   * simply not on screen, with no scrollbar to reveal it because the parent is
+   * overflow:hidden. Wrapping drops it to a second line instead.
+   */
   .af-lp-nav-right {
     gap: 10px;
+    flex-wrap: wrap;
+    row-gap: 8px;
   }
   .af-lp-hero {
     padding: 40px 16px 36px;
@@ -794,8 +879,12 @@
   .af-lp-b2b {
     padding: 36px 16px;
   }
-  .af-lp-cap-grid {
+  .af-lp-cap-grid,
+  .af-lp-faq-grid {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .af-lp-pricing-ctas {
+    margin-left: 0;
   }
   .af-lp-h2 {
     font-size: 24px;

@@ -13,6 +13,8 @@
  * real, shareable, indexable address rather than a per-browser preference.
  */
 
+import type { MonthlyPriceRange } from '@/lib/monetization/planPresentation'
+
 export const LANDING_LANGS = ['en', 'es'] as const
 export type LandingLang = (typeof LANDING_LANGS)[number]
 
@@ -44,6 +46,8 @@ export type LandingCopy = {
     pricing: string
     forCommissioners: string
     signIn: string
+    /** Primary CTA when the reader is already signed in. */
+    goToDashboard: string
     partners: string
     getStarted: string
     langLabel: string
@@ -58,8 +62,10 @@ export type LandingCopy = {
     reassure: string
     cardTitle: string
     cardWeek: string
+    /** Precedes the example uplift figure, e.g. "Two fixes worth " + "+13.0". */
     cardFootBefore: string
-    cardFootAfter: string
+    /** Second line under it — who produced the figure and over what. */
+    cardFootMeta: string
   }
   connects: { label: string; soon: string; sports: string }
   reasons: { h2: string; items: Reason[] }
@@ -77,7 +83,7 @@ export type LandingCopy = {
   }
 }
 
-const EN: LandingCopy = {
+const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
   htmlLang: 'en',
   ogLocale: 'en_US',
   meta: {
@@ -93,6 +99,7 @@ const EN: LandingCopy = {
     pricing: 'Pricing',
     forCommissioners: 'For commissioners',
     signIn: 'Sign in',
+    goToDashboard: 'Go to dashboard',
     partners: 'Partners',
     getStarted: 'Get started free',
     langLabel: 'Language',
@@ -108,7 +115,7 @@ const EN: LandingCopy = {
     cardTitle: 'Your leagues',
     cardWeek: 'Week 12 · example',
     cardFootBefore: 'Two fixes worth ',
-    cardFootAfter: ' — Chimmy, across all 4 leagues',
+    cardFootMeta: 'Chimmy, across all 4 leagues',
   },
   connects: {
     label: 'Connects to',
@@ -137,7 +144,9 @@ const EN: LandingCopy = {
   },
   pricing: {
     h2: 'Free to see it all. Upgrade to act on it.',
-    body: 'Every league, live score and standing is free. Paid plans from $9.99/mo add trade grades, projections and commissioner tools.',
+    body: prices
+      ? `Every league, live score and standing is free. Paid plans from ${prices.min}/mo add trade grades, projections and commissioner tools.`
+      : 'Every league, live score and standing is free. Paid plans add trade grades, projections and commissioner tools.',
     ctaPrimary: 'Start free',
     ctaSecondary: 'Compare plans',
   },
@@ -158,7 +167,9 @@ const EN: LandingCopy = {
       },
       {
         q: 'What does it cost?',
-        a: 'Free forever for players. Paid plans run $9.99–$29.99/mo and can be cancelled anytime.',
+        a: prices
+          ? `Free forever for players. Paid plans run ${prices.min}–${prices.max}/mo and can be cancelled anytime.`
+          : 'Free forever for players. Every paid plan can be cancelled anytime.',
       },
     ],
   },
@@ -185,7 +196,7 @@ const EN: LandingCopy = {
     compliance:
       'Not available in WA. Paid leagues restricted in HI, ID, MT, NV. 100% fantasy sports — no gambling, no DFS.',
   },
-}
+})
 
 /*
  * ⚠ THE SPANISH IS WRITTEN, NOT TRANSLATED WORD-FOR-WORD. Fantasy vocabulary in
@@ -199,7 +210,7 @@ const EN: LandingCopy = {
  * claim — because softening either one would make the page promise Spanish
  * readers something different from what it promises English ones.
  */
-const ES: LandingCopy = {
+const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
   htmlLang: 'es',
   ogLocale: 'es_US',
   meta: {
@@ -215,6 +226,7 @@ const ES: LandingCopy = {
     pricing: 'Precios',
     forCommissioners: 'Para comisionados',
     signIn: 'Iniciar sesión',
+    goToDashboard: 'Ir al panel',
     partners: 'Socios',
     getStarted: 'Empieza gratis',
     langLabel: 'Idioma',
@@ -230,7 +242,7 @@ const ES: LandingCopy = {
     cardTitle: 'Tus ligas',
     cardWeek: 'Semana 12 · ejemplo',
     cardFootBefore: 'Dos ajustes que valen ',
-    cardFootAfter: ' — Chimmy, en las 4 ligas',
+    cardFootMeta: 'Chimmy, en las 4 ligas',
   },
   connects: {
     label: 'Se conecta con',
@@ -259,7 +271,9 @@ const ES: LandingCopy = {
   },
   pricing: {
     h2: 'Gratis para verlo todo. Mejora tu plan para actuar.',
-    body: 'Todas tus ligas, marcadores en vivo y posiciones son gratis. Los planes de pago desde $9.99/mes agregan calificación de cambios, proyecciones y herramientas de comisionado.',
+    body: prices
+      ? `Todas tus ligas, marcadores en vivo y posiciones son gratis. Los planes de pago desde ${prices.min}/mes agregan calificación de cambios, proyecciones y herramientas de comisionado.`
+      : 'Todas tus ligas, marcadores en vivo y posiciones son gratis. Los planes de pago agregan calificación de cambios, proyecciones y herramientas de comisionado.',
     ctaPrimary: 'Empieza gratis',
     ctaSecondary: 'Comparar planes',
   },
@@ -280,7 +294,9 @@ const ES: LandingCopy = {
       },
       {
         q: '¿Cuánto cuesta?',
-        a: 'Gratis para siempre para jugadores. Los planes de pago van de $9.99 a $29.99 al mes y se cancelan cuando quieras.',
+        a: prices
+          ? `Gratis para siempre para jugadores. Los planes de pago van de ${prices.min} a ${prices.max} al mes y se cancelan cuando quieras.`
+          : 'Gratis para siempre para jugadores. Cualquier plan de pago se cancela cuando quieras.',
       },
     ],
   },
@@ -310,10 +326,26 @@ const ES: LandingCopy = {
     compliance:
       'No disponible en WA. Ligas de pago restringidas en HI, ID, MT y NV. 100% fantasy de temporada — sin apuestas, sin DFS.',
   },
+})
+
+const LANDING_COPY: Record<LandingLang, (prices: MonthlyPriceRange | null) => LandingCopy> = {
+  en: EN,
+  es: ES,
 }
 
-export const LANDING_COPY: Record<LandingLang, LandingCopy> = { en: EN, es: ES }
-
-export function getLandingCopy(lang: LandingLang): LandingCopy {
-  return LANDING_COPY[lang] ?? EN
+/**
+ * ⚠ `prices` IS REQUIRED, AND THAT IS THE POINT. It used to be absent and the two
+ * strings that quote money were typed out — "paid plans run $9.99–$29.99/mo", in
+ * both languages, long after $29.99 stopped being any plan's price. Making the
+ * range an argument means the copy cannot be rendered without someone handing it
+ * the live catalog, so the next price change reaches this page for free.
+ *
+ * Pass `null` only where no plan is sold monthly; the copy then omits the figures
+ * rather than printing a placeholder.
+ */
+export function getLandingCopy(
+  lang: LandingLang,
+  prices: MonthlyPriceRange | null
+): LandingCopy {
+  return (LANDING_COPY[lang] ?? EN)(prices)
 }

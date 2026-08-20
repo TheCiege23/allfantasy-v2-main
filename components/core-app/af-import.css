@@ -397,3 +397,238 @@
     width: 100%;
   }
 }
+
+/* ── Bulk import ("Import all") ──────────────────────────────────────────── */
+
+.af-im-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-im-bulk-btn {
+  flex: 0 0 auto;
+}
+
+.af-im-bulk-summary {
+  margin: 0;
+  flex: 1 1 240px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/*
+ * Per-league outcome replaces the row's button once bulk has touched it. Sized to
+ * the button it stands in for so the list does not reflow as statuses land.
+ */
+.af-im-league-status {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.af-im-league-status--done {
+  border-color: var(--good);
+  color: var(--good);
+}
+
+/* Already imported is a success, not a failure -- the league is present and was
+   not overwritten. Muted rather than green so it does not read as new work. */
+.af-im-league-status--exists {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.af-im-league-status--needs-attestation {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.af-im-league-status--failed {
+  border-color: var(--bad);
+  color: var(--bad);
+}
+
+/* ── Top bar + step indicator (handoffs 4c / 4d) ──────────────────────
+ * The connect screen is step 2 of the auth → connect → choose-leagues journey,
+ * so it carries the same brand lockup and progress bar as sign-up.
+ */
+.af-im-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  row-gap: 8px;
+  padding-bottom: 14px;
+  margin-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-im-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+}
+
+.af-im-wordmark {
+  font-size: 19px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-im-brand:hover .af-im-wordmark {
+  color: var(--accent);
+}
+
+.af-im-topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-left: auto;
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+/* The read-only promise, stated in the chrome rather than only in body copy —
+   it is the single most reassuring fact about this screen. */
+.af-im-readonly {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  cursor: help;
+}
+
+/* Swaps in once discovery has actually returned leagues — see connectedLabel. */
+.af-im-connected {
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--good);
+  background: var(--good-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--good);
+}
+
+.af-im-skip {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text2);
+  text-decoration: none;
+  /* 44px touch row on mobile. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+.af-im-skip:hover {
+  color: var(--text);
+}
+
+.af-im-steps {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.af-im-step {
+  flex: 1;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--line2);
+}
+.af-im-step[data-done='true'] {
+  background: var(--accent);
+}
+
+/* ── League selection (handoff 4d) ────────────────────────────────────── */
+
+.af-im-league-check {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.af-im-league-check:disabled {
+  cursor: default;
+}
+
+/* A ticked row is going to be imported — worth showing at a glance when the
+   list is long, without shouting. */
+.af-im-league[data-picked='true'] {
+  border-color: var(--accent-line);
+}
+
+/* ── 6a: the read / never-do trust contract ─────────────────────────────────
+   Two columns on desktop, stacked on narrow screens. Sits on --surface2 so it
+   reads as a distinct promise rather than more body copy, and the divider is a
+   border on the second column so it disappears automatically when they stack. */
+.af-core .af-im-trust {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+.af-core .af-im-trust-col {
+  padding: 16px 18px;
+}
+.af-core .af-im-trust-col + .af-im-trust-col {
+  border-left: 1px solid var(--line);
+}
+.af-core .af-im-trust-read {
+  color: var(--good);
+}
+.af-core .af-im-trust-never {
+  color: var(--bad);
+}
+.af-core .af-im-trust-body {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+/* The commitment made at the moment of typing, directly under the connect action. */
+.af-core .af-im-account-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+@media (max-width: 640px) {
+  .af-core .af-im-trust {
+    grid-template-columns: 1fr;
+  }
+  .af-core .af-im-trust-col + .af-im-trust-col {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}

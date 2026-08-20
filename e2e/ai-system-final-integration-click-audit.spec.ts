@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe('@ai ai system final integration click audit', () => {
   test.describe.configure({ mode: 'serial', timeout: 210_000 })
@@ -13,124 +14,6 @@ test.describe('@ai ai system final integration click audit', () => {
             feature_ai_assistant: state.enabled,
           },
         }),
-      })
-    })
-  }
-
-  async function mockDashboardApis(page: Page) {
-    const soccerLeagueId = 'soccer-e2e-123'
-    const soccerLeagueName = 'Soccer Dashboard Harness League'
-
-    await page.route('**/api/league/list', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          leagues: [
-            {
-              id: soccerLeagueId,
-              name: soccerLeagueName,
-              sport: 'SOCCER',
-              sport_type: 'SOCCER',
-              leagueVariant: 'STANDARD',
-              league_variant: 'STANDARD',
-              platform: 'manual',
-              leagueSize: 12,
-              isDynasty: false,
-              syncStatus: 'manual',
-              rosters: [],
-            },
-          ],
-        }),
-      })
-    })
-
-    await page.route('**/api/league/roster**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ roster: [], faabRemaining: null, waiverPriority: null }),
-      })
-    })
-
-    await page.route('**/api/bracket/leagues/**/standings', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ standings: [] }) })
-    })
-
-    await page.route('**/api/bracket/leagues/**/chat', async (route) => {
-      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ messages: [] }) })
-    })
-
-    await page.route('**/api/content-feed**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          items: [
-            {
-              id: 'a1',
-              title: 'League trend update',
-              summary: 'Waiver market heating up',
-              href: '/dashboard',
-              type: 'feed',
-              publishedAt: new Date().toISOString(),
-            },
-          ],
-        }),
-      })
-    })
-
-    await page.route('**/api/sports/news**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          news: [
-            {
-              id: 'n1',
-              title: 'Injury watch',
-              source: 'wire',
-              publishedAt: new Date().toISOString(),
-              url: '/fantasy-news',
-            },
-          ],
-        }),
-      })
-    })
-
-    await page.route('**/api/sports/weather**', async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          team: 'KC',
-          venue: 'Arrowhead',
-          isDome: false,
-          weather: { summary: 'Clear', tempF: 58, windMph: 6 },
-          source: 'openweathermap',
-        }),
-      })
-    })
-
-    await page.route(`**/api/leagues/${soccerLeagueId}`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          id: soccerLeagueId,
-          name: soccerLeagueName,
-          sport: 'SOCCER',
-          leagueVariant: 'STANDARD',
-          isDynasty: false,
-        }),
-      })
-    })
-
-    await page.route(`**/api/commissioner/leagues/${soccerLeagueId}/check**`, async (route) => {
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({ isCommissioner: false }),
       })
     })
   }
@@ -384,26 +267,9 @@ test.describe('@ai ai system final integration click audit', () => {
   async function fillAndEvaluateTrade(page: Page) {
     await page.getByLabel('sender player 1 name').fill('Atlas Runner')
     await page.getByLabel('receiver player 1 name').fill('Blaze Catcher')
-    await page.getByTestId('trade-evaluate-button').click()
+    await clickHydrated(page.getByTestId('trade-evaluate-button'))
     await expect(page.getByTestId('trade-ai-explanation-link')).toBeVisible()
   }
-
-  test('dashboard AI CTA switches between chat and deterministic fallback', async ({ page }) => {
-    const ai = { enabled: true }
-    mockAiAssistantFeature(page, ai)
-    await mockDashboardApis(page)
-
-    await page.goto('/e2e/dashboard-soccer-grouping')
-    await page.locator('[data-dashboard-tab="AI"]').click()
-    const askChimmyLink = page.getByRole('link', { name: /Ask Chimmy/i }).first()
-    await expect(askChimmyLink).toHaveAttribute('href', /\/messages\?tab=ai/)
-
-    ai.enabled = false
-    await page.reload()
-    await page.locator('[data-dashboard-tab="AI"]').click()
-    const fallbackLink = page.getByRole('link', { name: /Open lineup help/i }).first()
-    await expect(fallbackLink).toHaveAttribute('href', /\/app\/coach/)
-  })
 
   test('draft helper toggles AI link and deterministic refresh fallback', async ({ page }) => {
     const ai = { enabled: true }
@@ -418,7 +284,7 @@ test.describe('@ai ai system final integration click audit', () => {
     await expect(page.getByTestId('draft-helper-ai-explanation-toggle')).toBeDisabled()
     const fallbackButton = page.getByTestId('draft-ai-suggestion-fallback-button')
     await expect(fallbackButton).toBeVisible()
-    await fallbackButton.click()
+    await clickHydrated(fallbackButton)
     await expect(page.getByTestId('draft-helper-harness-refresh-count')).toContainText('Refresh count: 1')
   })
 
@@ -465,12 +331,12 @@ test.describe('@ai ai system final integration click audit', () => {
     await mockLeagueChatApis(page, leagueId)
 
     await page.goto('/e2e/league-chat-ai')
-    await page.getByRole('button', { name: /AI Chat/i }).click()
+    await clickHydrated(page.getByRole('button', { name: /AI Chat/i }))
     await expect(page.getByTestId('chimmy-chat-shell')).toBeVisible()
 
     ai.enabled = false
     await page.reload()
-    await page.getByRole('button', { name: /AI Chat/i }).click()
+    await clickHydrated(page.getByRole('button', { name: /AI Chat/i }))
     await expect(page.getByTestId('league-chat-ai-fallback')).toBeVisible()
     await expect(page.getByRole('link', { name: /Open waiver planner/i })).toHaveAttribute(
       'href',

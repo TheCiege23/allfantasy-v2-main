@@ -15,21 +15,13 @@
  * With no ids it auto-discovers the most-recently-synced leagues (each self-labels via provenance).
  */
 import { hasDatabaseUrl, resolveDatabaseUrl } from '../lib/env/database-url'
+import { assertNonProductionDbTarget, describeDbTarget } from './_db-target-identity'
 
-const PROD_HOST_MARKER = 'ep-spring-tooth'
 
 let failures = 0
 const check = (name: string, ok: boolean, detail = '') => {
   console.log(`${ok ? '✅' : '❌'} ${name}${detail ? `  — ${detail}` : ''}`)
   if (!ok) failures++
-}
-function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
 }
 
 interface TelemetryEvent { event: string; flags?: Record<string, unknown> }
@@ -61,11 +53,14 @@ const COUNTS = {
     console.log('COMMISSIONER_CONFORMANCE SKIPPED (no DATABASE_URL) — set a non-prod DATABASE_URL to run the real-data check.')
     process.exit(0)
   }
-  const host = hostOf(resolveDatabaseUrl())
-  if (host.includes(PROD_HOST_MARKER)) {
-    console.log(`COMMISSIONER_CONFORMANCE SKIPPED (refusing production DB host: ${host}) — run against a non-prod database.`)
-    process.exit(0)
-  }
+  const dbTargetUrl = resolveDatabaseUrl()
+  const host = describeDbTarget(dbTargetUrl)
+  assertNonProductionDbTarget({
+    script: 'decision-os-commissioner-conformance',
+    url: dbTargetUrl,
+    action: 'runs conformance checks',
+    exitCode: 0,
+  })
   console.log(`Phase F.1 commissioner conformance — READ-ONLY — DB host: ${host}`)
 
   const { prisma } = await import('../lib/prisma')

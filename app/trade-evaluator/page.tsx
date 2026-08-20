@@ -1062,7 +1062,15 @@ function TradeHubInner() {
 
             <label className="block">
               <span className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.24em] text-white/45">Sport</span>
+              {/*
+                A stable hook for the trade e2e suite. It previously reached this
+                control through DOM shape — `label:has-text("Sport") + select` —
+                which matched nothing, because the select is a CHILD of the label
+                and not its sibling. That selector returned an empty list and the
+                assertion failed on an empty array rather than on anything real.
+              */}
               <select
+                data-testid="trade-sport-select"
                 value={sport}
                 onChange={(event) => setSport(normalizeToSupportedSport(event.target.value))}
                 className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"

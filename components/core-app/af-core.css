@@ -470,3 +470,52 @@ html[data-mode='af'] .af-core {
   color: var(--bad);
   font-weight: 800;
 }
+
+/*
+ * ── Search field ─────────────────────────────────────────────────────
+ *
+ * A design-system primitive, not shell chrome. It lives here because TWO
+ * surfaces use it and they do not share a stylesheet: the shell's topbar, and
+ * Player Finder's search rail — which renders at /players/{slug} OUTSIDE
+ * AfCoreShell and therefore never loads af-core-shell.css, where these rules
+ * used to sit. Measured on that page before moving them: `.af-search` computed
+ * to `display:block`, no border, no radius, and the input painted as a raw
+ * white browser control on a dark card.
+ *
+ * ⚠ DELIBERATELY UNSCOPED, unlike the primitives above. Scoping to
+ * `.af-core .af-search` raises specificity to (0,2,0) and would start beating
+ * `.af-pf-search`'s (0,1,0) height override, silently shrinking the Player
+ * Finder field from 42px to 36px. Same specificity as before the move means
+ * every existing override keeps winning exactly as it did.
+ */
+.af-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+}
+.af-search-icon {
+  color: var(--faint);
+  font-size: 12px;
+}
+.af-search-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font-size: 13px;
+}
+.af-search-input::placeholder {
+  color: var(--faint);
+}
+.af-search-kbd {
+  font-size: 10px;
+  color: var(--faint);
+}

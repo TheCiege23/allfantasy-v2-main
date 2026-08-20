@@ -751,7 +751,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     frontendGateBehavior: "FeatureGate around the 'Generate Trade Proposals' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
-      routes: ["/af-legacy?tab=trade"],
+      routes: ["/legacy?tab=trade"],
       components: [],
     },
   },
@@ -781,7 +781,7 @@ const PREMIUM_FEATURE_MONETIZATION_MATRIX: readonly PremiumFeatureMonetizationEn
     frontendGateBehavior: "FeatureGate around the 'Analyze Free Agents' button.",
     unavailableBehavior: "disable_with_fallback",
     surfaceHints: {
-      routes: ["/af-legacy?tab=waiver"],
+      routes: ["/legacy?tab=waiver"],
       components: [],
     },
   },

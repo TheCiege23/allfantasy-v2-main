@@ -129,3 +129,37 @@ export function describeYearlySavings(plans: PlanPresentation[]): string | null 
   if (pcts.length === 0) return null
   return `Save ${Math.min(...pcts)}% paying yearly`
 }
+
+/** Cheapest and dearest monthly paid plan, already formatted for prose. */
+export type MonthlyPriceRange = {
+  /** e.g. "$9.99" */
+  min: string
+  /** e.g. "$19.99" */
+  max: string
+}
+
+/**
+ * The paid monthly span, for marketing copy that quotes a range.
+ *
+ * ⚠ THIS EXISTS BECAUSE THE LANDING PAGE HAD THE RANGE TYPED OUT AND IT WAS
+ * WRONG. lib/i18n/landing-copy.ts claimed "paid plans run $9.99–$29.99/mo" in
+ * BOTH languages. $29.99 was AF Legacy's price before it dropped to $9.99, so
+ * the top of the range had not existed for some time — and the page most new
+ * visitors see was quoting it. That is the same failure the pricing page's own
+ * header describes: a number transcribed somewhere the load-bearing code does
+ * not reach, in a file nobody re-reads when prices move.
+ *
+ * Returns null rather than a partial range when no plan is sold monthly, so a
+ * caller renders nothing instead of "$9.99–$9.99" or a bare dash.
+ */
+export function getMonthlyPriceRange(plans: PlanPresentation[]): MonthlyPriceRange | null {
+  const amounts = plans
+    .map((p) => p.monthly?.amountUsd)
+    .filter((n): n is number => n != null && n > 0)
+  if (amounts.length === 0) return null
+
+  // Whole dollars lose the .00 — "$80" reads as a price, "$80.00" as an invoice.
+  // Same rule as the pricing page's money(), kept consistent across surfaces.
+  const money = (n: number) => (Number.isInteger(n) ? `$${n}` : `$${n.toFixed(2)}`)
+  return { min: money(Math.min(...amounts)), max: money(Math.max(...amounts)) }
+}

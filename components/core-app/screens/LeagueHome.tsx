@@ -12,23 +12,58 @@ import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-league-home.css'
 import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
+import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 
 /**
- * Screen 2 — Dashboard, one league selected.
+ * Screen 3b — Dashboard, one league selected.
  *
- * The handoff: "the rail stays; the main column becomes that league's world".
- * Season timeline, Draft HQ and Commissioner Hub appear ONLY here.
+ * The rule the handoff opens with: season timeline, Draft HQ and Commissioner
+ * Hub exist ONLY here. There is no single season calendar across 60 leagues,
+ * which is why 3a carries none of them.
  *
- * Sections render real values or state plainly that they are unavailable and
- * why. There is no skeleton standing in for a number — a greyed-out win
- * probability still reads as a win probability, and this screen is where the
- * temptation to fake one is strongest.
+ * ── LAYOUT ───────────────────────────────────────────────────────────────────
+ * Rebuilt to the 3b screenshot: identity header, full-width season timeline,
+ * then `1fr | 372px` — matchup strip, the one urgent action, Draft HQ /
+ * Commissioner Hub two-up and standings on the left; Ask Chimmy, league buzz and
+ * rivalry radar on the right. Under 1080px it collapses to one column and the
+ * timeline scrolls horizontally with the current stage pinned in view, which is
+ * the mobile frame's own behaviour.
+ *
+ * ⚠ TWO OF THE FOUR "MISSING" PANELS WERE NOT MISSING. Corrected after audit:
+ *
+ *   - MATCHUP + WIN PROBABILITY. ✅ REAL NOW. The claim that no writer produces
+ *     per-week scoring was false — `lib/core-app/matchup.ts` already resolved
+ *     WeeklyMatchup rows and priced both lineups against fantasy_projections for
+ *     the Matchup screen. `leagueHome` now reuses that resolver. The probability
+ *     renders only when the engine produced one; a matchup that could not be
+ *     priced shows scores and no percentage.
+ *   - RIVALRY RADAR. ✅ REAL NOW. `WeeklyMatchup.matchupId` pairs the two rosters
+ *     in a week, so every past meeting is stored. Only "usually online" is
+ *     genuinely absent, and that line is dropped rather than guessed.
+ *   - COMMISSIONER HUB. Votes and commissioner tasks are not ingested.
+ *   - LEAGUE BUZZ. League transactions are not ingested for these platforms.
+ *   - RIVALRY RADAR. No head-to-head history, and nothing anywhere records when
+ *     a manager is usually online.
+ *
+ * Each renders its frame with the reason inside rather than being dropped, so
+ * the screen matches the design AND is honest about which panels are waiting on
+ * an engine. A greyed-out "71%" still reads as a win probability.
  */
 
 export type LeagueHomeProps = {
   data: LeagueHomeData
   /** How many outstanding issues exist in OTHER leagues. */
   otherLeagueIssueCount: number
+  /**
+   * This league's own issues, already sorted by severity then deadline.
+   *
+   * ⚠ THE HANDOFF SORTS THESE BY POINT DELTA ("the higher point delta wins").
+   * We do not compute a point delta for any issue — `CoreIssue` carries a
+   * deadline and a severity and no projection — so the existing sort stands in,
+   * which ranks a lineup that locks in an hour above one that locks tomorrow.
+   * That is a different rule and it is the honest one available.
+   */
+  issues?: CoreIssue[]
 }
 
 function Unavailable({ reason }: { reason: string }) {
@@ -42,36 +77,72 @@ function Unavailable({ reason }: { reason: string }) {
   )
 }
 
-function Section<T>({
+/** A titled panel. `tone` drives the 3b border colour on Commissioner Hub. */
+function Panel({
   title,
   help,
-  state,
+  tone,
+  className,
   children,
 }: {
   title: string
-  help?: string
-  state: SectionState<T>
-  children: (data: T) => React.ReactNode
+  help?: React.ReactNode
+  tone?: 'warn'
+  className?: string
+  children: React.ReactNode
 }) {
   return (
-    <section className="af-card af-lh-section">
-      <header className="af-lh-section-head">
-        <h2 className="af-label af-lh-section-title">{title}</h2>
-        {help ? <span className="af-lh-section-help">{help}</span> : null}
+    <section
+      className={`af-card af-lh-panel${className ? ` ${className}` : ''}`}
+      data-tone={tone}
+    >
+      <header className="af-lh-panel-head">
+        <h2 className="af-label af-lh-panel-title">{title}</h2>
+        {help ? <span className="af-lh-panel-help">{help}</span> : null}
       </header>
-      {state.available ? children(state.data) : <Unavailable reason={state.reason} />}
+      {children}
     </section>
   )
 }
 
-export function LeagueHome({ data, otherLeagueIssueCount }: LeagueHomeProps) {
+function StatePanel<T>({
+  title,
+  help,
+  tone,
+  className,
+  state,
+  children,
+}: {
+  title: string
+  help?: React.ReactNode
+  tone?: 'warn'
+  className?: string
+  state: SectionState<T> | { available: false; reason: string }
+  children: (data: T) => React.ReactNode
+}) {
+  return (
+    <Panel title={title} help={help} tone={tone} className={className}>
+      {state.available ? children((state as { available: true; data: T }).data) : <Unavailable reason={state.reason} />}
+    </Panel>
+  )
+}
+
+export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueHomeProps) {
   const { league } = data
+  const platformLabel = league.platform === 'manual' ? 'your platform' : league.platform
+
+  /*
+   * ONE urgent action, not a list — the handoff is explicit. Anything that has
+   * dropped out of the top slot is still reachable from the nav counts, so
+   * nothing is hidden, it is just not competing for the same row.
+   */
+  const urgent = issues[0] ?? null
 
   return (
     <div className="af-lh">
       {/* ── League identity ─────────────────────────────────────────── */}
       <header className="af-lh-head">
-        <div>
+        <div className="af-lh-ident">
           <h1 className="af-display af-lh-name">{league.name}</h1>
           <div className="af-lh-sub">
             <span className="af-platform af-lh-platform" data-platform={league.platform}>
@@ -90,104 +161,238 @@ export function LeagueHome({ data, otherLeagueIssueCount }: LeagueHomeProps) {
           </div>
         </div>
 
-        {/* Back to the all-leagues dashboard — the state this screen is a
-            variant OF, not /core, which is a different surface. */}
-        <Link href="/dashboard" className="af-btn af-btn--ghost af-lh-back">
-          Back to home →
-        </Link>
+        <div className="af-lh-headside">
+          {/*
+            The READ-ONLY chip is on every signed-in screen per the shared
+            contract. At /dashboard?league= this screen renders outside
+            AfCoreShell, so nothing else on the page carries it.
+          */}
+          <span className="af-readonly">Read-only</span>
+          <span className="af-sync af-num" data-stale={data.syncAge.stale}>
+            {data.syncAge.stale ? '⚠ ' : ''}
+            {data.syncAge.label}
+          </span>
+          <Link href="/dashboard" className="af-btn af-btn--ghost af-lh-back">
+            Back to home →
+          </Link>
+        </div>
       </header>
 
-      {otherLeagueIssueCount > 0 ? (
-        <p className="af-lh-elsewhere">
-          <span className="af-label">All leagues</span>
-          {` ${otherLeagueIssueCount} more ${otherLeagueIssueCount === 1 ? 'issue lives' : 'issues live'} outside this league.`}
-        </p>
-      ) : null}
-
       {/* ── Season timeline ─────────────────────────────────────────── */}
-      <Section
+      <StatePanel
         title={`Season timeline · ${league.name}`}
-        help={league.currentWeek != null ? `You are here · week ${league.currentWeek}` : undefined}
+        help={
+          league.currentWeek != null ? (
+            <span className="af-lh-here">You are here · week {league.currentWeek}</span>
+          ) : undefined
+        }
+        className="af-lh-timeline-panel"
         state={data.timeline}
       >
         {(stages) => (
           <ol className="af-timeline">
             {stages.map((s) => (
               <li key={s.key} className="af-timeline-stage" data-state={s.state}>
-                <span className="af-timeline-dot" aria-hidden />
+                <span className="af-timeline-bar" aria-hidden />
                 <span className="af-timeline-label">{s.label}</span>
                 <span className="af-timeline-when af-label">{s.state === 'now' ? 'NOW' : s.when}</span>
               </li>
             ))}
           </ol>
         )}
-      </Section>
+      </StatePanel>
 
+      {/* ── Main / side ─────────────────────────────────────────────── */}
       <div className="af-lh-grid">
-        {/* ── Matchup ───────────────────────────────────────────────── */}
-        <Section title="This week's matchup" state={data.matchup}>
-          {() => null}
-        </Section>
+        <div className="af-lh-main">
+          {/*
+            Matchup strip.
+            ⚠ THIS CALLBACK USED TO BE `() => null`, WHICH IS WHY PROMOTING THE TYPE
+            ALONE WAS NOT ENOUGH. The panel rendered its frame and nothing else, so
+            even once the loader produced a real matchup the screen would have shown
+            an empty box and tsc would not have complained — `() => null` satisfies
+            any `T`. The win probability appears only when the engine produced one.
+           */}
+          <StatePanel title="This week's matchup" className="af-lh-matchup" state={data.matchup}>
+            {(m) => (
+              <div className="af-lh-mrow">
+                <div className="af-lh-mside">
+                  <span className="af-lh-mlabel">YOU</span>
+                  <b className="af-lh-mteam">{m.you.name}</b>
+                  <b className="af-lh-mscore af-lh-good">{m.you.points.toFixed(1)}</b>
+                </div>
+                <div className="af-lh-mmid">
+                  {m.winProbability ? (
+                    <>
+                      <span className="af-lh-mlabel">WIN PROB</span>
+                      <b className="af-lh-mwin">{Math.round(m.winProbability.pWin * 100)}%</b>
+                      <span className="af-lh-mbar">
+                        <span style={{ width: `${Math.round(m.winProbability.pWin * 100)}%` }} />
+                      </span>
+                      <em className="af-lh-mnote">{m.winProbability.confidence}</em>
+                    </>
+                  ) : (
+                    <em className="af-lh-mnote">
+                      Week {m.week} · both lineups could not be priced, so there is no
+                      win probability
+                    </em>
+                  )}
+                </div>
+                <div className="af-lh-mside af-lh-mright">
+                  <span className="af-lh-mlabel">OPPONENT</span>
+                  <b className="af-lh-mteam">{m.opponent.name}</b>
+                  <b className="af-lh-mscore">{m.opponent.points.toFixed(1)}</b>
+                </div>
+              </div>
+            )}
+          </StatePanel>
 
-        {/* ── Standings ─────────────────────────────────────────────── */}
-        <Section title="Standings" state={data.standings}>
-          {(rows) => (
-            <ol className="af-standings">
-              {rows.slice(0, 6).map((t, i) => (
-                <li key={t.teamId} className="af-standings-row" data-you={t.isYou}>
-                  <span className="af-standings-rank af-num">{t.rank ?? i + 1}</span>
-                  <span className="af-standings-name">
-                    {t.teamName}
-                    {t.isYou ? <span className="af-standings-you"> — you</span> : null}
-                  </span>
-                  <span className="af-standings-record af-num">
-                    {t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`}
-                  </span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </Section>
+          {/* The one urgent action */}
+          {urgent ? (
+            <section className="af-card af-issue af-lh-urgent" data-severity={urgent.severity}>
+              <span className="af-lh-urgent-glyph" aria-hidden>
+                {urgent.glyph}
+              </span>
+              <div className="af-lh-urgent-body">
+                <h2 className="af-lh-urgent-title">{urgent.title}</h2>
+                <p className="af-lh-urgent-meta">{urgent.meta}</p>
+              </div>
+              {urgent.action ? (
+                <Link
+                  href={urgent.action.href}
+                  className="af-btn af-lh-urgent-cta"
+                  {...(urgent.action.external
+                    ? { target: '_blank', rel: 'noopener noreferrer' }
+                    : {})}
+                >
+                  {urgent.action.label}
+                </Link>
+              ) : null}
+            </section>
+          ) : null}
 
-        {/* ── Draft HQ ──────────────────────────────────────────────── */}
-        <Section title="Draft HQ" state={data.draftHq}>
-          {(d) => (
-            <div>
-              <div className="af-lh-card-headline">{d.headline}</div>
-              <p className="af-lh-card-detail">{d.detail}</p>
-            </div>
-          )}
-        </Section>
+          {/* Draft HQ + Commissioner Hub, two-up */}
+          <div className="af-lh-two">
+            <StatePanel title="Draft HQ" state={data.draftHq}>
+              {(d) => (
+                <div>
+                  <div className="af-lh-card-headline">{d.headline}</div>
+                  {d.detail ? <p className="af-lh-card-detail">{d.detail}</p> : null}
+                  <Link
+                    href={`/core/draft-hq?league=${encodeURIComponent(league.id)}`}
+                    className="af-lh-cardlink"
+                  >
+                    Open Draft HQ →
+                  </Link>
+                </div>
+              )}
+            </StatePanel>
 
-        {/* ── Commissioner Hub ──────────────────────────────────────── */}
-        <Section title="Commissioner Hub" state={data.commissioner}>
-          {(c) => <div className="af-lh-card-headline">{c.openCount} open</div>}
-        </Section>
+            <StatePanel title="Commissioner Hub" tone="warn" state={data.commissioner}>
+              {(c) => <div className="af-lh-card-headline">{c.openCount} open</div>}
+            </StatePanel>
+          </div>
 
-        {/* ── League buzz ───────────────────────────────────────────── */}
-        <Section title="League buzz" state={data.buzz}>
-          {(items) => (
-            <ul className="af-buzz">
-              {items.map((b) => (
-                <li key={b.id} className="af-buzz-row">
-                  <span className="af-buzz-actor">{b.actor}</span>
-                  <span className="af-buzz-text">{b.text}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
+          {/* Standings */}
+          <StatePanel title="Standings" state={data.standings}>
+            {(rows) => (
+              <ol className="af-standings">
+                {rows.slice(0, 6).map((t, i) => (
+                  <li key={t.teamId} className="af-standings-row" data-you={t.isYou}>
+                    <span className="af-standings-rank af-num">{t.rank ?? i + 1}</span>
+                    <span className="af-standings-name">
+                      {t.teamName}
+                      {t.isYou ? <span className="af-standings-you"> — you</span> : null}
+                    </span>
+                    <span className="af-standings-record af-num">
+                      {t.ties > 0 ? `${t.wins}-${t.losses}-${t.ties}` : `${t.wins}-${t.losses}`}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
+          </StatePanel>
+        </div>
+
+        <aside className="af-lh-side">
+          {/*
+            ── Ask Chimmy ───────────────────────────────────────────────
+            The handoff's open item resolves here: the screenshot label reads
+            CHIMMY INTELLIGENCE, ship it as ASK CHIMMY to match the rest of the
+            product.
+
+            The card carries the read-only posture rather than a verdict.
+            Chimmy's advice on this screen would have to be built on the matchup
+            and lineup data the panel above just said we do not have.
+          */}
+          <Panel title="Ask Chimmy" help={<span className="af-lh-scope">This league only</span>}>
+            <p className="af-lh-chimmy-note">
+              Chimmy reasons about this league only from here. There is no verdict to show yet —
+              the lineup and matchup reads it would be built on are not ingested for this league.
+            </p>
+            <p className="af-lh-readonly-note">
+              Make changes in {platformLabel} — AllFantasy only reads your league.
+            </p>
+          </Panel>
+
+          <StatePanel title="League buzz" state={data.buzz}>
+            {(items) => (
+              <ul className="af-buzz">
+                {items.map((b) => (
+                  <li key={b.id} className="af-buzz-row">
+                    <span className="af-buzz-actor">{b.actor}</span>
+                    <span className="af-buzz-text">{b.text}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </StatePanel>
+
+          {/*
+            Rivalry radar. Same `() => null` trap as the matchup strip above.
+            The design also shows when a manager is usually online; nothing records
+            that, so it is the one line omitted rather than invented.
+           */}
+          <StatePanel title="Rivalry radar · this league" state={data.rivalry}>
+            {(rows) => (
+              <div className="af-lh-rivals">
+                {rows.map((r) => (
+                  <div key={r.key} className="af-lh-rival">
+                    <span className="af-lh-rival-body">
+                      <b>{r.name}</b>
+                      <em>
+                        {r.meetings} {r.meetings === 1 ? 'meeting' : 'meetings'}
+                        {r.lastResult ? ` · last: ${r.lastResult}` : ''}
+                      </em>
+                    </span>
+                    <b className={r.wins >= r.losses ? 'af-lh-good' : 'af-lh-bad'}>
+                      {r.wins}–{r.losses}
+                    </b>
+                  </div>
+                ))}
+              </div>
+            )}
+          </StatePanel>
+        </aside>
       </div>
 
       {/*
-        The handoff puts this line under Chimmy's advice on this screen, and it is
-        the product's whole posture in one sentence — so it stays visible even
-        while the intelligence panel itself has nothing to say.
+        ── All leagues ──────────────────────────────────────────────────
+        League scope is absolute on this screen: every panel above is about this
+        one league, and cross-league facts live here and nowhere else.
       */}
-      <p className="af-lh-readonly-note">
-        Make changes in {league.platform === 'manual' ? 'your platform' : league.platform} — AllFantasy
-        only reads your league.
-      </p>
+      {otherLeagueIssueCount > 0 ? (
+        <section className="af-card af-lh-elsewhere">
+          <span className="af-label">All leagues</span>
+          <p className="af-lh-elsewhere-text">
+            {otherLeagueIssueCount} more {otherLeagueIssueCount === 1 ? 'issue lives' : 'issues live'}{' '}
+            outside this league.
+          </p>
+          <Link href="/dashboard" className="af-lh-cardlink">
+            Back to home →
+          </Link>
+        </section>
+      ) : null}
     </div>
   )
 }

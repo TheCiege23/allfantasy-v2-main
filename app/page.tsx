@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
-import { redirect } from 'next/navigation'
 import { PageJsonLd } from '@/components/seo/JsonLd'
 import { LandingInviteCapture } from '@/components/landing/LandingInviteCapture'
 import { LandingViewBeacon } from '@/components/landing/LandingViewBeacon'
@@ -14,9 +13,11 @@ import {
 } from '@/lib/i18n/landing-copy'
 import {
   buildSeoMeta,
+  getFAQPageSchema,
   getSoftwareApplicationSchema,
   getWebPageSchema,
 } from '@/lib/seo'
+import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
 
 /**
  * Landing page (Nocturne "1a" design). Replaces the legacy scrollytelling
@@ -53,7 +54,9 @@ export async function generateMetadata({
   searchParams?: HomeSearchParams
 }): Promise<Metadata> {
   const lang = resolveLandingLang(searchParams?.lang)
-  const copy = getLandingCopy(lang)
+  // The metadata strings quote no price, but getLandingCopy now requires the
+  // range so no caller can render the copy without the live catalog behind it.
+  const copy = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
 
   return buildSeoMeta({
     title: copy.meta.title,
@@ -116,23 +119,73 @@ export default async function HomePage({
   searchParams?: HomeSearchParams
 }) {
   const lang = resolveLandingLang(searchParams?.lang)
+
+  /*
+   * ⚠ `/` NO LONGER REDIRECTS ANYONE AWAY. THE LANDING PAGE IS THE FIRST THING
+   * EVERY VISITOR SEES, SIGNED IN OR NOT.
+   *
+   * This used to be `if (initialSession?.user) redirect('/dashboard')`, and that
+   * one line made allfantasy.ai land people on the LOGIN page. The reason is a
+   * disagreement between two gates that each looked correct on its own:
+   *
+   *   here                     `initialSession?.user`         — any truthy user object
+   *   app/dashboard/page.tsx   `session.user.id` non-empty    — a real user id
+   *
+   * Every session in the gap between those two — an expired cookie that still
+   * decodes, an OAuth session before its id is attached, any partial session —
+   * was treated as signed in HERE, redirected to /dashboard, rejected THERE, and
+   * forwarded to /login?callbackUrl=/dashboard. The visitor typed the domain and
+   * got a login form, and no amount of reloading escaped it, because `/` bounced
+   * them again every time. The marketing page was unreachable for exactly the
+   * people whose session was broken.
+   *
+   * Serving the landing unconditionally removes the whole class of bug: `/` has
+   * no redirect left to get wrong. A signed-in reader is offered their dashboard
+   * by the nav instead of being teleported into it — see `signedIn` below.
+   */
   const initialSession = await getHomeInitialSession()
-  if (initialSession?.user) {
-    redirect('/dashboard')
-  }
+
+  /*
+   * ⚠ MATCHES THE DASHBOARD'S TEST EXACTLY, AND MUST KEEP MATCHING. This decides
+   * whether the nav offers "Dashboard" or "Sign in", so a looser test here would
+   * show a Dashboard link to someone /dashboard will bounce straight to /login —
+   * the same mismatch that caused the bug above, moved into the nav.
+   */
+  const signedIn =
+    typeof initialSession?.user?.id === 'string' && initialSession.user.id.trim() !== ''
+
+  /*
+   * FAQPage structured data, built from the SAME array the page renders.
+   *
+   * The handoff requires the visible answers and the structured FAQ data to stay
+   * in sync. Deriving the schema from `copy.faq.items` rather than maintaining a
+   * second list makes that true by construction — including the cost answer,
+   * whose figures come from the catalog, so the rich result cannot advertise a
+   * price the checkout no longer charges.
+   *
+   * Unlike the two schemas above this cannot be a module constant: it is
+   * language-dependent, and a Spanish page emitting English Q&A would be worse
+   * than emitting none.
+   */
+  const copy = getLandingCopy(lang, getMonthlyPriceRange(getPlanPresentations()))
+  const faqSchema = getFAQPageSchema(copy.faq.items)
 
   return (
     <>
-      <PageJsonLd schemas={[HOME_WEBPAGE_SCHEMA, HOME_SOFTWARE_APP_SCHEMA]} />
+      <PageJsonLd schemas={[HOME_WEBPAGE_SCHEMA, HOME_SOFTWARE_APP_SCHEMA, faqSchema]} />
       <Suspense fallback={null}>
         <LandingInviteCapture />
       </Suspense>
       {/*
-        Mounted below the signed-in redirect above, so an authenticated user bounced to
-        /dashboard never records a landing view — that is a returning session, not
-        campaign-driven acquisition.
+        ⚠ NOW GATED ON `signedIn` RATHER THAN ON THE REDIRECT. This previously sat
+        below the signed-in redirect and relied on it: an authenticated visitor was
+        gone before the beacon mounted, so it only ever recorded signed-out views.
+        Removing the redirect took that protection away silently — every returning
+        signed-in visit would have started counting as campaign-driven acquisition
+        and inflated the top of the funnel. The condition restores exactly the old
+        behaviour, now stated instead of implied.
       */}
-      <LandingViewBeacon landingPath="/" />
+      {signedIn ? null : <LandingViewBeacon landingPath="/" />}
       {/*
         ⚠ CUTOVER: LandingV4 replaced LandingNocturne here. Everything AROUND this
         line is deliberately untouched — the JSON-LD schemas, invite capture, the
@@ -140,7 +193,7 @@ export default async function HomePage({
         and the acquisition attribution; swapping the visual must not cost them.
         One-line rollback: restore the LandingNocturne import and this element.
       */}
-      <LandingV4 lang={lang} />
+      <LandingV4 lang={lang} signedIn={signedIn} />
     </>
   )
 }

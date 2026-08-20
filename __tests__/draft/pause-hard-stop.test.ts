@@ -86,14 +86,24 @@ describe('Phase 1: Pause Hard-Stop', () => {
       expect(result.valid).toBe(true)
     })
 
-    it('should REJECT commissioner override if draft is paused', () => {
+    /*
+     * A pause is a hard stop for MANAGERS, never for the commissioner. Confirmed product rule:
+     * a commissioner can submit a correction pick, assign a player, or move a pick to a different
+     * manager whether or not the draft is paused. Pausing is exactly when those corrections
+     * happen, so rejecting the override here would force a commissioner to unpause — restarting
+     * everyone's clock — just to fix one bad pick.
+     *
+     * This test previously asserted the opposite and contradicted
+     * pick-execution-race-lockout.test.ts, which asserted paused picks were ALWAYS allowed.
+     * Neither matched the code. All three now agree.
+     */
+    it('ALLOWS a commissioner override while the draft is paused', () => {
       const result = validatePickSubmission({
         ...baseInput,
         sessionStatus: 'paused',
         commissionerOverride: true,
       })
-      expect(result.valid).toBe(false)
-      expect(result.error).toMatch(/paused/i)
+      expect(result.valid).toBe(true)
     })
 
     it('should reject skip picks when paused', () => {

@@ -15,8 +15,12 @@ import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-lea
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
+import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
+import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
+import { getMatchupData } from '@/lib/core-app/matchup'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
+import { deriveOutstandingIssues } from '@/lib/core-app/outstandingIssues'
 import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
@@ -192,30 +196,85 @@ export default async function DashboardPage({
      * the all-leagues dashboard rather than erroring: the loader returns null
      * for both cases, and a dead link should land somewhere useful.
      */
+    /*
+     * Derived ONCE, for both branches. 3a's whole top section is this list, and
+     * 3b needs the same derivation to split its own league's issues from the
+     * count of everything outside it. Running it twice would let the two screens
+     * disagree about how many issues exist.
+     */
+    const { issues: issuesAll } = deriveOutstandingIssues({ leagues: playedLeagues })
+
     if (selectedLeagueId) {
       const leagueHome = await getLeagueHomeData(selectedLeagueId, userId).catch(() => null)
       if (leagueHome) {
-        const otherIssues = playedLeagues.filter((l) => l.id !== leagueHome.league.id).length
+        /*
+         * ⚠ THIS COUNTED LEAGUES, NOT ISSUES, UNDER A PROP CALLED
+         * `otherLeagueIssueCount` — so a user with 60 imported leagues and
+         * nothing wrong anywhere read "59 more issues live outside this league".
+         * `deriveOutstandingIssues` is the same derivation /core already runs,
+         * and it also supplies this league's own issues so 3b can render its one
+         * urgent action instead of leaving the row empty.
+         */
+        const allIssues = issuesAll
+        const thisLeagueIssues = allIssues.filter((i) => i.leagueId === leagueHome.league.id)
+        const otherIssues = allIssues.filter((i) => i.leagueId !== leagueHome.league.id).length
         return (
           <div className="af-core af-lh-shell">
-            <LeagueHome data={leagueHome} otherLeagueIssueCount={otherIssues} />
+            <LeagueHome
+              data={leagueHome}
+              otherLeagueIssueCount={otherIssues}
+              issues={thisLeagueIssues}
+            />
           </div>
         )
       }
     }
 
+    /*
+     * The three panels 3a first shipped as "no engine exists". Each is real; see
+     * lib/core-app/dash3aPanels.ts for why that claim was wrong.
+     *
+     * Bounded deliberately. Exposure and rivals read every played league, but the
+     * win probability is resolved ONLY for the leagues whose cards are actually
+     * rendered — getMatchupData runs several queries per league, and pricing 60
+     * of them to display four would be work nobody sees.
+     */
+    const matchupLeagueIds = playedLeagues.slice(0, 4).map((l) => l.id)
+    const [exposure, rivals, matchups] = await Promise.all([
+      getCrossLeagueExposure(userId, playedLeagues.map((l) => l.id)).catch(() => null),
+      getRivalRecords(userId, playedLeagues.map((l) => l.id)).catch(() => null),
+      Promise.all(
+        matchupLeagueIds.map((id) =>
+          getMatchupData(id, userId)
+            .then((m) => ({ id, m }))
+            .catch(() => ({ id, m: null })),
+        ),
+      ),
+    ])
+
+    /*
+     * Only leagues whose BOTH lineups priced land here. An absent entry renders no
+     * percentage at all rather than a hedged one — a greyed-out probability still
+     * reads as a probability.
+     */
+    const winProb: Record<string, number> = {}
+    for (const { id, m } of matchups) {
+      if (m?.winProbability.available) winProb[id] = m.winProbability.data.pWin
+    }
+
     return (
-      <DashboardV2
+      <Dashboard3A
+        issues={issuesAll}
+        exposure={exposure}
+        rivals={rivals}
+        winProb={winProb}
         data={dash34}
-        weekLabel={dash34?.weekLabel ?? null}
         career={career}
-        portfolio={portfolio}
-        drafts={drafts}
         week={week}
-        nowIso={now.toISOString()}
+        weekLabel={dash34?.weekLabel ?? null}
         planName={planName}
-        syncedLabel={syncAge.stale ? null : syncAge.label}
         commissionerCount={playedLeagues.filter((l) => Boolean(l.isCommissioner)).length}
+        nowLabel={syncAge.stale ? null : syncAge.label}
       />
     )
   } catch (error) {

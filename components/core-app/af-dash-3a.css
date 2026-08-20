@@ -1,0 +1,430 @@
+/*
+ * Screen 3a — Dashboard, all leagues.
+ *
+ * Authored entirely on the token layer from the handoff's tokens.css (--bg,
+ * --surface, --line, --accent, --good/--warn/--bad …) so the screen follows
+ * dark / light / af modes without a second palette. Never a bare hex and never
+ * a Tailwind colour word: the repo's light-mode clamp rewrites those, and a
+ * hardcoded dark value on a light background is how a panel ends up unreadable.
+ */
+
+.af3a-shell {
+  display: grid;
+  grid-template-columns: 82px 232px 1fr;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* ── Rail ─────────────────────────────────────────────────────────────────── */
+.af3a-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 0 22px;
+  background: var(--rail);
+  border-right: 1px solid var(--line);
+}
+.af3a-shield {
+  display: grid;
+  place-items: center;
+  width: 46px; height: 46px;
+  border-radius: 13px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font: 900 15px/1 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.03em;
+}
+.af3a-rail-line { width: 34px; height: 1px; background: var(--line2); }
+.af3a-rail-spacer { flex: 1; }
+.af3a-tile {
+  display: grid;
+  place-items: center;
+  width: 44px; height: 44px;
+  border-radius: 13px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text2);
+  font: 800 14px/1 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af3a-tile:hover { border-color: var(--accent-line); text-decoration: none; }
+.af3a-tile-add {
+  border-style: dashed;
+  border-color: var(--accent-line);
+  background: transparent;
+  color: var(--accent);
+  font-size: 18px;
+}
+.af3a-avatar {
+  display: grid;
+  place-items: center;
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-line);
+  background: var(--surface);
+  color: var(--text);
+  font: 800 14px/1 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af3a-p-sleeper { background: var(--p-sleeper-bg); color: var(--p-sleeper-fg); border-color: transparent; }
+.af3a-p-espn    { background: var(--p-espn-bg);    color: var(--p-espn-fg);    border-color: transparent; }
+.af3a-p-yahoo   { background: var(--p-yahoo-bg);   color: var(--p-yahoo-fg);   border-color: transparent; }
+
+/* ── Nav ──────────────────────────────────────────────────────────────────── */
+.af3a-nav {
+  display: flex;
+  flex-direction: column;
+  padding: 18px 14px 18px;
+  background: var(--surface2);
+  border-right: 1px solid var(--line);
+}
+.af3a-navlist { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.af3a-navitem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--text2);
+  font: 600 14px/1 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af3a-navitem:hover { background: var(--chip); color: var(--text); text-decoration: none; }
+.af3a-navitem i { width: 16px; font-style: normal; color: var(--muted); text-align: center; }
+.af3a-navitem-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 800;
+}
+.af3a-navitem-on i { color: var(--accent); }
+.af3a-tag {
+  margin-left: auto;
+  padding: 3px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font: 800 9px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0.14em;
+  font-style: normal;
+}
+.af3a-tag-good { border-color: transparent; background: var(--good-soft); color: var(--good); }
+.af3a-count {
+  margin-left: auto;
+  display: grid;
+  place-items: center;
+  min-width: 19px; height: 19px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font: 800 10px/1 'JetBrains Mono', monospace;
+  font-style: normal;
+}
+.af3a-import {
+  margin-top: auto;
+  padding: 14px;
+  border-radius: 13px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+.af3a-import h4 { font: 800 14px/1.2 'Archivo', system-ui, sans-serif; letter-spacing: -0.03em; }
+.af3a-import p { margin: 6px 0 11px; color: var(--muted); font: 400 12px/1.45 'Archivo', system-ui, sans-serif; }
+
+/* ── Main ─────────────────────────────────────────────────────────────────── */
+.af3a-main { min-width: 0; padding: 18px 24px 40px; background: var(--bg); background-image: var(--hero); }
+.af3a-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
+.af3a-search {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 220px;
+  padding: 11px 14px;
+  border-radius: 11px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+.af3a-search-dot { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line2); }
+.af3a-search-ph { color: var(--muted); font: 400 13px/1 'Archivo', system-ui, sans-serif; }
+.af3a-search kbd {
+  margin-left: auto;
+  padding: 3px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font: 700 10px/1 'JetBrains Mono', monospace;
+}
+.af3a-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  color: var(--text2);
+  font: 700 10px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0.14em;
+  white-space: nowrap;
+}
+.af3a-plan { border-color: var(--p-gold-fg); color: var(--p-gold-fg); }
+.af3a-plan b { color: var(--p-gold-fg); font-weight: 800; }
+.af3a-plan i { width: 1px; height: 12px; background: var(--line2); font-style: normal; }
+.af3a-mono { font-family: 'JetBrains Mono', monospace; }
+
+.af3a-body { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start; }
+.af3a-col-main { min-width: 0; display: grid; gap: 26px; }
+.af3a-col-side { display: grid; gap: 16px; }
+
+.af3a-sec { min-width: 0; }
+.af3a-sechead { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; flex-wrap: wrap; }
+.af3a-sechead h2 { font: 900 26px/1.1 'Archivo', system-ui, sans-serif; letter-spacing: -0.03em; }
+.af3a-open {
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--bad);
+  background: var(--bad-soft);
+  color: var(--bad);
+  font: 800 10px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0.14em;
+}
+.af3a-note { color: var(--muted); font: 400 12px/1 'Archivo', system-ui, sans-serif; }
+.af3a-push { margin-left: auto; }
+
+.af3a-card {
+  padding: 15px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af3a-cardhead { display: flex; align-items: center; gap: 8px; margin-bottom: 11px; }
+.af3a-label {
+  color: var(--muted);
+  font: 800 10px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0.14em;
+}
+.af3a-cardlink { color: var(--accent); font: 700 12px/1 'Archivo', system-ui, sans-serif; }
+.af3a-cardhead .af3a-cardlink { margin-left: auto; }
+.af3a-reason { color: var(--muted); font: 400 13px/1.55 'Archivo', system-ui, sans-serif; }
+.af3a-empty h3 { font: 800 16px/1.25 'Archivo', system-ui, sans-serif; letter-spacing: -0.03em; }
+.af3a-empty p { margin-top: 6px; color: var(--muted); font: 400 13px/1.55 'Archivo', system-ui, sans-serif; }
+
+/* ── Urgent issue cards ───────────────────────────────────────────────────── */
+.af3a-urgent {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  margin-bottom: 11px;
+  padding: 15px 16px;
+  border-radius: 14px;
+  border: 1px solid var(--line2);
+  border-left: 3px solid var(--line2);
+  background: var(--surface);
+}
+.af3a-urgent.af3a-bad    { border-color: var(--bad);    border-left-color: var(--bad); }
+.af3a-urgent.af3a-warn   { border-color: var(--line2);  border-left-color: var(--warn); }
+.af3a-urgent.af3a-accent { border-color: var(--line2);  border-left-color: var(--accent); }
+.af3a-glyph {
+  display: grid;
+  place-items: center;
+  width: 38px; height: 38px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--chip);
+  color: var(--text2);
+  font: 800 15px/1 'Archivo', system-ui, sans-serif;
+}
+.af3a-bad .af3a-glyph    { background: var(--bad-soft);  color: var(--bad); }
+.af3a-warn .af3a-glyph   { background: var(--warn-soft); color: var(--warn); }
+.af3a-accent .af3a-glyph { background: var(--accent-soft); color: var(--accent); }
+.af3a-urgent-body { min-width: 0; flex: 1; }
+.af3a-urgent-body h3 { font: 800 17px/1.25 'Archivo', system-ui, sans-serif; letter-spacing: -0.03em; }
+.af3a-urgent-body p { margin-top: 4px; color: var(--muted); font: 400 13px/1.5 'Archivo', system-ui, sans-serif; }
+.af3a-dash { color: var(--text2); font-weight: 700; }
+
+.af3a-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text);
+  font: 800 13px/1 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+  cursor: pointer;
+}
+.af3a-btn:hover { text-decoration: none; border-color: var(--accent-line); }
+.af3a-btn-accent { border-color: transparent; background: var(--accent); color: var(--accent-ink); }
+.af3a-btn-full { width: 100%; }
+
+/* ── Compact issue rows ───────────────────────────────────────────────────── */
+.af3a-rows { padding: 4px 6px; }
+.af3a-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.af3a-row:last-child { border-bottom: 0; }
+.af3a-dot { width: 8px; height: 8px; flex: none; border-radius: 50%; background: var(--muted); }
+.af3a-dot.af3a-bad { background: var(--bad); }
+.af3a-dot.af3a-warn { background: var(--warn); }
+.af3a-dot.af3a-accent { background: var(--accent); }
+.af3a-row-title { flex: 1; min-width: 0; font: 600 13px/1.35 'Archivo', system-ui, sans-serif; }
+.af3a-row-league { color: var(--muted); font: 400 12px/1 'Archivo', system-ui, sans-serif; white-space: nowrap; }
+.af3a-row-when { color: var(--text2); font: 700 11px/1 'JetBrains Mono', monospace; white-space: nowrap; }
+.af3a-more { display: inline-block; margin-top: 12px; color: var(--accent); font: 700 13px/1 'Archivo', system-ui, sans-serif; }
+
+/* ── Matchups ─────────────────────────────────────────────────────────────── */
+.af3a-grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.af3a-match {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 14px 15px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+}
+.af3a-match-body { min-width: 0; flex: 1; }
+.af3a-match-body h4 { font: 800 14px/1.25 'Archivo', system-ui, sans-serif; letter-spacing: -0.03em; }
+.af3a-match-body p { margin-top: 3px; color: var(--muted); font: 400 12px/1.4 'Archivo', system-ui, sans-serif; }
+.af3a-match-score { display: flex; align-items: baseline; gap: 8px; }
+.af3a-match-score b { font: 900 21px/1 'JetBrains Mono', monospace; }
+.af3a-match-score span { color: var(--muted); font: 700 14px/1 'JetBrains Mono', monospace; }
+.af3a-good { color: var(--good); }
+.af3a-bad { color: var(--bad); }
+
+/* ── Chimmy ───────────────────────────────────────────────────────────────── */
+.af3a-chimmy { background: var(--chimmy); border-color: var(--accent-line); }
+.af3a-chimmy-head { display: flex; align-items: center; gap: 11px; margin-bottom: 12px; }
+.af3a-chimmy-av {
+  display: grid; place-items: center;
+  width: 38px; height: 38px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 17px;
+}
+.af3a-chimmy-head b { display: block; color: var(--accent); font: 800 10px/1.4 'JetBrains Mono', monospace; letter-spacing: 0.14em; }
+.af3a-chimmy-head span { color: var(--muted); font: 400 12px/1.3 'Archivo', system-ui, sans-serif; }
+.af3a-chimmy h3 { font: 900 20px/1.25 'Archivo', system-ui, sans-serif; letter-spacing: -0.03em; }
+.af3a-chimmy-note { margin-top: 9px; color: var(--muted); font: 400 12px/1.5 'Archivo', system-ui, sans-serif; }
+
+/* ── Career ───────────────────────────────────────────────────────────────── */
+.af3a-career { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.af3a-badge {
+  display: grid; place-items: center;
+  width: 40px; height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 17px;
+}
+.af3a-lvl, .af3a-stat { display: flex; flex-direction: column; gap: 3px; color: var(--text); font: 900 13px/1 'JetBrains Mono', monospace; }
+.af3a-lvl i { font-style: normal; font-size: 26px; color: var(--accent); }
+.af3a-stat { font-size: 26px; }
+.af3a-lvl em, .af3a-stat em { color: var(--muted); font: 700 9px/1 'JetBrains Mono', monospace; letter-spacing: 0.14em; font-style: normal; }
+.af3a-xp { margin-top: 14px; }
+.af3a-xp-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.af3a-xp-top span { color: var(--text2); font: 600 12px/1 'Archivo', system-ui, sans-serif; }
+.af3a-xp-top b { color: var(--text); font: 800 14px/1 'JetBrains Mono', monospace; }
+.af3a-xp-bar { margin-top: 8px; height: 6px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.af3a-xp-bar span { display: block; height: 100%; border-radius: 999px; background: var(--warn); }
+.af3a-xp-note { margin-top: 7px; color: var(--muted); font: 400 12px/1.4 'Archivo', system-ui, sans-serif; }
+
+/* ── Bottom three-up ──────────────────────────────────────────────────────── */
+.af3a-bottom { display: grid; grid-template-columns: 1fr 1fr 300px; gap: 16px; margin-top: 26px; align-items: start; }
+.af3a-leagues { display: grid; gap: 4px; }
+.af3a-league { display: flex; align-items: center; gap: 11px; padding: 9px 8px; border-radius: 10px; text-decoration: none; color: inherit; }
+.af3a-league:hover { background: var(--chip); text-decoration: none; }
+.af3a-league-body { min-width: 0; }
+.af3a-league-body b { display: block; font: 700 13px/1.3 'Archivo', system-ui, sans-serif; }
+.af3a-league-body em { color: var(--muted); font: 400 11px/1.3 'Archivo', system-ui, sans-serif; font-style: normal; }
+.af3a-tools { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.af3a-tool {
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 13px 12px;
+  border-radius: 11px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  color: var(--text);
+  font: 700 12px/1.2 'Archivo', system-ui, sans-serif;
+  text-decoration: none;
+}
+.af3a-tool:hover { border-color: var(--accent-line); text-decoration: none; }
+.af3a-tool i { font-style: normal; color: var(--accent); font-size: 15px; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .af3a-body { grid-template-columns: 1fr; }
+  .af3a-bottom { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 860px) {
+  .af3a-shell { grid-template-columns: 66px 1fr; }
+  .af3a-nav { display: none; }
+  .af3a-bottom, .af3a-grid2 { grid-template-columns: 1fr; }
+  .af3a-main { padding: 14px 14px 32px; }
+  .af3a-urgent { flex-wrap: wrap; }
+  .af3a-btn { width: 100%; min-height: 44px; }
+}
+
+/* ── Win probability on a matchup card ────────────────────────────────────── */
+.af3a-win { color: var(--warn); font-weight: 800; }
+
+/* ── Rivalry radar ────────────────────────────────────────────────────────── */
+.af3a-rivals { display: grid; gap: 4px; }
+.af3a-rival { display: flex; align-items: center; gap: 11px; padding: 9px 4px; }
+.af3a-rival-av {
+  display: grid; place-items: center;
+  width: 30px; height: 30px; flex: none;
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text2);
+  font: 800 12px/1 'Archivo', system-ui, sans-serif;
+}
+.af3a-rival-body { min-width: 0; flex: 1; }
+.af3a-rival-body b { display: block; font: 700 13px/1.3 'Archivo', system-ui, sans-serif; }
+.af3a-rival-body em {
+  color: var(--muted);
+  font: 400 11px/1.35 'Archivo', system-ui, sans-serif;
+  font-style: normal;
+}
+.af3a-rival > b { font: 800 13px/1 'JetBrains Mono', monospace; white-space: nowrap; }
+
+/* ── Player exposure ──────────────────────────────────────────────────────── */
+.af3a-exposure { display: grid; gap: 9px; }
+.af3a-exp { display: flex; align-items: center; gap: 10px; }
+.af3a-exp-name {
+  width: 108px; flex: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 600 13px/1.3 'Archivo', system-ui, sans-serif;
+}
+.af3a-exp-name em { color: var(--muted); font-style: normal; font-size: 11px; }
+.af3a-exp-bar {
+  flex: 1; min-width: 0;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+.af3a-exp-bar > span { display: block; height: 100%; border-radius: 999px; }
+.af3a-exp-full { background: var(--accent); }
+.af3a-exp-part { background: var(--warn); }
+.af3a-exp-count { flex: none; color: var(--text2); font: 700 11px/1 'JetBrains Mono', monospace; }
+.af3a-exp-note {
+  margin-top: 11px;
+  color: var(--muted);
+  font: 400 12px/1.5 'Archivo', system-ui, sans-serif;
+}

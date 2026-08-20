@@ -6,21 +6,30 @@
  * explicit-only CLI contract and the production-host refusal logic have a real unit-test seam,
  * mirroring the existing `scripts/manager-intelligence/nonprodValidationGuard.ts` pattern.
  */
+import { describeDbTarget, isProductionDbTarget } from './_db-target-identity'
 
-/** Matches the existing `scripts/decision-os-*-nonprod.ts` convention exactly — never touch this host. */
-export const PROD_HOST_MARKER = 'ep-spring-tooth'
-
-export function hostOf(url: string | null): string {
-  if (!url) return '?'
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, 'http://')).host
-  } catch {
-    return '?'
-  }
+/**
+ * Credential-free description of a connection target, for log lines.
+ *
+ * This used to be `hostOf`, returning the raw host. It is now the shared `endpoint/database
+ * (label)` form so logs name the database identity rather than a host string that cannot, on its
+ * own, tell production apart from the dev shadow that shares its compute.
+ */
+export function describeTarget(url: string | null): string {
+  return describeDbTarget(url)
 }
 
+/**
+ * True only for a target positively identified as production.
+ *
+ * Previously this was `hostOf(url).includes('ep-spring-tooth')`. `ep-spring-tooth-adaoi9x1` is the
+ * `claude-dashboard-local-dev` FORK; production is `ep-curly-block-ad0dlt9o`/`neondb`. The check
+ * therefore flagged the safe database and waved production through. The marker constant is gone
+ * on purpose — identity lives in `scripts/db-target-identity.cjs` and nowhere else, so there is no
+ * per-file literal left to go stale.
+ */
 export function isProductionHost(url: string | null): boolean {
-  return hostOf(url).includes(PROD_HOST_MARKER)
+  return isProductionDbTarget(url)
 }
 
 /**

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -365,7 +366,7 @@ test.describe('@cpu-ai-drafter-modes click audit', () => {
     const desktop = page.getByTestId('draft-desktop-layout')
     await expect(page.getByTestId('draft-topbar-orphan-mode-label')).toContainText('CPU Manager')
 
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await openCommissionerControls(page)
     const modal = page.getByTestId('draft-commissioner-modal')
     await expect(modal).toBeVisible()
     await modal.getByTestId('draft-commissioner-toggle-orphan-ai').click()
@@ -395,7 +396,7 @@ test.describe('@cpu-ai-drafter-modes click audit', () => {
     await openDraftRoomHarness(page)
 
     const desktop = page.getByTestId('draft-desktop-layout')
-    await page.getByTestId('draft-open-commissioner-controls').click()
+    await openCommissionerControls(page)
     const modal = page.getByTestId('draft-commissioner-modal')
     await modal.getByTestId('draft-commissioner-select-orphan-drafter-mode').selectOption('ai')
     await expect(modal.getByTestId('draft-commissioner-orphan-status')).toContainText(/Effective mode:\s*AI/i)

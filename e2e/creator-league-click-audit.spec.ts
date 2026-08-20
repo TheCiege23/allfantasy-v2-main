@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -357,29 +358,29 @@ test.describe('@community creator league click audit', () => {
     await expect(page.getByText(/subscribe/i)).toHaveCount(0)
 
     const followButton = page.getByTestId('creator-follow-button-alpha-creator')
-    await followButton.click()
+    await clickHydrated(followButton)
     await expect(followButton).toContainText('Following')
     await expect.poll(() => routes.counts.followRequests).toBe(1)
 
-    await page.getByTestId('creator-profile-link-alpha-creator').click()
+    await clickHydrated(page.getByTestId('creator-profile-link-alpha-creator'))
     await expect(page).toHaveURL(/\/creators\/alpha-creator/, { timeout: 15_000 })
     await expect(page.getByRole('heading', { name: 'Alpha Creator' })).toBeVisible()
 
-    await page.getByTestId('creator-analytics-tab').click()
+    await clickHydrated(page.getByTestId('creator-analytics-tab'))
     await expect(page.getByTestId('creator-analytics-panel')).toBeVisible()
 
-    await page.getByTestId('creator-branding-tab').click()
+    await clickHydrated(page.getByTestId('creator-branding-tab'))
     await page.getByTestId('creator-branding-tagline').fill('Fresh creator tagline')
-    await page.getByTestId('creator-branding-save-button').click()
+    await clickHydrated(page.getByTestId('creator-branding-save-button'))
     await expect.poll(() => routes.counts.brandingSaves).toBe(1)
 
-    await page.getByTestId('creator-community-tab').click()
-    await page.getByTestId('creator-league-share-creator-league-1').click()
+    await clickHydrated(page.getByTestId('creator-community-tab'))
+    await clickHydrated(page.getByTestId('creator-league-share-creator-league-1'))
     await expect.poll(() => routes.counts.leagueShareRequests).toBe(1)
 
     const joinLink = page.getByTestId('creator-league-join-creator-league-1')
     await expect(joinLink).toHaveAttribute('href', '/creator/leagues/creator-league-1?join=JOINALPHA')
-    await joinLink.click()
+    await clickHydrated(joinLink)
 
     await expect(page).toHaveURL(/\/creator\/leagues\/creator-league-1\?join=JOINALPHA/, {
       timeout: 15_000,
@@ -387,10 +388,10 @@ test.describe('@community creator league click audit', () => {
     await expect(page.getByTestId('creator-league-join-result')).toContainText('You joined this league.')
     await expect.poll(() => routes.counts.joinRequests).toBe(1)
 
-    await page.getByTestId('creator-invite-share-button').click()
+    await clickHydrated(page.getByTestId('creator-invite-share-button'))
     await expect(page.getByTestId('creator-invite-share-button')).toContainText('Shared')
 
-    await page.getByTestId('creator-league-back-to-profile').click()
+    await clickHydrated(page.getByTestId('creator-league-back-to-profile'))
     await expect(page).toHaveURL(/\/creators\/alpha-creator/, { timeout: 15_000 })
   })
 

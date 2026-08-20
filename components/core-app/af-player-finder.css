@@ -808,3 +808,128 @@
     font-size: 17px;
   }
 }
+
+/* ── 2a public shell: /players/{slug} ─────────────────────────────────────
+ *
+ * The indexable surface renders outside AfCoreShell — no rail, no nav, no
+ * topbar — so nothing else supplies a page background or a max width. Same
+ * wrapper pattern as .af-lh-shell on 3b, and for the same reason: a bare
+ * .af-core screen on the browser's default white was the visible symptom.
+ */
+.af-core.af-pf-shell {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px 22px 60px;
+}
+
+.af-core.af-pf-shell .af-pf {
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/*
+ * The indexable sentence.
+ *
+ * Real prose above the fold, not a hidden SEO block: it is visible, it is true
+ * for every player, and it says what the page is. Text hidden from users but
+ * served to crawlers is cloaking, and it is also how a page ends up with a
+ * snippet that does not match what a visitor sees.
+ */
+.af-core.af-pf-shell .af-pf-seo-intro {
+  max-width: 1280px;
+  margin: 0 auto 14px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* The one call to action a signed-out visitor gets. */
+.af-core .af-pf-signin {
+  margin-top: 10px;
+  text-decoration: none;
+}
+
+@media (max-width: 860px) {
+  .af-core.af-pf-shell {
+    padding: 16px 0 48px;
+  }
+  .af-core.af-pf-shell .af-pf-seo-intro {
+    padding: 0 16px;
+    font-size: 12.5px;
+  }
+}
+
+/* Related players — the public page's outbound internal links. */
+.af-core.af-pf-shell .af-pf-related {
+  max-width: 1280px;
+  margin: 16px auto 0;
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.af-core .af-pf-related-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.af-core .af-pf-related-link {
+  display: inline-flex;
+  align-items: center;
+  /* 44px touch target on the mobile frame, per the shared contract. */
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.af-core .af-pf-related-link:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+@media (max-width: 860px) {
+  .af-core.af-pf-shell .af-pf-related {
+    margin: 16px 16px 0;
+  }
+  .af-core .af-pf-related-link {
+    min-height: 44px;
+  }
+}
+
+/* ── /players index hub ──────────────────────────────────────────────── */
+.af-core.af-pf-index .af-pf-h1 {
+  max-width: 1280px;
+  margin: 0 auto 6px;
+  font-size: 28px;
+}
+
+.af-core.af-pf-index .af-pf-related + .af-pf-related {
+  margin-top: 12px;
+}
+
+.af-core .af-pf-related-team {
+  margin-left: 7px;
+  font-family: var(--font-jetbrains-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+@media (max-width: 860px) {
+  .af-core.af-pf-index .af-pf-h1 {
+    padding: 0 16px;
+    font-size: 22px;
+  }
+}

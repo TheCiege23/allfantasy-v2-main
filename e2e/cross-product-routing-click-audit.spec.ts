@@ -166,7 +166,10 @@ test.describe("@db @routing cross-product routing click audit", () => {
     await expect(page).toHaveURL(/\/dashboard/, { timeout: 20_000 })
 
     await page.goto("/admin?tab=overview")
-    await expect(page).toHaveURL(/\/login\?callbackUrl=%2Fadmin%3Ftab%3Doverview/, {
+    // /admin redirects to its OWN /admin-login, not the app's /login. (This
+    // used to cite admin-dashboard-click-audit, which was removed with the rest
+    // of the specs targeting the deleted /e2e/admin-dashboard harness.)
+    await expect(page).toHaveURL(/\/admin-login\?next=(%2F|\/)admin/, {
       timeout: 20_000,
     })
 
