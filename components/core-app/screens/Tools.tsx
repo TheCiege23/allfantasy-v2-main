@@ -48,6 +48,19 @@ const GROUPS: Array<{ heading: string; tools: Tool[] }> = [
         desc: 'Your AF Rank and where you sit against other managers.',
         leavesShell: true,
       },
+      {
+        href: '/trade-finder',
+        title: 'Trade Finder',
+        /*
+          Sleeper-only is stated up front, not discovered after the click.
+          /api/trade-finder reads the league straight from sleeper-client and
+          needs a linked Sleeper identity, so an ESPN, Yahoo or manual league
+          cannot be served here at all. This file's own rule: a launcher
+          pointing at the wrong place is worse than no launcher.
+        */
+        desc: 'Find trades that fit your roster and your league. Sleeper leagues only.',
+        leavesShell: true,
+      },
     ],
   },
   {
