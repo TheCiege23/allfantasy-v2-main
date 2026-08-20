@@ -420,6 +420,34 @@ function DraftBoardInner({
             >
               {boardModeLabel}
             </span>
+            {/*
+              8b legend. The board carries four cell states at once — on the clock, just picked,
+              your picks, unfilled — and until now nothing said which colour meant what. A reader
+              had to infer that gold was urgency from watching it move. Gold is listed first
+              because it is the only one that asks the reader to do something.
+
+              `currentUserRosterId` gates the "your picks" swatch: a spectator or a commissioner
+              with no roster has no such cells, and naming a state that cannot appear is noise.
+            */}
+            <span
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] uppercase tracking-[0.12em] text-white/45"
+              data-testid="draft-board-legend"
+            >
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-[2px] bg-[#f6c445]" aria-hidden />
+                on the clock
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <span className="h-2 w-2 rounded-[2px] bg-emerald-400" aria-hidden />
+                just picked
+              </span>
+              {currentUserRosterId ? (
+                <span className="inline-flex items-center gap-1">
+                  <span className="h-2 w-2 rounded-[2px] bg-cyan-400" aria-hidden />
+                  your picks
+                </span>
+              ) : null}
+            </span>
             {tradedPicks.length > 0 ? (
               onOpenTradeHistory ? (
                 <button

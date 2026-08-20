@@ -196,7 +196,7 @@ const STATIC_TOOLS: SearchResultItem[] = [
   {
     id: "legacy-mock",
     label: "Draft War Room",
-    href: "/af-legacy?tab=mock-draft",
+    href: "/legacy?tab=mock-draft",
     category: "tool",
     keywords: ["draft", "war", "room", "mock"],
     description: "Legacy mock draft workflow",

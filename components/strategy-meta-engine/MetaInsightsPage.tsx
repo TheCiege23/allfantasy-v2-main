@@ -759,7 +759,7 @@ export default function MetaInsightsPage() {
                           Open mock draft context
                         </Link>
                         <Link
-                          href="/af-legacy?tab=mock-draft"
+                          href="/legacy?tab=mock-draft"
                           className="rounded-2xl border border-slate-200 px-4 py-3 text-slate-900 transition hover:border-slate-300 hover:bg-slate-50"
                         >
                           Open AF Legacy

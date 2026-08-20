@@ -578,3 +578,57 @@
 .af-im-league[data-picked='true'] {
   border-color: var(--accent-line);
 }
+
+/* ── 6a: the read / never-do trust contract ─────────────────────────────────
+   Two columns on desktop, stacked on narrow screens. Sits on --surface2 so it
+   reads as a distinct promise rather than more body copy, and the divider is a
+   border on the second column so it disappears automatically when they stack. */
+.af-core .af-im-trust {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface2);
+  overflow: hidden;
+}
+.af-core .af-im-trust-col {
+  padding: 16px 18px;
+}
+.af-core .af-im-trust-col + .af-im-trust-col {
+  border-left: 1px solid var(--line);
+}
+.af-core .af-im-trust-read {
+  color: var(--good);
+}
+.af-core .af-im-trust-never {
+  color: var(--bad);
+}
+.af-core .af-im-trust-body {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+/* The commitment made at the moment of typing, directly under the connect action. */
+.af-core .af-im-account-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+@media (max-width: 640px) {
+  .af-core .af-im-trust {
+    grid-template-columns: 1fr;
+  }
+  .af-core .af-im-trust-col + .af-im-trust-col {
+    border-left: 0;
+    border-top: 1px solid var(--line);
+  }
+}
