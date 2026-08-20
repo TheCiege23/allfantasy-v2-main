@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clickHydrated } from './helpers/hydration'
+import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -402,7 +403,7 @@ test.describe('@c2c-draft-room click audit', () => {
     await expect(desktop.getByTestId('draft-player-panel')).toBeVisible()
     await expect(desktop.getByTestId('draft-pool-filter')).toHaveCount(0)
 
-    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
+    await openCommissionerControls(page)
     const modal = page.getByTestId('draft-commissioner-modal')
     await expect(modal).toBeVisible()
 

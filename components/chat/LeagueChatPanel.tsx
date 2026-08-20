@@ -29,7 +29,7 @@ import type { ChatTabId } from "@/types/chat"
 import PinnedSection from "@/components/chat/PinnedSection"
 import LeagueMessageRow from "@/components/chat/LeagueMessageRow"
 import ChatStatsBotMessage, { placeholderStatsBotUpdate } from "@/components/chat/ChatStatsBotMessage"
-import CommissionerBroadcastForm from "@/components/chat/CommissionerBroadcastForm"
+import BroadcastModal from "@/components/commish/BroadcastModal"
 import { ChimmyChatShell } from "@/components/chimmy"
 import { useUserTimezone } from "@/hooks/useUserTimezone"
 import {
@@ -127,6 +127,7 @@ export default function LeagueChatPanel({
   const [dmSending, setDmSending] = useState(false)
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
+  const [broadcastOpen, setBroadcastOpen] = useState(false)
   const [loadingMessages, setLoadingMessages] = useState(false)
   const [loadingThreads, setLoadingThreads] = useState(true)
   const [loadingDm, setLoadingDm] = useState(false)
@@ -884,14 +885,23 @@ export default function LeagueChatPanel({
               </div>
             )}
 
+            {/*
+              10b — "@everyone" moved from an always-open inline card to a composer action, and
+              from ONE league to a picker across every league you commission. The shared
+              `CommissionerBroadcastForm` is deliberately still mounted on CommissionerTab and
+              CommissionerControlsPanel (where an e2e spec drives
+              `commissioner-announcement-input`/`-send`); only this panel's copy is superseded,
+              because the modal does everything it did and this league arrives pre-selected.
+            */}
             {isCommissioner && resolvedLeagueThreadId && !isTribeChat && (
-              <div className="mb-2">
-                <CommissionerBroadcastForm
-                  threadId={resolvedLeagueThreadId}
-                  leagueId={leagueId}
-                  onSent={() => loadMessages(resolvedLeagueThreadId)}
-                />
-              </div>
+              <BroadcastModal
+                open={broadcastOpen}
+                onClose={() => {
+                  setBroadcastOpen(false)
+                  loadMessages(resolvedLeagueThreadId)
+                }}
+                defaultLeagueId={leagueId}
+              />
             )}
 
             <div className="mb-2 rounded-xl border p-2" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
@@ -1212,6 +1222,19 @@ export default function LeagueChatPanel({
               >
                 <BarChart2 className="h-4 w-4" />
               </button>
+              {isCommissioner && (
+                <button
+                  type="button"
+                  onClick={() => setBroadcastOpen(true)}
+                  className="rounded-lg border p-2"
+                  style={{ borderColor: "var(--border)", color: "var(--accent-amber-strong)" }}
+                  title="Send to @everyone"
+                  aria-label="Send to @everyone"
+                  data-testid="composer-broadcast-open"
+                >
+                  <Megaphone className="h-4 w-4" />
+                </button>
+              )}
               <div className="flex-1 min-w-[120px] rounded-xl border px-3 py-2" style={{ borderColor: "var(--border)", background: "var(--panel2)" }}>
                 <input
                   type="text"

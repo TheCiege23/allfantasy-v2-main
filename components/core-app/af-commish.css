@@ -1,0 +1,1656 @@
+/*
+ * AF Core — Commissioner OS surfaces (handoffs 11a mission control, 11b league
+ * health, 11c integrity, 11d rivalries).
+ *
+ * Scoped under `.af-core` via a shell class, same as every other af-*.css file;
+ * see af-core.css for why the tokens are namespaced rather than global.
+ *
+ * ⚠ ONE STYLESHEET FOR FOUR SCREENS ON PURPOSE. The four handoffs share a
+ * severity vocabulary that has to agree across them or the product lies: an
+ * `AT RISK` manager on 11b, an `at risk` league tile on 11a and a `HIGH` flag on
+ * 11c are the same claim at three zoom levels. Splitting them into four files is
+ * how the amber on one screen drifts from the amber on the next. The severity
+ * primitives live once, at the top, and every screen reads them.
+ *
+ * ⚠ SEVERITY IS A LEFT EDGE, NOT A FILL. Inherited from af-core.css's `.af-issue`
+ * and kept deliberately: a commissioner's queue is a page of problems, and a
+ * page of filled red cards is unreadable. Only the aggregate chips (open-flag
+ * counts, the at-risk tile) take a full outline, because those are single
+ * objects rather than list rows.
+ *
+ * ⚠ MEDIUM SEVERITY HAS NO COLOUR AT ALL. Stated in all three of 11a/11c's build
+ * rules and easy to "fix" by mistake: a medium row is a neutral card carrying
+ * only a tag. If medium gets a border colour then critical and high stop
+ * standing out, which is the entire job of the ranking.
+ */
+
+/* ── Shell ───────────────────────────────────────────────────────────── */
+
+.af-core.af-cm-shell {
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding: 20px 22px 60px;
+}
+
+.af-core.af-cm-shell .af-cm {
+  max-width: 1440px;
+  margin: 0 auto;
+}
+
+/* ── Page header ─────────────────────────────────────────────────────── */
+
+.af-core .af-cm-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+
+.af-core .af-cm-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+  color: var(--text);
+}
+
+.af-core .af-cm-sub {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.af-core .af-cm-head-titles {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.af-core .af-cm-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/*
+ * Header status chip. `data-tone` carries the meaning; the default is neutral so
+ * a chip with no tone (a week marker, a season count) never borrows a severity
+ * colour it did not earn.
+ */
+.af-core .af-cm-headchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  padding: 7px 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.af-core .af-cm-headchip[data-tone='good'] {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-cm-headchip[data-tone='warn'] {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-core .af-cm-headchip[data-tone='bad'] {
+  border-color: rgba(251, 91, 120, 0.35);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-core .af-cm-headchip[data-tone='accent'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-core .af-cm-headchip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+  flex: none;
+}
+
+/* ── Severity tags ───────────────────────────────────────────────────── */
+
+/*
+ * The tag is the ONLY thing a medium-severity row gets. Sized to sit inline
+ * beside a heading without pushing the baseline around.
+ */
+.af-core .af-cm-sev {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+  vertical-align: middle;
+}
+.af-core .af-cm-sev[data-sev='critical'] {
+  border-color: rgba(251, 91, 120, 0.4);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-core .af-cm-sev[data-sev='high'] {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+/* medium + low: the neutral base above, no override. Deliberate. */
+
+.af-core .af-cm-state {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid var(--chip-line);
+  padding: 3px 7px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Stat tiles (11a) ────────────────────────────────────────────────── */
+
+.af-core .af-cm-tiles {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+
+@media (max-width: 1180px) {
+  .af-core .af-cm-tiles {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 700px) {
+  .af-core .af-cm-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.af-core .af-cm-tile {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px 16px 16px;
+  min-width: 0;
+}
+/*
+ * A tile takes a full outline where a list row takes a left edge — a tile is one
+ * object on a wall of five, so an outline is what makes it findable at a glance
+ * without turning the row stack below into a colour field.
+ */
+.af-core .af-cm-tile[data-tone='warn'] {
+  border-color: var(--warn);
+}
+.af-core .af-cm-tile[data-tone='bad'] {
+  border-color: rgba(251, 91, 120, 0.45);
+}
+
+.af-core .af-cm-tile-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-core .af-cm-tile[data-tone='warn'] .af-cm-tile-label {
+  color: var(--warn);
+}
+.af-core .af-cm-tile[data-tone='bad'] .af-cm-tile-label {
+  color: var(--bad);
+}
+
+.af-core .af-cm-tile-value {
+  margin-top: 8px;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.af-core .af-cm-tile[data-tone='good'] .af-cm-tile-value {
+  color: var(--good);
+}
+.af-core .af-cm-tile[data-tone='warn'] .af-cm-tile-value {
+  color: var(--warn);
+}
+.af-core .af-cm-tile[data-tone='bad'] .af-cm-tile-value {
+  color: var(--bad);
+}
+
+.af-core .af-cm-tile-foot {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/*
+ * The `?` affordance. Small, quiet, and a real <button> with a title so the
+ * explanation is reachable by keyboard and by screen reader rather than being a
+ * decorative glyph.
+ */
+.af-core .af-cm-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--faint);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: help;
+  flex: none;
+  padding: 0;
+}
+
+/* ── Two-column body ─────────────────────────────────────────────────── */
+
+.af-core .af-cm-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .af-core .af-cm-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.af-core .af-cm-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.af-core .af-cm-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.af-core .af-cm-section-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.af-core .af-cm-section-hint {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* ── Attention queue (11a) ───────────────────────────────────────────── */
+
+.af-core .af-cm-queue {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.af-core .af-cm-qrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 14px 16px;
+}
+.af-core .af-cm-qrow[data-sev='critical'] {
+  border-color: rgba(251, 91, 120, 0.3);
+  border-left-color: var(--bad);
+  background: var(--bad-soft);
+}
+.af-core .af-cm-qrow[data-sev='high'] {
+  border-color: rgba(251, 191, 36, 0.3);
+  border-left-color: var(--warn);
+  background: var(--warn-soft);
+}
+/*
+ * A sync failure is a DATA problem, not a league problem, so it never takes a
+ * severity colour — it takes a dashed edge, which reads as "this is missing"
+ * rather than "this is bad". 11a build rule 3, and the same rule 11b applies to
+ * a stale score.
+ */
+.af-core .af-cm-qrow[data-sev='unavailable'] {
+  border-style: dashed;
+  border-left-style: dashed;
+  border-left-color: var(--line2);
+  background: transparent;
+}
+
+.af-core .af-cm-qicon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  flex: none;
+}
+.af-core .af-cm-qrow[data-sev='critical'] .af-cm-qicon {
+  border-color: rgba(251, 91, 120, 0.4);
+  color: var(--bad);
+}
+.af-core .af-cm-qrow[data-sev='high'] .af-cm-qicon {
+  border-color: rgba(251, 191, 36, 0.4);
+  color: var(--warn);
+}
+
+.af-core .af-cm-qtext {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.af-core .af-cm-qtitle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+.af-core .af-cm-qdesc {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+/* ── League health ranking / activity trend (11a rail) ───────────────── */
+
+.af-core .af-cm-rank {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.af-core .af-cm-rank-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.af-core .af-cm-rank-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.af-core .af-cm-rank-row:first-child {
+  padding-top: 0;
+}
+
+.af-core .af-cm-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text2);
+  flex: none;
+  text-transform: uppercase;
+}
+
+.af-core .af-cm-rank-name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-cm-rank-sub {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.af-core .af-cm-rank-score {
+  margin-left: auto;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  flex: none;
+}
+.af-core .af-cm-rank-score[data-tone='good'] {
+  color: var(--good);
+}
+.af-core .af-cm-rank-score[data-tone='warn'] {
+  color: var(--warn);
+}
+.af-core .af-cm-rank-score[data-tone='bad'] {
+  color: var(--bad);
+}
+/*
+ * No score is an em dash in `--faint`, never a zero and never a grey number that
+ * looks computed. A league we could not read has no health, and "—" is the only
+ * honest glyph for that.
+ */
+.af-core .af-cm-rank-score[data-tone='none'] {
+  color: var(--faint);
+  font-weight: 700;
+}
+
+.af-core .af-cm-trend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+
+.af-core .af-cm-trend-name {
+  font-weight: 700;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-core .af-cm-trend-val {
+  font-weight: 700;
+  flex: none;
+}
+.af-core .af-cm-trend-val[data-dir='up'] {
+  color: var(--good);
+}
+.af-core .af-cm-trend-val[data-dir='down'] {
+  color: var(--bad);
+}
+.af-core .af-cm-trend-val[data-dir='flat'] {
+  color: var(--faint);
+}
+
+/* ── Chimmy card (11a/11b/11d) ───────────────────────────────────────── */
+
+.af-core .af-cm-chimmy {
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--chimmy);
+  padding: 16px;
+}
+
+.af-core .af-cm-chimmy-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+}
+
+.af-core .af-cm-chimmy-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  object-fit: cover;
+  flex: none;
+}
+
+.af-core .af-cm-chimmy-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.af-core .af-cm-chimmy-lead {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-core .af-cm-chimmy-why {
+  margin: 9px 0 0;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-cm-chimmy-inline {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border: 1px solid var(--accent-line);
+  border-radius: 14px;
+  background: var(--chimmy);
+  padding: 14px 16px;
+  flex-wrap: wrap;
+}
+
+/* ── Footer disclosure ───────────────────────────────────────────────── */
+
+.af-core .af-cm-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+  padding: 13px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.af-core .af-cm-foot-link {
+  font-weight: 800;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+/* ── Health score card (11b) ─────────────────────────────────────────── */
+
+.af-core .af-cm-health {
+  display: grid;
+  grid-template-columns: minmax(0, 420px) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1000px) {
+  .af-core .af-cm-health {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.af-core .af-cm-score {
+  border: 1px solid var(--warn);
+  border-radius: 16px;
+  background: var(--surface);
+  padding: 18px;
+}
+.af-core .af-cm-score[data-tone='good'] {
+  border-color: rgba(52, 211, 153, 0.45);
+}
+.af-core .af-cm-score[data-tone='bad'] {
+  border-color: rgba(251, 91, 120, 0.45);
+}
+.af-core .af-cm-score[data-tone='none'] {
+  border-color: var(--line2);
+  border-style: dashed;
+}
+
+.af-core .af-cm-score-big {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.af-core .af-cm-score-num {
+  font-size: 62px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -0.045em;
+  color: var(--warn);
+}
+.af-core .af-cm-score[data-tone='good'] .af-cm-score-num {
+  color: var(--good);
+}
+.af-core .af-cm-score[data-tone='bad'] .af-cm-score-num {
+  color: var(--bad);
+}
+.af-core .af-cm-score[data-tone='none'] .af-cm-score-num {
+  color: var(--faint);
+}
+
+.af-core .af-cm-score-den {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.af-core .af-cm-score-tags {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.af-core .af-cm-status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--warn);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+.af-core .af-cm-status[data-tone='good'] {
+  border-color: rgba(52, 211, 153, 0.5);
+  color: var(--good);
+}
+.af-core .af-cm-status[data-tone='bad'] {
+  border-color: rgba(251, 91, 120, 0.5);
+  color: var(--bad);
+}
+.af-core .af-cm-status[data-tone='none'] {
+  border-color: var(--line2);
+  color: var(--faint);
+}
+
+.af-core .af-cm-trendword {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.af-core .af-cm-trendword[data-dir='up'] {
+  color: var(--good);
+}
+.af-core .af-cm-trendword[data-dir='down'] {
+  color: var(--bad);
+}
+.af-core .af-cm-trendword[data-dir='flat'] {
+  color: var(--faint);
+}
+
+.af-core .af-cm-subscores {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.af-core .af-cm-subscore {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 140px 34px;
+  align-items: center;
+  gap: 12px;
+}
+@media (max-width: 560px) {
+  .af-core .af-cm-subscore {
+    grid-template-columns: minmax(0, 1fr) 80px 34px;
+  }
+}
+
+.af-core .af-cm-subscore-name {
+  font-size: 14px;
+  color: var(--text2);
+}
+
+.af-core .af-cm-subscore-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+}
+
+.af-core .af-cm-subscore-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--warn);
+}
+.af-core .af-cm-subscore-fill[data-tone='good'] {
+  background: var(--good);
+}
+.af-core .af-cm-subscore-fill[data-tone='bad'] {
+  background: var(--bad);
+}
+
+.af-core .af-cm-subscore-val {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  text-align: right;
+}
+
+/*
+ * ⚠ THE CONFIDENCE FOOTNOTE IS NOT OPTIONAL CHROME. 11b build rule 1: this score
+ * is a computed signal, not a platform fact, and it never ships as a bare
+ * number. If you are tempted to hide this line to tidy the card, delete the
+ * score instead.
+ */
+.af-core .af-cm-confidence {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* ── Flagged signals + interventions (11b) ───────────────────────────── */
+
+.af-core .af-cm-flags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.af-core .af-cm-flag {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+.af-core .af-cm-flag-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 7px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--faint);
+  font-size: 11px;
+  font-weight: 800;
+  flex: none;
+  margin-top: 1px;
+}
+.af-core .af-cm-flag-icon[data-tone='bad'] {
+  border-color: rgba(251, 91, 120, 0.4);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-core .af-cm-flag-icon[data-tone='warn'] {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-core .af-cm-flag-icon[data-tone='good'] {
+  border-color: rgba(52, 211, 153, 0.4);
+  background: var(--good-soft);
+  color: var(--good);
+}
+
+.af-core .af-cm-interventions {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/*
+ * ⚠ ONE ROW = ONE RECOMMENDATION + ONE BUTTON THAT PERFORMS IT. 11b build rule 3.
+ * A recommendation rendered without its CTA is a to-do list, which is the thing
+ * this screen exists to replace.
+ */
+.af-core .af-cm-intervention {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-cm-intervention-text {
+  font-size: 15px;
+  color: var(--text);
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+/* ── Manager health table (11b) ──────────────────────────────────────── */
+
+.af-core .af-cm-table-wrap {
+  overflow-x: auto;
+}
+
+.af-core .af-cm-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+}
+
+.af-core .af-cm-table th {
+  text-align: right;
+  padding: 0 12px 10px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.af-core .af-cm-table th:first-child,
+.af-core .af-cm-table td:first-child {
+  text-align: left;
+}
+
+.af-core .af-cm-table td {
+  text-align: right;
+  padding: 13px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.af-core .af-cm-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.af-core .af-cm-mgr {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.af-core .af-cm-mgr-name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * ⚠ THE LINEUP FRACTION AND THE STATUS TAG READ THE SAME THRESHOLDS. 11b build
+ * rule 4 — if these two ever disagree, a row shows a green fraction beside an
+ * `INACTIVE` tag and the table stops being believable. Both are driven from one
+ * tone value computed once in ManagerHealthTable.tsx.
+ */
+.af-core .af-cm-lineups[data-tone='good'] {
+  color: var(--good);
+}
+.af-core .af-cm-lineups[data-tone='warn'] {
+  color: var(--warn);
+}
+.af-core .af-cm-lineups[data-tone='bad'] {
+  color: var(--bad);
+}
+.af-core .af-cm-lineups[data-tone='none'] {
+  color: var(--faint);
+}
+
+.af-core .af-cm-mstatus {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  padding: 4px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-core .af-cm-mstatus[data-tone='good'] {
+  border-color: rgba(52, 211, 153, 0.35);
+  background: var(--good-soft);
+  color: var(--good);
+}
+.af-core .af-cm-mstatus[data-tone='warn'] {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-core .af-cm-mstatus[data-tone='bad'] {
+  border-color: rgba(251, 91, 120, 0.35);
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+
+/* ── Integrity (11c) ─────────────────────────────────────────────────── */
+
+/*
+ * ⚠ THE DISCLOSURE BANNER IS PERMANENT AND UNDISMISSABLE. 11c build rule 1.
+ * Integrity detection is the most trust-sensitive surface in the product; the
+ * methodology statement is not a one-time tooltip. There is deliberately no
+ * close affordance on this element and none should be added.
+ */
+.af-core .af-cm-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-core .af-cm-disclosure-mark {
+  color: var(--accent);
+  flex: none;
+}
+
+.af-core .af-cm-flagcard {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--line2);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px 18px 18px;
+}
+.af-core .af-cm-flagcard[data-sev='high'] {
+  border-color: rgba(251, 191, 36, 0.3);
+  border-left-color: var(--warn);
+}
+.af-core .af-cm-flagcard[data-sev='critical'] {
+  border-color: rgba(251, 91, 120, 0.3);
+  border-left-color: var(--bad);
+}
+/* medium/low: neutral. See the note at the top of this file. */
+
+.af-core .af-cm-flagcard-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.af-core .af-cm-flagcard-tags {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-cm-flagcard-meta {
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.af-core .af-cm-flagcard-lead {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.35;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+.af-core .af-cm-sides {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+@media (max-width: 620px) {
+  .af-core .af-cm-sides {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.af-core .af-cm-side {
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface2);
+  padding: 12px 14px;
+  min-width: 0;
+}
+
+.af-core .af-cm-side-who {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-cm-side-assets {
+  margin: 7px 0 0;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  line-height: 1.4;
+  color: var(--text);
+}
+
+.af-core .af-cm-side-value {
+  margin-top: 7px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.af-core .af-cm-evidence {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.af-core .af-cm-evidence li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-core .af-cm-evidence li::before {
+  content: '·';
+  position: absolute;
+  left: 3px;
+  color: var(--faint);
+}
+
+.af-core .af-cm-statgrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+@media (max-width: 700px) {
+  .af-core .af-cm-statgrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.af-core .af-cm-stat-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-core .af-cm-stat-value {
+  margin-top: 6px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.af-core .af-cm-stat-value[data-tone='warn'] {
+  color: var(--warn);
+}
+.af-core .af-cm-stat-value[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.af-core .af-cm-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.af-core .af-cm-actions-note {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* A warn-filled primary: the escalation on a high-severity flag. */
+.af-core .af-btn.af-cm-btn-warn {
+  background: var(--warn);
+  color: #1a1204;
+}
+
+/* ── Integrity settings rail (11c) ───────────────────────────────────── */
+
+.af-core .af-cm-setgroup {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px;
+}
+
+.af-core .af-cm-setgroup-note {
+  margin: 0 0 14px;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.af-core .af-cm-setrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.af-core .af-cm-setrow-label {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+
+/* Segmented Low / Medium / High. */
+.af-core .af-cm-seg {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.af-core .af-cm-seg-btn {
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--surface2);
+  padding: 9px 4px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+.af-core .af-cm-seg-btn[aria-pressed='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/*
+ * ⚠ A SENSITIVITY CONTROL ALWAYS SHIPS WITH ITS PLAIN-LANGUAGE THRESHOLD. 11c
+ * build rule 5. "Medium" means nothing on its own; "Medium flags a trade once
+ * the two sides differ by about 42%" is a promise a commissioner can check.
+ */
+.af-core .af-cm-threshold {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-core .af-cm-toggle {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  padding: 5px 11px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+  cursor: pointer;
+}
+.af-core .af-cm-toggle[aria-pressed='true'] {
+  border-color: rgba(52, 211, 153, 0.5);
+  color: var(--good);
+}
+
+.af-core .af-cm-checks {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  padding-top: 4px;
+}
+
+.af-core .af-cm-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--text2);
+  cursor: pointer;
+}
+
+.af-core .af-cm-check input {
+  width: 17px;
+  height: 17px;
+  margin: 1px 0 0;
+  accent-color: var(--accent);
+  flex: none;
+  cursor: pointer;
+}
+
+.af-core .af-cm-check[data-disabled='true'] {
+  cursor: not-allowed;
+  color: var(--faint);
+}
+
+/* "(experimental)" is a plain label, never a colour. 11c colour contract. */
+.af-core .af-cm-experimental {
+  color: var(--faint);
+}
+
+.af-core .af-cm-numrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+}
+
+.af-core .af-cm-numinput {
+  width: 58px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--surface2);
+  padding: 8px 6px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 700;
+  text-align: center;
+  color: var(--text);
+}
+
+.af-core .af-cm-save {
+  width: 100%;
+  border: 1px solid var(--accent-line);
+  border-radius: 11px;
+  background: var(--accent-soft);
+  padding: 13px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--accent);
+  cursor: pointer;
+}
+.af-core .af-cm-save:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.af-core .af-cm-rail-foot {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+/* ── Rivalries (11d) ─────────────────────────────────────────────────── */
+
+.af-core .af-cm-rivalry {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px 18px;
+}
+/* Only the currently-scheduled rivalry-week pair takes the accent outline. */
+.af-core .af-cm-rivalry[data-featured='true'] {
+  border-color: var(--accent-line);
+}
+
+.af-core .af-cm-rivalry-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.af-core .af-cm-rivalry-title {
+  margin: 0;
+  font-size: 21px;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+  color: var(--text);
+  min-width: 0;
+}
+
+.af-core .af-cm-vs {
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.af-core .af-cm-rivalry-score {
+  text-align: right;
+  flex: none;
+}
+
+.af-core .af-cm-rivalry-score-num {
+  font-size: 30px;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+}
+.af-core .af-cm-rivalry:not([data-featured='true']) .af-cm-rivalry-score-num {
+  color: var(--text);
+}
+
+.af-core .af-cm-rivalry-chips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 13px;
+}
+
+/*
+ * ⚠ ONLY GENUINELY RARE STATS GET A TINT. 11d build rule 2 — an elimination is
+ * notable, "14 h2h meetings" is arithmetic. Tint the common chips and the eye
+ * stops finding the rare one, which is the whole point of the row.
+ */
+.af-core .af-cm-rchip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.af-core .af-cm-rchip[data-tone='warn'] {
+  border-color: rgba(251, 191, 36, 0.35);
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.af-core .af-cm-rivalry-note {
+  margin: 13px 0 0;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ── Universal messaging + audit log (11d rail) ──────────────────────── */
+
+.af-core .af-cm-msg-lead {
+  margin: 0 0 13px;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-core .af-cm-msg-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+/*
+ * ⚠ SCOPE LIVES IN THE LABEL, NOT BEHIND A CLICK. 11d build rule 3. "Broadcast"
+ * with the league count hidden until a confirm dialog is how a commissioner
+ * messages three leagues meaning to message one.
+ */
+.af-core .af-cm-msg-action {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  border: 1px solid var(--line2);
+  border-radius: 11px;
+  background: var(--surface2);
+  padding: 12px 14px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+.af-core .af-cm-msg-action:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.af-core .af-cm-msg-action-icon {
+  color: var(--accent);
+  flex: none;
+}
+
+.af-core .af-cm-msg-scope {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--faint);
+  flex: none;
+}
+
+.af-core .af-cm-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.af-core .af-cm-template {
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface2);
+  padding: 7px 13px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text2);
+  cursor: pointer;
+}
+
+.af-core .af-cm-audit {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* The log is a record, not a status — no row ever takes a severity colour. */
+.af-core .af-cm-audit-row {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.af-core .af-cm-audit-time {
+  font-size: 12px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+.af-core .af-cm-audit-text {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+
+/* ── Empty / unavailable states ──────────────────────────────────────── */
+
+.af-core .af-cm-empty {
+  border: 1px dashed var(--line2);
+  border-radius: 12px;
+  padding: 22px 18px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--muted);
+  text-align: center;
+}
+
+/* ── Exposure audit (12b) ────────────────────────────────────────────── */
+
+/*
+ * Lives in this stylesheet rather than its own because it reuses the severity
+ * primitives at the top verbatim — `af-cm-mstatus`, `af-cm-table`, `af-cm-badge`.
+ * An OVEREXPOSED tag and an AT RISK manager tag are the same amber claim at two
+ * zoom levels, and splitting the files is how the two drift apart.
+ */
+
+.af-core .af-xp-filters {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.af-core .af-xp-filter {
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface2);
+  padding: 7px 15px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+}
+.af-core .af-xp-filter[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/*
+ * ⚠ THE DEFINITION BANNER IS NOT DECORATION. Build rule 1: the overexposed rule
+ * is specific and two-part, and no reader guesses it correctly. It sits above
+ * the table, always, before any row can be misread.
+ */
+.af-core .af-xp-definition {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+  padding: 15px 17px;
+  margin-bottom: 14px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-core .af-xp-definition strong {
+  color: var(--text);
+  font-weight: 800;
+}
+
+.af-core .af-xp-table td {
+  vertical-align: middle;
+}
+
+/* The row tint is the only place overexposure paints a whole row. */
+.af-core .af-xp-row[data-over='true'] {
+  background: var(--warn-soft);
+}
+
+.af-core .af-xp-sub {
+  display: block;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.af-core .af-xp-sub.is-injured {
+  color: var(--bad);
+}
+
+.af-core .af-xp-pct {
+  font-weight: 800;
+}
+.af-core .af-xp-pct[data-over='true'] {
+  color: var(--warn);
+}
+
+.af-core .af-xp-slot {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 220px;
+}
+
+.af-core .af-xp-slot-bar {
+  display: flex;
+  height: 8px;
+  width: 150px;
+  border-radius: 999px;
+  background: var(--chip);
+  overflow: hidden;
+  flex: none;
+}
+
+.af-core .af-xp-seg {
+  display: block;
+  height: 100%;
+}
+/* started = the urgent one, benched = quiet, IR = the problem. */
+.af-core .af-xp-seg[data-slot='start'] {
+  background: var(--good);
+}
+.af-core .af-xp-seg[data-slot='bench'] {
+  background: var(--faint);
+}
+.af-core .af-xp-seg[data-slot='ir'] {
+  background: var(--bad);
+}
+
+.af-core .af-xp-slot-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.af-core .af-xp-slot-empty {
+  color: var(--faint);
+}
+
+.af-core .af-xp-tags {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

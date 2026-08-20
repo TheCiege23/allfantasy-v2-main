@@ -6,6 +6,7 @@ import {
   isDecisionTelemetryDebugSurfaceEnabled,
 } from '@/lib/decision-os/core/telemetryDebugAccess'
 import { listDecisionTelemetryDebugEvents } from '@/lib/decision-os/core/telemetryDebugStore'
+import { listPersistedParityEvents } from '@/lib/decision-os/core/parity/durableParityStore'
 import { summarizeFlipReadiness } from '@/lib/decision-os/core/parity/flipReadiness'
 
 export const runtime = 'nodejs'
@@ -39,10 +40,17 @@ export async function GET(request: NextRequest) {
   const minComparisonsRaw = Number(request.nextUrl.searchParams.get('minComparisons'))
   const minAgreementRaw = Number(request.nextUrl.searchParams.get('minAgreementRate'))
 
-  const events = listDecisionTelemetryDebugEvents({
-    event: 'decision.shadow_parity',
-    limit: 2000,
-  })
+  // Persisted history first -- the in-memory store is per-invocation and capped at 500, so on its
+  // own it can never reach the >=50 comparisons this gate requires. Fall back to it only when
+  // nothing is persisted yet (before the migration is applied, or on a fresh table), so this
+  // surface degrades to its previous behaviour rather than to an error.
+  const persisted = await listPersistedParityEvents(undefined, { limit: 20000 })
+  const shadowPersisted = persisted.filter((e) => e.event === 'decision.shadow_parity')
+  const events = shadowPersisted.length
+    ? shadowPersisted
+    : listDecisionTelemetryDebugEvents({ event: 'decision.shadow_parity', limit: 2000 })
+  // Named so a reader can tell a real accumulated history from a cold-start sample.
+  const eventSource = shadowPersisted.length ? 'persisted' : 'in_memory'
   const summaries = summarizeFlipReadiness(events, {
     minComparisons: Number.isFinite(minComparisonsRaw) && minComparisonsRaw > 0 ? minComparisonsRaw : undefined,
     minAgreementRate:
@@ -53,6 +61,7 @@ export async function GET(request: NextRequest) {
     ok: true,
     generatedAt: new Date().toISOString(),
     eventWindow: events.length,
+    eventSource,
     surfaces: summaries,
   })
 }

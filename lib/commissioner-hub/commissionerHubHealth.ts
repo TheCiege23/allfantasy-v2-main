@@ -80,6 +80,23 @@ export type CommissionerLeagueHealthSnapshot = {
   sustainabilityScore: number
   overallStatus: OverallStatus
   healthTrend: string
+  /**
+   * The engine's own confidence in this score, 0-100, distinct from
+   * `dataConfidence` above: `dataConfidence` says whether anyone has READ this
+   * league, `confidencePct` says how much of the sample the engine actually had
+   * once it did. 11b renders it beside the headline number because a computed
+   * signal never ships as a bare figure.
+   */
+  confidencePct: number
+  /**
+   * ⚠ RISK SCORES READ IN THE OPPOSITE DIRECTION FROM THE HEALTH SCORES ABOVE.
+   * 45 sustainability is middling; 45 churn risk is bad. `monitorLeagueHealth`
+   * has always returned these three and this builder always dropped them, which
+   * left 11b's risk row with nothing real to render.
+   */
+  churnRiskScore: number
+  disputeRiskScore: number
+  abandonmentRiskScore: number
   summary: string
   metrics: CommissionerLeagueHealthMetrics
   alerts: string[]
@@ -148,7 +165,15 @@ export type CommissionerHealthBuildInput = {
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
-const INACTIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
+/**
+ * How long a roster must sit untouched before its manager counts as inactive.
+ *
+ * ⚠ EXPORTED SO `managerHealth.ts` CANNOT DRIFT FROM IT. This surface reports an
+ * aggregate ("2 inactive teams") and the per-manager table names the individuals;
+ * if the two use different windows, the table shows three names under a headline
+ * that says two, and neither number can be trusted again.
+ */
+export const INACTIVE_AFTER_MS = 14 * 24 * 60 * 60 * 1000
 const RESERVE_SLOT_KEYS = new Set([
   'BN',
   'BE',
@@ -677,6 +702,10 @@ export function buildCommissionerHealthSnapshot(
     sustainabilityScore: health.sustainabilityScore,
     overallStatus: health.overallStatus,
     healthTrend: health.healthTrend,
+    confidencePct: health.confidencePct,
+    churnRiskScore: health.churnRiskScore,
+    disputeRiskScore: health.disputeRiskScore,
+    abandonmentRiskScore: health.abandonmentRiskScore,
     summary,
     metrics,
     alerts: [

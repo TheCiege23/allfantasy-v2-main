@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clickHydrated } from './helpers/hydration'
+import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -472,7 +473,7 @@ test.describe('@slow-draft-room click audit', () => {
       .not.toBe(timerBefore)
 
     // Pause window behavior via overnight mode + slow automation tick.
-    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
+    await openCommissionerControls(page)
     const commissionerModal = page.getByTestId('draft-commissioner-modal')
     await expect(commissionerModal).toBeVisible()
     await commissionerModal.getByTestId('draft-commissioner-select-timer-mode').selectOption('overnight_pause')
@@ -482,7 +483,7 @@ test.describe('@slow-draft-room click audit', () => {
     await expect(page.locator('header')).toContainText('paused')
 
     // Return to active mode, force expiry, then submit from queue.
-    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
+    await openCommissionerControls(page)
     await expect(commissionerModal).toBeVisible()
     await commissionerModal.getByTestId('draft-commissioner-select-timer-mode').selectOption('per_pick')
     await clickHydrated(commissionerModal.getByTestId('draft-commissioner-slow-tick'))

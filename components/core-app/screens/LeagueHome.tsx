@@ -29,13 +29,17 @@ import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
  * timeline scrolls horizontally with the current stage pinned in view, which is
  * the mobile frame's own behaviour.
  *
- * ⚠ FOUR PANELS IN THE DESIGN HAVE NO DATA BEHIND THEM AND SAY SO IN WORDS.
- * Measured against the loader before building, not discovered afterwards:
+ * ⚠ TWO OF THE FOUR "MISSING" PANELS WERE NOT MISSING. Corrected after audit:
  *
- *   - MATCHUP + WIN PROBABILITY. `leagueHome.matchup` is an `UnavailableSection`
- *     on every code path — no writer produces per-week scoring for imported
- *     leagues. The handoff's 71% is the single most authoritative-looking number
- *     in the product and there is nothing behind it.
+ *   - MATCHUP + WIN PROBABILITY. ✅ REAL NOW. The claim that no writer produces
+ *     per-week scoring was false — `lib/core-app/matchup.ts` already resolved
+ *     WeeklyMatchup rows and priced both lineups against fantasy_projections for
+ *     the Matchup screen. `leagueHome` now reuses that resolver. The probability
+ *     renders only when the engine produced one; a matchup that could not be
+ *     priced shows scores and no percentage.
+ *   - RIVALRY RADAR. ✅ REAL NOW. `WeeklyMatchup.matchupId` pairs the two rosters
+ *     in a week, so every past meeting is stored. Only "usually online" is
+ *     genuinely absent, and that line is dropped rather than guessed.
  *   - COMMISSIONER HUB. Votes and commissioner tasks are not ingested.
  *   - LEAGUE BUZZ. League transactions are not ingested for these platforms.
  *   - RIVALRY RADAR. No head-to-head history, and nothing anywhere records when
@@ -201,9 +205,46 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
       {/* ── Main / side ─────────────────────────────────────────────── */}
       <div className="af-lh-grid">
         <div className="af-lh-main">
-          {/* Matchup strip. Renders the frame, never a fabricated score. */}
+          {/*
+            Matchup strip.
+            ⚠ THIS CALLBACK USED TO BE `() => null`, WHICH IS WHY PROMOTING THE TYPE
+            ALONE WAS NOT ENOUGH. The panel rendered its frame and nothing else, so
+            even once the loader produced a real matchup the screen would have shown
+            an empty box and tsc would not have complained — `() => null` satisfies
+            any `T`. The win probability appears only when the engine produced one.
+           */}
           <StatePanel title="This week's matchup" className="af-lh-matchup" state={data.matchup}>
-            {() => null}
+            {(m) => (
+              <div className="af-lh-mrow">
+                <div className="af-lh-mside">
+                  <span className="af-lh-mlabel">YOU</span>
+                  <b className="af-lh-mteam">{m.you.name}</b>
+                  <b className="af-lh-mscore af-lh-good">{m.you.points.toFixed(1)}</b>
+                </div>
+                <div className="af-lh-mmid">
+                  {m.winProbability ? (
+                    <>
+                      <span className="af-lh-mlabel">WIN PROB</span>
+                      <b className="af-lh-mwin">{Math.round(m.winProbability.pWin * 100)}%</b>
+                      <span className="af-lh-mbar">
+                        <span style={{ width: `${Math.round(m.winProbability.pWin * 100)}%` }} />
+                      </span>
+                      <em className="af-lh-mnote">{m.winProbability.confidence}</em>
+                    </>
+                  ) : (
+                    <em className="af-lh-mnote">
+                      Week {m.week} · both lineups could not be priced, so there is no
+                      win probability
+                    </em>
+                  )}
+                </div>
+                <div className="af-lh-mside af-lh-mright">
+                  <span className="af-lh-mlabel">OPPONENT</span>
+                  <b className="af-lh-mteam">{m.opponent.name}</b>
+                  <b className="af-lh-mscore">{m.opponent.points.toFixed(1)}</b>
+                </div>
+              </div>
+            )}
           </StatePanel>
 
           {/* The one urgent action */}
@@ -307,8 +348,30 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
             )}
           </StatePanel>
 
+          {/*
+            Rivalry radar. Same `() => null` trap as the matchup strip above.
+            The design also shows when a manager is usually online; nothing records
+            that, so it is the one line omitted rather than invented.
+           */}
           <StatePanel title="Rivalry radar · this league" state={data.rivalry}>
-            {() => null}
+            {(rows) => (
+              <div className="af-lh-rivals">
+                {rows.map((r) => (
+                  <div key={r.key} className="af-lh-rival">
+                    <span className="af-lh-rival-body">
+                      <b>{r.name}</b>
+                      <em>
+                        {r.meetings} {r.meetings === 1 ? 'meeting' : 'meetings'}
+                        {r.lastResult ? ` · last: ${r.lastResult}` : ''}
+                      </em>
+                    </span>
+                    <b className={r.wins >= r.losses ? 'af-lh-good' : 'af-lh-bad'}>
+                      {r.wins}–{r.losses}
+                    </b>
+                  </div>
+                ))}
+              </div>
+            )}
           </StatePanel>
         </aside>
       </div>

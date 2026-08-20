@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { clickHydrated } from './helpers/hydration'
+import { openCommissionerControls } from './helpers/commissioner-controls'
 
 test.describe.configure({ mode: 'serial', timeout: 180_000 })
 
@@ -767,7 +768,7 @@ test.describe('@auction-draft-room click audit', () => {
     await expect(openAiHelper).toBeVisible()
 
     // Commissioner auction controls are wired.
-    await clickHydrated(page.getByTestId('draft-open-commissioner-controls'))
+    await openCommissionerControls(page)
     await expect(page.getByTestId('draft-commissioner-modal')).toBeVisible()
     await clickHydrated(page.getByTestId('draft-commissioner-toggle-auction-auto-nomination'))
     await clickHydrated(page.getByTestId('draft-commissioner-auction-tick'))

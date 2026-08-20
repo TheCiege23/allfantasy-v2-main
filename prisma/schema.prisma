@@ -2908,6 +2908,53 @@ model WeeklyMatchup {
   @@index([leagueId, seasonYear, rosterId])
 }
 
+/// Per-player weekly scoring for an IMPORTED league, as the source platform scored it.
+///
+/// ⚠ THIS IS NOT `PlayerWeeklyScore`, AND THE DIFFERENCE IS THE WHOLE POINT.
+/// `PlayerWeeklyScore` is unique on (playerId, week, season, sport) — GLOBAL. That is
+/// correct for raw box stats and for our own model output, because a rushing yard is a
+/// rushing yard regardless of whose league it happened in. It is WRONG for imported
+/// actuals: Sleeper's `players_points` is already scored by that league's own settings,
+/// so the same player in a PPR league and a standard league has two different, equally
+/// true totals. Writing both into a globally-unique row means whichever league synced
+/// last wins, and a manager in a standard league is shown PPR numbers as their own.
+///
+/// ⚠ `playerId` HOLDS THE PROVIDER'S ID, NOT OUR CANONICAL ONE, AND RESOLUTION HAPPENS AT
+/// RENDER. `SportsPlayer.sleeperId` covers roughly 87% of NFL players, so resolving during
+/// ingestion would silently DISCARD the scores of everyone who fails to bridge. Storing
+/// the provider id keeps the fact ("this player scored 12.4 in this league this week")
+/// even when we cannot yet say who he is — and `lib/core-app/myTeam.ts` already resolves
+/// sleeper ids at read time, so the read path exists. This mirrors `LineupSlot.unresolvedId`,
+/// which deliberately keeps "we could not identify him" distinct from "nobody is there".
+///
+/// `leagueId` is the PLATFORM league id, matching `WeeklyMatchup.leagueId`, so the two join.
+model LeaguePlayerWeeklyScore {
+  id          String   @id @default(cuid())
+  leagueId    String   @db.VarChar(64)
+  seasonYear  Int
+  week        Int
+  /// Provider-space player id (e.g. Sleeper's). See the note above.
+  playerId    String   @db.VarChar(64)
+  /// Which roster held him that week, when the provider reports it.
+  rosterId    Int?
+  /// He was in the starting lineup, not on the bench. Drives the starter-total sum.
+  isStarter   Boolean  @default(false)
+  /// Points as the SOURCE PLATFORM scored them. Never recomputed by us.
+  points      Float
+  /// ⚠ NOT SET FROM THE GAME CLOCK. Stat corrections reprocess for ~12h after a game ends
+  /// (contracts/rolling-insights/ENDPOINTS.yaml, `stat_corrections`), so a score is still
+  /// moving well after the whistle. Only a reconcile pass past that window may set this.
+  isFinalized Boolean  @default(false)
+  /// Which platform reported it — 'sleeper' today; espn/yahoo would each add their own.
+  source      String   @db.VarChar(16)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([leagueId, seasonYear, week, playerId])
+  @@index([leagueId, seasonYear, week])
+  @@map("league_player_weekly_scores")
+}
+
 model RankingsSnapshot {
   id           BigInt   @id @default(autoincrement())
   leagueId     String
@@ -15876,6 +15923,37 @@ model CommissionerSuccession {
 }
 
 /// Lifecycle event log — fire-and-forget telemetry for retention, renewal rate, churn analytics.
+/// Durable parity telemetry — the evidence the shadow-mode flip gate is defined on.
+///
+/// `summarizeFlipReadiness` flips a surface at >=95% agreement over >=50 REAL comparisons, but it
+/// read an in-memory array capped at 500 entries. On Vercel each invocation has its own memory, so
+/// it started empty on every cold start and could never accumulate 50 comparisons. This is where
+/// that evidence is kept instead.
+///
+/// Append-only. Nothing reads it as state; pruning old rows is safe (see the manual migration).
+model DecisionParityRecord {
+  id           String   @id @default(cuid())
+  /// 'decision.shadow_parity' | 'decision.validator_parity'. Other telemetry is high-frequency and
+  /// has no bearing on the flip decision, so it is deliberately not stored.
+  event        String   @db.VarChar(64)
+  decisionType String   @db.VarChar(64)
+  /// The gate is evaluated PER SURFACE, so this is part of the grouping key, not a detail in flags.
+  surface      String?  @db.VarChar(64)
+  decisionId   String?  @db.VarChar(64)
+  leagueId     String?  @db.VarChar(64)
+  userId       String?  @db.VarChar(64)
+  /// NULL means the event carried no agreement signal — a comparison WITHOUT a verdict. Those are
+  /// reported separately and must never count as agreement, which a non-null default would do.
+  agreement    Boolean?
+  flags        Json?
+  recordedAt   DateTime @default(now())
+
+  @@index([decisionType, surface, recordedAt])
+  @@index([event, recordedAt])
+  @@index([leagueId, recordedAt])
+  @@map("decision_parity_record")
+}
+
 model LifecycleTelemetryRecord {
   id         String                      @id @default(cuid())
   eventKind  LifecycleTelemetryEventKind
