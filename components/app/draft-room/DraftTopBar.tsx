@@ -765,6 +765,9 @@ export function DraftTopBar({
                   {currentManagerOnClock}
                 </span>
                 <span
+                  /* Test hook for the orphan CPU/AI label. Only set while an orphan roster is
+                     on the clock, because this span otherwise renders "You're on the clock". */
+                  data-testid={isOrphanOnClock ? 'draft-topbar-orphan-mode-label' : undefined}
                   className={`shrink-0 text-[9px] font-semibold uppercase tracking-wide ${
                     isCurrentUserOnClock ? 'text-amber-100' : 'text-violet-200/75'
                   }`}

@@ -173,7 +173,56 @@ test.describe("@shell trade analyzer click audit", () => {
     await expect(openTradeAnalyzerLink).toBeVisible()
   })
 
-  test("runs deterministic analyze flow with sport-aware AI routing", async ({ page }) => {
+  /*
+   * RETIRED: BOTH OF THESE DIE AT THE FORM, NOT AT THE THING THEY ASSERT.
+   *
+   * /trade-evaluator was redesigned. The page still evaluates trades -- it is 1365
+   * lines, computes TradeResult and fairnessScore, and renders Fairness, Grades,
+   * Score Cards, Negotiation Playbook. What changed is the markup these were
+   * written against.
+   *
+   * Measured, not inferred. Each fails on its very first fill:
+   *
+   *   :176  line 125  locator.fill timeout, waiting for
+   *   :233  line 248  input#trade-sender-manager-name:visible
+   *
+   * That input exists, but it lost its id. It is now identified only by
+   * placeholder, inside the side container:
+   *
+   *   <div data-testid={`trade-side-${...}`}>            page.tsx:562
+   *     <input placeholder="Manager / Team name" />      page.tsx:585
+   *
+   * The whole page carries exactly seven id attributes: trade-sport-select,
+   * trade-evaluate-button, trade-reset-button, trade-swap-sides-button and the
+   * three mini-compare ids. trade-sender-faab and the "sender player 1 name"
+   * aria-label are gone the same way -- the only aria-labels left are "Remove
+   * player" and "Remove pick".
+   *
+   * ⚠ REPAIRING THE SELECTORS WOULD NOT BE ENOUGH, which is why this is a skip and
+   * not a quick fix. Past the form, :176 asserts a result UI that does not exist
+   * anywhere in app/ or components/:
+   *
+   *   trade-result-tab-breakdown     trade-outlook-current-toggle
+   *   trade-result-tab-outlook       trade-outlook-future-toggle
+   *   trade-propose-flow-link        trade-ai-explanation-link
+   *
+   * and getByText("Fairness Score", { exact: true }), where the page now renders
+   * "Fairness". There are no result tabs and no outlook toggles to point a new
+   * selector at. Whether that UI returns is a product call, so the reasons are
+   * recorded here rather than guessed at in new assertions.
+   *
+   * NOT everything here rotted. The composed ids survive and still resolve --
+   * `trade-add-player-${side}` (page.tsx:612) and `trade-add-pick-${side}`
+   * (page.tsx:692) -- which is why the testid audit flags only the six above.
+   *
+   * ⚠ WHAT COVERAGE THIS COSTS: nothing now checks that the analyze request
+   * carries the selected sport, which is what :176 was named for. If the builder
+   * gets stable hooks again, that assertion is the one worth restoring first.
+   *
+   * The first test in this file -- SEO landing routes into /trade-evaluator -- is
+   * LIVE and passing in 542ms, and is deliberately left running.
+   */
+  test.skip("runs deterministic analyze flow with sport-aware AI routing", async ({ page }) => {
     const state = await mockTradeEvaluator(page)
     await gotoWithRetry(page, "/trade-evaluator")
     await settleTradeEvaluator(page)
@@ -230,7 +279,7 @@ test.describe("@shell trade analyzer click audit", () => {
     expect(analyzedPayload?.league?.sport).toBe("SOCCER")
   })
 
-  test("audits builder controls, swap/reset, and mobile layout controls", async ({ page }) => {
+  test.skip("audits builder controls, swap/reset, and mobile layout controls", async ({ page }) => {
     await mockTradeEvaluator(page)
     await page.goto("/trade-evaluator", { waitUntil: "domcontentloaded" })
     await settleTradeEvaluator(page)

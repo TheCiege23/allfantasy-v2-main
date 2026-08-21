@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 
 import { createManagedIntelligenceDeps } from '@/lib/decision-os/three-brain/phase2/realAdapters'
 import { runIntelligenceMaintenance } from '@/lib/decision-os/three-brain/phase2/maintenanceRunner'
+import {
+  runLineupShadowSweep,
+  shadowSweepEnabled,
+  productionSweepDeps,
+} from '@/lib/decision-os/lineup/shadowSweep'
+import { awaitPendingParityWrites } from '@/lib/decision-os/core/parity/durableParityStore'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -40,13 +46,43 @@ function maintenanceEnabled(): boolean {
   return process.env.DECISION_OS_MAINTENANCE_ENABLED === 'true'
 }
 
+/**
+ * Lineup shadow sweep — a SECOND, INDEPENDENT feature sharing this schedule.
+ *
+ * Deliberately evaluated BEFORE the `maintenanceEnabled()` early return, and behind its own flag,
+ * so the two features cannot silently gate each other. `DECISION_OS_MAINTENANCE_ENABLED` is absent
+ * from the committed `.env.production` but IS set in the Vercel dashboard — a live authenticated
+ * call to the deployed route returns `enabled: true`. That is exactly why the placement matters:
+ * whether maintenance runs is an operator setting that can change without a code change, and the
+ * sweep must not inherit it in either direction.
+ *
+ * Folded into this route rather than given its own: the repo is at Vercel's route ceiling and
+ * carries a standing rule against new API routes, and this needs a clock, not an endpoint.
+ *
+ * Never throws (the sweep swallows its own failures), so it cannot turn a scheduled job red over
+ * telemetry work.
+ */
+async function sweepLineupShadow() {
+  return runLineupShadowSweep(productionSweepDeps(), { enabled: shadowSweepEnabled() })
+}
+
 export async function GET(request: Request) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 })
   }
+
+  const sweep = await sweepLineupShadow()
+  // Flush parity writes before responding. The emitters cannot await -- they sit inside decision
+  // paths -- so writes are still in flight when the sweep returns, and on Vercel this instance can
+  // be frozen the moment the response is sent, which kills them. A cron has no latency budget to
+  // protect, so it is the right place to wait. Bounded internally, so a slow database cannot hold
+  // the invocation open until a platform duration kill (which runs no user code at all).
+  const parityWrites = await awaitPendingParityWrites()
+
   if (!maintenanceEnabled()) {
-    // Authenticated but disabled → inert success. Do NOT touch the DB, runner, providers, tokens, or freshness.
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled' })
+    // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
+    // providers, tokens, or freshness. The sweep above is gated separately and reports its own state.
+    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites })
   }
   try {
     // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
@@ -57,10 +93,10 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result })
+    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites })
   } catch (error) {
     return NextResponse.json(
-      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed' },
+      { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep },
       { status: 500 },
     )
   }
