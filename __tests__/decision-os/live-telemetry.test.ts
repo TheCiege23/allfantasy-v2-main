@@ -207,7 +207,10 @@ describe('commissioner hub live telemetry wiring', () => {
   it('emits a summary event after Promise.all with enriched_count and total_db_source', () => {
     const liveIdx = commissionerSrc.indexOf('if (isLive) {')
     expect(liveIdx).toBeGreaterThan(-1)
-    const block = commissionerSrc.slice(liveIdx, liveIdx + 1200)
+    // Widened from 1200: the batched `leaguesWithSavedAnalysis` prefilter added lines ahead of
+    // the summary emit. Unlike the `pre` windows below, this one is a CONTAINMENT check, not a
+    // proximity check, so widening preserves what it tests.
+    const block = commissionerSrc.slice(liveIdx, liveIdx + 3600)
     expect(block).toContain('enriched_count: enrichedCount')
     expect(block).toContain('total_db_source: totalDbSource')
     expect(block).toContain('latency_ms: Date.now() - liveStart')
