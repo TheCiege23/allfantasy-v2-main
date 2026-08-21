@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -66,6 +67,13 @@ export async function POST(
   })
 
   void (async () => {
+    /*
+     * ⚠ THE RESULT WAS AWAITED AND THROWN AWAY, then `'complete'` written
+     * regardless — the same defect as the import path. These services resolve
+     * normally while reporting `success: false` and a `failureMessage`, so a
+     * retry that imported nothing was indistinguishable from one that worked.
+     */
+    let result: unknown = null
     try {
       if (provider === 'sleeper') {
         const { syncSleeperHistoricalBackfillAfterImport } = await import(
@@ -75,27 +83,27 @@ export async function POST(
           ((currentSettings as Record<string, unknown>).isDynasty as boolean | undefined) ??
             (currentSettings as Record<string, unknown>).is_dynasty,
         )
-        await syncSleeperHistoricalBackfillAfterImport({ leagueId, isDynasty, force })
+        result = await syncSleeperHistoricalBackfillAfterImport({ leagueId, isDynasty, force })
       } else if (provider === 'yahoo') {
         const { syncYahooHistoricalBackfillAfterImport } = await import(
           '@/lib/league-import/yahoo/YahooHistoricalBackfillService'
         )
-        await syncYahooHistoricalBackfillAfterImport({ leagueId, userId })
+        result = await syncYahooHistoricalBackfillAfterImport({ leagueId, userId })
       } else if (provider === 'espn') {
         const { syncEspnHistoricalBackfillAfterImport } = await import(
           '@/lib/league-import/espn/EspnHistoricalBackfillService'
         )
-        await syncEspnHistoricalBackfillAfterImport({ leagueId, userId })
+        result = await syncEspnHistoricalBackfillAfterImport({ leagueId, userId })
       } else if (provider === 'mfl') {
         const { syncMflHistoricalBackfillAfterImport } = await import(
           '@/lib/league-import/mfl/MflHistoricalBackfillService'
         )
-        await syncMflHistoricalBackfillAfterImport({ leagueId, userId })
+        result = await syncMflHistoricalBackfillAfterImport({ leagueId, userId })
       } else if (provider === 'fantrax') {
         const { syncFantraxHistoricalBackfillAfterImport } = await import(
           '@/lib/league-import/fantrax/FantraxHistoricalBackfillService'
         )
-        await syncFantraxHistoricalBackfillAfterImport({ leagueId, userId })
+        result = await syncFantraxHistoricalBackfillAfterImport({ leagueId, userId })
       }
       const fresh = await prisma.league.findUnique({
         where: { id: leagueId },
@@ -106,8 +114,7 @@ export async function POST(
         data: {
           settings: {
             ...((fresh?.settings as Record<string, unknown> | null) ?? {}),
-            historicalBackfillStatus: 'complete',
-            historicalBackfillCompletedAt: new Date().toISOString(),
+            ...backfillSettingsPatch(readBackfillOutcome(result), new Date().toISOString()),
           } as never,
         },
       })
