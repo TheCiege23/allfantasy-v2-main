@@ -261,7 +261,7 @@ describe('public sports data routes are cache-first', () => {
       expect.objectContaining({
         where: expect.objectContaining({
           sport: 'NHL',
-          source: { in: ['rolling_insights', 'espn_live'] },
+          source: { in: ['rolling_insights', 'espn_live', 'api_sports'] },
         }),
       })
     )
