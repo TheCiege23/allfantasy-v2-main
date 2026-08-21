@@ -44,24 +44,20 @@ export async function register(): Promise<void> {
   } catch {
     // Optional; do not block startup
   }
-  // Decision OS parity telemetry -> durable storage.
+  // NOTE: a Decision OS parity telemetry sink was registered here and has been REMOVED.
+  // It never took effect. Next.js bundles instrumentation.ts separately from route handlers,
+  // so the module-level sink in core/telemetry.ts was set on THIS bundle's copy while routes
+  // imported a different instance; module state does not cross bundles. Verified in
+  // production: [ProviderConfig] proves register() runs on every cold start, yet the cron
+  // route still took emitDecisionTelemetry's console.log fallback, which only happens when
+  // sink is null.
   //
-  // Without a registered sink, `emitDecisionTelemetry` falls through to console.log and the
-  // evidence the flip gate needs goes to the log drain, where nothing can query it. The in-memory
-  // debug store it reads instead is per-invocation and capped at 500 entries, so the gate could
-  // never reach the >=50 comparisons it requires.
+  // It was also harmful: emitDecisionTelemetry is `if (sink) sink(p) else console.log(p)`, so a
+  // sink handling only parity silently deleted decision.issued / adopted / resolved /
+  // live_enrichment from the production log drain.
   //
-  // Safe before the migration is applied: the sink's write is fire-and-forget with a swallowed
-  // rejection, so a missing table changes nothing.
-  try {
-    const [{ registerDecisionTelemetrySink }, { createDurableParitySink }] = await Promise.all([
-      import("./lib/decision-os/core/telemetry"),
-      import("./lib/decision-os/core/parity/durableParityStore"),
-    ]);
-    registerDecisionTelemetrySink(createDurableParitySink());
-  } catch {
-    // Telemetry must never block startup.
-  }
+  // Parity is now persisted directly from core/parity/telemetry.ts, in the same module graph
+  // as the emitters, with no registration to lose.
 
   // Do not import BullMQ workers here — webpack bundles instrumentation.ts and would pull
   // bullmq/ioredis (Node-only: path, child_process, …) into the build and fail.

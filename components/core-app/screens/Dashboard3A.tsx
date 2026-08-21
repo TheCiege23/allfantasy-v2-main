@@ -99,12 +99,36 @@ const SEV_CLASS: Record<CoreIssue['severity'], string> = {
   info: 'af3a-accent',
 }
 
+/**
+ * The inline "?" affordance. `af-dash-3a.css` styles `[data-help]` into a 16px
+ * badge and `[data-help-body]` into a popover shown on hover or keyboard focus.
+ *
+ * ⚠ THE WHOLE THING WAS `aria-hidden`, WHICH HID THE EXPLANATION, NOT THE GLYPH.
+ * These bodies are the only place "15 of 62" or "LVL 14" is defined — hiding them
+ * from assistive tech left a screen of unexplained numbers. Only the decorative
+ * "?" is hidden now, and the badge takes focus so the popover is reachable
+ * without a pointer.
+ */
 function Help({ children, left = false }: { children: React.ReactNode; left?: boolean }) {
   return (
-    <span data-help {...(left ? { 'data-help-left': '' } : {})} aria-hidden="true">
-      ?<span data-help-body>{children}</span>
+    <span data-help {...(left ? { 'data-help-left': '' } : {})} tabIndex={0}>
+      <span aria-hidden="true">?</span>
+      <span data-help-body>{children}</span>
     </span>
   )
+}
+
+/**
+ * `PanelState.reason` values are authored as lower-case clauses ("weeks are on
+ * file but none have been scored yet…"), which read as broken copy when dropped
+ * straight into a paragraph. Presented as a sentence rather than rewritten at
+ * the source, because the same strings are consumed elsewhere.
+ */
+function sentence(text: string): string {
+  const t = text.trim()
+  if (!t) return t
+  const cased = t.charAt(0).toUpperCase() + t.slice(1)
+  return /[.!?]$/.test(cased) ? cased : `${cased}.`
 }
 
 function platformTile(platform: string | null | undefined): string {
@@ -153,6 +177,21 @@ export function Dashboard3A({
   const urgent = issues.slice(0, 3)
   const rest = issues.slice(3, 8)
   const leagues = data?.leagues ?? []
+  /*
+   * ⚠ `data.leagues` IS NOT EVERY LEAGUE, AND THIS HEADER CLAIMED IT WAS.
+   * `getDash34Data` caps that array at LIST_LIMIT = 8 because 34a's main column
+   * is a queue, not an inventory — so "8 total" was rendered for an account with
+   * 63 played leagues, directly under an issue row reading "63 leagues have
+   * never been read". `totalLeagues` is the real count the loader already
+   * carries; when the list is short of it, say so rather than letting the
+   * shorter number stand as the total.
+   */
+  const leagueTotal = data?.totalLeagues ?? leagues.length
+  const shownLeagues = leagues.slice(0, 5)
+  const leagueTotalLabel =
+    leagueTotal > shownLeagues.length
+      ? `${shownLeagues.length} of ${leagueTotal}`
+      : `${leagueTotal} total`
 
   /*
    * Two real sources, preferred in order. `Dash34League.score` is live and knows
@@ -226,17 +265,17 @@ export function Dashboard3A({
               <i>◆</i>War Room<em className="af3a-tag af3a-tag-good">LIVE</em>
             </Link>
           </li>
-          <li><Link className="af3a-navitem" href="/draft"><i>▤</i>Draft HQ</Link></li>
-          <li><Link className="af3a-navitem" href="/portfolio"><i>◈</i>Portfolio</Link></li>
-          <li><Link className="af3a-navitem" href="/career"><i>★</i>Your career</Link></li>
+          <li><Link className="af3a-navitem" href="/core/draft-hq"><i>▤</i>Draft HQ</Link></li>
+          <li><Link className="af3a-navitem" href="/core/portfolio"><i>◈</i>Portfolio</Link></li>
+          <li><Link className="af3a-navitem" href="/core/career"><i>★</i>Your career</Link></li>
           <li>
-            <Link className="af3a-navitem" href="/rankings">
+            <Link className="af3a-navitem" href="/af-rankings">
               <i>↑</i>Rankings
               {career?.level != null ? <em className="af3a-tag">LVL {career.level}</em> : null}
             </Link>
           </li>
           <li>
-            <Link className="af3a-navitem" href="/commissioner">
+            <Link className="af3a-navitem" href="/commissioner-hub">
               <i>⚑</i>Commissioner
               {commissionerCount > 0 ? <em className="af3a-count">{commissionerCount}</em> : null}
             </Link>
@@ -256,11 +295,18 @@ export function Dashboard3A({
       {/* ── Main ─────────────────────────────────────────────────────────── */}
       <main className="af3a-main">
         <div className="af3a-topbar">
-          <div className="af3a-search">
+          {/*
+            ⚠ THIS WAS A `div` WITH A `<kbd>⌘K</kbd>` AND NOTHING BEHIND EITHER.
+            No input, no handler, no shortcut — the whole component has zero
+            `onClick`/`useEffect`/`useState`, so the most prominent control on the
+            dashboard did nothing at all and advertised a keybinding that was never
+            bound. Now it goes to Player Finder, which is the search surface that
+            actually exists, and the ⌘K hint is gone rather than left lying.
+           */}
+          <Link className="af3a-search" href="/players">
             <span className="af3a-search-dot" />
             <span className="af3a-search-ph">Search any player or league</span>
-            <kbd>⌘K</kbd>
-          </div>
+          </Link>
           <span className="af3a-chip">
             READ-ONLY
           </span>
@@ -358,7 +404,7 @@ export function Dashboard3A({
                   ) : null}
 
                   {openCount > urgent.length + rest.length ? (
-                    <Link className="af3a-more" href="/issues">
+                    <Link className="af3a-more" href="/core">
                       See all {openCount} issues →
                     </Link>
                   ) : null}
@@ -453,7 +499,7 @@ export function Dashboard3A({
                   Level comes from the XP engine: championships, win rate, tenure,
                   leagues and playoff appearances.
                 </Help>
-                <Link className="af3a-cardlink" href="/rankings">Rankings →</Link>
+                <Link className="af3a-cardlink" href="/af-rankings">Rankings →</Link>
               </header>
 
               {career ? (
@@ -537,7 +583,7 @@ export function Dashboard3A({
                 </div>
               ) : (
                 <p className="af3a-reason">
-                  {rivals?.reason ?? 'Head-to-head records have not been read yet.'}
+                  {rivals ? sentence(rivals.reason) : 'Head-to-head records have not been read yet.'}
                 </p>
               )}
             </section>
@@ -587,16 +633,16 @@ export function Dashboard3A({
               </>
             ) : (
               <p className="af3a-reason">
-                {exposure?.reason ?? 'Roster exposure has not been read yet.'}
+                {exposure ? sentence(exposure.reason) : 'Roster exposure has not been read yet.'}
               </p>
             )}
-            <Link className="af3a-cardlink" href="/portfolio">Open Portfolio →</Link>
+            <Link className="af3a-cardlink" href="/core/portfolio">Open Portfolio →</Link>
           </section>
 
           <section className="af3a-card">
             <header className="af3a-cardhead">
               <span className="af3a-label">MY LEAGUES</span>
-              <span className="af3a-note af3a-push">{leagues.length} total</span>
+              <span className="af3a-note af3a-push">{leagueTotalLabel}</span>
             </header>
             {leagues.length === 0 ? (
               <p className="af3a-reason">
@@ -604,7 +650,7 @@ export function Dashboard3A({
               </p>
             ) : (
               <div className="af3a-leagues">
-                {leagues.slice(0, 5).map((l) => (
+                {shownLeagues.map((l) => (
                   <Link
                     key={l.id}
                     className="af3a-league"
@@ -621,6 +667,11 @@ export function Dashboard3A({
                 ))}
               </div>
             )}
+            {leagueTotal > shownLeagues.length ? (
+              <Link className="af3a-cardlink" href="/core/portfolio">
+                Show all {leagueTotal} &rarr;
+              </Link>
+            ) : null}
           </section>
 
           <section className="af3a-card">
@@ -629,8 +680,8 @@ export function Dashboard3A({
             </header>
             <div className="af3a-tools">
               <Link className="af3a-tool" href="/trade-evaluator"><i>⇄</i>Trade analyzer</Link>
-              <Link className="af3a-tool" href="/waivers"><i>◷</i>Waiver assistant</Link>
-              <Link className="af3a-tool" href="/draft"><i>▤</i>Mock draft</Link>
+              <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
+              <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
               <Link className="af3a-tool" href="/rankings"><i>★</i>Rankings</Link>
             </div>
           </section>

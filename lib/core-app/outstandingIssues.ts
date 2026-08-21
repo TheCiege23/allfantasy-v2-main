@@ -75,6 +75,40 @@ function platformHome(platform: string, league: UserLeague): { label: string; hr
   return null
 }
 
+/**
+ * Leagues that live only in AllFantasy. `computeUserRole` in
+ * lib/dashboard/get-dashboard-league-list.ts treats exactly these four values as
+ * native, and the production league list emits `manual` for them.
+ */
+const NON_SYNCING_PLATFORMS = new Set(['allfantasy', 'af', 'manual', 'native'])
+
+/**
+ * `lastSyncByLeague` from the league-list payload.
+ *
+ * ⚠ BOTH CALLERS USED TO OMIT THE ARGUMENT ENTIRELY, WHICH MADE THE DETECTOR
+ * REPORT "NEVER READ" FOR EVERY LEAGUE, ALWAYS. Measured on production
+ * 2026-08-20: /dashboard rendered "63 leagues have never been read" in the issue
+ * queue while its own topbar chip, built from the same rows, read "34m ago" —
+ * 54 of the 63 carried a `lastSyncedAt`. An optional parameter defaulting to
+ * `null` per league does not fail loudly; it just makes the screen wrong. This
+ * exists so the map is built the same way in both places.
+ */
+export function lastSyncByLeagueFrom(
+  leagues: Array<{ id: string; lastSyncedAt?: Date | string | null }>,
+): Record<string, Date | null> {
+  const map: Record<string, Date | null> = {}
+  for (const l of leagues) {
+    const raw = l.lastSyncedAt
+    if (!raw) {
+      map[l.id] = null
+      continue
+    }
+    const d = raw instanceof Date ? raw : new Date(raw)
+    map[l.id] = Number.isNaN(d.getTime()) ? null : d
+  }
+  return map
+}
+
 function titleCasePlatform(platform: string): string {
   const p = platform.toLowerCase()
   if (p === 'espn') return 'ESPN'
@@ -118,7 +152,20 @@ export function deriveOutstandingIssues(input: {
       }
     }
 
-    // ── Detector: this league's data has gone stale ──
+    /*
+     * ── Detector: this league's data has gone stale ──
+     *
+     * ⚠ A LEAGUE WITH NO EXTERNAL PLATFORM CANNOT BE "READ", SO IT CANNOT BE
+     * STALE. Native / manual AllFantasy leagues have no upstream to sync from —
+     * `lastSyncedAt` is null on all of them forever — and firing the detector on
+     * them tells the reader to go re-sync a league that has nothing to sync.
+     *
+     * Listed explicitly rather than reusing `platformHome`'s null: that returns
+     * null for CBS / MFL / Fantrax too, and those DO have an upstream that can go
+     * stale — they just have no deep link yet.
+     */
+    if (NON_SYNCING_PLATFORMS.has(platform)) continue
+
     const lastSync = input.lastSyncByLeague?.[league.id] ?? null
     const age = describeAge('roster', lastSync, now)
     if (age.stale) {

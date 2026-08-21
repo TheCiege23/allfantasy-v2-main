@@ -22,6 +22,7 @@ export default defineConfig({
     include: [
       '__tests__/decision-os/three-brain-phase2-integration.test.ts',
       '__tests__/decision-os/three-brain-phase2-hardening-integration.test.ts',
+      '__tests__/decision-os/canonical-decision-store-integration.test.ts',
     ],
     fileParallelism: false,
     maxConcurrency: 1,

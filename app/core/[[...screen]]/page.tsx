@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
-import { deriveOutstandingIssues } from '@/lib/core-app/outstandingIssues'
+import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
@@ -181,7 +181,22 @@ export default async function AfCorePage({
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
   }))
 
-  const { issues } = deriveOutstandingIssues({ leagues })
+  /*
+   * ⚠ `playedLeagues`, AND THE REAL SYNC TIMESTAMPS.
+   *
+   * This passed `leagues` — all 606 rows on a production account, 543 of which
+   * are AF Legacy board snapshots with no row in `leagues` and nothing to sync.
+   * The rail two lines above already filters them out for exactly this reason.
+   *
+   * It also omitted `lastSyncByLeague`, which defaults every league to "never
+   * read" and made the stale detector fire on all of them unconditionally.
+   */
+  const { issues } = deriveOutstandingIssues({
+    leagues: playedLeagues,
+    lastSyncByLeague: lastSyncByLeagueFrom(
+      playedLeagues as unknown as Array<{ id: string; lastSyncedAt?: Date | string | null }>,
+    ),
+  })
 
   // Screen 2 is the same route with a league selected — the handoff describes it
   // as the main column becoming "that league's world", not a separate page.

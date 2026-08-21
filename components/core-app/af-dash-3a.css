@@ -150,6 +150,10 @@
 }
 .af3a-search-dot { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line2); }
 .af3a-search-ph { color: var(--muted); font: 400 13px/1 'Archivo', system-ui, sans-serif; }
+/* The bar is a link to Player Finder now, so it has to read as one on hover. */
+a.af3a-search { text-decoration: none; }
+a.af3a-search:hover { border-color: var(--accent-line); text-decoration: none; }
+a.af3a-search:hover .af3a-search-ph { color: var(--text2); }
 .af3a-search kbd {
   margin-left: auto;
   padding: 3px 6px;
@@ -407,7 +411,11 @@
 .af3a-exposure { display: grid; gap: 9px; }
 .af3a-exp { display: flex; align-items: center; gap: 10px; }
 .af3a-exp-name {
-  width: 108px; flex: none;
+  /* Fixed 108px truncated "Aaron Rodgers" and "Jameis Winston" to an ellipsis on
+     a card that was 580px wide — the bar next to them had room to spare. Still a
+     single track so every row's bar starts on the same x, but it grows with the
+     card instead of clipping names the reader is meant to recognise. */
+  width: clamp(108px, 26%, 220px); flex: none;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font: 600 13px/1.3 'Archivo', system-ui, sans-serif;
 }
@@ -427,4 +435,70 @@
   margin-top: 11px;
   color: var(--muted);
   font: 400 12px/1.5 'Archivo', system-ui, sans-serif;
+}
+
+/* ── Inline help badge ────────────────────────────────────────────────────────
+ * ⚠ THIS WAS SHIPPED WITH NO RULE AT ALL, AND THE ABSENCE WAS INVISIBLE IN CODE.
+ * `Help` in Dashboard3A.tsx renders `<span data-help>?<span data-help-body>…`,
+ * and nothing in this repo styled either attribute — so every one of the five
+ * help affordances on /dashboard painted as a bare "?" followed by the whole
+ * tooltip body inline, at 18px, running across the topbar and shoving the card
+ * labels out of their headers. A missing selector throws nothing; the only way
+ * this surfaces is by looking at the page. Measured on production 2026-08-20:
+ * `[data-help]` computed to `display:block; width:1051px` inside the topbar.
+ *
+ * Authored on the token layer like the rest of this file. The body is hidden by
+ * visibility (not `display:none`) so it stays in the accessibility tree — the
+ * explanation is real content, and it is the only place these numbers are
+ * defined.
+ */
+[data-help] {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--chip-line);
+  background: var(--chip);
+  color: var(--muted);
+  font: 700 10px/1 'JetBrains Mono', monospace;
+  letter-spacing: 0;
+  vertical-align: middle;
+  cursor: help;
+}
+[data-help]:hover,
+[data-help]:focus-visible { border-color: var(--accent-line); color: var(--accent); outline: none; }
+[data-help-body] {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: -8px;
+  z-index: 30;
+  display: block;
+  width: 264px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text2);
+  font: 400 12px/1.5 'Archivo', system-ui, sans-serif;
+  letter-spacing: 0;
+  text-align: left;
+  text-transform: none;
+  box-shadow: 0 14px 34px rgb(0 0 0 / 38%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+/* Right-aligned for badges that sit in the 360px side column, where a
+   left-anchored popover would run off the edge of the viewport. */
+[data-help-left] [data-help-body] { left: auto; right: -8px; }
+[data-help]:hover [data-help-body],
+[data-help]:focus-visible [data-help-body] { opacity: 1; visibility: visible; }
+[data-help-body] b {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font: 800 12px/1.4 'Archivo', system-ui, sans-serif;
 }
