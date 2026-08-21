@@ -37,6 +37,28 @@ const ALLOWED_PATH_PATTERNS = [
   /^lib\/.*(ingest|ingestion|sync)/i,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,
+  /*
+   * Two sync modules the `lib/.*(ingest|sync)` pattern above misses purely
+   * because of how they are NAMED, not because of what they do. Listed by exact
+   * path rather than by widening that pattern, so this stays an allowlist of two
+   * audited files instead of a hole any future `lib/scores/*` file falls through.
+   *
+   * `sports-live-scores-service.ts` DEFINES `syncLiveScoresToDb` and is the
+   * db-first service itself — the module every other surface is supposed to go
+   * through. Forbidding it from calling a provider would leave nothing able to
+   * populate the cache the rule insists everyone reads.
+   *
+   * `scores/gameScoreProviders.ts` is provider fetchers only, consumed by
+   * `/api/cron/import-scores` (already allowed above) and `lib/api-sports.ts`.
+   * It has no request-path caller.
+   *
+   * ⚠ THIS IS NOT A LICENCE FOR PAGES. Both files were already flagged the moment
+   * TheSportsDB joined the host list on 2026-08-16; they had simply not been
+   * touched since, because the guard only scans CHANGED files. Anything on a
+   * request path must still go through `getLiveScoresForSport`.
+   */
+  /^lib\/sports-live-scores-service\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /^lib\/scores\/gameScoreProviders\.(ts|tsx|js|jsx|mjs|cjs)$/i,
 ];
 
 function parseArg(flag) {

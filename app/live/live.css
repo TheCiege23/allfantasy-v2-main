@@ -1,0 +1,103 @@
+/*
+ * `/live` — handoff 15a token bridge.
+ *
+ * ⚠ THESE ARE ALIASES, NOT A SECOND PALETTE. The 15a handoff names four tokens
+ * this app does not have (`--accent-soft`, `--accent-line`, `--chip`, `--line2`).
+ * Three of them already exist under the app's own names, so they are aliased
+ * rather than redefined — a parallel accent system is exactly what the Phase 2
+ * bridge in globals.css deliberately avoided, and two vocabularies for one colour
+ * is how surfaces drift apart.
+ *
+ * ⚠ THE ACCENT IS CYAN BECAUSE THE SCREENSHOT IS CYAN. The README says
+ * `--accent`, which resolves to purple in dark mode, but every accent pixel in
+ * screenshot-desktop@2x.png is cyan — the scope toggle, the win-prob bar, the
+ * "Box score" links, the shield. Screenshot wins over README when they disagree.
+ * `--cyan` is an existing token defined in both modes, so this is a reuse.
+ *
+ * Scoped to `.live-page` so nothing here can leak into another surface.
+ */
+
+.live-page {
+  /* Aliases onto the app's existing vocabulary. */
+  --live-chip: var(--panel2);
+  --live-line2: var(--border-2);
+
+  /* Genuinely new: a translucent accent wash + hairline for the "this is about
+     you" fantasy tie-in panel. Derived from --cyan via color-mix so they track
+     the theme instead of being hardcoded twice. */
+  --live-accent: var(--cyan);
+  --live-accent-soft: color-mix(in srgb, var(--cyan) 10%, transparent);
+  --live-accent-line: color-mix(in srgb, var(--cyan) 32%, transparent);
+
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+/*
+ * ⚠ THE ONLY NON-ALERT USE OF --bad IN THE SYSTEM, and the handoff calls that
+ * out explicitly: red is the app's live-broadcast convention, so a live game
+ * borrows the alert colour without being an alert.
+ */
+.live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--bad);
+  flex: 0 0 auto;
+}
+
+/* Reduced-motion users get the dot without the pulse — the colour and the word
+   "LIVE" already carry the meaning, so the animation is pure decoration. */
+@media (prefers-reduced-motion: no-preference) {
+  .live-dot {
+    animation: live-pulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* Every score, clock, win-prob number and stat line — handoff type contract. */
+.live-mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-display {
+  font-family: Archivo, ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Horizontal-scrolling sport chips on mobile, without a visible scrollbar. */
+.live-scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.live-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * Wide content must scroll inside its own container rather than making the page
+ * scroll sideways.
+ */
+.live-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .live-grid {
+    grid-template-columns: minmax(0, 1fr) 320px;
+  }
+}

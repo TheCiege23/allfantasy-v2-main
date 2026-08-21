@@ -46,6 +46,22 @@ export interface LiveScoreRow {
   overUnder: number | null
   week: number | null
   season: number
+  /**
+   * Best statistical performer in this game, or null when the feed names none
+   * (which is normal before kickoff). Never inferred from box-score guesses.
+   */
+  topPerformer: LiveScoreLeader | null
+}
+
+/** One named performer with the feed's own stat line, verbatim. */
+export type LiveScoreLeader = {
+  name: string
+  /** e.g. "18 CAR, 92 YDS, 1 TD" — ESPN's own displayValue, never recomposed. */
+  statLine: string
+  position: string | null
+  headshot: string | null
+  /** Which category won: "rushingYards", "passingYards", … */
+  category: string | null
 }
 
 export interface RollingInsightsScheduleGameRow {
@@ -147,6 +163,9 @@ export function mapChainScoreToLiveScore(raw: Record<string, unknown>, _sport: L
       typeof raw.season === 'number'
         ? raw.season
         : asFiniteInt(raw.season) || new Date().getFullYear(),
+    // This feed carries no per-game leaders. Null says so; it does not borrow
+    // one from another game or synthesise it from the box score.
+    topPerformer: null,
   }
 }
 
@@ -157,6 +176,23 @@ interface ESPNCompetitor {
   records?: Array<{ summary: string }>
 }
 
+/**
+ * ESPN's per-category statistical leaders for a game.
+ *
+ * The scoreboard payload has carried these all along; the mapper simply dropped
+ * them, so "who is actually doing something in this game" had no source despite
+ * already being fetched and parsed on every poll.
+ */
+interface ESPNLeaderCategory {
+  name?: string
+  displayName?: string
+  leaders?: Array<{
+    displayValue?: string
+    value?: number
+    athlete?: { displayName?: string; shortName?: string; headshot?: string; position?: { abbreviation?: string } }
+  }>
+}
+
 interface ESPNCompetition {
   competitors: ESPNCompetitor[]
   status: {
@@ -164,6 +200,7 @@ interface ESPNCompetition {
     period: number
     displayClock: string
   }
+  leaders?: ESPNLeaderCategory[]
   venue?: { fullName: string }
   odds?: Array<{ details: string; overUnder: number }>
   broadcasts?: Array<{ names: string[] }>
@@ -176,6 +213,56 @@ interface ESPNEvent {
   season: { year: number }
   week?: { number: number }
   competitions: ESPNCompetition[]
+}
+
+/**
+ * The single most notable performer in a game.
+ *
+ * ⚠ RANKS BY CATEGORY, NOT BY RAW `value`. ESPN's `value` is in the units of its
+ * own category, so comparing them numerically would rank 3 passing touchdowns
+ * (3) below 92 rushing yards (92) — the bigger number is simply the one measured
+ * in smaller units. The category order below is a fantasy-relevance ordering, and
+ * within the winning category the feed's own top leader is taken as-is.
+ *
+ * ⚠ RETURNS NULL RATHER THAN A BEST GUESS. Before kickoff ESPN sends leaders with
+ * no athlete attached; a card showing a name with an empty stat line reads as a
+ * data bug, and inventing a line to fill it would be worse.
+ */
+const LEADER_CATEGORY_PRIORITY = [
+  'rushingYards',
+  'receivingYards',
+  'passingYards',
+  'rushingTouchdowns',
+  'receivingTouchdowns',
+  'passingTouchdowns',
+]
+
+function pickTopPerformer(categories: ESPNLeaderCategory[] | undefined): LiveScoreLeader | null {
+  if (!Array.isArray(categories) || categories.length === 0) return null
+
+  const ranked = [...categories].sort((a, b) => {
+    const ai = LEADER_CATEGORY_PRIORITY.indexOf(String(a.name ?? ''))
+    const bi = LEADER_CATEGORY_PRIORITY.indexOf(String(b.name ?? ''))
+    // Unlisted categories sort last rather than to the front.
+    return (ai === -1 ? 999 : ai) - (bi === -1 ? 999 : bi)
+  })
+
+  for (const category of ranked) {
+    const leader = category.leaders?.[0]
+    const name = leader?.athlete?.displayName ?? leader?.athlete?.shortName
+    const statLine = leader?.displayValue
+    // Both halves required: a name with no line, or a line with no name, is not
+    // a performer — it is a partially populated pre-game row.
+    if (!name || !statLine) continue
+    return {
+      name: String(name),
+      statLine: String(statLine),
+      position: leader?.athlete?.position?.abbreviation ?? null,
+      headshot: leader?.athlete?.headshot ?? null,
+      category: category.name ?? null,
+    }
+  }
+  return null
 }
 
 function formatEspnDate(date: Date): string {
@@ -240,6 +327,7 @@ export async function fetchEspnScoreboard(
         overUnder: comp.odds?.[0]?.overUnder ?? null,
         week: event.week?.number ?? null,
         season: event.season.year,
+        topPerformer: pickTopPerformer(comp.leaders),
       }
       }))
     }
@@ -585,6 +673,11 @@ async function syncLiveScoresToDb(sport: LeagueSport, scores: LiveScoreRow[], so
   return synced
 }
 
+/**
+ * The cached DB fallback. `SportsGame` stores no per-game leaders, so
+ * `topPerformer` is null here — the row is a real score with one fewer field,
+ * not a reason to invent a performer from a table that does not have one.
+ */
 function dbRowToLiveScore(g: {
   externalId: string
   homeTeam: string
@@ -622,6 +715,7 @@ function dbRowToLiveScore(g: {
     overUnder: null,
     week: g.week,
     season: g.season ?? new Date().getFullYear(),
+    topPerformer: null,
   }
 }
 
@@ -710,6 +804,18 @@ export async function getLiveScoresForSport(options: {
   sport: string
   team?: string | null
   forceRefresh?: boolean
+  /**
+   * Try ESPN before Rolling Insights on refresh.
+   *
+   * ⚠ RI "HAS ROWS" IS NOT THE SAME AS RI "HAS A LIVE SLATE". For NFL its
+   * scoreboard returns the ENTIRE SEASON with no scores, no clock, no logos and
+   * no records — enough rows to satisfy the default `length > 0` check and win
+   * the race, while carrying none of the fields a live surface renders. Callers
+   * that need live game state opt into ESPN first; every existing caller keeps
+   * the RI-first order untouched, because their data is fine and changing it
+   * under them is not this flag's job.
+   */
+  preferEspn?: boolean
 }): Promise<{
   scores: LiveScoreRow[]
   source: string
@@ -737,23 +843,28 @@ export async function getLiveScoresForSport(options: {
   let fetchedAt: string | null = cachedGames[0]?.fetchedAt?.toISOString() ?? null
 
   if (refresh || stale) {
-    const fromRi = await fetchRollingInsightsScoreboard(sport, { forceRefresh: refresh })
+    /*
+     * Both branches persist through `syncLiveScoresToDb`, so whichever feed wins,
+     * the next reader is served from the database. That is the point of routing
+     * every provider read through this function instead of letting a page fetch
+     * a scoreboard on its own request path.
+     */
+    const order: Array<'rolling_insights' | 'espn_live'> = options.preferEspn
+      ? ['espn_live', 'rolling_insights']
+      : ['rolling_insights', 'espn_live']
 
-    if (fromRi.length > 0) {
-      await syncLiveScoresToDb(sport, fromRi, 'rolling_insights')
-      scores = fromRi
+    for (const candidate of order) {
+      const rows =
+        candidate === 'rolling_insights'
+          ? await fetchRollingInsightsScoreboard(sport, { forceRefresh: refresh })
+          : await fetchEspnScoreboard(sport)
+      if (rows.length === 0) continue
+      await syncLiveScoresToDb(sport, rows, candidate)
+      scores = rows
       refreshed = true
-      source = 'rolling_insights'
+      source = candidate
       fetchedAt = new Date().toISOString()
-    } else {
-      const espn = await fetchEspnScoreboard(sport)
-      if (espn.length > 0) {
-        await syncLiveScoresToDb(sport, espn, 'espn_live')
-        scores = espn
-        refreshed = true
-        source = 'espn_live'
-        fetchedAt = new Date().toISOString()
-      }
+      break
     }
   }
 
