@@ -71,7 +71,13 @@ describe('decision-os maintenance cron — activation gate', () => {
     delete process.env.DECISION_OS_MAINTENANCE_ENABLED
     const res = await GET(authed())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true, enabled: false, status: 'maintenance_disabled' })
+    const body = await res.json()
+    // The route now carries a SECOND, independently gated feature (the lineup shadow sweep), so
+    // this asserts the maintenance contract rather than the whole envelope. `toEqual` on the
+    // envelope made an unrelated additive field a failure, which is what happened here.
+    expect(body).toMatchObject({ ok: true, enabled: false, status: 'maintenance_disabled' })
+    // Inertness is the actual guarantee, and it is stronger asserted directly:
+    expect(body.sweep?.ran).toBe(false)
     expect(runMock).not.toHaveBeenCalled()
     expect(depsMock).not.toHaveBeenCalled()
   })
@@ -80,7 +86,13 @@ describe('decision-os maintenance cron — activation gate', () => {
     process.env.DECISION_OS_MAINTENANCE_ENABLED = 'false'
     const res = await GET(authed())
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ ok: true, enabled: false, status: 'maintenance_disabled' })
+    const body = await res.json()
+    // The route now carries a SECOND, independently gated feature (the lineup shadow sweep), so
+    // this asserts the maintenance contract rather than the whole envelope. `toEqual` on the
+    // envelope made an unrelated additive field a failure, which is what happened here.
+    expect(body).toMatchObject({ ok: true, enabled: false, status: 'maintenance_disabled' })
+    // Inertness is the actual guarantee, and it is stronger asserted directly:
+    expect(body.sweep?.ran).toBe(false)
     expect(runMock).not.toHaveBeenCalled()
     expect(depsMock).not.toHaveBeenCalled()
   })
@@ -89,7 +101,7 @@ describe('decision-os maintenance cron — activation gate', () => {
     for (const v of ['1', 'yes', 'TRUE', '', 'enabled', ' true ']) {
       process.env.DECISION_OS_MAINTENANCE_ENABLED = v
       const res = await GET(authed())
-      expect(await res.json(), `value=${JSON.stringify(v)} must be disabled`).toEqual({
+      expect(await res.json(), `value=${JSON.stringify(v)} must be disabled`).toMatchObject({
         ok: true,
         enabled: false,
         status: 'maintenance_disabled',

@@ -7,6 +7,7 @@ import {
   shadowSweepEnabled,
   productionSweepDeps,
 } from '@/lib/decision-os/lineup/shadowSweep'
+import { awaitPendingParityWrites } from '@/lib/decision-os/core/parity/durableParityStore'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -71,11 +72,17 @@ export async function GET(request: Request) {
   }
 
   const sweep = await sweepLineupShadow()
+  // Flush parity writes before responding. The emitters cannot await -- they sit inside decision
+  // paths -- so writes are still in flight when the sweep returns, and on Vercel this instance can
+  // be frozen the moment the response is sent, which kills them. A cron has no latency budget to
+  // protect, so it is the right place to wait. Bounded internally, so a slow database cannot hold
+  // the invocation open until a platform duration kill (which runs no user code at all).
+  const parityWrites = await awaitPendingParityWrites()
 
   if (!maintenanceEnabled()) {
     // Authenticated but disabled → inert success for MAINTENANCE. Do NOT touch the DB, runner,
     // providers, tokens, or freshness. The sweep above is gated separately and reports its own state.
-    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep })
+    return NextResponse.json({ ok: true, enabled: false, status: 'maintenance_disabled', sweep, parityWrites })
   }
   try {
     // Minute-bucket tick id. Overlap is prevented by the ONE global maintenance lease (AutomationLock) inside
@@ -86,7 +93,7 @@ export async function GET(request: Request) {
       deps: createManagedIntelligenceDeps(),
       config: { refreshBatch: 20, reconcileBatch: 200 },
     })
-    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep })
+    return NextResponse.json({ ok: true, enabled: true, tickId, ...result, sweep, parityWrites })
   } catch (error) {
     return NextResponse.json(
       { ok: false, error: error instanceof Error ? error.message.slice(0, 200) : 'maintenance failed', sweep },

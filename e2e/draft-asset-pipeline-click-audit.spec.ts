@@ -165,6 +165,32 @@ async function mockDraftAssetApis(page: Page, leagueId: string) {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) })
   })
 
+  /*
+   * ⚠ THESE THREE ARE NOT OPTIONAL, EVEN THOUGH NOTHING ASSERTS THEM.
+   *
+   * fetchDraftChromeData() calls /api/league/settings (singular "league") and
+   * /api/leagues/<id>/privacy inside a Promise.all, and DraftRoomPageClient
+   * awaits it in a Promise.allSettled BEFORE it ever calls fetchDraftPool
+   * (DraftRoomPageClient.tsx:2018 and :2031). Leave them unmocked and they hit
+   * the real dev server with a league id that does not exist, the bootstrap
+   * never settles, the pool is never fetched, and the player panel renders with
+   * a working search box and zero cards.
+   *
+   * Measured before adding them: the app never logged "[draft-room] draft pool
+   * loaded", player cards in the DOM were 0, and the search input still held
+   * its value -- so the failure looked like a missing testid when it was
+   * actually a blocked bootstrap two awaits upstream.
+   */
+  await page.route('**/api/league/settings**', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ settings: {} }) })
+  })
+  await page.route(`**/api/leagues/${leagueId}/privacy`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ privacy: {} }) })
+  })
+  await page.route(`**/api/leagues/${leagueId}/claim-roster`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) })
+  })
+
   await page.route(`**/api/leagues/${leagueId}/draft/session`, async (route) => {
     await route.fulfill({
       status: 200,

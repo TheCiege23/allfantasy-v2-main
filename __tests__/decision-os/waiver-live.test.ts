@@ -57,9 +57,15 @@ describe('waiver engine route Stage 1 wiring', () => {
     // Anchor to the branch itself so any preamble doesn't eat the window.
     const liveIdx = routeSrc.indexOf('if (isLive && input.leagueId)')
     expect(liveIdx).toBeGreaterThan(-1)
-    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 900)
+    // Window widened from 900: mounting `attachSavedAnalysis` in the LIVE block pushed both
+    // `decisionId` and the surrounding catch past 900 chars, so this failed while the code
+    // still did exactly what the test name claims. A fixed byte window is a fragile way to
+    // assert structure -- it fails on insertion, not on regression.
+    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toContain('decisionId: decision.decision_id')
-    expect(liveBlock).toContain('toWaiverCard(decision)')
+    expect(liveBlock).toContain('toWaiverCard(attached.decision)')  // NOT toWaiverCard(decision): the card must
+    // render the decision AFTER attachSavedAnalysis, or the AI explanation never reaches it.
+    // This is the property worth pinning, and it is stronger than what this line asserted before.
     expect(liveBlock).toContain('confidence: card.confidence')
     expect(liveBlock).toContain('legal: card.legal')
   })
@@ -67,7 +73,11 @@ describe('waiver engine route Stage 1 wiring', () => {
   it('LIVE path is isolated in try/catch so a Decision OS failure never breaks the route', () => {
     const liveIdx = routeSrc.indexOf('if (isLive && input.leagueId)')
     expect(liveIdx).toBeGreaterThan(-1)
-    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 900)
+    // Window widened from 900: mounting `attachSavedAnalysis` in the LIVE block pushed both
+    // `decisionId` and the surrounding catch past 900 chars, so this failed while the code
+    // still did exactly what the test name claims. A fixed byte window is a fragile way to
+    // assert structure -- it fails on insertion, not on regression.
+    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toMatch(/try\s*\{/)
     expect(liveBlock).toMatch(/catch/)
   })
