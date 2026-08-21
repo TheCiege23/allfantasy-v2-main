@@ -31,6 +31,33 @@
  *
  *   node scripts/audit-e2e-testids.mjs
  *   node scripts/audit-e2e-testids.mjs --list   # every absent id, not just a summary
+ *
+ * ⚠ THE LIST IS NOT A BUG QUEUE. EVERY ENTRY ON IT WAS RUN, AND NONE OF THEM
+ * CAUSED A FAILURE. Measured 2026-08-20, once the count
+ * came down from 68. Three distinct reasons an entry can be here and be fine:
+ *
+ *   1. THE SPEC ASSERTS THE ID IS ABSENT.
+ *      draft-room-click-audit:1786 does `toHaveCount(0)` on
+ *      draft-open-commissioner-controls, and its one click on that id (:1706) is
+ *      wrapped in `.catch(() => null)`. An absent id there is the assertion
+ *      PASSING. draft-room is 8/8 green.
+ *
+ *   2. THE ASSERTION IS INSIDE A GUARD THAT DOES NOT RUN.
+ *      draft-selected-player-panel is asserted visible at :1533 and :1535, both
+ *      inside `if (await helperRefresh.isVisible().catch(() => false))`. The
+ *      branch is skipped, so the id is never looked for.
+ *
+ *   3. THE SPEC FAILS ON A DIFFERENT, UNFLAGGED ID.
+ *      draft-asset-pipeline dies on draft-player-card-0 -- composed at
+ *      PlayerPanel.tsx:290 from a virtualiser row index, so this file correctly
+ *      reports it present. ai-system-final-integration dies on
+ *      waiver-ai-help-link, which IS rendered (WaiverWirePage.tsx:1468) but not
+ *      by /e2e/waiver-wire-live, whose harness mounts SportAwareWaiverWire with
+ *      a league id that has no data. Both are harness/fixture problems, not
+ *      missing test hooks, and no amount of testid analysis will find them.
+ *
+ * So: read an entry as "worth one run", never as "a bug". The run is cheap and it
+ * has disagreed with this list more often than it has agreed.
  */
 import fs from 'node:fs'
 import path from 'node:path'
