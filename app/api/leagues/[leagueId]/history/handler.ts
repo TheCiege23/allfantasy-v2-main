@@ -103,11 +103,35 @@ export async function GET(
   })
 
   const settings = (league.settings as Record<string, unknown> | null) ?? {}
+
+  /*
+   * The orchestrator's own status row. Read defensively — the table is written
+   * only on paths that reach `runDynastyBackfill`, so a league imported before
+   * that existed simply has no row, which is not an error.
+   */
+  const providerStatus = await prisma.dynastyBackfillStatus
+    .findFirst({
+      where: { leagueId },
+      orderBy: { updatedAt: 'desc' },
+      select: { status: true, failureMessage: true, lastStartedAt: true, updatedAt: true },
+    })
+    .catch(() => null)
   return NextResponse.json({
     leagueId,
     leagueName: league.name,
     sport: league.sport,
     seasons: unique,
+    /*
+     * ⚠ THE ONLY PLACE THE PRODUCT REPORTS THIS, so it has to report enough to
+     * act on. `status` alone said `complete` for 52 production leagues that had
+     * imported zero prior seasons — it cannot distinguish "no earlier seasons
+     * exist" from "three exist and none landed". The counts can, and the
+     * provider's own `failureMessage` names the reason.
+     *
+     * `providerStatus` is `dynasty_backfill_status`, the row the orchestrator
+     * actually writes its verdict to. Nothing in `app/` read that table, which is
+     * why a silently failing backfill was invisible from inside the product.
+     */
     historicalBackfill: {
       status:
         (settings.historicalBackfillStatus as string | undefined) ??
@@ -115,6 +139,20 @@ export async function GET(
       startedAt: (settings.historicalBackfillStartedAt as string | undefined) ?? null,
       completedAt: (settings.historicalBackfillCompletedAt as string | undefined) ?? null,
       error: (settings.historicalBackfillError as string | undefined) ?? null,
+      seasonsDiscovered:
+        (settings.historicalBackfillSeasonsDiscovered as number | undefined) ?? null,
+      seasonsImported:
+        (settings.historicalBackfillSeasonsImported as number | undefined) ?? null,
+      seasonsSkipped:
+        (settings.historicalBackfillSeasonsSkipped as number | undefined) ?? null,
+      providerStatus: providerStatus
+        ? {
+            status: providerStatus.status,
+            failureMessage: providerStatus.failureMessage,
+            lastStartedAt: providerStatus.lastStartedAt,
+            updatedAt: providerStatus.updatedAt,
+          }
+        : null,
     },
   })
 }
