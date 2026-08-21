@@ -58,6 +58,20 @@ export function agreementOf(flags: Record<string, unknown> | undefined | null): 
   if (!flags) return null
   if (typeof flags.agreement === 'boolean') return flags.agreement
   if (typeof flags.sameTopPlayer === 'boolean') return flags.sameTopPlayer
+  // `parity_passed` is the cross-slice parity verdict -- lineup, waiver, both trade paths and
+  // commissioner-health all emit it, and it is the ONLY agreement signal any of them emit. Without
+  // this branch every one of those comparisons is counted as a comparison WITHOUT a verdict, so
+  // `agreementRate` stays null no matter how many accumulate and no surface can ever reach `ready`.
+  // Confirmed against production: 8 stored lineup comparisons, all verdictless, flags carrying
+  // `parity_passed` and nothing this function read.
+  //
+  // Checked LAST so it cannot change the meaning of an event that already carries an explicit
+  // `agreement` (the trade surfaces set that deliberately).
+  //
+  // `sameTopPlayer` is kept above despite NO slice emitting it -- removing dead vocabulary is a
+  // separate change from fixing a gate, and dropping it here would silently alter any historical
+  // event that happens to carry it.
+  if (typeof flags.parity_passed === 'boolean') return flags.parity_passed
   return null
 }
 
