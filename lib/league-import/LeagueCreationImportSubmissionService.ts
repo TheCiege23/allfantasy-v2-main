@@ -45,6 +45,12 @@ export interface SubmitImportResult {
   error?: string;
   status?: number;
   requiresAttestation?: boolean;
+  /**
+   * True when the commit was an idempotent replay — the league was already
+   * imported and nothing was written. Distinct from `ok: false, status: 409`,
+   * which only fires for a league that has never completed an import run.
+   */
+  existed?: boolean;
 }
 
 export interface DiscoverProviderLeaguesResult {
@@ -157,7 +163,12 @@ export async function submitImportCreation(
         requiresAttestation: Boolean((data as { requiresAttestation?: boolean })?.requiresAttestation),
       };
     }
-    return { ok: true, data };
+    /*
+     * `existed` distinguishes a real import from an idempotent replay. The commit
+     * route 200s for both — see its own note — so without this the bulk importer
+     * reports "Imported" for leagues where nothing happened.
+     */
+    return { ok: true, data, existed: Boolean((data as { existed?: boolean })?.existed) };
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Network error';
     return { ok: false, error: message };
