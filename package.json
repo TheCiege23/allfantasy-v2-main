@@ -39,6 +39,8 @@
     "prisma:generate": "node scripts/prisma-generate-postinstall.cjs",
     "typecheck": "node --max-old-space-size=8192 ./node_modules/typescript/lib/tsc.js --noEmit",
     "ts:ratchet": "node scripts/ts-error-ratchet.mjs",
+    "test:ratchet": "node scripts/vitest-ratchet.mjs",
+    "test:ratchet:update": "node scripts/vitest-ratchet.mjs --update",
     "ts:ratchet:update": "node scripts/ts-error-ratchet.mjs --update",
     "ts:redraft": "node scripts/ts-error-ratchet.mjs --scope=redraft",
     "db:push": "node scripts/prisma-cli-guard.cjs db push",
