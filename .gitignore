@@ -110,3 +110,6 @@ spotify-final-results.txt
 
 # dedupe snapshots contain production row dumps — never commit them
 scripts/.dedupe-players-snapshot-*.json
+
+# vitest ratchet emits this per run so CI can rebuild the baseline; it is output, not source
+vitest-ratchet-result.json
