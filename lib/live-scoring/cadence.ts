@@ -33,6 +33,8 @@ const RAW_STATUS_MAP: Record<string, LiveGameStatus> = {
   pregame: 'scheduled',
   upcoming: 'scheduled',
   ns: 'scheduled',
+  not_started: 'scheduled',
+  tbd: 'scheduled',
   status_scheduled: 'scheduled',
   // running
   in_progress: 'in_progress',
@@ -48,6 +50,10 @@ const RAW_STATUS_MAP: Record<string, LiveGameStatus> = {
   '2q': 'in_progress',
   '3q': 'in_progress',
   '4q': 'in_progress',
+  first_quarter: 'in_progress',
+  second_quarter: 'in_progress',
+  third_quarter: 'in_progress',
+  fourth_quarter: 'in_progress',
   // halftime
   halftime: 'halftime',
   half: 'halftime',
@@ -61,6 +67,14 @@ const RAW_STATUS_MAP: Record<string, LiveGameStatus> = {
   final: 'final',
   'final/ot': 'final',
   ft: 'final',
+  finished: 'final',
+  match_finished: 'final',
+  full_time: 'final',
+  // "After Over Time" (AOT) is TERMINAL — a game that ENDED in overtime, not one
+  // still being played. Filing it under 'overtime' would mean it never reads as
+  // final, which is the exact bug this block exists to close.
+  after_over_time: 'final',
+  aot: 'final',
   complete: 'final',
   completed: 'final',
   closed: 'final',

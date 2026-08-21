@@ -161,6 +161,15 @@ export async function GET(request: NextRequest) {
         metadata: {
           seasonsTicked: r.ticked,
           seasonsPolled: r.polled,
+          /* Which slate each season actually polled, and whether the schedule or
+             the calendar decided it. A preseason tick persists nothing by design,
+             so "0 rows updated" is only correct if this says 'pre'. */
+          slates: r.summaries.map((x) => ({
+            seasonId: x.seasonId,
+            week: x.week,
+            seasonType: x.seasonType,
+            slateSource: x.slateSource,
+          })),
           liveProvider: provider ? 'rolling_insights_preseason' : 'sleeper',
           /* Recorded so a quiet Sunday can be told apart from a broken loop:
              ticks=1 with 'no-active-games' is correct on a Tuesday and a bug at
