@@ -129,6 +129,62 @@ describe('agreement extraction must not drift from the gate', () => {
   })
 })
 
+describe('parity_passed is the signal every slice actually emits', () => {
+  it('agreementOf reads it', () => {
+    // lineup, waiver, both trade paths and commissioner-health all emit `parity_passed` and
+    // nothing else. Before this branch existed, every one of their comparisons was verdictless.
+    expect(agreementOf({ parity_passed: true })).toBe(true)
+    expect(agreementOf({ parity_passed: false })).toBe(false)
+  })
+
+  it('an explicit `agreement` still wins over it', () => {
+    // The trade surfaces set `agreement` deliberately; `parity_passed` is checked last so it
+    // cannot change the meaning of an event that already carries a verdict.
+    expect(agreementOf({ agreement: false, parity_passed: true })).toBe(false)
+    expect(agreementOf({ agreement: true, parity_passed: false })).toBe(true)
+  })
+
+  it('still returns null when it is not a boolean', () => {
+    expect(agreementOf({ parity_passed: 'yes' })).toBeNull()
+    expect(agreementOf({ parity_failed: false })).toBeNull()
+  })
+
+  it('the REAL production flag shape now yields a verdict', () => {
+    // Copied verbatim from a stored prod row that was counted as verdictless.
+    expect(agreementOf({ ran: true, diffs: 0, shadow: true, source: 'redraft_native',
+      leagueId: '86bf7f14', warnings: [], parity_failed: false, parity_passed: true })).toBe(true)
+    expect(agreementOf({ parity_failed: false, parity_passed: true,
+      legacy_shadow_compared: true })).toBe(true)
+  })
+})
+
+describe('agreementOf and the gate must never disagree', () => {
+  // agreementOf is a copy of flipReadiness's private agreementSignal, lifted so the gate can be
+  // computed in SQL. If they drift, the persisted gate and the in-memory gate reach different
+  // verdicts about the SAME events -- worse than either being wrong alone. agreementSignal is not
+  // exported, so this drives it through summarizeFlipReadiness and compares the outcome.
+  const cases: Array<Record<string, unknown>> = [
+    { agreement: true }, { agreement: false },
+    { sameTopPlayer: true }, { sameTopPlayer: false },
+    { parity_passed: true }, { parity_passed: false },
+    { agreement: false, parity_passed: true },
+    { agreement: true, sameTopPlayer: false },
+    { parity_failed: true }, { parity_passed: 'yes' }, {},
+  ]
+
+  it.each(cases)('agrees on %j', (flags) => {
+    const mine = agreementOf(flags)
+    const [summary] = summarizeFlipReadiness([
+      { event: 'decision.shadow_parity', decision_type: 'manager.lineup.set', decision_id: 'd1',
+        flags: { ...flags, surface: 's', ran: true }, at: new Date().toISOString(),
+        userId: null, leagueId: null } as never,
+    ])
+    const theirs =
+      summary.agreements === 1 ? true : summary.disagreements === 1 ? false : null
+    expect(theirs).toBe(mine)
+  })
+})
+
 describe('reading it back', () => {
   it('returns [] when the delegate is absent, so callers fall back rather than crash', async () => {
     expect(await listPersistedParityEvents({} as never)).toEqual([])
