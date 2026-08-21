@@ -34,6 +34,11 @@ export type ProviderGame = {
   status: string | null
   startTime: Date | null
   week: number | null
+  /**
+   * Which slate `week` counts within. Null means the feed did not say — NOT
+   * "regular". Preseason week 1 and regular week 1 are otherwise the same row.
+   */
+  seasonType: CanonicalSeasonType | null
   season: number | null
   raw: unknown
 }
@@ -230,6 +235,9 @@ export async function fetchRollingInsightsNflGames(): Promise<ProviderResult> {
         status: str(r.status) ?? str(r.season_type) ?? existing?.status ?? null,
         startTime: toDate(r.game_time) ?? existing?.startTime ?? null,
         week: weekOrNull(r.week) ?? existing?.week ?? null,
+        // RI states it outright ("Preseason" | "Regular Season" | "Postseason"),
+        // which is why this feed is the reference for the whole column.
+        seasonType: normalizeSeasonType(r.season_type) ?? existing?.seasonType ?? null,
         season: seasonYear(r.season) ?? existing?.season ?? null,
         raw: r,
       }
@@ -269,6 +277,9 @@ export async function fetchCfbdGames(season: number, week?: number): Promise<Pro
       status: r.completed === true ? 'final' : 'scheduled',
       startTime: toDate(r.startDate),
       week: weekOrNull(r.week),
+      // The query string above pins `seasonType=regular`, so every row here IS
+      // regular season — asserted from the request, not guessed from the payload.
+      seasonType: normalizeSeasonType(r.seasonType) ?? 'regular',
       season: num(r.season),
       raw: r,
     })
@@ -334,6 +345,42 @@ export function normalizeGameStatus(raw: unknown): CanonicalGameStatus | null {
   return null
 }
 
+/**
+ * One season-type vocabulary, the same way `normalizeGameStatus` gives statuses one.
+ *
+ * Every feed spells this differently: API-Sports puts "Pre Season" in `game.stage`
+ * and repeats it inside the week label ("Pre Season - 1"), Rolling Insights sends
+ * `season_type: "Preseason" | "Regular Season" | "Postseason"`, ESPN uses a numeric
+ * `seasontype` (1/2/3), and CFBD says `seasonType: "regular" | "postseason"`.
+ *
+ * ⚠ RETURNS NULL FOR ANYTHING UNRECOGNISED, INCLUDING EMPTY INPUT. A default of
+ * 'regular' here would be a claim, and it is exactly the claim that made preseason
+ * games indistinguishable from regular ones in the first place. Callers decide what
+ * to do with "we do not know"; this function does not decide for them.
+ */
+export type CanonicalSeasonType = 'pre' | 'regular' | 'post'
+
+export function normalizeSeasonType(raw: unknown): CanonicalSeasonType | null {
+  if (raw == null) return null
+  // ESPN's numeric form. 1 = preseason, 2 = regular, 3 = postseason.
+  if (typeof raw === 'number') {
+    return raw === 1 ? 'pre' : raw === 2 ? 'regular' : raw === 3 ? 'post' : null
+  }
+  const v = String(raw).trim().toLowerCase()
+  if (!v) return null
+
+  // Order matters: "postseason" contains "season", and "pre season" contains
+  // "season" too, so the specific prefixes have to be tested before the generic.
+  if (v.includes('preseason') || v.includes('pre season') || v.includes('pre-season')) return 'pre'
+  if (v === 'pre' || v === '1') return 'pre'
+  if (v.includes('postseason') || v.includes('post season') || v.includes('post-season')) return 'post'
+  if (v.includes('playoff') || v.includes('championship')) return 'post'
+  if (v === 'post' || v === '3') return 'post'
+  if (v.includes('regular')) return 'regular'
+  if (v === 'reg' || v === '2') return 'regular'
+  return null
+}
+
 const THE_SPORTS_DB_LEAGUE: Record<string, string> = {
   NFL: '4391',
   NCAAF: '4479',
@@ -377,6 +424,9 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
         status: normalizeGameStatus(r.strStatus),
         startTime: date ? toDate(`${date}T${time ?? '00:00:00'}Z`) : null,
         week: weekOrNull(r.intRound),
+        // TheSportsDB exposes no season-type field. Null says so; it does not
+        // let this feed overwrite a slate another provider actually reported.
+        seasonType: null,
         season: seasonYear(r.strSeason) ?? (date ? Number(date.slice(0, 4)) : null),
         raw: r,
       })
@@ -411,6 +461,7 @@ export async function fetchTheSportsDbGames(sport: 'NFL' | 'NCAAF'): Promise<Pro
         // Observed 500 and 200 on real rows — TheSportsDB uses intRound for its
         // own bucketing, not a football week. Rejected rather than stored wrong.
         week: weekOrNull(r.intRound),
+        seasonType: null,
         season: seasonYear(r.strSeason) ?? (date ? Number(date.slice(0, 4)) : null),
         raw: r,
       })
@@ -483,6 +534,11 @@ export async function fetchEspnGames(sport: 'NFL' | 'NCAAF'): Promise<ProviderRe
       status,
       startTime: toDate(str(r.date)),
       week: weekOrNull((r as any).week?.number ?? (payload as any)?.week?.number),
+      // ESPN encodes the slate numerically (1 pre / 2 regular / 3 post) on both
+      // the event and the scoreboard envelope.
+      seasonType: normalizeSeasonType(
+        (r as any).season?.type ?? (payload as any)?.season?.type,
+      ),
       season: num((r as any).season?.year ?? (payload as any)?.season?.year),
       raw: r,
     })
