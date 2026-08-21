@@ -804,6 +804,18 @@ export async function getLiveScoresForSport(options: {
   sport: string
   team?: string | null
   forceRefresh?: boolean
+  /**
+   * Try ESPN before Rolling Insights on refresh.
+   *
+   * ⚠ RI "HAS ROWS" IS NOT THE SAME AS RI "HAS A LIVE SLATE". For NFL its
+   * scoreboard returns the ENTIRE SEASON with no scores, no clock, no logos and
+   * no records — enough rows to satisfy the default `length > 0` check and win
+   * the race, while carrying none of the fields a live surface renders. Callers
+   * that need live game state opt into ESPN first; every existing caller keeps
+   * the RI-first order untouched, because their data is fine and changing it
+   * under them is not this flag's job.
+   */
+  preferEspn?: boolean
 }): Promise<{
   scores: LiveScoreRow[]
   source: string
@@ -831,23 +843,28 @@ export async function getLiveScoresForSport(options: {
   let fetchedAt: string | null = cachedGames[0]?.fetchedAt?.toISOString() ?? null
 
   if (refresh || stale) {
-    const fromRi = await fetchRollingInsightsScoreboard(sport, { forceRefresh: refresh })
+    /*
+     * Both branches persist through `syncLiveScoresToDb`, so whichever feed wins,
+     * the next reader is served from the database. That is the point of routing
+     * every provider read through this function instead of letting a page fetch
+     * a scoreboard on its own request path.
+     */
+    const order: Array<'rolling_insights' | 'espn_live'> = options.preferEspn
+      ? ['espn_live', 'rolling_insights']
+      : ['rolling_insights', 'espn_live']
 
-    if (fromRi.length > 0) {
-      await syncLiveScoresToDb(sport, fromRi, 'rolling_insights')
-      scores = fromRi
+    for (const candidate of order) {
+      const rows =
+        candidate === 'rolling_insights'
+          ? await fetchRollingInsightsScoreboard(sport, { forceRefresh: refresh })
+          : await fetchEspnScoreboard(sport)
+      if (rows.length === 0) continue
+      await syncLiveScoresToDb(sport, rows, candidate)
+      scores = rows
       refreshed = true
-      source = 'rolling_insights'
+      source = candidate
       fetchedAt = new Date().toISOString()
-    } else {
-      const espn = await fetchEspnScoreboard(sport)
-      if (espn.length > 0) {
-        await syncLiveScoresToDb(sport, espn, 'espn_live')
-        scores = espn
-        refreshed = true
-        source = 'espn_live'
-        fetchedAt = new Date().toISOString()
-      }
+      break
     }
   }
 

@@ -2,7 +2,6 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import {
-  fetchEspnScoreboard,
   getCachedLiveScoresForSport,
   getLiveScoresForSport,
   type LiveScoreRow,
@@ -251,37 +250,35 @@ const SLATE_AFTER_MS = 18 * 60 * 60 * 1000
 /**
  * The slate for the sport being viewed.
  *
- * ⚠ ESPN FIRST, AND NOT BECAUSE OF PRECEDENCE ELSEWHERE. `getLiveScoresForSport`
- * prefers Rolling Insights, which for NFL returns the ENTIRE SEASON SCHEDULE with
- * no scores, no logos, no records and no clock — 200 cards of 0-0 "final", which
- * is both useless and untrue. ESPN's scoreboard is the only connected feed that
- * carries period, clock, records, logos and per-game leaders, which is precisely
- * the set of fields this design renders. Deliberately NOT changed inside the
- * shared service, because other surfaces depend on the RI-first order.
+ * ⚠ GOES THROUGH THE DB-FIRST SERVICE, NOT STRAIGHT TO A PROVIDER. An earlier
+ * version called `fetchEspnScoreboard` from here, which put provider latency and
+ * rate limits on the page's own request path and would blank the screen whenever
+ * ESPN blipped — exactly what the DB-first boundary exists to prevent, and the
+ * guard was right to reject it. `getLiveScoresForSport` serves the database when
+ * it is fresh, refreshes when it is stale, and PERSISTS whatever it fetched, so
+ * the next reader is served from our own store.
  *
- * Falls back to the shared path when ESPN gives nothing, so an ESPN outage
- * degrades to cached scores rather than an empty page.
+ * `preferEspn` is the one thing this surface needs from it: Rolling Insights
+ * returns the whole season scoreless for NFL, which satisfies the default
+ * "has rows" check while carrying no clock, logos, records or leaders.
  */
 async function loadActiveSlate(
   sport: LeagueSport,
 ): Promise<{ scores: LiveScoreRow[]; fetchedAt: string | null }> {
-  const espn = await fetchEspnScoreboard(sport)
-  if (espn.length > 0) {
-    return { scores: espn, fetchedAt: new Date().toISOString() }
-  }
-  const fallback = await getLiveScoresForSport({ sport, team: null })
+  const result = await getLiveScoresForSport({ sport, team: null, preferEspn: true })
   /*
-   * ⚠ THE FALLBACK NEEDS A WINDOW; ESPN'S DEFAULT RESPONSE ALREADY IS ONE.
-   * The shared path can return a whole season, and a "live scores" page listing
-   * every fixture from August to January is not a live scores page.
+   * ⚠ THE SLATE NEEDS A WINDOW. A cached fallback can hold a whole season, and a
+   * "live scores" page listing every fixture from August to January is not a live
+   * scores page. ESPN's own response is already today's slate, so this only ever
+   * trims the fallback.
    */
   const now = Date.now()
-  const inWindow = fallback.scores.filter((row) => {
+  const inWindow = result.scores.filter((row) => {
     const at = new Date(row.startTime).getTime()
     if (Number.isNaN(at)) return false
     return at >= now - SLATE_BEFORE_MS && at <= now + SLATE_AFTER_MS
   })
-  return { scores: inWindow, fetchedAt: fallback.fetchedAt }
+  return { scores: inWindow, fetchedAt: result.fetchedAt }
 }
 
 /** Build the page payload. `userId` null = signed out; tie-ins are simply absent. */
