@@ -187,16 +187,27 @@ test.describe("@db @state state polish click audit", () => {
       })
     })
 
-    // Dashboard: global empty state actions.
-    await page.goto("/dashboard")
-    await expect(page.getByTestId("dashboard-global-empty-state")).toBeVisible()
-
-    await page.getByTestId("dashboard-empty-create-league").click()
-    await expect(page).toHaveURL(/\/create-league/, { timeout: 20_000 })
-
-    await page.goto("/dashboard")
-    await page.getByTestId("dashboard-empty-connect-provider").click()
-    await expect(page).toHaveURL(/\/settings\?tab=connected/, { timeout: 20_000 })
+    /*
+     * ⚠ THE DASHBOARD EMPTY-STATE SECTION WAS REMOVED FROM HERE.
+     *
+     * It asserted three ids that exist nowhere in app/, components/ or pages/:
+     * dashboard-global-empty-state, dashboard-empty-create-league and
+     * dashboard-empty-connect-provider. Measured: this test failed at
+     * the first of those three assertions, and that id
+     * dashboard-global-empty-state is independently pinned as absent in the
+     * validation set of scripts/audit-e2e-testids.mjs.
+     *
+     * Only that section is gone. Everything below -- the notifications error ->
+     * retry -> empty-state CTA path, and the search overlay's error -> retry ->
+     * results -> no-results recovery -- drives ids that are live, and now runs
+     * again instead of being unreachable behind a failure on line one of the
+     * dashboard block.
+     *
+     * ⚠ WHAT THIS COSTS: nothing checks the signed-in-with-no-leagues dashboard any
+     * more. If that empty state is rebuilt, this is the section to restore, and it
+     * needs a fixture with zero leagues -- the seeded account has leagues, so the
+     * empty state would not render even if the markup came back.
+     */
 
     // Notifications page: error state -> retry -> empty-state CTA.
     await page.goto("/app/notifications")
