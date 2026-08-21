@@ -20,7 +20,7 @@ import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPa
 import { getMatchupData } from '@/lib/core-app/matchup'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
-import { deriveOutstandingIssues } from '@/lib/core-app/outstandingIssues'
+import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import { getCareerData } from '@/lib/core-app/career'
 import { getPortfolio } from '@/lib/core-app/portfolio'
@@ -202,7 +202,21 @@ export default async function DashboardPage({
      * count of everything outside it. Running it twice would let the two screens
      * disagree about how many issues exist.
      */
-    const { issues: issuesAll } = deriveOutstandingIssues({ leagues: playedLeagues })
+    /*
+     * ⚠ `lastSyncByLeague` IS NOT OPTIONAL IN PRACTICE. Omitting it defaults every
+     * league to a null timestamp, and `describeAge` reads null as "never synced,
+     * stale" — so the detector fired on all 63 played leagues and the queue's only
+     * row read "63 leagues have never been read" while the topbar chip three
+     * inches above it, built from `lastSynced` below and the same rows, read
+     * "34m ago". 54 of the 63 had been read. Same rows, same request, two answers.
+     */
+    const { issues: issuesAll } = deriveOutstandingIssues({
+      leagues: playedLeagues,
+      lastSyncByLeague: lastSyncByLeagueFrom(
+        playedLeagues as unknown as Array<{ id: string; lastSyncedAt?: Date | string | null }>,
+      ),
+      now,
+    })
 
     if (selectedLeagueId) {
       const leagueHome = await getLeagueHomeData(selectedLeagueId, userId).catch(() => null)
