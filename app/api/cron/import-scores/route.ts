@@ -121,6 +121,15 @@ async function persistGames(
         status: g.status,
         startTime: g.startTime,
         week: g.week,
+        /*
+         * ⚠ THE DISCRIMINATOR THAT MAKES `week` MEAN ANYTHING. Preseason week 1
+         * and regular week 1 are both stored as `1`; without this column the
+         * live-scoring slate query cannot separate them. Rows keep their own
+         * source, so a feed that does not report a season type (TheSportsDB)
+         * writes null into ITS row rather than erasing what RI reported in a
+         * different one.
+         */
+        seasonType: g.seasonType,
         season: g.season,
         fetchedAt: now,
         expiresAt,

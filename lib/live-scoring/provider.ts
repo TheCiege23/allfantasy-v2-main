@@ -20,10 +20,29 @@ export type LiveGameLite = {
   startTime: Date | null
 }
 
+/**
+ * Which slate a week number refers to. Providers that key stats by season type
+ * (Sleeper does: `?season_type=pre|regular|post`) need this to fetch the right
+ * week — preseason week 1 and regular-season week 1 are different games.
+ */
+export type LiveSeasonType = 'pre' | 'regular' | 'post'
+
 export type LiveStatsQuery = {
   sport: string
   season: number
   week: number
+  /**
+   * ⚠ OPTIONAL, AND ABSENT MEANS 'regular' — deliberately, so every existing
+   * caller and fixture keeps its current behaviour. Making it required would
+   * force a value at call sites that have no way to know one, and a guessed
+   * season type silently fetches the wrong slate.
+   */
+  seasonType?: LiveSeasonType
+}
+
+/** Absent season type means the regular season. Single place that decides. */
+export function resolveSeasonType(query: { seasonType?: LiveSeasonType }): LiveSeasonType {
+  return query.seasonType ?? 'regular'
 }
 
 /**

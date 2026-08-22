@@ -9,10 +9,6 @@ type RouteModule = Partial<Record<string, (request: NextRequest, context: RouteC
 type RouteLoader = () => Promise<unknown>
 
 const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
-  { pattern: ["leagues",":leagueId","draft-war-room"], load: () => import('@/server/api-route-modules/legacy/leagues/[leagueId]/draft-war-room/route') },
-  { pattern: ["leagues",":leagueId","market-board"], load: () => import('@/server/api-route-modules/legacy/leagues/[leagueId]/market-board/route') },
-  { pattern: ["leagues",":leagueId","team-scan"], load: () => import('@/server/api-route-modules/legacy/leagues/[leagueId]/team-scan/route') },
-  { pattern: ["leagues",":leagueId","trade-command-center"], load: () => import('@/server/api-route-modules/legacy/leagues/[leagueId]/trade-command-center/route') },
   { pattern: ["ai","run"], load: () => import('@/server/api-route-modules/legacy/ai/run/route') },
   { pattern: ["backfill","playoffs"], load: () => import('@/server/api-route-modules/legacy/backfill/playoffs/route') },
   { pattern: ["decision-guardian","evaluate"], load: () => import('@/server/api-route-modules/legacy/decision-guardian/evaluate/route') },
@@ -25,7 +21,6 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["guest-import"], load: () => import('@/server/api-route-modules/legacy/guest-import/route') },
   { pattern: ["market","refresh"], load: () => import('@/server/api-route-modules/legacy/market/refresh/route') },
   { pattern: ["portfolio","history"], load: () => import('@/server/api-route-modules/legacy/portfolio/history/route') },
-  { pattern: ["rank","dispute"], load: () => import('@/server/api-route-modules/legacy/rank/dispute/route') },
   { pattern: ["rank","refresh"], load: () => import('@/server/api-route-modules/legacy/rank/refresh/route') },
   { pattern: ["rankings","adaptive"], load: () => import('@/server/api-route-modules/legacy/rankings/adaptive/route') },
   { pattern: ["rankings","analyze"], load: () => import('@/server/api-route-modules/legacy/rankings/analyze/route') },
@@ -96,7 +91,6 @@ const ROUTES: Array<{ pattern: string[]; load: RouteLoader }> = [
   { pattern: ["trade-ideas"], load: () => import('@/server/api-route-modules/legacy/trade-ideas/route') },
   { pattern: ["trade-vote-analyze"], load: () => import('@/server/api-route-modules/legacy/trade-vote-analyze/route') },
   { pattern: ["transfer"], load: () => import('@/server/api-route-modules/legacy/transfer/route') },
-  { pattern: ["leagues",":leagueId","*path"], load: () => import('@/server/api-route-modules/legacy/leagues/[leagueId]/[...path]/route') },
 ]
 
 function normalizePath(context: RouteContext): string[] {

@@ -412,6 +412,10 @@ model SportsGame {
   startTime  DateTime?
   venue      String?
   week       Int?
+  // Which slate `week` counts within: "pre" | "regular" | "post".
+  // Without it, preseason week 1 and regular-season week 1 are the same row key
+  // to every reader — see the migration for the full reasoning.
+  seasonType String?
   season     Int?
   source     String
   fetchedAt  DateTime  @default(now())
@@ -423,6 +427,7 @@ model SportsGame {
   @@unique([sport, externalId, source])
   @@index([sport, startTime])
   @@index([sport, season, week])
+  @@index([sport, season, seasonType, week])
 }
 
 model SportsInjury {

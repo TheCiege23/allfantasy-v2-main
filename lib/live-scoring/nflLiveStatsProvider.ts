@@ -35,7 +35,7 @@ import {
 import { buildTeamDefensePlayerId } from '@/lib/redraft/teamDefenseStatsIngest'
 import { normalizeNflTeam } from '@/lib/redraft/lineupLock'
 import { normalizeLiveGameStatus } from '@/lib/live-scoring/cadence'
-import { teamsInGames, type LiveGameLite, type LiveStatsProvider, type LiveStatsQuery } from '@/lib/live-scoring/provider'
+import { resolveSeasonType, teamsInGames, type LiveGameLite, type LiveStatsProvider, type LiveStatsQuery } from '@/lib/live-scoring/provider'
 import type { LiveGameStatus } from '@/lib/live-scoring/types'
 
 export class NflLiveStatsProvider implements LiveStatsProvider {
@@ -46,8 +46,30 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
   }
 
   async fetchActiveGames(query: LiveStatsQuery): Promise<LiveGameLite[]> {
+    /*
+     * ⚠ SLATE-SCOPED, BECAUSE `week` ALONE IS AMBIGUOUS. Preseason week 1 and
+     * regular-season week 1 are both stored as week 1; querying on week alone
+     * returned both, so a finished August exhibition sat in a September league's
+     * live slate. `seasonType` is the discriminator.
+     *
+     * ⚠ NULL IS INCLUDED DELIBERATELY, AND ONLY FOR THE REGULAR SEASON. Rows
+     * written before the column existed have no season type, and the overwhelming
+     * majority of them are regular-season games. Excluding them would empty the
+     * slate for every league mid-backfill — a silent, total scoring outage.
+     * Preseason gets no such benefit of the doubt: an unlabelled row is not
+     * assumed to be preseason, because that direction of error puts exhibition
+     * stats into a real league.
+     */
+    const seasonType = resolveSeasonType(query)
     const rows = await this.prisma.sportsGame.findMany({
-      where: { sport: 'NFL', season: query.season, week: query.week },
+      where: {
+        sport: 'NFL',
+        season: query.season,
+        week: query.week,
+        ...(seasonType === 'regular'
+          ? { OR: [{ seasonType: 'regular' }, { seasonType: null }] }
+          : { seasonType }),
+      },
       select: { externalId: true, homeTeam: true, awayTeam: true, status: true, startTime: true },
     })
     return rows.map((r) => ({
@@ -63,9 +85,10 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
     query: LiveStatsQuery & { games: readonly LiveGameLite[] },
   ): Promise<Map<string, Record<string, number>>> {
     const out = new Map<string, Record<string, number>>()
+    const seasonType = resolveSeasonType(query)
     const teams = teamsInGames(query.games)
     for (const team of teams) {
-      const payload = await fetchSleeperTeamDefenseSeason(team, query.season, 'regular').catch(() => null)
+      const payload = await fetchSleeperTeamDefenseSeason(team, query.season, seasonType).catch(() => null)
       if (payload == null) continue
       const weekStats = extractSleeperWeekStats(payload, query.week)
       if (!weekStats) continue
@@ -81,8 +104,16 @@ export class NflLiveStatsProvider implements LiveStatsProvider {
   ): Promise<Map<string, Record<string, number>>> {
     const out = new Map<string, Record<string, number>>()
     if (query.playerIds.length === 0) return out
-    // Sleeper week-wide stats: one call returns every player's week row keyed by id.
-    const url = `https://api.sleeper.com/stats/nfl/${encodeURIComponent(query.season)}/${encodeURIComponent(query.week)}?season_type=regular`
+    /*
+     * Sleeper week-wide stats: one call returns every player's week row keyed by id.
+     *
+     * ⚠ `season_type` WAS HARDCODED TO 'regular', WHICH SCORES PRESEASON AS ZERO.
+     * Preseason stat lines live under `season_type=pre`; asking for `regular`
+     * during August returns the not-yet-played regular-season week instead — an
+     * empty payload that is indistinguishable from "nobody has scored yet".
+     */
+    const seasonType = resolveSeasonType(query)
+    const url = `https://api.sleeper.com/stats/nfl/${encodeURIComponent(query.season)}/${encodeURIComponent(query.week)}?season_type=${encodeURIComponent(seasonType)}`
     let payload: unknown = null
     try {
       const { rateLimitManager } = await import('@/lib/workers/rate-limit-manager')

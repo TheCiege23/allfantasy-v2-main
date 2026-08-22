@@ -346,10 +346,41 @@ test.describe('@draft-asset-pipeline click audit', () => {
     await openDraftRoomHarness(page)
     const desktop = page.getByTestId('draft-desktop-layout')
 
+    /*
+     * ⚠ NFL DEFAULTS TO THE TABLE, NOT CARDS, SO THIS CLICK IS LOAD-BEARING.
+     *
+     * PlayerPanel renders SleeperPoolTable when
+     *   poolLayout === 'sleeper_table' || (poolLayout === 'auto' && sport === 'NFL')
+     * (PlayerPanel.tsx:1393). poolLayout defaults to 'auto' (:398) and this spec
+     * navigates with sport=NFL, so the pool rendered as a table and every
+     * draft-player-card-* assertion below had nothing to match -- while the pool
+     * itself had loaded fine. Switching to the card view is what the toggle at
+     * :946 exists for, and it is a real user action rather than a test-only hook.
+     */
+    await clickHydrated(desktop.getByTestId('draft-pool-view-cards'))
+
     await desktop.getByTestId('draft-player-search-input').fill('Broken Image Back')
     await clickHydrated(desktop.getByTestId('draft-player-card-0'))
-    await expect(desktop.getByTestId('draft-selected-player-panel')).toBeVisible()
-    await clickHydrated(desktop.getByTestId('draft-clear-selected-player'))
+    /*
+     * ⚠ RE-POINTED, NOT DELETED: the selected-player panel became a modal.
+     *
+     * draft-selected-player-panel and draft-clear-selected-player exist nowhere in
+     * app/ or components/. Selecting a card now runs onPlayerSelect ->
+     * setSelectedPlayer (PlayerPanel.tsx:1412) and renders
+     * player-detail-modal (PlayerDetailModal.tsx), which closes on Escape (:296)
+     * rather than via a clear button. Same behaviour, different surface, so the
+     * assertions move instead of going away.
+     *
+     * Dismissing it matters and is not cosmetic: the modal overlays the pool list,
+     * so draft-queue-add-0 below is not clickable while it is open. Deleting these
+     * two lines outright -- which I tried first -- just moved the failure down here.
+     *
+     * None of this was reachable until two upstream bugs were fixed: the bootstrap
+     * starved the pool fetch, and NFL renders the Sleeper table instead of cards.
+     */
+    await expect(desktop.getByTestId('player-detail-modal')).toBeVisible({ timeout: 15_000 })
+    await page.keyboard.press('Escape')
+    await expect(desktop.getByTestId('player-detail-modal')).toHaveCount(0)
 
     await clickHydrated(desktop.getByTestId('draft-queue-add-0'))
     await expect(desktop.getByTestId('draft-queue-item-0')).toContainText('Broken Image Back')
