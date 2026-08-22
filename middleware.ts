@@ -41,6 +41,11 @@ function canonicalProductionHostRedirect(request: NextRequest): NextResponse | n
 
   const url = request.nextUrl.clone()
   url.hostname = canonicalHost
+  // Railway serves on PORT=8080 behind its proxy, so nextUrl carries :8080.
+  // Cloning keeps it, and setting only .hostname produced a 308 to
+  // https://www.allfantasy.ai:8080/... which does not answer over TLS --
+  // every apex visitor and Googlebot hit a dead redirect.
+  url.port = ''
   return NextResponse.redirect(url, 308)
 }
 
