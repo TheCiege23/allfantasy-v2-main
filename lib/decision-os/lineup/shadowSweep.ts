@@ -59,7 +59,7 @@ export interface ShadowSweepDeps {
   runShadow: (
     userId: string,
     summary: LineupActionSummaryPayload,
-    opts: { maxLeagues?: number },
+    opts: { maxLeagues?: number; leagueOffset?: number },
   ) => Promise<LineupShadowResult[]>
   now: () => number
 }
@@ -177,7 +177,12 @@ export async function runLineupShadowSweep(
           skipReasons.no_leagues = (skipReasons.no_leagues ?? 0) + 1
           continue
         }
-        const results = await deps.runShadow(userId, summary, { maxLeagues: 1 })
+        // Rotate the LEAGUE too, not just the user. One production account owns 63 of the 69
+        // leagues that have rosters; with a fixed slice the sweep re-measured that account's
+        // first league on every tick and reached 4 leagues in total. The bucket already
+        // advances the user window -- reusing it here advances the league window as well, at
+        // no extra cost per tick.
+        const results = await deps.runShadow(userId, summary, { maxLeagues: 1, leagueOffset: bucket })
         usersSwept += 1
         for (const r of results) {
           if (r?.ran) {

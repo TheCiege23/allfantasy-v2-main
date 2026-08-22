@@ -146,6 +146,10 @@ function inspectBuild(marker?: string) {
     const loaded = m ? m[1].split(",").map((x) => x.trim()) : null
     out.rootPageChunkIds = loaded
     out.rootPageJsBytes = pageJs.length
+    // Structure of the route module tail, so a null id list can be explained.
+    out.rootPageJsTail = pageJs.slice(-320)
+    out.rootPageHasXCall = pageJs.includes(".X(")
+    out.rootPageRequiresRuntime = pageJs.includes("webpack-runtime")
     const markerIds = hits.map((h) => h.replace("server/chunks/", "").replace(".js", ""))
     out.markerChunkIds = markerIds
     out.markerChunkIsLoadedByPage =

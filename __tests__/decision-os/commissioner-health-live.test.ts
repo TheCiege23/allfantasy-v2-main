@@ -17,6 +17,11 @@ const hubSrc = readFileSync(
   'utf8',
 )
 
+  // Windows widened from 400-1000 to 2600: the batched `leaguesWithSavedAnalysis` prefilter
+  // added lines at the head of the LIVE block, pushing every asserted token past the old spans
+  // (furthest is now 2374). All of these are CONTAINMENT checks -- does the block mention X -- so a
+  // wider window still tests the same thing. Contrast live-telemetry.test.ts, where three 300-char
+  // windows are PROXIMITY checks and widening would delete what they assert.
 describe('shouldRunCommissionerHealthLive (Stage 1 kill switch)', () => {
   it('true only when DECISION_OS_COMMISSIONER_HEALTH_LIVE=true', () => {
     expect(shouldRunCommissionerHealthLive({ DECISION_OS_COMMISSIONER_HEALTH_LIVE: 'true' } as never)).toBe(true)
@@ -54,7 +59,7 @@ describe('commissioner-hub Stage 1 wiring: commissionerHubHealth.ts', () => {
   it('LIVE path populates decisionOsShadow using runCommissionerHealthShadow', () => {
     const liveIdx = hubSrc.indexOf('shouldRunCommissionerHealthLive(process.env)')
     expect(liveIdx).toBeGreaterThan(-1)
-    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 700)
+    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toContain('runCommissionerHealthShadow')
     expect(liveBlock).toContain('decisionOsShadow:')
   })
@@ -62,7 +67,7 @@ describe('commissioner-hub Stage 1 wiring: commissionerHubHealth.ts', () => {
   it('LIVE path is isolated in try/catch so the hub never breaks', () => {
     const liveIdx = hubSrc.indexOf('shouldRunCommissionerHealthLive(process.env)')
     expect(liveIdx).toBeGreaterThan(-1)
-    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 1000)
+    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toMatch(/try\s*\{/)
     expect(liveBlock).toMatch(/catch/)
   })
@@ -71,7 +76,7 @@ describe('commissioner-hub Stage 1 wiring: commissionerHubHealth.ts', () => {
     const liveIdx = hubSrc.indexOf('shouldRunCommissionerHealthLive(process.env)')
     expect(liveIdx).toBeGreaterThan(-1)
     // The live block guards against non-database snapshots before running the shadow
-    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 400)
+    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toMatch(/source.*!==.*database/)
   })
 
@@ -88,7 +93,7 @@ describe('commissioner-hub Stage 1 wiring: commissionerHubHealth.ts', () => {
   it('decisionOsShadow field shape matches CommissionerLeagueHealthSnapshot type', () => {
     // All three required sub-fields must be populated in the live block
     const liveIdx = hubSrc.indexOf('shouldRunCommissionerHealthLive(process.env)')
-    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 700)
+    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toContain('decisionId:')
     expect(liveBlock).toContain('parityPassed:')
     expect(liveBlock).toContain('card:')
@@ -96,7 +101,7 @@ describe('commissioner-hub Stage 1 wiring: commissionerHubHealth.ts', () => {
 
   it('LIVE path uses Promise.all for parallel snapshot enrichment', () => {
     const liveIdx = hubSrc.indexOf('shouldRunCommissionerHealthLive(process.env)')
-    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 400)
+    const liveBlock = hubSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toContain('Promise.all')
   })
 })
