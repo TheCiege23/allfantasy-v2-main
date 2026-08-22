@@ -119,6 +119,22 @@ export async function POST(req: NextRequest) {
       }).catch(() => {})
     }
 
+    /*
+     * ⚠ `existed` WAS COMPUTED AND THEN DROPPED HERE, AND IT IS THE WHOLE ANSWER
+     * TO "WHY DID MY IMPORT DO NOTHING". `persistImportWithCanonicalAudit`
+     * short-circuits on the import idempotency key: a previously-completed run
+     * for (user, provider, sourceLeagueId, season) returns `existed: true` and
+     * never reaches `persistImportedLeagueFromNormalization`, so it never throws
+     * `ImportedLeagueConflictError` and never 409s. The route then answered 200
+     * with no way to tell the two apart, and the bulk importer maps any `res.ok`
+     * to "Imported".
+     *
+     * Measured on production 2026-08-20: a bulk run over 55 discovered Sleeper
+     * leagues reported "33 imported", every one of which was already present —
+     * the account's league count did not move, because nothing was imported.
+     * The 409/"Already imported" path is unreachable for anything imported once
+     * before, which is precisely the case a re-run hits.
+     */
     return NextResponse.json({
       leagueId: persisted.league.id,
       name: persisted.league.name,
@@ -126,6 +142,7 @@ export async function POST(req: NextRequest) {
       league: persisted.league,
       historicalBackfill: persisted.historicalBackfill,
       importRunId: runId,
+      existed: persisted.existed === true,
     })
   } catch (error) {
     if (error instanceof ImportedLeagueConflictError) {
