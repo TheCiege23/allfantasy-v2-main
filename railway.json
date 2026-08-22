@@ -5,7 +5,7 @@
     "buildCommand": "npx prisma generate && npm run build:railway"
   },
   "deploy": {
-    "startCommand": "npm run start:railway",
+    "startCommand": "node node_modules/next/dist/bin/next start -H 0.0.0.0 -p 8080",
     "healthcheckPath": "/api/af-debug/sha",
     "healthcheckTimeout": 300,
     "restartPolicyType": "ON_FAILURE",

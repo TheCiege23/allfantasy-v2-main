@@ -5,6 +5,7 @@ import {
   shouldIncludeInjuryInFanoutBatch,
   type InjurySyncFanoutRow,
 } from '@/lib/realtime-events/injuryFanoutPolicy'
+import { normalizeGameStatus, normalizeSeasonType } from '@/lib/scores/gameScoreProviders'
 
 const BASE_URL = 'https://v1.american-football.api-sports.io';
 
@@ -953,6 +954,33 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
     const homeTeam = teamNameToAbbrev(g.teams.home.name) || g.teams.home.name;
     const awayTeam = teamNameToAbbrev(g.teams.away.name) || g.teams.away.name;
     const weekNum = g.game.week ? parseInt(g.game.week.replace(/\D/g, '')) || null : null;
+    /*
+     * ⚠ API-Sports' `status.long` IS A DIALECT NOTHING DOWNSTREAM SPEAKS. It emits
+     * "Not Started", "First Quarter", "Finished", "After Over Time" — while the
+     * live-scoring cadence engine and every "is this game over?" check read the
+     * canonical vocabulary. An unrecognised value falls through to `scheduled`,
+     * so a game that had kicked off, and a game that had ENDED, both read as
+     * not-yet-started: the cadence never reaches live, and never stops.
+     *
+     * `short` is closer (NS/Q1/FT) but still a third dialect. Normalising at the
+     * WRITE boundary means this table holds one vocabulary regardless of which
+     * feed filled a row — the same contract gameScoreProviders already applies to
+     * Rolling Insights, TheSportsDB and CFBD.
+     *
+     * `normalizeGameStatus` returns null for input it does not recognise rather
+     * than guessing. A null status is legible as "we do not know"; "scheduled"
+     * would be a claim.
+     */
+    const gameStatus =
+      normalizeGameStatus(g.game.status.short) ?? normalizeGameStatus(g.game.status.long);
+
+    /*
+     * ⚠ `stage` WAS FETCHED AND THEN THROWN AWAY, WHICH IS WHY `week` LIED.
+     * API-Sports labels the week "Pre Season - 1" and the line above strips it to
+     * `1` — the same value regular-season week 1 gets. `stage` is the only thing
+     * that tells them apart, and it was already in the payload the whole time.
+     */
+    const seasonType = normalizeSeasonType(g.game.stage) ?? normalizeSeasonType(g.game.week);
 
     try {
       await prisma.sportsGame.upsert({
@@ -970,10 +998,11 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
           awayTeamId: String(g.teams.away.id),
           homeScore: g.scores.home.total,
           awayScore: g.scores.away.total,
-          status: g.game.status.long,
+          status: gameStatus,
           startTime: g.game.date.timestamp ? new Date(g.game.date.timestamp * 1000) : null,
           venue: g.game.venue?.name || null,
           week: weekNum,
+          seasonType,
           season: g.league.season ? parseInt(g.league.season) : null,
           fetchedAt: now,
           expiresAt,
@@ -987,10 +1016,11 @@ export async function syncAPISportsGamesToDb(opts?: { season?: string; sport?: '
           awayTeamId: String(g.teams.away.id),
           homeScore: g.scores.home.total,
           awayScore: g.scores.away.total,
-          status: g.game.status.long,
+          status: gameStatus,
           startTime: g.game.date.timestamp ? new Date(g.game.date.timestamp * 1000) : null,
           venue: g.game.venue?.name || null,
           week: weekNum,
+          seasonType,
           season: g.league.season ? parseInt(g.league.season) : null,
           source: 'api_sports',
           fetchedAt: now,

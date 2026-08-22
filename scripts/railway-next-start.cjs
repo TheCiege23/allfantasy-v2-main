@@ -71,7 +71,10 @@ function restoreDocumentShellIfNeeded(html, req) {
     '<!DOCTYPE html>',
     `<html lang="${lang}" data-lang="${lang}" data-mode="${dataMode}" class="scroll-smooth">`,
     '<head>',
-    '<link rel="stylesheet" href="/railway-styles.css"/>',
+    // Do NOT inject a stylesheet here. React never rendered this node, so it is an
+    // extra child of <head> at hydration time -> React #418 -> #423 -> the document
+    // is torn down and every page renders blank. Next's own
+    // /_next/static/css/*.css links are already inside headContent.
     headContent,
     '</head>',
     '<body class="antialiased min-h-screen mode-readable" style="background:var(--bg);color:var(--text)">',
@@ -117,6 +120,9 @@ function forwardRequest(req, res) {
         delete responseHeaders['content-encoding']
         delete responseHeaders['transfer-encoding']
         responseHeaders['content-length'] = String(body.length)
+        // DIAGNOSTIC: what Next actually emits before the proxy touches it.
+        responseHeaders['x-af-raw-prefix'] = encodeURIComponent(original.slice(0, 200))
+        responseHeaders['x-af-raw-len'] = String(original.length)
         if (normalized.changed) {
           responseHeaders['x-af-railway-shell-normalized'] = '1'
         }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma'
 import { calculateAndSaveRank } from '@/lib/rank/calculateRank'
 import { deriveImportStatsFromNormalized } from '@/lib/rank/deriveImportStatsFromNormalized'
 import { SETTINGS_SNAPSHOT_VERSION } from '@/lib/league-contract/types'
+import { readBackfillOutcome, backfillSettingsPatch } from '@/lib/league-import/backfillOutcome'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import type {
   CanonicalImportBundle,
@@ -537,6 +538,20 @@ export async function persistImportedLeagueFromNormalization(
   }
   void runHistoricalBackfill({ provider, leagueId: league.id, userId, normalized })
     .then(async (result) => {
+      /*
+       * ⚠ THIS USED TO WRITE `'complete'` UNCONDITIONALLY AND DROP `result`.
+       * `.then()` fires when the promise RESOLVES, which is not the same as
+       * seasons having been imported — `runDynastyBackfill` resolves with
+       * `success: false` and a `failureMessage` on every one of its bail-out
+       * paths. Measured on production: 52 leagues reading `complete`, no errors
+       * anywhere, and zero prior seasons in `/history` for a league whose 2025
+       * season is finished on Sleeper with real scores and records.
+       *
+       * The counts matter as much as the status: `complete` alone cannot
+       * distinguish "this league has no earlier seasons" from "three exist and
+       * none of them landed".
+       */
+      const outcome = readBackfillOutcome(result)
       try {
         const current = (await prisma.league.findUnique({
           where: { id: league.id },
@@ -547,13 +562,20 @@ export async function persistImportedLeagueFromNormalization(
           data: {
             settings: {
               ...(current ?? {}),
-              historicalBackfillStatus: 'complete',
-              historicalBackfillCompletedAt: new Date().toISOString(),
+              ...backfillSettingsPatch(outcome, new Date().toISOString()),
             } as Prisma.InputJsonValue,
           },
         })
       } catch {
         /* non-fatal */
+      }
+      if (outcome.status === 'failed' || outcome.seasonsImported === 0) {
+        console.warn(
+          `[ImportedLeagueCommitService] Historical ${provider} backfill for ${league.id} ` +
+            `finished ${outcome.status}: discovered=${outcome.seasonsDiscovered ?? '?'} ` +
+            `imported=${outcome.seasonsImported ?? '?'} skipped=${outcome.seasonsSkipped ?? '?'}` +
+            (outcome.failureMessage ? ` — ${outcome.failureMessage}` : ''),
+        )
       }
       return result
     })
