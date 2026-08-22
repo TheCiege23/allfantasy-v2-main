@@ -177,7 +177,7 @@ describe('lineup route live telemetry wiring', () => {
   it('includes source in the enriched=true flags (tracks redraft_native vs canonical_world)', () => {
     const liveIdx = lineupSrc.indexOf('if (isLive) {')
     expect(liveIdx).toBeGreaterThan(-1)
-    const block = lineupSrc.slice(liveIdx, liveIdx + 900)
+    const block = lineupSrc.slice(liveIdx, liveIdx + 2600)
     expect(block).toContain('source: first.source')
   })
 

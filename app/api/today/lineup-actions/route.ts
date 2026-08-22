@@ -8,6 +8,7 @@ import { shouldRunLineupShadow, shouldRunLineupLive, runLineupShadowForSummary }
 import { toTodayLineupCard, type LineupTodayCard } from '@/lib/decision-os/lineup/todayCardAdapter'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
 import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
+import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { prisma } from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -38,14 +39,30 @@ export async function GET() {
       const first = results[0]
       if (first?.ran && first.result) {
         const { decision } = first.result
-        const card = toTodayLineupCard(decision)
+        // Attach a saved three-brain analysis, if this user has one for this league. Same seam
+        // #545 mounted on the waiver surface: evidence -> analysis -> recommendation only pays
+        // off if the generated analysis reaches somebody, and until now exactly one of the four
+        // live surfaces read it.
+        //
+        // Costs one indexed count when there is nothing to show, which is every request while
+        // AI spend is disabled. It cannot throw, and `aiAuthorityPolicy` resolves this decision
+        // type to explanation_only (fail-closed for anything unlisted), so it can change the
+        // explanation string and nothing else -- the verdict, actions and rule verdicts are
+        // returned untouched.
+        const attached = await attachSavedAnalysis({
+          decision,
+          leagueId: first.leagueId,
+          userId,
+          tool: 'manager_intelligence',
+        })
+        const card = toTodayLineupCard(attached.decision)
         decisionOs = {
           decisionId: decision.decision_id,
           card,
           confidence: decision.confidence,
           leagueId: first.leagueId,
         }
-        emitLiveTelemetry('lineup.set', { enriched: true, latency_ms: Date.now() - liveStart, leagueId: first.leagueId, source: first.source }, decision.decision_id)
+        emitLiveTelemetry('lineup.set', { enriched: true, ai_explained: attached.enriched, ai_reason: attached.reason, latency_ms: Date.now() - liveStart, leagueId: first.leagueId, source: first.source }, decision.decision_id)
       } else {
         emitLiveTelemetry('lineup.set', { enriched: false, reason: 'shadow_no_result', latency_ms: Date.now() - liveStart })
       }
