@@ -15936,6 +15936,30 @@ model CommissionerSuccession {
 /// that evidence is kept instead.
 ///
 /// Append-only. Nothing reads it as state; pruning old rows is safe (see the manual migration).
+/// Lineup OS — maintained grounding facts for `manager.lineup.set`.
+///
+/// An ACCELERATOR, never a source of record: entries past `LINEUP_OS_TTL_MS` are treated as absent
+/// on read and the caller derives live instead. Maintained state that stops refreshing lies with
+/// confidence; this one can only ever be slow.
+///
+/// One row per (league, kind, scope). `kind` separates fact families that decay at very different
+/// rates -- season/matchup history vs injury/bye/projection.
+model LineupOsFacts {
+  id         String   @id @default(cuid())
+  leagueId   String   @db.VarChar(64)
+  sport      String   @db.VarChar(32)
+  /// 'warehouse' | 'signal'
+  kind       String   @db.VarChar(16)
+  /// 'user:<id>' for warehouse (cites that manager's roster), 'week:<n>' for signal.
+  scopeKey   String   @db.VarChar(96)
+  facts      Json
+  capturedAt DateTime @default(now())
+
+  @@unique([leagueId, kind, scopeKey])
+  @@index([capturedAt])
+  @@map("lineup_os_facts")
+}
+
 model DecisionParityRecord {
   id           String   @id @default(cuid())
   /// 'decision.shadow_parity' | 'decision.validator_parity'. Other telemetry is high-frequency and
