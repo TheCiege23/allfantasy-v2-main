@@ -135,6 +135,24 @@ function inspectBuild(marker?: string) {
   } catch {
     out.rootPageJsExists = "unknown"
   }
+
+  // Which chunks does the route module actually LOAD? Next emits a
+  // `t.X(0,[<chunk ids>], ...)` tail in server/app/page.js. If the chunk that
+  // holds the layout is absent from that list, the layout is compiled but
+  // never loaded -- which is exactly the observed symptom.
+  try {
+    const pageJs = fs.readFileSync(path.join(dist, "server", "app", "page.js"), "utf8")
+    const m = pageJs.match(/.X(0,s*[([d,s]+)]/)
+    const loaded = m ? m[1].split(",").map((x) => x.trim()) : null
+    out.rootPageChunkIds = loaded
+    out.rootPageJsBytes = pageJs.length
+    const markerIds = hits.map((h) => h.replace("server/chunks/", "").replace(".js", ""))
+    out.markerChunkIds = markerIds
+    out.markerChunkIsLoadedByPage =
+      loaded && markerIds.length > 0 ? markerIds.some((id) => loaded.includes(id)) : null
+  } catch (err) {
+    out.rootPageChunkIds = "unreadable: " + (err instanceof Error ? err.message : String(err))
+  }
   return out
 }
 
