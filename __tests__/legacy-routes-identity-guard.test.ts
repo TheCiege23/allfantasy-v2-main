@@ -92,15 +92,10 @@ const KNOWN_UNGATED: Record<string, string> = {
   'simulations/route.ts': 'Reads simulations for the named user behind requireAuthOrOrigin.',
   'cfb-players/route.ts': 'FANTRAX identity space (fantraxUsername) — needs a different gate.',
   'fantrax/route.ts': 'FANTRAX identity space — needs a different gate.',
-  'leagues/[leagueId]/team-scan/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
-  'leagues/[leagueId]/draft-war-room/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
-  'leagues/[leagueId]/market-board/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
-  'leagues/[leagueId]/trade-command-center/route.ts': 'Dead dispatcher duplicate of insights; slated for deletion.',
-  'leagues/[leagueId]/[...path]/route.ts': 'Dead dispatcher catch-all; slated for deletion.',
 }
 
 /** Ratchet ceiling. Lower it as routes are fixed; never raise it. */
-const KNOWN_UNGATED_CEILING = 12
+const KNOWN_UNGATED_CEILING = 7
 
 /**
  * Username arriving from the caller — property access, destructuring, or a query param.
