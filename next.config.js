@@ -78,6 +78,16 @@ const nextConfig = {
   },
 
   experimental: {
+    // Railway builds the root layout into a chunk the route never loads, so
+    // RootLayout never executes and every page renders without <html>/<body>,
+    // failing hydration and blanking the site. This repo already ships
+    // scripts/patch-manifest-race.cjs because concurrent webpack workers were
+    // corrupting Next manifest writes here; an inconsistent chunk graph is the
+    // same race one layer deeper, and it only reproduces on Railway's
+    // many-core builder, never on a local build.
+    webpackBuildWorker: false,
+    parallelServerCompiles: false,
+    parallelServerBuildTraces: false,
     instrumentationHook: process.env.NODE_ENV === 'production' || process.env.AF_ENABLE_DEV_INSTRUMENTATION === '1',
     outputFileTracingIncludes: {
       "/api/**": ["./data/**"],
