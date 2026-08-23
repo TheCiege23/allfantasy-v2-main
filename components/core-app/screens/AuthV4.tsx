@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { signIn } from 'next-auth/react'
+import { safeRedirectPath } from '@/lib/auth/auth-intent-resolver'
 import { Suspense, useState } from 'react'
 // af-core.css carries the .af-core token layer (--surface, --surface2, --line2,
 // --accent …) for all three modes. AfCoreShell imports it for screens inside the
@@ -464,9 +465,35 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
 
 function AuthInner({ mode }: { mode: AuthMode }) {
   const params = useSearchParams()
-  // Honour the callbackUrl the rest of the app already passes around, so a
-  // deep link that bounced through sign-in returns where it started.
-  const callbackUrl = params?.get('callbackUrl')?.trim() || '/dashboard'
+  /*
+   * ⚠ THIS WAS AN OPEN REDIRECT, AND IT FIRED AFTER A SUCCESSFUL SIGN-IN.
+   *
+   * The line read `params?.get('callbackUrl')?.trim() || '/dashboard'` — the raw
+   * query string, straight into the `router.replace(callbackUrl)` calls in both
+   * SignIn and SignUp. Confirmed in a browser before this fix:
+   * `/login?callbackUrl=https://example.com/pwned` signed the user in and then
+   * navigated them off the origin entirely. `/signup` did the same once the form
+   * was completed.
+   *
+   * That ordering is what makes it worth more than a lint fix. The victim sees a
+   * genuine allfantasy.ai address, types real credentials into the real form,
+   * succeeds — and only then lands on the attacker's page, with every reason to
+   * trust whatever it asks for next. It is a credential-phishing primitive
+   * wearing our own domain.
+   *
+   * OAuth was never exposed: next-auth's own `redirect` callback in lib/auth.ts
+   * reduces any url to `pathname + search` against baseUrl. These two
+   * `router.replace` calls bypass that entirely by using the query parameter
+   * rather than the `url` next-auth hands back — which is precisely why the
+   * flaw survived in a codebase that guards this everywhere else.
+   *
+   * safeRedirectPath is that existing guard (lib/auth/auth-intent-resolver.ts,
+   * whose docstring already says "open redirect"), shared with
+   * PostAuthIntentRouter and the legal-route resolver. Reused rather than
+   * reimplemented so there is one definition of an acceptable post-auth
+   * destination, and it falls back to /dashboard exactly as the old `||` did.
+   */
+  const callbackUrl = safeRedirectPath(params?.get('callbackUrl'))
 
   return mode === 'signin' ? (
     <SignIn callbackUrl={callbackUrl} />
