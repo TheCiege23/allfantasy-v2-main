@@ -17,6 +17,7 @@ import { refreshStaleLeagueProfiles } from '@/lib/psychological-profiles/Profile
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { runSportsDataImporter } from "@/lib/workers/sports-data-importer"
+import { createRunBudget } from "@/lib/cron/runBudget"
 
 /**
  * NOTE: `requireCronAuth` resolves `preferredSecretEnv ?? LEAGUE_CRON_SECRET ?? CRON_SECRET`.
@@ -43,6 +44,24 @@ async function handle(req: NextRequest) {
     : undefined
 
   const startedAt = Date.now()
+  /*
+   * ⚠ THE IMPORTER ALREADY SELF-BUDGETS AT 240s; THIS BUDGETS EVERYTHING AFTER IT.
+   *
+   * Measured 2026-08-23: this route returned HTTP 502 at ~300,262ms. The platform edge cuts
+   * the connection at 300s and answers 502 itself, so neither maxDuration nor a client
+   * timeout buys more room.
+   *
+   * `sports-data-importer` stops politely at IMPORT_BUDGET_MS (240s) — and then three more
+   * phases run ON TOP of that: identity repair/backfill, devy enrichment, and psych profile
+   * refresh. Each is capped by COUNT, not by time, so the handler routinely overshoots the
+   * ceiling even though its biggest phase behaved. A budget bolted onto the sport loop would
+   * have changed nothing; the budget has to span the whole handler.
+   *
+   * Deferring a maintenance phase is cheap: each drains oldest-first and resumes next run.
+   * Losing the entire response to a 502 is not — that is when nothing gets recorded at all.
+   */
+  const budget = createRunBudget()
+  const deferredPhases: string[] = []
 
   try {
     if (dryRun) {
@@ -98,7 +117,13 @@ async function handle(req: NextRequest) {
     // the only sport the identity map covers.
     let identity: Record<string, unknown> | null = null
     const wantsNfl = !sports || sports.includes('NFL')
-    if (wantsNfl) {
+    // Single evaluation, if/else. Two separate `budget.exhausted()` checks could disagree if the
+    // clock crossed the threshold between them, and the phase would then appear in NEITHER the
+    // result nor deferredPhases — silently vanishing, which is the failure mode this whole change
+    // exists to stop.
+    if (wantsNfl && budget.exhausted()) {
+      deferredPhases.push('identity')
+    } else if (wantsNfl) {
       try {
         const { backfillSleeperIds, repairSleeperIds } = await import('@/lib/player-match/sleeperIdentitySync')
         // Repair BEFORE backfill: repair only inspects rows that already carry an id, and
@@ -131,7 +156,12 @@ async function handle(req: NextRequest) {
     // Safe only because the intel model returns null for unevidenced fields —
     // before that it wrote a manufactured recruitingComposite to 991 players.
     let devyIntel: Record<string, number> | { error: string } = { enriched: 0, errors: 0 }
-    try {
+    // Guarded OUTSIDE the try on purpose: routing a deferral through the catch would report it as
+    // `{ error: ... }`, turning "we ran out of time" into "enrichment failed" — the opposite of
+    // what happened, and the kind of misreported state that sends someone debugging a healthy path.
+    if (budget.exhausted()) {
+      deferredPhases.push('devyIntel')
+    } else try {
       const { enrichDevyIntelMetrics } = await import('@/lib/devy-classification')
       const intel = await enrichDevyIntelMetrics({ limit: 500 })
       devyIntel = { enriched: intel.updated, errors: intel.errors.length }
@@ -155,7 +185,11 @@ async function handle(req: NextRequest) {
     // Bounded to a few of the stalest leagues per run and fully swallowed:
     // profiling is enrichment and must never fail the player import it rides on.
     let psychProfiles: unknown = { leaguesProfiled: 0, managersProfiled: 0 }
-    if (!dryRun) {
+    // Last phase, so it is the first to be dropped — and the cheapest to drop, since
+    // refreshStaleLeagueProfiles already drains stalest-first and simply resumes next run.
+    if (!dryRun && budget.exhausted()) {
+      deferredPhases.push('psychProfiles')
+    } else if (!dryRun) {
       try {
         psychProfiles = await refreshStaleLeagueProfiles({ maxLeagues: 3 })
       } catch (psychErr) {
@@ -169,6 +203,10 @@ async function handle(req: NextRequest) {
       ok: true,
       dryRun: false,
       imported: result.imported,
+      // Named so a partial run is legible: a deferred phase is time, not failure.
+      deferredPhases: deferredPhases.length ? deferredPhases : undefined,
+      budgetExhausted: budget.exhausted(),
+      budgetElapsedMs: budget.elapsedMs(),
       devyIntel,
       psychProfiles,
       sports: result.sports,

@@ -15,6 +15,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { createRunBudget, rotateForFairness } from "@/lib/cron/runBudget"
 import { syncNFLScheduleToDb } from "@/lib/rolling-insights"
 import {
   syncAPISportsGamesToDb,
@@ -77,6 +78,7 @@ async function handle(req: NextRequest) {
   const source = (url.searchParams.get("source") ?? "all").toLowerCase()
 
   const startedAt = Date.now()
+  const budget = createRunBudget()
   const results: Record<string, unknown> = {}
   const diagnostics: Record<string, unknown> = {}
 
@@ -129,15 +131,35 @@ async function handle(req: NextRequest) {
      * current_schedule — kickoff times flex and lineup locks are computed from
      * them, so weekly would be far too stale.
      */
+    /*
+     * ⚠ THE COMMENT ABOVE SAYS "roughly thirty seconds". IT IS NOT. Measured 2026-08-23, this
+     * route returned HTTP 502 at ~300,200ms on the `?source=tsdb-only` schedule — the platform
+     * edge severs the connection at 300s and answers 502 itself, so neither maxDuration nor a
+     * client timeout buys more room. Seven schedule calls plus six team sweeps grew past the
+     * estimate and nobody re-measured.
+     *
+     * Budget checked BETWEEN sports, and the list rotated: with a fixed order, whichever sport
+     * falls past the cut would be skipped on EVERY run rather than just this one. Rotation by the
+     * six-hour cadence, not the default day, because this fires four times daily and a daily
+     * rotation would give the same sport the lead on all four.
+     */
     if (url.searchParams.get('tsdb') !== '0') {
       const tsdb: Record<string, unknown> = {}
-      for (const s of TSDB_SPORTS) {
+      const deferred: string[] = []
+      for (const s of rotateForFairness(TSDB_SPORTS, 6 * 60 * 60 * 1000)) {
+        if (budget.exhausted()) {
+          deferred.push(s)
+          continue
+        }
         try {
           const sched = await ingestSchedule(s)
           const entry: Record<string, unknown> = { season: sched.season, games: sched.written }
           // Only the leagues whose teams come back in a single call. NCAAF is
           // excluded by TSDB_FAST_TEAM_SPORTS, not by accident.
-          if (TSDB_FAST_TEAM_SPORTS.includes(s)) {
+          //
+          // Re-checked before the SECOND call: the schedule fetch above may have consumed what
+          // was left, and a teams sweep started at 239s is exactly how this route hits the edge.
+          if (TSDB_FAST_TEAM_SPORTS.includes(s) && !budget.exhausted()) {
             const teams = await ingestTeams(s, { season: sched.season })
             entry.teams = teams.written
           }
@@ -146,6 +168,7 @@ async function handle(req: NextRequest) {
           tsdb[s] = { error: String(err).slice(0, 120) }
         }
       }
+      if (deferred.length) tsdb.deferredSports = deferred
       results.thesportsdb = tsdb
     }
 
