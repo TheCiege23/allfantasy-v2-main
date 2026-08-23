@@ -94,6 +94,10 @@ const CRON_METADATA: Record<string, CronMetadata> = {
   // Decision OS behavioral snapshot daily discovery walk (Aug 2026).
   "/api/cron/decision-os-snapshot-capture": { jobName: "cron-decision-os-snapshot-capture", category: "ai", staleAfterH: 30, instrumented: true },
   "/api/cron/decision-os-activity-ingest": { jobName: "cron-decision-os-activity-ingest", category: "data-import", staleAfterH: 30, instrumented: true },
+  // Wrapped in withSyncJobRun (Aug 2026) so the freshness monitor can probe it by heartbeat
+  // through the offseason, when a healthy run correctly writes no AFProjectionSnapshot row.
+  // The jobName matches what `slugJobName` would derive, so the panel joined it even before.
+  "/api/cron/compute-projections": { jobName: "cron-compute-projections", category: "projections", staleAfterH: 30, instrumented: true },
 }
 
 function deriveCategory(pathname: string): CronCategory {
