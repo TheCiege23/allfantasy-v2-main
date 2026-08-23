@@ -4,6 +4,7 @@ import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
 import { refreshPlayoffScheduleMetadataForChallenge } from "@/lib/playoffs/playoffSeriesSyncService"
 import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
+import { redactSecrets } from "@/lib/security/redactSecrets"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,10 +50,12 @@ async function getActivePlayoffChallengeIds(sport: "all" | "nba" | "nhl") {
   return rows.map((row: { id: string }) => row.id)
 }
 
+/**
+ * Delegates to the shared redactor. This used to cover only `Bearer` and `key=`, which misses
+ * `RSC_token=` — and this message is returned to the CALLER, not just logged.
+ */
 function sanitizeErrorMessage(error: unknown) {
-  return (error instanceof Error ? error.message : String(error))
-    .replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]+/gi, "$1[redacted]")
-    .replace(/(key=)[^&\s]+/gi, "$1[redacted]")
+  return redactSecrets(error)
 }
 
 type RefreshInput = z.infer<typeof querySchema>

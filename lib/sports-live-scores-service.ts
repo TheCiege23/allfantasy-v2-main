@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { redactSecrets } from '@/lib/security/redactSecrets'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import type { LeagueSport } from '@prisma/client'
 import { DEFAULT_SPORT, isSupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
@@ -476,8 +477,12 @@ export function buildRollingInsightsScheduleSeasonUrl(input: {
   return url.toString()
 }
 
+/**
+ * Delegates to the shared redactor. This used to strip only `RSC_token=`, so a diagnostic preview
+ * carrying any other credential — a bearer header, a connection string — was stored verbatim.
+ */
 function redactTokens(value: string): string {
-  return value.replace(/RSC_token=([^&\s]+)/gi, 'RSC_token=<redacted>')
+  return redactSecrets(value)
 }
 
 function safeObjectKeys(value: unknown): string[] {

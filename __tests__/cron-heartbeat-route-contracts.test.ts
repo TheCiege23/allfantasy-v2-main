@@ -262,6 +262,25 @@ describe('/api/brackets/playoffs/cron/refresh-schedule heartbeat contract', () =
     expect(withSyncJobRunMock).not.toHaveBeenCalled()
   })
 
+  it('does not leak a provider token into the 500 body when the sweep throws', async () => {
+    // The most severe of the four redaction paths: this message goes to the CALLER, not just to a
+    // log. `sanitizeErrorMessage` used to cover only `Bearer` and `key=`, so an RSC_token in a
+    // provider URL was returned verbatim in the response body.
+    prismaMock.playoffBracketChallenge.findMany.mockResolvedValue([{ id: 'C1' }])
+    refreshPlayoffScheduleMetadataForChallengeMock.mockRejectedValue(
+      new Error('upstream 502 for https://rest.datafeeds.rolling-insights.com/api/v1/x?RSC_token=leak-me-4242'),
+    )
+
+    const res = await playoffGET(nextReq('/api/brackets/playoffs/cron/refresh-schedule'))
+    const body = await res.json()
+
+    expect(res.status).toBe(500)
+    expect(JSON.stringify(body)).not.toContain('leak-me-4242')
+    expect(body.message).toContain('RSC_token=***')
+    // Still diagnosable — redaction must not swallow which endpoint failed.
+    expect(body.message).toContain('upstream 502')
+  })
+
   it('aggregates per-challenge totals and reports warnings as a partial run', async () => {
     prismaMock.playoffBracketChallenge.findMany.mockResolvedValue([{ id: 'C1' }, { id: 'C2' }])
     refreshPlayoffScheduleMetadataForChallengeMock.mockResolvedValue({
