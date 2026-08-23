@@ -3,6 +3,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { execSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
+import { parseChangedLineNumbers } from "./db-first-diff-lines.mjs";
 
 const DATA_API_HOST_PATTERNS = [
   /(^|\.)api\.sleeper\.app$/i,
@@ -30,6 +32,44 @@ const DATA_API_HOST_PATTERNS = [
   /(^|\.)rolling-insights\.com$/i,
 ];
 
+/**
+ * Exported constants that RESOLVE to a monitored host, treated exactly like a URL literal.
+ *
+ * WHY THIS EXISTS. This guard finds direct provider calls by scanning for `https://` literals, so
+ * the moment a base URL is hoisted into a shared constant every consumer becomes invisible to it.
+ * That is not hypothetical: consolidating ESPN onto one constant removed the literal from 15 files
+ * in a single commit, and without this rule all 15 would have gone quiet while still calling ESPN
+ * exactly as before. DRY at the call site must not cost coverage.
+ *
+ * Matching an identifier is weaker than matching a URL — a file could alias or re-export it — but
+ * it restores the common case, and the definition sites below are few enough to review by hand.
+ */
+const DATA_API_IDENTIFIERS = [
+  'ESPN_SITE_API_BASE',
+  'THE_SPORTS_DB_V1_JSON_BASE',
+  'THE_SPORTS_DB_V2_JSON_BASE',
+];
+
+/**
+ * Files that NAME a provider host by definition rather than calling one.
+ *
+ * Two kinds, and both have to be here or the rule eats its own tail:
+ *   - URL builders, whose only job is to build provider URL strings — no fetch, no credentials in
+ *     flight. They must hold the literal somewhere, so flagging the definition site says nothing;
+ *     what matters is who CONSUMES it, and DATA_API_IDENTIFIERS keeps those consumers visible.
+ *   - This guard itself, which lists every monitored host and identifier as data. Without the
+ *     entry it reports three violations against its own DATA_API_IDENTIFIERS array — which it did,
+ *     the first time this rule ran.
+ *
+ * Scoped to explicit filenames rather than a `lib/providers/*` glob, so a real fetching client
+ * dropped into that directory is still caught.
+ */
+const HOST_DEFINITION_FILES = [
+  /^lib\/providers\/espnUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /^lib\/providers\/theSportsDbUrls\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /^scripts\/check-db-first-api-boundary\.mjs$/i,
+];
+
 const SOURCE_EXTENSIONS = new Set([
   ".ts",
   ".tsx",
@@ -42,7 +82,13 @@ const SOURCE_EXTENSIONS = new Set([
 ]);
 
 const ALLOWED_PATH_PATTERNS = [
-  /^scripts\/.*(ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
+  /*
+   * `audit` joins this list because an audit script's whole purpose is comparing what a provider
+   * says against what we stored — it cannot do that without calling the provider, and a script is
+   * never a request path. scripts/audit-playoff-provider-data.ts documents itself as read-only,
+   * writes nothing, and is invoked by hand (absent from package.json and CI).
+   */
+  /^scripts\/.*(audit|ingest|ingestion|sync|backfill|import|migrate|worker|seed|hydrate|refresh)/i,
   /^lib\/.*(ingest|ingestion|sync)/i,
   /^app\/api\/sports\/news\/sync-helper\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^app\/api\/cron\//i,
@@ -68,6 +114,21 @@ const ALLOWED_PATH_PATTERNS = [
    */
   /^lib\/sports-live-scores-service\.(ts|tsx|js|jsx|mjs|cjs)$/i,
   /^lib\/scores\/gameScoreProviders\.(ts|tsx|js|jsx|mjs|cjs)$/i,
+  /*
+   * The provider ADAPTER layer — modules that exist to speak one vendor's API and nothing else.
+   * Forbidding the provider layer from calling a provider is incoherent; what the rule protects is
+   * everything ABOVE it.
+   *
+   * Same profile as `scores/gameScoreProviders.ts` two lines up, and checked the same way — by its
+   * callers, not by its name. `lib/workers/providers/espn.ts` is reached from exactly two app
+   * files, `app/api/cron/import-projections` and `app/api/health/data-providers`: a cron and a
+   * health probe. No request path.
+   *
+   * ⚠ RE-CHECK THE CALLERS BEFORE ADDING A FILE HERE. This is a directory pattern rather than a
+   * filename, so a new module dropped into lib/workers/providers/ inherits the exemption. That is
+   * intended for adapters and wrong for anything a page can reach.
+   */
+  /^lib\/workers\/providers\//i,
 ];
 
 function parseArg(flag) {
@@ -163,12 +224,40 @@ function isAllowedCaller(filePath) {
   return ALLOWED_PATH_PATTERNS.some((pattern) => pattern.test(normalized));
 }
 
-function collectViolations(rootDir, filesToScan) {
+function isHostDefinitionFile(filePath) {
+  const normalized = toPosixPath(filePath);
+  return HOST_DEFINITION_FILES.some((pattern) => pattern.test(normalized));
+}
+
+/**
+ * Line numbers touched per file, parsed from `git diff -U0`.
+ *
+ * WHY CHANGED-MODE IS LINE-SCOPED. This guard's job is "do not ADD a violation". Reporting a
+ * whole file meant editing one unrelated line in `lib/sports-router.ts` inherited its four
+ * pre-existing TheSportsDB calls, and the only ways out were to fix architecture you did not come
+ * to fix, or to paste `db-first-exception` onto lines you did not write. The second is what
+ * actually happens, and it hollows out the marker for everyone: it is reserved for a TEMPORARY
+ * violation with a migration plan, and once it means "the guard was in my way" it means nothing.
+ *
+ * Measured on the ESPN host swap: 10 whole-file violations, ZERO of them introduced by the change.
+ *
+ * The full scan (no `--changed`) is deliberately NOT line-scoped — the weekly audit exists to
+ * report the entire debt, and that number should stay honest.
+ */
+function getChangedLineNumbers(base, head) {
+  return parseChangedLineNumbers(
+    execSync(`git diff -U0 --diff-filter=ACMRTUXB ${base}..${head}`, { encoding: "utf8" }),
+  );
+}
+
+function collectViolations(rootDir, filesToScan, changedLines = null) {
   const violations = [];
 
   for (const relativePath of filesToScan) {
     const normalizedPath = toPosixPath(relativePath);
     const absolutePath = path.join(rootDir, relativePath);
+    // null => full scan, report every line. A Set => only lines this change touched.
+    const touched = changedLines ? changedLines.get(normalizedPath) ?? new Set() : null;
 
     if (!fs.existsSync(absolutePath)) {
       continue;
@@ -179,6 +268,12 @@ function collectViolations(rootDir, filesToScan) {
 
     for (let i = 0; i < lines.length; i += 1) {
       const line = lines[i];
+
+      // Line-scoped in changed mode: a violation on a line this change did not touch is
+      // pre-existing debt, not something this PR added. See getChangedLineNumbers.
+      if (touched && !touched.has(i + 1)) {
+        continue;
+      }
 
       if (line.includes("db-first-exception")) {
         continue;
@@ -199,7 +294,7 @@ function collectViolations(rootDir, filesToScan) {
           continue;
         }
 
-        if (isAllowedCaller(normalizedPath)) {
+        if (isAllowedCaller(normalizedPath) || isHostDefinitionFile(normalizedPath)) {
           continue;
         }
 
@@ -208,6 +303,26 @@ function collectViolations(rootDir, filesToScan) {
           line: i + 1,
           url: rawUrl,
         });
+      }
+
+      // A constant that resolves to a monitored host counts as the URL it stands for — otherwise
+      // hoisting the literal into a shared module silently retires this check for every consumer.
+      // Skipped in the builder modules themselves, where the constant is DEFINED rather than used.
+      // An IMPORT is not a call. Flagging the import line as well as the use double-reports every
+      // consumer and, worse, reports a line that no `db-first-exception` would ever sensibly sit
+      // on. What matters is the line that builds the URL.
+      const isImportLine = /^\s*(import\s|export\s+\{|\}?\s*from\s)/.test(line);
+
+      if (!isImportLine && !isAllowedCaller(normalizedPath) && !isHostDefinitionFile(normalizedPath)) {
+        for (const identifier of DATA_API_IDENTIFIERS) {
+          // Word-bounded so a longer name that merely contains this one does not match.
+          if (!new RegExp(`\\b${identifier}\\b`).test(line)) continue;
+          violations.push({
+            file: normalizedPath,
+            line: i + 1,
+            url: `${identifier} (resolves to a monitored provider host)`,
+          });
+        }
       }
     }
   }
@@ -223,13 +338,15 @@ function main() {
 
   let filesToScan = [];
 
+  let changedLines = null;
   if (changedOnly && base && head) {
     filesToScan = getChangedFiles(base, head);
+    changedLines = getChangedLineNumbers(base, head);
   } else {
     filesToScan = getAllSourceFiles(rootDir);
   }
 
-  const violations = collectViolations(rootDir, filesToScan);
+  const violations = collectViolations(rootDir, filesToScan, changedLines);
 
   if (violations.length === 0) {
     console.log("DB-first boundary check passed.");
@@ -246,4 +363,13 @@ function main() {
   process.exit(1);
 }
 
-main();
+/**
+ * Only run when executed directly.
+ *
+ * Without this, importing the module to unit-test parseChangedLineNumbers starts a FULL-TREE scan
+ * — the slow path, because an import passes no `--changed` flag — and then calls process.exit on
+ * the test runner. Found by doing exactly that.
+ */
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main();
+}

@@ -42,6 +42,7 @@ import { fetchWithChain } from '@/lib/workers/api-chain';
 import { isRollingInsightsEnabledForSport, legacySupportedSportToApiChain } from '@/lib/workers/api-config';
 import { getPlayersBySport } from '@/lib/sleeper-client';
 import { getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys';
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 export type Sport = SupportedSport;
 export type DataType = 'teams' | 'players' | 'games' | 'stats' | 'standings' | 'schedule' | 'depth_charts' | 'team_stats';
@@ -724,14 +725,14 @@ async function fetchFromESPN(sport: Sport, dataType: DataType, identifier?: stri
 
   switch (dataType) {
     case 'teams':
-      url = `https://site.api.espn.com/apis/site/v2/sports/${path}/teams`; // db-first-exception: provider router fallback pending DB-first news/schedule mirror
+      url = `${ESPN_SITE_API_BASE}/${path}/teams`; // db-first-exception: provider router fallback pending DB-first news/schedule mirror
       break;
     case 'games':
     case 'schedule':
-      url = `https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`; // db-first-exception: provider router fallback pending DB-first news/schedule mirror
+      url = `${ESPN_SITE_API_BASE}/${path}/scoreboard`; // db-first-exception: provider router fallback pending DB-first news/schedule mirror
       break;
     case 'standings':
-      url = `https://site.api.espn.com/apis/site/v2/sports/${path}/standings`; // db-first-exception: provider router fallback pending DB-first news/schedule mirror
+      url = `${ESPN_SITE_API_BASE}/${path}/standings`; // db-first-exception: provider router fallback pending DB-first news/schedule mirror
       break;
     default:
       return null;

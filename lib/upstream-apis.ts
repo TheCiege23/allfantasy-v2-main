@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma'
 import type { FantasyCalcPlayer, FantasyCalcSettings } from './fantasycalc'
 import { readCache, writeCache } from './enrichment-cache'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 type PrismaLike = typeof prisma
 type CacheScope = 'news_context' | 'rolling_insights'
@@ -701,7 +702,7 @@ export async function fetchNewsContext(
 
   if (dbNewsItemCount === 0) {
     const espnData = await fetchJson<EspnNewsResponse>(
-      'https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=15' // db-first-exception: emergency fallback when DB news is empty
+      `${ESPN_SITE_API_BASE}/football/nfl/news?limit=15` // db-first-exception: emergency fallback when DB news is empty
     )
 
     for (const article of espnData?.articles ?? []) {
