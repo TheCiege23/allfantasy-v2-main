@@ -9,6 +9,10 @@
       "schedule": "0 7 * * *"
     },
     {
+      "path": "/api/cron/decision-os-activity-ingest?relayOnly=1",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/decision-os-snapshot-capture?discover=1",
       "schedule": "30 7 * * *"
     },

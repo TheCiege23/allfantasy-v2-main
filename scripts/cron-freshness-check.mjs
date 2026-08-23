@@ -128,6 +128,15 @@ export const PROBES = {
   // and source='espn' is not exclusive either -- 'espn' is an NflRedraftProviderId, so the
   // redraft canonical sync can write it. The route now records a heartbeat instead.
   '/api/cron/import-scores': { heartbeat: 'cron-import-scores' },
+  // The outbox drain fires as `?relayOnly=1` on the SAME route as the daily ingest, so it needs
+  // its own job_name or the ingest's heartbeat would report the drain healthy on a day it never
+  // ran -- the shared-probe false green fixed for import-scores just above.
+  // Every 6h, so 9h allows one missed fire before it goes red.
+  '/api/cron/decision-os-activity-ingest?relayOnly=1': { heartbeat: 'cron-decision-os-relay-drain' },
+  // The outbox drain fires as `?relayOnly=1` on the SAME route as the daily ingest, so it needs
+  // its own job_name or the ingest's heartbeat would report the drain healthy on a day it never
+  // ran -- the shared-probe false green fixed for import-scores just above.
+  // Every 6h, so 9h allows one missed fire before it goes red.
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
 
   // ── heartbeat probes ──
