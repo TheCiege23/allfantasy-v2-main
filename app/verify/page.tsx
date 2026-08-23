@@ -258,7 +258,7 @@ function VerifyContent() {
           <div className={`mx-auto flex h-16 w-16 items-center justify-center rounded-2xl border ${config.color}`}>
             {config.icon}
           </div>
-          <h1 className="mt-5 text-2xl font-semibold text-white">{config.title}</h1>
+          <h2 className="mt-5 text-2xl font-semibold text-white">{config.title}</h2>
           <p className="mt-3 text-sm leading-6 text-white/60">{config.message}</p>
 
           {state === "success" && (

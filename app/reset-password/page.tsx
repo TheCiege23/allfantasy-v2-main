@@ -180,9 +180,9 @@ function ResetPasswordContent() {
               >
                 <TriangleAlert className="h-7 w-7" style={{ color: "var(--accent-amber-strong)" }} />
               </div>
-              <h1 className="mt-5 text-2xl font-semibold" style={{ color: "var(--text)" }}>
+              <h2 className="mt-5 text-2xl font-semibold" style={{ color: "var(--text)" }}>
                 Session required
-              </h1>
+              </h2>
               <p className="mt-3 text-sm leading-6" style={{ color: "var(--muted)" }}>
                 We couldn&apos;t verify a password reset session. Use the link from your email, or request a new reset.
               </p>
@@ -220,9 +220,9 @@ function ResetPasswordContent() {
               >
                 <CheckCircle2 className="h-7 w-7" style={{ color: "var(--accent-emerald-strong)" }} />
               </div>
-              <h1 className="mt-5 text-2xl font-semibold" style={{ color: "var(--text)" }}>
+              <h2 className="mt-5 text-2xl font-semibold" style={{ color: "var(--text)" }}>
                 Password reset
-              </h1>
+              </h2>
               <p className="mt-3 text-sm leading-6" style={{ color: "var(--muted)" }}>
                 Your password has been updated. Redirecting to sign in...
               </p>

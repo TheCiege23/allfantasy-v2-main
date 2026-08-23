@@ -704,9 +704,9 @@ export default function ForgotPasswordClient() {
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-emerald-500/20 bg-emerald-500/10">
                 <CheckCircle2 className="h-7 w-7 text-emerald-400" />
               </div>
-              <h1 className="mt-5 text-2xl font-semibold" style={{ color: 'var(--text)' }}>
+              <h2 className="mt-5 text-2xl font-semibold" style={{ color: 'var(--text)' }}>
                 Password reset
-              </h1>
+              </h2>
               <p className="mt-3 text-sm leading-6" style={{ color: 'var(--muted)' }}>
                 Your password has been updated. Redirecting to sign in...
               </p>
