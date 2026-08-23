@@ -108,7 +108,6 @@ export const PROBES = {
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   '/api/cron/sync-player-images?sport=all': { table: 'sports_core_player_images', column: 'fetched_at' },
-  '/api/cron/compute-projections': { table: 'AFProjectionSnapshot', column: 'computedAt' },
   /*
    * ⚠ `lastUpdatedAt`, NOT `createdAt`. This job UPSERTS, so `createdAt` freezes at first insert
    * and never moves again no matter how many times the row is refreshed.
@@ -186,6 +185,24 @@ export const PROBES = {
   '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': {
     heartbeat: 'cron-playoff-schedule-refresh',
   },
+
+  /*
+   * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
+   * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
+   * season a suppressed output probe would have left it completely unwatched for seven months --
+   * the "crons died and nothing told us" hole, reopened. The heartbeat is the weaker claim but it
+   * is the only one available here that survives the offseason.
+   *
+   * Until the season starts it refuses every player with `no_games_played` and writes no
+   * AFProjectionSnapshot row at all; since #596 it reports that as HTTP 200 + ok:false rather
+   * than the daily 500 it used to throw.
+   *
+   * ⚠ IN-SEASON THIS IS TOO WEAK. From Week 1 a heartbeat cannot tell a working run from one
+   * that fires daily and silently writes nothing. Restore the output probe then --
+   * { table: 'AFProjectionSnapshot', column: 'computedAt', seasonal: { sport: 'NFL' } } -- which
+   * keeps the strong claim in season and self-suppresses out of it.
+   */
+  '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 }
 
 /** Where heartbeats are read from. One row per run, whether or not the run found work to do. */
