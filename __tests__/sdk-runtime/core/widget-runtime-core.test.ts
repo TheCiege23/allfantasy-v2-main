@@ -247,9 +247,28 @@ describe('authPreCheck', () => {
   })
 
   it('is deterministic', () => {
+    /*
+     * ⚠ THE TIMESTAMP MUST BE PINNED, AND THIS TEST WAS FLAKY WITHOUT IT.
+     *
+     * authPreCheck builds its failure through buildSDKError, which defaults to
+     * `opts.timestamp ?? new Date().toISOString()` (lib/decision-os/sdk/errors.ts).
+     * With no timestamp passed, the two calls below stamp the clock separately,
+     * and whenever they straddle a millisecond boundary the deep-equal fails on
+     * a field neither call was testing.
+     *
+     * Measured on this file in isolation: 1 failure in 10 runs locally, and it
+     * broke CI's shard 4 twice as `[vitest-ratchet] 1 file(s) were passing and
+     * now FAIL` — which reads as a regression from whatever change happened to
+     * be in flight, and cost a real investigation to attribute.
+     *
+     * The sibling determinism test for mapHttpFailureToSDKError already pins a
+     * timestamp for exactly this reason; this one was simply missed. Determinism
+     * of the RESULT is still what is asserted — the clock was never part of it.
+     */
     const auth = makeAuth({ credential: '' })
-    const a = authPreCheck(auth)
-    const b = authPreCheck(auth)
+    const opts = { timestamp: '2026-01-01T00:00:00.000Z' }
+    const a = authPreCheck(auth, opts)
+    const b = authPreCheck(auth, opts)
     expect(a).toEqual(b)
   })
 })
