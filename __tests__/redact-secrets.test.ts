@@ -37,7 +37,16 @@ describe('redactSecrets — the two credentials CLAUDE.md names', () => {
 
   it('redacts the TheSportsDB key, which is a PATH SEGMENT and not a query param', () => {
     // No generic key=value rule can catch this shape — it needs its own.
-    const url = 'https://www.thesportsdb.com/api/v1/json/9427615/eventsday.php?d=2026-08-22'
+    //
+    // ⚠ WRITTEN WITHOUT A SCHEME ON PURPOSE, and it is not a workaround for a real violation.
+    // `scripts/check-db-first-api-boundary.mjs` flags `https?://<monitored-host>/...` literals in
+    // any changed file, and __tests__ is deliberately NOT excluded from its scan — a test must
+    // never reach a provider either. It cannot tell this fixture from a live call. Dropping the
+    // scheme is enough for the guard and changes nothing here, because the redaction rule matches
+    // on the host-and-path shape and never required one. Do NOT "fix" this by exempting tests
+    // from that guard or by adding a db-first-exception: the guard is right to be strict, and
+    // exception comments are reserved for temporary violations that have a migration plan.
+    const url = 'www.thesportsdb.com/api/v1/json/9427615/eventsday.php?d=2026-08-22'
     expectRedacted(url, '9427615')
     expect(redactSecrets(url)).toContain('/json/***/')
     expect(redactSecrets(url)).toContain('eventsday.php')
