@@ -29,6 +29,30 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to Sign Up" : "Back to Home"}
     >
+      {/*
+        ⚠ DO NOT ADD "delete it yourself in Settings" HERE WITHOUT RE-CHECKING THE
+        WIRING. It is the obvious improvement, the endpoint to back it exists,
+        and it would be FALSE today. Written down because the first draft of this
+        very change made that mistake:
+
+          - POST /api/user/delete is real, gated, and does the erasure.
+          - The only component that calls it is app/settings/SettingsFullPage.tsx.
+          - SettingsFullPage is rendered at /league/[leagueId]/settings ONLY, and
+            that route returns "You don't have permission to view this page" to
+            anyone who is not the league commissioner.
+          - /settings renders SettingsApp -> AccountSettingsSection, whose
+            "Delete account" button makes you type DELETE and then hands you a
+            mailto: link. It deletes nothing.
+
+        So the working right-to-erasure path is reachable only from a
+        commissioner-gated league screen, and the account screen where every user
+        would look offers an email draft. Email is genuinely the only route a
+        normal user has, which is why this page describes it and nothing else.
+
+        Two mismatches left in place because they are product decisions, not copy:
+        that gap itself, and AccountSettingsSection emailing support@ while this
+        page says privacy@ — the same request going to two addresses.
+      */}
       <section>
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">1. How to Request Deletion</h2>
         <p>
@@ -55,11 +79,26 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
       <section>
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">3. What We Delete</h2>
         <ul className="list-disc list-inside space-y-2 ml-4">
-          <li>Account profile information we use to operate AllFantasy</li>
+          <li>Account profile information we use to operate AllFantasy — your email address, username, display name and avatar are overwritten with anonymized values that cannot be reversed</li>
           <li>Connected account tokens and provider linkage data stored by AllFantasy</li>
+          <li>Your password, and any outstanding email-verification or password-reset tokens, so the account can no longer be signed into</li>
           <li>Saved preferences, AI context, and other account-level personalization where applicable</li>
           <li>Associated support or feedback records that are not required for security, legal, or billing retention</li>
         </ul>
+        {/*
+          Section 4 previously said only that we "may retain limited information"
+          for fraud, legal and billing reasons. True but not the whole picture:
+          app/api/user/delete/route.ts anonymizes the user record rather than
+          hard-deleting it, deliberately, so leagues and rosters other people are
+          still in do not lose their referential integrity. A page that describes
+          that as deletion without saying a row survives is over-promising, and
+          this is the one page where the difference is the entire subject.
+        */}
+        <p className="mt-3">
+          Deletion works by erasing the personal data on your account rather than removing the account row
+          itself. An anonymized record remains so that leagues, rosters, and historical results belonging to
+          other managers stay intact — it is no longer identifiable as you, and cannot be signed into.
+        </p>
       </section>
 
       <section>
@@ -106,7 +145,14 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">8. Contact</h2>
         <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
           <p className="font-semibold text-white">AllFantasy Privacy Requests</p>
-          <p className="text-white/70">Email: privacy@allfantasy.ai</p>
+          {/* Plain text while section 1 linked the same address — the same split
+              the Terms and Privacy contact sections had. */}
+          <p className="text-white/70">
+            Email:{" "}
+            <a href="mailto:privacy@allfantasy.ai" className="text-cyan-400 hover:text-cyan-300">
+              privacy@allfantasy.ai
+            </a>
+          </p>
         </div>
       </section>
     </LegalPageRenderer>
