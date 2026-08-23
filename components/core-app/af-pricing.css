@@ -523,3 +523,78 @@
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* ── Language switch (nav) ─────────────────────────────────────────────
+ * Two real links, one per language route — same construction as the landing
+ * switch, so both documents stay crawlable without JavaScript.
+ */
+.af-pr-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface2);
+}
+
+.af-pr-lang-opt {
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: 700 11px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.06em;
+  color: var(--text2);
+  text-decoration: none;
+}
+
+.af-pr-lang-opt[data-active='true'] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ── "Your pick" chip ──────────────────────────────────────────────────
+ * Marks the lane a returning visitor chose before signup sent them away.
+ * Mirrors .af-pr-tab but sits on the opposite side so it never collides with
+ * the "Best value" tab when the picked plan IS Supreme.
+ */
+.af-pr-picked {
+  position: absolute;
+  top: -11px;
+  right: 12px;
+  white-space: nowrap;
+  font: 800 9px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--good-soft, var(--chip));
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+
+.af-pr-card[data-picked] {
+  border-color: var(--accent);
+}
+
+/* ── Footer legal links ────────────────────────────────────────────────
+ * Terms / Privacy / no-gambling. The page took card details without linking to
+ * any of them; see the comment at the footer in PricingV4.tsx.
+ */
+.af-pr-foot-legal {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.af-pr-foot-legal a {
+  font-size: 12px;
+  color: var(--text2);
+  text-decoration: none;
+}
+
+.af-pr-foot-legal a:hover,
+.af-pr-foot-legal a:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
+}

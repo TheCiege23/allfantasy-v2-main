@@ -125,9 +125,23 @@ export function getPlanPresentations(): PlanPresentation[] {
  * Per-card the page shows the exact dollar saving, which is unimpeachable.
  */
 export function describeYearlySavings(plans: PlanPresentation[]): string | null {
+  const pct = getMinYearlySavingPct(plans)
+  return pct == null ? null : `Save ${pct}% paying yearly`
+}
+
+/**
+ * The smallest real yearly saving across the paid lanes, as a number.
+ *
+ * ⚠ THE NUMBER, NOT THE SENTENCE, IS WHAT A TRANSLATED PAGE NEEDS.
+ * describeYearlySavings bakes an English sentence around it, which is fine for
+ * English but put "Save 28% paying yearly" on the Spanish pricing page in the
+ * middle of otherwise-translated copy. Callers that render prose take this and
+ * format it in their own language; the string helper above stays for the callers
+ * (and the test) that already depend on it.
+ */
+export function getMinYearlySavingPct(plans: PlanPresentation[]): number | null {
   const pcts = plans.map((p) => p.savings?.savedPct).filter((n): n is number => n != null && n > 0)
-  if (pcts.length === 0) return null
-  return `Save ${Math.min(...pcts)}% paying yearly`
+  return pcts.length === 0 ? null : Math.min(...pcts)
 }
 
 /** Cheapest and dearest monthly paid plan, already formatted for prose. */

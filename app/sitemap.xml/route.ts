@@ -64,6 +64,8 @@ export async function GET() {
     { path: 'breathing', priority: '0.5', changefreq: 'weekly' },
     { path: 'horoscope', priority: '0.5', changefreq: 'weekly' },
     { path: 'pricing', priority: '0.5', changefreq: 'monthly' },
+    // Spanish pricing — its own canonical and hreflang, so it needs its own entry.
+    { path: 'es/pricing', priority: '0.5', changefreq: 'monthly' },
   ]
 
   const sportUrls = SPORT_SLUGS.map(

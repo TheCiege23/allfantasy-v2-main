@@ -18,6 +18,14 @@ import {
   LANDING_PATHS,
   type LandingLang,
 } from '@/lib/i18n/landing-copy'
+/*
+ * ⚠ THE PRICING LINKS BELOW MUST FOLLOW THE READER'S LANGUAGE. Both of them went
+ * to the English `/pricing` from every language, so someone who chose Spanish on
+ * this page hit English at the exact moment they were deciding whether to pay.
+ * PRICING_PATHS keys the destination off `lang`, so the Spanish landing sends
+ * readers to the Spanish pricing page and the two can never fall out of step.
+ */
+import { PRICING_PATHS, type PricingLang } from '@/lib/i18n/pricing-copy'
 import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
 // af-core.css carries the .af-core token layer (--surface, --line, --accent …).
 // AfCoreShell imports it for every screen inside the shell — but this one renders
@@ -174,6 +182,14 @@ export function LandingV4({
    * Defined once and used for all three CTAs — nav, hero and pricing band — so
    * they cannot drift into disagreeing about who the reader is.
    */
+  /*
+   * The landing and pricing language sets are the same two codes today. Resolved
+   * through a lookup rather than assumed equal, so adding a landing language
+   * without a matching pricing page degrades to English instead of linking at a
+   * route that does not exist.
+   */
+  const pricingHref = PRICING_PATHS[lang as PricingLang] ?? PRICING_PATHS.en
+
   const primaryCta = signedIn
     ? { href: '/dashboard', label: c.nav.goToDashboard }
     : { href: '/signup', label: c.nav.getStarted }
@@ -221,7 +237,7 @@ export function LandingV4({
           <a href="#faq" data-testid="landing-nav-faq">
             {c.nav.faq}
           </a>
-          <Link href="/pricing" data-testid="landing-nav-commissioners">
+          <Link href={pricingHref} data-testid="landing-nav-commissioners">
             {c.nav.forCommissioners}
           </Link>
         </div>
@@ -380,7 +396,7 @@ export function LandingV4({
             <Link href={primaryCta.href} className="af-btn" data-testid="landing-pricing-cta">
               {signedIn ? primaryCta.label : c.pricing.ctaPrimary}
             </Link>
-            <Link href="/pricing" className="af-btn af-btn--ghost" data-testid="landing-pricing-compare">
+            <Link href={pricingHref} className="af-btn af-btn--ghost" data-testid="landing-pricing-compare">
               {c.pricing.ctaSecondary}
             </Link>
           </div>

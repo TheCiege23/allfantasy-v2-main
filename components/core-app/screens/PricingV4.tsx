@@ -8,6 +8,18 @@ import { PLAN_FAMILY_INCLUDES, type PlanFamilyKey } from '@/lib/monetization/pla
 import { LockedFeatureBanner } from '@/components/monetization/LockedFeatureBanner'
 import { CheckoutOutcomePanel } from '@/components/monetization/CheckoutOutcomePanel'
 import { usePostPurchaseSync } from '@/hooks/usePostPurchaseSync'
+import {
+  getTermsUrl,
+  getPrivacyUrl,
+  getNoGamblingPolicyUrl,
+} from '@/lib/legal/legal-route-resolver'
+import {
+  getPricingCopy,
+  PRICING_PATHS,
+  PRICING_LANGS,
+  DEFAULT_PRICING_LANG,
+  type PricingLang,
+} from '@/lib/i18n/pricing-copy'
 // af-core.css carries the .af-core token layer (--surface, --line, --chip, --text2 …)
 // that every rule in af-pricing.css reads. AfCoreShell imports it for screens inside
 // the shell; this one renders standalone at /pricing, so without this line the whole
@@ -78,8 +90,26 @@ export type PricingPack = {
 export type PricingV4Props = {
   plans: PricingPlan[]
   packs: PricingPack[]
-  /** Derived headline, e.g. "Save 28% paying yearly". Null when no plan has a yearly saving. */
-  savingsHeadline: string | null
+  /**
+   * Smallest real yearly saving, as a PERCENTAGE. Null when no plan is sold yearly.
+   *
+   * ⚠ A NUMBER, NOT THE FORMATTED SENTENCE. This used to arrive as
+   * describeYearlySavings()'s English "Save 28% paying yearly", which rendered
+   * verbatim on the Spanish page in the middle of otherwise-translated copy.
+   * The figure is still derived from the catalog; only the wording is local.
+   */
+  savingsPct: number | null
+  /**
+   * The sku this visitor picked BEFORE being sent to signup, echoed back by the
+   * `?plan=` on the callbackUrl (see startCheckout's 401 branch).
+   *
+   * Passed down from the server page rather than read here with
+   * useSearchParams, so this component needs no Suspense boundary and the value
+   * is present in the server-rendered HTML instead of appearing after hydration.
+   */
+  pickedSku?: string | null
+  /** Which language of the page this is. Drives copy, the canonical and the switch. */
+  lang?: PricingLang
 }
 
 type Interval = 'month' | 'year'
@@ -93,11 +123,6 @@ type Interval = 'month' | 'year'
  */
 const LANE_ORDER = ['af_pro', 'af_war_room', 'af_commissioner', 'af_supreme'] as const
 
-const FREE_INCLUDES = [
-  'Every league you play, in one place',
-  'Live scores and standings',
-  'Import from Sleeper, ESPN and Yahoo',
-]
 
 function money(n: number): string {
   // Whole dollars lose the .00 — "$80" reads as a price, "$80.00" as an invoice.
@@ -140,27 +165,23 @@ function Shield() {
  * actually stops the Stripe webhook crediting anything. Printing the discounts
  * would advertise a product that was deliberately withdrawn.
  */
-const FAQS: { q: string; a: string }[] = [
-  {
-    q: 'What stays free?',
-    a: "Every league, live score and standing. Imports are unlimited and there's no trial clock on them.",
-  },
-  {
-    q: 'Do you take league dues?',
-    a: "No. League dues and payouts are handled on FanCred — AllFantasy never holds your league's money.",
-  },
-  {
-    q: 'Can I cancel?',
-    a: 'Any time, from Settings → Billing. Purchases follow the pricing shown at checkout and the applicable refund policy.',
-  },
-  {
-    q: 'Is this gambling?',
-    a: 'No. 100% season-long fantasy — no sportsbook, no daily fantasy. Not available in WA; paid leagues restricted in HI, ID, MT, NV.',
-  },
-]
 
-export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
-  const [interval, setInterval] = useState<Interval>('month')
+export function PricingV4({
+  plans,
+  packs,
+  savingsPct,
+  pickedSku = null,
+  lang = DEFAULT_PRICING_LANG,
+}: PricingV4Props) {
+  const c = getPricingCopy(lang)
+  /*
+   * Someone returning from signup picked a lane before they left. Opening on the
+   * interval they were actually looking at means a yearly pick does not silently
+   * become a monthly one on the way back.
+   */
+  const [interval, setInterval] = useState<Interval>(() =>
+    pickedSku && plans.some((p) => p.yearlySku === pickedSku) ? 'year' : 'month',
+  )
   const [pendingSku, setPendingSku] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -188,11 +209,47 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
     [ordered]
   )
 
+  /**
+   * ⚠ A 401 IS A REDIRECT TO MAKE, NOT A MESSAGE TO PRINT.
+   *
+   * Measured on the live page: a signed-out visitor clicking "Choose AF Pro" got
+   * a full-width error bar reading exactly `Unauthorized` — the checkout
+   * endpoint's raw string — and nothing else. No prompt, no link, no way on. The
+   * page's entire purpose failed for the audience the landing page sends here,
+   * and it failed in developer language.
+   *
+   * Signed-out is not an error state on a pricing page; it is the expected state
+   * of someone deciding whether to buy. So the 401 branch carries the intent to
+   * signup instead: `callbackUrl` returns them here afterwards, and `plan` marks
+   * the card they picked so the choice survives the round trip.
+   *
+   * ⚠ THE BUTTON STILL CALLS THE API RATHER THAN LINKING STRAIGHT TO /signup, AND
+   * THAT IS DELIBERATE. e2e/monetization-checkout-click-audit.spec.ts drives
+   * these testids with the checkout endpoint mocked and no session, asserting the
+   * click reaches the endpoint and follows the returned url. Turning the CTA into
+   * a link when signed out would break every one of those paths while looking
+   * like a UX improvement. Branching on the RESPONSE keeps that contract exactly:
+   * a mocked 200 still navigates to checkout, and the spec's 400 case still
+   * renders its message inline. Only a real 401 changes behaviour.
+   */
   async function startCheckout(sku: string, productType: 'subscription' | 'token_pack') {
     setError(null)
     setPendingSku(sku)
-    const result = await resolveCheckoutUrl({ sku, productType, returnPath: '/pricing' })
+    /*
+     * ⚠ BOTH RETURN PATHS ARE THE READER'S OWN LANGUAGE, NOT A HARDCODED
+     * `/pricing`. Sending a Spanish visitor to signup and then landing them back
+     * on the ENGLISH pricing page would undo the whole point of /es/pricing at
+     * the last step of the funnel — and it is the easy mistake here, because the
+     * literal reads correctly in the English case.
+     */
+    const self = PRICING_PATHS[lang]
+    const result = await resolveCheckoutUrl({ sku, productType, returnPath: self })
     if (!result.ok) {
+      if (result.status === 401) {
+        const back = `${self}?plan=${encodeURIComponent(sku)}`
+        window.location.assign(`/signup?callbackUrl=${encodeURIComponent(back)}`)
+        return
+      }
       setError(result.error)
       setPendingSku(null)
       return
@@ -201,7 +258,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
   }
 
   return (
-    <div className="af-core af-pr">
+    <div className="af-core af-pr" lang={c.htmlLang}>
       {/*
         ⚠ THIS PAGE HAD NO NAVIGATION AT ALL. Measured on the live page: zero
         <nav> elements and zero links to "/". A visitor who arrived here could
@@ -214,14 +271,30 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
       <nav className="af-pr-nav" aria-label="Main">
         <Link href="/" className="af-pr-brand">
           <Shield />
-          <span className="af-pr-wordmark">Pricing</span>
+          <span className="af-pr-wordmark">{c.nav.wordmark}</span>
         </Link>
         <div className="af-pr-nav-right">
+          {/* Two plain links, same rule as the landing switch: a real href per
+              language keeps both documents crawlable and shareable. */}
+          <div className="af-pr-lang" role="group" aria-label={c.foot.langLabel}>
+            {PRICING_LANGS.map((code) => (
+              <Link
+                key={code}
+                href={PRICING_PATHS[code]}
+                hrefLang={code}
+                className="af-pr-lang-opt"
+                data-active={code === lang ? 'true' : undefined}
+                aria-current={code === lang ? 'true' : undefined}
+              >
+                {code === 'en' ? 'EN' : 'ES'}
+              </Link>
+            ))}
+          </div>
           <Link href="/login" className="af-pr-nav-link">
-            Sign in
+            {c.nav.signIn}
           </Link>
           <Link href="/signup" className="af-pr-nav-cta">
-            Start free
+            {c.nav.startFree}
           </Link>
         </div>
       </nav>
@@ -236,22 +309,19 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
       </div>
 
       <header className="af-pr-hero">
-        <span className="af-pr-eyebrow">Pricing</span>
-        <h1 className="af-pr-title">Win more with tools built for fantasy managers</h1>
-        <p className="af-pr-sub">
-          Every league, live score and standing is free forever. Subscribe for Chimmy intelligence
-          and commissioner tools — or buy tokens when you need them.
-        </p>
+        <span className="af-pr-eyebrow">{c.hero.eyebrow}</span>
+        <h1 className="af-pr-title">{c.hero.title}</h1>
+        <p className="af-pr-sub">{c.hero.sub}</p>
 
         <div className="af-pr-toggle-row">
-          <div className="af-pr-toggle" role="group" aria-label="Billing interval">
+          <div className="af-pr-toggle" role="group" aria-label={c.toggle.label}>
             <button
               type="button"
               className="af-pr-toggle-btn"
               data-on={interval === 'month'}
               onClick={() => setInterval('month')}
             >
-              Monthly
+              {c.toggle.monthly}
             </button>
             <button
               type="button"
@@ -259,7 +329,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
               data-on={interval === 'year'}
               onClick={() => setInterval('year')}
             >
-              Yearly
+              {c.toggle.yearly}
             </button>
           </div>
           {/*
@@ -267,32 +337,34 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
             "yearly = 2 months free". That was true of the old prices and is not of
             these. Deriving it means the chip cannot outlive the prices it describes.
           */}
-          {savingsHeadline ? <span className="af-pr-savechip">{savingsHeadline}</span> : null}
+          {savingsPct != null ? (
+            <span className="af-pr-savechip">{c.card.savingsChip(savingsPct)}</span>
+          ) : null}
         </div>
       </header>
 
       {blocked ? (
-        <p className="af-pr-blocked">
-          Paid plans are not available in your state. Everything free stays available.
-        </p>
+        <p className="af-pr-blocked">{c.blocked}</p>
       ) : null}
       {error ? <p className="af-pr-error">{error}</p> : null}
 
       <div className="af-pr-grid">
         {/* ── Free ─────────────────────────────────────────────── */}
         <section className="af-pr-card">
-          <h2 className="af-pr-name">Free</h2>
-          <p className="af-pr-desc">Every league you play, in one place. No card, no trial clock.</p>
+          <h2 className="af-pr-name">{c.free.name}</h2>
+          <p className="af-pr-desc">{c.free.desc}</p>
           <div className="af-pr-price">
             <span className="af-pr-amount">$0</span>
           </div>
-          <p className="af-pr-per">free forever</p>
-          <a href="/signup" className="af-pr-cta af-pr-cta--ghost">
-            Create an account
-          </a>
+          <p className="af-pr-per">{c.free.per}</p>
+          {/* <Link>, not <a> — this was the one signup CTA of three doing a full
+              document reload instead of a client navigation. */}
+          <Link href="/signup" className="af-pr-cta af-pr-cta--ghost">
+            {c.free.cta}
+          </Link>
           <hr className="af-pr-rule" />
           <ul className="af-pr-features">
-            {FREE_INCLUDES.map((f) => (
+            {c.free.includes.map((f) => (
               <li key={f}>
                 <span className="af-pr-tick" aria-hidden>
                   ✓
@@ -308,13 +380,35 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
           const sku = interval === 'month' ? plan.monthlySku : plan.yearlySku
           const price = interval === 'month' ? plan.monthlyPrice : plan.yearlyPrice
           const best = plan.planFamily === 'af_supreme'
-          const includes = PLAN_FAMILY_INCLUDES[plan.planFamily as PlanFamilyKey] ?? []
+          /*
+           * Spanish supplies its own bullets and description; English passes null
+           * and falls through to the catalog, so the English strings keep exactly
+           * one source and cannot drift into a translated second copy.
+           */
+          const family = plan.planFamily as PlanFamilyKey
+          const includes = c.planIncludes?.[family] ?? PLAN_FAMILY_INCLUDES[family] ?? []
+          const description = c.planDescriptions?.[family] ?? plan.description
+          /*
+           * The lane this visitor chose before signup sent them away. Matched on
+           * either sku so the mark survives whichever interval they were on.
+           */
+          const picked =
+            pickedSku != null &&
+            (plan.monthlySku === pickedSku || plan.yearlySku === pickedSku)
 
           return (
-            <section key={plan.planFamily} className="af-pr-card" data-best={best}>
-              {best ? <span className="af-pr-tab">Best value</span> : null}
+            <section
+              key={plan.planFamily}
+              className="af-pr-card"
+              data-best={best}
+              data-picked={picked || undefined}
+              data-testid={picked ? 'pricing-picked-card' : undefined}
+            >
+              {best ? <span className="af-pr-tab">{c.card.bestValue}</span> : null}
+              {picked ? <span className="af-pr-picked">{c.card.picked}</span> : null}
+              {/* Plan names are brands and are not translated. */}
               <h2 className="af-pr-name">{plan.name}</h2>
-              <p className="af-pr-desc">{plan.description}</p>
+              <p className="af-pr-desc">{description}</p>
 
               <div className="af-pr-price">
                 {price == null ? (
@@ -325,10 +419,12 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
               </div>
               <p className="af-pr-per">
                 {price == null
-                  ? `not sold ${interval === 'month' ? 'monthly' : 'yearly'}`
+                  ? interval === 'month'
+                    ? c.card.notSoldMonthly
+                    : c.card.notSoldYearly
                   : interval === 'month'
-                    ? 'per month'
-                    : 'per year'}
+                    ? c.card.perMonth
+                    : c.card.perYear}
               </p>
 
               {/*
@@ -339,8 +435,11 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
               */}
               {interval === 'year' && plan.savings ? (
                 <p className="af-pr-save">
-                  {money(plan.savings.effectiveMonthly)}/mo · save {money(plan.savings.savedUsd)} (
-                  {plan.savings.savedPct}%)
+                  {c.card.saveLine(
+                    money(plan.savings.effectiveMonthly),
+                    money(plan.savings.savedUsd),
+                    plan.savings.savedPct,
+                  )}
                 </p>
               ) : (
                 <p className="af-pr-save af-pr-save--empty" aria-hidden />
@@ -364,7 +463,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 disabled={!sku || blocked || pendingSku === sku}
                 onClick={() => sku && startCheckout(sku, 'subscription')}
               >
-                {pendingSku === sku ? 'Opening checkout…' : `Choose ${plan.name}`}
+                {pendingSku === sku ? c.card.opening : c.card.choose(plan.name)}
               </button>
 
               <hr className="af-pr-rule" />
@@ -400,11 +499,8 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         {yearlyLanes.length > 0 ? (
           <section className="af-pr-yearly">
             <div className="af-pr-tokens-head">
-              <h2 className="af-pr-h2">Yearly, if you&rsquo;d rather pay once</h2>
-              <p className="af-pr-sub af-pr-sub--tight">
-                The same plans billed annually. Every figure below is what the card is
-                charged.
-              </p>
+              <h2 className="af-pr-h2">{c.yearly.h2}</h2>
+              <p className="af-pr-sub af-pr-sub--tight">{c.yearly.sub}</p>
             </div>
             <div className="af-pr-yearly-grid">
               {yearlyLanes.map((plan) => (
@@ -413,7 +509,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                   <span className="af-pr-yearly-price">{money(plan.yearlyPrice as number)}</span>
                   {plan.savings ? (
                     <span className="af-pr-yearly-save af-num">
-                      {money(plan.savings.effectiveMonthly)}/mo · save {plan.savings.savedPct}%
+                      {c.yearly.line(money(plan.savings.effectiveMonthly), plan.savings.savedPct)}
                     </span>
                   ) : (
                     <span className="af-pr-yearly-save af-pr-yearly-save--empty" aria-hidden />
@@ -427,11 +523,8 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
       {/* ── Tokens ─────────────────────────────────────────────── */}
       <section className="af-pr-tokens">
         <div className="af-pr-tokens-head">
-          <h2 className="af-pr-h2">Or pay only for what you use</h2>
-          <p className="af-pr-sub af-pr-sub--tight">
-            Tokens are for managers who do not want a subscription. Every action shows its cost
-            before you click, and what you buy never expires into a monthly reset.
-          </p>
+          <h2 className="af-pr-h2">{c.tokens.h2}</h2>
+          <p className="af-pr-sub af-pr-sub--tight">{c.tokens.sub}</p>
         </div>
         <div className="af-pr-packs">
           {packs.map((pack) => (
@@ -439,7 +532,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
               <span className="af-pr-pack-tokens">
                 {pack.tokenAmount != null ? pack.tokenAmount.toLocaleString() : '—'}
               </span>
-              <span className="af-pr-pack-label">tokens</span>
+              <span className="af-pr-pack-label">{c.tokens.tokensLabel}</span>
               <span className="af-pr-pack-price">{money(pack.amountUsd)}</span>
               <button
                 type="button"
@@ -448,7 +541,7 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
                 disabled={blocked || pendingSku === pack.sku}
                 onClick={() => startCheckout(pack.sku, 'token_pack')}
               >
-                {pendingSku === pack.sku ? 'Opening…' : 'Buy'}
+                {pendingSku === pack.sku ? c.tokens.buying : c.tokens.buy}
               </button>
             </div>
           ))}
@@ -459,10 +552,10 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
       {/* ── FAQ ────────────────────────────────────────────────── */}
       <section className="af-pr-faq" aria-labelledby="af-pr-faq-h">
         <h2 className="af-pr-h2" id="af-pr-faq-h">
-          Before you decide
+          {c.faq.h2}
         </h2>
         <div className="af-pr-faq-grid">
-          {FAQS.map((f) => (
+          {c.faq.items.map((f) => (
             <article key={f.q} className="af-pr-faq-item">
               <h3 className="af-pr-faq-q">{f.q}</h3>
               <p className="af-pr-faq-a">{f.a}</p>
@@ -477,12 +570,29 @@ export function PricingV4({ plans, packs, savingsHeadline }: PricingV4Props) {
         the part a hesitating buyer actually needs.
       */}
       <footer className="af-pr-foot">
-        <p>
-          Checkout is handled by Stripe — we never see your card details. League dues and payouts
-          are handled on FanCred, separately from your AllFantasy subscription.
-        </p>
+        <p>{c.foot.stripe}</p>
+        {/*
+          ⚠ THE LEGAL LINKS ARE NEW, AND THIS PAGE TAKES MONEY WITHOUT THEM UNTIL NOW.
+          Measured on the live page: five links in total — `/`, `/login` and three
+          to `/signup` — and not one to Terms or Privacy, on the surface where a
+          visitor enters a card. The FAQ above even answers "Can I cancel?" with
+          "purchases follow the pricing shown at checkout and the applicable
+          refund policy" while linking to no such policy.
+
+          The nav's own comment claims it was added so a visitor could "reach
+          Terms or Privacy"; the nav it added contains neither. This is that fix,
+          actually made.
+
+          Routed through the legal-route resolver rather than hardcoded hrefs, so
+          these match the ones the signup form already shows.
+        */}
+        <nav className="af-pr-foot-legal" aria-label="Legal">
+          <Link href={getTermsUrl()}>{c.foot.terms}</Link>
+          <Link href={getPrivacyUrl()}>{c.foot.privacy}</Link>
+          <Link href={getNoGamblingPolicyUrl()}>{c.foot.noGambling}</Link>
+        </nav>
         <Link href="/signup" className="af-pr-foot-cta">
-          Start free
+          {c.foot.cta}
         </Link>
       </footer>
     </div>
