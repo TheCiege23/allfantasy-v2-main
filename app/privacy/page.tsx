@@ -1,15 +1,20 @@
 import Link from "next/link"
 import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from 'next'
+import { buildSeoMeta } from '@/lib/seo'
 
 interface PrivacyPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+// Routed through buildSeoMeta for a canonical and page-specific OpenGraph;
+// see app/terms/page.tsx for why a bare metadata object was not enough.
+export const metadata: Metadata = buildSeoMeta({
   title: "Privacy Policy | AllFantasy",
   description: "Privacy Policy for AllFantasy - AI-powered fantasy sports platform",
-}
+  canonicalPath: '/privacy',
+})
 
 export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
@@ -147,7 +152,11 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
       <section>
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">9. Changes and Contact</h2>
         <p>
-          We may update this policy; the &quot;Last updated&quot; date will change. Continued use constitutes acceptance. Contact: privacy@allfantasy.ai.
+          We may update this policy; the &quot;Last updated&quot; date will change. Continued use constitutes acceptance. Contact:{" "}
+          <a href="mailto:privacy@allfantasy.ai" className="text-cyan-400 hover:text-cyan-300">
+            privacy@allfantasy.ai
+          </a>
+          .
         </p>
       </section>
 

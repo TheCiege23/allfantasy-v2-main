@@ -66,6 +66,26 @@ export async function GET() {
     { path: 'pricing', priority: '0.5', changefreq: 'monthly' },
     // Spanish pricing — its own canonical and hreflang, so it needs its own entry.
     { path: 'es/pricing', priority: '0.5', changefreq: 'monthly' },
+    /*
+     * The legal and company pages. None of the eight was published here, which
+     * is the kind of omission that stays invisible until it is urgent: app
+     * store submissions, payment processors and OAuth provider reviews all go
+     * looking for a reachable Terms and Privacy, and "it is linked from the
+     * footer" is a weaker answer than "it is in the sitemap".
+     *
+     * Low priority on purpose. They should be indexed and findable by name, not
+     * competing with the product pages — and every one of them now declares its
+     * own canonical, so the `?from=signup&next=...` variants the signup form
+     * links to consolidate onto these addresses rather than multiplying.
+     */
+    { path: 'terms', priority: '0.3', changefreq: 'yearly' },
+    { path: 'privacy', priority: '0.3', changefreq: 'yearly' },
+    { path: 'disclaimer', priority: '0.3', changefreq: 'yearly' },
+    { path: 'no-gambling-policy', priority: '0.3', changefreq: 'yearly' },
+    { path: 'ai-transparency', priority: '0.3', changefreq: 'yearly' },
+    { path: 'data-deletion', priority: '0.3', changefreq: 'yearly' },
+    { path: 'mission', priority: '0.4', changefreq: 'monthly' },
+    { path: 'contact', priority: '0.4', changefreq: 'monthly' },
   ]
 
   const sportUrls = SPORT_SLUGS.map(

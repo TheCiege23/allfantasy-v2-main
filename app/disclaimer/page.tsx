@@ -2,15 +2,20 @@ import Link from "next/link"
 import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
 import { DISCLAIMER_PAGE_TITLE, DISCLAIMER_PAGE_SECTIONS } from "@/lib/legal/DisclaimerPageService"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from 'next'
+import { buildSeoMeta } from '@/lib/seo'
 
 interface DisclaimerPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+// Routed through buildSeoMeta for a canonical and page-specific OpenGraph;
+// see app/terms/page.tsx for why a bare metadata object was not enough.
+export const metadata: Metadata = buildSeoMeta({
   title: "Disclaimer | AllFantasy",
   description: "AllFantasy fantasy sports disclaimer - no gambling, no DFS, entertainment and management tools only",
-}
+  canonicalPath: '/disclaimer',
+})
 
 export default async function DisclaimerPage({ searchParams }: DisclaimerPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}

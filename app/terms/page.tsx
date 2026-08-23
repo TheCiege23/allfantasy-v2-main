@@ -2,15 +2,43 @@ import Link from "next/link"
 import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
 import { TERMS_PAGE_TITLE, TERMS_POLICY_CHECKLIST } from "@/lib/legal/TermsPageService"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from 'next'
+import { buildSeoMeta } from '@/lib/seo'
 
 interface TermsPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+/*
+ * ⚠ THESE PAGES DECLARED A BARE `{ title, description }` OBJECT, WHICH IS NOT THE
+ * SAME AS BEING CONFIGURED — three separate things went wrong because of it, and
+ * all eight pages sharing LegalPageShell had the identical problem.
+ *
+ * 1. NO CANONICAL. /terms and /privacy take `?from=signup&next=...` and are
+ *    LINKED that way from the signup form, target="_blank" and not nofollowed.
+ *    Measured: /terms, /terms?from=signup&next=%2Fdashboard and
+ *    ?next=%2Fpricing all render the same document under the same title with no
+ *    canonical between them — one indexable URL per distinct `next` value. This
+ *    is the duplicate-content problem 39ab1f8 fixed sitewide, still open here
+ *    through the query string.
+ *
+ * 2. THE OPENGRAPH TAGS WERE THE HOMEPAGE'S. A bare object sets `title` and
+ *    `description` only, so the root layout's og:title and og:description fell
+ *    through: sharing the Terms of Service anywhere that reads OpenGraph
+ *    previewed it as "draft smarter, analyze trades, and dominate their
+ *    leagues." Wrong on any page, and worst on the legal ones, which get shared
+ *    precisely when someone wants the terms.
+ *
+ * 3. NOT IN sitemap.xml. None of the eight was published. App stores, payment
+ *    processors and OAuth reviewers all go looking for these.
+ *
+ * buildSeoMeta fixes all three at once and is what the rest of the site uses.
+ */
+export const metadata: Metadata = buildSeoMeta({
   title: "Terms of Service | AllFantasy",
   description: "Terms of Service for AllFantasy - AI-powered fantasy sports platform",
-}
+  canonicalPath: '/terms',
+})
 
 export default async function TermsPage({ searchParams }: TermsPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
@@ -298,7 +326,19 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
         <div className="mt-3 p-4 bg-white/5 rounded-xl border border-white/10">
           <p className="font-semibold text-white">AllFantasy</p>
-          <p className="text-white/60">Email: legal@allfantasy.ai</p>
+          {/*
+            The Terms had no mailto anywhere on the page: this address, the one
+            thing a reader scrolls to section 24 in order to act on, was plain
+            text. The Privacy Policy already linked an incidental address in its
+            state-detection section, so the two pages disagreed about whether a
+            contact address is clickable.
+          */}
+          <p className="text-white/60">
+            Email:{" "}
+            <a href="mailto:legal@allfantasy.ai" className="text-cyan-400 hover:text-cyan-300">
+              legal@allfantasy.ai
+            </a>
+          </p>
         </div>
       </section>
 

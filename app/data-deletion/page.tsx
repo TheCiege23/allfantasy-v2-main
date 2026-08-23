@@ -1,15 +1,20 @@
 import Link from "next/link"
 import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from 'next'
+import { buildSeoMeta } from '@/lib/seo'
 
 interface DataDeletionPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+// Routed through buildSeoMeta for a canonical and page-specific OpenGraph;
+// see app/terms/page.tsx for why a bare metadata object was not enough.
+export const metadata: Metadata = buildSeoMeta({
   title: "Data Deletion | AllFantasy",
   description: "How to request deletion of your AllFantasy account data and connected service information.",
-}
+  canonicalPath: '/data-deletion',
+})
 
 export default async function DataDeletionPage({ searchParams }: DataDeletionPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}

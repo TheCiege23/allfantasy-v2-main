@@ -1,16 +1,21 @@
 import Link from "next/link"
 import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from 'next'
+import { buildSeoMeta } from '@/lib/seo'
 
 interface AiTransparencyPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+// Routed through buildSeoMeta for a canonical and page-specific OpenGraph;
+// see app/terms/page.tsx for why a bare metadata object was not enough.
+export const metadata: Metadata = buildSeoMeta({
   title: "AI Transparency | AllFantasy",
   description:
     "How AllFantasy uses AI: trade analysis, rankings, and recommendations are guidance, not guarantees. AI is always optional.",
-}
+  canonicalPath: '/ai-transparency',
+})
 
 export default async function AiTransparencyPage({ searchParams }: AiTransparencyPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}

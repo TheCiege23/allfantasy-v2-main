@@ -1,15 +1,20 @@
 import Link from "next/link"
 import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from 'next'
+import { buildSeoMeta } from '@/lib/seo'
 
 interface ContactPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+// Routed through buildSeoMeta for a canonical and page-specific OpenGraph;
+// see app/terms/page.tsx for why a bare metadata object was not enough.
+export const metadata: Metadata = buildSeoMeta({
   title: "Contact | AllFantasy",
   description: "Contact AllFantasy support, privacy, or legal teams.",
-}
+  canonicalPath: '/contact',
+})
 
 export default async function ContactPage({ searchParams }: ContactPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
