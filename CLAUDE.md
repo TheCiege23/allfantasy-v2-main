@@ -48,13 +48,27 @@ The intended architecture is that application code reads from Postgres and only
 ingestion/sync modules call a provider. `scripts/check-db-first-api-boundary.mjs`
 enforces this.
 
-**It is partially enforced today.** The guard's monitored-host list covers
-Sleeper, Yahoo, NewsAPI, sportsdata.io, the-odds-api, ESPN and TheSportsDB — but
-**not Rolling Insights**, which per `contracts/rolling-insights/INTEGRATION.md` is
-the scoring source. Direct RI calls therefore do not trip the guard.
+**Every provider is now monitored**, Rolling Insights included (added 2026-08-22,
+PR #584 — it was the last one missing, and the most exposed, because RI passes
+`RSC_token` as a query parameter, so a direct call from a request path leaks a
+credential into any URL that gets logged).
+
+**But the code does not comply yet, and the guard says so.** A full scan reports
+~111 violations across tracked source — roughly half Rolling Insights, half the
+providers that were already monitored. Nothing is allowlisted to hide them.
 
 Treat both contracts' "the app never calls the vendor" line as the **target**
 architecture, not a description of current state.
+
+Two consequences worth knowing before you touch provider code:
+
+- CI runs the guard in `--changed` mode, so `main` stays green and only a PR that
+  **touches** one of those files is stopped. That is the guard working, not a
+  regression you introduced — check whether the violation predates your change.
+- `db-first-exception:` silences a line, and is reserved for a **temporary**
+  violation with a migration plan. It is not a way past a pre-existing one, and
+  widening `ALLOWED_PATH_PATTERNS` is a deliberate per-file decision — the two
+  entries there are audited individually on purpose.
 
 ### The 304 rule
 

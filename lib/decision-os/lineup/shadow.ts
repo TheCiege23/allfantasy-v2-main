@@ -233,16 +233,59 @@ async function runValidatorParityShadow(
 }
 
 /**
+ * Take `cap` league ids starting at `offset`, wrapping at the end.
+ *
+ * Extracted so the wrap is testable on its own -- the caller runs a full shadow per league, which
+ * makes "which leagues did it pick" impossible to assert from outside.
+ *
+ * WRAPS rather than slicing off the end: an offset past the last league must still evaluate
+ * something. A plain `slice(offset, offset + cap)` returns EMPTY once the offset passes the list
+ * length, which for a scheduled sweep means it quietly stops doing any work at all -- the failure
+ * would look like "no leagues" rather than a bug.
+ *
+ * Negative and fractional offsets are normalised, so a caller cannot make this throw or return a
+ * hole by passing something odd.
+ */
+export function selectLeagueWindow(
+  leagueIds: readonly string[],
+  cap: number,
+  offset: number,
+): string[] {
+  const n = leagueIds.length
+  if (n === 0) return []
+  const take = Math.max(1, Math.trunc(cap) || 1)
+  if (n <= take) return [...leagueIds]
+  const start = (((Math.trunc(offset) || 0) % n) + n) % n
+  return Array.from({ length: take }, (_, k) => leagueIds[(start + k) % n])
+}
+
+/**
  * Shadow up to `maxLeagues` leagues from a user summary (cost-bounded). Never throws.
  */
 export async function runLineupShadowForSummary(
   userId: string,
   summary: LineupActionSummaryPayload,
-  opts: { maxLeagues?: number } = {},
+  opts: {
+    maxLeagues?: number
+    /**
+     * Where in the user's league list to start taking from, wrapping at the end. Default 0, so
+     * every existing caller is unchanged.
+     *
+     * WITHOUT THIS, `slice(0, cap)` always takes the SAME leagues. That is fine for a request
+     * serving one user, and useless for a scheduled sweep: production has one account owning 63 of
+     * the 69 leagues that have rosters, so a cap of 1 meant the sweep re-measured that account's
+     * first league on every tick, forever. It reported identical counts for hours because it was
+     * not sampling the population at all -- 4 leagues reachable out of 69.
+     *
+     * Rotating the START costs exactly what the cap already costs, and coverage accumulates over
+     * ticks instead of standing still.
+     */
+    leagueOffset?: number
+  } = {},
   deps: Partial<LineupShadowDeps> = {},
 ): Promise<LineupShadowResult[]> {
-  const cap = Math.max(1, opts.maxLeagues ?? 1)
-  const leagueIds = Array.from(new Set((summary.leagues ?? []).map((l) => l.leagueId))).slice(0, cap)
+  const all = Array.from(new Set((summary.leagues ?? []).map((l) => l.leagueId)))
+  const leagueIds = selectLeagueWindow(all, opts.maxLeagues ?? 1, opts.leagueOffset ?? 0)
   const out: LineupShadowResult[] = []
   for (const leagueId of leagueIds) {
     out.push(await runLineupShadow({ userId, leagueId, legacySummary: summary }, deps))

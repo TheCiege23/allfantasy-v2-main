@@ -3,3 +3,4 @@
  */
 
 export { parseJsonBodySafe, MAX_JSON_BODY_BYTES } from "./input"
+export { redactSecrets, redactAndCap } from "./redactSecrets"

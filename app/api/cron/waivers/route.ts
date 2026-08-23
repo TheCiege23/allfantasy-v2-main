@@ -4,10 +4,21 @@ import { writeAutomationAuditLog } from "@/lib/automation/audit"
 import { toErrorMessage } from "@/lib/automation/errors"
 import { discoverDueWaiverLeagues } from "@/lib/automation/jobs/waivers/discoverDueWaiverLeagues"
 import { processLeagueWaiversJob } from "@/lib/automation/jobs/waivers/processLeagueWaiversJob"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 120
+
+/**
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ *
+ * This job is CONDITIONAL: outside the season there are no waivers due, so it correctly
+ * discovers nothing and writes nothing. An output probe on automation_runs is therefore red
+ * for most of the year, which is why the sweep records a sync_job_runs row on EVERY scheduled
+ * fire — including the ones that find no work. The row is what proves the scheduler is alive.
+ */
+const JOB = "cron-waivers"
 
 /**
  * GET /api/cron/waivers
@@ -32,60 +43,60 @@ function authorizeCron(request: Request): boolean {
   return false
 }
 
-export async function GET(request: Request) {
-  if (!authorizeCron(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-  }
+type DiscoveredRows = Awaited<ReturnType<typeof discoverDueWaiverLeagues>>
 
-  const url = new URL(request.url)
-  const dryRun = url.searchParams.get("dryRun") === "true"
-  const leagueId = url.searchParams.get("leagueId") ?? undefined
-  const limitRaw = url.searchParams.get("limit")
-  const limit = limitRaw ? Math.min(100, Math.max(1, Number(limitRaw) || 25)) : 25
-
-  let discoveredRows: Awaited<ReturnType<typeof discoverDueWaiverLeagues>>
+/**
+ * Discovery, keeping the audit-log write and production message-redaction this route has always
+ * done. Returns a discriminated result rather than a Response so the sweep below can be wrapped
+ * in telemetry and still fail with exactly the body it used to.
+ */
+async function discoverOrExplain(args: { limit: number; leagueId?: string }): Promise<
+  { ok: true; rows: DiscoveredRows } | { ok: false; safe: string; detail: string }
+> {
   try {
-    discoveredRows = await discoverDueWaiverLeagues({
-      limit,
-      leagueId,
+    const rows = await discoverDueWaiverLeagues({
+      limit: args.limit,
+      leagueId: args.leagueId,
       now: new Date(),
     })
+    return { ok: true, rows }
   } catch (discoverError: unknown) {
-    const safe =
-      process.env.NODE_ENV === "production"
-        ? "discovery_failed"
-        : toErrorMessage(discoverError)
+    const detail = toErrorMessage(discoverError)
     await writeAutomationAuditLog({
       action: "waivers.cron.discovery_failed",
       entityType: "system",
       entityId: "cron",
-      message: toErrorMessage(discoverError),
+      message: detail,
     }).catch(() => {})
-    return NextResponse.json({ ok: false, error: safe }, { status: 500 })
+    return {
+      ok: false,
+      safe: process.env.NODE_ENV === "production" ? "discovery_failed" : detail,
+      detail,
+    }
   }
+}
 
-  if (dryRun) {
-    return NextResponse.json({
-      ok: true,
-      dryRun: true,
-      discovered: discoveredRows.length,
-      processed: 0,
-      failed: 0,
-      results: discoveredRows.map((d) => ({
-        leagueId: d.leagueId,
-        pendingClaimCount: d.pendingClaimCount,
-        scheduledFor: d.scheduledFor.toISOString(),
-        waiverType: d.waiverType,
-        metadata: d.metadata,
-      })),
-    })
+type SweepResult =
+  | { kind: "discovery_failed"; safe: string; detail: string }
+  | {
+      kind: "swept"
+      discovered: number
+      processed: number
+      failed: number
+      results: Array<Record<string, unknown>>
+    }
+
+async function sweepDueWaiverLeagues(args: { limit: number; leagueId?: string }): Promise<SweepResult> {
+  const discovered = await discoverOrExplain(args)
+  if (!discovered.ok) {
+    return { kind: "discovery_failed", safe: discovered.safe, detail: discovered.detail }
   }
 
   const results: Array<Record<string, unknown>> = []
   let processed = 0
   let failed = 0
 
-  for (const row of discoveredRows) {
+  for (const row of discovered.rows) {
     try {
       const out = await processLeagueWaiversJob({
         leagueId: row.leagueId,
@@ -122,12 +133,78 @@ export async function GET(request: Request) {
     }
   }
 
+  return { kind: "swept", discovered: discovered.rows.length, processed, failed, results }
+}
+
+export async function GET(request: Request) {
+  if (!authorizeCron(request)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const url = new URL(request.url)
+  const dryRun = url.searchParams.get("dryRun") === "true"
+  const leagueId = url.searchParams.get("leagueId") ?? undefined
+  const limitRaw = url.searchParams.get("limit")
+  const limit = limitRaw ? Math.min(100, Math.max(1, Number(limitRaw) || 25)) : 25
+
+  /*
+   * A dry run processes nothing and is only ever issued by hand. It deliberately records NO
+   * heartbeat: the freshness probe matches on job_name alone, so a row written here would make
+   * a manual smoke test indistinguishable from a scheduled fire and could hide a dead
+   * scheduler — the exact "a curl returning 200 proves nothing" failure the monitor exists to
+   * catch.
+   */
+  if (dryRun) {
+    const discovered = await discoverOrExplain({ limit, leagueId })
+    if (!discovered.ok) {
+      return NextResponse.json({ ok: false, error: discovered.safe }, { status: 500 })
+    }
+    return NextResponse.json({
+      ok: true,
+      dryRun: true,
+      discovered: discovered.rows.length,
+      processed: 0,
+      failed: 0,
+      results: discovered.rows.map((d) => ({
+        leagueId: d.leagueId,
+        pendingClaimCount: d.pendingClaimCount,
+        scheduledFor: d.scheduledFor.toISOString(),
+        waiverType: d.waiverType,
+        metadata: d.metadata,
+      })),
+    })
+  }
+
+  /*
+   * The wrap starts OUTSIDE discovery on purpose. `withSyncJobRun` writes its row before the
+   * body runs, so the heartbeat survives every outcome below — no leagues due, discovery
+   * blowing up, or the platform killing this function at maxDuration (which runs no user code
+   * and so can never close the row; the started_at it left behind is still a valid heartbeat).
+   */
+  const outcome = await withSyncJobRun(
+    { jobName: JOB, trigger: "cron" },
+    () => sweepDueWaiverLeagues({ limit, leagueId }),
+    (r) =>
+      r.kind === "discovery_failed"
+        ? { status: "failed", errors: [r.detail] }
+        : {
+            rowsRead: r.discovered,
+            rowsWritten: r.processed,
+            status: r.failed > 0 ? "partial" : "success",
+            metadata: { discovered: r.discovered, processed: r.processed, failed: r.failed },
+          },
+  )
+
+  if (outcome.kind === "discovery_failed") {
+    return NextResponse.json({ ok: false, error: outcome.safe }, { status: 500 })
+  }
+
   return NextResponse.json({
-    ok: failed === 0,
+    ok: outcome.failed === 0,
     dryRun: false,
-    discovered: discoveredRows.length,
-    processed,
-    failed,
-    results,
+    discovered: outcome.discovered,
+    processed: outcome.processed,
+    failed: outcome.failed,
+    results: outcome.results,
   })
 }

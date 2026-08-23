@@ -56,9 +56,14 @@ describe('lineup route Stage 1 wiring', () => {
   it('LIVE path builds decisionOs from all four required fields', () => {
     const liveIdx = routeSrc.indexOf('if (isLive) {')
     expect(liveIdx).toBeGreaterThan(-1)
-    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 900)
+    // Window widened from 900: mounting `attachSavedAnalysis` in the LIVE block pushed the
+    // fields below past 900 chars. A fixed byte window fails on INSERTION, not on regression,
+    // which is a poor way to assert structure -- but widening keeps the intent intact.
+    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toContain('decisionId: decision.decision_id')
-    expect(liveBlock).toContain('toTodayLineupCard(decision)')
+    // NOT toTodayLineupCard(decision): the card must render the decision AFTER
+    // attachSavedAnalysis, or the AI explanation never reaches it. Stronger than before.
+    expect(liveBlock).toContain('toTodayLineupCard(attached.decision)')
     expect(liveBlock).toContain('confidence: decision.confidence')
     expect(liveBlock).toContain('leagueId: first.leagueId')
   })
@@ -66,7 +71,10 @@ describe('lineup route Stage 1 wiring', () => {
   it('LIVE path is isolated in try/catch so a Decision OS failure never breaks the route', () => {
     const liveIdx = routeSrc.indexOf('if (isLive) {')
     expect(liveIdx).toBeGreaterThan(-1)
-    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 900)
+    // Window widened from 900: mounting `attachSavedAnalysis` in the LIVE block pushed the
+    // fields below past 900 chars. A fixed byte window fails on INSERTION, not on regression,
+    // which is a poor way to assert structure -- but widening keeps the intent intact.
+    const liveBlock = routeSrc.slice(liveIdx, liveIdx + 2600)
     expect(liveBlock).toMatch(/try\s*\{/)
     expect(liveBlock).toMatch(/catch/)
   })

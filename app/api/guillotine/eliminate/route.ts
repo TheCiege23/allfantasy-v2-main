@@ -9,9 +9,20 @@ import { isChopDay } from '@/lib/guillotine/sportConfig'
 import { postGuillotineEliminationToChat } from '@/lib/guillotine/guillotineChatPoster'
 import { queueLeagueEventVideo } from '@/lib/fantasy-media/EventVideoAutomation'
 import { getDraftUISettingsForLeague } from '@/lib/draft-defaults/DraftUISettingsResolver'
+import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+/**
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ *
+ * This job is CONDITIONAL twice over: it is weekly and in-season only, and even when it fires
+ * it no-ops unless today is the sport's chop day. guillotine_survival_logs has no timestamp
+ * column to probe either way, so the sweep records a run per fire instead — including every
+ * fire that chops nobody.
+ */
+const JOB = 'cron-guillotine-eliminate'
 
 async function queueGuillotineEliminationVideos(args: {
   actorUserId: string
@@ -169,11 +180,38 @@ export async function GET(req: NextRequest) {
   }
   const seasonId = req.nextUrl.searchParams?.get('seasonId')?.trim()
   const sp = Number(req.nextUrl.searchParams?.get('scoringPeriod'))
+  /*
+   * Targeted single-season run: only ever issued by hand (the scheduler calls this route with
+   * no query string). It deliberately records no heartbeat — the probe matches on job_name
+   * alone, so a row from here would make a manual re-check look like a scheduled fire.
+   */
   if (seasonId && Number.isFinite(sp)) {
     const out = await runEliminationCheck(seasonId, sp, { skipIfAlreadyProcessed: true })
     return NextResponse.json({ ok: true, seasonId, scoringPeriod: sp, ...out })
   }
-  return NextResponse.json(await sweepActiveGuillotineSeasons())
+  /*
+   * The scheduled sweep. The row lands before the sweep starts, so a fire on a non-chop day —
+   * or one the platform kills at maxDuration, after which no user code runs to close the row —
+   * still leaves the started_at the freshness probe reads.
+   */
+  const sweep = await withSyncJobRun(
+    { jobName: JOB, trigger: 'cron' },
+    () => sweepActiveGuillotineSeasons(),
+    (r) => {
+      const errors = r.results.filter((x) => x.error)
+      return {
+        rowsRead: r.swept,
+        rowsWritten: r.results.reduce((sum, x) => sum + (x.eliminated ?? 0), 0),
+        rowsSkipped: r.results.filter((x) => x.skipped).length,
+        // A season that failed to evaluate must not fail the whole sweep — the other seasons
+        // still ran, and next week retries this one.
+        status: errors.length > 0 ? 'partial' : 'success',
+        errors: errors.slice(0, 10).map((x) => `${x.seasonId}: ${x.error}`),
+        metadata: { swept: r.swept, seasonsWithErrors: errors.length },
+      }
+    },
+  )
+  return NextResponse.json(sweep)
 }
 
 export async function POST(req: NextRequest) {

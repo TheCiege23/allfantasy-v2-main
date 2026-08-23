@@ -544,8 +544,17 @@ export function ImportV4({
        * their behalf across dozens of leagues would be attesting to something they
        * never read. Those are surfaced for a one-by-one decision instead.
        */
+      /*
+       * ⚠ `res.ok` ALONE CANNOT MEAN "IMPORTED". The commit route 200s for an
+       * idempotent replay too — a league already imported short-circuits on the
+       * import-run key and never reaches the 409 path, which only fires for a
+       * league that has never completed a run. A production bulk run over 55
+       * leagues reported "33 imported" while importing exactly none of them.
+       */
       const status: BulkStatus = res.ok
-        ? 'done'
+        ? res.existed
+          ? 'exists'
+          : 'done'
         : res.status === 409
           ? 'exists'
           : res.requiresAttestation

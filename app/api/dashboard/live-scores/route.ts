@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
+import { getLivePageData } from '@/lib/live/liveScoresPage'
 import type { DashboardLiveScore } from '@/lib/types/liveScoring'
 
 const SLEEPER_BASE = 'https://api.sleeper.app/v1' // db-first-exception: live scoring reads the platform feed
@@ -131,10 +132,29 @@ async function sleeperLiveScores(userId: string): Promise<DashboardLiveScore[]> 
   return scores
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = session.user.id
+
+  /*
+   * `/live` polls THIS route rather than getting its own, for the same reason the
+   * play feed rides along below: the repo is at Vercel's hard 2048-route ceiling,
+   * and a new endpoint for a second view of the same live data is exactly the
+   * kind of route that is not worth one of the remaining slots.
+   *
+   * The default response shape is untouched — the dashboard widget's caller does
+   * not pass `view`, so it still receives `{ scores, plays }` exactly as before.
+   */
+  const view = request.nextUrl.searchParams.get('view')
+  if (view === 'live') {
+    const data = await getLivePageData({
+      userId,
+      sport: request.nextUrl.searchParams.get('sport'),
+      scope: request.nextUrl.searchParams.get('scope') === 'all' ? 'all' : 'my',
+    })
+    return NextResponse.json(data)
+  }
 
   // Find all active redraft seasons where the user has a roster.
   const seasons = await prisma.redraftSeason.findMany({

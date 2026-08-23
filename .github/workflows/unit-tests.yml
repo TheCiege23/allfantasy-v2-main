@@ -1,0 +1,100 @@
+name: Unit tests
+
+# WHY THIS EXISTS
+# Vitest has never run in CI. 1,609 unit test files, and not one of them could
+# block a merge. On 2026-08-20 five tests sat red on main across three separate
+# merged PRs (#545, #554) and nothing anywhere reported it -- the failures were
+# only found by running the suite by hand while chasing an unrelated bug.
+#
+# WHAT THIS ENFORCES: A RATCHET, NOT A GREEN SUITE.
+#
+# The first CI run measured the truth: ~110 test files and ~300 tests are ALREADY
+# failing on main. Requiring a green suite would block every merge in the repo,
+# which is the trap playwright.yml documents for its red core shards. So this
+# follows ts-error-ratchet.yml instead -- allowlist the known-bad set in
+# scripts/vitest-failure-baseline.json, and fail only when a file that was
+# PASSING starts failing. The debt cannot grow; it can only be driven down.
+#
+# ⚠ THIS JOB IS NOT A REQUIRED CHECK YET.
+#
+# The standard for adding a required context is written in playwright.yml and it
+# is a good one: the four required Playwright lanes were "measured green on five
+# consecutive completed runs across main and four different feature branches
+# before being added". The same doc records what happens otherwise -- the three
+# core shards were required while red and "would block every merge in the repo
+# rather than protect anything".
+#
+# This suite's health in CI is UNKNOWN. It has never run here, it is ~1,600
+# files, and a local full run did not finish inside ten minutes. So it lands
+# advisory, and gets promoted only after it has been observed green on several
+# consecutive completed runs.
+#
+# To promote it, add these four contexts (all of them -- a shard left out is a
+# hole) via the API, never by editing a comment:
+#
+#   gh api repos/OWNER/REPO/branches/main/protection/required_status_checks
+#
+#   Unit tests (1/4)
+#   Unit tests (2/4)
+#   Unit tests (3/4)
+#   Unit tests (4/4)
+#
+# ⚠ A required context that never reports blocks every PR in the repo, forever.
+# If you change the shard count, the context NAMES change with it, and the old
+# names become un-reportable. Update branch protection in the same change.
+
+on:
+  pull_request:
+    # No `branches:` filter, matching ts-error-ratchet.yml: filtering PR runs to
+    # base main silently skipped every stacked PR, so those merged uncovered.
+  push:
+    branches: [main]
+
+# A superseded run tells you nothing except that you pushed again. Playwright
+# already does this; without it a slow suite queues behind its own dead runs.
+concurrency:
+  group: unit-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    # Sharded because the suite is large. Each shard is an independent check
+    # context, so a promotion has to list all four.
+    name: Unit tests (${{ matrix.shard }}/4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      # One shard failing must not cancel the others: the first CI run of this
+      # suite is a measurement, and a partial picture is worth much less.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Vitest ratchet, shard ${{ matrix.shard }} of 4
+        # The ratchet -- not bare vitest. ~110 files are already failing on main, so a bare run
+        # fails every time and protects nothing. This fails only when a file that was PASSING
+        # starts failing. Integration tests are excluded inside the script: 10 of them need a live
+        # Postgres, and a unit gate that needs a database fails for reasons unrelated to the code
+        # under review.
+        run: node scripts/vitest-ratchet.mjs --shard=${{ matrix.shard }}/4
+
+      - name: Upload this shard's result
+        # ALWAYS, including on failure: this file is how the baseline gets rebuilt. Scraping the
+        # job log was tried and is not reliable -- GitHub truncated one shard's log before its
+        # summary, which would have produced a baseline missing a quarter of its entries. Every
+        # missing entry then reads as a fresh regression and blocks merges.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitest-ratchet-shard-${{ matrix.shard }}
+          path: vitest-ratchet-result.json
+          if-no-files-found: warn
