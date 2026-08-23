@@ -40,7 +40,44 @@ export type EspnInjurySyncResult = {
   written: number
   skippedNoPlayer: number
   errors: string[]
+  /**
+   * True when the provider could not be attempted at all, as distinct from attempted-and-failed.
+   * A caller must not treat this as a transient error to retry — nothing on our side changes it.
+   */
+  unavailable?: boolean
 }
+
+/**
+ * ⛔ `site.api.espn.com` IS BLOCKED AT THE EDGE. Verified 2026-08-22.
+ *
+ * Every path on that host returns `403 Access Denied` from `AkamaiGHost` — scoreboard, news,
+ * teams and injuries alike — so this is a HOST-level block, not a moved endpoint. Reproduced from
+ * two unrelated networks (a local machine and the Railway production egress), which rules out an
+ * IP-specific ban, and a full browser header set including `referer` and `origin` changes nothing.
+ * Akamai is fingerprinting the client below the HTTP layer; browsers pass where fetch and curl do
+ * not.
+ *
+ * WE DO NOT TRY TO DEFEAT IT. Spoofing bot detection would be circumventing an access control ESPN
+ * deliberately put up, and it would break again the moment they tune it.
+ *
+ * WHY THE CALL IS SKIPPED RATHER THAN LEFT TO FAIL. Attempting it cost ~20s of `AbortSignal.timeout`
+ * per cron run — most of a 26s invocation — and surfaced as `espn responded 403`, which reads like
+ * a transient fault somebody should retry. It is not.
+ *
+ * NOT MIGRATED to `sports.core.api.espn.com`, which does still serve: it has no league-wide
+ * injuries endpoint, and the per-team one returns only `$ref` links — 70 for a single NFL team, so
+ * roughly 2,240 requests to cover the league. That does not fit a cron, and the host could be
+ * locked down next.
+ *
+ * IMPACT, so nobody re-enables this expecting it to work: NFL injuries are unaffected, because
+ * Rolling Insights supplies them (395 rows on the run that surfaced this). NCAAF has NO remaining
+ * source — ESPN was the only one. That gap is reported honestly by the caller rather than dressed
+ * up as a failed fetch.
+ *
+ * TO RE-ENABLE: flip this to false and run the job once. If ESPN has lifted the block it works
+ * unchanged; nothing else here was removed.
+ */
+export const ESPN_SITE_API_BLOCKED = true
 
 const str = (v: unknown): string | null => {
   if (v == null) return null
@@ -86,6 +123,14 @@ export async function syncEspnInjuriesToDb(opts: {
 }): Promise<EspnInjurySyncResult> {
   const sport = opts.sport
   const result: EspnInjurySyncResult = { sport, fetched: 0, written: 0, skippedNoPlayer: 0, errors: [] }
+
+  // Skipped, not attempted-and-failed — see ESPN_SITE_API_BLOCKED. Returning before the fetch is
+  // what removes ~20s of certain timeout from every run of this cron.
+  if (ESPN_SITE_API_BLOCKED) {
+    result.unavailable = true
+    result.errors.push('espn site.api unavailable: blocked at the Akamai edge (403 on every path), not retried')
+    return result
+  }
 
   const path = ESPN_PATH[sport]
   if (!path) {

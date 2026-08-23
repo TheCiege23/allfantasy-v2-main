@@ -96,6 +96,10 @@ async function runOneSport(url: URL, sport: Sport) {
         fetched: 0,
         written: 0,
         skippedNoPlayer: 0,
+        // A THROW is attempted-and-failed, so this stays false: it must keep counting as a real
+        // failure. Only the deliberate `unavailable` short-circuit inside the module earns the
+        // carve-out below, never an exception we happened to catch here.
+        unavailable: false,
         errors: [e instanceof Error ? e.message : String(e)],
       })),
     ])
@@ -110,16 +114,48 @@ async function runOneSport(url: URL, sport: Sport) {
     // Either feed landing rows counts as success. For NCAAF, ESPN is the only
     // one that can, and reporting failure because RI wrote nothing would be
     // reporting a fact about the wrong provider.
-    const failed = result.written === 0 && espn.written === 0
+    //
+    // ONE CARVE-OUT, and it deliberately does not weaken the rule above: a sport whose every
+    // provider is UNAVAILABLE has not failed to do its job, it has no job it can do. ESPN's
+    // site.api is blocked at the Akamai edge (see ESPN_SITE_API_BLOCKED), and it was NCAAF's only
+    // source — so NCAAF would otherwise 500 on this cron every hour, forever, for a condition no
+    // amount of retrying can change. That is how a red signal stops being read.
+    //
+    // The distinction is availability, NOT emptiness. A sport with a working provider that writes
+    // zero rows still fails, exactly as before — which is the case the comment above was written
+    // for. `providerUnavailable` is reported in the body so the gap stays visible instead of
+    // becoming a silent success.
+    const availableProviders =
+      (sport === 'NFL' ? 1 : 0) + (espn.unavailable ? 0 : 1)
+    const wroteNothing = result.written === 0 && espn.written === 0
+    const providerUnavailable = availableProviders === 0
+    const failed = wroteNothing && !providerUnavailable
     return {
       body: {
-        ok: !failed,
+        // `ok` reports whether DATA LANDED; `failed` drives the HTTP status and means "retry this".
+        // They come apart in exactly one case: no provider was available. Then ok:false (nothing
+        // was written, and saying otherwise would be the false green this handler already has a
+        // comment about) with HTTP 200 (retrying cannot help, and an hourly red teaches everyone
+        // to ignore it). `providerUnavailable` in the payload is what keeps that combination
+        // unambiguous rather than looking like the masking bug it superficially resembles.
+        ok: !failed && !providerUnavailable,
         sport,
         season: season ?? "current",
         source: sport === 'NFL' ? "rolling_insights+espn" : "espn",
         synced: result.written + espn.written,
         fetched: result.fetched + espn.fetched,
-        espn: { fetched: espn.fetched, written: espn.written, errors: espn.errors.slice(0, 3) },
+        espn: {
+          fetched: espn.fetched,
+          written: espn.written,
+          unavailable: espn.unavailable ?? false,
+          errors: espn.errors.slice(0, 3),
+        },
+        /**
+         * Set when NOTHING could be attempted for this sport. Distinct from `ok:false`, which
+         * means a provider was reachable and produced nothing. Kept in the payload so a coverage
+         * gap is visible on every run rather than inferred from a missing number.
+         */
+        providerUnavailable: providerUnavailable || undefined,
         /**
          * RI ships no status field — designations are parsed from prose. This
          * counter is the parser-coverage signal: a rising number means the feed
