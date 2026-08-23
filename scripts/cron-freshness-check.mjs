@@ -91,7 +91,20 @@ export const PROBES = {
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   '/api/cron/sync-player-images?sport=all': { table: 'sports_core_player_images', column: 'fetched_at' },
   '/api/cron/compute-projections': { table: 'AFProjectionSnapshot', column: 'computedAt' },
-  '/api/cron/recompute-allfantasy-adp': { table: 'allfantasy_adp_snapshots', column: 'createdAt' },
+  /*
+   * ⚠ `lastUpdatedAt`, NOT `createdAt`. This job UPSERTS, so `createdAt` freezes at first insert
+   * and never moves again no matter how many times the row is refreshed.
+   *
+   * Measured cost of getting it wrong: the monitor reported this job 32.8 days stale and I went
+   * looking for a month-old failure. `lastUpdatedAt` was 2.8 days — exactly the scheduler outage,
+   * same as everything else. The job was never broken.
+   *
+   * THE GENERAL RULE: probe a WRITE-TIME column. `createdAt` is only a freshness signal on an
+   * append-only table (`adp_data` and `player_news` below are genuinely append-only, which is why
+   * they keep it). On anything that upserts it measures the wrong event entirely, and it fails in
+   * the direction that wastes the most time — a false alarm on a healthy job.
+   */
+  '/api/cron/recompute-allfantasy-adp': { table: 'allfantasy_adp_snapshots', column: 'lastUpdatedAt' },
   // runAdpImporter writes prisma.adpDataRecord -> adp_data (82k rows). adp_refresh_runs holds 2
   // rows, newest 118 days old, and is not the job's output.
   '/api/cron/adp-refresh': { table: 'adp_data', column: 'created_at' },
@@ -188,9 +201,23 @@ export const NO_PROBE = {
   '/api/cron/trade-weekly-recalibration': 'TradeLearningStats holds ZERO rows -- this job has never produced output on any scheduler. Investigate before probing.',
 }
 
+/**
+ * Fallback order when a probe names no explicit column. WRITE-TIME columns first; `createdAt` is
+ * last because on an upsert table it freezes at first insert and never moves again.
+ *
+ * ⚠ `lastUpdatedAt` is in here because a real table used exactly that spelling and the list
+ * missed it — `allfantasy_adp_snapshots` would have fallen through to `createdAt` and reported a
+ * healthy job as a month stale. Add spellings when you meet them.
+ *
+ * ⚠ NOTHING THAT DESCRIBES THE WORLD RATHER THAN OUR WRITE. `expiresAt`, `startTime`,
+ * `forecastForTime`, `reportDate`, `occurredAt` are all timestamps on these tables and all wrong:
+ * the first three are usually in the FUTURE, and event-time columns like `occurredAt` would mask a
+ * dead ingester the moment a provider backfills. Freshness means "when did WE last write this".
+ */
 const FRESHNESS_COLUMN_PREFERENCE = [
   'fetchedAt', 'fetched_at', 'capturedAt', 'captured_at', 'computedAt', 'computed_at',
-  'lastUpdated', 'last_updated', 'updatedAt', 'updated_at', 'createdAt', 'created_at',
+  'lastUpdatedAt', 'last_updated_at', 'lastUpdated', 'last_updated',
+  'updatedAt', 'updated_at', 'createdAt', 'created_at',
 ]
 
 // ───────────────────────────── cron cadence ──────────────────────────────
