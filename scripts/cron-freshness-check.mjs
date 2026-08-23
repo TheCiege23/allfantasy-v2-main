@@ -128,6 +128,33 @@ export const PROBES = {
   '/api/cron/morning-briefing': { heartbeat: 'cron-morning-briefing' },
   '/api/cron/import-nfl-team-defense': { heartbeat: 'cron-nfl-team-defense-import' },
   '/api/cron/weekly-awards': { heartbeat: 'cron-weekly-awards' },
+
+  // The eight conditional jobs that used to sit in NO_PROBE as "Needs withSyncJobRun". Each
+  // handler now records a run row on every SCHEDULED fire, the no-work ones included -- which is
+  // the whole point, because no-work IS the normal outcome for all eight. Manual and dry-run
+  // paths on these routes deliberately record nothing: the probe matches on job_name alone, so a
+  // row written by hand would be indistinguishable from a scheduled fire and could hide a dead
+  // scheduler.
+  //
+  // Until each job next fires these read CONFIG ("no sync_job_runs rows for job_name ..."), not
+  // STALE -- a heartbeat cannot backfill, and a job_name with zero rows is deliberately reported
+  // as a registry problem rather than a dead scheduler. For a newly instrumented job that state
+  // is expected and clears itself on the first fire; for the four FAST-tier entries here
+  // (waivers, score-sync, draft-tick, legacy-import-drain) it will persist until the fast tier
+  // has a scheduler again, exactly like the fast-tier output probes above.
+  '/api/cron/waivers': { heartbeat: 'cron-waivers' },
+  '/api/redraft/score-sync': { heartbeat: 'cron-redraft-score-sync' },
+  '/api/redraft/waiver-process': { heartbeat: 'cron-redraft-waiver-process' },
+  '/api/guillotine/eliminate': { heartbeat: 'cron-guillotine-eliminate' },
+  '/api/tournament/automation': { heartbeat: 'cron-tournament-automation' },
+  // draft-tick WAS instrumented, but only below its DRAFT_TICK_CRON_ENABLED early-return -- so
+  // the default path (flag off) recorded nothing and the job looked identical whether it ran
+  // every minute or had not run since March. The wrap now spans the whole tick.
+  '/api/cron/draft-tick': { heartbeat: 'cron-draft-tick' },
+  '/api/cron/legacy-import-drain': { heartbeat: 'cron-legacy-import-drain' },
+  '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': {
+    heartbeat: 'cron-playoff-schedule-refresh',
+  },
 }
 
 /** Where heartbeats are read from. One row per run, whether or not the run found work to do. */
@@ -146,22 +173,15 @@ export const NO_PROBE = {
   '/api/cron/import-standings': 'the `standings` table has never held a row -- find where this job actually writes before probing it',
   '/api/cron/import-schedules?source=tsdb-only': '`fantasy_schedule_games` has never held a row; the tsdb path may be dead',
 
-  // ── CONDITIONAL: correctly writes nothing most of the year ──
-  // Every one of these needs a HEARTBEAT, not an output probe, and none of them records one today.
-  // The fix is the same for all: wrap the handler in withSyncJobRun so it logs a sync_job_runs row
-  // per run, then move the entry up into PROBES as `{ heartbeat: '<job_name>' }`. Until then an
-  // outage in these is genuinely invisible, and saying so is the point of this list.
-  '/api/cron/waivers': 'CONDITIONAL -- no waivers to process outside the season; automation_runs is 63d old and that is expected in August. Needs withSyncJobRun.',
-  '/api/redraft/score-sync': 'CONDITIONAL -- no games to score in preseason, and redraft_matchups has NO timestamp column at all. Needs withSyncJobRun.',
-  '/api/redraft/waiver-process': 'CONDITIONAL -- redraft_waiver_claims holds 1 row, 48d old. Needs withSyncJobRun.',
-  '/api/guillotine/eliminate': 'CONDITIONAL -- weekly in-season only, and guillotine_survival_logs has NO timestamp column. Needs withSyncJobRun.',
-  '/api/tournament/automation': 'CONDITIONAL -- only acts on active tournaments; tournament_audit_logs holds 1 row. Needs withSyncJobRun.',
-  '/api/cron/draft-tick': 'CONDITIONAL -- only advances autopick during a LIVE draft, so draft_sessions goes stale for most of the season. Needs withSyncJobRun.',
-  '/api/cron/legacy-import-drain': 'CONDITIONAL -- only runs work when a user has queued an import; LegacyImportJob is 33d old. Needs withSyncJobRun.',
-  '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': 'CONDITIONAL + SHARED -- playoffs only, and it writes SportsGame, which import-scores refreshes every 2 minutes. Needs withSyncJobRun.',
+  // The eight CONDITIONAL jobs that used to live here -- waivers, redraft score-sync and
+  // waiver-process, guillotine eliminate, tournament automation, draft-tick, legacy-import-drain
+  // and the playoff schedule refresh -- are now instrumented with withSyncJobRun and have moved
+  // up into PROBES as heartbeats. They are the reason heartbeat probes exist: every one of them
+  // correctly writes nothing for most of the year, so an output probe on them is red for
+  // two-thirds of the season and trains everyone to ignore the alarm.
 
   // ── NO DURABLE OUTPUT AT ALL ──
-  '/api/cron/alert-sweep': 'WRITES NOTHING -- reads webPushSubscription and sends push notifications. There is no table to probe; only a heartbeat could ever cover it.',
+  '/api/cron/alert-sweep': 'WRITES NOTHING -- reads webPushSubscription and sends push notifications. There is no table to probe; only a heartbeat could ever cover it, and the handler does not record one yet.',
   '/api/cron/draft-pool-prewarm': 'WRITES NOTHING DURABLE -- warms a cache. The `draft_pool_cache_warm` job_name exists in sync_job_runs but has 0 cron-triggered runs, so the cron path does not record one.',
 
   // ── HAS NEVER PRODUCED ANYTHING ──

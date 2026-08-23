@@ -3,10 +3,21 @@ import { z } from "zod"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
 import { refreshPlayoffScheduleMetadataForChallenge } from "@/lib/playoffs/playoffSeriesSyncService"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
+
+/**
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ *
+ * This job is CONDITIONAL and its output is SHARED: it only acts during the NBA/NHL playoffs,
+ * and what it writes lands in SportsGame, which import-scores refreshes every two minutes — so
+ * an output probe would read as fresh year-round no matter what this job did. A per-fire run
+ * row is the only honest signal, including the (usual) fires that find no active challenge.
+ */
+const JOB = "cron-playoff-schedule-refresh"
 
 const booleanLike = z.preprocess((value) => {
   if (typeof value === "string") return value === "true" || value === "1"
@@ -44,6 +55,50 @@ function sanitizeErrorMessage(error: unknown) {
     .replace(/(key=)[^&\s]+/gi, "$1[redacted]")
 }
 
+type RefreshInput = z.infer<typeof querySchema>
+
+/**
+ * The sweep across every active challenge, as plain totals, so the scheduled path can be
+ * wrapped in telemetry without changing the response body a byte.
+ */
+async function refreshActiveChallenges(input: RefreshInput) {
+  const challengeIds = await getActivePlayoffChallengeIds(input.sport)
+  const warnings: string[] = []
+  let updatedSeries = 0
+  let scheduleGamesSeen = 0
+  let scheduleGamesMatched = 0
+  let liveGamesMatched = 0
+  let broadcastFieldsFound = 0
+  let venueFieldsFound = 0
+
+  for (const challengeId of challengeIds) {
+    const result = await refreshPlayoffScheduleMetadataForChallenge({
+      challengeId,
+      provider: input.provider,
+      windowDays: input.windowDays,
+      dryRun: input.dryRun,
+    })
+    updatedSeries += result.updatedSeries
+    scheduleGamesSeen += result.scheduleGamesSeen
+    scheduleGamesMatched += result.scheduleGamesMatched
+    liveGamesMatched += result.liveGamesMatched
+    broadcastFieldsFound += result.broadcastFieldsFound
+    venueFieldsFound += result.venueFieldsFound
+    warnings.push(...result.warnings.map((warning) => `${challengeId}: ${warning}`))
+  }
+
+  return {
+    challengeIds,
+    warnings,
+    updatedSeries,
+    scheduleGamesSeen,
+    scheduleGamesMatched,
+    liveGamesMatched,
+    broadcastFieldsFound,
+    venueFieldsFound,
+  }
+}
+
 export async function GET(request: NextRequest) {
   if (!isPlayoffCronAuthorized(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
@@ -58,30 +113,45 @@ export async function GET(request: NextRequest) {
   const syncedAt = new Date().toISOString()
 
   try {
-    const challengeIds = await getActivePlayoffChallengeIds(input.sport)
-    const warnings: string[] = []
-    let updatedSeries = 0
-    let scheduleGamesSeen = 0
-    let scheduleGamesMatched = 0
-    let liveGamesMatched = 0
-    let broadcastFieldsFound = 0
-    let venueFieldsFound = 0
-
-    for (const challengeId of challengeIds) {
-      const result = await refreshPlayoffScheduleMetadataForChallenge({
-        challengeId,
-        provider: input.provider,
-        windowDays: input.windowDays,
-        dryRun: input.dryRun,
-      })
-      updatedSeries += result.updatedSeries
-      scheduleGamesSeen += result.scheduleGamesSeen
-      scheduleGamesMatched += result.scheduleGamesMatched
-      liveGamesMatched += result.liveGamesMatched
-      broadcastFieldsFound += result.broadcastFieldsFound
-      venueFieldsFound += result.venueFieldsFound
-      warnings.push(...result.warnings.map((warning) => `${challengeId}: ${warning}`))
-    }
+    const sweep = () => refreshActiveChallenges(input)
+    /*
+     * A dry run changes nothing and is only ever issued by hand, so it deliberately records no
+     * heartbeat: the probe matches on job_name alone, and a row written here would make a
+     * manual check indistinguishable from a scheduled fire.
+     *
+     * Every real fire records one. The row is written before the sweep starts, so a playoff-less
+     * night with no active challenge still counts as a run — as does one the platform kills at
+     * maxDuration, after which no user code runs to close the row and only started_at survives.
+     */
+    const {
+      challengeIds,
+      warnings,
+      updatedSeries,
+      scheduleGamesSeen,
+      scheduleGamesMatched,
+      liveGamesMatched,
+      broadcastFieldsFound,
+      venueFieldsFound,
+    } = input.dryRun
+      ? await sweep()
+      : await withSyncJobRun(
+          { jobName: JOB, trigger: "cron", sport: input.sport, provider: input.provider },
+          sweep,
+          (r) => ({
+            rowsRead: r.scheduleGamesSeen,
+            rowsWritten: r.updatedSeries,
+            rowsSkipped: r.scheduleGamesSeen - r.scheduleGamesMatched,
+            // Per-challenge warnings are collected, not thrown — the sweep still completed.
+            status: r.warnings.length > 0 ? "partial" : "success",
+            warnings: r.warnings.slice(0, 25),
+            metadata: {
+              challengeCount: r.challengeIds.length,
+              updatedSeries: r.updatedSeries,
+              scheduleGamesMatched: r.scheduleGamesMatched,
+              liveGamesMatched: r.liveGamesMatched,
+            },
+          }),
+        )
 
     return NextResponse.json({
       ok: true,

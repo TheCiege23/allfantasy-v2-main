@@ -10,9 +10,20 @@ import { getZombieLeagueConfig } from '@/lib/zombie/ZombieLeagueConfig'
 import { syncPlayerWeeklyScoresForRedraftSeason } from '@/lib/redraft/playerWeeklyScoreService'
 import { recalculateMatchupsForSeasonWeek } from '@/lib/redraft/scoringEngine'
 import { updateStandings } from '@/lib/redraft/standingsEngine'
+import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
+
+/**
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ *
+ * This job is CONDITIONAL: in preseason there are no games to score, and redraft_matchups has
+ * no timestamp column to probe in any case. Only the SCHEDULED GET records a run — the admin
+ * POST below is a manual invocation, and letting it refresh the heartbeat would mask a dead
+ * scheduler.
+ */
+const JOB = 'cron-redraft-score-sync'
 
 type ScoreSyncBody = {
   leagueId?: string
@@ -178,5 +189,30 @@ export async function GET(request: Request) {
   if (!requireCronAuth(request as unknown as NextRequest, 'CRON_SECRET')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  return NextResponse.json(await runLegacyAutomationBridge())
+  /*
+   * `withSyncJobRun` writes its row before the bridge runs, so the heartbeat is recorded on
+   * every scheduled fire — including the preseason ones that legitimately find nothing to
+   * score, and including a run the platform kills at maxDuration (no user code runs after a
+   * kill, so the row never closes; the started_at it already wrote is still the heartbeat).
+   */
+  const bridge = await withSyncJobRun(
+    { jobName: JOB, trigger: 'cron', sport: 'NFL' },
+    () => runLegacyAutomationBridge(),
+    (r) => ({
+      rowsWritten: r.matchupsRecalculated,
+      // Survivor/zombie leagues each report their own failures without throwing; a partial
+      // sweep is a degraded run, not a dead one.
+      status:
+        r.survivorBridge.failed > 0 || r.zombieResolutionFailed > 0 ? 'partial' : 'success',
+      metadata: {
+        matchupsRecalculated: r.matchupsRecalculated,
+        survivorSynced: r.survivorBridge.synced,
+        survivorFailed: r.survivorBridge.failed,
+        zombieResolutionAttempts: r.zombieResolutionAttempts,
+        zombieResolutionFailed: r.zombieResolutionFailed,
+        c2cLeaguesSynced: r.c2cLeaguesSynced,
+      },
+    }),
+  )
+  return NextResponse.json(bridge)
 }
