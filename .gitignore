@@ -100,6 +100,19 @@ spotify-test-results-*.txt
 spotify-final-results.txt
 .tmp/
 
+# Scratch files named by their own prefix. 38 of these were tracked -- one-off
+# .cjs debug scripts, .json data dumps from backfills, Playwright output, a
+# screenshot -- none referenced by any tooling, and one (tmp-ri-probe.js) was an
+# ad-hoc provider probe of the kind CLAUDE.md forbids. They were untracked in the
+# same commit that added these lines; without the patterns the next one just
+# lands again.
+#
+# NOT anchored to the repo root on purpose: `tmp-` means temporary wherever it
+# sits, and scripts/tmp-survivor-preset-check.ts proved the root-only version
+# leaks. Anything meant to last should not be named `tmp-`.
+tmp-*
+.tmp-*
+
 # Local build and background-task locks; regenerated per session.
 .next-build.lock
 .claude/scheduled_tasks.lock
