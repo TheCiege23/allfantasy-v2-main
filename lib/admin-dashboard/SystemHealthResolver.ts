@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma"
 import type { SystemHealthStatus } from "./types"
 import { getSportsAlertLatency } from "./SportsAlertLatencyResolver"
 import { getTheAudioDbApiKeyOrFallback, getTheSportsDbApiKeyOrFallback } from '@/lib/env/sports-media-keys'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 const API_KEYS = ["sleeper", "yahoo", "mfl", "fantrax", "fantasycalc", "thesportsdb", "theaudiodb", "espn", "openai", "grok"] as const
 const ENDPOINTS: Record<string, string> = {
@@ -17,7 +18,7 @@ const ENDPOINTS: Record<string, string> = {
   fantasycalc: "https://api.fantasycalc.com/values/current?isDynasty=true&numQbs=1&numTeams=12&ppr=1",
   thesportsdb: `https://www.thesportsdb.com/api/v1/json/${getTheSportsDbApiKeyOrFallback('123')}/all_leagues.php`,
   theaudiodb: `https://www.theaudiodb.com/api/v1/json/${getTheAudioDbApiKeyOrFallback('2')}/album.php?i=112024`,
-  espn: "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard", // db-first-exception: live provider health probe
+  espn: `${ESPN_SITE_API_BASE}/football/nfl/scoreboard`, // db-first-exception: live provider health probe
   openai: "https://api.openai.com/v1/models",
   grok: "https://api.x.ai/v1/models",
 }

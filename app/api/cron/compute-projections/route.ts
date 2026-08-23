@@ -67,11 +67,36 @@ async function handle(req: NextRequest) {
     const refusalRate = considered > 0 ? r.refused / considered : 1
     const zeroRows = r.written === 0
     const tooManyRefusals = refusalRate > REFUSAL_RATE_FAILURE_THRESHOLD
-    const failed = zeroRows || tooManyRefusals
+
+    /*
+     * ONE CARVE-OUT: the source season has not been played yet.
+     *
+     * This job projects targetSeason from sourceSeason, and in the months before a season starts
+     * EVERY player refuses with `no_games_played` — there is no game data to project from. That is
+     * the calendar, not a fault, and it made the cron 500 every day through the offseason. An
+     * hourly-or-daily red for a condition that resolves itself in September is a red nobody reads
+     * by the time it means something.
+     *
+     * DELIBERATELY NARROW, and it does not weaken the threshold above. The check exists to catch
+     * "an upstream input vanished" (see REFUSAL_RATE_FAILURE_THRESHOLD), and that is still exactly
+     * what it does: this only exempts the case where zero rows were written AND every single
+     * refusal is `no_games_played`. Any other reason in the map — insufficient_sample,
+     * no_scoring_basis, anything new — means real data existed and the engine rejected it, which
+     * still fails. So does a mix, because a mix means some players DID have games.
+     */
+    const reasons = Object.keys(r.refusalsByReason ?? {})
+    const noSourceSeasonYet =
+      zeroRows && r.refused > 0 && reasons.length === 1 && reasons[0] === 'no_games_played'
+
+    const failed = (zeroRows || tooManyRefusals) && !noSourceSeasonYet
 
     return NextResponse.json(
       {
-        ok: !failed,
+        // `ok` reports whether PROJECTIONS LANDED; `failed` drives the HTTP status and means
+        // "retry this". They come apart only when the source season has not been played: ok:false
+        // because nothing was written and claiming otherwise would be a false green, HTTP 200
+        // because no retry can conjure games that have not happened.
+        ok: !failed && !noSourceSeasonYet,
         sport,
         dryRun,
         sourceSeason: r.sourceSeason,
@@ -90,11 +115,18 @@ async function handle(req: NextRequest) {
         usedTackleSplitEstimate: r.usedTackleSplitEstimate,
         /** No sleeperId mapped, so weekly logs were unreachable — expect ~47% for NFL. */
         withoutWeeklyData: r.withoutWeeklyData,
-        failureReason: zeroRows
-          ? 'zero_rows_written'
-          : tooManyRefusals
-            ? 'refusal_rate_above_threshold'
-            : undefined,
+        /**
+         * Reported even when the run is not a failure, because a coverage gap that leaves no trace
+         * is how the last outage stayed invisible for six days. `ok:false` with HTTP 200 says
+         * "nothing was produced, and retrying will not change that until the season starts".
+         */
+        failureReason: noSourceSeasonYet
+          ? 'source_season_not_played_yet'
+          : zeroRows
+            ? 'zero_rows_written'
+            : tooManyRefusals
+              ? 'refusal_rate_above_threshold'
+              : undefined,
         errors: r.errors.length ? r.errors.slice(0, 10) : undefined,
         durationMs: Date.now() - startedAt,
         timestamp: new Date().toISOString(),

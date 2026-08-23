@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getLevelFromXp } from '@/lib/rank/levels'
+import { computePrestige, winRateOf, type PrestigeComponent } from '@/lib/core-app/prestige'
 
 /**
  * Career — the trophy room's data layer, derived from imported league history.
@@ -123,29 +124,14 @@ export type CareerTitle = {
   settingsLabel: string | null
 }
 
-/** One capped component of the GM prestige score. */
-export type PrestigeComponent = {
-  key: 'championships' | 'winRate' | 'tenure' | 'leagues' | 'playoffs'
-  label: string
-  /** Raw achieved value (3 championships, 9 seasons…). */
-  value: number
-  /** The cap. Beyond this the component stops contributing — one huge number
-   *  must not be able to carry the whole score. */
-  max: number
-  /** value/max clamped to 0..1. */
-  ratio: number
-  /** Share of the total prestige score this component is worth. */
-  weight: number
-  /** How this component is written on screen: "3/10", "58%". */
-  display: string
-  /**
-   * True when the raw value is at or past the cap. Measured on a real account:
-   * 521 leagues against a cap of 15 rendered as "521/15", which reads as a
-   * broken widget rather than a maxed one. The UI shows saturated components as
-   * MAXED — the cap is working as the handoff intends, and saying so is honest.
-   */
-  saturated: boolean
-}
+/**
+ * One capped component of the GM prestige score.
+ *
+ * Re-exported rather than redefined: the type and the weights that produce it
+ * now live in `lib/core-app/prestige.ts`, shared with 14a's leaderboard. Every
+ * existing importer still reads it from here.
+ */
+export type { PrestigeComponent }
 
 export type LegacyDimension = {
   key: 'championship' | 'playoff' | 'consistency' | 'dynasty'
@@ -219,19 +205,6 @@ export type CareerData = {
   isEmpty: boolean
 }
 
-/* ── prestige weights ──────────────────────────────────────────────────────
- * The handoff's own help text: championships 30%, win rate 20%, tenure 20%,
- * league diversity 15%, playoff appearances 15%, each capped. Caps are the
- * handoff's too (3/10, 9/20, 11/15, 14/30).
- */
-const PRESTIGE_SPEC = [
-  { key: 'championships', label: 'Championships', max: 10, weight: 0.3 },
-  { key: 'winRate', label: 'Win rate', max: 1, weight: 0.2 },
-  { key: 'tenure', label: 'Tenure', max: 20, weight: 0.2 },
-  { key: 'leagues', label: 'Leagues', max: 15, weight: 0.15 },
-  { key: 'playoffs', label: 'Playoffs', max: 30, weight: 0.15 },
-] as const
-
 /*
  * ⚠ FOUR DIMENSIONS, NOT THE DESIGN'S SIX. Rivalry and Awards are in the mock
  * but nothing in an import can produce them: rivalry needs head-to-head results
@@ -251,16 +224,8 @@ const LEGACY_SPEC = [
 
 const LEGACY_UNAVAILABLE = ['Rivalry', 'Awards']
 
-function pct(n: number): number {
-  return Math.round(n * 1000) / 10
-}
-
-/** Games-weighted win rate, or null when nothing was played. */
-function rate(wins: number, losses: number, ties: number): number | null {
-  const games = wins + losses + ties
-  if (games <= 0) return null
-  return (wins + ties * 0.5) / games
-}
+/** Games-weighted win rate, or null when nothing was played. Shared with 14a. */
+const rate = winRateOf
 
 type SeasonAccumulator = {
   season: number
@@ -785,33 +750,13 @@ export async function getCareerData(
   /* ── prestige ──────────────────────────────────────────────────────────── */
   let prestige: CareerData['prestige'] = null
   if (!isEmpty) {
-    const raw: Record<string, { value: number; display: string }> = {
-      championships: { value: championships, display: `${championships}/10` },
-      winRate: {
-        value: winRate ?? 0,
-        display: winRate != null ? `${pct(winRate)}%` : '—',
-      },
-      tenure: { value: seasonsPlayed, display: `${seasonsPlayed}/20` },
-      leagues: { value: leaguesPlayed, display: `${leaguesPlayed}/15` },
-      playoffs: { value: playoffAppearances, display: `${playoffAppearances}/30` },
-    }
-    const components: PrestigeComponent[] = PRESTIGE_SPEC.map((spec) => {
-      const r = raw[spec.key]
-      const ratio = Math.max(0, Math.min(r.value / spec.max, 1))
-      return {
-        key: spec.key,
-        label: spec.label,
-        value: r.value,
-        max: spec.max,
-        ratio,
-        weight: spec.weight,
-        display: r.display,
-        saturated: r.value >= spec.max,
-      }
+    prestige = computePrestige({
+      championships,
+      winRate,
+      seasonsPlayed,
+      leaguesPlayed,
+      playoffAppearances,
     })
-    const total =
-      Math.round(components.reduce((s, c) => s + c.ratio * c.weight, 0) * 1000) / 10
-    prestige = { total, components }
   }
 
   /* ── legacy ────────────────────────────────────────────────────────────── */

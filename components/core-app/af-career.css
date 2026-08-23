@@ -654,3 +654,193 @@
 .af-crm-cta:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .af-crm-note { margin: 0; font: 400 11px/1.5 var(--font-archivo, 'Archivo'), system-ui, sans-serif; color: var(--faint); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+ * 13a — Your Career (overview).
+ *
+ * A later handoff than 33a for the same screen, and a different shape: a
+ * full-width identity banner over a 340 / 1fr / 300 three-column body, rather
+ * than 33a's fixed identity rail beside one main column. The 33a rules above
+ * still style the tab bar, the ring shelf, the career arc and the legacy rows,
+ * all of which 13a keeps — only the frame changed, so only the frame is
+ * re-authored here under the af-c13- prefix.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
+.af-c13 { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+/* ── identity banner ─────────────────────────────────────────────────────── */
+
+.af-c13-banner {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 22px 24px;
+  border-radius: 18px;
+  border: 1px solid var(--line2);
+  background: var(--chimmy);
+  box-shadow: var(--shadow);
+}
+.af-c13-av {
+  flex: none;
+  width: 74px;
+  height: 74px;
+  border-radius: 16px;
+  display: grid;
+  place-items: center;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: 900 34px/1 var(--font-archivo, Archivo), system-ui, sans-serif;
+  overflow: hidden;
+  object-fit: cover;
+}
+.af-c13-who { min-width: 0; flex: 1; }
+.af-c13-handle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 0;
+  font: 900 30px/1.05 var(--font-archivo, Archivo), system-ui, sans-serif;
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+.af-c13-chip {
+  font: 700 10px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  padding: 6px 9px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.af-c13-chip--good { background: var(--good-soft); border-color: var(--good); color: var(--good); }
+/* A chip for something the design shows but no table answers. */
+.af-c13-chip--unmeasured {
+  background: transparent;
+  border: 1px dashed var(--line2);
+  color: var(--faint);
+}
+.af-c13-subline { margin: 9px 0 0; font-size: 13px; color: var(--muted); line-height: 1.5; }
+
+.af-c13-stats { display: flex; gap: 30px; flex-wrap: wrap; margin-left: auto; }
+.af-c13-stat { min-width: 76px; }
+.af-c13-stat span {
+  display: block;
+  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+.af-c13-stat b {
+  font: 800 27px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-c13-stat b.warn { color: var(--warn); }
+.af-c13-stat b.good { color: var(--good); }
+
+/* ── three-column body ───────────────────────────────────────────────────── */
+
+.af-c13-body {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+.af-c13-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+.af-c13-card {
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  padding: 17px;
+  min-width: 0;
+}
+.af-c13-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 13px;
+  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-c13-head .sp { margin-left: auto; }
+.af-c13-big {
+  font: 800 40px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: -0.03em;
+  color: var(--accent);
+}
+.af-c13-big small { font-size: 14px; color: var(--muted); margin-left: 5px; }
+.af-c13-big.warn { color: var(--warn); }
+
+.af-c13-row {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+.af-c13-row span:first-child { font-size: 12.5px; color: var(--text2); }
+.af-c13-track { height: 6px; border-radius: 999px; background: var(--chip); overflow: hidden; }
+.af-c13-track > i { display: block; height: 100%; border-radius: 999px; }
+.af-c13-row .v {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 11.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* legacy dimensions, 13a's three-across grid */
+.af-c13-lgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 18px; }
+.af-c13-ldim { min-width: 0; }
+.af-c13-ldimhead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font: 800 13px/1.2 var(--font-archivo, Archivo), system-ui, sans-serif;
+  color: var(--text);
+}
+.af-c13-ldimhead b {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  font-size: 15px;
+}
+.af-c13-ldimmeta {
+  margin: 6px 0 0;
+  font: 700 9.5px/1 var(--font-jetbrains-mono, 'JetBrains Mono'), ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  color: var(--faint);
+}
+/* A dimension in the design that nothing can score. Dashed, never coloured —
+   an unmeasured dimension is not a low one. */
+.af-c13-ldim--none .af-c13-ldimhead { color: var(--faint); }
+.af-c13-ldim--none .af-c13-track { border: 1px dashed var(--line2); background: transparent; }
+
+.af-c13-note { margin: 13px 0 0; font-size: 12px; line-height: 1.55; color: var(--faint); }
+
+/* an empty card that names the table behind it */
+.af-c13-none {
+  padding: 13px;
+  border-radius: 11px;
+  border: 1px dashed var(--line2);
+  background: var(--chip);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+@media (max-width: 1240px) {
+  .af-c13-body { grid-template-columns: minmax(0, 1fr) 300px; }
+  .af-c13-lgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 900px) {
+  .af-c13-body { grid-template-columns: minmax(0, 1fr); }
+  .af-c13-stats { margin-left: 0; gap: 22px; }
+  .af-c13-handle { font-size: 24px; }
+}
