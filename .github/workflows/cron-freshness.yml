@@ -1,0 +1,79 @@
+name: Cron freshness
+
+# Alerts when a scheduled job stops WRITING ROWS.
+#
+# WHY THIS EXISTS
+# All 41 crons died on the Vercel -> Railway migration and nothing surfaced it for six days. The
+# bug was never "crons died", it was "crons died and nothing told us". This is the thing that
+# tells us. It is the more important half of the scheduler restore -- a scheduler with no alarm
+# just fails silently again the next time.
+#
+# ⚠ THIS WILL BE RED UNTIL THE FAST TIER IS RESTORED, AND THAT IS CORRECT.
+# At the time it was added, 7 probes were stale: five from the migration outage, one
+# (import-player-game-stats) at 6 days, and recompute-allfantasy-adp at 32 days, which was broken
+# long before the migration. Do not "fix" this by loosening thresholds or muting probes -- a
+# monitor that reports green while the data is stale is the exact failure mode being replaced
+# (see computeJobHealth, which checks runningTooLong before freshness and so can never escalate
+# a stuck job to red).
+#
+# REQUIRED CONFIGURATION
+#   repository secret  DATABASE_URL   (or DIRECT_URL) -- a read-only connection is sufficient and
+#                                     preferred; this issues only SELECT and information_schema.
+# With neither set the job logs a notice and exits green rather than failing every hour.
+
+on:
+  schedule:
+    # Hourly. The tightest slow-tier cadence is hourly, and the fast tier's 20-minute allowance is
+    # still caught within an hour of going stale -- fast enough for a data-staleness alarm, and
+    # infrequent enough that a red run is a signal rather than noise.
+    - cron: "25 * * * *"
+  workflow_dispatch:
+    inputs:
+      report_only:
+        description: 'Print the report without failing the run'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cron-freshness
+  cancel-in-progress: true
+
+jobs:
+  freshness:
+    name: Check data freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # Just the driver, not the whole dependency tree. `npm ci` on this repo is minutes; the
+      # check needs exactly one package.
+      #
+      # `pg` and NOT Prisma, deliberately: Prisma reports a Neon bad password as P1001 "can't
+      # reach database", which reads as an outage. pg surfaces the real 28P01. A monitor that
+      # misreports its own auth failure as a production incident is worse than no monitor.
+      - name: Install driver
+        run: npm install --no-save --no-audit --no-fund pg@^8.20.0
+
+      # Input passed through `env:` and tested as a shell variable, never interpolated into the
+      # script text -- see the note in cron-slow-tier.yml.
+      - name: Check freshness
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          INPUT_REPORT_ONLY: ${{ inputs.report_only }}
+        run: |
+          set -euo pipefail
+          if [ "${INPUT_REPORT_ONLY:-false}" = "true" ]; then
+            node scripts/cron-freshness-check.mjs --report
+          else
+            node scripts/cron-freshness-check.mjs
+          fi

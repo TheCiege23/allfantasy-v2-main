@@ -44,12 +44,12 @@ const SAFE_HEADER_KEYS = [
  * "the runtime skipped it". Returns only filenames, sizes and booleans --
  * never file contents, env values or secrets.
  */
-function inspectBuild() {
+function inspectBuild(marker?: string) {
   const fs = nodeFs
   const path = nodePath
   const cwd = process.cwd()
   // The layout's own signature: className="scroll-smooth" on <html>.
-  const MARKER = "scroll-smooth"
+  const MARKER = marker && /^[A-Za-z0-9_-]{3,40}$/.test(marker) ? marker : "scroll-smooth"
   const out: Record<string, unknown> = {
     node: process.version,
     platform: process.platform,
@@ -135,6 +135,28 @@ function inspectBuild() {
   } catch {
     out.rootPageJsExists = "unknown"
   }
+
+  // Which chunks does the route module actually LOAD? Next emits a
+  // `t.X(0,[<chunk ids>], ...)` tail in server/app/page.js. If the chunk that
+  // holds the layout is absent from that list, the layout is compiled but
+  // never loaded -- which is exactly the observed symptom.
+  try {
+    const pageJs = fs.readFileSync(path.join(dist, "server", "app", "page.js"), "utf8")
+    const m = pageJs.match(/.X(0,s*[([d,s]+)]/)
+    const loaded = m ? m[1].split(",").map((x) => x.trim()) : null
+    out.rootPageChunkIds = loaded
+    out.rootPageJsBytes = pageJs.length
+    // Structure of the route module tail, so a null id list can be explained.
+    out.rootPageJsTail = pageJs.slice(-320)
+    out.rootPageHasXCall = pageJs.includes(".X(")
+    out.rootPageRequiresRuntime = pageJs.includes("webpack-runtime")
+    const markerIds = hits.map((h) => h.replace("server/chunks/", "").replace(".js", ""))
+    out.markerChunkIds = markerIds
+    out.markerChunkIsLoadedByPage =
+      loaded && markerIds.length > 0 ? markerIds.some((id) => loaded.includes(id)) : null
+  } catch (err) {
+    out.rootPageChunkIds = "unreadable: " + (err instanceof Error ? err.message : String(err))
+  }
   return out
 }
 
@@ -147,7 +169,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url)
   // ?build=1 adds deployed-build introspection (no secrets).
-  const buildInfo = url.searchParams.get("build") === "1" ? inspectBuild() : undefined
+  const buildInfo = url.searchParams.get("build") === "1" ? inspectBuild(url.searchParams.get("marker") ?? undefined) : undefined
 
   return NextResponse.json(
     {

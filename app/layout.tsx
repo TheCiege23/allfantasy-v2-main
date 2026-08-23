@@ -77,6 +77,11 @@ export const metadata: Metadata = {
  * HTML on every route regardless of which headers the upstream proxy keeps.
  */
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // TEMPORARY DIAGNOSTIC (remove once the Railway blank-page cause is found).
+  // Railway renders every route without this layout while its `metadata` export
+  // still resolves. This proves whether the component runs at all, and whether
+  // it runs at BUILD time (prerender) or per request.
+  console.log("[af-layout] RootLayout invoked, phase=" + (process.env.NEXT_PHASE ?? "runtime"));
   const cookieStore = await cookies();
   const cookieLang = cookieStore.get('af_lang')?.value;
   const htmlLang = resolveLanguage(cookieLang);
@@ -113,6 +118,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const gaMeasurementId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID || '';
   const metaPixelId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_META_PIXEL_ID || '';
   const fbAppId = isVisualQaMode ? '' : process.env.NEXT_PUBLIC_FB_APP_ID || '1790659191546539';
+  console.log("[af-layout] RootLayout returning <html> wrapper");
   return (
     <html
       lang={htmlLang}

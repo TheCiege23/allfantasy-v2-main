@@ -3,10 +3,20 @@ import { prisma } from '@/lib/prisma'
 import { calculateLeagueStandings } from '@/lib/tournament/advancementEngine'
 import { handleRoundTransition } from '@/lib/tournament/redraftScheduler'
 import { requireCronAuth } from '@/app/api/cron/_auth'
+import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 export const maxDuration = 60
+
+/**
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ *
+ * This job is CONDITIONAL: it only acts on shells that are neither in setup nor complete, so
+ * with no tournament running it correctly touches nothing and tournament_audit_logs never
+ * moves. Only the SCHEDULED GET records a run; POST is the admin path.
+ */
+const JOB = 'cron-tournament-automation'
 
 /**
  * Cron / admin: sync shell league standings and optional round transitions.
@@ -16,14 +26,34 @@ export async function GET(req: NextRequest) {
   if (!requireCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  return runAutomation()
+  /*
+   * The row is written before the sweep runs, so an hour with no live tournament — or a run
+   * the platform kills at maxDuration, which executes no user code afterwards and so never
+   * closes the row — still leaves a usable started_at for the freshness probe.
+   */
+  const summary = await withSyncJobRun(
+    { jobName: JOB, trigger: 'cron' },
+    () => runAutomation(),
+    (r) => ({
+      rowsWritten: r.processed + r.legacyTournamentsProcessed,
+      // Per-shell failures are collected rather than thrown; the sweep still covered the rest.
+      status: r.errors.length > 0 ? 'partial' : 'success',
+      errors: r.errors.slice(0, 10).map((e) => `${e.id}: ${e.message}`),
+      metadata: {
+        shellsProcessed: r.processed,
+        legacyTournamentsProcessed: r.legacyTournamentsProcessed,
+        errorCount: r.errors.length,
+      },
+    }),
+  )
+  return NextResponse.json(summary)
 }
 
 export async function POST(req: NextRequest) {
   if (!requireCronAuth(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  return runAutomation()
+  return NextResponse.json(await runAutomation())
 }
 
 async function runAutomation() {
@@ -109,9 +139,9 @@ async function runAutomation() {
     }
   }
 
-  return NextResponse.json({
+  return {
     processed: processed.length,
     legacyTournamentsProcessed: legacyProcessed.length,
     errors,
-  })
+  }
 }

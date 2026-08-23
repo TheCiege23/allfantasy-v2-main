@@ -34,6 +34,14 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { slowTierSchedules, classifyCrons } from './cron-tier.mjs'
+
+/**
+ * Slow-tier crons are fired by GitHub Actions, not by the host, and a workflow's `schedule:`
+ * block cannot be generated at run time -- it has to be literal YAML. That one duplicated list
+ * is the only place the two schedulers can silently drift apart, so rule 4 pins it.
+ */
+const SLOW_TIER_WORKFLOW = join('.github', 'workflows', 'cron-slow-tier.yml')
 
 /**
  * Deliberately below any current Vercel plan cap, so this trips while there is
@@ -97,6 +105,53 @@ lines.push(`distinct schedules: ${buckets.size}`)
 const busiest = [...buckets.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6)
 for (const [schedule, n] of busiest) {
   lines.push(`  ${String(schedule).padEnd(18)} ${n}`)
+}
+
+// ── Rule 4: every slow-tier schedule must be firable ───────────────────────
+// The slow tier moved off the host after all 41 crons stopped on the Railway migration and
+// nothing noticed for six days. A slow cron whose schedule is missing from the workflow belongs
+// to NO scheduler at all -- it looks declared, and never runs. That is precisely the failure
+// this rule exists to make loud, at PR time, instead of weeks later in stale data.
+{
+  const tiers = classifyCrons(crons)
+  lines.push(`tiers: ${tiers.fast.length} fast (host) / ${tiers.slow.length} slow (Actions) / ${tiers.excluded.length} excluded`)
+
+  let workflowYaml = null
+  try {
+    workflowYaml = readFileSync(join(root, SLOW_TIER_WORKFLOW), 'utf8')
+  } catch {
+    failures.push(
+      `${SLOW_TIER_WORKFLOW} is missing, so ${tiers.slow.length} slow-tier cron(s) have no scheduler.\n` +
+        `    Restore it, or move those jobs back onto the host's own cron declaration.`,
+    )
+  }
+
+  if (workflowYaml) {
+    // Regex rather than a YAML dependency: this check is run with no `npm ci` precisely because
+    // it has none, and the file has exactly one schedule block.
+    const declared = new Set(
+      [...workflowYaml.matchAll(/^\s*-\s*cron:\s*["']([^"']+)["']/gm)].map((m) => m[1].trim()),
+    )
+    const required = slowTierSchedules(crons)
+
+    const missing = required.filter((s) => !declared.has(s))
+    if (missing.length > 0) {
+      failures.push(
+        `${missing.length} slow-tier schedule(s) are declared in vercel.json but absent from\n` +
+          `    ${SLOW_TIER_WORKFLOW}, so nothing fires them. Add under \`on.schedule:\`:\n` +
+          missing.map((s) => `      - cron: ${JSON.stringify(s)}`).join('\n'),
+      )
+    }
+
+    const orphaned = [...declared].filter((s) => !required.includes(s))
+    if (orphaned.length > 0) {
+      failures.push(
+        `${orphaned.length} schedule(s) in ${SLOW_TIER_WORKFLOW} no longer match any slow-tier\n` +
+          `    cron. Each one wakes a runner to do nothing. Delete from \`on.schedule:\`:\n` +
+          orphaned.map((s) => `      - cron: ${JSON.stringify(s)}`).join('\n'),
+      )
+    }
+  }
 }
 
 console.log(lines.join('\n'))

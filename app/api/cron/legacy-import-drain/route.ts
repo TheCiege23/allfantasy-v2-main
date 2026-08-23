@@ -21,10 +21,21 @@ import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { runLegacyImportStep } from "@/lib/legacy-import"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 export const maxDuration = 60
+
+/**
+ * Heartbeat job name, probed by scripts/cron-freshness-check.mjs.
+ *
+ * This job is CONDITIONAL: it only has work when a guest has queued an import, so the queue is
+ * empty on the overwhelming majority of its once-a-minute fires and LegacyImportJob can be
+ * weeks old while the drain is perfectly healthy. The empty-queue runs are exactly the ones
+ * that must still record a row.
+ */
+const JOB = "cron-legacy-import-drain"
 
 // Leave headroom under maxDuration so the function returns cleanly rather than being killed
 // mid-step by the platform timeout.
@@ -33,7 +44,8 @@ const TIME_BUDGET_MS = 50_000
 // one invocation. A real import is bounded by MIN_YEAR..CURRENT_YEAR season steps.
 const MAX_STEPS = 400
 
-async function handle() {
+/** The drain itself, as plain data, so the scheduled path can be wrapped in telemetry. */
+async function drain() {
   const startedAt = Date.now()
   let steps = 0
   let jobsAdvanced = 0
@@ -77,7 +89,7 @@ async function handle() {
     }
   }
 
-  return NextResponse.json({
+  return {
     ok: true,
     steps,
     jobsCompleted,
@@ -86,19 +98,42 @@ async function handle() {
     hitStepCap: steps >= MAX_STEPS,
     durationMs: Date.now() - startedAt,
     timestamp: new Date().toISOString(),
-  })
+  }
 }
 
 export async function GET(req: NextRequest) {
   if (!requireCronAuth(req, "CRON_SECRET")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  return handle()
+  /*
+   * The row lands before the drain starts, so the (usual) empty-queue minute still records a
+   * heartbeat — and so does a run the platform kills at maxDuration, which executes no user
+   * code afterwards and therefore never closes the row. Only the SCHEDULED GET records one;
+   * POST is the manual re-drain.
+   */
+  const result = await withSyncJobRun(
+    { jobName: JOB, trigger: "cron" },
+    () => drain(),
+    (r) => ({
+      rowsRead: r.steps,
+      rowsWritten: r.jobsCompleted,
+      // A step that failed marks its job failed and moves on; the drain itself still worked.
+      status: r.failed > 0 ? "partial" : "success",
+      metadata: {
+        steps: r.steps,
+        jobsCompleted: r.jobsCompleted,
+        jobsFailed: r.failed,
+        hitTimeBudget: r.hitTimeBudget,
+        hitStepCap: r.hitStepCap,
+      },
+    }),
+  )
+  return NextResponse.json(result)
 }
 
 export async function POST(req: NextRequest) {
   if (!requireCronAuth(req, "CRON_SECRET")) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
-  return handle()
+  return NextResponse.json(await drain())
 }

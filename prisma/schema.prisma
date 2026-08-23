@@ -15936,6 +15936,41 @@ model CommissionerSuccession {
 /// that evidence is kept instead.
 ///
 /// Append-only. Nothing reads it as state; pruning old rows is safe (see the manual migration).
+/// Domain OS — maintained grounding facts that FEED Decision OS.
+///
+/// Supersedes the lineup-only table before it was ever applied: three domains would have meant
+/// three near-identical tables, and the fact envelope is the same for all of them.
+///
+/// An ACCELERATOR, never a source of record. Entries past their per-kind TTL are reported as
+/// ABSENT on read and the caller derives live — maintained state that stops refreshing lies with
+/// confidence, and every scheduled job in this repo is currently dead.
+///
+/// `level` is app | league | user, matching the three levels `AfAppLearningSnapshot`,
+/// `AfLeagueLearningSnapshot` and `AfUserLearningProfile` already model. `confidence` and
+/// `sampleSize` mirror that trio: a fact from 2 games and one from 200 are not the same fact.
+model DomainOsFacts {
+  id         String   @id @default(cuid())
+  /// 'lineup' | 'waiver' | 'trade'
+  domain     String   @db.VarChar(16)
+  /// Fact family within the domain, e.g. 'settings' | 'resource' | 'rosters'.
+  kind       String   @db.VarChar(32)
+  /// 'app' | 'league' | 'user'
+  level      String   @db.VarChar(8)
+  /// How the fact is addressed within its level: a sport, a league id, a user+league pair.
+  scopeKey   String   @db.VarChar(128)
+  sport      String   @db.VarChar(16)
+  facts      Json
+  /// Null = the producer does not express confidence for this fact. Never zero-as-unknown.
+  confidence Float?
+  sampleSize Int?
+  capturedAt DateTime @default(now())
+
+  @@unique([domain, kind, level, scopeKey])
+  @@index([capturedAt])
+  @@index([domain, level])
+  @@map("domain_os_facts")
+}
+
 model DecisionParityRecord {
   id           String   @id @default(cuid())
   /// 'decision.shadow_parity' | 'decision.validator_parity'. Other telemetry is high-frequency and

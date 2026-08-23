@@ -19,6 +19,15 @@ const DATA_API_HOST_PATTERNS = [
   // a page that calls it directly gets provider latency and rate limits on the
   // request path, and goes blank when the provider blips.
   /(^|\.)thesportsdb\.com$/i,
+  // Rolling Insights was the LAST monitored provider still missing, and the most exposed one:
+  // per contracts/rolling-insights/INTEGRATION.md it is the scoring source, and it passes
+  // `RSC_token` as a QUERY PARAMETER — so a direct call from a request path both bypasses the
+  // DB-first rule and puts a long-lived credential into any URL that gets logged or surfaced in
+  // an error. CLAUDE.md called this gap out explicitly.
+  //
+  // Covers every subdomain seen in this repo: rest.datafeeds., datafeeds., accounts., auth.,
+  // api., and the bare domain.
+  /(^|\.)rolling-insights\.com$/i,
 ];
 
 const SOURCE_EXTENSIONS = new Set([
@@ -98,15 +107,26 @@ function getAllSourceFiles(rootDir) {
   const EXCLUDED_DIRS = new Set([
     '.git',
     'node_modules',
-    '.next',
-    '.next-dev-local',
-    '.next-dev-local-uifix',
     'dist',
     'build',
     'coverage',
     'playwright-report',
     'test-results',
   ]);
+
+  /**
+   * Any Next build output, matched by PREFIX rather than by name.
+   *
+   * `.next`, `.next-dev-local` and `.next-dev-local-uifix` were listed literally, which missed
+   * `.next-dev-3101` — a build directory that is COMMITTED to this repo. Its compiled bundles
+   * inline every provider URL from the source they were built from, so the weekly full scan was
+   * reporting hundreds of duplicate violations from build artefacts and burying the real ones.
+   * A prefix test also covers whatever the next `.next-*` variant is called.
+   *
+   * Excluding build output loses nothing: the source it was compiled from is scanned directly,
+   * and a bundle is never itself a caller anyone can fix.
+   */
+  const isBuildOutputDir = (name) => name.startsWith('.next');
 
   while (stack.length > 0) {
     const current = stack.pop();
@@ -115,7 +135,7 @@ function getAllSourceFiles(rootDir) {
     }
 
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      if (EXCLUDED_DIRS.has(entry.name)) {
+      if (EXCLUDED_DIRS.has(entry.name) || isBuildOutputDir(entry.name)) {
         continue;
       }
 

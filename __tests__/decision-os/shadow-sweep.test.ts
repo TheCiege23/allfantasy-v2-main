@@ -110,6 +110,48 @@ describe('counting', () => {
   })
 })
 
+describe('it rotates the LEAGUE, not just the user', () => {
+  // Production has one account owning 63 of the 69 leagues that have rosters. `slice(0, cap)`
+  // always takes the same ones, so before this the sweep re-measured that account's first league
+  // on every tick -- 4 leagues reachable out of 69, and identical counts for hours because it was
+  // not sampling the population at all.
+  it('passes a leagueOffset that advances with the clock', async () => {
+    const seen: Array<number | undefined> = []
+    for (const t of [0, 10 * 60 * 1000, 20 * 60 * 1000]) {
+      const clock = { t }
+      await runLineupShadowSweep(
+        deps(
+          {
+            listCandidateUserIds: async () => ['a'],
+            runShadow: async (_u, _s, opts) => {
+              seen.push(opts.leagueOffset)
+              return [{ ran: true, leagueId: 'L1' } as never]
+            },
+          },
+          clock,
+        ),
+      )
+    }
+    // Same bucket that advances the user window, reused for the league window.
+    expect(seen).toEqual([0, 1, 2])
+    expect(new Set(seen).size).toBe(3)
+  })
+
+  it('still asks for one league per user, so the per-tick cost is unchanged', async () => {
+    let capSeen: number | undefined
+    await runLineupShadowSweep(
+      deps({
+        listCandidateUserIds: async () => ['a'],
+        runShadow: async (_u, _s, opts) => {
+          capSeen = opts.maxLeagues
+          return [{ ran: true, leagueId: 'L1' } as never]
+        },
+      }),
+    )
+    expect(capSeen).toBe(1)
+  })
+})
+
 describe('it never throws, and never gives up early', () => {
   it('one user failing does not abort the rest', async () => {
     // Otherwise a single league with bad data blocks every user ordered after it forever, and

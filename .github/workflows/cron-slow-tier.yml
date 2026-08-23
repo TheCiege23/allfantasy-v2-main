@@ -1,0 +1,131 @@
+name: Cron slow tier
+
+# Fires the 25 hourly-or-slower crons declared in vercel.json against the deployed app.
+#
+# WHY THIS EXISTS
+# All 41 crons stopped on the Vercel -> Railway move: vercel.json declares them, Vercel executes
+# them, and Vercel is blocked. Nothing noticed for six days, because the only things that could
+# have noticed were themselves crons. Hosting the slow tier here means a host outage can never
+# again take out *everything* -- the slow tier keeps writing timestamps, and
+# `.github/workflows/cron-freshness.yml` can still see the gap.
+#
+# The fast tier (12 sub-hourly jobs, including two every-minute) stays on the host. GitHub Actions
+# schedules have a 5-minute floor and queue behind the shared runner pool, which is fine for a
+# nightly ingest and useless for live-score-tick.
+#
+# REQUIRED CONFIGURATION
+#   repository variable  APP_URL      e.g. https://your-app.up.railway.app
+#   repository secret    CRON_SECRET  the same value the deployed app reads
+# With either missing this workflow logs a notice and exits green, rather than failing every run.
+#
+# ⚠ SCHEDULES ONLY FIRE FROM THE DEFAULT BRANCH. A `schedule:` trigger on a feature branch never
+# runs, so this cannot be tested by pushing a branch -- use the workflow_dispatch inputs below,
+# which work from any branch.
+#
+# ⚠ GitHub disables scheduled workflows in repos with 60 days of no activity. Not a concern while
+# this repo is active, but it is a silent-stop failure mode worth knowing about.
+#
+# ADDING A CRON: add it to vercel.json. If it is hourly-or-slower and its schedule is not already
+# in the list below, `scripts/cron-budget-check.mjs` fails the PR and tells you the line to add.
+# The job list itself is read from vercel.json at run time and is never duplicated here.
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+    - cron: "0 */3 * * *"
+    - cron: "0 */4 * * *"
+    - cron: "0 */6 * * *"
+    - cron: "0 10 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 11 * * 1"
+    - cron: "0 12 * * *"
+    - cron: "0 14 * * 2"
+    - cron: "0 16-19 * * *"
+    - cron: "0 3 * * 1"
+    - cron: "0 4 * * 3"
+    - cron: "0 7 * * *"
+    - cron: "0 9 * * *"
+    - cron: "10 */6 * * *"
+    - cron: "10 5 * * *"
+    - cron: "20 6 * * *"
+    - cron: "30 7 * * *"
+    - cron: "30 7 * * 2"
+    - cron: "40 6 * * *"
+    - cron: "50 6 * * *"
+    - cron: "50 7 * * *"
+  workflow_dispatch:
+    inputs:
+      schedule:
+        description: 'Fire every slow job on this cron expression, e.g. "0 * * * *"'
+        required: false
+        type: string
+      path:
+        description: 'Fire one job by path, e.g. /api/cron/import-injuries'
+        required: false
+        type: string
+      all:
+        description: 'Fire every slow-tier job'
+        required: false
+        default: false
+        type: boolean
+      dry_run:
+        description: 'List what would be called without calling it'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+# Per-schedule, so the 07:00 group never cancels the hourly group. Never cancel-in-progress:
+# aborting a half-finished ingest is worse than letting the next run queue behind it.
+concurrency:
+  group: cron-slow-${{ github.event.schedule || inputs.schedule || inputs.path || 'manual' }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    name: Dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # No `npm ci`. The dispatcher uses only the Node standard library and global fetch, so
+      # installing would be most of the runtime for nothing -- same reasoning as cron-budget.yml.
+      # Every ${{ }} value goes through `env:` and is referenced as "$VAR", never interpolated into
+      # the script text. A workflow_dispatch input is attacker-controlled text as far as the shell
+      # is concerned, and `node ... --path ${{ inputs.path }}` is the standard Actions script
+      # injection. This repo is public, so that pattern does not belong here even though dispatch
+      # requires write access.
+      - name: Dispatch slow-tier crons
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_SCHEDULE: ${{ inputs.schedule }}
+          INPUT_PATH: ${{ inputs.path }}
+          INPUT_ALL: ${{ inputs.all }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          DRY=""
+          if [ "${INPUT_DRY_RUN:-false}" = "true" ]; then DRY="--dry-run"; fi
+
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            node scripts/cron-dispatch.mjs --schedule "$EVENT_SCHEDULE"
+          elif [ "${INPUT_ALL:-false}" = "true" ]; then
+            node scripts/cron-dispatch.mjs --all $DRY
+          elif [ -n "${INPUT_PATH:-}" ]; then
+            node scripts/cron-dispatch.mjs --path "$INPUT_PATH" $DRY
+          elif [ -n "${INPUT_SCHEDULE:-}" ]; then
+            node scripts/cron-dispatch.mjs --schedule "$INPUT_SCHEDULE" $DRY
+          else
+            echo "::error::Provide one of: all, path, or schedule."
+            exit 1
+          fi
