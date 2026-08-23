@@ -21,6 +21,31 @@ vi.mock('@/lib/af-projections/writeAfProjectionSnapshots', () => ({
   writeAfProjectionSnapshots: writeMock,
 }))
 
+/**
+ * ⚠ THE ROUTE NOW WRITES A HEARTBEAT, AND AN UNMOCKED ONE REACHES POSTGRES.
+ * `withSyncJobRun` opens its `sync_job_runs` row BEFORE the body runs, so once the route was
+ * wrapped in it every case below tried to hit a database this suite does not have — the file
+ * stopped loading at all rather than failing an assertion, which reads as an infrastructure
+ * timeout instead of a test failure.
+ *
+ * The summariser is still INVOKED rather than stubbed away. It calls `assess()` on the real
+ * result, so a bug in the telemetry verdict — the thing that decides whether the offseason no-op
+ * is recorded as success or failure — still surfaces here instead of only in production.
+ */
+vi.mock('@/lib/production-health/syncJobRunTelemetry', () => ({
+  withSyncJobRun: vi.fn(
+    async (
+      _meta: unknown,
+      run: () => Promise<unknown>,
+      summarize?: (result: unknown) => unknown,
+    ) => {
+      const result = await run()
+      summarize?.(result)
+      return result
+    },
+  ),
+}))
+
 import { GET } from '@/app/api/cron/compute-projections/route'
 
 const SECRET = 'test-cron-secret'
