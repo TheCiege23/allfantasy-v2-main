@@ -168,9 +168,25 @@ describe('decision-os-activity-ingest ?relayOnly=1', () => {
     expect(opts?.shouldStop?.()).toBe(false)
   })
 
-  it('reports the job under its existing telemetry name', async () => {
+  it('records the drain under its own job name, not the one the ingest uses', async () => {
     await GET(req('/api/cron/decision-os-activity-ingest?relayOnly=1'))
     expect(syncRuns).toHaveLength(1)
+    // Both modes are the same route. A shared heartbeat name would let the daily ?discover=1 fire
+    // report the drain healthy on a day it never ran -- the shared-probe false green fixed in #602.
+    expect(syncRuns[0]!.ctx.jobName).toBe('cron-decision-os-relay-drain')
+  })
+
+  it('leaves the ingest fire on its original job name', async () => {
+    await GET(req('/api/cron/decision-os-activity-ingest?discover=1'))
+    // Pinned in BOTH directions: renaming the ingest would silently orphan its existing probe and
+    // its history in sync_job_runs.
     expect(syncRuns[0]!.ctx.jobName).toBe('cron-decision-os-activity-ingest')
+  })
+
+  it('has a freshness probe pointing at the drain job name', async () => {
+    const { PROBES } = await import('../scripts/cron-freshness-check.mjs')
+    const probe = (PROBES as Record<string, { heartbeat?: string }>)['/api/cron/decision-os-activity-ingest?relayOnly=1']
+    // A cron with no probe is an invisible cron, which is the condition this whole PR exists to end.
+    expect(probe?.heartbeat).toBe('cron-decision-os-relay-drain')
   })
 })

@@ -270,15 +270,29 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  // `?relayOnly=1` drains the outbox and does nothing else. Same second-vercel.json-entry
+  // pattern as `import-schedules?source=tsdb-only`: one route, two schedules, and no new route
+  // at the 2048-route ceiling.
+  const relayOnly = new URL(request.url).searchParams.get("relayOnly") === "1"
+
+  /*
+   * ⚠ A DISTINCT JOB NAME PER MODE, AND THE REASON MATTERS.
+   *
+   * Both vercel.json entries hit this one route. Sharing a heartbeat name would let the daily
+   * ?discover=1 fire satisfy a probe on the drain -- reporting the drain healthy on a day it
+   * never ran. That is precisely the shared-probe false green fixed in #602, where import-scores
+   * probed the same SportsGame column import-schedules writes and read `ok 6m` for a job that
+   * had not run at all.
+   *
+   * Separate names make the drain independently observable, which is the whole point here: it
+   * was invisible for three days behind a green 200.
+   */
+  const jobName = relayOnly ? "cron-decision-os-relay-drain" : "cron-decision-os-activity-ingest"
+
   const summary = await withSyncJobRun(
-    { jobName: "cron-decision-os-activity-ingest", trigger: "cron" },
+    { jobName, trigger: "cron" },
     async () => {
       const startedAt = Date.now()
-
-      // `?relayOnly=1` drains the outbox and does nothing else. Same second-vercel.json-entry
-      // pattern as `import-schedules?source=tsdb-only`: one route, two schedules, and no new
-      // route at the 2048-route ceiling.
-      const relayOnly = new URL(request.url).searchParams.get("relayOnly") === "1"
 
       // Same honest-refusal precedent as the snapshot route: without the generated
       // delegate this environment cannot store activity at all.
