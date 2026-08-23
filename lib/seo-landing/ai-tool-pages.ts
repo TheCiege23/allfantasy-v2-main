@@ -1,3 +1,5 @@
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+
 /**
  * PROMPT 161 — AI tool SEO landing pages config.
  * Routes: /trade-analyzer, /waiver-wire, /draft-helper, /player-comparison, /matchup-simulator, /fantasy-coach
@@ -258,7 +260,9 @@ export const AI_TOOL_PAGE_SLUGS: AIToolPageSlug[] = [
   'fantasy-coach',
 ]
 
-const BASE = 'https://allfantasy.ai'
+// Resolved through getPublicSiteOrigin(); see lib/seo-landing/config.ts for why
+// the hardcoded apex was wrong.
+const BASE = getPublicSiteOrigin()
 
 export function getAIToolPageCanonical(slug: AIToolPageSlug): string {
   return `${BASE}/${slug}`

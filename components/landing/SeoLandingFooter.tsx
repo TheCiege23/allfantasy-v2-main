@@ -21,7 +21,21 @@ const FOOTER_SECTIONS = [
     heading: 'Sports',
     links: [
       { href: '/fantasy-football', label: 'Fantasy Football' },
-      { href: '/fantasy-football/dynasty', label: 'Dynasty Football' },
+      /*
+       * ⚠ THIS WAS '/fantasy-football/dynasty', WHICH IS A 404, AND THIS FOOTER
+       * RENDERS ON FIVE PAGE FAMILIES: /sports/[sport], /tools/[tool],
+       * /tools-hub, /chimmy and /manager-compare. A dead link in a shared SEO
+       * footer is on every SEO landing page at once, which makes it the widest
+       * broken link the site could have — and it survived because nothing
+       * renders a /fantasy-football/[sub] route at all, so it never 500s or
+       * throws, it just quietly returns not-found.
+       *
+       * /tools/legacy-dynasty is the right target: 200, public, and titled
+       * "Legacy & Dynasty Fantasy Tools". The other dynasty routes are wrong for
+       * an SEO footer specifically — /startup-dynasty and /dynasty-trade-analyzer
+       * both 307 to sign-in, so a crawler following them lands on a login wall.
+       */
+      { href: '/tools/legacy-dynasty', label: 'Dynasty Football' },
       { href: '/fantasy-basketball', label: 'Fantasy Basketball' },
       { href: '/fantasy-baseball', label: 'Fantasy Baseball' },
       { href: '/fantasy-hockey', label: 'Fantasy Hockey' },
