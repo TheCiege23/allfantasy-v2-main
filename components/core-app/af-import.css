@@ -329,6 +329,20 @@
   color: var(--faint);
 }
 
+/*
+ * The server's reason under a failed league's name. Sentence case and normal
+ * tracking, unlike the meta line above it — this is prose to be read, not a spec
+ * strip to be scanned, and it wraps rather than clipping so a long reason stays
+ * whole.
+ */
+.af-im-league-reason {
+  margin-top: 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--bad);
+  white-space: normal;
+}
+
 /* Same specificity trap as the submit below — `.af-core .af-btn` wins otherwise. */
 .af-core .af-im-league-btn {
   margin-left: auto;
@@ -421,6 +435,20 @@
   color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
+}
+
+/*
+ * Holds the outcome badge and, for the two statuses that need an answer, the
+ * "Confirm" / "Retry" button beside it. Wraps rather than overflowing so a narrow
+ * row puts the button under its badge instead of pushing the name out of the list.
+ */
+.af-im-league-outcome {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 /*
