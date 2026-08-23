@@ -87,11 +87,27 @@ export const PROBES = {
   '/api/cron/import-season-stats': { table: 'player_season_stats', column: 'fetchedAt' },
   // fetched_at / expires_at / source_updated_at are NULL on all 252,768 rows; updatedAt is the
   // only column this table actually advances.
-  '/api/cron/import-player-game-stats': { table: 'player_game_stats', column: 'updatedAt' },
+  /*
+   * ⚠ SEASONAL, AND ONLY THIS ONE UNTIL ANOTHER IS PROVEN. Measured 2026-08-23: 37 runs total, but
+   * the last one to read anything was 2026-07-21 (a five-run backfill burst, 13,670 rows). Every
+   * scheduled run since reads 0 and writes 0 in ~700ms. That is the route's DOCUMENTED success
+   * path -- "once a season reconciles this is a cheap no-op" -- because the table holds season 2025
+   * only (252,768 rows, weeks 1-18, newest game_date 2026-01-04) and no 2026 regular-season game
+   * has been played yet.
+   *
+   * Marking a probe seasonal SUPPRESSES a real alarm for months, so it is done per job, on
+   * evidence, and never speculatively. import-season-stats is a plausible next candidate and is
+   * deliberately NOT marked: it is currently healthy, and exempting a job that has not been shown
+   * to need it is how a monitor quietly stops monitoring.
+   */
+  '/api/cron/import-player-game-stats': {
+    table: 'player_game_stats',
+    column: 'updatedAt',
+    seasonal: { sport: 'NFL' },
+  },
   '/api/cron/import-stat-lines': { table: 'fantasy_stat_lines', column: 'fetched_at' },
   '/api/cron/import-depth-charts': { table: 'depth_charts', column: 'fetchedAt' },
   '/api/cron/sync-player-images?sport=all': { table: 'sports_core_player_images', column: 'fetched_at' },
-  '/api/cron/compute-projections': { table: 'AFProjectionSnapshot', column: 'computedAt' },
   /*
    * ⚠ `lastUpdatedAt`, NOT `createdAt`. This job UPSERTS, so `createdAt` freezes at first insert
    * and never moves again no matter how many times the row is refreshed.
@@ -120,7 +136,23 @@ export const PROBES = {
   // ── fast tier (stays on the host) ──
   // Monitored here on purpose. The whole reason the tiers are split is so that a host outage
   // cannot silence its own alarm; these probes are what make a fast-tier stop visible.
-  '/api/cron/import-scores': { table: 'SportsGame', column: 'fetchedAt' },
+  // MOVED OFF SportsGame 2026-08-23. This probe read the same table+column as import-schedules,
+  // so ANY import-schedules run reported import-scores healthy. With the fast tier dead, that was
+  // a silent false green for a job that had not run at all -- strictly worse than the wrong-table
+  // probes fixed earlier, because those were permanently RED and therefore loud.
+  // No column can separate them (both write rolling_insights, thesportsdb AND api_sports rows),
+  // and source='espn' is not exclusive either -- 'espn' is an NflRedraftProviderId, so the
+  // redraft canonical sync can write it. The route now records a heartbeat instead.
+  '/api/cron/import-scores': { heartbeat: 'cron-import-scores' },
+  // The outbox drain fires as `?relayOnly=1` on the SAME route as the daily ingest, so it needs
+  // its own job_name or the ingest's heartbeat would report the drain healthy on a day it never
+  // ran -- the shared-probe false green fixed for import-scores just above.
+  // Every 6h, so 9h allows one missed fire before it goes red.
+  '/api/cron/decision-os-activity-ingest?relayOnly=1': { heartbeat: 'cron-decision-os-relay-drain' },
+  // The outbox drain fires as `?relayOnly=1` on the SAME route as the daily ingest, so it needs
+  // its own job_name or the ingest's heartbeat would report the drain healthy on a day it never
+  // ran -- the shared-probe false green fixed for import-scores just above.
+  // Every 6h, so 9h allows one missed fire before it goes red.
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
 
   // ── heartbeat probes ──
@@ -169,9 +201,73 @@ export const PROBES = {
   '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': {
     heartbeat: 'cron-playoff-schedule-refresh',
   },
+
+  /*
+   * Offseason-conditional, and the reason it is a HEARTBEAT rather than a `seasonal` output
+   * probe like import-player-game-stats above: this job had NO telemetry of any kind, so out of
+   * season a suppressed output probe would have left it completely unwatched for seven months --
+   * the "crons died and nothing told us" hole, reopened. The heartbeat is the weaker claim but it
+   * is the only one available here that survives the offseason.
+   *
+   * Until the season starts it refuses every player with `no_games_played` and writes no
+   * AFProjectionSnapshot row at all; since #596 it reports that as HTTP 200 + ok:false rather
+   * than the daily 500 it used to throw.
+   *
+   * ⚠ IN-SEASON THIS IS TOO WEAK. From Week 1 a heartbeat cannot tell a working run from one
+   * that fires daily and silently writes nothing. Restore the output probe then --
+   * { table: 'AFProjectionSnapshot', column: 'computedAt', seasonal: { sport: 'NFL' } } -- which
+   * keeps the strong claim in season and self-suppresses out of it.
+   */
+  '/api/cron/compute-projections': { heartbeat: 'cron-compute-projections' },
 }
 
 /** Where heartbeats are read from. One row per run, whether or not the run found work to do. */
+/**
+ * Months (1-12, UTC) in which a sport produces the data a seasonal probe watches.
+ *
+ * ⚠ THIS IS A CALENDAR, NOT A GUESS AT WHETHER A JOB WORKS. It answers one question: can this job
+ * possibly have new data to import right now? Out of season the honest answer is no, and holding a
+ * three-day freshness allowance against it means the probe goes STALE every offseason for months.
+ *
+ * ⚠ AND THAT IS NOT A COSMETIC PROBLEM. An alarm that is red for months is one people stop reading.
+ * cron-freshness failed hourly for 61 hours while live scoring was dead and nobody looked, because
+ * it had been failing on seasonal probes long before that. A probe that cries wolf costs more than
+ * no probe at all.
+ *
+ * Mirrors `regularSeasonPeriod` in lib/sport-defaults/SeasonCalendarResolver.ts. Duplicated rather
+ * than imported because this script deliberately runs on the Node standard library alone — it must
+ * work in a bare checkout with no install. Keep the two in sync.
+ *
+ * ⚠ NOT DERIVED FROM THE DATA, DELIBERATELY. The obvious "are there recent games?" signal cannot
+ * yet distinguish preseason from regular season: `SportsGame.seasonType` was added 2026-08-22 and
+ * is still NULL on all pre-existing rows, so a preseason slate would read as "in season" and defeat
+ * the point. Revisit once that column is populated.
+ */
+const SEASON_WINDOWS = {
+  NFL: [9, 10, 11, 12, 1],
+}
+
+/**
+ * True when `sport` is inside its regular season, plus a TRAILING grace period.
+ *
+ * ⚠ THE GRACE IS TRAILING ONLY, AND THE SYMMETRIC VERSION IS A BUG I WROTE FIRST. Granting grace on
+ * both sides made 23 August "in season" because three weeks later is September — which re-armed the
+ * alarm across the whole preseason gap this function exists to exempt. The two directions are not
+ * symmetric:
+ *
+ *   AFTER a season ends, the data is still legitimately fresh for a while (January's stats do not
+ *   rot on 1 February), so a strict month cutoff would false-alarm.
+ *   BEFORE a season starts, there is no data yet BY DEFINITION. Grace there does not prevent a
+ *   false alarm, it creates one.
+ */
+export function isInSeason(sport, now = new Date(), graceDays = 21) {
+  const months = SEASON_WINDOWS[String(sport).toUpperCase()]
+  if (!months) return true // Unknown sport: judge it normally rather than silently exempting it.
+  const monthOf = (d) => d.getUTCMonth() + 1
+  if (months.includes(monthOf(now))) return true
+  return months.includes(monthOf(new Date(now.getTime() - graceDays * 86_400_000)))
+}
+
 const HEARTBEAT_TABLE = 'sync_job_runs'
 const HEARTBEAT_NAME_COLUMN = 'job_name'
 const HEARTBEAT_TIME_COLUMN = 'started_at'
@@ -296,6 +392,9 @@ function fmtAge(ms) {
 // ───────────────────────────────── main ──────────────────────────────────
 
 async function main() {
+  // One clock for the whole run, so a probe evaluated late cannot land on the other side of a
+  // season boundary from one evaluated early.
+  const now = new Date()
   const reportOnly = process.argv.includes('--report')
   const asJson = process.argv.includes('--json')
   const connectionString = process.env.DATABASE_URL?.trim() || process.env.DIRECT_URL?.trim()
@@ -437,6 +536,17 @@ async function main() {
         state = 'CONFIG'
       } else if (ageMs == null) {
         state = 'EMPTY'
+      } else if (ageMs > allowanceMs && probe.seasonal && !isInSeason(probe.seasonal.sport, now)) {
+        /*
+         * Out of season the job cannot have new data, so age carries no information about health.
+         * Reported as IDLE rather than OK: OK would claim the data is fresh, which it is not. IDLE
+         * says "stale, and expected to be" -- a third state, because collapsing it into either of
+         * the other two loses the distinction that makes the alarm worth reading.
+         *
+         * CONFIG and EMPTY are checked FIRST and are never softened: a wrong column or a table that
+         * has never held a row is broken in or out of season.
+         */
+        state = 'IDLE'
       } else {
         state = ageMs > allowanceMs ? 'STALE' : 'OK'
       }
@@ -455,7 +565,8 @@ async function main() {
     await client.end()
   }
 
-  const bad = results.filter((r) => r.state !== 'OK')
+  // IDLE is a healthy outcome: the job is correct and simply has nothing to do this month.
+  const bad = results.filter((r) => r.state !== 'OK' && r.state !== 'IDLE')
 
   if (asJson) {
     console.log(JSON.stringify({ results, unmonitored, failing: bad.length }, null, 2))
@@ -463,7 +574,12 @@ async function main() {
     console.log('\n=== Cron freshness ===')
     console.log('Judged on max(freshness column) per table, against each job\'s own declared cadence.\n')
     for (const r of [...results].sort((a, b) => a.state.localeCompare(b.state) || a.path.localeCompare(b.path))) {
-      const mark = r.state === 'OK' ? 'ok  ' : r.state === 'STALE' ? 'STALE' : r.state === 'EMPTY' ? 'EMPTY' : 'CONFIG'
+      const mark =
+        r.state === 'OK' ? 'ok  '
+        : r.state === 'IDLE' ? 'idle'
+        : r.state === 'STALE' ? 'STALE'
+        : r.state === 'EMPTY' ? 'EMPTY'
+        : 'CONFIG'
       const age = r.state === 'CONFIG' ? r.detail : `${fmtAge(r.ageMs)} old (allow ${fmtAge(r.allowanceMs)})`
       const kind = r.kind === 'heartbeat' ? 'hb ' : '   '
       console.log(`  ${mark.padEnd(6)} ${r.tier.padEnd(5)} ${kind}${r.path.padEnd(52)} ${age}`)

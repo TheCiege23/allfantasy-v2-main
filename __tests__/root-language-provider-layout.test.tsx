@@ -538,8 +538,21 @@ describe("root language provider layout", () => {
     expect(nixpacksSource).toContain('"npm run build:railway"')
     expect(nixpacksSource).not.toContain("railway-patch-app-build-manifest.cjs")
     expect(nixpacksSource).not.toContain('"node scripts/railway-verify-next-build.cjs"')
-    expect(layoutSource).toContain('href="/railway-styles.css"')
-    expect(layoutSource).toContain("RAILWAY_ENVIRONMENT")
+    /*
+     * ⚠ THE ROOT LAYOUT NO LONGER CARRIES ANYTHING RAILWAY-SPECIFIC, and these
+     * two assertions were what pinned it there. The unconditional
+     * `<link href="/railway-styles.css">` existed to compensate for Railway's
+     * CSS-extraction failure; it shipped on EVERY response, Vercel included,
+     * which is a per-page request for a stylesheet that platform never needs.
+     * Production is Vercel, so the tag was removed rather than re-gated —
+     * removing it is hydration-safe in a way re-gating is not, because both
+     * server and client now render nothing (see the comment history on
+     * `useRailwayStylesFallback`, where a server-only env gate crashed
+     * hydration on every page).
+     *
+     * The rest of this block still guards the Railway build scripts, which are
+     * retained and inert: they self-disable unless RAILWAY_* is set.
+     */
     expect(railwayPrebuildSource).toContain("AF_RAILWAY_TAILWIND_PREBUILD")
     expect(railwayCleanSource).toContain("path.join(repoRoot, '.next')")
     expect(railwayCleanSource).toContain("removePath(nextDir)")

@@ -25,14 +25,21 @@ export interface AntiGamingJustification {
   passed: boolean
 }
 
-const IMPROVEMENT_THRESHOLDS = {
+/**
+ * ⚠ EXPORTED BECAUSE 14b's FAQ RENDERS THESE NUMBERS. The handoff's build rule
+ * is that the four thresholds it publishes are the actual gating logic, not
+ * illustrative values, and must stay numerically in sync with this engine. The
+ * FAQ imports them from here so there is no second copy to drift.
+ */
+export const IMPROVEMENT_THRESHOLDS = {
   starter_value_percentile: 0.02,
   expected_wins: 0.15,
   injury_delta: 0.03,
   trade_efficiency: 0.02,
 }
 
-const MAX_UNJUSTIFIED_CLIMB = 1
+/** Spots a team may climb week over week without a justifying improvement. */
+export const MAX_UNJUSTIFIED_CLIMB = 1
 
 export function applyAntiGamingConstraints(
   teams: AntiGamingInput[],

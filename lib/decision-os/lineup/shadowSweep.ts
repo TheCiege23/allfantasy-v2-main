@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma as defaultPrisma } from '@/lib/prisma'
 import { computeLineupActionsForUser } from '@/lib/lineup-actions/computeLineupActionsForUser'
 import { runLineupShadowForSummary, type LineupShadowResult } from './shadow'
+import { createLineupOsLoaders } from '@/lib/decision-os/lineup-os'
 import type { LineupActionSummaryPayload } from '@/lib/lineup-actions/types'
 
 /**
@@ -82,6 +83,15 @@ const DEFAULT_BUDGET_MS = 20_000
 const ROTATION_BUCKET_MS = 10 * 60 * 1000
 
 export function productionSweepDeps(db: typeof defaultPrisma = defaultPrisma): ShadowSweepDeps {
+  // One feed for the whole tick. The sweep runs several users per fire and they share league
+  // and app-level facts, which is exactly the case a per-call feed would miss.
+  const lineupOs = createLineupOsLoaders()
+  // Only the two dependency slots `runLineupShadow` declares. Spelled out rather than spread so
+  // a future addition to the loaders object cannot silently start shadowing a shadow dep.
+  const lineupOsLoaders = {
+    loadWarehouseFacts: lineupOs.loadWarehouseFacts,
+    loadSignalFacts: lineupOs.loadSignalFacts,
+  }
   return {
     // groupBy, NOT findMany+distinct. Prisma applies `distinct` client-side after the rows come
     // back, so pairing it with skip/take would paginate the PRE-distinct rows and the rotation
@@ -103,7 +113,7 @@ export function productionSweepDeps(db: typeof defaultPrisma = defaultPrisma): S
       return rows.length
     },
     computeSummary: (userId) => computeLineupActionsForUser(userId),
-    runShadow: (userId, summary, opts) => runLineupShadowForSummary(userId, summary, opts),
+    runShadow: (userId, summary, opts) => runLineupShadowForSummary(userId, summary, opts, lineupOsLoaders),
     now: () => Date.now(),
   }
 }

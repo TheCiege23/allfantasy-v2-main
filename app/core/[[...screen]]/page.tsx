@@ -35,6 +35,10 @@ import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
+import { Rankings } from '@/components/core-app/screens/Rankings'
+import { RankingsFaq } from '@/components/core-app/screens/RankingsFaq'
+import { RankingsCompare } from '@/components/core-app/screens/RankingsCompare'
+import { getRankingsData, getCompareData, type CompareResult } from '@/lib/core-app/rankings'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
@@ -220,6 +224,25 @@ export default async function AfCorePage({
       ? await getCareerData(userId, typeof sp.platform === 'string' ? sp.platform : null).catch(
           () => null
         )
+      : null
+
+  /*
+   * Rankings, its FAQ and the compare view share one screen key and one data
+   * read. `?view=` picks the panel — three sibling routes for one product
+   * surface is exactly the spend that pushed this repo against the route
+   * ceiling, and the ladder is the same on all three.
+   */
+  const rankingsView = activeKey === 'rankings' ? (typeof sp.view === 'string' ? sp.view : null) : null
+  const rankings =
+    activeKey === 'rankings' ? await getRankingsData(userId).catch(() => null) : null
+
+  // Only run the comparison when a handle was actually submitted — an empty box
+  // is the initial state, not a failed lookup.
+  const compareQuery =
+    rankingsView === 'compare' && typeof sp.user === 'string' ? sp.user.trim() : ''
+  const compare: CompareResult | null =
+    rankingsView === 'compare' && compareQuery
+      ? await getCompareData(userId, compareQuery).catch(() => null)
       : null
 
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
@@ -515,6 +538,26 @@ export default async function AfCorePage({
         />
       ) : activeKey === 'tools' ? (
         <Tools />
+      ) : activeKey === 'rankings' ? (
+        rankingsView === 'compare' ? (
+          <RankingsCompare result={compare} query={compareQuery} />
+        ) : rankings ? (
+          rankingsView === 'faq' ? (
+            <RankingsFaq data={rankings} />
+          ) : (
+            <Rankings data={rankings} board={typeof sp.board === 'string' ? sp.board : null} />
+          )
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Rankings
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read the rankings just now. This is a read failure on our side, not a sign
+              that nobody is ranked.
+            </p>
+          </div>
+        )
       ) : activeKey === 'career' ? (
         career ? (
           <Career data={career} view={typeof sp.view === 'string' ? sp.view : null} />

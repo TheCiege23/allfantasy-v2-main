@@ -17,6 +17,7 @@ export type DecisionTelemetryEventName =
   | 'decision.validator_parity' // composed validators vs each other
   // Stage 1 enrichment tracking:
   | 'decision.live_enrichment'  // LIVE path ran; enriched=true means decisionOs was added to response
+  | 'decision.os_feed'        // domain-OS feed: where each fact came from (store / live / unavailable)
 
 export interface DecisionTelemetryEvent {
   event: DecisionTelemetryEventName
