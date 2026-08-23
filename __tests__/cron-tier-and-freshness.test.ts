@@ -143,21 +143,29 @@ describe('age is computed by Postgres, not by the client clock', () => {
    * a 20-minute allowance reports healthy no matter how long its job has been dead — a false
    * negative in the tool whose whole purpose is to prevent false negatives.
    */
-  const source = readFileSync(join(process.cwd(), 'scripts/cron-freshness-check.mjs'), 'utf8')
+  const monitor = readFileSync(join(process.cwd(), 'scripts/cron-freshness-check.mjs'), 'utf8')
+  const helper = readFileSync(join(process.cwd(), 'scripts/db-freshness.mjs'), 'utf8')
 
-  it('pins the session to UTC so the naive-vs-timestamptz distinction stops mattering', () => {
-    expect(source).toContain("SET TIME ZONE 'UTC'")
+  it('keeps the mechanism in the shared helper', () => {
+    expect(helper).toContain("SET TIME ZONE 'UTC'")
+    expect(helper).toContain('EXTRACT(EPOCH FROM (now() - max(')
   })
 
-  it('derives every age from EXTRACT(EPOCH FROM (now() - max(...)))', () => {
-    const extracts = source.match(/EXTRACT\(EPOCH FROM \(now\(\) - max\(/g) ?? []
-    // One for the output probes, one for the heartbeat probes.
-    expect(extracts.length).toBeGreaterThanOrEqual(2)
+  it('has the monitor DELEGATE rather than reimplement it', () => {
+    // These two tests failed the moment the SQL moved out of the monitor, which is the guard
+    // working: the rule is "the mechanism lives in exactly one place", so both halves are
+    // asserted rather than just its presence somewhere.
+    expect(monitor).toContain("from './db-freshness.mjs'")
+    expect(monitor).not.toContain('EXTRACT(EPOCH FROM (now() - max(')
+    expect(monitor).not.toContain("SET TIME ZONE 'UTC'")
   })
 
-  it('never subtracts a fetched timestamp from Date.now()', () => {
-    // The exact regression: `Date.now() - newest.getTime()`.
-    expect(source).not.toMatch(/Date\.now\(\)\s*-\s*\w+\.getTime\(\)/)
+  it('never subtracts a fetched timestamp from Date.now(), in either file', () => {
+    // The exact regression: `Date.now() - newest.getTime()`. Checked in both, because the helper
+    // existing does not stop someone hand-rolling it next door.
+    const offender = /Date\.now\(\)\s*-\s*\w+\.getTime\(\)/
+    expect(monitor).not.toMatch(offender)
+    expect(helper).not.toMatch(offender)
   })
 })
 

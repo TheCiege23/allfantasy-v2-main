@@ -51,6 +51,7 @@ import process from 'node:process'
 import { pathToFileURL } from 'node:url'
 import pg from 'pg'
 import { readVercelCrons, classifyCrons } from './cron-tier.mjs'
+import { pinSessionToUtc, maxAge } from './db-freshness.mjs'
 
 /** A job must miss this many consecutive runs before it counts as stale. */
 const TOLERANCE = 3
@@ -331,7 +332,7 @@ async function main() {
    * Postgres coerces a naive column using the session zone, which is now the UTC the data is
    * actually stored in.
    */
-  await client.query("SET TIME ZONE 'UTC'")
+  await pinSessionToUtc(client)
 
   const results = []
   const unmonitored = []
@@ -373,26 +374,25 @@ async function main() {
       if (probe.heartbeat) {
         let hb
         try {
-          // age_seconds comes from Postgres, not from Date.now() — see the SET TIME ZONE note.
-          hb = await client.query(
-            `SELECT max("${HEARTBEAT_TIME_COLUMN}") AS newest, count(*)::bigint AS n,
-                    EXTRACT(EPOCH FROM (now() - max("${HEARTBEAT_TIME_COLUMN}"))) AS age_seconds
-               FROM "${HEARTBEAT_TABLE}" WHERE "${HEARTBEAT_NAME_COLUMN}" = $1`,
-            [probe.heartbeat],
-          )
+          hb = await maxAge(client, {
+            table: HEARTBEAT_TABLE,
+            column: HEARTBEAT_TIME_COLUMN,
+            where: `"${HEARTBEAT_NAME_COLUMN}" = $1`,
+            params: [probe.heartbeat],
+          })
         } catch (err) {
           results.push({ ...base, state: 'CONFIG', detail: err.message })
           continue
         }
-        const newest = hb.rows[0].newest ? new Date(hb.rows[0].newest) : null
-        const runCount = Number(hb.rows[0].n)
+        const newest = hb.newest
+        const runCount = hb.rowCount
         // A job_name that has never appeared is a registry error, not a dead cron -- most likely the
         // name was renamed in code. Reporting it as STALE would send someone hunting a scheduler.
         if (runCount === 0) {
           results.push({ ...base, state: 'CONFIG', detail: `no sync_job_runs rows for job_name "${probe.heartbeat}"` })
           continue
         }
-        const ageMs = hb.rows[0].age_seconds == null ? null : Number(hb.rows[0].age_seconds) * 1000
+        const ageMs = hb.ageMs
         results.push({
           ...base,
           column: probe.heartbeat,
@@ -424,21 +424,13 @@ async function main() {
         // "this job has never written" from "this probe names the wrong column", which a bare
         // max() reports identically as `never`. player_game_stats is exactly that case: 252,768
         // rows, fetched_at NULL on every one.
-        row = await client.query(
-          // age_seconds comes from Postgres, not from Date.now() — see the SET TIME ZONE note.
-          `SELECT max("${column}") AS newest, count(*)::bigint AS n, count("${column}")::bigint AS n_ts,
-                  EXTRACT(EPOCH FROM (now() - max("${column}"))) AS age_seconds
-             FROM "${probe.table}"`,
-        )
+        row = await maxAge(client, { table: probe.table, column })
       } catch (err) {
         results.push({ ...base, column, state: 'CONFIG', detail: err.message })
         continue
       }
 
-      const newest = row.rows[0].newest ? new Date(row.rows[0].newest) : null
-      const rowCount = Number(row.rows[0].n)
-      const tsCount = Number(row.rows[0].n_ts)
-      const ageMs = row.rows[0].age_seconds == null ? null : Number(row.rows[0].age_seconds) * 1000
+      const { newest, rowCount, timestampCount: tsCount, ageMs } = row
 
       let state
       if (rowCount > 0 && tsCount === 0) {
