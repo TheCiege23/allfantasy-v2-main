@@ -35,6 +35,7 @@ import { Portfolio } from '@/components/core-app/screens/Portfolio'
 import { Tools } from '@/components/core-app/screens/Tools'
 import { Career } from '@/components/core-app/screens/Career'
 import { getCareerData } from '@/lib/core-app/career'
+import { toShareCard } from '@/lib/core-app/shareCard'
 import { Rankings } from '@/components/core-app/screens/Rankings'
 import { RankingsFaq } from '@/components/core-app/screens/RankingsFaq'
 import { RankingsCompare } from '@/components/core-app/screens/RankingsCompare'
@@ -244,6 +245,14 @@ export default async function AfCorePage({
     rankingsView === 'compare' && compareQuery
       ? await getCompareData(userId, compareQuery).catch(() => null)
       : null
+
+  /*
+   * The share card (13b) is derived from the career read that is already in
+   * hand — build rule 2 is that every number on it traces to a value 13a shows,
+   * and re-reading would let the two drift within a single request.
+   */
+  const shareCard =
+    activeKey === 'career' && sp.view === 'share' && career ? toShareCard(career) : null
 
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
   const playerDetail =
@@ -560,7 +569,11 @@ export default async function AfCorePage({
         )
       ) : activeKey === 'career' ? (
         career ? (
-          <Career data={career} view={typeof sp.view === 'string' ? sp.view : null} />
+          <Career
+            data={career}
+            view={typeof sp.view === 'string' ? sp.view : null}
+            share={shareCard}
+          />
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

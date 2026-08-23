@@ -2,6 +2,8 @@
 
 import Link from 'next/link'
 import type { CareerData, PrestigeComponent } from '@/lib/core-app/career'
+import type { ShareCardData } from '@/lib/core-app/shareCard'
+import { ShareCard, SHARE_CARD_SIZE } from '@/components/career/ShareCard'
 import '@/components/core-app/af-career.css'
 
 /**
@@ -386,13 +388,96 @@ function CareerMobile({ data }: { data: CareerData }) {
   )
 }
 
-export function Career({ data, view }: { data: CareerData; view?: string | null }) {
-  const active = TABS.some((t) => t.key === view) ? (view as string) : 'overview'
+export function Career({
+  data,
+  view,
+  share,
+}: {
+  data: CareerData
+  view?: string | null
+  share?: ShareCardData | null
+}) {
+  /*
+   * `share` is a view but not a tab. 13a puts "Share card" in the header action
+   * row beside Records, not in the Overview/Seasons/Hall of Fame/Records tab
+   * set, so adding it to TABS would put a fifth tab in a design that has four.
+   */
+  const active = view === 'share' || TABS.some((t) => t.key === view) ? (view as string) : 'overview'
   return (
     <>
-      <CareerDesktop data={data} view={active} />
+      <CareerDesktop data={data} view={active} share={share ?? null} />
       <CareerMobile data={data} />
     </>
+  )
+}
+
+/**
+ * Share card preview — handoff 13b, in the product.
+ *
+ * ⚠ THE PREVIEW IS THE EXPORT. Both render `<ShareCard>`, so what a user
+ * approves here is what the PNG contains — the one exception being the typeface,
+ * which is called out below rather than left for someone to discover after they
+ * have posted the image.
+ *
+ * ⚠ THE CARD IS NOT SCALED TO FIT. 13b build rule 1 makes it a fixed 620×780
+ * export target that must render identically regardless of viewport, so on a
+ * narrow screen the wrapper scrolls rather than the card shrinking. A preview
+ * that resized would be showing a layout the export will never produce.
+ */
+function SharePreview({ share, isEmpty }: { share: ShareCardData | null; isEmpty: boolean }) {
+  if (!share) {
+    return (
+      <div className="af-cr-empty">
+        <p className="af-cr-empty-t">Nothing to put on a card yet.</p>
+        <p className="af-cr-empty-b">
+          {isEmpty
+            ? 'The card is built from finished seasons — record, rings, prestige and legacy. Once a league of yours completes a season there is something to share.'
+            : 'We could not build your card just now. This is a read failure on our side.'}
+        </p>
+        <Link href="/core/career" className="af-cr-btn af-cr-btn--primary">
+          Back to Overview
+        </Link>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div style={{ maxWidth: '100%', overflowX: 'auto' }}>
+        <div style={{ width: SHARE_CARD_SIZE.width }}>
+          <ShareCard data={share} />
+        </div>
+      </div>
+
+      <div className="af-c13-card" style={{ maxWidth: SHARE_CARD_SIZE.width }}>
+        <p className="af-c13-head">Sharing this</p>
+        <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6, color: 'var(--text2)' }}>
+          Every figure on the card is the same one your Overview shows — prestige, legacy, titles,
+          record, win rate and XP all come from the same read, so the card cannot claim something the
+          career page disagrees with.
+        </p>
+        <p className="af-c13-note">
+          {/*
+            Saying this here is the point. The exported PNG renders in the
+            default sans because the repo ships no font binaries; the card above
+            uses the real faces. Nobody should find that out from the image.
+          */}
+          The downloadable image is generated server-side at exactly {SHARE_CARD_SIZE.width}×
+          {SHARE_CARD_SIZE.height}. It renders in a default sans rather than Archivo and JetBrains
+          Mono — the layout is identical, the typeface is not.
+        </p>
+        <p style={{ marginTop: 14 }}>
+          <a
+            className="af-cr-btn af-cr-btn--primary"
+            href="/api/share/career-card?design=13b"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open the image →
+          </a>
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -469,7 +554,15 @@ function PlatformFilter({ data }: { data: CareerData }) {
  * shown with their design weights, dashed and labelled unmeasured, never scored
  * zero — a zero would drag a real total down to represent data we never had.
  */
-function CareerDesktop({ data, view }: { data: CareerData; view: string }) {
+function CareerDesktop({
+  data,
+  view,
+  share,
+}: {
+  data: CareerData
+  view: string
+  share: ShareCardData | null
+}) {
   const { prestige, legacy, titles, activeLeagues, leagueCounts, currentSeason } = data
 
   const record = data.games > 0 ? `${nf(data.wins)}–${nf(data.losses)}` : null
@@ -512,11 +605,14 @@ function CareerDesktop({ data, view }: { data: CareerData; view: string }) {
           ) : null}
         </div>
         <div className="af-cr-actions">
+          <Link className="af-cr-btn af-cr-btn--primary" href="/core/career?view=share">Share card</Link>
           <Link className="af-cr-btn af-cr-btn--ghost" href="/core/career?view=records">Records</Link>
         </div>
       </nav>
 
-      {view !== 'overview' ? (
+      {view === 'share' ? (
+        <SharePreview share={share} isEmpty={data.isEmpty} />
+      ) : view !== 'overview' ? (
         <UnbuiltView label={TABS.find((t) => t.key === view)?.label ?? 'This view'} />
       ) : data.isEmpty ? (
         <div className="af-cr-empty">
