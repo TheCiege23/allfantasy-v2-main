@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { buildSeoMeta } from '@/lib/seo'
+import { getAIToolPageCanonical } from '@/lib/seo-landing/ai-tool-pages'
 import {
   Swords,
   Sparkles,
@@ -14,11 +16,28 @@ import {
   Zap,
 } from 'lucide-react'
 
-export const metadata: Metadata = {
+/*
+ * ⚠ A BARE `{ title, description }` OBJECT, THE SAME DEFECT AS THE EIGHT LEGAL
+ * PAGES IN 5430ed57: it sets the document title and meta description and
+ * nothing else, so this page emitted no canonical and inherited the homepage's
+ * OpenGraph. It is a public marketing page — sport cards, feature copy, CTAs —
+ * and six of its sibling flat AI-tool pages (/trade-analyzer, /draft-helper,
+ * /ai-chat, /player-comparison, /fantasy-coach) already route through
+ * buildSeoMeta with getAIToolPageCanonical. This one did not.
+ *
+ * ⚠ THE TITLE AND DESCRIPTION BELOW ARE THE PAGE'S OWN, DELIBERATELY NOT THE
+ * ONES IN AI_TOOL_PAGES['war-room']. That config still calls this surface the
+ * "Draft War Room"; the page itself, and its visible copy, call it AF Legacy.
+ * Importing the config's strings would have quietly renamed the product in
+ * search results to a name it no longer uses. The canonical is taken from the
+ * shared helper, which is the part that was actually missing.
+ */
+export const metadata: Metadata = buildSeoMeta({
   title: 'AF Legacy | AI Fantasy Football Draft Tool | AllFantasy',
   description:
     'Use AF Legacy as your AI-powered fantasy football draft assistant with pick recommendations, tier alerts, roster strategy, and multi-sport draft previews.',
-}
+  canonical: getAIToolPageCanonical('war-room'),
+})
 
 const SPORT_CARDS = [
   {
