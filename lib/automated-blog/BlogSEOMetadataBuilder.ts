@@ -3,7 +3,20 @@
  * Ensures meta descriptions and titles are within length limits; supports canonical.
  */
 
-const BASE = "https://allfantasy.ai"
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+
+/*
+ * ⚠ THE APEX WAS HARDCODED, AND THIS BUILDS THE CANONICAL FOR EVERY BLOG
+ * ARTICLE. app/sitemap.xml/route.ts publishes articles on www via
+ * getPublicSiteOrigin(), and the apex 307s to www — so each article told
+ * crawlers its canonical was a URL that redirects, contradicting the sitemap
+ * entry that led them there. Articles are the blog's actual ranking content,
+ * so this was the costliest place left for it.
+ *
+ * Fifth file in this class: 39ab1f8 fixed 17, d662343a fixed four more under
+ * lib/seo-landing, and this one hid behind the same `BASE` name.
+ */
+const BASE = getPublicSiteOrigin()
 const SITE_NAME = "AllFantasy"
 
 export interface BlogSEOInput {
