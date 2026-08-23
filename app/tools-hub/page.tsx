@@ -6,11 +6,12 @@ import {
 import { getAllSports, getAllTools } from '@/lib/tool-hub'
 import ToolsHubClient from './ToolsHubClient'
 import { buildMetadata } from '@/lib/seo'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 export const metadata: Metadata = buildMetadata({
   title: TOOLS_HUB_TITLE,
   description: TOOLS_HUB_DESCRIPTION,
-  canonical: 'https://allfantasy.ai/tools-hub',
+  canonical: `${getPublicSiteOrigin()}/tools-hub`,
 })
 
 export default function ToolsHubPage() {

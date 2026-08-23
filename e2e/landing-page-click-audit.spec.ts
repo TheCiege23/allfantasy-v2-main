@@ -1,24 +1,23 @@
 import { expect, test } from "@playwright/test"
 
 /**
- * Landing click audit, retargeted at the Nocturne landing.
+ * Landing click audit, retargeted at LandingV4.
  *
- * `/` renders LandingNocturne now; the scrollytelling landing this spec was
- * written against is still on disk for rollback but is no longer mounted. Every
- * `landing-*` testid it asserted therefore resolved to nothing, and the whole
- * spec failed as "element(s) not found" — which reads as a broken homepage
- * rather than as a homepage that was replaced.
+ * ⚠ THIS SPEC HAS NOW BEEN OUTRUN BY A LANDING CUT-OVER TWICE, and the second
+ * time it failed exactly as its own previous note described. It asserted
+ * `nocturne-*` testids; `/` renders `LandingV4` (app/page.tsx), which shipped
+ * with NO testids at all — so every `getByTestId` here resolved to nothing and
+ * the suite reported the homepage as broken when what was broken was the spec.
  *
- * Kept: the parts that describe any landing page — that it renders, that its
- * internal links resolve, that the tool pages it advertises are reachable, and
- * that neither breakpoint scrolls sideways. Those were the assertions actually
- * earning their keep.
+ * The fix on both sides: LandingV4 now carries stable `landing-*` testids that
+ * are named for the ROLE of each affordance (nav CTA, hero primary, pricing
+ * CTA) rather than for the design that happens to render it. A third redesign
+ * that keeps a hero CTA keeps `landing-hero-primary`, and this spec survives it.
  *
- * Dropped: the theme-toggle and language-toggle sequences, and the mobile
- * sticky-CTA block. Nocturne ships no theme or language control in its header
- * (`data-mode`/`data-lang` still live on <html>, but nothing on this page flips
- * them) and has no sticky mobile CTA. Asserting them here would be asserting a
- * different page than the one users get.
+ * What this guards, and why it is the tool for auditing `/` without production:
+ * it crawls every `<a href>` the page actually rendered and asserts each
+ * internal one answers < 400. That is the "does everything lead somewhere"
+ * check, run against a local dev server, with no deploy involved.
  */
 
 test.describe("@growth landing page click audit", () => {
@@ -28,12 +27,43 @@ test.describe("@growth landing page click audit", () => {
     await page.setViewportSize({ width: 1366, height: 900 })
     await page.goto("/", { waitUntil: "domcontentloaded" })
 
-    await expect(page.getByTestId("nocturne-nav-sign-in")).toBeVisible()
-    await expect(page.getByTestId("nocturne-nav-sign-up")).toBeVisible()
-    await expect(page.getByTestId("nocturne-hero-primary")).toBeVisible()
+    await expect(page.getByTestId("landing-nav-sign-in")).toBeVisible()
+    await expect(page.getByTestId("landing-nav-cta")).toBeVisible()
+    await expect(page.getByTestId("landing-hero-primary")).toBeVisible()
     // The headline ships server-rendered — a "Loading…" shell here would mean
     // crawlers and link previews see nothing.
     await expect(page.locator("h1").first()).toBeVisible()
+
+    /*
+     * The three nav jumps must land on a section that EXISTS. `#faq` is the one
+     * that regressed before: the section carried `id="faq"` while nothing linked
+     * to it, so the link and the target have to be asserted together — a nav
+     * item pointing at a missing id scrolls nowhere and reports no error.
+     */
+    for (const anchor of ["how", "pricing", "faq"]) {
+      await expect(
+        page.getByTestId(`landing-nav-${anchor}`),
+        `nav should offer a #${anchor} jump`,
+      ).toBeVisible()
+      await expect(
+        page.locator(`#${anchor}`),
+        `#${anchor} must exist for the nav link to land on`,
+      ).toHaveCount(1)
+    }
+
+    /*
+     * The homepage linked to none of the /sports/* or /tools/* pages the sitemap
+     * publishes, which orphaned the entire SEO tree from the strongest page on
+     * the site. Assert the discovery band is present and populated — a silently
+     * empty map lookup would render zero links and still pass a "section exists"
+     * check.
+     */
+    await expect(page.getByTestId("landing-discover")).toBeVisible()
+    const discoverLinks = page.getByTestId("landing-discover-link")
+    expect(
+      await discoverLinks.count(),
+      "landing should link into the /sports and /tools pages the sitemap publishes",
+    ).toBeGreaterThanOrEqual(20)
 
     // Verify all internal links on the landing surface resolve.
     const hrefs = await page.locator("a[href]").evaluateAll((links) => {
@@ -88,7 +118,7 @@ test.describe("@growth landing page click audit", () => {
     await page.goto("/", { waitUntil: "domcontentloaded" })
 
     await expect(page.locator("h1").first()).toBeVisible()
-    await expect(page.getByTestId("nocturne-hero-primary")).toBeVisible()
+    await expect(page.getByTestId("landing-hero-primary")).toBeVisible()
 
     // A landing page that scrolls sideways on a phone is the single most common
     // way this surface breaks, and the reason this check outlived the redesign.
@@ -97,7 +127,7 @@ test.describe("@growth landing page click audit", () => {
     })
     expect(mobileHasOverflow).toBeFalsy()
 
-    await page.getByTestId("nocturne-hero-primary").click()
+    await page.getByTestId("landing-hero-primary").click()
     await expect(page).not.toHaveURL(/\/$/, { timeout: 20_000 })
   })
 })

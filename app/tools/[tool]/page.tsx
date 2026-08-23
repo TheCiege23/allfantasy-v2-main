@@ -9,6 +9,7 @@ import {
 import { ToolPageJsonLd } from '@/components/seo/JsonLd'
 import ToolLandingClient from './ToolLandingClient'
 import { buildMetadata } from '@/lib/seo'
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export async function generateStaticParams() {
   return TOOL_SLUGS.map((tool) => ({ tool }))
@@ -25,7 +26,7 @@ export async function generateMetadata({
     return buildMetadata({
       title: 'AllFantasy – Fantasy Sports Tools',
       description: 'AI-powered fantasy sports tools and league management.',
-      canonical: 'https://allfantasy.ai/tools-hub',
+      canonical: `${getPublicSiteOrigin()}/tools-hub`,
     })
   }
 

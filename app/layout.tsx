@@ -31,7 +31,26 @@ export const metadata: Metadata = {
     title: 'AllFantasy – Fantasy Sports Tools Powered by Chimmy',
     description:
       'AllFantasy combines fantasy sports leagues, bracket challenges, and Chimmy-powered tools to help players draft smarter, analyze trades, and dominate their leagues.',
-    canonical: 'https://allfantasy.ai/',
+    /*
+     * ⚠ NO `canonical` HERE, AND ADDING ONE BACK BREAKS EVERY PAGE ON THE SITE.
+     *
+     * This used to read `canonical: 'https://allfantasy.ai/'`. Next merges
+     * metadata by top-level field, so `alternates` set on this ROOT layout is
+     * inherited by every descendant page that does not declare its own — which
+     * was 353 of the 384 page.tsx files in `app/`. All of them shipped
+     * `<link rel="canonical" href="https://allfantasy.ai/">`, i.e. each one told
+     * crawlers it was a duplicate of the homepage and should not rank as itself.
+     * `/privacy` and `/terms`, both linked from the landing footer, are two of
+     * them; `/` escaped only because its own generateMetadata overrides this.
+     *
+     * The host was wrong on top of that: lib/site-public-origin.ts defines the
+     * canonical origin as https://www.allfantasy.ai and the apex 307s to it, so
+     * the inherited canonical also pointed at a redirect.
+     *
+     * A canonical is a per-page fact and belongs on the page. Pass
+     * `canonicalPath` to buildSeoMeta in each route's own metadata — it resolves
+     * against getPublicSiteOrigin(), so it cannot drift from the served host.
+     */
     keywords: [
       'fantasy sports',
       'fantasy football tools',

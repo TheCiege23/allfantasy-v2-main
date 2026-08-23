@@ -18,6 +18,7 @@ import {
   getWebPageSchema,
 } from '@/lib/seo'
 import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 /**
  * Landing page (Nocturne "1a" design). Replaces the legacy scrollytelling
@@ -78,7 +79,17 @@ export async function generateMetadata({
     openGraphDescription: copy.meta.ogDescription,
     twitterTitle: copy.meta.ogTitle,
     twitterDescription: copy.meta.ogDescription,
-    imagePath: '/af-crest.png',
+    /*
+     * ⚠ `/og-image.jpg`, NOT `/af-crest.png`. This is the page whose link
+     * preview matters most, and it was the one page opting OUT of the correct
+     * card. `/af-crest.png` is 1024×1024 (and, despite the extension, JPEG
+     * bytes) — a square crest rendered into a `summary_large_image` Twitter
+     * card and a 1.91:1 OpenGraph slot, so every share of the homepage got the
+     * logo letterboxed or cropped. `/og-image.jpg` is the real 1200×630 card
+     * and is already DEFAULT_OG_IMAGE_PATH in SocialShareMetadataService, so
+     * this line now agrees with what every other page gets for free.
+     */
+    imagePath: '/og-image.jpg',
     keywords: [
       'fantasy sports',
       'fantasy football',
@@ -105,11 +116,26 @@ const HOME_WEBPAGE_SCHEMA = getWebPageSchema({
   url: '/',
 })
 
+/*
+ * ⚠ `url` IS RESOLVED, NOT TYPED. It was the apex literal `https://allfantasy.ai/`,
+ * which 307s to www — so the homepage's SoftwareApplication node identified the
+ * product by a URL that redirects.
+ *
+ * Every other structured-data node on this page already agreed with the served
+ * host: getWebPageSchema normalises its relative `url` against getPublicSiteOrigin(),
+ * and the WebSite + Organization nodes come from the root layout's DefaultJsonLd,
+ * which is built from the same helper. This was the last one disagreeing.
+ *
+ * Note there is deliberately no Organization or BreadcrumbList node added here:
+ * Organization already ships site-wide from DefaultJsonLd (a second copy would be
+ * a duplicate entity), and a breadcrumb whose only item is the page you are
+ * already on carries no information.
+ */
 const HOME_SOFTWARE_APP_SCHEMA = getSoftwareApplicationSchema({
   name: 'AllFantasy.ai',
   description:
     'Commissioner-first fantasy sports platform for serious managers with league management, live drafts, trade tools, and waiver wire tracking.',
-  url: 'https://allfantasy.ai/',
+  url: `${getPublicSiteOrigin()}/`,
   applicationCategory: 'SportsApplication',
 })
 

@@ -1,18 +1,19 @@
 import type { Metadata } from "next"
 import Link from "next/link"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export const metadata: Metadata = {
   title: "Daily Reflection & Horoscope-Inspired Meditation \u2014 Zen Lab",
   description:
     "Use Zen Lab alongside your horoscope or astrology routine for quiet daily reflection, mindful breathing, and gentle spiritual check-ins.",
   alternates: {
-    canonical: "https://allfantasy.ai/horoscope",
+    canonical: `${getPublicSiteOrigin()}/horoscope`,
   },
   openGraph: {
     title: "Daily Reflection & Horoscope-Inspired Calm \u2014 Zen Lab",
     description:
       "Pair your daily horoscope with a few minutes of guided breathing and reflection in Zen Lab to ground your day.",
-    url: "https://allfantasy.ai/horoscope",
+    url: `${getPublicSiteOrigin()}/horoscope`,
     type: "website",
   },
 }

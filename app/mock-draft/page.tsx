@@ -6,6 +6,7 @@ import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTr
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
 import { isMockDraftsEnabled } from '@/lib/feature-toggle'
 import { buildMetadata, getSEOPageConfig } from '@/lib/seo'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,7 +14,7 @@ export const metadata = buildMetadata(
   getSEOPageConfig('mock-draft') ?? {
     title: 'Mock Drafts – AllFantasy',
     description: 'Create, run, and share unlimited AllFantasy mock drafts with AI-powered insights.',
-    canonical: 'https://allfantasy.ai/mock-draft',
+    canonical: `${getPublicSiteOrigin()}/mock-draft`,
   }
 )
 

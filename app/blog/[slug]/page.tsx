@@ -5,8 +5,9 @@ import { prisma } from "@/lib/prisma"
 import { buildBlogSEO } from "@/lib/automated-blog"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
-const BASE = "https://allfantasy.ai"
+const BASE = getPublicSiteOrigin()
 
 type Props = { params: Promise<{ slug: string }>; searchParams?: Promise<{ preview?: string }> }
 

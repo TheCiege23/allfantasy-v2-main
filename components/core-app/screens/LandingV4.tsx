@@ -1,4 +1,16 @@
 import Link from 'next/link'
+/*
+ * The discovery band is built from the SAME catalogue that generates the pages
+ * it links to and the sitemap that publishes them, so the homepage cannot
+ * advertise a `/sports/*` or `/tools/*` page that does not exist, and a slug
+ * added to the catalogue is linked from here without touching this file.
+ */
+import {
+  SPORT_SLUGS,
+  TOOL_SLUGS,
+  SPORT_CONFIG,
+  TOOL_CONFIG,
+} from '@/lib/seo-landing/config'
 import {
   getLandingCopy,
   DEFAULT_LANDING_LANG,
@@ -184,25 +196,46 @@ export function LandingV4({
             nothing here to link to and it now goes to /pricing, where AF
             Commissioner is a real tier with its own described feature list.
           */}
-          <a href="#how">{c.nav.how}</a>
-          <a href="#pricing">{c.nav.pricing}</a>
-          <Link href="/pricing">{c.nav.forCommissioners}</Link>
+          <a href="#how" data-testid="landing-nav-how">
+            {c.nav.how}
+          </a>
+          <a href="#pricing" data-testid="landing-nav-pricing">
+            {c.nav.pricing}
+          </a>
+          {/*
+            ⚠ THE THIRD BROKEN NAV LINK, FIXED THE SAME WAY AS THE OTHER TWO.
+            `#faq` was the last orphan on this page: the section below has
+            carried `id="faq"` since it was written and NOTHING linked to it, so
+            the four answers a hesitant reader most needs — "is this gambling?",
+            "what does it cost?" — were reachable only by scrolling past
+            everything else. The id already existed; only the link was missing.
+          */}
+          <a href="#faq" data-testid="landing-nav-faq">
+            {c.nav.faq}
+          </a>
+          <Link href="/pricing" data-testid="landing-nav-commissioners">
+            {c.nav.forCommissioners}
+          </Link>
         </div>
 
         <div className="af-lp-nav-right">
           <LangSwitch lang={lang} label={c.nav.langLabel} />
           {/* "Sign in" is noise to someone already signed in. */}
-          {signedIn ? null : <Link href="/login">{c.nav.signIn}</Link>}
+          {signedIn ? null : (
+            <Link href="/login" data-testid="landing-nav-sign-in">
+              {c.nav.signIn}
+            </Link>
+          )}
           {/* Partners points at the B2B screen, which is served by the
               /core catch-all as the `partners` segment — no extra route. It was
               previously an in-page #business anchor, which became a dead link
               when the band moved off this page. */}
           <span className="af-lp-nav-divider" aria-hidden />
-          <Link href="/core/partners" className="af-lp-partners">
+          <Link href="/core/partners" className="af-lp-partners" data-testid="landing-nav-partners">
             {c.nav.partners}
             <span className="af-lp-api-chip af-num">API</span>
           </Link>
-          <Link href={primaryCta.href} className="af-btn af-lp-cta">
+          <Link href={primaryCta.href} className="af-btn af-lp-cta" data-testid="landing-nav-cta">
             {primaryCta.label}
           </Link>
         </div>
@@ -219,10 +252,18 @@ export function LandingV4({
           </h1>
           <p className="af-lp-sub">{c.hero.sub}</p>
           <div className="af-lp-hero-ctas">
-            <Link href={primaryCta.href} className="af-btn af-lp-cta-lg">
+            <Link
+              href={primaryCta.href}
+              className="af-btn af-lp-cta-lg"
+              data-testid="landing-hero-primary"
+            >
               {signedIn ? primaryCta.label : c.hero.ctaPrimary}
             </Link>
-            <a href="#how" className="af-btn af-btn--ghost af-lp-cta-lg">
+            <a
+              href="#how"
+              className="af-btn af-btn--ghost af-lp-cta-lg"
+              data-testid="landing-hero-secondary"
+            >
               {c.hero.ctaSecondary}
             </a>
           </div>
@@ -328,10 +369,10 @@ export function LandingV4({
             <p className="af-lp-pricing-body">{c.pricing.body}</p>
           </div>
           <div className="af-lp-pricing-ctas">
-            <Link href={primaryCta.href} className="af-btn">
+            <Link href={primaryCta.href} className="af-btn" data-testid="landing-pricing-cta">
               {signedIn ? primaryCta.label : c.pricing.ctaPrimary}
             </Link>
-            <Link href="/pricing" className="af-btn af-btn--ghost">
+            <Link href="/pricing" className="af-btn af-btn--ghost" data-testid="landing-pricing-compare">
               {c.pricing.ctaSecondary}
             </Link>
           </div>
@@ -360,6 +401,103 @@ export function LandingV4({
         </div>
       </section>
 
+      {/* ── Discover: sport & tool pages ───────────────────────────── */}
+      {/*
+        ⚠ THIS EXISTS BECAUSE THE HOMEPAGE WAS LINKING TO NONE OF IT.
+        app/sitemap.xml/route.ts publishes every `/sports/*` and `/tools/*` page
+        — and up to 20,000 player pages — but the strongest page on the site
+        pointed at exactly zero of them, so the whole SEO tree was orphaned from
+        `/` and reachable only via the sitemap. A sitemap tells a crawler a URL
+        exists; an internal link tells it the URL matters. These are the second.
+
+        Rendered from SPORT_SLUGS/TOOL_SLUGS with each destination's own
+        `headline` as the anchor text, so the link text always matches the page
+        it opens and a new slug in the catalogue appears here automatically.
+      */}
+      <section className="af-lp-discover" id="discover" data-testid="landing-discover">
+        <span className="af-label">{c.discover.label}</span>
+        <h2 className="af-lp-h2">{c.discover.h2}</h2>
+        <p className="af-lp-discover-body">{c.discover.body}</p>
+        <div className="af-lp-discover-cols">
+          <div className="af-lp-discover-col">
+            <h3 className="af-lp-discover-h3">{c.discover.bySport}</h3>
+            <ul className="af-lp-discover-list">
+              {SPORT_SLUGS.map((slug) => (
+                <li key={slug}>
+                  <Link href={`/sports/${slug}`} data-testid="landing-discover-link">
+                    {SPORT_CONFIG[slug].headline}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div className="af-lp-discover-col">
+            <h3 className="af-lp-discover-h3">{c.discover.byTool}</h3>
+            <ul className="af-lp-discover-list">
+              {TOOL_SLUGS.map((slug) => (
+                <li key={slug}>
+                  <Link href={`/tools/${slug}`} data-testid="landing-discover-link">
+                    {TOOL_CONFIG[slug].headline}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Footer ──────────────────────────────────────────────────── */}
+      <footer className="af-lp-footer">
+        <div className="af-lp-footer-top">
+          <span className="af-lp-brand">
+            <Shield />
+            <span className="af-lp-wordmark">AllFantasy</span>
+          </span>
+          <nav className="af-lp-footer-links" aria-label="Footer">
+            <Link href="/core/players">{c.footer.playerFinder}</Link>
+            <Link href="/dashboard">{c.footer.dashboard}</Link>
+            <Link href="/privacy">{c.footer.privacy}</Link>
+            <Link href="/terms">{c.footer.terms}</Link>
+            <Link href="/data-deletion">{c.footer.dataDeletion}</Link>
+          </nav>
+        </div>
+        <div className="af-lp-footer-legal">
+          <span>© 2026 AllFantasy.ai</span>
+          <span className="af-lp-footer-builtby">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              className="af-lp-footer-mark"
+              src="/brand/brown-pig-llc.png"
+              alt=""
+              width={34}
+              height={34}
+              loading="lazy"
+            />
+            <span className="af-lp-footer-builtby-text">
+              <span className="af-label">{c.footer.builtByLabel}</span>
+              <strong className="af-lp-footer-builtby-name">Brown Pig LLC</strong>
+            </span>
+          </span>
+        </div>
+        {/*
+          Jurisdiction copy is a compliance statement, not decoration — it stays
+          in the footer verbatim.
+        */}
+        <p className="af-lp-footer-compliance">{c.footer.compliance}</p>
+      </footer>
+
+      {/*
+        ⚠ THIS BAND SITS AFTER </footer> ON PURPOSE — DO NOT MOVE IT BACK UP.
+        These are six links to OTHER products, and they used to sit directly
+        above the footer: on the one page whose job is to convert, the last
+        thing in front of a scrolling visitor was six ways to leave for a
+        different site, with every CTA already behind them.
+
+        Nothing about the band itself changed — same six links, same Brown Pig
+        mark, same copy. Only its position did: the nav CTA, the hero CTA and
+        the pricing CTA are all above it now, so the reader meets every offer to
+        sign up before the first offer to go elsewhere.
+      */}
       {/* ── Brown Pig network ───────────────────────────────────────── */}
       <section className="af-lp-network">
         {/*
@@ -407,46 +545,6 @@ export function LandingV4({
           })}
         </div>
       </section>
-
-      {/* ── Footer ──────────────────────────────────────────────────── */}
-      <footer className="af-lp-footer">
-        <div className="af-lp-footer-top">
-          <span className="af-lp-brand">
-            <Shield />
-            <span className="af-lp-wordmark">AllFantasy</span>
-          </span>
-          <nav className="af-lp-footer-links" aria-label="Footer">
-            <Link href="/core/players">{c.footer.playerFinder}</Link>
-            <Link href="/dashboard">{c.footer.dashboard}</Link>
-            <Link href="/privacy">{c.footer.privacy}</Link>
-            <Link href="/terms">{c.footer.terms}</Link>
-            <Link href="/data-deletion">{c.footer.dataDeletion}</Link>
-          </nav>
-        </div>
-        <div className="af-lp-footer-legal">
-          <span>© 2026 AllFantasy.ai</span>
-          <span className="af-lp-footer-builtby">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="af-lp-footer-mark"
-              src="/brand/brown-pig-llc.png"
-              alt=""
-              width={34}
-              height={34}
-              loading="lazy"
-            />
-            <span className="af-lp-footer-builtby-text">
-              <span className="af-label">{c.footer.builtByLabel}</span>
-              <strong className="af-lp-footer-builtby-name">Brown Pig LLC</strong>
-            </span>
-          </span>
-        </div>
-        {/*
-          Jurisdiction copy is a compliance statement, not decoration — it stays
-          in the footer verbatim.
-        */}
-        <p className="af-lp-footer-compliance">{c.footer.compliance}</p>
-      </footer>
     </div>
   )
 }

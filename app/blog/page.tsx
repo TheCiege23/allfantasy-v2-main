@@ -5,8 +5,9 @@ import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { BLOG_CATEGORY_LABELS, BLOG_CATEGORIES } from "@/lib/automated-blog/types"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
-const BASE = "https://allfantasy.ai"
+const BASE = getPublicSiteOrigin()
 
 export const dynamic = "force-dynamic"
 
