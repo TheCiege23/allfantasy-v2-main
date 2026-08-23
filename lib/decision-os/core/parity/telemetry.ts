@@ -71,3 +71,38 @@ export function emitLiveTelemetry(
 ): void {
   emitDecisionTelemetry('decision.live_enrichment', decisionType, flags, decisionId)
 }
+
+/**
+ * Domain-OS feed outcomes for one request or sweep tick.
+ *
+ * WHY THIS IS THE POINT OF WIRING THE FEED AT ALL. The feed serves a fact from the store when
+ * one is fresh and derives it live otherwise, and the ONLY way to know which is happening is to
+ * count it. Signal facts carry a 30-minute TTL by design (a stale injury status is a wrong
+ * answer delivered confidently), so the store only pays on repeat requests inside that window --
+ * which is a property of real traffic, not of this code. If `store` stays at zero here, the
+ * cache is overhead and the backing table is not worth creating.
+ *
+ * NOT persisted: it is not a parity comparison and the flip gate does not read it.
+ * Never throws -- telemetry must not be able to fail the decision it is measuring.
+ */
+export function emitFeedOutcomes(
+  domain: string,
+  outcomes: Record<string, { servedFrom: string; ageMs: number | null }>,
+): void {
+  try {
+    const entries = Object.entries(outcomes)
+    if (entries.length === 0) return
+    const by = { store: 0, live: 0, unavailable: 0 } as Record<string, number>
+    for (const [, o] of entries) by[o.servedFrom] = (by[o.servedFrom] ?? 0) + 1
+    emitDecisionTelemetry("decision.os_feed", domain, {
+      served_store: by.store,
+      served_live: by.live,
+      served_unavailable: by.unavailable,
+      // Per-source, so a domain with one hot and one cold fact kind is legible rather than
+      // averaged into a single misleading hit rate.
+      sources: entries.map(([k, o]) => `${k}:${o.servedFrom}`).join(","),
+    })
+  } catch {
+    // measuring the cache must never break the request
+  }
+}
