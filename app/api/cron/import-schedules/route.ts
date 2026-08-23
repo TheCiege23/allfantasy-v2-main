@@ -152,8 +152,17 @@ async function handle(req: NextRequest) {
           continue
         }
         try {
-          const sched = await ingestSchedule(s)
+          /*
+           * Hand the sport whatever wall-clock is left, minus headroom for the teams call below and
+           * for serialising the response. Without this the sport runs unbounded and a single large
+           * population (MLB 2,303 events, NCAAF 866) walks the handler into the 300s edge 502.
+           */
+          const sportBudgetMs = Math.max(0, budget.remainingMs() - 20_000)
+          const sched = await ingestSchedule(s, { budgetMs: sportBudgetMs })
           const entry: Record<string, unknown> = { season: sched.season, games: sched.written }
+          // A partial sweep is progress, not failure — but it has to SAY so, or a sport that never
+          // finishes looks identical to one that had nothing to write.
+          if (sched.deferred > 0) entry.deferredEvents = sched.deferred
           // Only the leagues whose teams come back in a single call. NCAAF is
           // excluded by TSDB_FAST_TEAM_SPORTS, not by accident.
           //
