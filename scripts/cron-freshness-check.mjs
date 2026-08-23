@@ -120,7 +120,14 @@ export const PROBES = {
   // ── fast tier (stays on the host) ──
   // Monitored here on purpose. The whole reason the tiers are split is so that a host outage
   // cannot silence its own alarm; these probes are what make a fast-tier stop visible.
-  '/api/cron/import-scores': { table: 'SportsGame', column: 'fetchedAt' },
+  // MOVED OFF SportsGame 2026-08-23. This probe read the same table+column as import-schedules,
+  // so ANY import-schedules run reported import-scores healthy. With the fast tier dead, that was
+  // a silent false green for a job that had not run at all -- strictly worse than the wrong-table
+  // probes fixed earlier, because those were permanently RED and therefore loud.
+  // No column can separate them (both write rolling_insights, thesportsdb AND api_sports rows),
+  // and source='espn' is not exclusive either -- 'espn' is an NflRedraftProviderId, so the
+  // redraft canonical sync can write it. The route now records a heartbeat instead.
+  '/api/cron/import-scores': { heartbeat: 'cron-import-scores' },
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
 
   // ── heartbeat probes ──

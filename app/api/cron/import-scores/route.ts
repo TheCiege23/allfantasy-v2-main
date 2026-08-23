@@ -29,6 +29,7 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
+import { withSyncJobRun } from "@/lib/production-health/syncJobRunTelemetry"
 import {
   syncAPISportsGamesToDb,
   clearAPISportsDiagnostics,
@@ -233,10 +234,51 @@ async function handle(req: NextRequest) {
    * when NFL's provider is down. That is the property the two separate crons had
    * for free, and losing it would be a real regression.
    */
-  const results = []
-  for (const sport of sports) {
-    results.push(await runOneSport(url, sport))
-  }
+  /*
+   * ⚠ THE HEARTBEAT WRAP GOES HERE, ABOVE BOTH RETURNS BELOW.
+   *
+   * This route writes SportsGame -- and so does import-schedules. That made the freshness probe
+   * on SportsGame report GREEN for import-scores while the fast tier was dead and this job had
+   * not run at all. Measured 2026-08-23: dispatching import-schedules ALONE flipped the
+   * import-scores probe from STALE 23m to ok 6m, and the fleet count 20/32 -> 21/32, exactly as
+   * if something had recovered.
+   *
+   * No column separates the two jobs. Both write rolling_insights and thesportsdb rows, and
+   * runOneSport calls syncAPISportsGamesToDb, so this job writes api_sports rows too. Scoping a
+   * probe to source="espn" fails for a subtler reason: "espn" is a member of
+   * NflRedraftProviderId, so the redraft canonical sync can write that source as well. Only a
+   * heartbeat answers "did THIS job run" -- which is why lib/production-health/cronRegistry.ts
+   * already declares the job name "cron-import-scores" that this route never actually recorded.
+   *
+   * Wrapped around the work rather than inside runOneSport: a per-sport wrap would record two
+   * runs per fire, and a gated sport still needs to prove the job WOKE UP -- gating IS the job
+   * working, not a reason to stay silent.
+   */
+  const results = await withSyncJobRun(
+    { jobName: "cron-import-scores", jobScope: sports.join(","), trigger: "cron" },
+    async () => {
+      const acc: Array<Awaited<ReturnType<typeof runOneSport>>> = []
+      for (const sport of sports) {
+        acc.push(await runOneSport(url, sport))
+      }
+      return acc
+    },
+    (acc) => ({
+      rowsWritten: acc.reduce(
+        (n, r) => n + ("synced" in r && typeof r.synced === "number" ? r.synced : 0),
+        0,
+      ),
+      errors: acc
+        .filter((r) => !r.ok)
+        .map((r) => ("error" in r ? `${r.sport}: ${String(r.error)}` : `${r.sport}: failed`)),
+      // Gating is NORMAL operation (quota conservation), so it rides in metadata rather than
+      // warnings -- a warning would infer status "partial" on a healthy, quota-respecting run,
+      // and a job that looks degraded every time it behaves correctly is a muted alarm.
+      metadata: {
+        gatedSports: acc.filter((r) => "gated" in r && r.gated === true).map((r) => r.sport),
+      },
+    }),
+  )
 
   // Explicit single-sport callers keep the exact response they had before.
   if (explicit) {
