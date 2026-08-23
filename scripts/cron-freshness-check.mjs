@@ -9,17 +9,30 @@
  * THREE RULES IT IS BUILT AROUND, each of which is a way the previous checks lied:
  *
  *   1. CHECK THE DATA, NOT THE ROUTE. A manual curl returning 200 proves the handler is alive and
- *      reachable. It proves nothing about whether anything SCHEDULED it. Every job here is judged
- *      only by `max(<freshness column>)` on the table it is supposed to write.
+ *      reachable. It proves nothing about whether anything SCHEDULED it. Every job is judged by a
+ *      timestamp in the database, never by a response code.
  *
  *   2. NEVER TRUST SyncJobRun.status. A row stuck in `running` makes computeJobHealth report amber
  *      forever -- it checks runningTooLong BEFORE freshness, so it can never escalate to red. A
  *      maxDuration kill runs no user code, so withSyncJobRun never closes the row. This script
- *      does not read that table at all.
+ *      never reads `status`. Heartbeat probes read max(started_at) from the same table, which is
+ *      not the same mistake: a timestamp cannot be stuck, only old.
  *
  *   3. USE `pg`, NOT PRISMA. Prisma reports a Neon bad password as P1001 "can't reach database",
  *      which reads as an outage. `pg` surfaces the real 28P01. A monitor that misreports its own
  *      auth failure as a production incident is worse than no monitor.
+ *
+ * TWO KINDS OF PROBE, because two kinds of job:
+ *   OUTPUT    max(<freshness column>) on the table the job writes. Proves it did its work. Correct
+ *             for unconditional jobs -- the data imports, which write on every successful run.
+ *   HEARTBEAT max(started_at) in sync_job_runs for that job_name. Proves only that it RAN. Correct
+ *             for CONDITIONAL jobs, which legitimately write nothing most of the year: no waivers
+ *             to process in August, no autopick outside a live draft. An output probe on those is
+ *             red for two-thirds of the season and teaches everyone to ignore the alarm.
+ *
+ * A cron that is neither probed nor listed in NO_PROBE is reported as an unclassified gap, and
+ * __tests__/cron-tier-and-freshness.test.ts fails until someone classifies it. Silence about
+ * coverage is what let the last outage run for six days.
  *
  * STALENESS is judged per job against its OWN declared cadence in vercel.json -- specifically the
  * largest gap between consecutive fires, not the average. `0 16-19 * * *` fires hourly inside a
@@ -56,7 +69,7 @@ const MIN_ALLOWANCE_MS = 20 * 60_000
  * that quietly covers two-thirds of the fleet while printing "all healthy" is how the last outage
  * stayed invisible.
  */
-const PROBES = {
+export const PROBES = {
   // ── slow tier (GitHub Actions) ──
   '/api/cron/import-injuries': { table: 'SportsInjury', column: 'fetchedAt' },
   '/api/cron/import-players': { table: 'sports_players', column: 'last_updated' },
@@ -86,12 +99,41 @@ const PROBES = {
   '/api/cron/decision-os-activity-ingest?discover=1': { table: 'decision_os_imported_activity', column: 'updatedAt' },
   '/api/cron/decision-os-snapshot-capture?discover=1': { table: 'intelligence_league_snapshot', column: 'updatedAt' },
 
+  // Produces decision_parity_record rows; the `*/10` job whose 37-hour gap is how the whole
+  // scheduler outage was found in the first place.
+  '/api/cron/decision-os-intelligence-maintenance': { table: 'decision_parity_record', column: 'recordedAt' },
+
   // ── fast tier (stays on the host) ──
   // Monitored here on purpose. The whole reason the tiers are split is so that a host outage
   // cannot silence its own alarm; these probes are what make a fast-tier stop visible.
   '/api/cron/import-scores': { table: 'SportsGame', column: 'fetchedAt' },
   '/api/cron/import-news': { table: 'player_news', column: 'created_at' },
+
+  // ── heartbeat probes ──
+  // `heartbeat` reads max(started_at) from sync_job_runs for that job_name instead of looking at
+  // an output table. It answers "did this job RUN", which is a strictly weaker claim than "did it
+  // do its work" -- a run that started and then failed still refreshes the heartbeat.
+  //
+  // Weaker is the right trade for CONDITIONAL jobs. Most of these correctly write nothing most of
+  // the time: there are no waivers to process in August, no live scores between games, no drafts
+  // outside draft season. An output probe on those is red for two-thirds of the year and trains
+  // everyone to ignore the alarm, which is the failure this monitor exists to prevent.
+  //
+  // Reading sync_job_runs at all is NOT a contradiction of rule 2 above. Rule 2 forbids trusting
+  // `status`, where a row stuck in `running` makes computeJobHealth report amber forever. A
+  // timestamp is not a status: max(started_at) cannot be stuck, only old.
+  '/api/cron/live-score-tick': { heartbeat: 'cron-live-score-tick' },
+  '/api/cron/trade-grade-notify': { heartbeat: 'cron-trade-grade-notify' },
+  '/api/cron/fantasy-os-exec-sync': { heartbeat: 'fantasy-os-sleeper-sync' },
+  '/api/cron/morning-briefing': { heartbeat: 'cron-morning-briefing' },
+  '/api/cron/import-nfl-team-defense': { heartbeat: 'cron-nfl-team-defense-import' },
+  '/api/cron/weekly-awards': { heartbeat: 'cron-weekly-awards' },
 }
+
+/** Where heartbeats are read from. One row per run, whether or not the run found work to do. */
+const HEARTBEAT_TABLE = 'sync_job_runs'
+const HEARTBEAT_NAME_COLUMN = 'job_name'
+const HEARTBEAT_TIME_COLUMN = 'started_at'
 
 /**
  * Crons with a KNOWN reason for having no probe, so they are reported as a deliberate gap rather
@@ -100,9 +142,30 @@ const PROBES = {
  * A probe on a table that nothing writes is worse than no probe: it goes red on day one, stays
  * red, and trains everyone to ignore the alarm. Both entries here were exactly that trap.
  */
-const NO_PROBE = {
+export const NO_PROBE = {
   '/api/cron/import-standings': 'the `standings` table has never held a row -- find where this job actually writes before probing it',
   '/api/cron/import-schedules?source=tsdb-only': '`fantasy_schedule_games` has never held a row; the tsdb path may be dead',
+
+  // ── CONDITIONAL: correctly writes nothing most of the year ──
+  // Every one of these needs a HEARTBEAT, not an output probe, and none of them records one today.
+  // The fix is the same for all: wrap the handler in withSyncJobRun so it logs a sync_job_runs row
+  // per run, then move the entry up into PROBES as `{ heartbeat: '<job_name>' }`. Until then an
+  // outage in these is genuinely invisible, and saying so is the point of this list.
+  '/api/cron/waivers': 'CONDITIONAL -- no waivers to process outside the season; automation_runs is 63d old and that is expected in August. Needs withSyncJobRun.',
+  '/api/redraft/score-sync': 'CONDITIONAL -- no games to score in preseason, and redraft_matchups has NO timestamp column at all. Needs withSyncJobRun.',
+  '/api/redraft/waiver-process': 'CONDITIONAL -- redraft_waiver_claims holds 1 row, 48d old. Needs withSyncJobRun.',
+  '/api/guillotine/eliminate': 'CONDITIONAL -- weekly in-season only, and guillotine_survival_logs has NO timestamp column. Needs withSyncJobRun.',
+  '/api/tournament/automation': 'CONDITIONAL -- only acts on active tournaments; tournament_audit_logs holds 1 row. Needs withSyncJobRun.',
+  '/api/cron/draft-tick': 'CONDITIONAL -- only advances autopick during a LIVE draft, so draft_sessions goes stale for most of the season. Needs withSyncJobRun.',
+  '/api/cron/legacy-import-drain': 'CONDITIONAL -- only runs work when a user has queued an import; LegacyImportJob is 33d old. Needs withSyncJobRun.',
+  '/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn': 'CONDITIONAL + SHARED -- playoffs only, and it writes SportsGame, which import-scores refreshes every 2 minutes. Needs withSyncJobRun.',
+
+  // ── NO DURABLE OUTPUT AT ALL ──
+  '/api/cron/alert-sweep': 'WRITES NOTHING -- reads webPushSubscription and sends push notifications. There is no table to probe; only a heartbeat could ever cover it.',
+  '/api/cron/draft-pool-prewarm': 'WRITES NOTHING DURABLE -- warms a cache. The `draft_pool_cache_warm` job_name exists in sync_job_runs but has 0 cron-triggered runs, so the cron path does not record one.',
+
+  // ── HAS NEVER PRODUCED ANYTHING ──
+  '/api/cron/trade-weekly-recalibration': 'TradeLearningStats holds ZERO rows -- this job has never produced output on any scheduler. Investigate before probing.',
 }
 
 const FRESHNESS_COLUMN_PREFERENCE = [
@@ -209,7 +272,9 @@ async function main() {
   try {
     // One introspection query for every probe table, so a missing table or column is a config
     // error rather than a per-probe exception storm.
-    const tables = [...new Set(Object.values(PROBES).map((p) => p.table))]
+    // Heartbeat probes carry no `table`; filtering keeps an `undefined` out of the ANY($1) array,
+    // which would otherwise make the introspection return nothing and mark every probe a CONFIG error.
+    const tables = [...new Set(Object.values(PROBES).map((p) => p.table).filter(Boolean))]
     const cols = await client.query(
       `SELECT table_name, array_agg(column_name::text) AS cols
          FROM information_schema.columns
@@ -230,7 +295,47 @@ async function main() {
 
       const gap = maxGapMs(cron.schedule)
       const allowanceMs = Math.max(MIN_ALLOWANCE_MS, (gap ?? 3_600_000) * TOLERANCE)
-      const base = { path: cron.path, schedule: cron.schedule, tier: tierOf.get(cron.path) ?? '?', table: probe.table, allowanceMs }
+      const base = {
+        path: cron.path,
+        schedule: cron.schedule,
+        tier: tierOf.get(cron.path) ?? '?',
+        table: probe.heartbeat ? HEARTBEAT_TABLE : probe.table,
+        kind: probe.heartbeat ? 'heartbeat' : 'output',
+        allowanceMs,
+      }
+
+      if (probe.heartbeat) {
+        let hb
+        try {
+          hb = await client.query(
+            `SELECT max("${HEARTBEAT_TIME_COLUMN}") AS newest, count(*)::bigint AS n
+               FROM "${HEARTBEAT_TABLE}" WHERE "${HEARTBEAT_NAME_COLUMN}" = $1`,
+            [probe.heartbeat],
+          )
+        } catch (err) {
+          results.push({ ...base, state: 'CONFIG', detail: err.message })
+          continue
+        }
+        const newest = hb.rows[0].newest ? new Date(hb.rows[0].newest) : null
+        const runCount = Number(hb.rows[0].n)
+        // A job_name that has never appeared is a registry error, not a dead cron -- most likely the
+        // name was renamed in code. Reporting it as STALE would send someone hunting a scheduler.
+        if (runCount === 0) {
+          results.push({ ...base, state: 'CONFIG', detail: `no sync_job_runs rows for job_name "${probe.heartbeat}"` })
+          continue
+        }
+        const ageMs = newest ? Date.now() - newest.getTime() : null
+        results.push({
+          ...base,
+          column: probe.heartbeat,
+          rowCount: runCount,
+          newest: newest?.toISOString() ?? null,
+          ageMs,
+          state: ageMs == null ? 'EMPTY' : ageMs > allowanceMs ? 'STALE' : 'OK',
+          caveat: 'heartbeat: proves the job RAN, not that it succeeded',
+        })
+        continue
+      }
 
       const available = columnsByTable.get(probe.table)
       if (!available) {
@@ -297,8 +402,9 @@ async function main() {
     for (const r of [...results].sort((a, b) => a.state.localeCompare(b.state) || a.path.localeCompare(b.path))) {
       const mark = r.state === 'OK' ? 'ok  ' : r.state === 'STALE' ? 'STALE' : r.state === 'EMPTY' ? 'EMPTY' : 'CONFIG'
       const age = r.state === 'CONFIG' ? r.detail : `${fmtAge(r.ageMs)} old (allow ${fmtAge(r.allowanceMs)})`
-      console.log(`  ${mark.padEnd(6)} ${r.tier.padEnd(5)} ${r.path.padEnd(52)} ${age}`)
-      if (r.caveat) console.log(`         ^ ${r.caveat}`)
+      const kind = r.kind === 'heartbeat' ? 'hb ' : '   '
+      console.log(`  ${mark.padEnd(6)} ${r.tier.padEnd(5)} ${kind}${r.path.padEnd(52)} ${age}`)
+      if (r.caveat) console.log(`             ^ ${r.caveat}`)
     }
     if (unmonitored.length > 0) {
       const known = unmonitored.filter((c) => c.reason)

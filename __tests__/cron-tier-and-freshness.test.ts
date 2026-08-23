@@ -10,7 +10,7 @@ import {
   slowTierSchedules,
   SLOW_TIER_EXCLUSIONS,
 } from '../scripts/cron-tier.mjs'
-import { maxGapMs } from '../scripts/cron-freshness-check.mjs'
+import { maxGapMs, NO_PROBE, PROBES } from '../scripts/cron-freshness-check.mjs'
 
 /**
  * Scheduling moved off the host after all 41 crons died on the Vercel -> Railway migration and
@@ -126,6 +126,51 @@ describe('maxGapMs', () => {
   it('returns null for an unparseable expression rather than a misleading number', () => {
     expect(maxGapMs('not a cron')).toBeNull()
     expect(maxGapMs('0 0')).toBeNull()
+  })
+})
+
+describe('freshness coverage is total', () => {
+  const crons = readVercelCrons()
+
+  it('classifies every declared cron as probed, deliberately unprobed, or excluded', () => {
+    // The invariant that keeps the coverage list honest. A cron that is none of these is a silent
+    // gap -- exactly what let the 41-cron outage run for six days -- so adding one to vercel.json
+    // fails here until someone decides which it is.
+    const unclassified = crons
+      .filter((c) => !PROBES[c.path])
+      .filter((c) => !NO_PROBE[c.path])
+      .filter((c) => !SLOW_TIER_EXCLUSIONS[c.path.split('?')[0]])
+      .map((c) => `${c.schedule}  ${c.path}`)
+
+    expect(unclassified, `unclassified crons:\n  ${unclassified.join('\n  ')}`).toEqual([])
+  })
+
+  it('gives every deliberately-unprobed cron a substantive reason', () => {
+    for (const [path, reason] of Object.entries(NO_PROBE)) {
+      expect(reason, `${path} needs a reason`).toBeTruthy()
+      expect(reason.length, `${path}: "${reason}" is too terse to act on`).toBeGreaterThan(40)
+    }
+  })
+
+  it('never points a probe at both a table and a heartbeat', () => {
+    // The two read completely different queries; carrying both would silently pick one.
+    for (const [path, probe] of Object.entries(PROBES)) {
+      const hasTable = Boolean(probe.table)
+      const hasHeartbeat = Boolean(probe.heartbeat)
+      expect(hasTable !== hasHeartbeat, `${path} must have exactly one of table/heartbeat`).toBe(true)
+    }
+  })
+
+  it('does not both probe and excuse the same cron', () => {
+    const both = Object.keys(PROBES).filter((p) => NO_PROBE[p])
+    expect(both).toEqual([])
+  })
+
+  it('only names crons that are actually declared', () => {
+    // A probe for a path removed from vercel.json is dead config that reads as coverage.
+    const declared = new Set(crons.map((c) => c.path))
+    const orphans = [...Object.keys(PROBES), ...Object.keys(NO_PROBE)].filter((p) => !declared.has(p))
+    expect(orphans, `probe entries with no matching cron:\n  ${orphans.join('\n  ')}`).toEqual([])
   })
 })
 
