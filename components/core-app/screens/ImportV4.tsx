@@ -335,6 +335,23 @@ export function ImportV4({
     setError(null)
   }, [])
 
+  /**
+   * ⚠ RETURNS TO THE DISCOVERED LIST INSTEAD OF DISCARDING IT. `reset` clears
+   * `leagues`, which is right when there is nothing to go back to — but every exit
+   * from the single-league panels used it, so finishing (or abandoning) ONE league
+   * threw away the other fifty-four and forced a re-discovery to reach the next.
+   * That is the whole cost of "do those individually": a bulk run over 55 Sleeper
+   * leagues leaves a dozen needing confirmation, and each one meant retyping the
+   * username and waiting out discovery again.
+   *
+   * Used only where a list actually exists; the callers fall back to `reset`
+   * otherwise, so the no-list behaviour is unchanged.
+   */
+  const backToList = useCallback(() => {
+    setPhase({ k: 'idle' })
+    setError(null)
+  }, [])
+
   const runDiscover = useCallback(
     async (identifier: string) => {
       setError(null)
@@ -484,6 +501,13 @@ export function ImportV4({
         historicalBackfill?: unknown
       }
       const leagueId = data?.leagueId || data?.league?.id || ''
+      /*
+       * Keeps the discovered list truthful for anyone who goes back to it. A league
+       * confirmed one-by-one after a bulk run is imported now, and leaving its row
+       * reading "Needs your confirmation" would invite a second, pointless pass over
+       * work already done. Harmless when there is no list — nothing reads the map.
+       */
+      setBulkStatus((prev) => (prev[sourceId] ? { ...prev, [sourceId]: 'done' } : prev))
       setPhase({
         k: 'done',
         leagueId,
@@ -516,6 +540,17 @@ export function ImportV4({
   const [bulkRunning, setBulkRunning] = useState(false)
   const [bulkDone, setBulkDone] = useState(false)
   const [bulkStatus, setBulkStatus] = useState<Record<string, BulkStatus>>({})
+  /**
+   * The server's own sentence for each league that did not go through, keyed by
+   * sourceId. Two consumers, and a row is only ever one of the two:
+   *   - `needs-attestation` → the attestation panel's prompt, so it reads "you're a
+   *     verified member of this league (not its commissioner)…" instead of a generic
+   *     line.
+   *   - `failed` → the reason, surfaced on the row so "Retry" is an informed choice
+   *     rather than a coin flip. A league that failed because it does not exist will
+   *     fail identically every time, and the row should say so.
+   */
+  const [bulkMessage, setBulkMessage] = useState<Record<string, string>>({})
 
   /*
    * ── Which discovered leagues to bring in (handoff 4d) ──────────────────────
@@ -547,15 +582,19 @@ export function ImportV4({
     })
   }, [])
 
-  const runBulkImport = useCallback(async () => {
-    if (bulkRunning || selectedLeagues.length === 0) return
-    setBulkRunning(true)
-    setBulkDone(false)
-    setBulkStatus({})
-    setError(null)
-    for (const league of selectedLeagues) {
-      setBulkStatus((prev) => ({ ...prev, [league.sourceId]: 'importing' }))
-      const res = await submitImportCreation(provider, league.sourceId, '')
+  /**
+   * One league through the commit call, with its row updated in place.
+   *
+   * ⚠ SHARED BY THE BULK LOOP AND THE PER-ROW RETRY ON PURPOSE. These two must
+   * classify an outcome identically — a retry that read `res.ok` as "imported"
+   * where the bulk loop knows better would report a league as freshly imported
+   * when it was an idempotent replay, which is exactly the bug the `existed`
+   * check below exists to prevent. One function, so they cannot drift.
+   */
+  const importOneLeague = useCallback(
+    async (sourceId: string): Promise<BulkStatus> => {
+      setBulkStatus((prev) => ({ ...prev, [sourceId]: 'importing' }))
+      const res = await submitImportCreation(provider, sourceId, '')
       /*
        * Attestation is deliberately NOT auto-accepted here. The server asks for it
        * when someone imports a league they do not commission, and answering that on
@@ -578,11 +617,54 @@ export function ImportV4({
           : res.requiresAttestation
             ? 'needs-attestation'
             : 'failed'
-      setBulkStatus((prev) => ({ ...prev, [league.sourceId]: status }))
+      const message = res.ok ? null : res.error || null
+      setBulkMessage((prev) => {
+        // Cleared on success so a retry that works does not leave the previous
+        // attempt's error sitting on a row that has since imported.
+        if (!message) {
+          if (!prev[sourceId]) return prev
+          const next = { ...prev }
+          delete next[sourceId]
+          return next
+        }
+        return { ...prev, [sourceId]: message }
+      })
+      setBulkStatus((prev) => ({ ...prev, [sourceId]: status }))
+      return status
+    },
+    [provider]
+  )
+
+  const runBulkImport = useCallback(async () => {
+    if (bulkRunning || selectedLeagues.length === 0) return
+    setBulkRunning(true)
+    setBulkDone(false)
+    setBulkStatus({})
+    setBulkMessage({})
+    setError(null)
+    for (const league of selectedLeagues) {
+      await importOneLeague(league.sourceId)
     }
     setBulkRunning(false)
     setBulkDone(true)
-  }, [bulkRunning, selectedLeagues, provider])
+  }, [bulkRunning, selectedLeagues, importOneLeague])
+
+  /**
+   * Re-runs a single failed league in place. Deliberately NOT a navigation: a
+   * failed row is usually a transient provider hiccup partway through a long run,
+   * and routing it through the preview → commit panels to recover would cost the
+   * list (and, before `backToList`, the other fifty-four rows) for what is one
+   * button press. The row shows "Importing…" while it goes and settles on whatever
+   * the retry actually returned — including `failed` again, with the new reason.
+   */
+  const retryLeague = useCallback(
+    async (sourceId: string) => {
+      if (bulkRunning) return
+      setError(null)
+      await importOneLeague(sourceId)
+    },
+    [bulkRunning, importOneLeague]
+  )
 
   const bulkCounts = (() => {
     const v = Object.values(bulkStatus)
@@ -967,13 +1049,73 @@ export function ImportV4({
                         .filter(Boolean)
                         .join(' · ')}
                     </span>
+                    {/*
+                      ⚠ WHY IT FAILED, NOT JUST THAT IT DID. "Failed" on its own makes
+                      Retry a coin flip — a league that failed because it does not exist
+                      will fail identically however many times it is pressed, and the
+                      user has no way to tell that from a timeout worth re-running.
+                      Only rendered for `failed`: the `needs-attestation` reason is the
+                      attestation panel's job and would be duplicated here.
+                    */}
+                    {bulkStatus[l.sourceId] === 'failed' && bulkMessage[l.sourceId] ? (
+                      <span className="af-im-league-reason">{bulkMessage[l.sourceId]}</span>
+                    ) : null}
                   </span>
                   {bulkStatus[l.sourceId] ? (
-                    <span
-                      className={`af-im-league-status af-im-league-status--${bulkStatus[l.sourceId]}`}
-                      role="status"
-                    >
-                      {BULK_STATUS_LABEL[bulkStatus[l.sourceId]]}
+                    <span className="af-im-league-outcome">
+                      <span
+                        className={`af-im-league-status af-im-league-status--${bulkStatus[l.sourceId]}`}
+                        role="status"
+                      >
+                        {BULK_STATUS_LABEL[bulkStatus[l.sourceId]]}
+                      </span>
+                      {/*
+                        ⚠ THE BADGE ALONE WAS A DEAD END. Any bulk status replaced the
+                        row's "Import" button outright, so the one status that asks the
+                        user to DO something -- "Needs your confirmation" -- left them
+                        nothing to click. The summary line says "do those individually",
+                        and the only way to obey it was to reload /import and re-run
+                        discovery. Observed on a real 55-league Sleeper run.
+
+                        Goes straight to the attestation panel rather than re-previewing:
+                        the commit already told us this exact league needs one, so routing
+                        back through preview -> commit -> 403 -> attest would just make the
+                        user re-earn a refusal we have already recorded.
+                      */}
+                      {bulkStatus[l.sourceId] === 'needs-attestation' ? (
+                        <button
+                          type="button"
+                          className="af-btn af-btn--ghost af-im-league-btn"
+                          disabled={busy || bulkRunning}
+                          onClick={() =>
+                            setPhase({
+                              k: 'attest',
+                              sourceId: l.sourceId,
+                              message:
+                                bulkMessage[l.sourceId] ||
+                                'Confirm you are authorized to import this league.',
+                            })
+                          }
+                        >
+                          Confirm
+                        </button>
+                      ) : null}
+                      {/*
+                        A failed row was as much a dead end as an unconfirmed one: the
+                        badge replaced the button, so the only way to re-attempt a league
+                        that hit a transient provider error midway through a long run was
+                        to reload and re-discover. Retries in place instead.
+                      */}
+                      {bulkStatus[l.sourceId] === 'failed' ? (
+                        <button
+                          type="button"
+                          className="af-btn af-btn--ghost af-im-league-btn"
+                          disabled={busy || bulkRunning}
+                          onClick={() => void retryLeague(l.sourceId)}
+                        >
+                          Retry
+                        </button>
+                      ) : null}
                     </span>
                   ) : (
                     <button
@@ -1006,7 +1148,16 @@ export function ImportV4({
             >
               Confirm and continue
             </button>
-            <button type="button" className="af-btn af-btn--ghost" onClick={reset}>
+            {/*
+              Backing out of ONE league's confirmation must not discard the other
+              fifty-four. `reset` still applies when this panel was reached without a
+              discovered list (a deep link, or a pasted league ID).
+            */}
+            <button
+              type="button"
+              className="af-btn af-btn--ghost"
+              onClick={leagues.length > 0 ? backToList : reset}
+            >
               Cancel
             </button>
           </div>
@@ -1033,7 +1184,11 @@ export function ImportV4({
             >
               Import this league
             </button>
-            <button type="button" className="af-btn af-btn--ghost" onClick={reset}>
+            <button
+              type="button"
+              className="af-btn af-btn--ghost"
+              onClick={leagues.length > 0 ? backToList : reset}
+            >
               Back
             </button>
           </div>
@@ -1076,9 +1231,21 @@ export function ImportV4({
               at all -- the field is not rendered in this phase. Reported as "it
               doesn't even let me input the league ID again".
             */}
-            <button type="button" className="af-btn af-btn--ghost" onClick={reset}>
-              Import another league
-            </button>
+            {/*
+              When a discovered list is still in hand, "back" means back to IT — the
+              rows, their outcomes, and the ones still waiting on a confirmation. Only
+              when there is no list does this fall back to clearing the form, which is
+              what it always did.
+            */}
+            {leagues.length > 0 ? (
+              <button type="button" className="af-btn af-btn--ghost" onClick={backToList}>
+                Back to your leagues
+              </button>
+            ) : (
+              <button type="button" className="af-btn af-btn--ghost" onClick={reset}>
+                Import another league
+              </button>
+            )}
             {/*
               ⚠ THE RETURN PATH IS OFFERED, NOT FORCED. Someone who arrived from
               create-league came here to finish THAT flow and would otherwise be
