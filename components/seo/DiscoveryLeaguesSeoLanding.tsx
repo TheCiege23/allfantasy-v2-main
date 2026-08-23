@@ -7,6 +7,7 @@ import {
   getDiscoveryLeaguesCanonical,
   type DiscoveryLeaguesPageConfig,
 } from '@/lib/seo-landing/discovery-leagues-pages'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 interface DiscoveryLeaguesSeoLandingProps {
   config: DiscoveryLeaguesPageConfig
@@ -14,6 +15,23 @@ interface DiscoveryLeaguesSeoLandingProps {
 
 export default function DiscoveryLeaguesSeoLanding({ config }: DiscoveryLeaguesSeoLandingProps) {
   const canonicalUrl = getDiscoveryLeaguesCanonical(config.slug)
+  /*
+   * ⚠ THE SITE ROOT USED TO BE THE HARDCODED APEX IN TWO PLACES BELOW, AND THAT
+   * LEFT THIS PAGE'S OWN JSON-LD DISAGREEING WITH ITSELF. `canonicalUrl` resolves
+   * through getPublicSiteOrigin() and returns www; `isPartOf.url` and the
+   * breadcrumb's Home item said https://allfantasy.ai. Measured on all three
+   * rendered pages: BOTH hosts appeared inside the same structured-data block,
+   * so the page declared two different site roots and named a Home URL that
+   * 307s.
+   *
+   * That is worse than being uniformly wrong, and it got worse when d662343a
+   * fixed the canonical helper without touching these two literals — a partial
+   * fix turned a consistent error into an inconsistent one. This is the last
+   * SEO-visible instance of the hardcoded apex; the ~30 that remain are
+   * NEXTAUTH_URL fallbacks for invite and share links, which are a different
+   * concern and deliberately untouched.
+   */
+  const siteOrigin = getPublicSiteOrigin()
   const relatedPages = DISCOVERY_LEAGUES_SLUGS.filter((slug) => slug !== config.slug).map(
     (slug) => DISCOVERY_LEAGUES_PAGE_CONFIG[slug]
   )
@@ -39,7 +57,7 @@ export default function DiscoveryLeaguesSeoLanding({ config }: DiscoveryLeaguesS
     isPartOf: {
       '@type': 'WebSite',
       name: 'AllFantasy',
-      url: 'https://allfantasy.ai',
+      url: siteOrigin,
     },
     breadcrumb: {
       '@type': 'BreadcrumbList',
@@ -48,7 +66,7 @@ export default function DiscoveryLeaguesSeoLanding({ config }: DiscoveryLeaguesS
           '@type': 'ListItem',
           position: 1,
           name: 'Home',
-          item: 'https://allfantasy.ai',
+          item: siteOrigin,
         },
         {
           '@type': 'ListItem',
