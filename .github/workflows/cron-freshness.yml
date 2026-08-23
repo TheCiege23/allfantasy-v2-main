@@ -63,10 +63,17 @@ jobs:
       - name: Install driver
         run: npm install --no-save --no-audit --no-fund pg@^8.20.0
 
+      # Input passed through `env:` and tested as a shell variable, never interpolated into the
+      # script text -- see the note in cron-slow-tier.yml.
       - name: Check freshness
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           DIRECT_URL: ${{ secrets.DIRECT_URL }}
+          INPUT_REPORT_ONLY: ${{ inputs.report_only }}
         run: |
           set -euo pipefail
-          node scripts/cron-freshness-check.mjs ${{ inputs.report_only == true && '--report' || '' }}
+          if [ "${INPUT_REPORT_ONLY:-false}" = "true" ]; then
+            node scripts/cron-freshness-check.mjs --report
+          else
+            node scripts/cron-freshness-check.mjs
+          fi

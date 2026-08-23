@@ -97,20 +97,34 @@ jobs:
 
       # No `npm ci`. The dispatcher uses only the Node standard library and global fetch, so
       # installing would be most of the runtime for nothing -- same reasoning as cron-budget.yml.
+      # Every ${{ }} value goes through `env:` and is referenced as "$VAR", never interpolated into
+      # the script text. A workflow_dispatch input is attacker-controlled text as far as the shell
+      # is concerned, and `node ... --path ${{ inputs.path }}` is the standard Actions script
+      # injection. This repo is public, so that pattern does not belong here even though dispatch
+      # requires write access.
       - name: Dispatch slow-tier crons
         env:
           APP_URL: ${{ vars.APP_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_SCHEDULE: ${{ inputs.schedule }}
+          INPUT_PATH: ${{ inputs.path }}
+          INPUT_ALL: ${{ inputs.all }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
         run: |
           set -euo pipefail
-          if [ "${{ github.event_name }}" = "schedule" ]; then
-            node scripts/cron-dispatch.mjs --schedule "${{ github.event.schedule }}"
-          elif [ "${{ inputs.all }}" = "true" ]; then
-            node scripts/cron-dispatch.mjs --all ${{ inputs.dry_run == true && '--dry-run' || '' }}
-          elif [ -n "${{ inputs.path }}" ]; then
-            node scripts/cron-dispatch.mjs --path "${{ inputs.path }}" ${{ inputs.dry_run == true && '--dry-run' || '' }}
-          elif [ -n "${{ inputs.schedule }}" ]; then
-            node scripts/cron-dispatch.mjs --schedule "${{ inputs.schedule }}" ${{ inputs.dry_run == true && '--dry-run' || '' }}
+          DRY=""
+          if [ "${INPUT_DRY_RUN:-false}" = "true" ]; then DRY="--dry-run"; fi
+
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            node scripts/cron-dispatch.mjs --schedule "$EVENT_SCHEDULE"
+          elif [ "${INPUT_ALL:-false}" = "true" ]; then
+            node scripts/cron-dispatch.mjs --all $DRY
+          elif [ -n "${INPUT_PATH:-}" ]; then
+            node scripts/cron-dispatch.mjs --path "$INPUT_PATH" $DRY
+          elif [ -n "${INPUT_SCHEDULE:-}" ]; then
+            node scripts/cron-dispatch.mjs --schedule "$INPUT_SCHEDULE" $DRY
           else
             echo "::error::Provide one of: all, path, or schedule."
             exit 1
