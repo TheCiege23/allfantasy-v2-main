@@ -1,0 +1,455 @@
+/*
+ * AF Legal — handoffs 17a (privacy policy) and 17b (terms of service).
+ *
+ * 17a's build note asks for ONE page shell reused across every legal route, which
+ * is what LegalPageShell already was — seven routes render through it (/privacy,
+ * /terms, /disclaimer, /data-deletion, /ai-transparency, /contact, /mission,
+ * /no-gambling-policy). Restyling the shell therefore restyles all of them at
+ * once, and any new legal page inherits the design for free.
+ *
+ * ⚠ COLOURS ARE LITERAL HERE, NOT var() READS OF THE af-core TOKENS. af-core.css
+ * declares its palette on a `.af-core` ANCESTOR scope so a handoff cannot repaint
+ * the rest of the product; these pages render standalone with no such ancestor, so
+ * every var() would resolve to nothing. Values below are the af-core dark palette
+ * transcribed, which is safe precisely because a legal page has no theme switch —
+ * see the fixed-scheme note below.
+ *
+ * ⚠ THESE PAGES ARE DARK IN BOTH SYSTEM THEMES, ON PURPOSE AND UNCHANGED FROM
+ * BEFORE. The shell was already dark-only; the handoff draws them dark; and a
+ * legal page is the wrong place to discover a half-finished light palette, since
+ * unreadable terms are a compliance problem rather than a cosmetic one. Every
+ * colour is stated outright rather than inherited, so nothing here can be
+ * repainted by a global rule landing later in the cascade.
+ */
+
+/*
+ * ⚠ THE GLOBAL LIGHT-MODE CLAMP MUST NOT REACH INSIDE A LEGAL PAGE, AND THIS RULE
+ * IS LOAD-BEARING RATHER THAN TIDY.
+ *
+ * app/globals.css carries `html[data-mode="light"] .mode-readable [class*="text-white"]
+ * { color: var(--text) !important }` and a family of siblings. They exist to rescue
+ * dark-authored surfaces when the app is in light mode, and they work by assuming
+ * the surface underneath went light too. These pages are dark in BOTH modes, so the
+ * clamp repainted every heading that still carried a Tailwind `text-white` to near-
+ * black — measured on /terms before this rule: rgba(2, 6, 23, 0.92) on a #06070f
+ * background, which is invisible, across all 24 clauses of the Terms of Service.
+ *
+ * ⚠ THIS WAS ALREADY BROKEN BEFORE THE REDESIGN — the previous shell painted
+ * `from-neutral-950`, and `neutral-950` is not among the background classes the
+ * clamp rewrites, so the clamp darkened the text and left the background dark.
+ * Fixing it here rather than only in the two pages that were rewritten means the
+ * other six legal routes stop being unreadable in light mode as well.
+ *
+ * Specificity and !important both have to beat the clamp, which is why the
+ * selector repeats its shape with `.af-legal` inserted.
+ */
+html[data-mode='light'] .mode-readable .af-legal [class*='text-white'],
+html[data-mode='light'] .mode-readable .af-legal [class*='text-gray-'],
+html[data-mode='light'] .mode-readable .af-legal [class*='text-slate-'] {
+  color: inherit !important;
+}
+
+html[data-mode='light'] .mode-readable .af-legal h1,
+html[data-mode='light'] .mode-readable .af-legal h2,
+html[data-mode='light'] .mode-readable .af-legal h3,
+html[data-mode='light'] .mode-readable .af-legal strong {
+  color: var(--lg-text) !important;
+}
+
+html[data-mode='light'] .mode-readable .af-legal .af-legal-title {
+  color: var(--lg-accent) !important;
+}
+
+html[data-mode='light'] .mode-readable .af-legal [class*='bg-white'],
+html[data-mode='light'] .mode-readable .af-legal [class*='bg-black'],
+html[data-mode='light'] .mode-readable .af-legal [class*='bg-slate-'] {
+  background-color: var(--lg-surface) !important;
+}
+
+.af-legal {
+  --lg-bg: #06070f;
+  --lg-surface: #0d1020;
+  --lg-surface2: #0a0c1a;
+  --lg-line: rgba(255, 255, 255, 0.09);
+  --lg-text: #eef0fa;
+  --lg-body: #c3c9e6;
+  --lg-muted: #989fc2;
+  --lg-faint: #7d84a8;
+  --lg-accent: #22d3ee;
+  --lg-good: #34d399;
+  --lg-warn: #fbbf24;
+
+  min-height: 100vh;
+  padding: 40px 20px 64px;
+  background: var(--lg-bg);
+  color: var(--lg-body);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 15px;
+  line-height: 1.7;
+}
+
+/* The handoff's 980px measure. Wider than a reading column wants, but these pages
+   carry two-up sub-boxes and a 15-cell policy grid that need the room. */
+.af-legal-inner {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.af-legal-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 26px;
+  color: var(--lg-muted);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.af-legal-back:hover {
+  color: var(--lg-accent);
+}
+
+.af-legal-title {
+  margin: 0;
+  font-size: 46px;
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+  color: var(--lg-accent);
+}
+
+.af-legal-stamp {
+  margin: 10px 0 34px;
+  font-size: 14px;
+  color: var(--lg-faint);
+}
+
+/* ── Body typography ─────────────────────────────────────────────────── */
+
+.af-legal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.af-legal-body h2 {
+  margin: 0 0 12px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--lg-text);
+}
+
+.af-legal-body h3 {
+  margin: 20px 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--lg-text);
+}
+
+.af-legal-body p {
+  margin: 0 0 12px;
+  color: var(--lg-body);
+}
+
+.af-legal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.af-legal-body ul,
+.af-legal-body ol {
+  margin: 0 0 12px;
+  padding-left: 20px;
+  color: var(--lg-body);
+}
+
+.af-legal-body li {
+  margin-bottom: 6px;
+}
+
+.af-legal-body a {
+  color: var(--lg-accent);
+  text-decoration: none;
+}
+
+.af-legal-body a:hover {
+  text-decoration: underline;
+}
+
+.af-legal-body strong {
+  color: var(--lg-text);
+  font-weight: 700;
+}
+
+/* Mono eyebrow used above the sub-boxes (2.1 YOU PROVIDE, 2.3 THIRD-PARTY …). */
+.af-legal-eyebrow {
+  display: block;
+  margin-bottom: 10px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--lg-accent);
+}
+
+/* ── Sub-boxes and grids ─────────────────────────────────────────────── */
+
+.af-legal-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.af-legal-box {
+  padding: 18px 20px;
+  border: 1px solid var(--lg-line);
+  border-radius: 12px;
+  background: var(--lg-surface);
+}
+
+.af-legal-box ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.af-legal-box li {
+  position: relative;
+  padding-left: 14px;
+  font-size: 14px;
+  color: var(--lg-body);
+}
+
+.af-legal-box li::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  color: var(--lg-faint);
+}
+
+/* ── Callouts ────────────────────────────────────────────────────────── */
+
+.af-legal-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  border: 1px solid var(--lg-line);
+  border-radius: 12px;
+  background: var(--lg-surface);
+  color: var(--lg-body);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+
+.af-legal-callout[data-tone='good'] {
+  border-color: var(--lg-good);
+  background: rgba(52, 211, 153, 0.08);
+}
+
+.af-legal-callout[data-tone='accent'] {
+  border-color: rgba(34, 211, 238, 0.34);
+  background: rgba(34, 211, 238, 0.09);
+}
+
+.af-legal-callout[data-tone='warn'] {
+  border-color: var(--lg-warn);
+  background: rgba(251, 191, 36, 0.07);
+}
+
+.af-legal-callout-mark {
+  flex: 0 0 auto;
+  font-weight: 900;
+  line-height: 1.5;
+}
+
+.af-legal-callout[data-tone='good'] .af-legal-callout-mark {
+  color: var(--lg-good);
+}
+
+.af-legal-callout[data-tone='warn'] .af-legal-callout-mark {
+  color: var(--lg-warn);
+}
+
+.af-legal-callout-title {
+  display: block;
+  margin-bottom: 3px;
+  font-weight: 800;
+  color: var(--lg-text);
+}
+
+/* ── Policy grid (17b, "the policies, in short") ─────────────────────── */
+
+.af-legal-policies {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  margin-top: 4px;
+}
+
+/*
+ * ⚠ EACH CELL IS AN <a> TO THE FULL CLAUSE, NOT A DEAD CARD. 17b's build note is
+ * explicit that the grid is "meant to be scannable, not the full legal text —
+ * each links out to (or expands into) the full clause". A summary that cannot be
+ * expanded is a summary presented AS the terms, which is the one thing a terms
+ * page must not do.
+ */
+a.af-legal-policy {
+  display: block;
+  padding: 16px 18px;
+  border: 1px solid var(--lg-line);
+  border-radius: 12px;
+  background: var(--lg-surface);
+  text-decoration: none;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+a.af-legal-policy:hover {
+  border-color: rgba(34, 211, 238, 0.4);
+  background: var(--lg-surface2);
+  text-decoration: none;
+}
+
+.af-legal-policy-name {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--lg-text);
+}
+
+.af-legal-policy-sub {
+  display: block;
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--lg-muted);
+}
+
+/* Section a policy cell jumps to — offset so the heading is not hidden under
+   any sticky chrome, and highlighted briefly so the reader can see where they
+   landed in a long document. */
+.af-legal-body section[id] {
+  scroll-margin-top: 24px;
+}
+
+.af-legal-body section[id]:target > h2 {
+  color: var(--lg-accent);
+}
+
+/* ── Numbered steps (17b data-deletion sidebar) ──────────────────────── */
+
+.af-legal-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: af-legal-step;
+}
+
+.af-legal-step {
+  display: flex;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--lg-body);
+}
+
+.af-legal-step::before {
+  counter-increment: af-legal-step;
+  content: counter(af-legal-step);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid var(--lg-line);
+  border-radius: 6px;
+  background: var(--lg-surface2);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--lg-faint);
+}
+
+/* ── Primary action ──────────────────────────────────────────────────── */
+
+.af-legal-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 0 22px;
+  border: 1px solid var(--lg-accent);
+  border-radius: 10px;
+  background: var(--lg-accent);
+  color: #04050c;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.af-legal-cta:hover {
+  filter: brightness(1.08);
+  text-decoration: none;
+}
+
+.af-legal-cta--ghost {
+  border-color: var(--lg-line);
+  background: var(--lg-surface);
+  color: var(--lg-text);
+}
+
+/* ── Footer nav ──────────────────────────────────────────────────────── */
+
+.af-legal-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 26px;
+  margin-top: 48px;
+  padding-top: 26px;
+  border-top: 1px solid var(--lg-line);
+}
+
+.af-legal-foot a {
+  color: var(--lg-accent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.af-legal-foot a:hover {
+  text-decoration: underline;
+}
+
+.af-legal-foot a[data-home='true'] {
+  color: var(--lg-muted);
+}
+
+/* ── Mobile ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .af-legal {
+    padding: 28px 16px 48px;
+    font-size: 14.5px;
+  }
+
+  .af-legal-title {
+    font-size: 34px;
+  }
+
+  .af-legal-body h2 {
+    font-size: 19px;
+  }
+
+  .af-legal-foot {
+    gap: 16px;
+  }
+}
