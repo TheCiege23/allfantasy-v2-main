@@ -1,6 +1,39 @@
 import type { ReactNode } from "react"
+import type { Metadata } from "next"
 import Link from "next/link"
 import ProductShellLayout from "@/components/navigation/ProductShellLayout"
+import { buildSeoMeta } from "@/lib/seo"
+import {
+  LEGACY_DEFAULT_TAB,
+  LEGACY_DESCRIPTION,
+  LEGACY_TAB_TITLES,
+} from "./legacy-tab-seo"
+
+/*
+ * ⚠ THIS ROUTE DECLARED NO METADATA AT ALL, AND IT IS IN sitemap.xml AT 0.8.
+ *
+ * app/af-legacy/page.tsx is a client component, so it cannot export `metadata`,
+ * and this layout exported none — so /af-legacy inherited the ROOT layout's
+ * metadata wholesale. Measured on the served HTML before this change:
+ *
+ *   <title>AllFantasy – Fantasy Sports Tools Powered by Chimmy</title>
+ *   <meta name="description" content="AllFantasy combines fantasy sports …">
+ *   <meta property="og:title" content="AllFantasy – Fantasy Sports Tools …">
+ *   canonical: none        og:url: none        robots: index, follow
+ *
+ * i.e. the homepage's title, the homepage's share preview, and no canonical,
+ * on a page submitted to search engines at priority 0.8 — while fifteen
+ * carefully written SEO titles sat one file away, reachable only by running
+ * JavaScript. See legacy-tab-seo.ts.
+ *
+ * The canonical is the bare path on purpose: all fifteen tabs are `?tab=`
+ * variants of this one URL and consolidate onto it.
+ */
+export const metadata: Metadata = buildSeoMeta({
+  title: LEGACY_TAB_TITLES[LEGACY_DEFAULT_TAB],
+  description: LEGACY_DESCRIPTION,
+  canonicalPath: "/af-legacy",
+})
 
 const LEGACY_TABS = [
   { href: "/af-legacy?tab=overview", label: "Overview" },
