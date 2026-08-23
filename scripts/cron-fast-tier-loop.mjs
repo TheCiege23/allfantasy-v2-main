@@ -54,8 +54,15 @@ const SCHEDULER_INTERVAL_MS = 1_000
 /** Stagger the startup burst so 12 jobs do not hit the app in the same second. */
 const STARTUP_STAGGER_MS = 3_000
 
-/** Simultaneous in-flight requests, across all jobs. */
-const MAX_CONCURRENCY = 4
+/**
+ * Simultaneous in-flight requests, across all jobs.
+ *
+ * ⚠ RAISED FROM 4 AFTER MEASURING STARVATION IN PRODUCTION. Several fast-tier jobs are slow or hang
+ * to the timeout — import-news and fantasy-os-exec-sync have both been stale for days — and four
+ * slots were not enough to stop them monopolising the pool. Raising this ALONE would not have
+ * fixed it; see orderByUrgency.
+ */
+const MAX_CONCURRENCY = 8
 
 /**
  * A job is only reported as systemically broken after this many attempts, all failed.
@@ -87,6 +94,33 @@ export function intervalMsForSchedule(schedule) {
  */
 export function nextBoundary(now, intervalMs) {
   return Math.ceil((now + 1) / intervalMs) * intervalMs
+}
+
+/**
+ * Order due jobs so the one most overdue RELATIVE TO ITS OWN CADENCE goes first.
+ *
+ * ⚠ FIXED ARRAY ORDER STARVED EXACTLY THE JOBS THIS LOOP EXISTS FOR. `classifyCrons` returns
+ * vercel.json order, which happens to put the every-minute jobs LAST: draft-tick at index 8,
+ * live-score-tick at 9, legacy-import-drain at 10. When slower jobs at indices 0-4 filled the
+ * concurrency pool, the scheduler re-scanned from index 0 on every tick and never reached the tail.
+ *
+ * MEASURED ON THE FIRST PRODUCTION RUN — lateness increased monotonically with index:
+ *   draft-tick           (idx 8)   14.1 min since last fire   (declared every 1 min)
+ *   live-score-tick      (idx 9)   20.8 min                   (declared every 2 min)
+ *   legacy-import-drain  (idx 10)  20.8 min                   (declared every 1 min)
+ * while waivers (idx 2) and score-sync (idx 5) fired on time throughout.
+ *
+ * ⚠ RANKING BY ABSOLUTE LATENESS WOULD NOT FIX IT. A 30-minute job three minutes late looks later
+ * than a 1-minute job two minutes late, when the second has missed two entire cycles and the first
+ * has missed none. The ratio to its own interval is what expresses urgency.
+ */
+export function orderByUrgency(dueJobs, now) {
+  return [...dueJobs].sort((a, b) => {
+    const ratio = (j) => (now - j.dueAt) / j.intervalMs
+    const d = ratio(b) - ratio(a)
+    // Tiebreak on cadence, so equal relative lateness still favours the tighter schedule.
+    return d !== 0 ? d : a.intervalMs - b.intervalMs
+  })
 }
 
 /** A job failed every time it was tried, enough times to mean configuration rather than weather. */
@@ -226,18 +260,33 @@ async function main() {
 
   while (Date.now() < deadline) {
     const now = Date.now()
+
+    /*
+     * Collect what is due, THEN order by urgency. Iterating the job array directly is precisely what
+     * starved the every-minute jobs: they sit at the end of vercel.json's order, so a full
+     * concurrency pool meant the scan never reached them.
+     */
+    const due = []
     for (const job of jobs) {
-      if (now < nextDueAt.get(job.path)) continue
+      const dueAt = nextDueAt.get(job.path)
+      if (now < dueAt) continue
       if (inFlight.has(job.path)) {
         // Still running from last time. Skip this slot; do not queue.
         stats.get(job.path).skipped += 1
         nextDueAt.set(job.path, nextBoundary(now, job.intervalMs))
         continue
       }
-      if (concurrency >= MAX_CONCURRENCY) continue // re-evaluated next tick
+      due.push({ ...job, dueAt })
+    }
+
+    for (const job of orderByUrgency(due, now)) {
+      // `break`, not `continue`: anything past the cap keeps its due time and is re-ranked next
+      // tick, so a job that has been waiting longest keeps climbing rather than losing its place.
+      if (concurrency >= MAX_CONCURRENCY) break
       fire(job)
       nextDueAt.set(job.path, nextBoundary(now, job.intervalMs))
     }
+
     if (args.once) break
     await sleep(SCHEDULER_INTERVAL_MS)
   }
