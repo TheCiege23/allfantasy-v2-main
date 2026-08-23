@@ -41,6 +41,20 @@ function canonicalProductionHostRedirect(request: NextRequest): NextResponse | n
 
   const url = request.nextUrl.clone()
   url.hostname = canonicalHost
+  /*
+   * ⚠ CLEARING THE PORT IS THE WHOLE FIX, AND OMITTING IT TOOK THE SITE DOWN.
+   * `request.nextUrl` carries the port the SERVER is listening on. On Vercel that
+   * was 443, so setting only `hostname` produced a correct public URL and this
+   * line was never needed. On Railway the container listens on 8080, so the same
+   * clone emitted `Location: https://www.allfantasy.ai:8080/` — a port that is
+   * not published. Every visitor who typed the bare domain got a connection
+   * failure while `www` served fine, which reads as "the whole site is down"
+   * from outside and as "200 OK" from any check that skips the redirect.
+   *
+   * The canonical hosts here are always public HTTPS, so there is no port to
+   * preserve; an empty port is the only correct value.
+   */
+  url.port = ''
   return NextResponse.redirect(url, 308)
 }
 

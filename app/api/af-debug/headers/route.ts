@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server"
 import { headers } from "next/headers"
-import nodeFs from "node:fs"
-import nodePath from "node:path"
 
 /**
  * Safe diagnostic endpoint. Returns a small, non-secret slice of request
@@ -37,129 +35,6 @@ const SAFE_HEADER_KEYS = [
   "user-agent",
 ] as const
 
-
-/**
- * Build introspection. Reports whether the DEPLOYED build output actually
- * contains the root layout, which distinguishes "the build dropped it" from
- * "the runtime skipped it". Returns only filenames, sizes and booleans --
- * never file contents, env values or secrets.
- */
-function inspectBuild(marker?: string) {
-  const fs = nodeFs
-  const path = nodePath
-  const cwd = process.cwd()
-  // The layout's own signature: className="scroll-smooth" on <html>.
-  const MARKER = marker && /^[A-Za-z0-9_-]{3,40}$/.test(marker) ? marker : "scroll-smooth"
-  const out: Record<string, unknown> = {
-    node: process.version,
-    platform: process.platform,
-    nodeEnv: process.env.NODE_ENV ?? null,
-    afNextDistDir: process.env.AF_NEXT_DIST_DIR ?? null,
-    cwd,
-  }
-  try {
-    out.distDirsPresent = fs
-      .readdirSync(cwd)
-      .filter((n) => n === ".next" || n.startsWith(".next-"))
-      .slice(0, 20)
-  } catch {
-    out.distDirsPresent = "unreadable"
-  }
-  const dist = path.join(cwd, process.env.AF_NEXT_DIST_DIR || ".next")
-  out.distDir = dist
-  try {
-    out.buildId = fs.readFileSync(path.join(dist, "BUILD_ID"), "utf8").trim()
-  } catch {
-    out.buildId = null
-  }
-  // Does the server build contain the layout at all? The layout's markup is
-  // compiled into <dist>/server/chunks/*.js -- verified against a known-good
-  // local build, where it lands in exactly 3 of ~1056 chunk files.
-  const hits: string[] = []
-  let scanned = 0
-  try {
-    const chunkDir = path.join(dist, "server", "chunks")
-    for (const name of fs.readdirSync(chunkDir)) {
-      if (!name.endsWith(".js")) continue
-      if (scanned >= 2000 || hits.length >= 8) break
-      scanned++
-      try {
-        if (fs.readFileSync(path.join(chunkDir, name), "utf8").includes(MARKER)) {
-          hits.push("server/chunks/" + name)
-        }
-      } catch { /* unreadable chunk */ }
-    }
-  } catch { /* no chunks dir */ }
-  out.filesScanned = scanned
-  out.layoutMarker = MARKER
-  out.layoutMarkerFoundIn = hits
-  out.layoutPresentInBuild = hits.length > 0
-  try {
-    const appDir = path.join(dist, "server", "app")
-    out.serverAppEntries = fs.readdirSync(appDir).slice(0, 15)
-  } catch {
-    out.serverAppEntries = "unreadable"
-  }
-  // The route tree itself. If the layout is on disk but absent from these
-  // manifests, Next has no way to wrap /page in it -- which is the difference
-  // between "the build dropped it" and "the manifest lost it".
-  try {
-    const m = JSON.parse(
-      fs.readFileSync(path.join(dist, "app-build-manifest.json"), "utf8"),
-    ) as { pages?: Record<string, string[]> }
-    const pages = m.pages ?? {}
-    out.appBuildManifest = {
-      totalKeys: Object.keys(pages).length,
-      hasLayoutKey: Object.prototype.hasOwnProperty.call(pages, "/layout"),
-      layoutFileCount: pages["/layout"]?.length ?? null,
-      pageFileCount: pages["/page"]?.length ?? null,
-      firstKeys: Object.keys(pages).slice(0, 6),
-    }
-  } catch (err) {
-    out.appBuildManifest = "unreadable: " + (err instanceof Error ? err.message : String(err))
-  }
-  try {
-    const m = JSON.parse(
-      fs.readFileSync(path.join(dist, "server", "app-paths-manifest.json"), "utf8"),
-    ) as Record<string, string>
-    out.appPathsManifest = {
-      totalKeys: Object.keys(m).length,
-      rootPage: m["/page"] ?? null,
-      hasRootLayout: Object.prototype.hasOwnProperty.call(m, "/layout"),
-    }
-  } catch (err) {
-    out.appPathsManifest = "unreadable: " + (err instanceof Error ? err.message : String(err))
-  }
-  try {
-    out.rootPageJsExists = fs.existsSync(path.join(dist, "server", "app", "page.js"))
-  } catch {
-    out.rootPageJsExists = "unknown"
-  }
-
-  // Which chunks does the route module actually LOAD? Next emits a
-  // `t.X(0,[<chunk ids>], ...)` tail in server/app/page.js. If the chunk that
-  // holds the layout is absent from that list, the layout is compiled but
-  // never loaded -- which is exactly the observed symptom.
-  try {
-    const pageJs = fs.readFileSync(path.join(dist, "server", "app", "page.js"), "utf8")
-    const m = pageJs.match(/.X(0,s*[([d,s]+)]/)
-    const loaded = m ? m[1].split(",").map((x) => x.trim()) : null
-    out.rootPageChunkIds = loaded
-    out.rootPageJsBytes = pageJs.length
-    // Structure of the route module tail, so a null id list can be explained.
-    out.rootPageJsTail = pageJs.slice(-320)
-    out.rootPageHasXCall = pageJs.includes(".X(")
-    out.rootPageRequiresRuntime = pageJs.includes("webpack-runtime")
-    const markerIds = hits.map((h) => h.replace("server/chunks/", "").replace(".js", ""))
-    out.markerChunkIds = markerIds
-    out.markerChunkIsLoadedByPage =
-      loaded && markerIds.length > 0 ? markerIds.some((id) => loaded.includes(id)) : null
-  } catch (err) {
-    out.rootPageChunkIds = "unreadable: " + (err instanceof Error ? err.message : String(err))
-  }
-  return out
-}
-
 export async function GET(request: Request) {
   const headerList = await headers()
   const safeHeaders: Record<string, string | null> = {}
@@ -168,8 +43,6 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url)
-  // ?build=1 adds deployed-build introspection (no secrets).
-  const buildInfo = url.searchParams.get("build") === "1" ? inspectBuild(url.searchParams.get("marker") ?? undefined) : undefined
 
   return NextResponse.json(
     {
@@ -179,7 +52,6 @@ export async function GET(request: Request) {
         search: url.search,
       },
       headers: safeHeaders,
-      build: buildInfo,
       timestamp: new Date().toISOString(),
     },
     {
