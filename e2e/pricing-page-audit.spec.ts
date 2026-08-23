@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { clickHydrated } from './helpers/hydration'
 
 /**
  * Pricing page audit — the counterpart to landing-page-click-audit.spec.ts, and
@@ -26,12 +27,45 @@ import { expect, test } from '@playwright/test'
 test.describe('@growth pricing page audit', () => {
   test.describe.configure({ timeout: 240_000 })
 
+  /*
+   * ⚠ WARM THE CHECKOUT ROUTE BEFORE ANY TEST CLICKS A CTA, OR THIS SUITE FAILS
+   * FOR A REASON THAT HAS NOTHING TO DO WITH WHAT IT CHECKS.
+   *
+   * `resolveCheckoutUrl` aborts its fetch after 12s. That is a sane production
+   * timeout — the route is prebuilt there and answers in well under a second —
+   * but against a dev server compiling on demand it is not enough: measured
+   * here, /pricing takes ~30s to compile cold and the checkout route another
+   * ~7.5s, so the POST is aborted before any response exists.
+   *
+   * The failure that produces is genuinely misleading. An abort yields no HTTP
+   * status, so `startCheckout` cannot see a 401, falls through to the generic
+   * branch, and renders "Unable to start checkout" — which looks exactly like
+   * the dead-end defect this suite was written to prevent. It reported the fix
+   * as broken while the fix was working; verified separately at 6/6 against a
+   * warm route, and 0/1 against a cold one.
+   *
+   * A plain POST compiles the route. The 401 it returns is the expected
+   * signed-out answer and is deliberately not asserted on here — this is a
+   * warmup, not a test.
+   */
+  test.beforeEach(async ({ request }) => {
+    await request
+      .post('/api/monetization/checkout/subscription', {
+        data: { sku: 'af_pro_monthly', returnPath: '/pricing' },
+        failOnStatusCode: false,
+        timeout: 180_000,
+      })
+      .catch(() => {
+        /* Warmup only: a failure here is not this suite's concern. */
+      })
+  })
+
   test('signed-out plan click carries intent to signup instead of dead-ending', async ({ page }) => {
     await page.goto('/pricing', { waitUntil: 'domcontentloaded' })
 
     const cta = page.locator('[data-testid^="pricing-subscription-cta-"]').first()
     await expect(cta).toBeVisible({ timeout: 30_000 })
-    await cta.click()
+    await clickHydrated(cta)
 
     /*
      * The 401 is answered with a redirect, not a message. Waiting on the URL
@@ -124,7 +158,7 @@ test.describe('@growth pricing page audit', () => {
      */
     const cta = page.locator('[data-testid^="pricing-subscription-cta-"]').first()
     await expect(cta).toBeVisible({ timeout: 30_000 })
-    await cta.click()
+    await clickHydrated(cta)
     await page.waitForURL(/\/signup/, { timeout: 60_000 })
     const callback = new URL(page.url()).searchParams.get('callbackUrl') ?? ''
     expect(callback, 'a Spanish reader must return to the Spanish pricing page').toContain(
