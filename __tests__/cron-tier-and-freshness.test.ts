@@ -129,6 +129,46 @@ describe('maxGapMs', () => {
   })
 })
 
+describe('age is computed by Postgres, not by the client clock', () => {
+  /*
+   * A SOURCE-LEVEL GUARD, deliberately, because no behavioural test can catch this.
+   *
+   * The freshness columns are `timestamp without time zone` holding UTC, and `pg` returns those as
+   * JS Dates interpreted in the CLIENT's timezone. `Date.now() - newest` is therefore correct on a
+   * UTC runner and wrong everywhere else — a row written 2 minutes ago read as 238 minutes in the
+   * FUTURE on a UTC-4 machine. CI runs on UTC, so a test asserting behaviour would pass against
+   * the broken code every single time.
+   *
+   * A negative age is not cosmetic: it makes data look NEWER than it is, so a fast-tier probe with
+   * a 20-minute allowance reports healthy no matter how long its job has been dead — a false
+   * negative in the tool whose whole purpose is to prevent false negatives.
+   */
+  const monitor = readFileSync(join(process.cwd(), 'scripts/cron-freshness-check.mjs'), 'utf8')
+  const helper = readFileSync(join(process.cwd(), 'scripts/db-freshness.mjs'), 'utf8')
+
+  it('keeps the mechanism in the shared helper', () => {
+    expect(helper).toContain("SET TIME ZONE 'UTC'")
+    expect(helper).toContain('EXTRACT(EPOCH FROM (now() - max(')
+  })
+
+  it('has the monitor DELEGATE rather than reimplement it', () => {
+    // These two tests failed the moment the SQL moved out of the monitor, which is the guard
+    // working: the rule is "the mechanism lives in exactly one place", so both halves are
+    // asserted rather than just its presence somewhere.
+    expect(monitor).toContain("from './db-freshness.mjs'")
+    expect(monitor).not.toContain('EXTRACT(EPOCH FROM (now() - max(')
+    expect(monitor).not.toContain("SET TIME ZONE 'UTC'")
+  })
+
+  it('never subtracts a fetched timestamp from Date.now(), in either file', () => {
+    // The exact regression: `Date.now() - newest.getTime()`. Checked in both, because the helper
+    // existing does not stop someone hand-rolling it next door.
+    const offender = /Date\.now\(\)\s*-\s*\w+\.getTime\(\)/
+    expect(monitor).not.toMatch(offender)
+    expect(helper).not.toMatch(offender)
+  })
+})
+
 describe('freshness coverage is total', () => {
   const crons = readVercelCrons()
 

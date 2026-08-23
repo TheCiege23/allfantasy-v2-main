@@ -7,6 +7,7 @@ import { ESPN_SPORT_SITE_PATH, getLiveScoresForSport } from '@/lib/sports-live-s
 import { ensureChallengeTournament } from '@/lib/brackets/PlayoffChallengeTournamentService'
 import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoffConfigResolver'
 import type { SportType } from '@/lib/sport-defaults/types'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 import {
   applySeededTeamsToPlayoffBracket,
   linkRoundOneNodesToSportsGames,
@@ -91,7 +92,7 @@ export async function fetchEspnPlayoffStandings(
   const path = ESPN_SPORT_SITE_PATH[sport]
   if (!path) return []
 
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/standings`
+  const url = `${ESPN_SITE_API_BASE}/${path}/standings`
   try {
     const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(15000) })
     if (!res.ok) return []

@@ -1,14 +1,15 @@
 /**
  * Fantasy OS Phase 5D-b — ESPN provider adapter (real; schedules/games; public API, no key).
  *
- * Verified minimally against `site.api.espn.com/.../nfl/scoreboard`. Provider-specific fields are transformed
+ * Verified minimally against `site.web.api.espn.com/.../nfl/scoreboard`. Provider-specific fields are transformed
  * to CanonicalGameSchedule inside this file and never leak. Schema-validated; unexpected shapes are rejected.
  */
 import type { CanonicalGameSchedule, CanonicalGameStatus } from '../contracts'
 import type { ProviderCapabilityDeclaration } from '../capabilities'
 import { BaseProviderAdapter, type ProviderHealth } from '../adapter'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
-const BASE = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl' // db-first-exception: gateway schedule provider (server-side)
+const BASE = `${ESPN_SITE_API_BASE}/football/nfl` // db-first-exception: gateway schedule provider (server-side)
 
 /** Raw, provider-shaped box-score athlete row. Provider fields are transformed by the normalizer and never leak. */
 export type EspnBoxScoreAthlete = { providerAthleteId: string; name: string; teamAbbrev: string; position: string | null; stats: Record<string, number> }

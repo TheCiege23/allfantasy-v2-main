@@ -25,7 +25,27 @@
 import process from 'node:process'
 import { readVercelCrons, classifyCrons, slowTierJobsForSchedule } from './cron-tier.mjs'
 
-const DEFAULT_TIMEOUT_MS = 300_000
+/**
+ * Longer than any route's own `maxDuration`, on purpose.
+ *
+ * This was 300_000 — the EXACT value these routes declare — so the dispatcher gave up at the same
+ * instant the platform would, and the run reported a timeout while the handler carried on and
+ * finished. Observed on three jobs in one morning: `import-players`, `import-season-stats` and
+ * `import-schedules?source=tsdb-only` all "failed" at exactly 300s, and two of them WROTE THEIR
+ * ROWS ANYWAY — the freshness monitor showed them healthy at 1.8h and 7.4h while the workflow was
+ * red.
+ *
+ * A red run over work that succeeded is the worst kind of alarm: it is indistinguishable from a
+ * real failure and it arrives on a schedule, which is how a team learns to close the tab.
+ *
+ * 600s gives the handler room to finish and be OBSERVED. It does not paper over a hang: the job
+ * still fails, just with the route's own answer instead of a race the dispatcher started, and the
+ * workflow's own `timeout-minutes: 30` remains the real backstop.
+ *
+ * ⚠ Keep this ABOVE the largest `maxDuration` in app/api/cron/*. If a route ever declares more
+ * than 600, raise this too or the race comes back.
+ */
+const DEFAULT_TIMEOUT_MS = 600_000
 
 function parseArgs(argv) {
   const args = { schedule: null, path: null, all: false, dryRun: false, timeoutMs: DEFAULT_TIMEOUT_MS }

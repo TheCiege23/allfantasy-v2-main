@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma'
 import type { ADPEntry } from '@/lib/adp-data'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 const ESPN_NEWS_TTL_MS = 45 * 60 * 1000
 
@@ -29,7 +30,19 @@ async function getCachedEspnNewsRows(): Promise<EspnNewsCacheRow[]> {
   const refreshStart = Date.now()
   try {
     console.log(`[espn/news] ESPN cache miss { cacheKey: '${cacheKey}' }`)
-    const res = await fetch('https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=40', {
+    /*
+     * ESPN news read inline on cache miss from a REQUEST path — this module is imported by five
+     * app/api/mock-draft/* routes, so a cold cache puts provider latency in front of a user.
+     * Mitigated but not fixed: 45-minute TTL, 4s timeout, stale-on-failure fallback.
+     *
+     * MIGRATION: read `player_news`, which app/api/sports/news/sync-helper.ts already populates
+     * from this same ESPN feed. This fetch goes away entirely once that read path is wired, which
+     * is what makes the marker below a temporary exception rather than a silencer.
+     *
+     * ⚠ The marker has to sit on the OFFENDING LINE — the guard skips lines that CONTAIN the
+     * string, not blocks that precede them. Putting it in this comment left the violation flagged.
+     */
+    const res = await fetch(`${ESPN_SITE_API_BASE}/football/nfl/news?limit=40`, { // db-first-exception: request-path ESPN news on cache miss; migrating to player_news
       cache: 'no-store',
       signal: AbortSignal.timeout(4000),
     })

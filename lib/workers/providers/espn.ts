@@ -1,4 +1,5 @@
 import { toApiChainSport, type ApiChainSport, type ApiFetchParams, type ApiProvider } from '@/lib/workers/api-config'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 const ESPN_SPORT_PATH: Partial<Record<ApiChainSport, { sport: string; league: string }>> = {
   nfl: { sport: 'football', league: 'nfl' },
@@ -84,7 +85,7 @@ export const espnProvider: ApiProvider = {
     const path = ESPN_SPORT_PATH[cs]
     if (!path) return null
 
-    const base = `https://site.api.espn.com/apis/site/v2/sports/${path.sport}/${path.league}`
+    const base = `${ESPN_SITE_API_BASE}/${path.sport}/${path.league}`
 
     if (dataType === 'news') {
       const json = await fetchEspnJson(`${base}/news`)

@@ -127,22 +127,39 @@ export async function GET(req: NextRequest) {
   const isCron = Boolean(cronSecret) && authHeader === `Bearer ${cronSecret}`
 
   if (isCron) {
-    if (process.env.MORNING_BRIEFING_ENABLED !== '1') {
-      return NextResponse.json({ mode: 'cron' as const, enabled: false, note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.' })
-    }
-    const owners = await prisma.league.findMany({
-      where: { platform: 'sleeper', platformLeagueId: { not: '' } },
-      select: { userId: true },
-      distinct: ['userId'],
-      take: 100,
-    })
-    const userIds = [...new Set(owners.map((o) => o.userId).filter((v): v is string => Boolean(v)))]
-    const users = await prisma.appUser
-      .findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } })
-      .catch(() => [] as { id: string; email: string | null }[])
-    const sweep = await withSyncJobRun(
+    /*
+     * THE WRAP SPANS THE FLAG CHECK, NOT JUST THE SWEEP.
+     *
+     * It used to start below the MORNING_BRIEFING_ENABLED early-return, so with the flag off this
+     * route answered 200 and recorded NOTHING. The freshness monitor probes this job by
+     * max(started_at) in sync_job_runs, so a disabled job and a job whose scheduler died look
+     * exactly alike — and this one sat at 3.1 days stale while firing correctly every single day.
+     *
+     * `withSyncJobRun` writes its row before the body runs, so the heartbeat now survives every
+     * outcome: flag off, no league owners, or the platform killing the function at maxDuration
+     * (which executes no user code afterwards, leaving started_at as the only evidence).
+     *
+     * Exactly the bug draft-tick had, for exactly the same reason: a wrap placed below an early
+     * return only covers the path someone happened to be thinking about.
+     */
+    const outcome = await withSyncJobRun(
       { jobName: 'cron-morning-briefing', trigger: 'cron' },
       async () => {
+        if (process.env.MORNING_BRIEFING_ENABLED !== '1') {
+          return { enabled: false as const, candidates: 0, sent: 0, failed: 0 }
+        }
+
+        const owners = await prisma.league.findMany({
+          where: { platform: 'sleeper', platformLeagueId: { not: '' } },
+          select: { userId: true },
+          distinct: ['userId'],
+          take: 100,
+        })
+        const userIds = [...new Set(owners.map((o) => o.userId).filter((v): v is string => Boolean(v)))]
+        const users = await prisma.appUser
+          .findMany({ where: { id: { in: userIds } }, select: { id: true, email: true } })
+          .catch(() => [] as { id: string; email: string | null }[])
+
         let sent = 0
         let failed = 0
         for (const u of users) {
@@ -151,15 +168,31 @@ export async function GET(req: NextRequest) {
           if (r === 'sent') sent += 1
           if (r === 'failed') failed += 1
         }
-        return { candidates: users.length, sent, failed }
+        return { enabled: true as const, candidates: users.length, sent, failed }
       },
-      (r) => ({
-        rowsRead: r.candidates,
-        rowsWritten: r.sent,
-        errors: r.failed > 0 ? [`${r.failed} briefing email(s) failed to send`] : [],
-      }),
+      (r) =>
+        r.enabled
+          ? {
+              rowsRead: r.candidates,
+              rowsWritten: r.sent,
+              errors: r.failed > 0 ? [`${r.failed} briefing email(s) failed to send`] : [],
+            }
+          : // Deliberately inert, not broken. `success` keeps a disabled job out of the failure
+            // telemetry while the heartbeat still proves the scheduler fired.
+            { status: 'success' as const, metadata: { disabled: true, reason: 'MORNING_BRIEFING_ENABLED is not 1' } },
     )
-    return NextResponse.json({ mode: 'cron' as const, enabled: true, ...sweep })
+
+    // Response bodies are unchanged from before the wrap moved — callers see exactly what they did.
+    if (!outcome.enabled) {
+      return NextResponse.json({ mode: 'cron' as const, enabled: false, note: 'Set MORNING_BRIEFING_ENABLED=1 to enable the daily sweep.' })
+    }
+    return NextResponse.json({
+      mode: 'cron' as const,
+      enabled: true,
+      candidates: outcome.candidates,
+      sent: outcome.sent,
+      failed: outcome.failed,
+    })
   }
 
   const session = (await getServerSession(authOptions as never)) as {
