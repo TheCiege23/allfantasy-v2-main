@@ -7,8 +7,8 @@ import { ESPN_SPORT_SITE_PATH, getLiveScoresForSport } from '@/lib/sports-live-s
 import { ensureChallengeTournament } from '@/lib/brackets/PlayoffChallengeTournamentService'
 import { resolveDefaultPlayoffConfig } from '@/lib/sport-defaults/DefaultPlayoffConfigResolver'
 import type { SportType } from '@/lib/sport-defaults/types'
-import {
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import {
   applySeededTeamsToPlayoffBracket,
   linkRoundOneNodesToSportsGames,
 } from '@/lib/brackets/teamImport'

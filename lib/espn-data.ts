@@ -1,8 +1,8 @@
 import { prisma } from './prisma';
 import { normalizeTeamAbbrev } from './team-abbrev';
 import { recordProviderSync } from './provider-sync-logger';
-import {
 import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
+import {
   shouldIncludeInjuryInFanoutBatch,
   type InjurySyncFanoutRow,
 } from '@/lib/realtime-events/injuryFanoutPolicy';
