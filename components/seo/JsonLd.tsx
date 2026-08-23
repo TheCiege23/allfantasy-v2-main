@@ -31,6 +31,16 @@ export function ToolPageJsonLd({ config }: { config: ToolConfig }) {
       description: config.description,
       url,
       applicationCategory: "GameApplication",
+      /*
+       * Several of these tools ARE gated. feature-monetization-matrix.ts puts
+       * ai_waivers (/waiver-ai), ai_chat (/chimmy), create_league
+       * (/trade-analyzer, /trade-evaluator) and planning_tools (/af-legacy)
+       * behind requiredPlanId "pro" with a token fallback. Measured before this
+       * change: /tools/waiver-wire-advisor, /tools/trade-analyzer and
+       * /tools/ai-draft-assistant each emitted "price":"0". Saying nothing is
+       * correct here; the honest price depends on the visitor's plan.
+       */
+      offers: false,
     }),
   ]
   if (config.faqs?.length) {
