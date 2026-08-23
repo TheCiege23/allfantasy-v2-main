@@ -15,6 +15,7 @@ import {
   getLandingCopy,
   DEFAULT_LANDING_LANG,
   LANDING_LANGS,
+  LANDING_PATHS,
   type LandingLang,
 } from '@/lib/i18n/landing-copy'
 import { getPlanPresentations, getMonthlyPriceRange } from '@/lib/monetization/planPresentation'
@@ -100,9 +101,16 @@ function LangSwitch({ lang, label }: { lang: LandingLang; label: string }) {
         return (
           <Link
             key={code}
-            // English is the canonical URL, so it drops the param rather than
-            // creating a second address for the same document.
-            href={code === DEFAULT_LANDING_LANG ? '/' : `/?lang=${code}`}
+            /*
+             * ⚠ THE REAL PATH, FROM THE SAME TABLE THE CANONICAL USES. This was
+             * `/?lang=es`, which is now a legacy address that 308s to /es — so
+             * leaving it here would have made the one control whose entire job
+             * is switching language take every reader through a redirect, and
+             * would have put a URL in the crawlable markup that no longer
+             * serves a document. Reading LANDING_PATHS means this link cannot
+             * disagree with the canonical it is pointing at.
+             */
+            href={LANDING_PATHS[code]}
             hrefLang={code}
             className="af-lp-lang-opt af-num"
             data-active={active ? 'true' : undefined}

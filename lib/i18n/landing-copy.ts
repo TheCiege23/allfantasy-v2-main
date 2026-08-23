@@ -20,6 +20,27 @@ export type LandingLang = (typeof LANDING_LANGS)[number]
 
 export const DEFAULT_LANDING_LANG: LandingLang = 'en'
 
+/**
+ * Where each language of the landing page lives.
+ *
+ * ⚠ PATHS, NEVER QUERY STRINGS, AND THAT IS A HARD CONSTRAINT RATHER THAN A
+ * STYLE CHOICE. Spanish used to live at `/?lang=es`, and Next 14.2 strips the
+ * search string when resolving `alternates` against `metadataBase` — so the
+ * Spanish document declared the ENGLISH url as its canonical and all three
+ * `hreflang` alternates collapsed onto one address. See the header comment in
+ * components/landing/landing-route.tsx for the measurements.
+ *
+ * The canonical, the self-referencing `hreflang`, the sibling `hreflang`, the
+ * WebPage JSON-LD node, the analytics beacon path and the on-page language
+ * switch are all generated from this one table, so they cannot drift into
+ * disagreeing about where a language lives. A third language needs an entry
+ * here and a route directory — nothing else.
+ */
+export const LANDING_PATHS: Record<LandingLang, string> = {
+  en: '/',
+  es: '/es',
+}
+
 /** Narrows an untrusted `?lang=` value; anything unrecognised falls back to English. */
 export function resolveLandingLang(raw: string | string[] | undefined): LandingLang {
   const value = Array.isArray(raw) ? raw[0] : raw

@@ -113,6 +113,82 @@ test.describe("@growth landing page click audit", () => {
     expect(desktopHasOverflow).toBeFalsy()
   })
 
+  /*
+   * ⚠ THIS TEST EXISTS BECAUSE THE BUG IT GUARDS WAS INVISIBLE FOR MONTHS.
+   *
+   * The Spanish landing rendered Spanish copy under a Spanish <title> and
+   * declared the ENGLISH url as its canonical, because Next 14.2 strips the
+   * search string out of `alternates` — so `canonicalPath: '/?lang=es'` became
+   * `https://www.allfantasy.ai`. Nothing failed. The page looked perfect in a
+   * browser; only the <head> was wrong, and no test read the <head>.
+   *
+   * Every assertion below therefore reads rendered markup rather than trusting
+   * the metadata inputs, and the canonical/hreflang pair is checked on BOTH
+   * documents — a one-sided hreflang is not a valid pair.
+   */
+  test("language routing: /es canonical, reciprocal hreflang, legacy redirect", async ({
+    page,
+    request,
+  }) => {
+    const canonicalOf = () =>
+      page.locator('link[rel="canonical"]').first().getAttribute("href")
+    const altOf = (lang: string) =>
+      page.locator(`link[rel="alternate"][hreflang="${lang}"]`).first().getAttribute("href")
+
+    await page.goto("/", { waitUntil: "domcontentloaded" })
+    const enCanonical = await canonicalOf()
+    const enAltEn = await altOf("en")
+    const enAltEs = await altOf("es")
+
+    await page.goto("/es", { waitUntil: "domcontentloaded" })
+    const esCanonical = await canonicalOf()
+    const esAltEn = await altOf("en")
+    const esAltEs = await altOf("es")
+
+    // The whole defect in one assertion: the two documents must not claim the
+    // same canonical.
+    expect(
+      esCanonical,
+      "/es must not declare the English page as its canonical",
+    ).not.toBe(enCanonical)
+    expect(esCanonical, "/es canonical should be the /es url").toMatch(/\/es$/)
+
+    // hreflang must agree across both documents, and each must point at the
+    // other language rather than at itself.
+    expect(enAltEs, "en page's es alternate should point at /es").toMatch(/\/es$/)
+    expect(esAltEs, "hreflang=es must match on both documents").toBe(enAltEs)
+    expect(esAltEn, "hreflang=en must match on both documents").toBe(enAltEn)
+    expect(esAltEn, "en alternate should not be the /es url").not.toMatch(/\/es$/)
+
+    // Each document self-references: its own canonical is its own alternate.
+    expect(enCanonical, "en canonical should equal its own hreflang=en").toBe(enAltEn)
+    expect(esCanonical, "es canonical should equal its own hreflang=es").toBe(esAltEs)
+
+    // The Spanish document must actually be Spanish — a correct canonical on an
+    // English body would be the same bug wearing a different hat.
+    await expect(page.locator("html body")).toContainText(/ligas/i)
+
+    /*
+     * The legacy address consolidates rather than serving a duplicate, and it
+     * carries its query across: `invite` drives LandingInviteCapture and the
+     * utm_* set carries acquisition attribution, so dropping them would lose a
+     * league invite and re-file paid traffic as direct.
+     */
+    const legacy = await request.get("/?lang=es&invite=E2E&utm_source=spec", {
+      maxRedirects: 0,
+    })
+    expect(legacy.status(), "legacy ?lang=es should permanently redirect").toBe(308)
+    const location = legacy.headers()["location"] ?? ""
+    expect(location, "should consolidate onto /es").toContain("/es")
+    expect(location, "invite must survive the redirect").toContain("invite=E2E")
+    expect(location, "utm must survive the redirect").toContain("utm_source=spec")
+    expect(location, "lang itself is now carried by the path").not.toContain("lang=")
+
+    // English is this route, so it renders rather than redirecting.
+    const english = await request.get("/?lang=en", { maxRedirects: 0 })
+    expect(english.status(), "?lang=en should render, not redirect").toBe(200)
+  })
+
   test("mobile layout click audit: responsive rendering and hero CTA", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 })
     await page.goto("/", { waitUntil: "domcontentloaded" })

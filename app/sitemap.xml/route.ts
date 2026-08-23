@@ -43,6 +43,13 @@ export async function GET() {
   const staticPages = [
     { path: 'blog', priority: '0.8', changefreq: 'weekly' },
     { path: '', priority: '1.0', changefreq: 'weekly' },
+    /*
+     * The Spanish landing. It is a distinct indexable document with its own
+     * canonical — not a variant of `/` — so it needs its own entry here or the
+     * only way a crawler reaches it is the hreflang on the English page.
+     * Lower priority than `/` because English is x-default.
+     */
+    { path: 'es', priority: '0.9', changefreq: 'weekly' },
     { path: 'app', priority: '0.9', changefreq: 'weekly' },
     { path: 'bracket', priority: '0.9', changefreq: 'weekly' },
     { path: 'brackets', priority: '0.8', changefreq: 'weekly' },
