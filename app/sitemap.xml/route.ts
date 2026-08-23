@@ -59,10 +59,6 @@ export async function GET() {
     { path: 'waiver-ai', priority: '0.7', changefreq: 'weekly' },
     { path: 'tools-hub', priority: '0.85', changefreq: 'weekly' },
     { path: 'chimmy', priority: '0.8', changefreq: 'weekly' },
-    { path: 'zen', priority: '0.6', changefreq: 'weekly' },
-    { path: 'meditation', priority: '0.6', changefreq: 'weekly' },
-    { path: 'breathing', priority: '0.5', changefreq: 'weekly' },
-    { path: 'horoscope', priority: '0.5', changefreq: 'weekly' },
     { path: 'pricing', priority: '0.5', changefreq: 'monthly' },
     // Spanish pricing — its own canonical and hreflang, so it needs its own entry.
     { path: 'es/pricing', priority: '0.5', changefreq: 'monthly' },
