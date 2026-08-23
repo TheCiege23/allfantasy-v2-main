@@ -129,6 +129,38 @@ describe('maxGapMs', () => {
   })
 })
 
+describe('age is computed by Postgres, not by the client clock', () => {
+  /*
+   * A SOURCE-LEVEL GUARD, deliberately, because no behavioural test can catch this.
+   *
+   * The freshness columns are `timestamp without time zone` holding UTC, and `pg` returns those as
+   * JS Dates interpreted in the CLIENT's timezone. `Date.now() - newest` is therefore correct on a
+   * UTC runner and wrong everywhere else — a row written 2 minutes ago read as 238 minutes in the
+   * FUTURE on a UTC-4 machine. CI runs on UTC, so a test asserting behaviour would pass against
+   * the broken code every single time.
+   *
+   * A negative age is not cosmetic: it makes data look NEWER than it is, so a fast-tier probe with
+   * a 20-minute allowance reports healthy no matter how long its job has been dead — a false
+   * negative in the tool whose whole purpose is to prevent false negatives.
+   */
+  const source = readFileSync(join(process.cwd(), 'scripts/cron-freshness-check.mjs'), 'utf8')
+
+  it('pins the session to UTC so the naive-vs-timestamptz distinction stops mattering', () => {
+    expect(source).toContain("SET TIME ZONE 'UTC'")
+  })
+
+  it('derives every age from EXTRACT(EPOCH FROM (now() - max(...)))', () => {
+    const extracts = source.match(/EXTRACT\(EPOCH FROM \(now\(\) - max\(/g) ?? []
+    // One for the output probes, one for the heartbeat probes.
+    expect(extracts.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('never subtracts a fetched timestamp from Date.now()', () => {
+    // The exact regression: `Date.now() - newest.getTime()`.
+    expect(source).not.toMatch(/Date\.now\(\)\s*-\s*\w+\.getTime\(\)/)
+  })
+})
+
 describe('freshness coverage is total', () => {
   const crons = readVercelCrons()
 

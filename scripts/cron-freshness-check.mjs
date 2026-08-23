@@ -287,6 +287,25 @@ async function main() {
   const client = new pg.Client({ connectionString })
   await client.connect()
 
+  /**
+   * Every age below is computed by POSTGRES, against its own clock, and this pins the session to
+   * UTC so that stays true regardless of where the check runs.
+   *
+   * WHY, because the bug it fixes is invisible in CI. The freshness columns are
+   * `timestamp without time zone` holding UTC, and `pg` hands those back as JS Dates interpreted
+   * in the CLIENT's timezone. On a UTC runner that happens to be right; on a UTC-4 laptop a row
+   * written 2 minutes ago reads as 238 minutes in the FUTURE.
+   *
+   * A negative age is not a harmless oddity: it makes data look NEWER than it is, so a fast-tier
+   * probe with a 20-minute allowance reports healthy no matter how long its job has been dead.
+   * That is a false negative in the one tool whose entire job is to stop false negatives.
+   *
+   * Setting the session zone also makes the naive-vs-timestamptz distinction stop mattering:
+   * Postgres coerces a naive column using the session zone, which is now the UTC the data is
+   * actually stored in.
+   */
+  await client.query("SET TIME ZONE 'UTC'")
+
   const results = []
   const unmonitored = []
   try {
@@ -327,8 +346,10 @@ async function main() {
       if (probe.heartbeat) {
         let hb
         try {
+          // age_seconds comes from Postgres, not from Date.now() — see the SET TIME ZONE note.
           hb = await client.query(
-            `SELECT max("${HEARTBEAT_TIME_COLUMN}") AS newest, count(*)::bigint AS n
+            `SELECT max("${HEARTBEAT_TIME_COLUMN}") AS newest, count(*)::bigint AS n,
+                    EXTRACT(EPOCH FROM (now() - max("${HEARTBEAT_TIME_COLUMN}"))) AS age_seconds
                FROM "${HEARTBEAT_TABLE}" WHERE "${HEARTBEAT_NAME_COLUMN}" = $1`,
             [probe.heartbeat],
           )
@@ -344,7 +365,7 @@ async function main() {
           results.push({ ...base, state: 'CONFIG', detail: `no sync_job_runs rows for job_name "${probe.heartbeat}"` })
           continue
         }
-        const ageMs = newest ? Date.now() - newest.getTime() : null
+        const ageMs = hb.rows[0].age_seconds == null ? null : Number(hb.rows[0].age_seconds) * 1000
         results.push({
           ...base,
           column: probe.heartbeat,
@@ -377,7 +398,10 @@ async function main() {
         // max() reports identically as `never`. player_game_stats is exactly that case: 252,768
         // rows, fetched_at NULL on every one.
         row = await client.query(
-          `SELECT max("${column}") AS newest, count(*)::bigint AS n, count("${column}")::bigint AS n_ts FROM "${probe.table}"`,
+          // age_seconds comes from Postgres, not from Date.now() — see the SET TIME ZONE note.
+          `SELECT max("${column}") AS newest, count(*)::bigint AS n, count("${column}")::bigint AS n_ts,
+                  EXTRACT(EPOCH FROM (now() - max("${column}"))) AS age_seconds
+             FROM "${probe.table}"`,
         )
       } catch (err) {
         results.push({ ...base, column, state: 'CONFIG', detail: err.message })
@@ -387,7 +411,7 @@ async function main() {
       const newest = row.rows[0].newest ? new Date(row.rows[0].newest) : null
       const rowCount = Number(row.rows[0].n)
       const tsCount = Number(row.rows[0].n_ts)
-      const ageMs = newest ? Date.now() - newest.getTime() : null
+      const ageMs = row.rows[0].age_seconds == null ? null : Number(row.rows[0].age_seconds) * 1000
 
       let state
       if (rowCount > 0 && tsCount === 0) {
