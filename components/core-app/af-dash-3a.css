@@ -144,6 +144,27 @@
  * scroll container and would break any future `position: sticky` descendant; there
  * are none in this sheet today, and this keeps it that way by not mattering.
  */
+/*
+ * Visually hidden, still announced. The dashboard's <h1> exists for screen
+ * readers only — this screen's design has no visible title bar, and inventing
+ * one to satisfy the outline would have changed the layout to fix an
+ * accessibility bug. `clip` rather than `display:none` or `visibility:hidden`,
+ * both of which remove the element from the accessibility tree entirely and
+ * would leave the page with no h1 again.
+ */
+.af3a-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .af3a-main { min-width: 0; padding: 18px 24px 40px; background: var(--bg); background-image: var(--hero); overflow-x: clip; }
 .af3a-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
 .af3a-search {
