@@ -66,7 +66,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         <p>
           AllFantasy provides AI-powered fantasy sports analysis, trade evaluations, waiver recommendations, league rankings,
           career statistics, and related tools. The Service may integrate with third-party fantasy platforms (e.g., Sleeper, Yahoo,
-          MFL, Fantrax) to access league data where you have authorized or made it available.
+          ESPN, MFL, Fleaflicker, Fantrax) to access league data where you have authorized or made it available.
         </p>
       </section>
 
