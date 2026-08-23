@@ -2,6 +2,8 @@ import Link from "next/link"
 import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
 import { DISCLAIMER_PAGE_TITLE, DISCLAIMER_PAGE_SECTIONS } from "@/lib/legal/DisclaimerPageService"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import { RESTRICTED_STATES } from "@/lib/geo/restrictedStates"
+import { getFanCredBoundaryDisclosureLong } from "@/lib/legal/FanCredBoundaryDisclosure"
 import type { Metadata } from 'next'
 import { buildSeoMeta } from '@/lib/seo'
 
@@ -23,6 +25,9 @@ export default async function DisclaimerPage({ searchParams }: DisclaimerPagePro
   const next = typeof params.next === "string" ? params.next : undefined
   const signupHref = getSignupReturnUrl(next)
 
+  const fullBlockStates = RESTRICTED_STATES.filter((s) => s.level === "full_block")
+  const paidBlockStates = RESTRICTED_STATES.filter((s) => s.level === "paid_block")
+
   return (
     <LegalPageRenderer
       title={DISCLAIMER_PAGE_TITLE}
@@ -36,16 +41,38 @@ export default async function DisclaimerPage({ searchParams }: DisclaimerPagePro
           AllFantasy.ai is committed to complying with all applicable U.S. state laws regarding fantasy sports. Fantasy sports laws
           vary significantly by state and are subject to change.
         </p>
+        {/*
+          ⚠ THIS LIST IS RENDERED FROM lib/geo/restrictedStates.ts, THE SAME ARRAY
+          THE GEO-BLOCK ENFORCES. It used to be typed out here as prose naming
+          Washington, Hawaii, Idaho, Montana and Nevada with RCW 9.46.240 quoted
+          by hand.
+
+          It happened to be accurate. That is the point: /no-gambling-policy and
+          /paid-restricted already derive from the array, so this page was the
+          only one of the three that could silently drift out of agreement with
+          what the product actually enforces — and it is the page a regulator or
+          an app reviewer is most likely to read. Deriving it means the page
+          cannot claim a restriction the code does not apply, or miss one it does.
+        */}
         <p className="mt-3 font-semibold text-white">Important: Residents of the following states should be aware of specific restrictions:</p>
+        {fullBlockStates.map((state) => (
+          <p className="mt-3" key={state.code}>
+            <strong>{state.name}:</strong> {state.details} ({state.legalBasis}) AllFantasy.ai does not provide
+            services to users located in {state.name}. Using a VPN or proxy to bypass this restriction may be a
+            violation of {state.name} state law.
+          </p>
+        ))}
         <p className="mt-3">
-          <strong>Washington State:</strong> ALL fantasy sports activities are prohibited under RCW 9.46.240. AllFantasy.ai does not
-          provide services to users located in Washington. Using a VPN or proxy to bypass this restriction may be a violation of
-          Washington state law.
+          <strong>{paidBlockStates.map((s) => s.name).join(", ")}:</strong> Paid fantasy sports contests are
+          prohibited by state law. Only free fantasy sports play is permitted for residents of these states.
         </p>
-        <p className="mt-3">
-          <strong>Hawaii, Idaho, Montana, Nevada:</strong> Paid fantasy sports contests are prohibited by state law. Only free
-          fantasy sports play is permitted for residents of these states.
-        </p>
+        <ul className="mt-3 list-disc list-inside space-y-2 ml-4">
+          {paidBlockStates.map((state) => (
+            <li key={state.code}>
+              <strong>{state.name}:</strong> {state.details} ({state.legalBasis})
+            </li>
+          ))}
+        </ul>
         <p className="mt-3">
           This platform does not provide legal advice. Users are responsible for ensuring their participation complies with all
           applicable local, state, and federal laws. If you are unsure whether participation in fantasy sports is legal in your
@@ -81,13 +108,20 @@ export default async function DisclaimerPage({ searchParams }: DisclaimerPagePro
 
       <section>
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">League Dues and Payments</h2>
-        <p>
-          AllFantasy does not collect, hold, or distribute league dues or entry fees. Any payments between
-          league members (e.g., dues, payouts) are solely between users and/or handled by third-party
-          services such as FanCred. Commissioners are responsible for setting up and managing those
-          external payment flows. AllFantasy does not host prize pools or payout systems. If we provide
-          links or references to third-party payment or league-management services, their terms and
-          policies apply.
+        {/*
+          The same duplication as the state list, one file over.
+          lib/legal/FanCredBoundaryDisclosure.ts carries a VERSIONED canonical
+          text (FANCRED_BOUNDARY_DISCLOSURE_VERSION), served to clients through
+          two monetization API routes and rendered by /no-gambling-policy. This
+          page restated it from memory, so a revision to the versioned text —
+          which is versioned precisely because it gets revised — would have
+          reached the API and the sibling page and not this one.
+        */}
+        <p>{getFanCredBoundaryDisclosureLong()}</p>
+        <p className="mt-3">
+          AllFantasy does not collect, hold, or distribute league dues or entry fees, and does not host prize
+          pools or payout systems. If we provide links or references to third-party payment or
+          league-management services, their terms and policies apply.
         </p>
       </section>
 
