@@ -182,7 +182,10 @@ export function buildToolsHub(input: {
           live: liveFrom(draftIssue, 'No draft is running or scheduled.'),
           tokenCost: costOf('ai_draft_pick_explanation'),
           tier: tierOf('ai_draft_pick_explanation'),
-          alternates: [{ label: 'War Room (full page)', href: '/war-room' }],
+          alternates: [
+            { label: 'War Room (full page)', href: '/war-room' },
+            { label: 'Mock Draft (practice)', href: '/mock-draft' },
+          ],
         },
       ],
     },
@@ -260,6 +263,26 @@ export function buildToolsHub(input: {
             { label: 'Player Comparison', href: '/player-comparison' },
             { label: 'Player Comparison Lab', href: '/player-comparison-lab' },
           ],
+        },
+        {
+          id: 'power-rankings',
+          title: 'League Power Rankings',
+          desc: 'AI power rankings, trends, strengths and risks for a league.',
+          href: '/rankings',
+          leavesShell: true,
+          live: {
+            text:
+              stats.connectedLeagues > 0
+                ? `Ranks teams across your ${stats.connectedLeagues} connected ${stats.connectedLeagues === 1 ? 'league' : 'leagues'}`
+                : 'No connected leagues to rank',
+            tone: 'calm',
+          },
+          tokenCost: null,
+          tier: 'free',
+          // /core/rankings is the AF ladder — a different product, already on
+          // the rail. /af-rankings is the career-rank page the old dashboard
+          // linked to; listed so retiring that dashboard does not orphan it.
+          alternates: [{ label: 'AF Rankings (career rank)', href: '/af-rankings' }],
         },
       ],
     },
@@ -340,7 +363,7 @@ export function buildToolsHub(input: {
   return {
     groups,
     leagueScopedNote:
-      'Trade finder, mock drafts and projections are scoped to one league, so they live inside that ' +
+      'Trade finder and projections are scoped to one league, so they live inside that ' +
       'league’s own nav rather than here — open a league from the rail and they are on its screens. ' +
       'They are not missing; they are somewhere a league is already selected.',
     openDecision: {
