@@ -246,11 +246,30 @@ describe('authPreCheck', () => {
     }
   })
 
-  it('is deterministic', () => {
-    const auth = makeAuth({ credential: '' })
-    const a = authPreCheck(auth)
-    const b = authPreCheck(auth)
-    expect(a).toEqual(b)
+  it('is deterministic under a fixed clock', () => {
+    // ⚠ authPreCheck is NOT deterministic on its own. buildSDKError stamps
+    // `new Date().toISOString()` whenever no timestamp is supplied, so two back-to-back calls
+    // agree only when BOTH LAND IN THE SAME MILLISECOND. Measured on idle hardware that is
+    // 0.069% of pairs (139 of 200,000) -- rare enough to pass locally every single time, common
+    // enough on a contended four-shard CI runner to redden "Unit tests (4/4)" over and over.
+    //
+    // Four reruns were spent blaming a dying vitest worker, because `--reporter=json` replaced
+    // the console reporter and the job log named a file and nothing else. `gh run rerun` then
+    // overwrote the evidence each time. The assertion text only became visible once the ratchet
+    // started recording it (scripts/vitest-ratchet.mjs).
+    //
+    // Freezing the clock preserves what this test is FOR -- same input, same output -- while
+    // removing the single field that is wall-clock BY DESIGN. Genuine nondeterminism (a random
+    // id, unstable key order) still fails here.
+    vi.useFakeTimers()
+    try {
+      const auth = makeAuth({ credential: '' })
+      const a = authPreCheck(auth)
+      const b = authPreCheck(auth)
+      expect(a).toEqual(b)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
