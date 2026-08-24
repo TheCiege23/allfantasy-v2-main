@@ -2,12 +2,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const h = vi.hoisted(() => ({
   findMany: vi.fn(), ingestBatch: vi.fn(),
-  identityFind: vi.fn(), rawQuery: vi.fn(),
+  identityFind: vi.fn(), rawQuery: vi.fn(), profileFind: vi.fn(),
 }))
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     redraftRosterPlayer: { findMany: h.findMany },
     playerIdentityMap: { findMany: h.identityFind },
+    userProfile: { findMany: h.profileFind },
     $queryRawUnsafe: h.rawQuery,
   },
 }))
@@ -31,7 +32,8 @@ const ev = (over: Partial<LiveEvent> = {}): LiveEvent =>
     ...over,
   }) as LiveEvent
 
-const rostered = (playerId = '101', ownerId = 'user-1') => [
+// Redraft roster rows hold the SLEEPER id ('11560'), never the RI feed id ('101').
+const rostered = (playerId = '11560', ownerId = 'user-1') => [
   { playerId, roster: { ownerId } },
 ]
 
@@ -40,8 +42,10 @@ beforeEach(() => {
   h.ingestBatch.mockReset()
   h.findMany.mockResolvedValue(rostered())
   h.ingestBatch.mockResolvedValue([])
-  h.identityFind.mockReset(); h.identityFind.mockResolvedValue([])
+  h.identityFind.mockReset()
+  h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
   h.rawQuery.mockReset(); h.rawQuery.mockResolvedValue([])
+  h.profileFind.mockReset(); h.profileFind.mockResolvedValue([])
 })
 
 describe('who gets told', () => {
@@ -67,13 +71,15 @@ describe('who gets told', () => {
     // manager hears about someone they cut last week.
     expect(where.droppedAt).toBeNull()
     expect(where.roster.season.status).toBe('active')
+    // ...and queries by the TRANSLATED Sleeper id, never the RI feed id.
+    expect(where.playerId.in).toEqual(['11560'])
   })
 
   it('tells a manager once even when they hold the player in several leagues', async () => {
     h.findMany.mockResolvedValue([
-      { playerId: '101', roster: { ownerId: 'user-1' } },
-      { playerId: '101', roster: { ownerId: 'user-1' } },
-      { playerId: '101', roster: { ownerId: 'user-2' } },
+      { playerId: '11560', roster: { ownerId: 'user-1' } },
+      { playerId: '11560', roster: { ownerId: 'user-1' } },
+      { playerId: '11560', roster: { ownerId: 'user-2' } },
     ])
     await notifyBigPlays([ev()])
     expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['user-1', 'user-2'])
@@ -140,6 +146,13 @@ describe('the payload', () => {
     expect(n.body).toContain('24')
   })
 
+  it('never emails a big play — in-app + push only', async () => {
+    // The category default is in-app + email; an email per big play is a
+    // Sunday inbox flood that burns the sending domain.
+    await notifyBigPlays([ev()])
+    expect(h.ingestBatch.mock.calls[0][0][0].skipChannels).toEqual({ email: true, sms: true })
+  })
+
   it('never throws when the notification engine fails', async () => {
     h.ingestBatch.mockRejectedValue(new Error('queue down'))
     // This runs behind live scoring. A missed alert must not cost a score.
@@ -166,10 +179,13 @@ describe('imported leagues', () => {
     h.findMany.mockResolvedValue([])
     h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
     h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }])
+    h.profileFind.mockResolvedValue([{ userId: 'af-user-9', sleeperUserId: 'sleeper-user-9' }])
 
     const res = await notifyBigPlays([ev()])
     expect(res.notificationsSent).toBe(1)
-    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['sleeper-user-9'])
+    // The Sleeper user id is translated to OUR user id — the dispatcher
+    // silently drops ids it cannot find a settings profile for.
+    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['af-user-9'])
   })
 
   it('crosses RI ids to Sleeper ids rather than assuming they match', async () => {
@@ -189,20 +205,21 @@ describe('imported leagues', () => {
     expect(h.rawQuery).not.toHaveBeenCalled()
   })
 
-  it('still alerts redraft managers when the imported lookup fails', async () => {
+  it('still alerts redraft managers when the imported roster lookup fails', async () => {
     // Imported resolution is additive. A failure there must not mean nobody
     // gets an alert.
-    h.identityFind.mockRejectedValue(new Error('db down'))
+    h.rawQuery.mockRejectedValue(new Error('db down'))
     const res = await notifyBigPlays([ev()])
     expect(res.notificationsSent).toBe(1)
     expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['user-1'])
   })
 
   it('merges both league types for the same player without duplicates', async () => {
-    h.findMany.mockResolvedValue(rostered('101', 'redraft-user'))
+    h.findMany.mockResolvedValue(rostered('11560', 'redraft-user'))
     h.identityFind.mockResolvedValue([{ rollingInsightsId: '101', sleeperId: '11560' }])
     h.rawQuery.mockResolvedValue([{ platformUserId: 'sleeper-user-9' }, { platformUserId: 'sleeper-user-9' }])
+    h.profileFind.mockResolvedValue([{ userId: 'af-user-9', sleeperUserId: 'sleeper-user-9' }])
     await notifyBigPlays([ev()])
-    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['redraft-user', 'sleeper-user-9'])
+    expect(h.ingestBatch.mock.calls[0][0][0].userIds).toEqual(['redraft-user', 'af-user-9'])
   })
 })

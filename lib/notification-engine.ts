@@ -53,6 +53,8 @@ export type NotificationEvent = {
   severity?: NotificationSeverity
   /** Source system that generated the event. */
   source?: string
+  /** Opt out of transport channels for this event (forwarded to the dispatcher). */
+  skipChannels?: { email?: boolean; sms?: boolean; push?: boolean }
 }
 
 // ── Event → Category Mapping ──
@@ -119,20 +121,33 @@ function buildSourceKey(event: NotificationEvent): string {
 
 // ── Cooldown Check ──
 
-async function isInCooldown(sourceKey: string, cooldownMinutes: number): Promise<boolean> {
-  if (cooldownMinutes <= 0) return false
+/**
+ * Per-user cooldown: users who already received a notification for this
+ * sourceKey inside the window are filtered out; everyone else still gets
+ * theirs. Matches on `meta.sourceKey` of the stored in-app row (written by
+ * `ingest` below) — NOT the unique `sourceKey` column, which is reserved for
+ * idempotent fan-out and would never match the bare key anyway.
+ */
+async function filterUsersInCooldown(
+  sourceKey: string,
+  userIds: string[],
+  cooldownMinutes: number,
+): Promise<string[]> {
+  if (cooldownMinutes <= 0 || userIds.length === 0) return userIds
   try {
     const cutoff = new Date(Date.now() - cooldownMinutes * 60 * 1000)
-    const existing = await prisma.platformNotification.findFirst({
+    const recent = await prisma.platformNotification.findMany({
       where: {
-        sourceKey,
+        userId: { in: userIds },
         createdAt: { gte: cutoff },
+        meta: { path: ['sourceKey'], equals: sourceKey },
       },
-      select: { id: true },
+      select: { userId: true },
     })
-    return existing !== null
+    const cooling = new Set(recent.map((row) => row.userId))
+    return userIds.filter((id) => !cooling.has(id))
   } catch {
-    return false
+    return userIds
   }
 }
 
@@ -172,15 +187,6 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
 
   const sourceKey = buildSourceKey(event)
 
-  // Cooldown check
-  const cooldown = COOLDOWN_MINUTES[event.type] ?? 0
-  if (cooldown > 0) {
-    const inCooldown = await isInCooldown(sourceKey, cooldown)
-    if (inCooldown) {
-      return { dispatched: false, reason: 'cooldown', sourceKey }
-    }
-  }
-
   // Resolve target users
   let userIds = event.userIds ?? []
   if (userIds.length === 0 && event.leagueId) {
@@ -188,6 +194,16 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
   }
   if (userIds.length === 0) {
     return { dispatched: false, reason: 'no_target_users', sourceKey }
+  }
+
+  // Cooldown check — per user, so one manager's recent alert never suppresses
+  // delivery to a manager who has not been notified yet.
+  const cooldown = COOLDOWN_MINUTES[event.type] ?? 0
+  if (cooldown > 0) {
+    userIds = await filterUsersInCooldown(sourceKey, userIds, cooldown)
+    if (userIds.length === 0) {
+      return { dispatched: false, reason: 'cooldown', sourceKey }
+    }
   }
 
   const severity = event.severity ?? DEFAULT_SEVERITY[event.type] ?? 'low'
@@ -201,6 +217,7 @@ export async function ingest(event: NotificationEvent): Promise<IngestResult> {
       body: event.body,
       actionHref: event.actionHref,
       actionLabel: event.actionLabel,
+      skipChannels: event.skipChannels,
       meta: {
         ...event.meta,
         source: event.source ?? 'notification-engine',
