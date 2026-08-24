@@ -64,7 +64,7 @@ prisma/*.db-journal
 scripts/ri-import-all.ts
 
 # local agent settings (may contain secrets)
-.claude/settings.local.json
+.claude/settings.local.json*
 
 # Pre-write snapshots taken by the destructive maintenance scripts. These are verbatim dumps
 # of PRODUCTION rows, and this repo is public — they must never be committed. The dedupe

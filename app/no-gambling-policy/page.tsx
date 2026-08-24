@@ -1,5 +1,5 @@
 import Link from "next/link"
-import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
+import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 import { RESTRICTED_STATES } from "@/lib/geo/restrictedStates"
 import { getFanCredBoundaryDisclosureLong, getFanCredBoundaryChecklist } from "@/lib/legal/FanCredBoundaryDisclosure"
@@ -26,7 +26,7 @@ export default async function NoGamblingPolicyPage({ searchParams }: NoGamblingP
   return (
     <LegalPageRenderer
       title="No Gambling Policy"
-      description={`Last updated: ${LEGAL_LAST_UPDATED}`}
+      description={`Last updated: ${legalLastUpdated("noGamblingPolicy")}`}
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to Sign Up" : "Back to Home"}
     >

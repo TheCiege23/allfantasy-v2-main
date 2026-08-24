@@ -1,5 +1,5 @@
 import Link from "next/link"
-import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
+import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 
 interface AiTransparencyPageProps {
@@ -21,7 +21,7 @@ export default async function AiTransparencyPage({ searchParams }: AiTransparenc
   return (
     <LegalPageRenderer
       title="AI Transparency"
-      description={`Last updated: ${LEGAL_LAST_UPDATED}`}
+      description={`Last updated: ${legalLastUpdated("aiTransparency")}`}
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to Sign Up" : "Back to Home"}
     >
