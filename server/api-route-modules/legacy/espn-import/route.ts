@@ -1,15 +1,40 @@
 import { withApiUsage } from "@/lib/telemetry/usage"
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchEspnLeague, findTeamByName } from '@/lib/espn-client'
-import { requireVerifiedUser } from '@/lib/auth-guard'
+import { getSessionAndProfile } from '@/lib/auth-guard'
+import { consumeRateLimit, getClientIp, buildRateLimit429 } from '@/lib/rate-limit'
 
 export const dynamic = 'force-dynamic'
 
 export const POST = withApiUsage({ endpoint: "/api/legacy/espn-import", tool: "LegacyEspnImport" })(async (req: NextRequest) => {
   try {
-    const auth = await requireVerifiedUser()
-    if (!auth.ok) {
-      return auth.response
+    /*
+     * ⚠ GUESTS ARE ALLOWED HERE ON PURPOSE. This endpoint is a stateless READ
+     * of a public ESPN league (it writes nothing), yet it required a verified
+     * user while the af-legacy trial funnel offered its tab to guests — every
+     * guest submit died as a raw 401 "UNAUTHENTICATED" (verified live with a
+     * public league). Guests get the same anti-abuse shape the Sleeper
+     * guest-import route uses: tight per-league+IP cooldown plus a looser
+     * per-IP cap. Signed-in users skip the tight limit.
+     */
+    const { userId } = await getSessionAndProfile()
+    if (!userId) {
+      const ip = getClientIp(req)
+      const perIpLimit = consumeRateLimit({
+        scope: 'legacy',
+        action: 'guest_espn_import_ip',
+        sleeperUsername: null,
+        ip,
+        maxRequests: 10,
+        windowMs: 10 * 60_000,
+        includeIpInKey: true,
+      })
+      if (!perIpLimit.success) {
+        return NextResponse.json(
+          buildRateLimit429({ message: 'Too many imports from this connection. Please try again shortly.', rl: perIpLimit }),
+          { status: 429 },
+        )
+      }
     }
 
     const body = await req.json()
