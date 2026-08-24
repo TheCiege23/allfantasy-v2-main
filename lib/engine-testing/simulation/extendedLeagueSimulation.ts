@@ -4,7 +4,10 @@
  * No database — safe for CI and stress loops.
  */
 
-import { validateCreatePayload } from '@/lib/league-creation/canonical/validateCreateLeague'
+import {
+  COLLEGE_FORMATS_NOT_OPEN_CODE,
+  validateCreatePayload,
+} from '@/lib/league-creation/canonical/validateCreateLeague'
 import { resolveLeagueTradeSettings } from '@/lib/league-trade-engine/tradeSettingsResolver'
 import {
   validateTradeAssets,
@@ -79,7 +82,13 @@ export function runExtendedLeagueEngineSimulation(
     leagueName: p.leagueName ?? 'Sim',
     ...(String(p.sport).toUpperCase() === 'SOCCER' ? { soccerPipeline: 'mls' as const } : {}),
   })
-  extendedOnlySteps.push({ kind: 'create_payload', ok: cp.ok })
+  // Option B launch gate: devy/c2c CREATION is closed as policy. A rejection
+  // carrying ONLY that gate's code means the payload cleared every structural
+  // check, which is what this step verifies — not the launch policy.
+  const cpBlockedByLaunchGateOnly =
+    !cp.ok && cp.errors.length > 0 && cp.errors.every((e) => e.code === COLLEGE_FORMATS_NOT_OPEN_CODE)
+  const cpStructurallyOk = cp.ok || cpBlockedByLaunchGateOnly
+  extendedOnlySteps.push({ kind: 'create_payload', ok: cpStructurallyOk })
 
   const lg = buildEngineTestLeague()
   const proposer = buildEngineTestRoster('r-sim-1', lg.id, 'u1', { players: ['p1', 'p2'] })
@@ -160,7 +169,7 @@ export function runExtendedLeagueEngineSimulation(
 
   const matchupOk = mv.ok
   const extendedOk =
-    cp.ok &&
+    cpStructurallyOk &&
     tv.ok &&
     dupIssues.length > 0 &&
     matchupOk &&

@@ -1,10 +1,8 @@
 'use client'
 
-import Link from 'next/link'
 import { Crosshair, Sparkles, Telescope, Timer, Trophy } from 'lucide-react'
 
 export type DevyLeagueHomeHeroProps = {
-  leagueId: string
   leagueName: string
   sport: string
   season: number
@@ -16,10 +14,10 @@ export type DevyLeagueHomeHeroProps = {
 
 /**
  * Premium devy league home strip — scouting / war-room aesthetic (glass, glow, depth).
- * Surfaces pipeline status chips; deep roster/pick tooling stays on dedicated devy routes.
+ * Surfaces pipeline status chips. The dedicated /devy roster/pick pages are
+ * build-excluded in production, so this strip must not link into them.
  */
 export function DevyLeagueHomeHero({
-  leagueId,
   leagueName,
   sport,
   season,
@@ -106,18 +104,7 @@ export function DevyLeagueHomeHero({
       </div>
 
       <div className="relative mx-auto mt-4 flex max-w-5xl flex-wrap gap-3 text-[11px]">
-        <Link
-          href={`/devy/${leagueId}/roster`}
-          className="text-cyan-300/90 underline-offset-2 hover:text-cyan-200 hover:underline"
-        >
-          Devy roster →
-        </Link>
-        <Link
-          href={`/devy/${leagueId}/picks`}
-          className="text-cyan-300/90 underline-offset-2 hover:text-cyan-200 hover:underline"
-        >
-          Future picks →
-        </Link>
+        <span className="text-white/45">Devy roster &amp; future picks — dedicated pages not yet enabled.</span>
         {isCommissioner ? (
           <span className="text-amber-200/80">Commissioner: open Devy HQ in settings for full controls.</span>
         ) : null}

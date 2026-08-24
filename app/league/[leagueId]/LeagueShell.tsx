@@ -1141,8 +1141,10 @@ export function LeagueShell({
     league.leagueVariant === 'big_brother' ||
     Boolean(tournamentHeroContext)
 
-  const showDevyHero =
-    league.leagueType === 'devy' || (devyConfig !== null && devyConfig !== 'none')
+  // Only the /api/devy config fetch (fail-closed in prod, where the /devy tree
+  // is build-excluded) may enable the hero — `leagueType === 'devy'` alone let
+  // API-created devy leagues render a hero whose surfaces 404.
+  const showDevyHero = devyConfig !== null && devyConfig !== 'none'
 
   const draftTabForHero = useMemo(() => {
     const ids = new Set(tabDefs.map((x) => x.id))
@@ -1328,7 +1330,6 @@ export function LeagueShell({
             ) : null}
             {showDevyHero ? (
               <DevyLeagueHomeHero
-                leagueId={league.id}
                 leagueName={selectedLeague.name ?? 'League'}
                 sport={String(selectedLeague.sport)}
                 season={Number(selectedLeague.season ?? new Date().getFullYear())}

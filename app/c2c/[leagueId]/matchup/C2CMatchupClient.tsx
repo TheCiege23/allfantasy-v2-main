@@ -22,6 +22,7 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
   const [oppCanton, setOppCanton] = useState<C2CPlayerRow[]>([])
   const [tick, setTick] = useState(false)
   const [err, setErr] = useState<string | null>(null)
+  const [scoresLoaded, setScoresLoaded] = useState(false)
 
   const reload = useCallback(async () => {
     setErr(null)
@@ -63,21 +64,11 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
       const mine = m.homeRosterId === roster.id
       const otherId = mine ? m.awayRosterId : m.homeRosterId
       const scores = mj.c2cScores?.[m.id]
-      const empty = (): C2CMatchupScore =>
-        ({
-          campusStarterScore: 0,
-          cantonStarterScore: 0,
-          officialTeamScore: 0,
-          campusMatchupResult: null,
-          cantonMatchupResult: null,
-        }) as C2CMatchupScore
-      if (scores) {
-        setYou((mine ? scores.home : scores.away) ?? empty())
-        setOpp((mine ? scores.away : scores.home) ?? empty())
-      } else {
-        setYou(empty())
-        setOpp(empty())
-      }
+      // Absent C2CMatchupScore rows stay null — fabricating zero rows made
+      // "not scored yet" indistinguishable from a real 0.0.
+      setYou((mine ? scores?.home : scores?.away) ?? null)
+      setOpp((mine ? scores?.away : scores?.home) ?? null)
+      setScoresLoaded(true)
       if (mine ? m.awayRoster?.teamName : m.homeRoster?.teamName) {
         setOppName((mine ? m.awayRoster?.teamName : m.homeRoster?.teamName) ?? 'Opponent')
       }
@@ -113,43 +104,51 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
   if (err) {
     return <p className="px-4 py-10 text-center text-[13px] text-red-300/90">{err}</p>
   }
-  if (!cfg || !you || !opp) {
+  if (!cfg || !scoresLoaded) {
     return <p className="px-4 py-10 text-center text-[13px] text-white/45">Loading matchup…</p>
   }
 
-  const yc = you.campusStarterScore
-  const yct = you.cantonStarterScore
-  const yt = you.officialTeamScore
-  const oc = opp.campusStarterScore
-  const oct = opp.cantonStarterScore
-  const ot = opp.officialTeamScore
+  // No college weekly stats are ingested yet, so a stored campus 0 is absent
+  // data, not a score — surface it as a labeled absence instead of 0.0.
+  const campusVal = (s: C2CMatchupScore | null) => (s && s.campusStarterScore > 0 ? s.campusStarterScore : null)
+  const yc = campusVal(you)
+  const yct = you ? you.cantonStarterScore : null
+  const yt = you ? you.officialTeamScore : null
+  const oc = campusVal(opp)
+  const oct = opp ? opp.cantonStarterScore : null
+  const ot = opp ? opp.officialTeamScore : null
 
   const RowBar = ({
     left,
     right,
     label,
     variant,
+    missingLabel,
   }: {
-    left: number
-    right: number
+    left: number | null
+    right: number | null
     label: string
     variant: 'campus' | 'canton' | 'total'
+    missingLabel: string
   }) => {
-    const t = Math.max(left + right, 0.0001)
-    const lp = left / t
+    const t = Math.max((left ?? 0) + (right ?? 0), 0.0001)
+    const lp = (left ?? 0) / t
     const leftClass =
       variant === 'campus' ? 'bg-violet-600/85' : variant === 'canton' ? 'bg-blue-600/85' : 'bg-gradient-to-r from-violet-600/80 to-blue-600/80'
     return (
       <div className="mb-3">
         <div className="mb-1 flex justify-between text-[11px] text-white/70">
-          <span>{left.toFixed(1)}</span>
+          <span>{left != null ? left.toFixed(1) : '—'}</span>
           <span className="font-bold text-white/90">{label}</span>
-          <span>{right.toFixed(1)}</span>
+          <span>{right != null ? right.toFixed(1) : '—'}</span>
         </div>
         <div className="flex h-3 overflow-hidden rounded-full bg-white/[0.06]">
           <div className={`h-full transition-all ${leftClass}`} style={{ width: `${Math.round(lp * 100)}%` }} />
           <div className="h-full flex-1 bg-white/[0.04]" />
         </div>
+        {left == null && right == null ? (
+          <p className="mt-1 text-center text-[10px] text-white/40">{missingLabel}</p>
+        ) : null}
       </div>
     )
   }
@@ -165,9 +164,9 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
         </div>
       </div>
 
-      <RowBar left={yc} right={oc} label="🎓 Campus" variant="campus" />
-      <RowBar left={yct} right={oct} label="🏙 Canton" variant="canton" />
-      <RowBar left={yt} right={ot} label="Total" variant="total" />
+      <RowBar left={yc} right={oc} label="🎓 Campus" variant="campus" missingLabel="No college scoring yet" />
+      <RowBar left={yct} right={oct} label="🏙 Canton" variant="canton" missingLabel="Not scored yet" />
+      <RowBar left={yt} right={ot} label="Total" variant="total" missingLabel="Not scored yet" />
 
       {cfg.scoringMode === 'weighted_combined' ? (
         <p className="mb-4 text-center text-[11px] text-white/50">
@@ -178,10 +177,10 @@ export function C2CMatchupClient({ leagueId, userId }: { leagueId: string; userI
       {cfg.scoringMode === 'dual_track' ? (
         <div className="mb-4 flex justify-center gap-4 text-[11px] text-white/60">
           <span>
-            Campus result: {you.campusMatchupResult ?? '—'} / {opp.campusMatchupResult ?? '—'}
+            Campus result: {you?.campusMatchupResult ?? '—'} / {opp?.campusMatchupResult ?? '—'}
           </span>
           <span>
-            Canton result: {you.cantonMatchupResult ?? '—'} / {opp.cantonMatchupResult ?? '—'}
+            Canton result: {you?.cantonMatchupResult ?? '—'} / {opp?.cantonMatchupResult ?? '—'}
           </span>
         </div>
       ) : null}

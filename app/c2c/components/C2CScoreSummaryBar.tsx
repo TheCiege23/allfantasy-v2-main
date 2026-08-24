@@ -9,15 +9,15 @@ export function C2CScoreSummaryBar({
   config,
   compact,
 }: {
-  campus: number
-  canton: number
-  total: number
+  campus: number | null
+  canton: number | null
+  total: number | null
   config: C2CConfigClient
   compact?: boolean
 }) {
-  const sum = Math.max(campus + canton, 0.0001)
-  const campusPct = campus / sum
-  const cantonPct = canton / sum
+  const sum = Math.max((campus ?? 0) + (canton ?? 0), 0.0001)
+  const campusPct = (campus ?? 0) / sum
+  const cantonPct = (canton ?? 0) / sum
   const desc = c2cScoreModeDescription(config)
 
   return (
@@ -28,21 +28,39 @@ export function C2CScoreSummaryBar({
       <div className="grid grid-cols-3 gap-2 text-center">
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-violet-300/90">🎓 Campus</p>
-          <p className="text-lg font-bold text-violet-200" style={{ textShadow: 'var(--c2c-campus-glow)' }}>
-            {campus.toFixed(1)}
-          </p>
-          <p className="text-[9px] text-white/40">pts</p>
+          {campus != null ? (
+            <>
+              <p className="text-lg font-bold text-violet-200" style={{ textShadow: 'var(--c2c-campus-glow)' }}>
+                {campus.toFixed(1)}
+              </p>
+              <p className="text-[9px] text-white/40">pts</p>
+            </>
+          ) : (
+            <p className="mt-1 text-[10px] leading-tight text-white/40" data-testid="c2c-campus-no-scoring">
+              No college scoring yet
+            </p>
+          )}
         </div>
         <div className="flex flex-col justify-center">
           <p className="text-[10px] font-bold uppercase text-white/50">Total</p>
-          <p className="text-xl font-extrabold text-white">{total.toFixed(1)}</p>
+          {total != null ? (
+            <p className="text-xl font-extrabold text-white">{total.toFixed(1)}</p>
+          ) : (
+            <p className="mt-1 text-[10px] leading-tight text-white/40">Not scored yet</p>
+          )}
         </div>
         <div>
           <p className="text-[10px] font-bold uppercase tracking-wide text-blue-300/90">🏙 Canton</p>
-          <p className="text-lg font-bold text-blue-200" style={{ textShadow: 'var(--c2c-canton-glow)' }}>
-            {canton.toFixed(1)}
-          </p>
-          <p className="text-[9px] text-white/40">pts</p>
+          {canton != null ? (
+            <>
+              <p className="text-lg font-bold text-blue-200" style={{ textShadow: 'var(--c2c-canton-glow)' }}>
+                {canton.toFixed(1)}
+              </p>
+              <p className="text-[9px] text-white/40">pts</p>
+            </>
+          ) : (
+            <p className="mt-1 text-[10px] leading-tight text-white/40">Not scored yet</p>
+          )}
         </div>
       </div>
       <div className="mt-3 flex h-2.5 overflow-hidden rounded-full bg-white/[0.06]">

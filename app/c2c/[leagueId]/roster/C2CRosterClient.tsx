@@ -250,10 +250,12 @@ export function C2CRosterClient({
         </div>
       ) : null}
 
+      {/* No college weekly stats are ingested yet, so a stored campus 0 is absent
+          data, not a score — it renders as a labeled absence, never as 0.0. */}
       <C2CScoreSummaryBar
-        campus={scores?.campus ?? 0}
-        canton={scores?.canton ?? 0}
-        total={scores?.total ?? (scores?.campus ?? 0) + (scores?.canton ?? 0)}
+        campus={scores && scores.campus > 0 ? scores.campus : null}
+        canton={scores ? scores.canton : null}
+        total={scores ? scores.total : null}
         config={cfg}
         compact
       />
