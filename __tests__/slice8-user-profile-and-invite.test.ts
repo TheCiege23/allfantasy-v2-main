@@ -81,8 +81,8 @@ describe('Slice 8 — post-signup callback preserves invite for email flow', () 
 })
 
 describe('Slice 8 — post-signup routing (credential signup)', () => {
-  it('defaults new signup to /dashboard when no invite or verify callback', () => {
-    expect(resolveUnifiedAuthDestinationForSignup({})).toBe('/dashboard')
+  it('defaults new signup to /core when no invite or verify callback', () => {
+    expect(resolveUnifiedAuthDestinationForSignup({})).toBe('/core')
   })
 
   it('preserves invite accept URL from callbackUrl', () => {
@@ -101,12 +101,12 @@ describe('Slice 8 — post-signup routing (credential signup)', () => {
     ).toBe('/verify/email?token=abc')
   })
 
-  it('falls back to /dashboard when callback is unsafe and no safe next', () => {
+  it('falls back to /core when callback is unsafe and no safe next', () => {
     expect(
       resolveUnifiedAuthDestinationForSignup({
         callbackUrl: 'https://evil.example/phish',
       }),
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('does not send successful signup to /login when login is the only callback', () => {
@@ -114,7 +114,7 @@ describe('Slice 8 — post-signup routing (credential signup)', () => {
       resolveUnifiedAuthDestinationForSignup({
         callbackUrl: '/login?callbackUrl=%2Fdashboard',
       }),
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('allows /join/ token paths', () => {
@@ -183,9 +183,9 @@ describe('Slice 8 — canonicalizeProductRoute', () => {
     expect(canonicalizeProductRoute('/bracket/leagues/xyz')).toBe('/brackets/leagues/xyz')
   })
 
-  it('sends external and /api paths to /dashboard', () => {
-    expect(canonicalizeProductRoute('https://evil.example/x')).toBe('/dashboard')
-    expect(canonicalizeProductRoute('/api/auth/session')).toBe('/dashboard')
+  it('sends external and /api paths to /core', () => {
+    expect(canonicalizeProductRoute('https://evil.example/x')).toBe('/core')
+    expect(canonicalizeProductRoute('/api/auth/session')).toBe('/core')
   })
 })
 

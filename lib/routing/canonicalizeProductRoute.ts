@@ -3,7 +3,7 @@
  * APIs may still exist; this is for browser redirects only.
  */
 
-const DASHBOARD = "/dashboard"
+const DASHBOARD = "/core"
 
 function splitPathAndQuery(fullPath: string): { pathname: string; search: string } {
   const t = fullPath.trim()
@@ -13,8 +13,8 @@ function splitPathAndQuery(fullPath: string): { pathname: string; search: string
 }
 
 /**
- * Map legacy or cross-product paths to `/dashboard` or `/league/[leagueId]`.
- * External URLs and bare `/api/*` resolve to `/dashboard`.
+ * Map legacy or cross-product paths to `/core` or `/league/[leagueId]`.
+ * External URLs and bare `/api/*` resolve to `/core`.
  */
 export function canonicalizeProductRoute(path: string): string {
   const trimmed = path.trim()

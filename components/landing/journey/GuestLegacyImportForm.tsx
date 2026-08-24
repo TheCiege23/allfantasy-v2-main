@@ -27,14 +27,14 @@ export function GuestLegacyImportForm() {
 
   useEffect(() => {
     if (phase !== 'complete') return
-    const t = setTimeout(() => router.push('/dashboard/universal'), 600)
+    const t = setTimeout(() => router.push('/core'), 600)
     return () => clearTimeout(t)
   }, [phase, router])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!inputValue.trim() || busy) return
-    trackLandingCtaClick({ cta_label: 'See my leagues', cta_destination: '/dashboard/universal', cta_type: 'primary', source: 'hero-guest-import' })
+    trackLandingCtaClick({ cta_label: 'See my leagues', cta_destination: '/core', cta_type: 'primary', source: 'hero-guest-import' })
     void startImport(inputValue)
   }
 

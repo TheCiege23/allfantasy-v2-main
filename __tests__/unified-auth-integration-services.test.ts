@@ -41,7 +41,7 @@ describe("Unified auth integration services", () => {
       resolvePostAuthIntentDestination({
         rememberedIntent: "/af-legacy",
       })
-    ).toBe("/dashboard")
+    ).toBe("/core")
   })
 
   it("downgrades admin destination when user is non-admin", () => {
@@ -50,7 +50,7 @@ describe("Unified auth integration services", () => {
         callbackUrl: "/admin",
         isAdmin: false,
       })
-    ).toBe("/dashboard")
+    ).toBe("/core")
   })
 
   it("auth redirect resolver honors returnTo fallback", () => {

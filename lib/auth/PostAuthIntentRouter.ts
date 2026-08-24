@@ -6,7 +6,7 @@ import {
 } from "@/lib/auth/postSignupRedirectPolicy"
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute"
 
-export const DEFAULT_POST_AUTH_ROUTE = "/dashboard"
+export const DEFAULT_POST_AUTH_ROUTE = "/core"
 export const AUTH_INTENT_STORAGE_KEY = "af_auth_intent"
 
 const SPORTS_APP_INTENTS = new Set(["sports-app", "sports", "webapp", "app"])
@@ -35,7 +35,7 @@ function isSafeInternalPath(value: string | null | undefined): value is string {
 function resolveIntentAlias(intent: string | null | undefined): string | null {
   if (!intent || typeof intent !== "string") return null
   const normalized = intent.trim().toLowerCase()
-  if (SPORTS_APP_INTENTS.has(normalized)) return "/dashboard"
+  if (SPORTS_APP_INTENTS.has(normalized)) return "/core"
   if (BRACKET_INTENTS.has(normalized)) return "/brackets"
   if (LEGACY_INTENTS.has(normalized)) return "/af-legacy"
   if (ADMIN_INTENTS.has(normalized)) return "/admin"
@@ -48,14 +48,14 @@ function remapDeprecatedAppRoutes(safe: string): string {
   const path = q === -1 ? safe : safe.slice(0, q)
   const search = q === -1 ? "" : safe.slice(q)
   if (path === "/web" || path.startsWith("/web/")) {
-    return `/dashboard${search}`
+    return `/core${search}`
   }
   if (path === "/bracket" || path.startsWith("/bracket/")) {
     const mapped = path.replace(/^\/bracket(\/|$)/, "/brackets$1")
     return `${mapped}${search}`
   }
   if (path === "/app" || path === "/app/" || path === "/app/home") {
-    return `/dashboard${search}`
+    return `/core${search}`
   }
   if (path.startsWith("/app/leagues") || path.startsWith("/app/power-rankings")) {
     return `${path.replace(/^\/app/, "")}${search}`

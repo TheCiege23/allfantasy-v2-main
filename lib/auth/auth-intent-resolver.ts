@@ -3,8 +3,8 @@
  * One account, one session; redirect depends on product intent (next / callbackUrl).
  */
 
-const DEFAULT_AFTER_LOGIN = "/dashboard"
-const DEFAULT_AFTER_SIGNUP = "/dashboard"
+const DEFAULT_AFTER_LOGIN = "/core"
+const DEFAULT_AFTER_SIGNUP = "/core"
 
 /** Safe path: must start with / and not be a full URL (open redirect). */
 export function safeRedirectPath(path: string | null | undefined): string {

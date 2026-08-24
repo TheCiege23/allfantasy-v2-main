@@ -155,7 +155,7 @@ export function LandingV4({
    * they cannot drift into disagreeing about who the reader is.
    */
   const primaryCta = signedIn
-    ? { href: '/dashboard', label: c.nav.goToDashboard }
+    ? { href: '/core', label: c.nav.goToDashboard }
     : { href: '/signup', label: c.nav.getStarted }
 
   return (
@@ -417,7 +417,7 @@ export function LandingV4({
           </span>
           <nav className="af-lp-footer-links" aria-label="Footer">
             <Link href="/core/players">{c.footer.playerFinder}</Link>
-            <Link href="/dashboard">{c.footer.dashboard}</Link>
+            <Link href="/core">{c.footer.dashboard}</Link>
             <Link href="/privacy">{c.footer.privacy}</Link>
             <Link href="/terms">{c.footer.terms}</Link>
             <Link href="/data-deletion">{c.footer.dataDeletion}</Link>

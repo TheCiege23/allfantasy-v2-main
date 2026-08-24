@@ -256,10 +256,7 @@ test.describe("@db @settings full settings profile preferences click audit", () 
     await page.goto("/settings?tab=account")
     await expect(page.getByRole("heading", { name: /^Account$/ })).toBeVisible()
     await expect(page.getByRole("button", { name: "Sign out" }).first()).toBeVisible()
-    await expect(page.getByRole("link", { name: "Request account deletion" })).toHaveAttribute(
-      "href",
-      /mailto:support@allfantasy.ai/
-    )
+    await expect(page.getByTestId("settings-account-delete-open")).toBeVisible()
 
     // Mobile navigation sanity
     await page.setViewportSize({ width: 390, height: 844 })

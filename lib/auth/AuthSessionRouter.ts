@@ -17,5 +17,5 @@ export function resolveAuthSessionDestination(input: AuthSessionRouteInput): str
     fallback: input.fallback,
   })
   if (route) return route
-  return input.fallback ?? '/dashboard'
+  return input.fallback ?? '/core'
 }

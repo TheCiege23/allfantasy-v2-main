@@ -40,7 +40,7 @@ describe('Unified auth flow controllers', () => {
       resolveSignupRedirectPath({
         callbackUrl: '/brackets',
       })
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('signup redirect skips /login and prefers a safe next', () => {
@@ -55,7 +55,7 @@ describe('Unified auth flow controllers', () => {
       resolveSignupRedirectPath({
         callbackUrl: '/login',
       })
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('routes post-signup to phone verify when method is phone', () => {

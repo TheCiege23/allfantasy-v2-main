@@ -6,6 +6,6 @@ export function buildProviderPendingHref(input: {
 }): string {
   const safeCallback = input.callbackUrl.startsWith('/')
     ? input.callbackUrl
-    : '/dashboard'
+    : '/core'
   return `/auth/provider-pending?provider=${encodeURIComponent(input.provider)}&callbackUrl=${encodeURIComponent(safeCallback)}`
 }

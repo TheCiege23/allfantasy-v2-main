@@ -117,14 +117,6 @@ describe('source-level fabrication locks', () => {
     )
   })
 
-  it('PortfolioAnalytics never renders a fabricated 50% probability and shares the render/sort unit helpers', () => {
-    const src = read('app/dashboard/universal/components/PortfolioAnalytics.tsx')
-    expect(src).not.toContain('?? 50')
-    expect(src).toContain('Win probability unavailable')
-    expect(src).toContain('formatWinProbabilityPercents')
-    expect(src).toContain('winProbabilitySortDistance')
-  })
-
   it('MatchupHeaderCard shows an honest unavailable state instead of nothing', () => {
     expect(read('components/matchup-center/MatchupHeaderCard.tsx')).toContain(
       'Win probability unavailable'

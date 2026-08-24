@@ -16,7 +16,6 @@ import {
   Search,
   Shield,
   Sliders,
-  Sparkles,
   Trophy,
   User,
 } from 'lucide-react'
@@ -38,7 +37,6 @@ export type SettingsTabId =
   | 'rank'
   | 'command'
   | 'legal'
-  | 'chimmy'
   | 'account'
 
 type NavDef = {
@@ -46,10 +44,14 @@ type NavDef = {
   icon: ComponentType<{ className?: string }>
 }
 
+// Settings honesty (P2-5): the former 'chimmy' AI tab was removed — its 18
+// per-user toggles persisted to notificationPreferences.aiSettings but nothing
+// server-side ever read them (the real AI gate is league-level in
+// lib/league/ai-feature-gate.ts), and its tier badge came from the admin
+// allowlist, so every paying subscriber saw "Free" with locked toggles.
 const NAV_DEFS: NavDef[] = [
   { id: 'profile', icon: User },
   { id: 'preferences', icon: Sliders },
-  { id: 'chimmy', icon: Sparkles },
   { id: 'command', icon: LayoutDashboard },
   { id: 'security', icon: Shield },
   { id: 'notifications', icon: Bell },

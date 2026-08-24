@@ -38,6 +38,7 @@ export function isAllowedSignupPostAuthDestination(
   if (pathname === "/af-legacy" || pathname.startsWith("/af-legacy/")) return false
   if (pathname === "/app" || pathname.startsWith("/app/")) return false
   if (pathname === "/web" || pathname.startsWith("/web/")) return false
+  if (pathname === "/core" || pathname.startsWith("/core/")) return true
   if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) return true
   if (pathname === "/world-cup-intro") return true
   if (pathname.startsWith("/invite/")) return true

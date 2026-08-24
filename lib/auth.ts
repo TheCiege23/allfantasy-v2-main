@@ -772,7 +772,7 @@ export const authOptions: NextAuthOptions = {
     async redirect({ url, baseUrl }) {
       const base = baseUrl.replace(/\/$/, "");
       if (!url) {
-        return `${base}/dashboard`;
+        return `${base}/core`;
       }
 
       // Extract pathname + query from full URLs (handles www vs non-www mismatches).
@@ -792,7 +792,7 @@ export const authOptions: NextAuthOptions = {
         return `${base}${pathAndQuery}`;
       }
       if (pathname === "/login" || pathname === "/") {
-        return `${base}/dashboard`;
+        return `${base}/core`;
       }
 
       return `${base}${pathAndQuery}`;

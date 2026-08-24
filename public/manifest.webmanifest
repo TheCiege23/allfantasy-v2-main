@@ -3,7 +3,7 @@
   "name": "AllFantasy.ai",
   "short_name": "AllFantasy",
   "description": "AI-powered fantasy sports — trade analyzer, draft assistant, waiver AI, and more.",
-  "start_url": "/app",
+  "start_url": "/core",
   "scope": "/",
   "display": "standalone",
   "dir": "ltr",
@@ -108,7 +108,7 @@
   "shortcuts": [
     {
       "name": "My Leagues",
-      "url": "/app/home",
+      "url": "/leagues",
       "icons": [
         {
           "src": "/icons/icon-96.png",

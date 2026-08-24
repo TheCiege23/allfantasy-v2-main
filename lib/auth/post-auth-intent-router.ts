@@ -5,10 +5,10 @@
 import { resolvePostAuthIntentDestination } from "./PostAuthIntentRouter"
 
 /** Default destination when user comes from main landing (no product chosen). */
-export const DEFAULT_LANDING_AFTER_AUTH = "/dashboard"
+export const DEFAULT_LANDING_AFTER_AUTH = "/core"
 
 /** When user explicitly chose Sports App (e.g. sign up from sports-app intent). */
-export const SPORTS_APP_AFTER_AUTH = "/dashboard"
+export const SPORTS_APP_AFTER_AUTH = "/core"
 
 /** When user explicitly chose Bracket (e.g. sign up from /bracket). */
 export const BRACKET_AFTER_AUTH = "/brackets"

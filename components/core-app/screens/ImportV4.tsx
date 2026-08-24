@@ -730,7 +730,7 @@ export function ImportV4({
               Read-only
             </span>
           )}
-          <Link href="/dashboard" className="af-im-skip">
+          <Link href="/core" className="af-im-skip">
             Skip for now
           </Link>
         </div>

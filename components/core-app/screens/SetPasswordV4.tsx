@@ -78,7 +78,7 @@ export function SetPasswordV4() {
   const searchParams = useSearchParams()
   const token = searchParams?.get('token') || ''
   const requestedReturnTo = searchParams?.get('returnTo') || ''
-  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/dashboard'
+  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/core'
   const loginHref = `/login?callbackUrl=${encodeURIComponent(safeReturnTo)}`
   const requestHref = `/forgot-password?returnTo=${encodeURIComponent(safeReturnTo)}`
 

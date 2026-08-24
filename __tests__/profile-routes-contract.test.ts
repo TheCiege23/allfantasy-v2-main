@@ -116,6 +116,50 @@ describe("Profile route contracts", () => {
     )
   })
 
+  it("merges a notifications-tab save over stored co-located preference keys", async () => {
+    const { PATCH } = await import("@/app/api/user/profile/route")
+    getServerSessionMock.mockResolvedValueOnce({ user: { id: "u1" } })
+    getSettingsProfileMock.mockResolvedValue({
+      preferredLanguage: "en",
+      themePreference: "dark",
+      timezone: "America/New_York",
+      notificationPreferences: {
+        aiSettings: { ai_chimmy_advanced: true },
+        chimmyAlertPreferences: { frequency: "daily" },
+        categories: { lineup_reminders: { enabled: false } },
+      },
+    })
+    saveSettingsOrchestratedMock.mockResolvedValueOnce({ ok: true })
+
+    const req = new Request("http://localhost/api/user/profile", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        notificationPreferences: {
+          globalEnabled: false,
+          categories: { lineup_reminders: { enabled: true } },
+        },
+      }),
+    })
+    const res = await PATCH(req)
+    expect(res.status).toBe(200)
+    expect(saveSettingsOrchestratedMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "u1",
+        payload: expect.objectContaining({
+          profile: expect.objectContaining({
+            notificationPreferences: {
+              aiSettings: { ai_chimmy_advanced: true },
+              chimmyAlertPreferences: { frequency: "daily" },
+              globalEnabled: false,
+              categories: { lineup_reminders: { enabled: true } },
+            },
+          }),
+        }),
+      })
+    )
+  })
+
   it("persists AI settings through the unified settings route without dropping existing notification prefs", async () => {
     const { PATCH } = await import("@/app/api/user/settings/route")
     getServerSessionMock.mockResolvedValueOnce({ user: { id: "u1" } })
