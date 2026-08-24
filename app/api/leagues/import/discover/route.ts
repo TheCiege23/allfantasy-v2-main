@@ -192,6 +192,38 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  /*
+   * ⚠ STAMP THE LINK WHILE WE HOLD THE RESOLVED USER. The commissioner gate
+   * on preview/commit requires a linked Sleeper account, but nothing in this
+   * modern pipeline ever wrote one — a direct signup discovered their leagues
+   * here and then failed the very next step with "Link your Sleeper account",
+   * with no surface to do the linking. First-write-wins: an already-linked
+   * profile is never overwritten, and a handle claimed by ANOTHER account is
+   * left alone (unique constraint) — discovery still works, the gate then
+   * refuses with its own message.
+   */
+  await prisma.userProfile
+    .upsert({
+      where: { userId: auth.userId },
+      update: {},
+      create: { userId: auth.userId },
+    })
+    .then(async (profile) => {
+      if (profile.sleeperUserId) return
+      await prisma.userProfile.update({
+        where: { userId: auth.userId },
+        data: {
+          sleeperUserId: sleeperUser.user.user_id,
+          sleeperUsername: sleeperUser.user.username ?? accountIdentifier,
+          sleeperLinkedAt: new Date(),
+        },
+      })
+    })
+    .catch(() => {
+      /* unique-violation (handle owned by another account) or transient DB
+         failure — discovery itself must not break on the stamp. */
+    })
+
   try {
     const leagues = await getUserLeagues(sleeperUser.user.user_id, sport, season)
     return NextResponse.json({
