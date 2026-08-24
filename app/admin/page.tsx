@@ -11,6 +11,7 @@ import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
 import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
 import { AiProviderHealthPanel } from "@/components/admin/AiProviderHealthPanel"
+import { EmailSegmentsPanel } from "@/components/admin/EmailSegmentsPanel"
 import { PlatformOsOperatorPanel } from "@/components/admin/PlatformOsOperatorPanel"
 import type {
   AdminProviderHealthRow,
@@ -577,24 +578,8 @@ function EmailCenterPanel({ status }: { status: AdminEmailStatus }) {
         <MetricCard item={{ label: "Opt-outs", value: status.productUpdateOptOuts + status.unsubscribed, tracked: true, note: "Product updates false or unsubscribed" }} />
         <MetricCard item={{ label: "Pending email outbox", value: status.pendingEmailOutbox, tracked: true }} />
       </div>
-      <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100/75">Admin API</h3>
-            <p className="mt-1 text-xs text-white/50">Preview, test-send, then confirm broadcast. Opt-outs are excluded and every send is logged.</p>
-          </div>
-          <a href="/api/admin/email/broadcast" className="rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100">
-            Email status JSON
-          </a>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {status.audiences.map((audience) => (
-            <div key={audience.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <div className="font-black text-white">{audience.label}</div>
-              <div className="mt-1 text-xs text-white/48">{audience.description}</div>
-            </div>
-          ))}
-        </div>
+      <div className="mt-4">
+        <EmailSegmentsPanel status={status} />
       </div>
     </AccordionSection>
   )
