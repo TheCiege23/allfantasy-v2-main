@@ -102,6 +102,19 @@ function readString(
   return typeof value === 'string' && value.trim().length > 0 ? value : fallback
 }
 
+/**
+ * Unlike `readNumber`, preserves an absent value as `null` rather than a fallback number.
+ * `League.rosterSize` is a nullable column precisely so "we don't know" can be recorded honestly
+ * instead of as a guessed default that reads as a real, commissioner-set roster size.
+ */
+function readNullableNumber(
+  source: Record<string, unknown> | null | undefined,
+  key: string,
+): number | null {
+  const value = source?.[key]
+  return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
 function buildOpenTeamName(slotNumber: number): string {
   return `Open Team ${slotNumber}`
 }
@@ -299,7 +312,19 @@ export async function createCanonicalLeagueInTransaction(
       settings: mergedSettings as Prisma.InputJsonValue,
       syncStatus: 'manual',
       scoring: scoringFormat,
-      rosterSize: readNumber(foundationDefaults.rosterSettings, 'roster_size', readNumber(foundationDefaults.rosterSettings, 'rosterSize', 0)) || null,
+      /**
+       * ⚠ THE OLD LOOKUP HERE COULD NEVER SUCCEED. It read `roster_size` / `rosterSize` off
+       * rosterSettings, but no producer under lib/league-defaults or lib/league-concepts has ever
+       * written either key — `getLeagueDefaults` resolves `rosterSlots` / `benchSlots` / `irSlots`
+       * / `taxiSlots` individually and never summed them. Every call missed both keys, the
+       * `readNumber` fallback of 0 was then collapsed by `|| null`, and this column was written
+       * NULL on every manual-league creation with no error anywhere to say so.
+       *
+       * `totalRosterSlots` is the sum getLeagueDefaults now computes from those same resolved
+       * slot counts (see the comment there). Still nullable on purpose: a concept whose preset
+       * carries no roster-slot data at all should record "unknown", not a guessed 0.
+       */
+      rosterSize: readNullableNumber(foundationDefaults.rosterSettings, 'totalRosterSlots'),
       presetKey: engine.presetKey,
       scoringPresetId: body.scoringPreset,
       settingsSnapshotVersion: SETTINGS_SNAPSHOT_VERSION,
