@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import OpenCommsButton from '@/components/core-app/comms/OpenCommsButton'
 import { Dash34Countdown, Dash34Time } from './Dashboard34Live'
 import '@/components/core-app/af-dash34.css'
 
@@ -232,8 +233,17 @@ const TOOLS: ReadonlyArray<{ href: string; glyph: string; name: string; leagueSc
   { href: '/commissioner-os', glyph: '⚑', name: 'Commissioner HQ' },
 ]
 
-/** Chimmy's chat surface. `/chimmy` is the marketing page, not the assistant. */
-const CHIMMY_HREF = '/chimmy/chat'
+/*
+ * ⚠ CHIMMY OPENS THE DRAWER HERE, IT DOES NOT NAVIGATE. Both entry points on
+ * this screen used to be `<Link href="/chimmy/chat">` — including a floating
+ * bubble whose own comment said "Chat is a floating bubble, not a tab". It read
+ * as a bubble and behaved as a page: one click and you were off /core, having
+ * lost whatever you were looking at. That is the exact failure handoff 23a is
+ * built to prevent.
+ *
+ * `/chimmy/chat` remains a real page and is still reachable directly; it is
+ * simply no longer where a bubble inside /core sends you.
+ */
 
 function toolHref(t: { href: string; leagueScoped?: boolean }, leagueId: string | null): string {
   if (!t.leagueScoped || !leagueId) return t.href
@@ -601,7 +611,7 @@ function Desktop({ data, leagueId }: { data: Dash34Data; leagueId: string | null
             <h2 className="af-d34-briefh">{brief.headline}</h2>
             <p className="af-d34-briefb">{brief.body}</p>
             <div className="af-d34-briefcta">
-              <Link className="af-d34-open" href={CHIMMY_HREF}>Ask Chimmy</Link>
+              <OpenCommsButton className="af-d34-open">Ask Chimmy</OpenCommsButton>
             </div>
           </section>
         ) : null}
@@ -819,12 +829,13 @@ export function Dashboard34({ data }: { data: Dash34Data }) {
     <>
       <Desktop data={data} leagueId={leagueId} />
       <Mobile data={data} leagueId={leagueId} />
-      {/* Chat is a floating bubble, not a tab. Desktop 60px, mobile 56px above
-          the bottom nav; the right column reserves 88px so nothing sits under it. */}
-      <Link className="af-d34-fab" href={CHIMMY_HREF} aria-label="Open chat">
-        Ask Chimmy
-        {data.chatUnread ? <span className="af-d34-fabdot">{data.chatUnread}</span> : null}
-      </Link>
+      {/*
+        The floating bubble is gone from this screen, deliberately.
+        `CommsDock` mounts one launcher in the shell for EVERY /core screen, so
+        keeping this one produced two bubbles stacked in the same corner on the
+        home screen alone — and only one of them opened the drawer. Its unread
+        count is not lost: it is passed to the shell's launcher as `comms.unread`.
+      */}
     </>
   )
 }

@@ -535,3 +535,24 @@
   .af-cm[data-mode='docked'] { width: 100vw; }
   .af-cm-launch { right: 14px; bottom: 76px; }
 }
+
+/*
+ * Unread badge on the launcher. Inherited from the /core home's old floating
+ * bubble (`.af-d34-fabdot`), which this launcher replaced — see CommsDock.
+ * Only rendered when the count is above zero: a badge with nothing behind it is
+ * an invented notification.
+ */
+.af-cm-launchdot {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--bad);
+  color: #ffffff;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+}

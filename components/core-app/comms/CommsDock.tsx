@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import CommsDrawer, { type CommsLeague, type CommsTab } from './CommsDrawer'
 import SupportModal from '@/components/core-app/support/SupportModal'
+import { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT } from './commsEvents'
 
 /**
  * Mounts the communications drawer (23a/23b) and the support modal (25b) once,
@@ -33,12 +34,21 @@ export type CommsDockProps = {
   dockable?: boolean
   /** Prefills the support form's reply address. */
   supportEmail?: string | null
+  /**
+   * Unread count for the launcher badge. Carried over from the /core home's old
+   * floating bubble, which this launcher replaced — dropping it would have been
+   * a silent feature loss. Omitted or zero renders no badge, per the standing
+   * rule that a badge with nothing behind it is an invented notification.
+   */
+  unread?: number
 }
 
-/** Opens the drawer from anywhere — nav links, empty states, keyboard. */
-export const COMMS_OPEN_EVENT = 'af-comms-open'
-/** Opens the support modal from anywhere. */
-export const SUPPORT_OPEN_EVENT = 'af-support-open'
+/*
+ * Re-exported for existing importers. The definitions moved to `commsEvents.ts`
+ * so SERVER components can reach them without pulling this client module —
+ * see that file's header.
+ */
+export { COMMS_OPEN_EVENT, SUPPORT_OPEN_EVENT }
 
 export function CommsDock({
   leagues,
@@ -46,6 +56,7 @@ export function CommsDock({
   chimmyTokenCost,
   dockable = false,
   supportEmail = null,
+  unread = 0,
 }: CommsDockProps) {
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<CommsTab>('chimmy')
@@ -107,6 +118,7 @@ export function CommsDock({
           aria-label="Open communications"
         >
           Chat
+          {unread > 0 ? <span className="af-cm-launchdot">{unread}</span> : null}
           <span aria-hidden>›</span>
         </button>
       ) : null}
