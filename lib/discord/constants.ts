@@ -26,5 +26,13 @@ export const DISCORD_OAUTH_REDIRECT_URI =
 export const DISCORD_BOT_CALLBACK_URI =
   process.env.DISCORD_BOT_REDIRECT_URI ?? `${getPublicSiteOrigin()}/api/discord/bot-callback`
 
-/** Bot permissions: VIEW_CHANNEL + MANAGE_CHANNELS + SEND_MESSAGES + READ_MESSAGE_HISTORY + EMBED_LINKS + ATTACH_FILES + MANAGE_WEBHOOKS */
-export const DISCORD_BOT_PERMISSIONS = '536988688'
+/**
+ * Bot permissions: VIEW_CHANNEL + MANAGE_CHANNELS + SEND_MESSAGES + READ_MESSAGE_HISTORY +
+ * EMBED_LINKS + ATTACH_FILES + MANAGE_WEBHOOKS + CREATE_INSTANT_INVITE
+ *
+ * CREATE_INSTANT_INVITE lets the bot mint a "join our Discord" link for league members —
+ * without it, `createOrReuseChannelInvite` in lib/discord/bot.ts fails on every server that
+ * installed under an older grant. Same retroactive-grant problem as every permission before
+ * it: existing installs need to re-run the install link to pick this up.
+ */
+export const DISCORD_BOT_PERMISSIONS = '536988689'
