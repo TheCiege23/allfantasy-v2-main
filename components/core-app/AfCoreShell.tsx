@@ -103,6 +103,8 @@ export type AfCoreShellProps = {
   comms?: {
     leagues: Array<{ id: string; name: string; platform: string }>
     chimmyTokenCost: number | null
+    /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
+    homeSignals?: string | null
     /** League-scoped screens dock the panel beside the content instead of over it. */
     dockable: boolean
     supportEmail: string | null
@@ -693,6 +695,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
           leagues={comms.leagues}
           pageLeagueId={props.selectedLeagueId ?? null}
           chimmyTokenCost={comms.chimmyTokenCost}
+          homeSignals={comms.homeSignals ?? null}
           dockable={comms.dockable}
           supportEmail={comms.supportEmail}
           unread={comms.unread ?? 0}

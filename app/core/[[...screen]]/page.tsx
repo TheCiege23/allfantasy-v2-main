@@ -8,6 +8,7 @@ import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActiva
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
+import { buildHomeSignals, serializeHomeSignals } from '@/lib/core-app/homeSignals'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
@@ -910,6 +911,14 @@ export default async function AfCorePage({
          * disappeared when that bubble was removed.
          */
         unread: dash34?.chatUnread ?? 0,
+        /*
+         * The home's own claims, handed to the assistant the user opens FROM
+         * those claims. Derived from the same dash34 facts that feed the brief
+         * and the issues queue, so the three cannot disagree. Ids and counts
+         * only — the route resolves names itself; see lib/core-app/homeSignals.ts
+         * for why nothing free-text crosses that boundary.
+         */
+        homeSignals: serializeHomeSignals(buildHomeSignals(dash34, issues.length)),
       }}
     >
       {segment === 'bracket' ? (

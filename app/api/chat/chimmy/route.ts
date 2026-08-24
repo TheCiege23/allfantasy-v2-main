@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 import OpenAI from 'openai'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { parseHomeSignals, renderHomeSignalsPrompt } from '@/lib/core-app/homeSignals'
 import { requireVerifiedUser } from '@/lib/auth-guard'
 import { buildUserTemporalContextForAI } from '@/lib/preferences/userTemporalContextForAI'
 import { runPECR } from '@/lib/ai/pecr'
@@ -294,6 +295,12 @@ const ChimmyFormSchema = z.object({
     return value.trim().toLowerCase() === 'all' ? 'all' : undefined
   }, z.enum(['all']).optional()),
   leagueName: optionalTrimmedStringField(120),
+  /**
+   * The /core home's own signals — a validated id/count payload, never prose.
+   * See lib/core-app/homeSignals.ts for why nothing free-text crosses this
+   * boundary: @chimmy answers are posted publicly in the league tab.
+   */
+  homeSignals: optionalTrimmedStringField(2000),
   conversation: z.array(ConversationTurnSchema).max(MAX_CONVERSATION_TURNS),
   hasImage: z.boolean(),
 })
@@ -909,6 +916,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     insightType: formData.get('insightType'),
     sportScope: formData.get('sportScope'),
     leagueName: formData.get('leagueName'),
+    homeSignals: formData.get('homeSignals'),
     conversation: conversationPayload,
     hasImage: imageValidation.hasImage,
   })
@@ -948,9 +956,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     insightType,
     sportScope,
     leagueName: requestedLeagueNameHint,
+    homeSignals: rawHomeSignals,
     conversation: parsedConversation,
     hasImage,
   } = parseResult.data
+  const homeSignals = parseHomeSignals(rawHomeSignals)
   const selectedAssistantMode = normalizeChimmyAssistantMode(
     mode ?? assistantMode ?? strategyMode ?? riskMode
   )
@@ -1306,8 +1316,40 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     memorySummary: chimmyMemorySummaryLine,
   })
 
+  /*
+   * The home's own claims, so the assistant a user opens from the brief holds
+   * the facts that brief stated instead of re-deriving them and possibly
+   * disagreeing on the same screen.
+   *
+   * ⚠ NAMES COME FROM THE DATABASE, SCOPED TO THIS USER — never from the
+   * request. The client sends ids and counts only (see homeSignals.ts); an id
+   * this query does not return is dropped, so a caller cannot use this to read
+   * the name of a league they do not hold, and cannot put text of their own
+   * choosing into a prompt whose answers get posted publicly in the league tab.
+   */
+  let homeSignalsBlock: string | null = null
+  if (homeSignals && userId) {
+    const ids = [...new Set([...homeSignals.urgent, ...homeSignals.drafting])]
+    const owned = ids.length
+      ? await prisma.league
+          .findMany({ where: { id: { in: ids }, userId }, select: { id: true, name: true } })
+          .catch(() => [])
+      : []
+    homeSignalsBlock = renderHomeSignalsPrompt(
+      homeSignals,
+      // League.name is nullable; an unnamed league is an unresolved one, and
+      // the renderer already drops those rather than printing a blank.
+      new Map(
+        owned
+          .filter((l): l is { id: string; name: string } => typeof l.name === 'string' && l.name.length > 0)
+          .map((l) => [l.id, l.name] as const),
+      ),
+    )
+  }
+
   const combinedMemorySection = [
     memPrompt.contextBlock,
+    homeSignalsBlock ?? undefined,
     memorySection,
     leagueSportsGrounding
       ? `## NFL/NCAAF LEAGUE SPORTS GROUNDING\n${leagueSportsGrounding.serialized}`
@@ -1337,6 +1379,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (insightSources.length > 0) dataSources.push(...insightSources)
   if (memorySection) dataSources.push('ai_memory', 'chat_history')
   if (memPrompt.contextBlock) dataSources.push('working_memory')
+  if (homeSignalsBlock) dataSources.push('core_home_signals')
   if (leagueSportsGrounding) dataSources.push('league_sports_grounding_packet')
   if (personalizationDirectives) dataSources.push('chimmy_personalization')
   if (sourceReferences.length > 0) dataSources.push('league_source_references')
