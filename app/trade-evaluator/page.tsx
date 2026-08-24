@@ -1208,6 +1208,7 @@ function TradeHubInner() {
             senderPlayers={sender.players}
             receiverPlayers={receiver.players}
             leagueSize={12}
+            groundedLeagueId={linkedLeagueId || undefined}
           />
         ) : null}
 

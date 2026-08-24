@@ -159,6 +159,30 @@ export function SimulationPanel({
             Estimates from a simulation seeded with placeholder projections — listed trade assets only, synthetic bench padding.
             Directional insight, not real playoff or title odds.
           </p>
+          {trade.leagueGrounded ? (
+            trade.leagueGrounded.available ? (
+              <div className="mt-3 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.05] px-3 py-2">
+                <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-300/70">
+                  Real schedule impact
+                </div>
+                <div className="mt-1 tabular-nums">
+                  Δ Expected wins{' '}
+                  <span className="text-emerald-200/90">
+                    {trade.leagueGrounded.expectedWinsDelta >= 0 ? '+' : ''}
+                    {trade.leagueGrounded.expectedWinsDelta.toFixed(2)}
+                  </span>{' '}
+                  over {trade.leagueGrounded.weeks.length} priced week{trade.leagueGrounded.weeks.length === 1 ? '' : 's'} of your actual remaining schedule
+                </div>
+                <p className="mt-1 text-[10px] text-white/40">
+                  {trade.leagueGrounded.scopeNote} {trade.leagueGrounded.limitation}
+                </p>
+              </div>
+            ) : (
+              <p className="mt-2 text-[10px] text-white/40">
+                Real-schedule engine unavailable: {trade.leagueGrounded.reason}
+              </p>
+            )
+          ) : null}
         </div>
       ) : null}
     </div>

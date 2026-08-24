@@ -26,6 +26,7 @@ import { getCachedDNA, formatDNAForPrompt } from '@/lib/manager-dna'
 import { getAllPlayers, getLeagueInfo, getLeagueRosters, getLeagueUsers } from '@/lib/sleeper-client'
 import { lookupByNames, buildPlayerContextForAI, enrichWithValuation, type UnifiedPlayer } from '@/lib/unified-player-service'
 import { computeTradeDrivers, type TradeDriverData } from '@/lib/trade-engine/trade-engine'
+import { computeManagerTendencies, type ManagerTendencyProfile } from '@/lib/trade-engine/manager-tendency-engine'
 import type { Asset } from '@/lib/trade-engine/types'
 import { computeDraftProjectionScore, devyAcceptanceAdjustment, applyTeamDirectionAdjustment } from '@/lib/devy-model'
 import { extractAcceptanceFeatures, acceptanceProbabilityWithLiquidity } from '@/lib/acceptance-model'
@@ -2106,7 +2107,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       const tierAssetsB = convertToTierAssets(assetsB, numTeams)
       
       const tierRosterPositions = league?.roster_positions || []
-      const isSF = clientLeagueContext?.settings?.qbFormat === 'superflex' || clientLeagueContext?.settings?.qbFormat === '2qb' || detectSFFromRosterPositions(tierRosterPositions) || true
+      const isSF = clientLeagueContext?.settings?.qbFormat === 'superflex' || clientLeagueContext?.settings?.qbFormat === '2qb' || detectSFFromRosterPositions(tierRosterPositions)
       const idpStarterCount = detectIDPFromRosterPositions(tierRosterPositions)
       const isTEP = clientLeagueContext?.settings?.tep?.enabled ?? (league?.scoring_settings?.bonus_rec_te ? league.scoring_settings.bonus_rec_te > 0 : false)
       
@@ -2275,7 +2276,33 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       : undefined
 
     const calWeights = await getCalibratedWeights()
-    const tradeDriverData = computeTradeDrivers(giveDriverAssets, receiveDriverAssets, null, null, isSFForDrivers, isTEPForDrivers, rosterCtx, undefined, undefined, undefined, undefined, calWeights)
+
+    // P4-8 — thread real manager tendencies into the behavior slot. Loaded from
+    // the same LeagueTradeHistory-backed engine trade-pre-analysis already uses
+    // (canonicalA/canonicalB are Sleeper usernames; leagueId is the Sleeper
+    // league id). Sample-size gated: below MIN_TENDENCY_TRADES analyzed trades a
+    // profile carries zero-defaults, which would claim behavior data while
+    // holding none — withheld instead, so the behavior score honestly stays 0.5.
+    const MIN_TENDENCY_TRADES = 3
+    let fromTendency: ManagerTendencyProfile | null = null
+    let toTendency: ManagerTendencyProfile | null = null
+    let behaviorHistoryNote: string | null = null
+    if (leagueMode) {
+      const [tendencyA, tendencyB] = await Promise.all([
+        canonicalA ? computeManagerTendencies(canonicalA, leagueId).catch(() => null) : Promise.resolve(null),
+        canonicalB ? computeManagerTendencies(canonicalB, leagueId).catch(() => null) : Promise.resolve(null),
+      ])
+      fromTendency = tendencyA && tendencyA.sampleSize >= MIN_TENDENCY_TRADES ? tendencyA : null
+      toTendency = tendencyB && tendencyB.sampleSize >= MIN_TENDENCY_TRADES ? tendencyB : null
+      if (!fromTendency && !toTendency) {
+        behaviorHistoryNote =
+          `Manager behavior: insufficient history — ${tendencyA?.sampleSize ?? 0} and ` +
+          `${tendencyB?.sampleSize ?? 0} analyzed trades on file (${MIN_TENDENCY_TRADES}+ needed), ` +
+          `so the behavior score stays neutral (0.5).`
+      }
+    }
+
+    const tradeDriverData = computeTradeDrivers(giveDriverAssets, receiveDriverAssets, null, null, isSFForDrivers, isTEPForDrivers, rosterCtx, fromTendency, toTendency, undefined, undefined, calWeights)
 
     let devyAcceptDelta = 0
     const allTradeAssets = [...(assetsA || []), ...(assetsB || [])]
@@ -2372,6 +2399,40 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     }
     const reconciliationDirective = buildTradeIntelReconciliationDirective(providerAudit)
 
+    // P4-8 — deterministic-first: the canonical grade is computed BEFORE the LLM
+    // call so the model explains the deterministic verdict instead of inventing
+    // its own (the waiver engine's deterministic-then-narrate pattern, and the
+    // same MANDATORY-directive shape the tier evaluation already uses).
+    // DECISION_OS_TRADE_LIVE_LEGACY now defaults ON; set it to 'false' to fall
+    // back to the LLM-led grade. Parity is still recorded after the LLM call.
+    const liveLegacy =
+      String(process.env['DECISION_OS_TRADE_LIVE_LEGACY'] ?? 'true').trim().toLowerCase() === 'true'
+    let legacyCanonical: ReturnType<typeof buildLegacyCanonicalGrade> | null = null
+    try {
+      legacyCanonical = buildLegacyCanonicalGrade({
+        assetsA: assetsA as never[],
+        assetsB: assetsB as never[],
+        marketValueFor: (name: string) => {
+          const row = newsAdjustedCalcMap.get(name.toLowerCase()) as { value?: number } | undefined
+          return typeof row?.value === 'number' && Number.isFinite(row.value) ? row.value : null
+        },
+        sport: 'NFL',
+        format: format || 'dynasty',
+        currentSeason: new Date().getFullYear(),
+      })
+    } catch {
+      // Canonical grading must never break the legacy response.
+    }
+    const canonicalGradeDirective =
+      liveLegacy && legacyCanonical && !legacyCanonical.insufficientData && legacyCanonical.grade && legacyCanonical.verdict
+        ? [
+            '--- CANONICAL GRADE (MANDATORY) ---',
+            `The deterministic canonical value engine has already graded this trade: grade=${legacyCanonical.grade}, verdict="${legacyCanonical.verdict}", fairnessScore=${legacyCanonical.fairnessScore}.`,
+            'This grade and verdict are FINAL and are what the user will see. Set your grade and verdict fields to match them exactly. Your job is to EXPLAIN why the value data supports this verdict — do NOT argue for a different grade.',
+            '--- END CANONICAL GRADE ---',
+          ].join('\n')
+        : ''
+
     const userPrompt = buildUserPrompt({
       sport,
       format,
@@ -2411,7 +2472,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
       newsValueAdjustments,
     })
 
-    const enrichedUserPrompt = [userPrompt, externalIntel, reconciliationDirective]
+    const enrichedUserPrompt = [userPrompt, externalIntel, reconciliationDirective, canonicalGradeDirective]
       .filter((s) => typeof s === 'string' && s.trim().length > 0)
       .join('\n\n')
 
@@ -2467,7 +2528,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
         sentiment: n?.sentiment || null,
         updatedAt: n?.updatedAt || n?.timestamp || null,
       })),
-      promptVersion: 'v1',
+      promptVersion: 'v2',
     }
 
     const aiResult = await getOrCreateAiResult({
@@ -2532,6 +2593,7 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     const finalNotes = Array.from(
       new Set([
         ...notes,
+        ...(behaviorHistoryNote ? [behaviorHistoryNote] : []),
         'Legacy Tool: No tier gating here.',
         'App Disclaimer: In the AllFantasy app, Trade Analyzer is available for AF Pro + AF Supreme.',
       ])
@@ -2956,65 +3018,52 @@ export const POST = withApiUsage({ endpoint: "/api/legacy/trade/analyze", tool: 
     } catch {}
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Slice 13/14 — CANONICAL CONVERGENCE for the highest-traffic trade surface.
-    //
-    // Legacy's grade has always been an LLM output constrained by FantasyCalc.
-    // Here we compute the CANONICAL grade for the same trade (the
-    // buildTradeValueSnapshot → gradeTrade engine the Decision Registry names
-    // authoritative), fed from the same real FantasyCalc values legacy already
-    // loaded, via the market-value basis completed in slice 14.
+    // Slice 13/14 + P4-8 — CANONICAL CONVERGENCE for the highest-traffic trade
+    // surface. The canonical grade was computed BEFORE the LLM call (see
+    // legacyCanonical above) so the narrative explains the deterministic
+    // verdict; here we record parity and enforce the override.
     //
     //   • Always: record parity (canonical vs legacy) so divergence is measured.
-    //   • DECISION_OS_TRADE_LIVE_LEGACY=true: the canonical grade/verdict is
-    //     what the user sees. Default OFF — flipping is an env change.
+    //   • DECISION_OS_TRADE_LIVE_LEGACY: the canonical grade/verdict is what the
+    //     user sees. DEFAULT ON since P4-8 — set to 'false' to fall back to the
+    //     LLM-led grade.
     //   • NEVER override on insufficientData: if the canonical engine cannot
     //     grade, legacy's existing answer stands rather than blanking a working
     //     surface.
     // Fully guarded — convergence can never throw into the legacy response.
     let canonicalGradeApplied = false
     try {
-      const canonical = buildLegacyCanonicalGrade({
-        assetsA: assetsA as never[],
-        assetsB: assetsB as never[],
-        marketValueFor: (name: string) => {
-          const row = newsAdjustedCalcMap.get(name.toLowerCase()) as { value?: number } | undefined
-          return typeof row?.value === 'number' && Number.isFinite(row.value) ? row.value : null
-        },
-        sport: 'NFL',
-        format: format || 'dynasty',
-        currentSeason: new Date().getFullYear(),
-      })
+      const canonical = legacyCanonical
+      if (canonical) {
+        const legacyAdvantage = legacyVerdictToAdvantage((data as { verdict?: string })?.verdict)
+        const canonicalAdvantage = canonical.verdict ? legacyVerdictToAdvantage(canonical.verdict) : null
 
-      const legacyAdvantage = legacyVerdictToAdvantage((data as { verdict?: string })?.verdict)
-      const canonicalAdvantage = canonical.verdict ? legacyVerdictToAdvantage(canonical.verdict) : null
+        recordTradeSurfaceShadow({
+          surface: 'legacy',
+          leagueId: leagueId || null,
+          assetsGive: assetsB.length,
+          assetsGet: assetsA.length,
+          surfaceVerdict: (data as { verdict?: string })?.verdict ?? null,
+          surfaceAnalysisMode: (data as { grade?: string })?.grade ?? 'llm_grade',
+          comparison: buildSurfaceParity({
+            surfaceAdvantage: legacyAdvantage,
+            engineAdvantage: canonicalAdvantage,
+            engineGrade: canonical.grade,
+            engineFairnessScore: canonical.fairnessScore,
+            engineConfidenceScore: canonical.confidenceScore,
+            engineValueDifference: canonical.valueDifference,
+          }),
+        })
 
-      recordTradeSurfaceShadow({
-        surface: 'legacy',
-        leagueId: leagueId || null,
-        assetsGive: assetsB.length,
-        assetsGet: assetsA.length,
-        surfaceVerdict: (data as { verdict?: string })?.verdict ?? null,
-        surfaceAnalysisMode: (data as { grade?: string })?.grade ?? 'llm_grade',
-        comparison: buildSurfaceParity({
-          surfaceAdvantage: legacyAdvantage,
-          engineAdvantage: canonicalAdvantage,
-          engineGrade: canonical.grade,
-          engineFairnessScore: canonical.fairnessScore,
-          engineConfidenceScore: canonical.confidenceScore,
-          engineValueDifference: canonical.valueDifference,
-        }),
-      })
-
-      const liveLegacy =
-        String(process.env['DECISION_OS_TRADE_LIVE_LEGACY'] ?? '').trim().toLowerCase() === 'true'
-      if (liveLegacy && !canonical.insufficientData && canonical.grade && canonical.verdict) {
-        const target = data as Record<string, unknown>
-        target.grade = canonical.grade
-        target.verdict = canonical.verdict
-        target.fairnessScore = canonical.fairnessScore
-        target.confidenceScore = canonical.confidenceScore
-        target.gradeSource = 'canonical_value_engine'
-        canonicalGradeApplied = true
+        if (liveLegacy && !canonical.insufficientData && canonical.grade && canonical.verdict) {
+          const target = data as Record<string, unknown>
+          target.grade = canonical.grade
+          target.verdict = canonical.verdict
+          target.fairnessScore = canonical.fairnessScore
+          target.confidenceScore = canonical.confidenceScore
+          target.gradeSource = 'canonical_value_engine'
+          canonicalGradeApplied = true
+        }
       }
     } catch {
       // Convergence must never break the legacy response.

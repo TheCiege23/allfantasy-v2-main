@@ -26,7 +26,6 @@ import type { Asset } from '@/lib/trade-engine/types'
 import { getCalibratedWeights } from '@/lib/trade-engine/accept-calibration'
 import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
-import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader'
 import { normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
 import { prisma } from '@/lib/prisma'
 import { leagueWantsLongHorizon, resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
@@ -747,7 +746,6 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
 
   if (!input.skipAi) {
     const skipCheck = shouldSkipGpt(gptContract)
-    const playerValuesCtx = getPlayerValuesContext({ sport: effectiveSport })
     if (skipCheck === 'ok') {
       try {
         const aiResult = await openaiChatJson({
@@ -756,7 +754,6 @@ export async function runTradeConsoleAnalysis(input: TradeConsoleAnalyzeInput): 
               role: 'system',
               content:
                 GPT_NARRATIVE_SYSTEM_PROMPT +
-                (playerValuesCtx ? `\n\n${playerValuesCtx}` : '') +
                 `\n\nDo not invent injuries or news. Only explain using the structured driver data and named assets.`,
             },
             {
