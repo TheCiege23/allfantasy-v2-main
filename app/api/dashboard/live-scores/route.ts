@@ -134,8 +134,6 @@ async function sleeperLiveScores(userId: string): Promise<DashboardLiveScore[]> 
 
 export async function GET(request: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
-  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const userId = session.user.id
 
   /*
    * `/live` polls THIS route rather than getting its own, for the same reason the
@@ -143,18 +141,27 @@ export async function GET(request: NextRequest) {
    * and a new endpoint for a second view of the same live data is exactly the
    * kind of route that is not worth one of the remaining slots.
    *
+   * ⚠ THIS BRANCH RUNS BEFORE THE AUTH GATE, DELIBERATELY. `/live` renders signed
+   * out — scores are public and only the roster tie-ins need a user — so its tab
+   * clicks and polls must not 401. `getLivePageData` takes a nullable userId and
+   * simply returns no tie-ins, and the page copy already explains the absence.
+   *
    * The default response shape is untouched — the dashboard widget's caller does
-   * not pass `view`, so it still receives `{ scores, plays }` exactly as before.
+   * not pass `view`, so it still receives `{ scores, plays }` exactly as before,
+   * and still requires a session below.
    */
   const view = request.nextUrl.searchParams.get('view')
   if (view === 'live') {
     const data = await getLivePageData({
-      userId,
+      userId: session?.user?.id ?? null,
       sport: request.nextUrl.searchParams.get('sport'),
       scope: request.nextUrl.searchParams.get('scope') === 'all' ? 'all' : 'my',
     })
     return NextResponse.json(data)
   }
+
+  if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  const userId = session.user.id
 
   // Find all active redraft seasons where the user has a roster.
   const seasons = await prisma.redraftSeason.findMany({
