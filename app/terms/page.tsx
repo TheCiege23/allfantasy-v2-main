@@ -1,5 +1,9 @@
 import Link from "next/link"
-import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
+import LegalPageRenderer, {
+  LEGAL_LAST_UPDATED,
+  LegalCallout,
+  LegalPolicyGrid,
+} from "@/components/legal/LegalPageRenderer"
 import { TERMS_PAGE_TITLE, TERMS_POLICY_CHECKLIST } from "@/lib/legal/TermsPageService"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 
@@ -23,9 +27,65 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
       title={TERMS_PAGE_TITLE}
       description={`Last updated: ${LEGAL_LAST_UPDATED}`}
       backHref={fromSignup ? signupHref : "/"}
-      backLabel={fromSignup ? "Back to Sign Up" : "Back to Home"}
+      backLabel={fromSignup ? "Back to sign up" : "Back to home"}
     >
-      <section>
+      {/*
+        ⚠ COPY CONTRACT — THE GEOGRAPHIC SPECIFICS ARE EXACT AND MUST STAY IN SYNC
+        WITH LEGAL AND WITH THE CODE THAT ENFORCES THEM. WA is excluded outright;
+        HI, ID, MT and NV are excluded from PAID leagues only. These are the same
+        rules useGeoRestriction applies at runtime, so a drift here is a page that
+        tells a user something different from what the product will do. Clause 7
+        below carries the statutory citations behind each one.
+      */}
+      <LegalCallout tone="warn" mark="§" title="Geographic restrictions">
+        U.S. state laws may fully or partially restrict fantasy sports. AllFantasy is not available
+        in Washington. Paid leagues are restricted in Hawaii, Idaho, Montana and Nevada. We check
+        your state to apply these rules, not to track you.
+      </LegalCallout>
+
+      {/*
+        ⚠ COMPLIANCE-CRITICAL AND NOT TO BE PARAPHRASED — 17b's copy contract. The
+        read-only claim in particular is a statement about what our integrations
+        do, and it is true: the import paths never write back to a connected
+        platform.
+      */}
+      <LegalCallout tone="accent" title="100% season-long fantasy sports">
+        There is no sportsbook, no daily fantasy and no wagering on AllFantasy. We are read-only on
+        every platform you connect — we never place a claim, accept a trade or set a lineup on your
+        behalf.
+      </LegalCallout>
+
+      <section id="policies-in-short">
+        <h2>The policies, in short</h2>
+        {/*
+          ⚠ THIS GRID IS A TABLE OF CONTENTS, NOT THE TERMS. 17b's build note says
+          each cell "links out to (or expands into) the full clause" — so every one
+          of these is an anchor into the numbered clause below that actually binds,
+          and the full text stays on the page underneath. A summary presented as
+          the agreement would be the one thing a terms page must never do.
+        */}
+        <LegalPolicyGrid
+          items={[
+            { name: "Platform rules", summary: "Use the service lawfully and follow the in-product rules.", href: "#clause-3" },
+            { name: "Anti-collusion", summary: "Collusion and coordinated manipulation are prohibited.", href: "#clause-4" },
+            { name: "Anti-cheating", summary: "Cheating, bot abuse and unfair automation are prohibited.", href: "#clause-4" },
+            { name: "Acceptable use", summary: "No abuse, harassment, scraping abuse or unauthorized access.", href: "#clause-5" },
+            { name: "Intelligence use", summary: "Generated content is informational and may be imperfect.", href: "#clause-6" },
+            { name: "Geographic eligibility", summary: "Where the service and paid leagues are available, and why we check.", href: "#clause-7" },
+            { name: "No manipulation or exploits", summary: "Don't exploit bugs or manipulate platform outcomes.", href: "#clause-8" },
+            { name: "Paid vs free features", summary: "Paid features follow disclosed pricing; free features stay available as offered.", href: "#clause-9" },
+            { name: "Subscriptions and tokens", summary: "Purchases follow in-product pricing and the applicable refund policy.", href: "#clause-9" },
+            { name: "Account responsibilities", summary: "Keep your credentials secure; you're responsible for activity on your account.", href: "#clause-10" },
+            { name: "Content moderation", summary: "We may remove or restrict harmful or non-compliant content.", href: "#clause-11" },
+            { name: "Dispute handling", summary: "User-to-user disputes are between users; disputes with us follow the Terms process.", href: "#clause-12" },
+            { name: "Imported & external data", summary: "Imported third-party data depends on external sources and may change.", href: "#clause-13" },
+            { name: "Limitation of liability", summary: "The service is provided as-is, with the liability limits defined in the Terms.", href: "#clause-18" },
+            { name: "Platform updates", summary: "We may update features and policies over time.", href: "#clause-22" },
+          ]}
+        />
+      </section>
+
+      <section id="clause-1">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">1. Acceptance of Terms</h2>
         <p>
           By accessing or using AllFantasy (&quot;Service&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;).
@@ -33,7 +93,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-2">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">2. Description of Service</h2>
         <p>
           AllFantasy provides AI-powered fantasy sports analysis, trade evaluations, waiver recommendations, league rankings,
@@ -42,7 +102,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-3">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">3. Platform Rules</h2>
         <p>
           You must use the Service in accordance with these Terms and any in-product rules we publish. You may not use the Service
@@ -51,7 +111,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-4">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">4. Anti-Collusion and Anti-Cheating</h2>
         <p>
           Collusion (e.g., secret agreements between managers to distort league outcomes or disadvantage others) and cheating
@@ -61,7 +121,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-5">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">5. Acceptable Use</h2>
         <p>You agree not to:</p>
         <ul className="list-disc list-inside space-y-1 ml-4 mt-2">
@@ -74,7 +134,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </ul>
       </section>
 
-      <section>
+      <section id="clause-6">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">6. AI Use Policy</h2>
         <p>
           Our AI tools are provided for informational and entertainment purposes. AI-generated content (recommendations, rankings,
@@ -84,7 +144,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-7">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">7. Geographic Restrictions and Eligibility</h2>
         <p>
           AllFantasy.ai complies with all applicable U.S. state and local laws regarding fantasy sports. Access to certain features
@@ -143,7 +203,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-8">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">8. No Manipulation or Exploits</h2>
         <p>
           You may not manipulate rankings, scores, or other platform data, or exploit bugs or design flaws to gain an unfair
@@ -151,7 +211,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-9">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">9. Paid vs. Free Leagues; Subscriptions and Tokens</h2>
         <p>
           AllFantasy may offer free and paid features (e.g., subscriptions, in-app tokens, or premium tiers). Paid features are
@@ -162,7 +222,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-10">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">10. Account Responsibilities</h2>
         <p>You agree to:</p>
         <ul className="list-disc list-inside space-y-1 ml-4 mt-2">
@@ -173,7 +233,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </ul>
       </section>
 
-      <section>
+      <section id="clause-11">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">11. Content Moderation</h2>
         <p>
           We may remove or refuse content (including user-generated content) that violates these Terms or that we deem harmful,
@@ -182,7 +242,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-12">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">12. Dispute Handling</h2>
         <p>
           Disputes between users (e.g., league or trade disputes) are between those users; we are not obligated to resolve them.
@@ -192,7 +252,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-13">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">13. Legacy Import and External Data</h2>
         <p>
           Where we offer legacy or historical import (e.g., from Sleeper, Yahoo, ESPN, MFL, Fleaflicker, Fantrax), you are
@@ -202,7 +262,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-14">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">14. Intellectual Property</h2>
         <p>
           AllFantasy content, features, and functionality are our property or our licensors&apos; and are protected by
@@ -211,7 +271,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-15">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">15. User Content</h2>
         <p>
           By submitting content to AllFantasy (e.g., feedback, league ideas), you grant us a non-exclusive, worldwide,
@@ -219,7 +279,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-16">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">16. Third-Party Platforms</h2>
         <p>
           The Service may integrate with third-party fantasy or other platforms. Your use of those platforms is subject to their
@@ -227,7 +287,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-17">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">17. Disclaimer of Warranties</h2>
         <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-200 text-sm">
           <p className="font-bold mb-2">THE SERVICE IS PROVIDED &quot;AS IS&quot; AND &quot;AS AVAILABLE&quot; WITHOUT WARRANTIES OF ANY KIND.</p>
@@ -238,7 +298,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </div>
       </section>
 
-      <section>
+      <section id="clause-18">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">18. Limitation of Liability</h2>
         <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-200 text-sm">
           IN NO EVENT SHALL ALLFANTASY, ITS OFFICERS, DIRECTORS, EMPLOYEES, OR AGENTS BE LIABLE FOR ANY INDIRECT, INCIDENTAL,
@@ -247,7 +307,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </div>
       </section>
 
-      <section>
+      <section id="clause-19">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">19. Indemnification</h2>
         <p>
           You agree to defend, indemnify, and hold harmless AllFantasy and its officers, directors, employees, and agents from
@@ -256,7 +316,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-20">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">20. No Gambling or Betting</h2>
         <p>
           AllFantasy is not a gambling or betting service. We do not facilitate or endorse real-money gambling or DFS. Our
@@ -264,7 +324,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-21">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">21. Termination</h2>
         <p>
           We may terminate or suspend your access immediately, without prior notice, for any reason, including breach of these
@@ -272,7 +332,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-22">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">22. Platform Updates and Changes</h2>
         <p>
           We may change, suspend, or discontinue features or the Service at any time. We will use reasonable efforts to notify
@@ -281,7 +341,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-23">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">23. Severability and Entire Agreement</h2>
         <p>
           If any provision is held unenforceable, the remaining provisions remain in effect. These Terms, together with our
@@ -291,7 +351,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
         </p>
       </section>
 
-      <section>
+      <section id="clause-24">
         <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">24. Contact</h2>
         <p>
           Questions about these Terms? Contact us at:
@@ -311,6 +371,27 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
             </li>
           ))}
         </ul>
+      </section>
+      {/*
+        ⚠ TWO SEPARATE AGREEMENTS, AND THE FORM MUST SAY WHICH ONE IS MISSING.
+        17b's copy contract: sign-up is gated on the fantasy-sports disclaimer AND
+        these Terms as distinct checkboxes. One combined "I agree to everything"
+        box would not be the consent either document asks for.
+      */}
+      <section id="signup-gate">
+        <div className="af-legal-callout">
+          <div>
+            <p>
+              Sign-up is gated on two checkboxes: the fantasy-sports disclaimer (no gambling or DFS)
+              and these Terms. Miss either and the form tells you which one.
+            </p>
+            <p style={{ marginTop: 12, marginBottom: 0 }}>
+              <Link href={signupHref} className="af-legal-cta">
+                Back to sign up
+              </Link>
+            </p>
+          </div>
+        </div>
       </section>
     </LegalPageRenderer>
   )
