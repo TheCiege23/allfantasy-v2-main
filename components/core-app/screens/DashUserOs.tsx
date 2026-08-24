@@ -40,13 +40,25 @@ export function DashUserOs({
   if (!snapshot || !snapshot.available || !leagueId) return null
 
   const a = snapshot.activitySummary
-  const holdsAnyFact =
+  /*
+   * ⚠ THE OR LET A VERDICT THROUGH ON NO EVIDENCE. `leagueTrend.available`
+   * alone satisfied the old gate, so a league with all four counts at zero
+   * still rendered — and the card's participation chip then reads "Inactive"
+   * with a warning triangle. That is a claim about the MANAGER built from a
+   * coverage gap: the event store is nearly empty in production, so zero
+   * events overwhelmingly means "we have not ingested your activity", not
+   * "you did nothing". This component's own header names that exact failure.
+   *
+   * The trend is context for activity, never a substitute for it. At least one
+   * real event must exist before this screen says anything about how someone
+   * plays.
+   */
+  const holdsRealActivity =
     a.tradeEventCount > 0 ||
     a.waiverEventCount > 0 ||
     a.lineupEventCount > 0 ||
-    a.draftEventCount > 0 ||
-    snapshot.leagueTrend.available
-  if (!holdsAnyFact) return null
+    a.draftEventCount > 0
+  if (!holdsRealActivity) return null
 
   return (
     <section className="af-core" aria-label="Your team intelligence" style={{ marginBottom: 16 }}>

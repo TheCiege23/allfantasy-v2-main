@@ -85,7 +85,20 @@ export function DashScheduleBand({
       ? kickoffDayLabel(board.firstKickoffAt)
       : null
 
-  const weekLabel = board.week != null ? `Week ${board.week}` : 'This week'
+  /*
+   * ⚠ THE WEEK ONLY ADVANCES WHEN SOMETHING GETS SCORED. `board.week` is the
+   * earliest week still carrying an unscored row — the right rule, and the one
+   * that stops a bootstrapped season resolving to week 18 in August. But it
+   * has a tail: if 2026 scoring never lands, week 1 stays the earliest
+   * unscored week forever, and this band would still say "Week 1" in
+   * December, presenting a long-finished week as the one ahead.
+   *
+   * So the label drops to the neutral form once its own kickoff is in the
+   * past. "This week · who you play" is true whatever the ingestion is doing;
+   * "Week 1" in December is not.
+   */
+  const weekLabel =
+    board.week != null && kickoff != null ? `Week ${board.week}` : 'This week'
 
   return (
     <section className="af-core af-sched" aria-label="Who you play this week">

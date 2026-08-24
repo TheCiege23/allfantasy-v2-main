@@ -1288,6 +1288,26 @@ export default async function AfCorePage({
             />
             <DashDraftsBand data={homeDrafts} now={now} />
             {/*
+              Starters in doubt — the DECISION slice of the injury book.
+              ⚠ ITS POSITION HAS MOVED TWICE, AND BOTH MOVES WERE RIGHT. It
+              first led the page as the loader's whole 40-row book, which read
+              as a wall of headshots with no decision attached, so it was
+              filtered to starters-who-may-not-play and demoted. Now that the
+              ordering is value-aware — a first-round back outranks a bench
+              stash instead of losing to it alphabetically — the founder's
+              actual ask stands: an injured starter should be the first thing
+              he sees. It ranks above the trade band and the brief and below
+              only a live slate and a draft on the clock, both of which are
+              happening RIGHT NOW rather than needing a decision. On a day with
+              no lineup decision it still renders nothing at all, which is what
+              makes it safe to place this high.
+            */}
+            <Dash3ATriage
+              book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
+              now={now}
+              valueBasis={dash34.valueBasis ?? null}
+            />
+            {/*
               A trade landing is news the moment it lands, and it was the one
               thing the founder named that no surface showed at all. Below the
               live/draft bands because it is not a deadline; above the brief
@@ -1311,18 +1331,6 @@ export default async function AfCorePage({
               snapshot={homeUserOs}
               leagueId={homeUserOsLeague?.id ?? null}
               leagueName={homeUserOsLeague?.name ?? null}
-            />
-            {/*
-              Starters in doubt — the DECISION slice of the injury book (see
-              Dash3ATriage's filter). ⚠ DELIBERATELY NOT FIRST: as a leading
-              wall of headshots it buried the page under noise
-              (founder-reported 2026-08-24); it now sits under the first-lock
-              band and renders nothing on days with no lineup decisions.
-            */}
-            <Dash3ATriage
-              book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
-              now={now}
-              valueBasis={dash34.valueBasis ?? null}
             />
             {/*
               WHO you play this week, immediately above the section that can

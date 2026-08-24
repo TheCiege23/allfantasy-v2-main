@@ -111,6 +111,22 @@ describe('DashScheduleBand', () => {
     expect(empty.container.innerHTML).toBe('')
   })
 
+  it('drops the week number once its own kickoff has passed', () => {
+    /*
+     * The tail on "earliest unscored week": if scoring never lands, week 1
+     * stays the earliest unscored week forever and this band would say
+     * "Week 1" in December. The neutral label is true whatever ingestion does.
+     */
+    const { container } = render(
+      <DashScheduleBand
+        board={board({ week: 1, firstKickoffAt: new Date(Date.now() - 60 * 86_400_000).toISOString() })}
+        syncLabel={null}
+      />,
+    )
+    expect(container.textContent).toContain('This week · who you play')
+    expect(container.textContent).not.toContain('Week 1')
+  })
+
   it('drops a kickoff that has already passed rather than reporting it as upcoming', () => {
     const { container } = render(
       <DashScheduleBand
