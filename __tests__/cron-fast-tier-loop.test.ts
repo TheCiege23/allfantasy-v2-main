@@ -58,19 +58,36 @@ describe('nextBoundary', () => {
   })
 })
 
+/**
+ * ⚠ THIS CONTRACT CHANGED: a bare attempt COUNT is no longer enough to blame a job.
+ *
+ * It used to be `attempts >= 3 && succeeded === 0`, which cannot tell a route that is broken from
+ * one whose every attempt happened to land inside a host outage — and a low-frequency job fires
+ * only three times in a 55-minute window, so a single outage could consume all of them. The
+ * failures are now recorded individually, with a kind, so the two can be separated. See
+ * cron-fast-tier-host-vs-job.test.ts for that half.
+ */
+const jobFail = (n: number, at = 1_700_000_000_000) =>
+  Array.from({ length: n }, (_, i) => ({ path: '/x', at: at + i * 60_000, kind: 'job', error: 'HTTP 500' }))
+
 describe('isSystemicFailure', () => {
   it('ignores a single bad tick, because one blip must not redden an hourly workflow', () => {
-    expect(isSystemicFailure({ attempts: 1, succeeded: 0 })).toBe(false)
-    expect(isSystemicFailure({ attempts: 2, succeeded: 0 })).toBe(false)
+    expect(isSystemicFailure({ attempts: 1, succeeded: 0, failures: jobFail(1) })).toBe(false)
+    expect(isSystemicFailure({ attempts: 2, succeeded: 0, failures: jobFail(2) })).toBe(false)
   })
 
   it('flags a job that has failed every attempt — that is a 401 or 404, not weather', () => {
-    expect(isSystemicFailure({ attempts: 3, succeeded: 0 })).toBe(true)
-    expect(isSystemicFailure({ attempts: 40, succeeded: 0 })).toBe(true)
+    expect(isSystemicFailure({ attempts: 3, succeeded: 0, failures: jobFail(3) })).toBe(true)
+    expect(isSystemicFailure({ attempts: 40, succeeded: 0, failures: jobFail(40) })).toBe(true)
   })
 
   it('does not flag a job that succeeded even once', () => {
-    expect(isSystemicFailure({ attempts: 40, succeeded: 1 })).toBe(false)
+    expect(isSystemicFailure({ attempts: 40, succeeded: 1, failures: jobFail(39) })).toBe(false)
+  })
+
+  it('is not fooled by a stat with no recorded failures, which cannot prove anything', () => {
+    // Defensive: an attempt count with no failure detail is not evidence of a broken route.
+    expect(isSystemicFailure({ attempts: 40, succeeded: 0, failures: [] })).toBe(false)
   })
 })
 

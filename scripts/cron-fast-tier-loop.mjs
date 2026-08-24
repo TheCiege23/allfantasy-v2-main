@@ -123,9 +123,76 @@ export function orderByUrgency(dueJobs, now) {
   })
 }
 
-/** A job failed every time it was tried, enough times to mean configuration rather than weather. */
-export function isSystemicFailure(stat) {
-  return stat.attempts >= SYSTEMIC_FAILURE_MIN_ATTEMPTS && stat.succeeded === 0
+/**
+ * Two failures that look identical in a log and mean opposite things.
+ *
+ * A gateway status or a dropped connection is the HOST refusing to answer — every job in flight
+ * gets the same error at the same instant, and none of them is broken. Anything else came from the
+ * application: a 401, a 404, a 500 out of the handler. That is the job's own problem.
+ *
+ * ⚠ TIMEOUTS ARE DELIBERATELY 'job' HERE and are re-classified later if they land inside a detected
+ * host outage. A route that always times out while its neighbours answer is broken — that is
+ * exactly `draft-pool-prewarm`, which fired 3 times and succeeded 0 in a window where every other
+ * job was fine. Calling every timeout a host problem would have hidden it.
+ */
+export function classifyFailure(status, error) {
+  if (status === 502 || status === 503 || status === 504) return 'host'
+  const e = String(error ?? '').toLowerCase()
+  if (/econnrefused|econnreset|enotfound|eai_again|socket hang up|fetch failed|network/.test(e)) {
+    return 'host'
+  }
+  return 'job'
+}
+
+/** Host-class failures this close together are one outage, not several. */
+const HOST_OUTAGE_WINDOW_MS = 90_000
+
+/** Distinct jobs that must fail together before it counts as the host rather than the job. */
+const HOST_OUTAGE_MIN_JOBS = 2
+
+/**
+ * Collapse host-class failures into outage windows.
+ *
+ * ⚠ ONE JOB FAILING ALONE IS NEVER AN OUTAGE, however gateway-ish the error. A single route can
+ * 502 because IT crashed — the platform returns a gateway error for an app that died mid-request.
+ * Requiring two DISTINCT jobs inside the same short window is what separates "the host went away"
+ * from "this handler fell over", and without it a genuinely broken route could excuse itself by
+ * returning the right status code.
+ */
+export function detectHostOutages(failures, windowMs = HOST_OUTAGE_WINDOW_MS) {
+  const host = failures.filter((f) => f.kind === 'host').sort((a, b) => a.at - b.at)
+  const windows = []
+  for (const f of host) {
+    const last = windows[windows.length - 1]
+    if (last && f.at - last.end <= windowMs) {
+      last.end = f.at
+      last.paths.add(f.path)
+    } else {
+      windows.push({ start: f.at, end: f.at, paths: new Set([f.path]) })
+    }
+  }
+  return windows.filter((w) => w.paths.size >= HOST_OUTAGE_MIN_JOBS)
+}
+
+/** True when `at` falls inside any detected outage (with the same slack at both ends). */
+export function insideOutage(at, outages, windowMs = HOST_OUTAGE_WINDOW_MS) {
+  return outages.some((w) => at >= w.start - windowMs && at <= w.end + windowMs)
+}
+
+/**
+ * A job failed every time it was tried, enough times to mean configuration rather than weather.
+ *
+ * ⚠ ATTEMPTS LOST TO A HOST OUTAGE DO NOT COUNT. A low-frequency job fires only a handful of times
+ * per window — `fantasy-os-exec-sync` fired 3 times in 55 minutes — so a single host outage can
+ * consume every one of its attempts and make a perfectly healthy job look permanently broken. That
+ * is the false alarm this whole workflow keeps teaching people to ignore.
+ */
+export function isSystemicFailure(stat, outages = []) {
+  if (stat.succeeded > 0) return false
+  const ownFailures = (stat.failures ?? []).filter(
+    (f) => f.kind === 'job' && !insideOutage(f.at, outages),
+  )
+  return ownFailures.length >= SYSTEMIC_FAILURE_MIN_ATTEMPTS
 }
 
 function parseArgs(argv) {
@@ -296,18 +363,44 @@ async function main() {
   while (inFlight.size > 0 && Date.now() < drainUntil) await sleep(500)
 
   console.log(`\n=== fast-tier summary (${Math.round((Date.now() - startedAt) / 1000)}s) ===`)
+
+  const allFailures = jobs.flatMap((j) => stats.get(j.path).failures)
+  const outages = detectHostOutages(allFailures)
+
   const systemic = []
   for (const j of jobs) {
     const s = stats.get(j.path)
-    const line = `  ${j.path.padEnd(52)} fired ${String(s.attempts).padStart(3)}  ok ${String(s.succeeded).padStart(3)}  skipped ${String(s.skipped).padStart(3)}`
+    const hostHits = s.failures.filter((f) => f.kind === 'host' || insideOutage(f.at, outages)).length
+    const line =
+      `  ${j.path.padEnd(52)} fired ${String(s.attempts).padStart(3)}` +
+      `  ok ${String(s.succeeded).padStart(3)}` +
+      `  skipped ${String(s.skipped).padStart(3)}` +
+      (hostHits > 0 ? `  host ${String(hostHits).padStart(3)}` : '')
     console.log(s.lastError ? `${line}  last: ${s.lastError}` : line)
-    if (isSystemicFailure(s)) systemic.push({ path: j.path, error: s.lastError })
+    if (isSystemicFailure(s, outages)) systemic.push({ path: j.path, error: s.lastError })
+  }
+
+  /*
+   * Reported, never fatal. The host being unreachable is real and worth seeing -- four jobs all
+   * returning 502 in the same minute is a redeploy or a restart, not eleven broken routes -- but
+   * failing the workflow for it would make this run red for something no code change can fix, and
+   * a workflow that is red for weather is one nobody reads when it finally means something.
+   */
+  if (outages.length > 0) {
+    console.log('')
+    console.log(`Host unreachable during ${outages.length} window(s) -- not counted against any job:`)
+    for (const w of outages) {
+      const secs = Math.max(1, Math.round((w.end - w.start) / 1000))
+      console.log(`  ${hhmmss(w.start)}-${hhmmss(w.end)} (~${secs}s)  ${w.paths.size} jobs affected`)
+    }
   }
 
   if (systemic.length > 0) {
-    console.log('\nEvery attempt failed for:')
-    for (const f of systemic) console.log(`  ${f.path} — ${f.error}`)
-    console.log('\nThat is configuration, not weather — check APP_URL, CRON_SECRET and the route itself.')
+    console.log('')
+    console.log('Every attempt failed, with the host up:')
+    for (const f of systemic) console.log(`  ${f.path} -- ${f.error}`)
+    console.log('')
+    console.log('That is configuration, not weather -- check APP_URL, CRON_SECRET and the route itself.')
     return 1
   }
   return 0
