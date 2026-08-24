@@ -75,12 +75,47 @@ function writeBaseline(files, note) {
   return payload
 }
 
-/** Run vitest and return { ran, failed } as normalized path sets. */
+/**
+ * Vitest's own failure output, per file, for the summary and the uploaded artifact.
+ *
+ * WITHOUT THIS, A FAILURE IS A FILENAME AND NOTHING ELSE. `--reporter=json` REPLACES the console
+ * reporter, so a failing file produced no FAIL line, no assertion and no stack -- the job log named
+ * the file once and said nothing more. Four separate investigations into shard 4/4 ended right
+ * there, because the only artifact that survives a rerun (vitest-ratchet-result.json) recorded
+ * names and threw away every message the report already contained.
+ *
+ * Kept SHORT on purpose: enough to tell an assertion apart from a dead worker, not a full stack.
+ */
+function collectErrors(result) {
+  const out = []
+  for (const a of result.assertionResults || []) {
+    if (a && a.status === 'failed') {
+      const msg = (a.failureMessages || []).join(' | ').replace(/\s+/g, ' ').trim()
+      out.push(((a.fullName || a.title || '(unnamed)') + ': ' + msg).slice(0, 300))
+    }
+  }
+  // A file can fail with NO failing assertion -- an import that threw, or a worker that died
+  // mid-file. That is the shape shard 4 keeps producing, and it is the case worth naming loudest.
+  if (out.length === 0) {
+    const top = String(result.message || '').replace(/\s+/g, ' ').trim()
+    out.push(
+      top
+        ? ('file-level failure: ' + top).slice(0, 300)
+        : 'file-level failure with NO assertion error and NO message -- the file did not complete (worker died, or an import threw)',
+    )
+  }
+  return out
+}
+
+/** Run vitest and return { ran, failed, errors } as path sets plus per-file detail. */
 function runVitest(passthrough) {
   const out = join(mkdtempSync(join(tmpdir(), 'vitest-ratchet-')), 'results.json')
   const argv = [
     'vitest',
     'run',
+    // BOTH reporters. `json` feeds the ratchet; `default` puts the human-readable failure back in
+    // the job log, where it was missing entirely.
+    '--reporter=default',
     '--reporter=json',
     `--outputFile=${out}`,
     // Integration tests need a live Postgres; a unit gate that needs a database fails for reasons
@@ -100,13 +135,17 @@ function runVitest(passthrough) {
   const data = JSON.parse(readFileSync(out, 'utf8'))
   const ran = new Set()
   const failed = new Set()
+  const errors = {}
   for (const r of data.testResults || []) {
     if (!r?.name) continue
     const rel = normalize(r.name)
     ran.add(rel)
-    if (r.status === 'failed') failed.add(rel)
+    if (r.status === 'failed') {
+      failed.add(rel)
+      errors[rel] = collectErrors(r)
+    }
   }
-  return { ran, failed }
+  return { ran, failed, errors }
 }
 
 function main() {
@@ -129,14 +168,21 @@ function main() {
     ...args.filter((a) => a.startsWith('--shard=')),
     ...args.filter((a) => !a.startsWith('--')),
   ]
-  const { ran, failed } = runVitest(passthrough)
+  const { ran, failed, errors } = runVitest(passthrough)
 
   // Always emit this run's result, so the baseline can be rebuilt from CI without scraping logs.
   // Scraping was tried first and is not reliable: GitHub truncates a large failed-job log, and one
   // shard's summary was cut off entirely, which would have produced a baseline missing a quarter of
   // its entries -- worse than no ratchet, because every missing file reads as a fresh regression.
   const shardOut = join(root, `vitest-ratchet-result.json`)
-  writeFileSync(shardOut, JSON.stringify({ ran: [...ran].sort(), failed: [...failed].sort() }, null, 2) + '\n', 'utf8')
+  // `errors` rides along BECAUSE THIS FILE IS THE ONLY THING THAT SURVIVES A RERUN. `gh run rerun`
+  // overwrites both the job conclusion and the log, so a flake investigated after the fact has no
+  // evidence left anywhere else -- which is exactly how four shard-4 failures went undiagnosed.
+  writeFileSync(
+    shardOut,
+    JSON.stringify({ ran: [...ran].sort(), failed: [...failed].sort(), errors }, null, 2) + '\n',
+    'utf8',
+  )
   console.log(`[vitest-ratchet] ran ${ran.size} files, ${failed.size} failed → ${relative(root, shardOut)}`)
 
   if (has('--update')) {
@@ -170,6 +216,12 @@ function main() {
 
   if (regressions.length) {
     console.error(`\n[vitest-ratchet] ${regressions.length} file(s) were passing and now FAIL:`)
+    // Print WHY, not just which. A bare filename cannot distinguish an assertion someone broke
+    // from a worker that died, and those need opposite responses: fix the code, or investigate the
+    // runner. Four investigations stalled on exactly this distinction.
+    for (const f of regressions) {
+      for (const e of errors[f] || []) console.error(`      ${e}`)
+    }
     for (const f of regressions) console.error(`  ✗ ${f}`)
     console.error('\nThese are regressions, not pre-existing debt. Fix them, or if the failure is')
     console.error('intentional, add the file to scripts/vitest-failure-baseline.json in the same change')
