@@ -53,6 +53,17 @@ export const simulateBodySchema = z.discriminatedUnion('kind', [
     focusedTeamId: z.string(),
     leagueSize: z.number().min(4).max(32).optional(),
     weeksRemaining: z.number().optional(),
+    // P4-8: optional real-league grounding. When present the API route ALSO runs
+    // the Gaussian win-probability engine over the league's actual remaining
+    // schedule (lib/ai/sim/groundedTradeDelta) and attaches `leagueGrounded` to
+    // the result. The Monte Carlo above stays synthetic and stays labeled.
+    leagueGrounding: z
+      .object({
+        leagueId: z.string().min(1),
+        sent: z.array(z.object({ name: z.string().min(1), position: z.string().min(1) })).max(12),
+        received: z.array(z.object({ name: z.string().min(1), position: z.string().min(1) })).max(12),
+      })
+      .optional(),
   }),
   z.object({
     kind: z.literal('draft'),

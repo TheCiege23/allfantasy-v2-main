@@ -2,7 +2,8 @@ import type { TradeDecisionContextV1, AssetValuation, PlayerRiskMarker } from '.
 import type { PeerReviewConsensus, DisagreementBlock } from './trade-analysis-schema'
 import type { QualityGateResult, ConditionalRecommendation } from './quality-gate'
 
-export type FairnessGrade = 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F'
+/** 'N/A' = refused: zero valued assets — see verdictHasNoSignal(). Never a letter. */
+export type FairnessGrade = 'A+' | 'A' | 'B+' | 'B' | 'C' | 'D' | 'F' | 'N/A'
 
 export type DeterministicDriver = {
   label: string
@@ -15,7 +16,8 @@ export type DeterministicVerdict = {
   winner: 'A' | 'B' | 'Even'
   winnerLabel: string
   fairnessGrade: FairnessGrade
-  fairnessScore: number
+  /** Null when the verdict refused to grade (no valued assets — see verdictHasNoSignal). */
+  fairnessScore: number | null
   netValueDelta: number
   netValueDeltaPct: number
   acceptanceProbability: number
@@ -152,6 +154,20 @@ function computeFairnessGrade(pctDiff: number): FairnessGrade {
   if (pctDiff <= 25) return 'C'
   if (pctDiff <= 35) return 'D'
   return 'F'
+}
+
+/**
+ * P4-8 zero-data guard — mirrors hasNoSignal() in lib/projections/tradeGrading.
+ * When no asset resolved a value, sideA/sideB totals are 0-vs-0, percentageDiff
+ * reads 0, and the bands above would grade "A+ / dead even" from pure absence
+ * of data. "We could not price this trade" and "this trade is fair" are
+ * opposite claims; only one of them is true.
+ */
+export function verdictHasNoSignal(ctx: TradeDecisionContextV1): boolean {
+  return (
+    ctx.dataQuality.assetsCovered === 0 ||
+    (ctx.sideA.totalValue <= 0 && ctx.sideB.totalValue <= 0)
+  )
 }
 
 function computeVetoRisk(pctDiff: number): ValueVerdict['vetoRisk'] {
@@ -897,11 +913,12 @@ export function computeDeterministicVerdict(ctx: TradeDecisionContextV1): {
 
   const pctDiff = ctx.valueDelta.percentageDiff
   const favored = ctx.valueDelta.favoredSide
+  const noSignal = verdictHasNoSignal(ctx)
   const winner = pctDiff <= 3 ? 'Even' as const : favored
-  const grade = computeFairnessGrade(pctDiff)
+  const grade: FairnessGrade = noSignal ? 'N/A' : computeFairnessGrade(pctDiff)
   const vetoRisk = computeVetoRisk(pctDiff)
 
-  const fairnessScore = Math.max(0, Math.min(100, 100 - pctDiff * 2.5))
+  const fairnessScore = noSignal ? null : Math.max(0, Math.min(100, 100 - pctDiff * 2.5))
   const confidence = computeDeterministicConfidence(ctx)
 
   const injuryRiskDelta = Math.round((injuryAdjusted.sideAInjuryDiscount - injuryAdjusted.sideBInjuryDiscount) * 10) / 10
@@ -909,7 +926,9 @@ export function computeDeterministicVerdict(ctx: TradeDecisionContextV1): {
   const keyDrivers = buildDeterministicDrivers(ctx, rankingsImpact, injuryAdjusted, starterBench, partnerFit, timing)
 
   let winnerLabel: string
-  if (winner === 'Even') {
+  if (noSignal) {
+    winnerLabel = `Not graded — none of the ${ctx.dataQuality.assetsTotal} assets in this trade could be valued`
+  } else if (winner === 'Even') {
     winnerLabel = 'Dead even — both sides get fair value'
   } else {
     winnerLabel = `Side ${winner} gets the better end by ${pctDiff}%`
@@ -919,7 +938,7 @@ export function computeDeterministicVerdict(ctx: TradeDecisionContextV1): {
     winner,
     winnerLabel,
     fairnessGrade: grade,
-    fairnessScore: Math.round(fairnessScore),
+    fairnessScore: fairnessScore == null ? null : Math.round(fairnessScore),
     netValueDelta: ctx.valueDelta.absoluteDiff,
     netValueDeltaPct: pctDiff,
     acceptanceProbability: acceptanceResult.score,
@@ -973,7 +992,7 @@ export function formatTradeResponse(
   return {
     deterministicVerdict: detVerdict,
     valueVerdict: {
-      fairnessGrade: computeFairnessGrade(ctx.valueDelta.percentageDiff),
+      fairnessGrade: verdictHasNoSignal(ctx) ? 'N/A' : computeFairnessGrade(ctx.valueDelta.percentageDiff),
       edge: computeEdgeLabel(ctx),
       edgeSide: ctx.valueDelta.favoredSide,
       valueDeltaPercent: ctx.valueDelta.percentageDiff,

@@ -50,7 +50,6 @@ import { prisma } from '@/lib/prisma'
 import { buildLeagueContext } from '@/lib/league/buildLeagueContext'
 import { requireFeatureEntitlement } from '@/lib/subscription/entitlement-middleware'
 import { TokenSpendService } from '@/lib/tokens/TokenSpendService'
-import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader'
 import { normalizeToSupportedSport } from '@/lib/sport-scope'
 import { resolveTradeEvaluatorInternalLeagueId } from '@/lib/trades/resolveTradeEvaluatorInternalLeagueId'
 import { resolveTradePlayerAssets } from '@/lib/trades/tradePlayerIdentityResolver'
@@ -1450,26 +1449,12 @@ ${normalizedEvidencePrompt ? `\nNORMALIZED PROVIDER EVIDENCE (supplemental — i
     if (skipGpt !== 'ok') {
       console.warn(`[trade-evaluator] Skipping GPT: ${skipGpt}`)
     } else {
-      const leagueSportNorm = normalizeToSupportedSport(String(data.league?.sport || 'nfl'))
-      const lf = data.league?.format
-      const formatForValues =
-        lf === 'redraft' ? ('redraft' as const)
-        : lf === 'dynasty' ? ('dynasty' as const)
-        : lf === 'best_ball' ? ('bestball' as const)
-        : undefined
-      const playerValuesCtx = getPlayerValuesContext({
-        sport: leagueSportNorm,
-        ...(formatForValues ? { format: formatForValues } : {}),
-      })
       const systemPrompt =
         STRUCTURED_TRADE_EVAL_SYSTEM_PROMPT +
         '\n\n' +
         GPT_NARRATIVE_SYSTEM_PROMPT +
         (leagueHistoryContext
           ? `\n\nLEAGUE HISTORY & MANAGER TIERS (use for negotiation leverage — do not contradict deterministic values):\n${leagueHistoryContext}`
-          : '') +
-        (playerValuesCtx
-          ? `\n\n${playerValuesCtx}\n\nUse these player values when making recommendations, comparisons, and rankings. Prefer these values over your general training knowledge when they conflict.`
           : '')
       const narrativePrompt = gptContract ? buildGptUserPrompt(gptContract) : ''
 

@@ -11,6 +11,8 @@ import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { getTrendingPlayers } from '@/lib/sleeper-client'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
+import { buildIdpKickerValueMap, idpTierValueCeiling, isIdpPosition } from '@/lib/idp-kicker-values'
+import { isIdpLeague } from '@/lib/idp/IDPLeagueConfig'
 import { fetchFantasyCalcValues, findPlayerByName, type FantasyCalcPlayer } from '@/lib/fantasycalc'
 import { pricePlayer, compositeScore, type ValuationContext, type PricedAsset } from '@/lib/hybrid-valuation'
 import { sportsRecordToPricedAsset } from '@/lib/trade-value-console/sports-db-valuation'
@@ -771,6 +773,25 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
     }
   }
 
+  /*
+   * IDP leagues: FantasyCalc carries no individual defenders, so an IDP
+   * candidate priced through the NFL bundle scores ~0 and could never be
+   * recommended. Value defenders with the real tier-curve valuation instead
+   * (Sleeper search_rank tiers — the same source power rankings use).
+   */
+  const idpDynasty = tradeLeague?.isDynasty ?? selectedLeague?.isDynasty ?? true
+  let idpTierValues: Awaited<ReturnType<typeof buildIdpKickerValueMap>> | null = null
+  if (sportStr === 'NFL' && selectedLeague && (await isIdpLeague(selectedLeague.id))) {
+    const idpIds = candidates.filter((c) => isIdpPosition(c.position)).map((c) => c.externalId)
+    if (idpIds.length > 0) {
+      try {
+        idpTierValues = await buildIdpKickerValueMap(idpIds, idpDynasty)
+      } catch {
+        dataGaps.push('IDP tier valuation unavailable for defender candidates.')
+      }
+    }
+  }
+
   type Scored = WaiverIntelPlayer & { _need: number }
   const scored: Scored[] = []
 
@@ -797,7 +818,15 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
     let injuryStatus: string | null = injuryByName.get(c.name.toLowerCase()) ?? null
     let recordId: string | null = null
 
-    if (sportStr === 'NFL' && nflBundle) {
+    const idpTierValue = idpTierValues?.get(c.externalId) ?? null
+    if (sportStr === 'NFL' && idpTierValue) {
+      // Real tier-curve value; composite is that value normalized onto the
+      // 0–100 scale the offense-side composite uses.
+      marketValue = Math.max(idpTierValue.value, idpTierValue.redraftValue)
+      composite = Math.min(100, Math.round((marketValue / idpTierValueCeiling(idpDynasty)) * 100))
+      const nflRec = await resolveRecordForFreeAgent(sportStr, c.externalId)
+      if (nflRec) recordId = nflRec.id
+    } else if (sportStr === 'NFL' && nflBundle) {
       const matched = findPlayerByName(nflBundle.fc, c.name)
       try {
         let priced = await pricePlayer(c.name, nflBundle.ctx)
@@ -882,6 +911,7 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
       c.trending > 0 ? `Sleeper trending add (+${c.trending.toLocaleString()})` : 'Free-agent pool candidate',
       injuryStatus ? `Injury report: ${injuryStatus}` : null,
       needBonus > 0 ? `Team need at ${pos}` : null,
+      idpTierValue ? 'IDP tier-curve valuation (search-rank based)' : null,
       `Composite ${Math.round(composite)}/100 · Market ~${Math.round(marketValue)}`,
     ].filter(Boolean)
 

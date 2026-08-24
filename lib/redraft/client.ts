@@ -515,6 +515,29 @@ export async function listTradeProposals(params: {
   return body.proposals ?? []
 }
 
+/**
+ * Decision OS Slice 3 (Stage 1 LIVE) — appended by POST /api/redraft/trade-proposals when the live
+ * runner produced an evaluation for the created proposal. Optional and nullable on purpose: absent
+ * means the runner did not run or had nothing to say, never that the proposal failed. Mirrors the
+ * route's envelope (`{ decisionId, card: toTradeCard(...), completeness, uncertaintySources }`) —
+ * see `lib/decision-os/trade/tradeCardAdapter.ts` for the card contract.
+ */
+export type TradeDecisionOsCard = {
+  decisionId: string
+  card: {
+    title: string
+    subtitle: string
+    detail: string
+    grade: string | null
+    fairnessScore: number | null
+    legal: boolean
+    proposalId: string | null
+  }
+  /** 0–100 — how complete the evaluation's inputs were (decision.data_completeness). */
+  completeness: number
+  uncertaintySources: string[]
+}
+
 export async function createTradeProposal(payload: {
   leagueId: string
   seasonId: string
@@ -550,7 +573,7 @@ export async function createTradeProposal(payload: {
       assets,
     }),
   })
-  return parseJson<{ proposal: RedraftTradeProposal }>(res)
+  return parseJson<{ proposal: RedraftTradeProposal; decisionOs?: TradeDecisionOsCard | null }>(res)
 }
 
 export async function submitTradeVote(payload: {

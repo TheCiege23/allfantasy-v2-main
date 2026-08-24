@@ -14,7 +14,6 @@ import { rateLimit, getClientIp } from '@/lib/rate-limit'
 import { sendMetaCAPIEvent } from '@/lib/meta-capi'
 import { logTradeOfferEvent } from '@/lib/trade-engine/trade-event-logger'
 import { logNarrativeValidation } from '@/lib/trade-engine/narrative-validation-logger'
-import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader'
 
 const PICK_PATTERN = /(\d{4})\s*(1st|2nd|3rd|4th|first|second|third|fourth)/i
 const ROUND_MAP: Record<string, number> = {
@@ -337,7 +336,6 @@ export const POST = withApiUsage({ endpoint: "/api/instant/trade", tool: "Instan
     let aiNarrative: { bullets: Array<{ text: string; driverId: string }>; sensitivity: { text: string; driverId: string } } | null = null
 
     const skipCheck = shouldSkipGpt(gptContract)
-    const playerValuesCtx = getPlayerValuesContext({ sport: 'NFL' })
     if (skipCheck !== 'ok') {
       console.warn(`[instant-trade] Skipping GPT: ${skipCheck}`)
     } else {
@@ -346,11 +344,7 @@ export const POST = withApiUsage({ endpoint: "/api/instant/trade", tool: "Instan
           messages: [
             {
               role: 'system',
-              content:
-                GPT_NARRATIVE_SYSTEM_PROMPT +
-                (playerValuesCtx
-                  ? `\n\n${playerValuesCtx}\n\nUse these player values when making recommendations, comparisons, and rankings. Prefer these values over your general training knowledge when they conflict.`
-                  : ''),
+              content: GPT_NARRATIVE_SYSTEM_PROMPT,
             },
             {
               role: 'user',

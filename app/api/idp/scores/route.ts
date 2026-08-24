@@ -4,20 +4,26 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isIdpLeague } from '@/lib/idp'
 import { prisma } from '@/lib/prisma'
-import { getMergedScoringRulesForLeague } from '@/lib/idp/scoringEngine'
+import { computeIdpFantasyPoints, getMergedScoringRulesForLeague } from '@/lib/idp/scoringEngine'
+import { getLatestIdpStatSeason, getRealIdpLinesForRosterIds } from '@/lib/idp/realStatLines'
 import { parseIdpRowsFromPlayerData } from '@/lib/idp/idpRouteHelpers'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_IDS = 80
 
+const MISS_REASON_LABEL: Record<string, string> = {
+  no_identity_mapping: 'no identity mapping into the ingested stat-line id space',
+  no_stat_line: 'no ingested stat line for this week',
+}
+
 /*
- * ⚠ THIS ROUTE NO LONGER FABRICATES SCORES. It used to score
- * generateDeterministicWeeklyStatLine — stat lines invented from a hash of
- * the player id — under the league's real rules and attach them to real
- * player names. Real PBP-derived rows exist in FantasyStatLine; until this
- * route is wired to them (planned work), it answers honestly: rules yes,
- * scores no. No mounted UI calls it today.
+ * ⚠ THIS ROUTE NEVER FABRICATES SCORES. It once scored
+ * generateDeterministicWeeklyStatLine — stat lines invented from a hash of the
+ * player id — under the league's real rules. It now serves the real PBP-derived
+ * rows in FantasyStatLine (source rolling_insights_pbp), joined from Sleeper
+ * roster ids via PlayerIdentityMap. Players without a real line stay absent
+ * from `entries` and are listed in `missing` with the reason.
  */
 async function honestEmptyResponse(leagueId: string, week: number, requested: number) {
   return NextResponse.json({
@@ -26,10 +32,52 @@ async function honestEmptyResponse(leagueId: string, week: number, requested: nu
     source: 'unavailable',
     message:
       requested > 0
-        ? 'Live IDP stat lines are not wired to this endpoint yet — scores appear when real weekly stats land.'
+        ? 'No ingested IDP stat lines match this request yet — scores appear when real weekly stats land.'
         : 'No IDP players found on your roster snapshot.',
     scoringRules: await getMergedScoringRulesForLeague(leagueId).catch(() => ({})),
     entries: [],
+  })
+}
+
+async function realScoresResponse(leagueId: string, week: number, playerIds: string[]) {
+  if (playerIds.length === 0) return honestEmptyResponse(leagueId, week, 0)
+  const season = await getLatestIdpStatSeason()
+  if (!season) return honestEmptyResponse(leagueId, week, playerIds.length)
+
+  const rules = await getMergedScoringRulesForLeague(leagueId).catch(
+    () => ({}) as Record<string, number>,
+  )
+  const { linesByPlayer, missing } = await getRealIdpLinesForRosterIds(playerIds, season, { week })
+  if (linesByPlayer.size === 0) return honestEmptyResponse(leagueId, week, playerIds.length)
+
+  const entries = playerIds.flatMap((playerId) => {
+    const line = linesByPlayer.get(playerId)?.[0]
+    if (!line) return []
+    const points = computeIdpFantasyPoints(line.stats, rules)
+    return [
+      {
+        playerId,
+        week: line.week,
+        stats: line.stats,
+        points: Math.round(points.total * 100) / 100,
+        breakdown: points.breakdown,
+      },
+    ]
+  })
+
+  return NextResponse.json({
+    leagueId,
+    week,
+    season,
+    source: 'ingested_stats',
+    scoringRules: rules,
+    entries,
+    missing: playerIds
+      .filter((id) => !linesByPlayer.has(id))
+      .map((playerId) => ({
+        playerId,
+        reason: MISS_REASON_LABEL[missing.get(playerId) ?? 'no_stat_line'],
+      })),
   })
 }
 
@@ -41,7 +89,9 @@ async function honestEmptyResponse(leagueId: string, week: number, requested: nu
  * POST /api/idp/scores — body: { leagueId, week, playerIds?: string[], scope?: 'mine' }
  * (playerIds for large batches)
  *
- * Points use league merged scoring rules × deterministic weekly stat lines until live stats are wired.
+ * Points use league merged scoring rules × real ingested weekly stat lines
+ * (FantasyStatLine, source rolling_insights_pbp). Players with no real line
+ * are reported in `missing` with the reason — never scored from invented stats.
  */
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
@@ -71,14 +121,7 @@ export async function GET(req: NextRequest) {
     })
     playerIds = parseIdpRowsFromPlayerData(roster?.playerData).map((r) => r.playerId)
     if (playerIds.length === 0) {
-      return NextResponse.json({
-        leagueId,
-        week,
-        source: 'deterministic_simulation',
-        message: 'No IDP players found on your roster snapshot.',
-        scoringRules: await getMergedScoringRulesForLeague(leagueId),
-        entries: [],
-      })
+      return honestEmptyResponse(leagueId, week, 0)
     }
   } else {
     const raw = searchParams?.get('playerIds')?.trim() ?? ''
@@ -95,7 +138,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return honestEmptyResponse(leagueId, week, playerIds.length)
+  return realScoresResponse(leagueId, week, playerIds)
 }
 
 export async function POST(req: NextRequest) {
@@ -138,6 +181,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return honestEmptyResponse(leagueId, week, playerIds.length)
+  return realScoresResponse(leagueId, week, playerIds)
 }
 

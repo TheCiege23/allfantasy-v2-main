@@ -39,12 +39,15 @@ export function TradeSimulationStrip({
   senderPlayers,
   receiverPlayers,
   leagueSize = 12,
+  groundedLeagueId,
 }: {
   senderTeamName: string
   receiverTeamName: string
   senderPlayers: Array<{ id: string; name: string; position: string }>
   receiverPlayers: Array<{ id: string; name: string; position: string }>
   leagueSize?: number
+  /** Canonical League.id — when set, the API also runs the real-schedule Gaussian engine. */
+  groundedLeagueId?: string
 }) {
   const requestBody = useMemo(() => {
     const snd = senderPlayers.filter((p) => p.name.trim()).map(toSimPlayer)
@@ -67,8 +70,21 @@ export function TradeSimulationStrip({
       focusedTeamId: 'sender',
       leagueSize,
       weeksRemaining: 12,
+      ...(groundedLeagueId
+        ? {
+            leagueGrounding: {
+              leagueId: groundedLeagueId,
+              sent: senderPlayers
+                .filter((p) => p.name.trim() && p.position.trim())
+                .map((p) => ({ name: p.name.trim(), position: p.position.trim() })),
+              received: receiverPlayers
+                .filter((p) => p.name.trim() && p.position.trim())
+                .map((p) => ({ name: p.name.trim(), position: p.position.trim() })),
+            },
+          }
+        : {}),
     }
-  }, [senderTeamName, receiverTeamName, senderPlayers, receiverPlayers, leagueSize])
+  }, [senderTeamName, receiverTeamName, senderPlayers, receiverPlayers, leagueSize, groundedLeagueId])
 
   const canSim = senderPlayers.some((p) => p.name.trim()) && receiverPlayers.some((p) => p.name.trim())
 

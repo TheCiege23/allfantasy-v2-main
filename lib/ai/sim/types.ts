@@ -94,7 +94,42 @@ export type TradeSimResult = {
   before: SeasonSimResult
   after: SeasonSimResult
   iterations: number
+  /**
+   * P4-8: attached by the API route when the caller supplied league grounding —
+   * real remaining-schedule win odds from the Gaussian engine, or a labeled
+   * refusal. Absent entirely for ungrounded (synthetic-only) runs.
+   */
+  leagueGrounded?: GroundedTradeDelta
 }
+
+/** One priced week of the real remaining schedule. */
+export type GroundedWeekDelta = {
+  week: number
+  opponentRosterId: number
+  pWinBefore: number
+  pWinAfter: number
+}
+
+/**
+ * P4-8 — real-schedule trade delta from the Gaussian win-probability engine
+ * (lib/projections/winProbability), computed ONLY when league rosters, schedule,
+ * and league-scored projections all resolve. Every other case is a labeled
+ * refusal; no number is invented.
+ */
+export type GroundedTradeDelta =
+  | {
+      available: true
+      engine: 'gaussian-winprob-v1'
+      weeks: GroundedWeekDelta[]
+      weeksSkipped: Array<{ week: number; reason: string }>
+      expectedWinsBefore: number
+      expectedWinsAfter: number
+      expectedWinsDelta: number
+      /** What this is and is not — shown to the user verbatim. */
+      scopeNote: string
+      limitation: string
+    }
+  | { available: false; reason: string }
 
 export type DraftSimResult = {
   baselineStrength: number
