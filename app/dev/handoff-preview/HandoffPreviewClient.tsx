@@ -3,9 +3,13 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import LeagueTile from '@/components/core-app/league-tile/LeagueTile'
+import DraftMusicWidget from '@/components/core-app/draft-music/DraftMusicWidget'
+import { DiscordBridge } from '@/components/core-app/screens/DiscordBridge'
+import { BracketChallenge } from '@/components/core-app/screens/BracketChallenge'
+import type { BracketChallengeData } from '@/lib/core-app/bracketChallenge'
 import { findCollidingNames } from '@/components/core-app/league-tile/leagueTileModel'
 import type { PushSelection } from '@/lib/core-app/notificationsCenter'
-import { COLLIDING_TILES, TILE_STATES } from './fixtures'
+import { COLLIDING_TILES, PREVIEW_DISCORD_BRIDGE, PREVIEW_QUEUE, TILE_STATES } from './fixtures'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-notifications.css'
 import './handoff-preview.css'
@@ -107,11 +111,14 @@ export function HandoffPreviewClient({
   draftStartingEmail,
   draftRecapEmail,
   push,
+  bracket,
 }: {
   tradeEmail: Email
   draftStartingEmail: Email
   draftRecapEmail: Email
   push: PushSelection
+  /** 28a, loaded through its real loader. Null if the team read failed. */
+  bracket: BracketChallengeData | null
 }) {
   const [showAnatomy, setShowAnatomy] = useState(true)
   const colliding = findCollidingNames(COLLIDING_TILES)
@@ -120,7 +127,7 @@ export function HandoffPreviewClient({
     <main className="af-core hp">
       <header className="hp-head">
         <p className="hp-eyebrow">Dev only · 404s in production</p>
-        <h1 className="hp-title">Handoff preview — 22a to 27a</h1>
+        <h1 className="hp-title">Handoff preview — 22a to 34a</h1>
         <p className="hp-sub">
           Twelve drops. The five that are real signed-in screens are linked, not mocked — a copy
           rendered with fake data is a copy that drifts from the thing it is previewing. What is
@@ -135,6 +142,10 @@ export function HandoffPreviewClient({
           <Link href="/core/tools" className="hp-navlink">25a · Tools</Link>
           <Link href="/core/share" className="hp-navlink">26a · Career Share</Link>
           <Link href="/core/notifications" className="hp-navlink">22c · Notifications</Link>
+          <Link href="/core/bracket?sport=mlb" className="hp-navlink">28a · Bracket Challenge</Link>
+          <Link href="/core/business" className="hp-navlink">30b · B2B retention case</Link>
+          <Link href="/commissioner-os/analytics" className="hp-navlink">30a · Commissioner analytics</Link>
+          <Link href="/admin" className="hp-navlink">29a · Admin Command Center</Link>
           <Link href="/core" className="hp-navlink hp-navlink--alt">
             23a/23b/25b · open /core, then the Chat button
           </Link>
@@ -249,6 +260,44 @@ export function HandoffPreviewClient({
           (<code>notifyOnTheClockAfterPick</code>); whether it also warrants an email is an open
           question for product.
         </p>
+      </Section>
+
+      {/*
+        28a–34a. The Discord bridge and the draft-room music widget are rendered
+        here rather than linked, because both are league-scoped signed-in
+        surfaces: /core/discord needs a league you commission, and the music
+        widget lives inside a live draft. Everything else in this batch IS a
+        reachable route and is linked in the nav above rather than mocked.
+      */}
+      <Section
+        id="bracket"
+        title="28a · Bracket Challenge, MLB"
+        blurb="Loaded through the real loader, so the club list is the one in Postgres and every seed slot is genuinely empty — no seeding source exists yet, and the bracket says so rather than guessing a field. Byes stay open until Round 1 resolves. The sport switcher renders every sport through this same component."
+      >
+        {bracket ? (
+          <BracketChallenge data={bracket} />
+        ) : (
+          <p className="hp-secblurb">Team data could not be read — the loader returned nothing.</p>
+        )}
+      </Section>
+
+      <Section
+        id="discord"
+        title="32a · Discord bridge"
+        blurb="Rendered with a fixture league. The real screen is /core/discord with a league you commission selected in the rail. Note the APP tag on the Discord side — Discord's own requirement for webhook messages, never ours to hide — and that commissioner notes default to Off."
+      >
+        <DiscordBridge data={PREVIEW_DISCORD_BRIDGE} />
+      </Section>
+
+      <Section
+        id="music"
+        title="31a · Spotify, draft room widget"
+        blurb="Both variants. The collapsed strip is what the draft room actually shows: fixed height, in normal flow, never overlaying the board, and never autoplaying. Which state you see depends on your own Spotify connection — disconnected, reconnect-needed, free (previews only) or Premium."
+      >
+        <div className="hp-music">
+          <DraftMusicWidget variant="collapsed" playlistName="Iron Horse Dynasty draft" queue={PREVIEW_QUEUE} queuePending />
+          <DraftMusicWidget variant="full" playlistName="Iron Horse Dynasty draft" queue={PREVIEW_QUEUE} queuePending={false} />
+        </div>
       </Section>
 
       <Section

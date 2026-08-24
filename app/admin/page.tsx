@@ -6,10 +6,12 @@ import {
   type AdminCommandCenterMetrics,
   type AdminMetric,
 } from "@/lib/admin-dashboard/AdminCommandCenterService"
+import { AdminCommandCenterOverview } from "@/components/admin/AdminCommandCenterOverview"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
 import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
 import { AiProviderHealthPanel } from "@/components/admin/AiProviderHealthPanel"
+import { EmailSegmentsPanel } from "@/components/admin/EmailSegmentsPanel"
 import { PlatformOsOperatorPanel } from "@/components/admin/PlatformOsOperatorPanel"
 import type {
   AdminProviderHealthRow,
@@ -576,24 +578,8 @@ function EmailCenterPanel({ status }: { status: AdminEmailStatus }) {
         <MetricCard item={{ label: "Opt-outs", value: status.productUpdateOptOuts + status.unsubscribed, tracked: true, note: "Product updates false or unsubscribed" }} />
         <MetricCard item={{ label: "Pending email outbox", value: status.pendingEmailOutbox, tracked: true }} />
       </div>
-      <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h3 className="text-xs font-black uppercase tracking-[0.16em] text-cyan-100/75">Admin API</h3>
-            <p className="mt-1 text-xs text-white/50">Preview, test-send, then confirm broadcast. Opt-outs are excluded and every send is logged.</p>
-          </div>
-          <a href="/api/admin/email/broadcast" className="rounded-2xl border border-cyan-300/30 bg-cyan-300/10 px-3 py-2 text-xs font-black text-cyan-100">
-            Email status JSON
-          </a>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-2">
-          {status.audiences.map((audience) => (
-            <div key={audience.id} className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <div className="font-black text-white">{audience.label}</div>
-              <div className="mt-1 text-xs text-white/48">{audience.description}</div>
-            </div>
-          ))}
-        </div>
+      <div className="mt-4">
+        <EmailSegmentsPanel status={status} />
       </div>
     </AccordionSection>
   )
@@ -1544,6 +1530,14 @@ export default async function AdminPage({
           </div>
         </header>
 
+        {/*
+          29a — the verdict leads. It is rendered BEFORE the overview deck and
+          before any metric section on purpose: the handoff's core fix is that
+          /admin answers "is anything wrong?" before it shows a number. Moving
+          this below anything undoes the fix.
+        */}
+        <AdminCommandCenterOverview metrics={data} />
+
         <AdminOverviewDeck data={data} accessSource={gate.source} />
 
         <Section id="morning-dashboard" title="Morning Dashboard" items={data.morning} />
@@ -1552,7 +1546,10 @@ export default async function AdminPage({
         <Section title="Tokens & AI" items={[...data.tokens, ...data.ai]} />
         <Section title="World Cup" items={data.worldCup} />
         <Section title="System Health" items={data.health} />
+        {/* #crons and #env are the anchors the verdict strip links into. */}
         <div id="production-readiness">
+          <span id="crons" />
+          <span id="env" />
           <ProductionReadinessPanel data={data.productionReadiness} />
         </div>
         <TrafficGeoPanel data={data.productionReadiness} metrics={data.traffic} />
@@ -1574,6 +1571,7 @@ export default async function AdminPage({
         <ProviderTeamReconciliationPanel data={data.providerTeamReconciliation} />
         <Section title="Integrity / Fraud Signals" items={data.integrity} />
         <Section title="Admin Data Quality" items={data.dataQuality} />
+        <span id="providers" />
         <AccordionSection id="provider-health" title="Sports API Health" eyebrow="providers" defaultOpen={false}>
           <ProviderHealthPanel rows={data.providerHealth ?? []} />
         </AccordionSection>
