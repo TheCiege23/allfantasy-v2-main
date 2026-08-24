@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma'
 import { resolveLeagueAccess } from '@/lib/league-access'
 import { getSettingsProfile } from '@/lib/user-settings'
 import { runUnifiedAlertEngine } from '@/lib/chimmy-alerts'
+import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
 import type { ChimmyAlertContext, ChimmyAlertSignalBundle, ChimmyAlertUserPreferences } from '@/lib/chimmy-alerts'
 import { mapAlertPreferenceToSensitivity, resolveChimmyPersonalizationProfile } from '@/lib/chimmy-personalization'
 
@@ -31,13 +32,19 @@ async function buildContext(input: {
   signalBundle?: ChimmyAlertSignalBundle
   userPreferences?: ChimmyAlertUserPreferences
 }): Promise<ChimmyAlertContext | null> {
-  const [profile, subscriptionProfile, personalization] = await Promise.all([
+  const [profile, subscriptionProfile, personalization, injuredStartersSignal] = await Promise.all([
     getSettingsProfile(input.userId),
     prisma.userProfile.findUnique({
       where: { userId: input.userId },
       select: { afProSub: true, afCommissionerSub: true },
     }),
     resolveChimmyPersonalizationProfile(input.userId).catch(() => null),
+    // Cross-league by design (one portfolio pass, filtered per league below). A caller
+    // that already supplies the signal skips the cost; a portfolio failure degrades to
+    // "not hydrated" rather than 500ing the whole feed.
+    input.signalBundle?.injuredStarters
+      ? Promise.resolve(null)
+      : hydrateInjuredStarters({ appUserId: input.userId }).catch(() => null),
   ])
 
   let sport = 'NFL'
@@ -97,8 +104,18 @@ async function buildContext(input: {
     }
   }
 
+  // League-scoped requests only see that league's starters (portfolio leagueIds are
+  // canonical League.id uuids — the same space as input.leagueId). Undefined (hydration
+  // skipped or failed) stays distinct from [] ("checked, none found").
+  const hydratedInjuredStarters = injuredStartersSignal
+    ? input.leagueId
+      ? injuredStartersSignal.injuredStarters.filter((s) => s.leagueId === input.leagueId)
+      : injuredStartersSignal.injuredStarters
+    : undefined
+
   const signalBundle = {
     ...(input.signalBundle ?? {}),
+    injuredStarters: input.signalBundle?.injuredStarters ?? hydratedInjuredStarters,
     draftStartingSoon: input.signalBundle?.draftStartingSoon ?? (leagueState?.status === 'drafting'),
     specialtyPhaseTransition: input.signalBundle?.specialtyPhaseTransition ?? (
       leagueState?.leagueVariant && leagueType !== 'redraft'

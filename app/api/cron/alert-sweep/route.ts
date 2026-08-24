@@ -26,13 +26,112 @@ import { NextResponse } from 'next/server'
 
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { prisma } from '@/lib/prisma'
+import { fetchSleeperStatuses } from '@/lib/autocoach/status-sources/SleeperStatusAdapter'
 import { detectInjuredStarterAlerts } from '@/lib/chimmy-alerts/ChimmyAlertDetectors'
 import { hydrateInjuredStarters } from '@/lib/chimmy-alerts/hydrateInjuredStarters'
+import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { sendPushToUser } from '@/lib/push-notifications'
 import type { ChimmyAlertContext } from '@/lib/chimmy-alerts/types'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
+
+/**
+ * Game-window Sleeper status fold.
+ *
+ * `SleeperStatusAdapter` and the playerGameLock engine otherwise run only in
+ * the AutoCoach worker, which nothing schedules — so this sweep's
+ * injured-starter detection ran purely on the 15-minute Rolling Insights
+ * ingest. This folds a bounded read of Sleeper's live `injury_status` blob
+ * into `SportsInjury` (source `sleeper_live`, short TTL) so the canonical
+ * injury read port — the sweep's actual injury source via
+ * `assembleCrossLeaguePlayerPortfolio` → `resolveInjuryFacts` — sees fresh
+ * game-day designations: the port picks the freshest row per player, so a
+ * just-fetched live status wins for the rest of the window and expires on
+ * its own afterwards.
+ *
+ * Bounded on purpose: NFL only (the sweep hydrates NFL), Out/Doubtful only
+ * (the designations that actually move inside a game window — IR and
+ * suspensions are slow-moving and already carried by the RI ingest), capped
+ * row count, no-op outside game windows, and the adapter caches the blob.
+ */
+const LIVE_FOLD_TIMEOUT_MS = 8_000
+const LIVE_FOLD_MAX_ROWS = 400
+const LIVE_STATUS_TTL_MS = 6 * 60 * 60 * 1000
+const LIVE_STATUS_SOURCE = 'sleeper_live'
+const LIVE_URGENT_STATUSES = new Set(['out', 'doubtful'])
+const GAME_WINDOW_HOURS = 8
+
+async function foldLiveSleeperStatusesForGameWindow(now: Date): Promise<void> {
+  const gamesInWindow = await prisma.sportsGame.count({
+    where: {
+      sport: 'NFL',
+      startTime: {
+        gte: new Date(now.getTime() - GAME_WINDOW_HOURS * 60 * 60 * 1000),
+        lte: new Date(now.getTime() + GAME_WINDOW_HOURS * 60 * 60 * 1000),
+      },
+    },
+  })
+  if (gamesInWindow === 0) return
+
+  const statuses = await fetchSleeperStatuses('nfl')
+  const urgent: Array<{ externalId: string; status: string }> = []
+  for (const [externalId, status] of statuses) {
+    if (!LIVE_URGENT_STATUSES.has(status.trim().toLowerCase())) continue
+    urgent.push({ externalId, status: status.trim() })
+    if (urgent.length >= LIVE_FOLD_MAX_ROWS) break
+  }
+
+  // A player who recovered must not keep an old live row outranking the feed —
+  // clear live rows the current blob no longer marks urgent.
+  await prisma.sportsInjury.deleteMany({
+    where: {
+      sport: 'NFL',
+      source: LIVE_STATUS_SOURCE,
+      ...(urgent.length > 0 ? { externalId: { notIn: urgent.map((u) => u.externalId) } } : {}),
+    },
+  })
+  if (urgent.length === 0) return
+
+  const meta = await prisma.sportsPlayer.findMany({
+    where: { sport: 'NFL', externalId: { in: urgent.map((u) => u.externalId) } },
+    select: { externalId: true, name: true, team: true, position: true },
+  })
+  const metaById = new Map(meta.map((m) => [m.externalId, m]))
+  const expiresAt = new Date(now.getTime() + LIVE_STATUS_TTL_MS)
+
+  for (const u of urgent) {
+    const m = metaById.get(u.externalId)
+    // No identity, no claim — a row the port would bind by a wrong or empty
+    // name is worse than no row.
+    if (!m?.name?.trim()) continue
+    await prisma.sportsInjury.upsert({
+      where: {
+        sport_externalId_source: { sport: 'NFL', externalId: u.externalId, source: LIVE_STATUS_SOURCE },
+      },
+      create: {
+        sport: 'NFL',
+        externalId: u.externalId,
+        playerName: m.name,
+        playerId: u.externalId,
+        team: m.team,
+        position: m.position,
+        status: u.status,
+        source: LIVE_STATUS_SOURCE,
+        fetchedAt: now,
+        expiresAt,
+      },
+      update: {
+        playerName: m.name,
+        team: m.team,
+        position: m.position,
+        status: u.status,
+        fetchedAt: now,
+        expiresAt,
+      },
+    })
+  }
+}
 
 interface SweepUserResult {
   userId: string
@@ -55,6 +154,20 @@ async function handle(req: NextRequest) {
   )
 
   try {
+    // Game-window fold FIRST, so this very sweep evaluates against the fresh
+    // statuses. Error-swallowed and time-boxed: Sleeper being slow or down must
+    // never stop the sweep itself (the race leaves a late fold to finish in the
+    // background; the sweep proceeds on whatever the port already has).
+    await Promise.race([
+      foldLiveSleeperStatusesForGameWindow(new Date()).catch((err) => {
+        console.warn(
+          '[cron/alert-sweep] live status fold skipped:',
+          err instanceof Error ? err.message : String(err),
+        )
+      }),
+      new Promise<void>((resolve) => setTimeout(resolve, LIVE_FOLD_TIMEOUT_MS)),
+    ])
+
     // Only users we can actually reach. A subscription row is the proof of reachability —
     // permission granted, endpoint stored, and not yet expired.
     const subscribers = singleUser
@@ -96,15 +209,38 @@ async function handle(req: NextRequest) {
           results.push(result)
           continue
         }
+
+        // Send only the most urgent alert per sweep. A burst of six notifications for six
+        // leagues is how someone turns notifications off permanently.
+        const top = [...alerts].sort((a, b) => b.urgencySignal - a.urgencySignal)[0]!
+
+        // In-app row first, so the bell and the notifications centre carry the alert even
+        // when push is unconfigured or the subscription has gone stale. Every transport is
+        // skipped — the targeted push below stays the only push, and email/SMS would be new
+        // noise this sweep never promised. The UTC-day bucket in the dedupe prefix keeps a
+        // 15-minute cadence from writing 96 rows for the same injury.
+        await dispatchNotification({
+          userIds: [sub.userId],
+          category: 'injury_alerts',
+          productType: 'app',
+          type: 'chimmy_alert',
+          title: top.title,
+          body: top.message,
+          actionHref: top.leagueId ? `/league/${top.leagueId}` : '/my-players',
+          actionLabel: 'Set lineup',
+          leagueId: top.leagueId ?? null,
+          severity: top.urgencySignal >= 78 ? 'high' : 'medium',
+          meta: { chimmyAlert: true, class: top.class, alertType: top.type, ...(top.metadata ?? {}) },
+          dedupePrefix: `injured-starter:${top.leagueId ?? 'all'}:${new Date().toISOString().slice(0, 10)}`,
+          skipChannels: { email: true, sms: true, push: true },
+        })
+
         if (!pushConfigured) {
           result.errors.push('push not configured')
           results.push(result)
           continue
         }
 
-        // Send only the most urgent alert per sweep. A burst of six notifications for six
-        // leagues is how someone turns notifications off permanently.
-        const top = [...alerts].sort((a, b) => b.urgencySignal - a.urgencySignal)[0]!
         const sent = await sendPushToUser(sub.userId, {
           title: top.title,
           body: top.message,
