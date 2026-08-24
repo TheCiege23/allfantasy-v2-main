@@ -339,7 +339,9 @@ export function buildChimmySourceReferences(args: {
   ]
 
   if (args.intent === 'draft') {
-    refs.push({ label: 'Draft Room', href: `/league/${args.leagueId}/draft-room` })
+    // The draft room lives at /draft, not /draft-room — the old href 404'd and
+    // was also injected into the model prompt as a "source".
+    refs.push({ label: 'Draft Room', href: `/league/${args.leagueId}/draft` })
   }
   if (args.intent === 'waiver') {
     refs.push({ label: 'Waivers', href: `/league/${args.leagueId}?tab=waivers` })

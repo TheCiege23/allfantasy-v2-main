@@ -2467,9 +2467,9 @@ function computeTradeHubShortcuts(args: {
       ldiScore: score,
       leverageScore,
       ctas: [
-        { id: 'generate_offers', label: 'Generate offers', href: `/legacy/trade-hub?leagueId=${leagueId}&season=${seasonYear}&rosterId=${t.rosterId}&pos=${encodeURIComponent(pos)}&mode=generate` },
-        { id: 'find_overpayers', label: 'Find overpayers', href: `/legacy/trading-partners?leagueId=${leagueId}&season=${seasonYear}&pos=${encodeURIComponent(pos)}` },
-        { id: 'open_trade_hub', label: 'Open Trade Hub', href: `/legacy/trade-hub?leagueId=${leagueId}&season=${seasonYear}` },
+        { id: 'generate_offers', label: 'Generate offers', href: `/af-legacy?tab=trade&leagueId=${leagueId}&season=${seasonYear}&rosterId=${t.rosterId}&pos=${encodeURIComponent(pos)}&mode=generate` },
+        { id: 'find_overpayers', label: 'Find overpayers', href: `/af-legacy?tab=finder&leagueId=${leagueId}&season=${seasonYear}&pos=${encodeURIComponent(pos)}` },
+        { id: 'open_trade_hub', label: 'Open Trade Hub', href: `/af-legacy?tab=trade&leagueId=${leagueId}&season=${seasonYear}` },
       ],
       evidence: {
         exposureByPos: t.rosterExposure ?? {},
