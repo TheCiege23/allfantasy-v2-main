@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { isBotConfigured } from '@/lib/discord/bot'
+import { isBotConfigured, missingBotPermissions } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 
 export const dynamic = 'force-dynamic'
@@ -40,8 +40,13 @@ export async function GET(req: NextRequest) {
     include: { guild: true },
   })
 
+  // Servers that installed the bot under the old permission integer still hold a
+  // narrower grant. Only worth asking Discord once a channel is actually linked.
+  const missingPermissions = link ? await missingBotPermissions(link.guildId) : []
+
   return NextResponse.json({
     botConfigured: isBotConfigured(),
+    missingPermissions,
     discordConnected: Boolean(profile?.discordUserId),
     discordGuildId: profile?.discordGuildId ?? null,
     leagueName: league.name,
