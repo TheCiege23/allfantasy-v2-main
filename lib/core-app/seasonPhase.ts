@@ -52,3 +52,54 @@ const readFirstStatedKickoff = unstable_cache(
 export async function getFirstStatedKickoff(sport = 'NFL'): Promise<string | null> {
   return readFirstStatedKickoff(sport).catch(() => null)
 }
+
+/**
+ * How far back a kicked-off regular-season game still counts as "this season".
+ *
+ * Week 18 lands in the first days of January, so any August sits well clear of
+ * it — which is the whole point: without a window, "a regular-season game has
+ * kicked off" stays true forever after the first one ever played, and the
+ * preseason gate below would pass every August from the second season onward.
+ */
+const SEASON_LOOKBACK_MS = 150 * 24 * 60 * 60 * 1000
+
+const readRegularSeasonStarted = unstable_cache(
+  async (sport: string) => {
+    const now = new Date()
+    const game = await prisma.sportsGame
+      .findFirst({
+        where: {
+          sport,
+          seasonType: 'regular',
+          startTime: { lte: now, gte: new Date(now.getTime() - SEASON_LOOKBACK_MS) },
+        },
+        orderBy: { startTime: 'desc' },
+        select: { id: true },
+      })
+      .catch(() => null)
+    return game != null
+  },
+  ['season-phase-regular-underway'],
+  { revalidate: 300 },
+)
+
+/**
+ * Has a regular-season game actually kicked off this season?
+ *
+ * ⚠ THIS IS NOT `!getFirstStatedKickoff()`. That answers "when is the next
+ * stated regular kickoff", and there is one of those every week until Week 18
+ * — so a surface gated on it would suppress itself all season long. This asks
+ * the opposite question, of the past.
+ *
+ * Surfaces that only make sense while fantasy points are being scored use it
+ * to stay silent through the preseason: an NFL preseason game is real football
+ * and produces real plays, but nobody's lineup scores it, so a live-looking
+ * band over one is exactly the "players with no meaning" failure the /core
+ * home was rebuilt to avoid.
+ *
+ * Fails CLOSED — an unreadable table returns false and the caller stays quiet,
+ * because a silent band costs nothing and a wrong one costs trust.
+ */
+export async function hasRegularSeasonStarted(sport = 'NFL'): Promise<boolean> {
+  return readRegularSeasonStarted(sport).catch(() => false)
+}

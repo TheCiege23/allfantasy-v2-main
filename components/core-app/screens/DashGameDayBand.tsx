@@ -13,13 +13,26 @@ import type { TodayStripData } from '@/lib/core-app/todayStrip'
  * in for six hours had nothing that moved. The two loaders for it were already
  * built, already honest, and mounted only on the unused dashboard-v2 segment.
  *
- * ⚠ IT RENDERS ONLY INSIDE A GAME WINDOW, AND THAT IS THE WHOLE DESIGN. A
- * live-looking band on a Tuesday, or during a preseason game nobody's lineup
- * scores, is the "players with no meaning" problem again. The gate is evidence
- * that football is happening to THIS account: a play detected in the last few
- * hours (the poller only fills that feed while games are live), or a today's
- * record, which exists only when live matchups are actually being scored.
- * Neither → the band does not exist. Most of the week that is the right answer.
+ * ⚠ IT RENDERS ONLY INSIDE A REGULAR-SEASON GAME WINDOW, AND THAT IS THE
+ * WHOLE DESIGN. A live-looking band on a Tuesday, or during a preseason game
+ * nobody's lineup scores, is the "players with no meaning" problem again.
+ *
+ * Two gates, and the first one was missing when this shipped: the regular
+ * season must actually have kicked off (`hasRegularSeasonStarted`), because
+ * preseason football produces perfectly real plays that score nobody's lineup
+ * — the band claimed this rule in prose and did not enforce it. Then there
+ * must be evidence football is happening to THIS account: a play detected in
+ * the last few hours (the poller only fills that feed while games are live),
+ * or a today's record, which exists only when live matchups are being scored.
+ * Any gate unmet → the band does not exist. Most of the week that is right.
+ *
+ * ⚠ THE FEED IS LEAGUE-WIDE, NOT YOUR PLAYERS, AND THE CARD SAYS SO. It is
+ * the newest scoring plays in the NFL, unfiltered by roster — six strangers'
+ * touchdowns under a header carrying your record would read as your players
+ * doing this. Naming it costs one line and is the difference between a scores
+ * ticker and an implied claim. (Marking which rows ARE yours needs a join
+ * from the provider's player id into the Sleeper id space the rosters use;
+ * that identity cross is real work, not a label, so it is not faked here.)
  *
  * ⚠ NO FANTASY POINTS ON A PLAY, EVER. The same catch is worth different points
  * in each league the player is rostered in, so a single figure here would be
@@ -55,11 +68,16 @@ export function DashGameDayBand({
   strip,
   plays,
   now,
+  regularSeasonUnderway,
 }: {
   strip: TodayStripData | null
   plays: PlayFeedItem[]
   now: Date
+  /** False through the whole preseason — see the header's first gate. */
+  regularSeasonUnderway: boolean
 }) {
+  if (!regularSeasonUnderway) return null
+
   const cutoff = now.getTime() - LIVE_WINDOW_MS
   const fresh = plays.filter((p) => {
     const t = new Date(p.detectedAt).getTime()
@@ -71,10 +89,12 @@ export function DashGameDayBand({
 
   const visible = fresh.slice(0, PLAY_CAP)
   /*
-   * What is still to come today — kickoffs and real waiver runs. This strip was
-   * one of the sections deliberately not carried into the /core cutover; inside
-   * a game window it is exactly the right context, so it lands here rather than
-   * as a permanent fixture.
+   * What is still to come today, from the strip's own next-24 rows. This
+   * section was one of the pieces deliberately not carried into the /core
+   * cutover; inside a game window it is exactly the right context, so it lands
+   * here rather than as a permanent fixture. It renders whatever kinds the
+   * loader emits — waiver rows were removed there because the timings were our
+   * own defaults rather than ingested, so today that is kickoffs.
    */
   const upcoming = (strip?.next24 ?? []).slice(0, NEXT_CAP)
 
@@ -101,6 +121,10 @@ export function DashGameDayBand({
           <span className="af-gd-recmeta">no matchup of yours is scored yet</span>
         )}
       </div>
+
+      {visible.length > 0 ? (
+        <p className="af-gd-scope">Scoring plays across the NFL — not filtered to your rosters</p>
+      ) : null}
 
       {visible.length > 0 ? (
         <ul className="af-gd-plays">

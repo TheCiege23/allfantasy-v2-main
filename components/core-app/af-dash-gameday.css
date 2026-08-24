@@ -176,3 +176,12 @@
     display: none;
   }
 }
+
+/* The feed is every NFL scoring play, not the user's players. Said quietly and
+   permanently rather than left to be inferred from a header that carries their
+   own record two inches above. */
+.af-gd-scope {
+  margin: 0 0 8px;
+  font-size: 10.5px;
+  color: var(--muted);
+}

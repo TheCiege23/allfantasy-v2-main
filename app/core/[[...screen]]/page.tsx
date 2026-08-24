@@ -62,6 +62,7 @@ import { getRankingsData, getCompareData, type CompareResult } from '@/lib/core-
 import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
+import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
 import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
@@ -608,6 +609,7 @@ export default async function AfCorePage({
     homeSchedule,
     homeStrip,
     homePlays,
+    homeRegularSeason,
   ] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
@@ -649,8 +651,16 @@ export default async function AfCorePage({
           now,
         ).catch(() => null),
         getPlayFeed(12).catch(() => []),
+        /*
+         * Has the regular season actually kicked off? The game-day band claimed
+         * in prose that it must not render over preseason football and then did
+         * not enforce it — a live-looking band over a Saturday exhibition
+         * nobody's lineup scores. Cached and user-independent, so it costs
+         * nothing per viewer.
+         */
+        hasRegularSeasonStarted('NFL').catch(() => false),
       ])
-    : [null, null, null, null, null, null, null, []]
+    : [null, null, null, null, null, null, null, [], false]
 
   /*
    * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
@@ -1254,7 +1264,12 @@ export default async function AfCorePage({
               matchup of the user's), so outside one this is not a quiet band,
               it is no band at all.
             */}
-            <DashGameDayBand strip={homeStrip} plays={homePlays} now={now} />
+            <DashGameDayBand
+              strip={homeStrip}
+              plays={homePlays}
+              now={now}
+              regularSeasonUnderway={homeRegularSeason}
+            />
             <DashDraftsBand data={homeDrafts} now={now} />
             {/*
               34a's four unique sections (first-lock band, honesty notice,
