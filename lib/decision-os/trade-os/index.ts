@@ -67,4 +67,24 @@ export function createTradeOs(deps: Parameters<typeof createOsFeed>[1] = {}): Os
   return createOsFeed('trade', deps)
 }
 
+/**
+ * Shaped for `TradeShadowDeps.loadWorldFacts`, so the feed can be adopted without touching the
+ * decision path.
+ *
+ * ⚠ READS THROUGH THE **ROSTER** SOURCE, NOT SETTINGS, for the same reason Waiver OS reads
+ * through its user entry: both sources share one `derive` and return the same whole
+ * `TradeWorldFacts`, so the source chosen decides how stale the WHOLE object may be. Settings
+ * lives 2h; rosters lives 3min because a roster changes the moment either side moves a player,
+ * and evaluating a trade against a stale roster grades a deal that cannot be made.
+ *
+ * The 2h settings entry is a `refresh()` target for a scheduler that does not exist yet.
+ */
+export function createTradeOsLoaders(deps: Parameters<typeof createOsFeed>[1] = {}) {
+  const feed = createTradeOs(deps)
+  return {
+    loadWorldFacts: (input: TradeOsArgs) => feed.get(tradeRosterSource, input),
+    drainOutcomes: () => feed.drainOutcomes(),
+  }
+}
+
 export const tradeOsSources = [tradeSettingsSource, tradeRosterSource] as const

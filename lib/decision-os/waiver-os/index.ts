@@ -64,4 +64,29 @@ export function createWaiverOs(deps: Parameters<typeof createOsFeed>[1] = {}): O
   return createOsFeed('waiver', deps)
 }
 
+/**
+ * Shaped for `WaiverShadowDeps.loadWorldFacts`, so the feed can be adopted without touching
+ * the decision path.
+ *
+ * ⚠ READS THROUGH THE **USER** SOURCE, NOT THE LEAGUE ONE, AND THE CHOICE IS THE CARE POINT.
+ * Both sources share one `derive` and return the same whole `WaiverWorldFacts`, so whichever
+ * one the read goes through decides how stale the WHOLE object may be. The league entry lives
+ * 6h; the user entry lives 5min because FAAB and priority change on every claim.
+ *
+ * Reading through the league entry would serve a six-hour-old FAAB balance — exactly what this
+ * module warns about: it would let the system tell someone they can afford a bid they cannot.
+ * The header names the user entry as "the entry most likely to be derived live"; this is it.
+ *
+ * The 6h league entry is not dead — it is a `refresh()` target for a scheduler that does not
+ * exist yet (see `OsFeed.refresh`: "the gathering half; it needs a scheduler").
+ */
+export function createWaiverOsLoaders(deps: Parameters<typeof createOsFeed>[1] = {}) {
+  const feed = createWaiverOs(deps)
+  return {
+    loadWorldFacts: (userId: string, leagueId: string) =>
+      feed.get(waiverResourceSource, { userId, leagueId }),
+    drainOutcomes: () => feed.drainOutcomes(),
+  }
+}
+
 export const waiverOsSources = [waiverSettingsSource, waiverResourceSource] as const
