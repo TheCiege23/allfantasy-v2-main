@@ -211,3 +211,68 @@ export async function fetchChannelMessages(
   }
   return (await res.json()) as DiscordApiMessage[]
 }
+
+/**
+ * The permissions our install link asks for. A server that added the bot before
+ * DISCORD_BOT_PERMISSIONS was corrected holds only SEND_MESSAGES + MANAGE_WEBHOOKS,
+ * and Discord never upgrades a grant retroactively — that server has to re-run the
+ * install link before channel creation or message polling can work there.
+ */
+export const REQUIRED_BOT_PERMISSIONS: ReadonlyArray<{ label: string; bit: bigint }> = [
+  { label: 'View channels', bit: 1n << 10n },
+  { label: 'Send messages', bit: 1n << 11n },
+  { label: 'Embed links', bit: 1n << 14n },
+  { label: 'Attach files', bit: 1n << 15n },
+  { label: 'Read message history', bit: 1n << 16n },
+  { label: 'Manage channels', bit: 1n << 4n },
+  { label: 'Manage webhooks', bit: 1n << 29n },
+]
+
+const ADMINISTRATOR_BIT = 1n << 3n
+
+type DiscordRole = { id: string; permissions: string }
+
+/**
+ * Guild-level permissions the bot actually holds: the OR of every role it has,
+ * including @everyone (whose role id is the guild id). Channel overwrites are not
+ * applied — this answers "what did the install grant", not "can it post in this
+ * exact channel". Returns null when Discord cannot be reached or the bot is gone.
+ */
+export async function getGuildBotPermissions(guildId: string): Promise<bigint | null> {
+  if (!isBotConfigured()) return null
+  const botId = await getBotUserId()
+  if (!botId) return null
+
+  const [rolesRes, memberRes] = await Promise.all([
+    fetch(`${DISCORD_BASE}/guilds/${guildId}/roles`, { headers: botHeaders() }),
+    fetch(`${DISCORD_BASE}/guilds/${guildId}/members/${botId}`, { headers: botHeaders() }),
+  ])
+  if (!rolesRes.ok || !memberRes.ok) return null
+
+  const roles = (await rolesRes.json()) as DiscordRole[]
+  const member = (await memberRes.json()) as { roles?: string[] }
+  const held = new Set([guildId, ...(member.roles ?? [])])
+
+  let bits = 0n
+  for (const role of Array.isArray(roles) ? roles : []) {
+    if (!held.has(role.id)) continue
+    try {
+      bits |= BigInt(role.permissions)
+    } catch {
+      // Malformed bitfield from the API — ignore this role rather than fail the check.
+    }
+  }
+  return bits
+}
+
+/**
+ * Labels of the required permissions a guild's install is missing. An empty array
+ * means the grant is current; null means we could not determine it, which the UI
+ * must treat as "unknown" rather than "fine".
+ */
+export async function missingBotPermissions(guildId: string): Promise<string[] | null> {
+  const bits = await getGuildBotPermissions(guildId)
+  if (bits === null) return null
+  if ((bits & ADMINISTRATOR_BIT) === ADMINISTRATOR_BIT) return []
+  return REQUIRED_BOT_PERMISSIONS.filter((p) => (bits & p.bit) !== p.bit).map((p) => p.label)
+}
