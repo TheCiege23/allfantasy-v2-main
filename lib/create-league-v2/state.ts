@@ -93,6 +93,9 @@ export interface DynastySetupState {
   rookieDraftType: 'linear' | 'snake'
   rookieDraftOrderMethod: DynastyRookieOrderMethod
   futurePickTradeYears: number
+  /** Option B slice: trailing startup-draft rounds become devy-only (NFL dynasty only). */
+  devyRoundsEnabled: boolean
+  devyRoundCount: number
   waiverType: 'faab' | 'rolling' | 'reverse_standings'
   faabBudget: number
   visibility: DynastyVisibility
@@ -217,6 +220,8 @@ export function getDefaultDynastySetup(sport: SupportedSport, draftType: WizardD
     rookieDraftType: 'linear',
     rookieDraftOrderMethod: 'max_pf',
     futurePickTradeYears: 3,
+    devyRoundsEnabled: false,
+    devyRoundCount: 2,
     waiverType: 'faab',
     faabBudget: 100,
     visibility: 'private',

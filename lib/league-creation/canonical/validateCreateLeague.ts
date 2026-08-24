@@ -89,6 +89,11 @@ function issuesFromZod(err: z.ZodError): ValidationIssue[] {
   }))
 }
 
+/** Stable code for the Option B launch gate on college-format (devy/c2c) creation. */
+export const COLLEGE_FORMATS_NOT_OPEN_CODE = 'COLLEGE_FORMATS_NOT_OPEN'
+export const COLLEGE_FORMATS_NOT_OPEN_MESSAGE =
+  'College formats are not yet open — devy rounds are available on dynasty leagues'
+
 /**
  * Structural + business validation (format-engine allowlists, team counts).
  */
@@ -282,6 +287,25 @@ export function validateCreatePayload(input: unknown): ValidateCreateLeagueResul
         status: 400,
         errors: [{ path: 'conceptSetup.bestBall.playoffTeams', message: 'Playoff teams cannot exceed the number of teams in the league' }],
       }
+    }
+  }
+
+  // Option B (launch): college formats are draft-only — dynasty carries the
+  // devy rounds. The wizard already hides devy/c2c; this closes the bare-API
+  // path. Runs LAST so devy/c2c payloads still get specific draft-type and
+  // team-count diagnostics, and can never reach `ok: true`.
+  if (formatId === 'devy' || formatId === 'c2c') {
+    return {
+      ok: false,
+      error: COLLEGE_FORMATS_NOT_OPEN_MESSAGE,
+      status: 400,
+      errors: [
+        {
+          path: 'concept',
+          message: COLLEGE_FORMATS_NOT_OPEN_MESSAGE,
+          code: COLLEGE_FORMATS_NOT_OPEN_CODE,
+        },
+      ],
     }
   }
 

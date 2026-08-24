@@ -549,7 +549,7 @@ export function CommissionerSettingsModal({
           ) : activeTab === 'devy_drafts' ? (
             <DevyDraftsPanel config={devyConfig} />
           ) : activeTab === 'devy_import' ? (
-            <DevyImportPanel leagueId={leagueId} />
+            <DevyImportPanel />
           ) : activeTab === 'devy_ai' ? (
             <DevyAIPanel leagueId={leagueId} hasAfSub={hasSub} isCommissioner={canEdit} />
           ) : activeTab === 'c2c_format' ? (

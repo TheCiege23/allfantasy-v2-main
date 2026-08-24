@@ -468,6 +468,49 @@ export function DraftStep({
         </label>
       </div>
 
+      {leagueType === 'dynasty' && state.sport === 'NFL' && state.draftType !== 'auction' ? (
+        <div
+          className="rounded-xl border border-[color:var(--border-subtle)] bg-[color:var(--surface-card-soft)] p-4"
+          data-testid="g30-devy-rounds-panel"
+        >
+          <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm font-bold">
+            <input
+              type="checkbox"
+              checked={state.dynasty.devyRoundsEnabled === true}
+              onChange={(event) =>
+                onChange({ dynasty: { ...state.dynasty, devyRoundsEnabled: event.target.checked } })
+              }
+              data-testid="g30-devy-rounds-toggle"
+            />
+            <span>{t('createLeague.g30.devyRounds.enable')}</span>
+          </label>
+          <p className="mt-1 text-xs leading-5 text-[color:var(--text-secondary)]">
+            {t('createLeague.g30.devyRounds.body')}
+          </p>
+          {state.dynasty.devyRoundsEnabled === true ? (
+            <label className="mt-3 block max-w-[160px] space-y-2">
+              <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">
+                {t('createLeague.g30.devyRounds.count')}
+              </span>
+              <select
+                value={state.dynasty.devyRoundCount ?? 2}
+                onChange={(event) =>
+                  onChange({ dynasty: { ...state.dynasty, devyRoundCount: Number(event.target.value) } })
+                }
+                className={fieldClass()}
+                data-testid="g30-devy-rounds-count"
+              >
+                {[1, 2, 3, 4].map((count) => (
+                  <option key={count} value={count}>
+                    {count}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="grid gap-4 md:grid-cols-3">
         <label className="space-y-2">
           <span className="text-xs font-black uppercase tracking-wide text-[color:var(--text-tertiary)]">

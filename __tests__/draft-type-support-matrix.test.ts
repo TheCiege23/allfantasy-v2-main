@@ -78,8 +78,8 @@ describe('draft type support matrix', () => {
     expect(wire).toContain('team')
   })
 
-  it('validateCreatePayload accepts devy canonical ids that match the matrix', () => {
-    const ok = validateCreatePayload({
+  it('validateCreatePayload clears devy canonical ids that match the matrix (blocked only by the college creation gate)', () => {
+    const r = validateCreatePayload({
       concept: 'devy',
       sport: 'NFL',
       scoringPreset: 'fb_half_ppr',
@@ -87,7 +87,11 @@ describe('draft type support matrix', () => {
       draftType: 'devy_snake',
       leagueName: 'Matrix Test Devy',
     })
-    expect(ok.ok).toBe(true)
+    expect(r.ok).toBe(false)
+    if (!r.ok) {
+      expect(r.errors.some((e) => e.code === 'COLLEGE_FORMATS_NOT_OPEN')).toBe(true)
+      expect(r.errors.some((e) => e.path === 'draftType')).toBe(false)
+    }
   })
 
   it('blocks invalid concept + draft pairs consistently', () => {
