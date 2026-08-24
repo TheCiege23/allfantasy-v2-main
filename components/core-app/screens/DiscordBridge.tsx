@@ -347,6 +347,42 @@ export function DiscordBridge({ data }: DiscordBridgeProps) {
               </p>
             )}
 
+            {/*
+              The bot's server-side install grant, separate from the account
+              connection above. A server that added the bot before its
+              permission scope widened still holds the narrower grant — Discord
+              never upgrades one retroactively — and the bridge silently fails
+              in exactly the channels that need the missing permission. Only
+              shown once there is an install to check (`guildId` set); `null`
+              from a checked install means Discord could not be reached and is
+              rendered as unknown, never as "fine".
+            */}
+            {data.guildId && data.missingPermissions === null ? (
+              <p className="af-dc-perm af-dc-perm--unknown" role="status">
+                Could not verify the bot&apos;s permissions in {data.guildName ?? 'your server'} just
+                now. This does not mean anything is wrong — try again shortly.
+              </p>
+            ) : data.guildId && data.missingPermissions && data.missingPermissions.length > 0 ? (
+              <div className="af-dc-perm af-dc-perm--warn" role="alert">
+                <p className="af-dc-perm-head">
+                  The bot&apos;s install in {data.guildName ?? 'your server'} is missing permissions
+                </p>
+                <ul className="af-dc-perm-list">
+                  {data.missingPermissions.map((label) => (
+                    <li key={label}>{label}</li>
+                  ))}
+                </ul>
+                <p className="af-dc-perm-fix">
+                  Discord grants permissions at install time only — re-running the install link below
+                  fixes it without removing the bot first.
+                </p>
+              </div>
+            ) : data.guildId && data.missingPermissions && data.missingPermissions.length === 0 ? (
+              <p className="af-dc-perm af-dc-perm--ok">
+                The bot&apos;s permissions in {data.guildName ?? 'your server'} are current.
+              </p>
+            ) : null}
+
             <p className="af-dc-scope-h">What we ask for</p>
             <ul className="af-dc-scopes">
               {BRIDGE_SCOPES_REQUESTED.map((s) => (

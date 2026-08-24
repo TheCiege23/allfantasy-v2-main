@@ -388,6 +388,9 @@ export const PREVIEW_DISCORD_BRIDGE: DiscordBridgeData = {
   guildId: '000000000000000000',
   installUrl: null,
   surfacesPending: true,
+  // A missing permission in the preview, so the warning state is visible
+  // without needing a real Discord install to demonstrate it.
+  missingPermissions: ['Manage webhooks'],
   mappings: BRIDGE_SURFACES.map((surface) =>
     surface.id === 'league_chat'
       ? {

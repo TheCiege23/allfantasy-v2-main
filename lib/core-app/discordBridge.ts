@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma'
-import { isBotConfigured } from '@/lib/discord/bot'
+import { isBotConfigured, missingBotPermissions } from '@/lib/discord/bot'
 import { channelLink } from '@/lib/discord/deepLinks'
 import { DISCORD_BOT_PERMISSIONS, DISCORD_CLIENT_ID } from '@/lib/discord/constants'
 
@@ -142,6 +142,16 @@ export type DiscordBridgeData = {
    * plain sentence rather than hiding three dead controls.
    */
   surfacesPending: boolean
+  /**
+   * Labels of REQUIRED_BOT_PERMISSIONS this guild's install is missing.
+   * null means one of: no guild mapped yet, or Discord could not be reached —
+   * the screen renders that as "unknown", never as "the install is fine".
+   * Empty array means the grant is current.
+   *
+   * Only checked once a channel is actually linked (a Discord round trip per
+   * page load otherwise buys nothing — see the call site below).
+   */
+  missingPermissions: string[] | null
 }
 
 /** The three scopes the connect flow asks for, and the ones it never does. */
@@ -248,6 +258,14 @@ export async function getDiscordBridge(
 
   const guildId = link?.guildId ?? profile?.discordGuildId ?? null
 
+  /*
+   * Servers that installed the bot before its permission scope was widened
+   * still hold the narrower grant — Discord never upgrades one retroactively.
+   * Only worth asking Discord once a channel is actually linked; an unmapped
+   * league has no install to check yet.
+   */
+  const missingPermissions = link ? await missingBotPermissions(link.guildId) : null
+
   return {
     leagueId: league.id,
     leagueName: league.name ?? 'League',
@@ -261,5 +279,6 @@ export async function getDiscordBridge(
       ? `https://discord.com/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&permissions=${DISCORD_BOT_PERMISSIONS}&scope=bot%20applications.commands`
       : null,
     surfacesPending: true,
+    missingPermissions,
   }
 }

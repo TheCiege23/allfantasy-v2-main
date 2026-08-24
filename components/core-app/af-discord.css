@@ -354,6 +354,48 @@
   color: var(--text2);
 }
 
+/* ── Bot install permission status ───────────────────────────────────────── */
+
+.af-dc-perm {
+  margin: 12px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.af-dc-perm--unknown { color: var(--faint); }
+
+.af-dc-perm--ok { color: var(--good); }
+
+.af-dc-perm--warn {
+  padding: 10px 11px;
+  border: 1px solid var(--warn-soft);
+  border-left: 3px solid var(--warn);
+  border-radius: 0 8px 8px 0;
+  background: var(--warn-soft);
+  color: var(--text2);
+}
+
+.af-dc-perm-head {
+  margin: 0;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.af-dc-perm-list {
+  margin: 6px 0;
+  padding-left: 16px;
+}
+
+.af-dc-perm-list li {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+}
+
+.af-dc-perm-fix {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+
 .af-dc-scope-h {
   margin: 14px 0 6px;
   font-size: 10px;
