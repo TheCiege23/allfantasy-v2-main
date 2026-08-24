@@ -84,7 +84,11 @@ export async function POST(req: NextRequest) {
    * pool and FantasyStatLine (planned work). ai_prefs stays: it only saves
    * settings.
    */
-  if (action !== 'ai_prefs') {
+  // Typed boolean (not literal true) so the early return cannot narrow
+  // `action` to 'ai_prefs' — that narrowing made all 17 switch cases below
+  // impossible comparisons for the TS ratchet. Flip to false to re-enable.
+  const IDP_AI_OFFLINE: boolean = true
+  if (IDP_AI_OFFLINE && action !== 'ai_prefs') {
     return NextResponse.json(
       {
         error: 'IDP AI is temporarily offline while we connect it to live defensive stats.',

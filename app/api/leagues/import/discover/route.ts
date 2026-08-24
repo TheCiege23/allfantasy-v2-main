@@ -202,14 +202,13 @@ export async function POST(req: NextRequest) {
    * left alone (unique constraint) — discovery still works, the gate then
    * refuses with its own message.
    */
-  await prisma.userProfile
-    .upsert({
+  try {
+    const profile = await prisma.userProfile.upsert({
       where: { userId: auth.userId },
       update: {},
       create: { userId: auth.userId },
     })
-    .then(async (profile) => {
-      if (profile.sleeperUserId) return
+    if (!profile.sleeperUserId) {
       await prisma.userProfile.update({
         where: { userId: auth.userId },
         data: {
@@ -218,11 +217,13 @@ export async function POST(req: NextRequest) {
           sleeperLinkedAt: new Date(),
         },
       })
-    })
-    .catch(() => {
-      /* unique-violation (handle owned by another account) or transient DB
-         failure — discovery itself must not break on the stamp. */
-    })
+    }
+  } catch {
+    /* unique-violation (handle owned by another account), a partial prisma in
+       tests, or a transient DB failure — discovery itself must not break on
+       the stamp. try/catch, not .catch(): a mocked client without the
+       userProfile delegate throws SYNCHRONOUSLY, before any promise exists. */
+  }
 
   try {
     const leagues = await getUserLeagues(sleeperUser.user.user_id, sport, season)
