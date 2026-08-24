@@ -33,7 +33,7 @@ export default function DonatePage() {
     }
   }
 
-  const title = mode === "lab" ? "Get Bracket Lab Pass" : "Support FanCred Brackets"
+  const title = mode === "lab" ? "Get Bracket Lab Pass" : "Support AllFantasy"
   const subtitle =
     mode === "lab"
       ? "Unlock simulation + strategy exploration tools for this tournament."
@@ -42,8 +42,8 @@ export default function DonatePage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-950 to-slate-900 text-white">
       <div className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6">
-        <a href="/ai-lab" className="text-sm text-white/70 hover:text-white">
-          &larr; Back to Bracket Lab
+        <a href="/" className="text-sm text-white/70 hover:text-white">
+          &larr; Back to AllFantasy
         </a>
 
         <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-8">
