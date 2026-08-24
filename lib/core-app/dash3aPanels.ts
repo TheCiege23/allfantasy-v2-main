@@ -285,7 +285,12 @@ export async function getRivalRecords(
     })
     .catch(() => [])
 
-  const rowsByPlatformLeague = new Map<string, typeof allRows>()
+  /*
+   * The element type, not `typeof allRows`: the `.catch(() => [])` above makes
+   * the awaited type a union with `never[]`, and a Map valued at that union
+   * types `push` as taking `never`.
+   */
+  const rowsByPlatformLeague = new Map<string, (typeof allRows)[number][]>()
   for (const r of allRows) {
     const list = rowsByPlatformLeague.get(r.leagueId)
     if (list) list.push(r)
