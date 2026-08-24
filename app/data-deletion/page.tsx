@@ -1,21 +1,42 @@
 import Link from "next/link"
-import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
+import LegalPageRenderer, {
+  LEGAL_LAST_UPDATED,
+  LegalBox,
+  LegalCallout,
+} from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
-import type { Metadata } from 'next'
-import { buildSeoMeta } from '@/lib/seo'
+import type { Metadata } from "next"
+import { buildSeoMeta } from "@/lib/seo"
 
 interface DataDeletionPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-// Routed through buildSeoMeta for a canonical and page-specific OpenGraph;
-// see app/terms/page.tsx for why a bare metadata object was not enough.
+/*
+ * ⚠ SAME AS /privacy — #613 replaced buildSeoMeta with a bare object, which
+ * drops the canonical and the page-specific OpenGraph that 5430ed57 added.
+ * #613's relayout is kept in full; only the metadata call is restored.
+ */
 export const metadata: Metadata = buildSeoMeta({
   title: "Data Deletion | AllFantasy",
-  description: "How to request deletion of your AllFantasy account data and connected service information.",
-  canonicalPath: '/data-deletion',
+  description:
+    "How to request deletion of your AllFantasy account data and connected service information.",
+  canonicalPath: "/data-deletion",
 })
 
+/**
+ * Handoff 17b's data-deletion deliverable, which the mock draws as a sidebar
+ * beside the Terms. It renders as its own route here because /data-deletion is
+ * already linked from the privacy policy, the legal footer on all eight legal
+ * pages, and app-store listings — turning it into a panel inside /terms would
+ * break every one of those inbound links.
+ *
+ * ⚠ THE PROCESS IS EMAIL-BASED AND HUMAN-OPERATED, WHICH THIS COPY ASSUMES. There
+ * is no self-serve deletion endpoint; a request goes to a person. 17b's build note
+ * asks that this be flagged to product if a self-serve flow is ever planned,
+ * because the wording here ("we may ask you to verify", "within 30 days") is
+ * written for a queue with a human in it and would be wrong for a button.
+ */
 export default async function DataDeletionPage({ searchParams }: DataDeletionPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}
   const fromSignup = params.from === "signup"
@@ -24,136 +45,119 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
 
   return (
     <LegalPageRenderer
-      title="Data Deletion"
+      title="Delete my data"
       description={`Last updated: ${LEGAL_LAST_UPDATED}`}
       backHref={fromSignup ? signupHref : "/"}
-      backLabel={fromSignup ? "Back to Sign Up" : "Back to Home"}
+      backLabel={fromSignup ? "Back to sign up" : "Back to home"}
     >
-      {/*
-        ⚠ DO NOT ADD "delete it yourself in Settings" HERE WITHOUT RE-CHECKING THE
-        WIRING. It is the obvious improvement, the endpoint to back it exists,
-        and it would be FALSE today. Written down because the first draft of this
-        very change made that mistake:
-
-          - POST /api/user/delete is real, gated, and does the erasure.
-          - The only component that calls it is app/settings/SettingsFullPage.tsx.
-          - SettingsFullPage is rendered at /league/[leagueId]/settings ONLY, and
-            that route returns "You don't have permission to view this page" to
-            anyone who is not the league commissioner.
-          - /settings renders SettingsApp -> AccountSettingsSection, whose
-            "Delete account" button makes you type DELETE and then hands you a
-            mailto: link. It deletes nothing.
-
-        So the working right-to-erasure path is reachable only from a
-        commissioner-gated league screen, and the account screen where every user
-        would look offers an email draft. Email is genuinely the only route a
-        normal user has, which is why this page describes it and nothing else.
-
-        Two mismatches left in place because they are product decisions, not copy:
-        that gap itself, and AccountSettingsSection emailing support@ while this
-        page says privacy@ — the same request going to two addresses.
-      */}
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">1. How to Request Deletion</h2>
-        <p>
-          To request deletion of your AllFantasy account data, email{" "}
-          <a href="mailto:privacy@allfantasy.ai" className="text-cyan-400 hover:text-cyan-300">
-            privacy@allfantasy.ai
-          </a>{" "}
-          with the subject line <strong>Data Deletion Request</strong>.
-        </p>
-        <p className="mt-3">
-          Include the email address, username, and any connected fantasy platform identifiers tied to your account so we can locate
-          your records quickly and reduce delays.
-        </p>
-      </section>
-
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">2. Identity Verification</h2>
-        <p>
-          Before deleting account data, we may ask you to verify account ownership to protect your information from unauthorized
-          requests. If we cannot verify ownership, we may ask for additional details or decline the request.
-        </p>
-      </section>
-
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">3. What We Delete</h2>
-        <ul className="list-disc list-inside space-y-2 ml-4">
-          <li>Account profile information we use to operate AllFantasy — your email address, username, display name and avatar are overwritten with anonymized values that cannot be reversed</li>
-          <li>Connected account tokens and provider linkage data stored by AllFantasy</li>
-          <li>Your password, and any outstanding email-verification or password-reset tokens, so the account can no longer be signed into</li>
-          <li>Saved preferences, AI context, and other account-level personalization where applicable</li>
-          <li>Associated support or feedback records that are not required for security, legal, or billing retention</li>
-        </ul>
+      <section id="overview">
         {/*
-          Section 4 previously said only that we "may retain limited information"
-          for fraud, legal and billing reasons. True but not the whole picture:
-          app/api/user/delete/route.ts anonymizes the user record rather than
-          hard-deleting it, deliberately, so leagues and rosters other people are
-          still in do not lose their referential integrity. A page that describes
-          that as deletion without saying a row survives is over-promising, and
-          this is the one page where the difference is the entire subject.
+          ⚠ "DELETE YOUR PROFILE" IS NOT WHAT THE CODE DOES, and 07fe80d0 corrected
+          this once already before #613's relayout reintroduced it.
+          app/api/user/delete/route.ts revokes authentication and then overwrites
+          the identifying fields with unrecoverable anonymized values — its own
+          header says so: "rosters, and analytics keep an anonymized user row".
+          The row survives on purpose, for referential integrity. Saying "we
+          delete your profile" on the page a user reads to understand their
+          erasure right is the one sentence here that must match the code.
         */}
-        <p className="mt-3">
-          Deletion works by erasing the personal data on your account rather than removing the account row
-          itself. An anonymized record remains so that leagues, rosters, and historical results belonging to
-          other managers stay intact — it is no longer identifiable as you, and cannot be signed into.
-        </p>
-      </section>
-
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">4. What We May Retain</h2>
         <p>
-          We may retain limited information when required for fraud prevention, security logging, legal compliance, dispute
-          resolution, financial recordkeeping, or enforcement of our policies. When full deletion is not possible, we will limit
-          further use and retain only what is reasonably necessary.
+          We remove your connected-account tokens and provider links, saved preferences and
+          personalization, and support records we aren&apos;t required to keep. Your account record
+          itself is anonymized rather than dropped — the identifying fields are overwritten with
+          values that cannot be reversed, so leagues, rosters and historical results stay intact
+          without remaining attributable to you.
         </p>
-      </section>
-
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">5. Third-Party Services</h2>
+        {/*
+          ⚠ 17b's COPY CONTRACT — DELETION DOES NOT CASCADE, AND THE USER HAS TO BE
+          TOLD SO BEFORE THEY ASSUME IT DOES. Someone who deletes here and believes
+          their Sleeper or ESPN data went with it has been misled by omission.
+        */}
         <p>
-          If you connected services such as Sleeper, Yahoo, ESPN, MFL, Fleaflicker, or Fantrax, deleting your AllFantasy data does
-          not delete data held by those platforms. You must manage deletion requests with each provider under their own policies.
+          Deleting here does not delete anything held by Sleeper, ESPN, Yahoo, MFL, Fleaflicker or
+          Fantrax — manage those with each provider directly.
+        </p>
+
+        <ol className="af-legal-steps">
+          <li className="af-legal-step">
+            <span>
+              Email <a href="mailto:privacy@allfantasy.ai">privacy@allfantasy.ai</a> with the subject{" "}
+              <strong>Data Deletion Request</strong>. Include your email, username and any connected
+              platform IDs so we can find your records.
+            </span>
+          </li>
+          <li className="af-legal-step">
+            <span>
+              We may ask you to verify you own the account. If ownership can&apos;t be verified
+              we&apos;ll ask for more detail or decline the request.
+            </span>
+          </li>
+          <li className="af-legal-step">
+            <span>
+              Verified requests are completed — deleted or anonymized — within 30 days where
+              reasonably possible.
+            </span>
+          </li>
+        </ol>
+
+        <p style={{ marginTop: 22 }}>
+          <a href="mailto:privacy@allfantasy.ai?subject=Data%20Deletion%20Request" className="af-legal-cta">
+            Email privacy@allfantasy.ai
+          </a>
         </p>
       </section>
 
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">6. Timing</h2>
+      <LegalBox eyebrow="What we may keep">
+        <p style={{ margin: 0 }}>
+          Limited records for fraud prevention, security logging, legal compliance, dispute
+          resolution or financial recordkeeping. Where full deletion isn&apos;t possible we limit
+          further use and keep only what&apos;s necessary.
+        </p>
+      </LegalBox>
+
+      {/*
+        ⚠ SURFACE THIS BEFORE PROCESSING ANY DELETION TIED TO A LEAGUE — 17b names
+        it as a commissioner caveat. A commissioner who deletes their account
+        without handing over their leagues first strands every other manager in
+        them, and nobody else has the standing to remove the league afterwards.
+      */}
+      <LegalCallout tone="warn" mark="!">
+        If you commission leagues, archive them or hand them over first. Only the account that
+        created a league can remove it from AllFantasy.
+      </LegalCallout>
+
+      <section id="what-we-delete">
+        <h2>What we delete</h2>
+        <ul>
+          <li>Account profile information we use to operate AllFantasy</li>
+          <li>Connected account tokens and provider linkage data stored by AllFantasy</li>
+          <li>Saved preferences, assistant context and other account-level personalization</li>
+          <li>
+            Support or feedback records that are not required for security, legal or billing
+            retention
+          </li>
+        </ul>
+      </section>
+
+      <section id="related-policies">
+        <h2>Related policies</h2>
         <p>
-          We aim to review verified requests promptly and complete deletion or anonymization within 30 days when reasonably possible,
-          subject to technical and legal constraints.
+          For more about how we collect, use and retain information, read our{" "}
+          <Link href="/privacy">Privacy Policy</Link> and{" "}
+          <Link href="/terms">Terms of Service</Link>.
         </p>
       </section>
 
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">7. Related Policies</h2>
-        <p>
-          For more information about how we collect, use, and retain information, review our{" "}
-          <Link href="/privacy" className="text-cyan-400 hover:text-cyan-300">
-            Privacy Policy
-          </Link>{" "}
-          and{" "}
-          <Link href="/terms" className="text-cyan-400 hover:text-cyan-300">
-            Terms of Service
-          </Link>
-          .
-        </p>
-      </section>
-
-      <section>
-        <h2 className="text-xl sm:text-2xl font-bold text-white mb-3">8. Contact</h2>
-        <div className="mt-3 rounded-xl border border-white/10 bg-white/5 p-4">
-          <p className="font-semibold text-white">AllFantasy Privacy Requests</p>
-          {/* Plain text while section 1 linked the same address — the same split
-              the Terms and Privacy contact sections had. */}
-          <p className="text-white/70">
-            Email:{" "}
-            <a href="mailto:privacy@allfantasy.ai" className="text-cyan-400 hover:text-cyan-300">
-              privacy@allfantasy.ai
-            </a>
+      <section id="contact">
+        <h2>Contact</h2>
+        <LegalBox>
+          <p style={{ margin: 0 }}>
+            <strong>AllFantasy Privacy Requests</strong>
           </p>
-        </div>
+          <p style={{ margin: 0 }}>
+            Email: <a href="mailto:privacy@allfantasy.ai">privacy@allfantasy.ai</a>
+          </p>
+        </LegalBox>
       </section>
     </LegalPageRenderer>
   )

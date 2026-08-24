@@ -711,6 +711,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.legacy.subtitle":
     "Importa tu historial fantasy para AllFantasy Legacy. Deportes admitidos: {{sports}}.",
   "settings.legacy.title": "Importación Legacy",
+  "settings.legal.agreedAtSignup": "Aceptado al registrarse",
   "settings.legal.acceptanceState": "Estado de aceptación",
   "settings.legal.acceptedAt": "Aceptado el",
   "settings.legal.ageVerified": "Edad verificada",
@@ -718,6 +719,7 @@ export const translationsEsParity: Record<string, string> = {
   "settings.legal.linkCookies": "Cookies y seguimiento",
   "settings.legal.linkDataDeletion": "Eliminación de datos",
   "settings.legal.linkDisclaimer": "Descargo",
+  "settings.legal.linkNoGambling": "Política de no apuestas",
   "settings.legal.linkPrivacy": "Política de privacidad",
   "settings.legal.linkTerms": "Términos del servicio",
   "settings.legal.no": "No",
