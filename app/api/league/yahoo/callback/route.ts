@@ -3,7 +3,12 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { encrypt } from '@/lib/league-auth-crypto';
-import { readYahooOAuthState, YAHOO_STATE_COOKIE_NAMES } from '@/lib/yahoo/oauthConfig'
+import {
+  readYahooOAuthState,
+  sanitizeYahooReturnTo,
+  YAHOO_RETURN_TO_COOKIE,
+  YAHOO_STATE_COOKIE_NAMES,
+} from '@/lib/yahoo/oauthConfig'
 
 export async function GET(req: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
@@ -82,9 +87,19 @@ export async function GET(req: NextRequest) {
       },
     });
 
-    const response = NextResponse.redirect(new URL('/leagues?success=yahoo_connected', req.url));
+    /*
+     * Return where the user STARTED. A connect begun on /import used to land
+     * on /leagues regardless — the returnTo cookie existed and this callback
+     * ignored it. The sanitizer rejects anything that isn't a safe internal
+     * path, and /import remains the default for a cookie-less round trip.
+     */
+    const returnTo = sanitizeYahooReturnTo(req.cookies.get(YAHOO_RETURN_TO_COOKIE)?.value);
+    const dest = new URL(returnTo, req.url);
+    dest.searchParams.set('success', 'yahoo_connected');
+    const response = NextResponse.redirect(dest);
     // Clear both names -- either could have carried this round-trip.
     for (const name of YAHOO_STATE_COOKIE_NAMES) response.cookies.delete(name);
+    response.cookies.delete(YAHOO_RETURN_TO_COOKIE);
     return response;
   } catch (err: any) {
     console.error('[Yahoo Callback] Error:', err);

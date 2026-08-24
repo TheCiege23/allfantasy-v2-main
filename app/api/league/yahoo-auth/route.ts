@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import crypto from 'crypto';
-import { getYahooRedirectUri, YAHOO_AUTH_URL, YAHOO_FANTASY_SCOPE } from '@/lib/yahoo/oauthConfig';
+import {
+  getYahooRedirectUri,
+  getYahooStateCookieDomain,
+  sanitizeYahooReturnTo,
+  YAHOO_AUTH_URL,
+  YAHOO_FANTASY_SCOPE,
+  YAHOO_RETURN_TO_COOKIE,
+} from '@/lib/yahoo/oauthConfig';
 
 export async function GET(request: NextRequest) {
   const session = (await getServerSession(authOptions as any)) as { user?: { id?: string } } | null;
@@ -31,13 +38,27 @@ export async function GET(request: NextRequest) {
 
   const response = NextResponse.redirect(`${YAHOO_AUTH_URL}?${params.toString()}`);
 
-  response.cookies.set('yahoo_league_oauth_state', state, {
+  /*
+   * ⚠ DOMAIN-SCOPED, LIKE THE OTHER ENTRY POINT. A host-only cookie set on the
+   * apex dies when Yahoo returns the user to www (or vice versa) — the exact
+   * invalid_state failure already fixed on /api/auth/yahoo. And the returnTo
+   * cookie makes the callback land the user where they started (?returnTo=,
+   * sanitized to safe internal paths; /import by default).
+   */
+  const cookieBase = {
     httpOnly: true,
     secure: true,
-    sameSite: 'lax',
+    sameSite: 'lax' as const,
     maxAge: 600,
     path: '/',
-  });
+    domain: getYahooStateCookieDomain(request.headers.get('host')),
+  };
+  response.cookies.set('yahoo_league_oauth_state', state, cookieBase);
+  response.cookies.set(
+    YAHOO_RETURN_TO_COOKIE,
+    sanitizeYahooReturnTo(request.nextUrl.searchParams.get('returnTo')),
+    cookieBase,
+  );
 
   return response;
 }
