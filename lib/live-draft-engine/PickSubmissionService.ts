@@ -529,6 +529,38 @@ async function _submitPickCore(input: SubmitPickInput): Promise<SubmitPickResult
     // non-fatal: contract assignment failure should never block pick persistence
   }
 
+  // ── Devy/C2C: persist the drafted college player as an owned right ──
+  // Runs after the pick transaction commits; a failed write is logged loudly but
+  // never voids the committed pick. 'promoted_devy' consumes an existing right
+  // rather than creating one, so it is skipped.
+  if ((assetType === 'devy_pick' || assetType === 'c2c_college') && input.source !== 'promoted_devy') {
+    try {
+      const { recordDraftedDevyRights } = await import('@/lib/devy/rightsWriter')
+      const rights = await recordDraftedDevyRights({
+        leagueId: input.leagueId,
+        rosterId: effectiveRosterId,
+        playerName: input.playerName.trim(),
+        devyPlayerId: input.playerId ?? null,
+        assetType,
+      })
+      if (!rights.ok) {
+        logStructured('error', 'submit_pick', 'devy_rights_write_failed', {
+          leagueId: input.leagueId,
+          overall,
+          rosterId: effectiveRosterId,
+          reason: rights.reason ?? 'unknown',
+        })
+      }
+    } catch (e) {
+      logStructured('error', 'submit_pick', 'devy_rights_write_failed', {
+        leagueId: input.leagueId,
+        overall,
+        rosterId: effectiveRosterId,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
   void import('@/lib/draft-room/postDraftPickChatEvent')
     .then(({ postDraftPickChatEvent }) =>
       postDraftPickChatEvent({
