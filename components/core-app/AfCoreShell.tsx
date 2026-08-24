@@ -2,7 +2,8 @@
 
 import Link from 'next/link'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
-import CommsDock, { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/CommsDock'
+import CommsDock from '@/components/core-app/comms/CommsDock'
+import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { useMemo, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -90,6 +91,8 @@ export type AfCoreShellProps = {
     /** League-scoped screens dock the panel beside the content instead of over it. */
     dockable: boolean
     supportEmail: string | null
+    /** Unread chat count for the launcher badge. */
+    unread?: number
   } | null
   /** Unread count for the Notifications nav badge. Omitted when zero. */
   notificationCount?: number
@@ -423,6 +426,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
           chimmyTokenCost={comms.chimmyTokenCost}
           dockable={comms.dockable}
           supportEmail={comms.supportEmail}
+          unread={comms.unread ?? 0}
         />
       ) : null}
     </div>
