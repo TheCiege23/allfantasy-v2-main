@@ -1,0 +1,365 @@
+/* 28a — Bracket Challenge. Reads the .af-core token layer. */
+
+.af-bk { max-width: 1180px; }
+
+.af-bk-head { margin-bottom: 16px; }
+
+.af-bk-eyebrow { margin: 0 0 6px; color: var(--faint); }
+
+.af-bk-title { margin: 0; font-size: 26px; letter-spacing: -0.035em; }
+
+/* ── Sport switcher ───────────────────────────────────────────────────────── */
+
+.af-bk-sports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.af-bk-sport {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.af-bk-sport[aria-current='page'] {
+  border-color: transparent;
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.af-bk-sport[data-soon='true'] { opacity: 0.62; }
+
+.af-bk-soon {
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Round-value key ──────────────────────────────────────────────────────── */
+
+.af-bk-key {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.af-bk-key-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--line2);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.af-bk-key-item--bonus { border-top-color: var(--p-gold-fg); }
+.af-bk-key-item--total { border-top-color: var(--accent); }
+
+.af-bk-key-pts {
+  display: block;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-bk-key-label {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.af-bk-key-fmt {
+  display: block;
+  margin-top: 1px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-bk-pending {
+  margin: 0 0 14px;
+  padding: 11px 13px;
+  border: 1px solid var(--accent-line);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 10px 10px 0;
+  background: var(--accent-soft);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+/* ── The board ────────────────────────────────────────────────────────────── */
+
+.af-bk-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(210px, 260px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.af-bk-side { min-width: 0; }
+
+/* The right side mirrors: seeds fill outward from the centre. */
+.af-bk-side[data-mirrored='true'] { direction: rtl; }
+.af-bk-side[data-mirrored='true'] * { direction: ltr; }
+
+.af-bk-side-label {
+  margin: 0 0 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-bk-col { margin-bottom: 14px; }
+
+.af-bk-col-label {
+  display: block;
+  margin-bottom: 6px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-bk-match {
+  margin-bottom: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.af-bk-match--bye { border-style: dashed; }
+
+.af-bk-slot {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 9px;
+  background: var(--surface2);
+}
+
+.af-bk-slot + .af-bk-slot { border-top: 1px solid var(--line); }
+
+.af-bk-slot[data-bye='true'] { background: var(--p-gold-soft); }
+
+.af-bk-seed {
+  flex: none;
+  width: 17px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--faint);
+}
+
+.af-bk-logo { flex: none; width: 18px; height: 18px; border-radius: 3px; }
+
+.af-bk-logo--none {
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+
+.af-bk-team {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* An open slot is a question mark, never a guessed team. */
+.af-bk-open {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line2);
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--faint);
+}
+
+.af-bk-waiting { font-size: 10.5px; color: var(--faint); }
+
+.af-bk-slot--waiting { background: transparent; }
+
+/* ── Centre ───────────────────────────────────────────────────────────────── */
+
+.af-bk-centre {
+  padding: 14px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface2);
+  text-align: center;
+}
+
+.af-bk-centre-label {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--p-gold-fg);
+}
+
+.af-bk-champ {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: 92px;
+  justify-content: center;
+  padding: 12px;
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.af-bk-champ[data-filled='true'] {
+  border-style: solid;
+  border-color: var(--p-gold-fg);
+  background: var(--p-gold-soft);
+}
+
+.af-bk-champ-logo { border-radius: 6px; }
+
+.af-bk-champ-name { font-size: 13px; font-weight: 700; color: var(--text); }
+
+.af-bk-champ-empty { font-size: 12px; color: var(--faint); }
+
+.af-bk-champ-clear {
+  padding: 3px 9px;
+  border: 1px solid var(--chip-line);
+  border-radius: 6px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.af-bk-picker { display: block; margin-bottom: 12px; text-align: left; }
+
+.af-bk-picker-label {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-bk-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.af-bk-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.af-bk-length { text-align: left; }
+
+.af-bk-bonus {
+  color: var(--p-gold-fg);
+  font-weight: 800;
+}
+
+.af-bk-length-set {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+}
+
+.af-bk-length-btn {
+  padding: 8px 0;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text2);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-bk-length-btn[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--p-gold-fg);
+  color: #1a1204;
+}
+
+.af-bk-length-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Sidebar note ─────────────────────────────────────────────────────────── */
+
+.af-bk-note {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.af-bk-note-title { margin: 0 0 8px; font-size: 14px; font-weight: 700; color: var(--text); }
+
+.af-bk-note-body {
+  margin: 0 0 10px;
+  max-width: 70ch;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.af-bk-vars {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.af-bk-vars dt {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-bk-vars dd {
+  margin: 3px 0 0;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+@media (max-width: 900px) {
+  .af-bk-board { grid-template-columns: minmax(0, 1fr); }
+  .af-bk-side[data-mirrored='true'] { direction: ltr; }
+}

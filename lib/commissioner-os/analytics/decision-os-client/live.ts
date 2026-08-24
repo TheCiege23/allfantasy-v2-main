@@ -148,6 +148,18 @@ export const liveAnalyticsClient: AnalyticsClient = {
       transactionsByWeek: [],
       rosterUtilization: [],
       seasonComparison: [],
+      /*
+       * 30a's four fields, on the same rule as the five above: Decision OS
+       * tracks behavioural engagement, never fantasy scoring outcomes or
+       * standings, so there is no analog for points-for/against or a
+       * per-week health series here. Empty arrays and a null target are
+       * genuine "nothing to show" values; the view renders an explicit
+       * not-wired panel for each rather than an empty chart frame.
+       */
+      healthByWeek: [],
+      healthTarget: null,
+      managerActivity: [],
+      pointsForAgainst: [],
       generatedAt: timestamp,
     }
 

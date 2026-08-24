@@ -1,0 +1,330 @@
+/*
+ * 31a — Spotify in the draft room. Reads the .af-core token layer.
+ *
+ * ⚠ THE COLLAPSED STRIP MUST NOT OVERLAY THE BOARD. It is in normal flow with a
+ * fixed height — no position:absolute, no position:fixed, no z-index war with
+ * the draft board's layered UI. A music widget that covers a pick is worse than
+ * no music widget.
+ */
+
+.af-dm {
+  --dm-green: #1db954;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+/* Fixed height: a track name changing length must not reflow the board. */
+.af-dm--collapsed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--surface2);
+}
+
+.af-dm-mark {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--dm-green);
+  color: #04120a;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.af-dm-collapsed-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+
+.af-dm-badge {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.af-dm-expand {
+  flex: none;
+  padding: 4px 10px;
+  border: 1px solid var(--chip-line);
+  border-radius: 6px;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.af-dm-expand:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Head ─────────────────────────────────────────────────────────────────── */
+
+.af-dm-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.af-dm-head-text { flex: 1; min-width: 0; }
+
+.af-dm-title { margin: 0; font-size: 14px; font-weight: 700; color: var(--text); }
+
+.af-dm-playlist { margin: 2px 0 0; font-size: 11px; color: var(--faint); }
+
+.af-dm-truth {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--dm-green);
+  border-radius: 0 6px 6px 0;
+  background: color-mix(in srgb, var(--dm-green) 9%, transparent);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+.af-dm-msg {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-dm-pending {
+  margin: 0 0 10px;
+  padding: 9px 11px;
+  border: 1px dashed var(--line2);
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+
+.af-dm-pending code {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--text2);
+}
+
+/* ── Connect / free states ────────────────────────────────────────────────── */
+
+.af-dm-connect,
+.af-dm-free { margin-bottom: 12px; }
+
+.af-dm-scopes { margin: 10px 0; padding: 0; list-style: none; }
+
+.af-dm-scope {
+  position: relative;
+  padding: 3px 0 3px 17px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.af-dm-scope::before { position: absolute; left: 0; font-weight: 800; }
+.af-dm-scope--yes::before { content: '✓'; color: var(--good); }
+.af-dm-scope--no::before { content: '✕'; color: var(--bad); }
+
+.af-dm-free-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+
+.af-dm-btn {
+  display: inline-block;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--dm-green);
+  color: #04120a;
+  font-size: 12px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.af-dm-btn--ghost {
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text2);
+}
+
+.af-dm-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.af-dm-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ── Now playing ──────────────────────────────────────────────────────────── */
+
+.af-dm-now {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 10px;
+}
+
+.af-dm-art {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--faint);
+  overflow: hidden;
+}
+
+.af-dm-art img { width: 100%; height: 100%; object-fit: cover; }
+
+.af-dm-now-text { flex: 1; min-width: 0; }
+
+.af-dm-track {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-dm-artist { display: block; margin-top: 2px; font-size: 11.5px; color: var(--faint); }
+
+.af-dm-transport { display: flex; align-items: center; gap: 6px; }
+
+.af-dm-tbtn {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--chip-line);
+  border-radius: 50%;
+  background: var(--chip);
+  color: var(--text2);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.af-dm-tbtn--main {
+  width: 34px;
+  height: 34px;
+  border-color: transparent;
+  background: var(--dm-green);
+  color: #04120a;
+  font-size: 13px;
+}
+
+.af-dm-tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* ── Scrubber + volume ────────────────────────────────────────────────────── */
+
+.af-dm-scrub { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+
+.af-dm-time {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.af-dm-scrub-track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chip);
+  overflow: hidden;
+}
+
+.af-dm-scrub-fill { height: 100%; border-radius: 2px; background: var(--dm-green); }
+
+.af-dm-vol { display: flex; align-items: center; gap: 9px; margin-bottom: 12px; }
+
+.af-dm-vol input { flex: 1; accent-color: var(--dm-green); }
+
+.af-dm-vol-label { font-size: 11px; color: var(--faint); white-space: nowrap; }
+
+.af-dm-vol-val {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--muted);
+  width: 22px;
+  text-align: right;
+}
+
+/* ── Queue ────────────────────────────────────────────────────────────────── */
+
+.af-dm-queue { padding-top: 12px; border-top: 1px solid var(--line); }
+
+.af-dm-queue-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+}
+
+.af-dm-queue-title {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-dm-queue-count {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--chip);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.af-dm-queue-list { margin: 0 0 10px; padding: 0; list-style: none; }
+
+.af-dm-queue-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.9fr) minmax(0, 0.9fr) 38px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-dm-queue-row:last-child { border-bottom: 0; }
+
+.af-dm-queue-track {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-dm-queue-artist,
+.af-dm-queue-by { font-size: 11px; color: var(--faint); }
+
+.af-dm-queue-dur {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--faint);
+  text-align: right;
+}
+
+@media (max-width: 620px) {
+  .af-dm-queue-row { grid-template-columns: minmax(0, 1fr) 38px; }
+  .af-dm-queue-by { display: none; }
+}

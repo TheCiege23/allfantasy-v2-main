@@ -1,6 +1,6 @@
 /**
- * Dev-only preview of the twelve handoff drops: 22a–c, 23a–b, 24a–b, 25a–b,
- * 26a–b, 27a.
+ * Dev-only preview of the handoff drops: 22a–c, 23a–b, 24a–b, 25a–b, 26a–b,
+ * 27a, and the 28a–34a batch.
  *
  * Five of the twelve are real signed-in screens and are LINKED rather than
  * mocked here — a copy of them rendered with synthetic data is a copy that
@@ -17,16 +17,17 @@ import { HandoffPreviewClient } from './HandoffPreviewClient'
 import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import { buildDraftStartingEmail, buildDraftRecapEmail } from '@/lib/draft-notifications/draftEmails'
 import { selectPushNotifications } from '@/lib/core-app/notificationsCenter'
+import { getBracketChallenge } from '@/lib/core-app/bracketChallenge'
 import { PREVIEW_EXPECTATION, PREVIEW_ISSUES, PREVIEW_TRADE, previewNow } from './fixtures'
 
 export const dynamic = 'force-dynamic'
 
 export const metadata = {
-  title: 'Handoff preview — 22a to 27a',
+  title: 'Handoff preview — 22a to 34a',
   robots: { index: false, follow: false },
 }
 
-export default function HandoffPreviewPage() {
+export default async function HandoffPreviewPage() {
   if (process.env.NODE_ENV === 'production') notFound()
 
   const base = 'https://allfantasy.ai'
@@ -121,12 +122,21 @@ export default function HandoffPreviewPage() {
    */
   const push = selectPushNotifications(PREVIEW_ISSUES, previewNow())
 
+  /*
+   * 28a is loaded through its REAL loader, not a fixture. It reads SportsTeam
+   * for the sport, so the preview shows the actual club list and the actual
+   * empty-seed state — which is the behaviour worth checking. A fixture here
+   * would hide the very thing the screen is careful about.
+   */
+  const bracket = await getBracketChallenge('mlb').catch(() => null)
+
   return (
     <HandoffPreviewClient
       tradeEmail={tradeEmail}
       draftStartingEmail={draftStartingEmail}
       draftRecapEmail={draftRecapEmail}
       push={push}
+      bracket={bracket}
     />
   )
 }
