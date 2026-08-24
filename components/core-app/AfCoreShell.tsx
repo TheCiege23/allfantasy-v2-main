@@ -31,8 +31,14 @@ export type RailLeague = {
   id: string
   name: string
   platform: PlatformId | string
-  /** Single letter shown on the tile. */
+  /** Single letter shown on the tile — the genuine fallback when no image renders. */
   mark: string
+  /**
+   * Resolved league image URL (commissioner logoUrl, or a Sleeper avatar hash
+   * already resolved to its sleepercdn URL by the caller) — never a bare hash,
+   * which would 404 as a src. Null/omitted renders `mark`.
+   */
+  imageUrl?: string | null
   /** Something needs attention in this league. */
   hasAlert?: boolean
   alertTone?: 'bad' | 'warn'
@@ -65,6 +71,7 @@ export type CoreNavKey =
   | 'live-scores'
   | 'my-leagues'
   | 'league-sync'
+  | 'settings'
 
 type NavItem = {
   key: CoreNavKey
@@ -104,6 +111,13 @@ export type AfCoreShellProps = {
   } | null
   /** Unread count for the Notifications nav badge. Omitted when zero. */
   notificationCount?: number
+  /**
+   * The signed-in account, for the rail's profile chip. `imageUrl` must be a
+   * resolved URL or null; `name` feeds the initial fallback. Omitted or empty
+   * renders a neutral mark rather than inventing an identity — the chip was
+   * previously a hardcoded 'G' for every account.
+   */
+  profile?: { name: string | null; imageUrl: string | null } | null
   children: React.ReactNode
 }
 
@@ -226,6 +240,15 @@ function navItems(props: AfCoreShellProps): NavItem[] {
           : undefined,
     },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: '/core/tools' },
+    // Full page outside /core, like My Leagues and League Sync above. This is
+    // where appearance mode and language live (Settings → Preferences), and
+    // the rail's bottom profile tile was the only way there — a single-letter
+    // tile nobody reads as "settings". Deep-links straight to the Preferences
+    // tab because mode/language is what people come here for; the other tabs
+    // stay one click away in the settings chrome. Not ⚙: Tools owns that
+    // glyph, and two identical marks in one nav was exactly the mistake the
+    // Career entry above had to fix.
+    { key: 'settings', label: 'Settings', glyph: '◧', href: '/settings?tab=preferences' },
   ]
 }
 
@@ -394,6 +417,20 @@ function TopSearch() {
   )
 }
 
+/**
+ * A league or profile image on a rail tile, falling back to the letter it would
+ * otherwise render. Same pattern as Dashboard3A's `Mark`: `useState` rather
+ * than a plain `onError` src swap, because a broken-image glyph left in place
+ * is worse than the letter it replaces — the Sleeper CDN 404s for some avatar
+ * ids. `alt` is empty on purpose: the wrapping link already carries the
+ * accessible name, and doubling it reads the league name twice.
+ */
+function RailMark({ src, letter }: { src: string | null | undefined; letter: string }) {
+  const [failed, setFailed] = useState(false)
+  if (!src || failed) return <>{letter}</>
+  return <img src={src} alt="" className="af-rail-tile-img" onError={() => setFailed(true)} loading="lazy" />
+}
+
 function HelpDot({ title, body }: { title: string; body: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -448,7 +485,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
             title={`${l.name} · ${l.platform}`}
             aria-label={`${l.name} on ${l.platform}`}
           >
-            {l.mark}
+            <RailMark src={l.imageUrl} letter={l.mark} />
             {l.hasAlert ? <span className="af-rail-dot" data-tone={l.alertTone ?? 'warn'} /> : null}
           </Link>
         ))}
@@ -471,7 +508,19 @@ export function AfCoreShell(props: AfCoreShellProps) {
         <div className="af-rail-spacer" />
 
         <Link href="/settings" className="af-rail-tile af-rail-profile" title="Profile, settings and modes">
-          G
+          {/*
+           * ⚠ THIS WAS A HARDCODED 'G' — every account saw the same letter
+           * regardless of who was signed in. Now: the account's own image when
+           * one is stored, the display-name initial when not, and a neutral
+           * mark when the account has neither. Array.from, not slice: a name
+           * starting with an emoji sliced mid-surrogate serialises differently
+           * on server and client and takes hydration down (same trap the 3A
+           * initials fix documents).
+           */}
+          <RailMark
+            src={props.profile?.imageUrl}
+            letter={(Array.from(props.profile?.name?.trim() || '•')[0] ?? '•').toUpperCase()}
+          />
         </Link>
       </nav>
 

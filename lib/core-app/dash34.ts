@@ -111,7 +111,8 @@ export type Dash34Result = Dash34Data & {
   /** Rows excluded from the list because they are historical, not played. */
   legacyCount: number
   /**
-   * "NFL WK 2", for the shell's top bar. Taken from the next scheduled game in a
+   * "NFL WK 2" — or "NFL PRE WK 3" when the next game is a stated preseason
+   * fixture — for the shell's top bar. Taken from the next scheduled game in a
    * sport you play — the only place a week number is actually recorded. Null when
    * no schedule is ingested for your sports, because a guessed week is worse than
    * none: every deadline on this product hangs off it.
@@ -251,7 +252,7 @@ function formatLabelOf(row: Dash34LeagueRow): string | null {
  * a broken image on every row. Anything that is not obviously a URL is treated as
  * a Sleeper id, and anything else falls through to initials.
  */
-function imageOf(row: Dash34LeagueRow): string | null {
+export function imageOf(row: Dash34LeagueRow): string | null {
   const logo = row.logoUrl?.trim()
   if (logo && /^https?:\/\//i.test(logo)) return logo
   const avatar = row.avatarUrl?.trim()
@@ -348,7 +349,23 @@ export async function getDash34Data(
         where: { sport: { in: sports }, startTime: { gte: now } },
         orderBy: { startTime: 'asc' },
         take: 40,
-        select: { sport: true, startTime: true, week: true, season: true, homeTeam: true, awayTeam: true },
+        select: {
+          sport: true,
+          startTime: true,
+          week: true,
+          season: true,
+          homeTeam: true,
+          awayTeam: true,
+          /*
+           * Which slate `week` counts within — "pre" | "regular" | "post", or
+           * null meaning "no source has said", never "regular". Selected
+           * explicitly (this model is never read with a bare findMany — the
+           * column reached production before every deployed client knew it,
+           * and a bare read 500s in that window). See
+           * prisma/migrations/20260820200000_sports_game_season_type.
+           */
+          seasonType: true,
+        },
       })
       .catch(() => []),
   ])
@@ -751,6 +768,35 @@ export async function getDash34Data(
    */
   const topLeague = needs[0] ?? null
   const nextGame = nextGames[0] ?? null
+
+  /*
+   * Which slate the countdown's game belongs to. Production stores the same
+   * game once per source (see the fixtures comment above), and the sources are
+   * not equally informed: TheSportsDB rows carry `seasonType: null` while the
+   * Rolling Insights / ESPN row for the SAME game states it — and which
+   * duplicate sorts first is arbitrary. So slate and week are coalesced across
+   * every fetched row describing the same game (same start instant, same two
+   * clubs), taking a value only when the rows that state one agree. Silence or
+   * disagreement yields null, and null renders NO slate label rather than a
+   * guess — an unlabelled kickoff is ambiguous, but "Week 3" over the 27 Aug
+   * preseason game reads as regular season and is wrong (founder-reported
+   * 2026-08-24).
+   */
+  const clubPair = (g: { homeTeam: string | null; awayTeam: string | null }) =>
+    [g.homeTeam ?? '', g.awayTeam ?? ''].map((c) => c.trim().toLowerCase()).sort().join('|')
+  const nextStart = nextGame?.startTime ?? null
+  const sameGameRows =
+    nextGame && nextStart
+      ? nextGames.filter(
+          (g) => g.startTime?.getTime() === nextStart.getTime() && clubPair(g) === clubPair(nextGame),
+        )
+      : []
+  const statedSlates = [...new Set(sameGameRows.map((g) => g.seasonType).filter((s): s is string => Boolean(s)))]
+  const nextGameSlate = statedSlates.length === 1 ? statedSlates[0] : null
+  const statedWeeks = [...new Set(sameGameRows.map((g) => g.week).filter((w): w is number => w != null))]
+  // The first row's own week wins when it has one; a sibling source's sole
+  // stated week fills the gap; conflicting claims fill nothing.
+  const nextGameWeek = nextGame ? (nextGame.week ?? (statedWeeks.length === 1 ? statedWeeks[0] : null)) : null
   const firstLock = nextGame?.startTime
     ? {
         countdown: formatCountdown(nextGame.startTime.getTime() - now.getTime()),
@@ -764,12 +810,27 @@ export async function getDash34Data(
         countdownLabel: 'FIRST KICKOFF',
         kickoffLabel: [
           nextGame.sport,
-          nextGame.week != null ? `Week ${nextGame.week}` : null,
+          /*
+           * The slate, when a source has stated it. "Week N" alone continues
+           * to mean regular season; preseason and postseason are named
+           * outright; an unknown slate adds nothing rather than guessing.
+           */
+          nextGameSlate === 'pre' ? 'Preseason' : nextGameSlate === 'post' ? 'Postseason' : null,
+          nextGameWeek != null ? `Week ${nextGameWeek}` : null,
           nextGame.startTime.toUTCString().slice(0, 22) + ' UTC',
         ]
           .filter(Boolean)
           .join(' · '),
         headline: `${nextGame.awayTeam} at ${nextGame.homeTeam}`,
+        /*
+         * Raw club names for the band's club marks, NFL only — names and codes
+         * collide across sports and lib/team-abbrev.ts is an NFL table. A
+         * non-NFL next game emits null and the headline text stands alone.
+         */
+        awayClub:
+          String(nextGame.sport ?? '').toUpperCase() === 'NFL' ? (nextGame.awayTeam ?? null) : null,
+        homeClub:
+          String(nextGame.sport ?? '').toUpperCase() === 'NFL' ? (nextGame.homeTeam ?? null) : null,
         // No lineup reader exists, so there are no slot chips to show. An empty
         // array renders nothing rather than inventing "FLEX empty".
         slots: [],
@@ -846,6 +907,8 @@ export async function getDash34Data(
          */
         position: b.position,
         team: b.team,
+        /* NFL gate for the club mark beside the code — codes collide across sports. */
+        sport: b.sport,
         status: b.status,
         exposure: `${b.leagues.size} of ${totalActive}`,
         /*
@@ -1081,7 +1144,9 @@ export async function getDash34Data(
     book: bookRows.length > 0 ? bookRows : null,
     legacyCount,
     weekLabel:
-      nextGame?.week != null ? `${nextGame.sport} WK ${nextGame.week}` : null,
+      nextGame && nextGameWeek != null
+        ? `${nextGame.sport}${nextGameSlate === 'pre' ? ' PRE' : nextGameSlate === 'post' ? ' POST' : ''} WK ${nextGameWeek}`
+        : null,
     notice: everSynced
       ? null
       : {

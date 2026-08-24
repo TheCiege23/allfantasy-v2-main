@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClubLogo } from '@/components/core-app/ClubLogo'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-triage.css'
 
@@ -34,6 +35,8 @@ export type TriageBookRow = {
   note: string
   position: string | null
   team: string | null
+  /** NFL gate for the club mark — club codes collide across sports. */
+  sport?: string | null
   status: string
   exposure: string
   exposureCount: number
@@ -103,6 +106,9 @@ export function Dash3ATriage({ book, now }: { book: TriageBookRow[] | null; now:
                   </Link>
                   <span className="af-triage-meta">
                     {[p.position, p.team].filter(Boolean).join(' · ')}
+                    {String(p.sport ?? '').toUpperCase() === 'NFL' ? (
+                      <ClubLogo club={p.team} size={14} style={{ marginLeft: 6 }} />
+                    ) : null}
                   </span>
                   <span className="af-triage-status" data-tone={p.tone}>
                     {p.status}

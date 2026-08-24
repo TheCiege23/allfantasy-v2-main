@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ClubLogo } from '@/components/core-app/ClubLogo'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-carryover.css'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
@@ -40,7 +41,12 @@ export function Dash34Carryover({ data }: { data: Dash34Data | null }) {
             <span className="af-carry-kick">{firstLock.kickoffLabel}</span>
           </div>
           <div className="af-carry-lockbody">
-            <h2 className="af-carry-lockh">{firstLock.headline}</h2>
+            <h2 className="af-carry-lockh">
+              {/* Club marks are loader-gated to NFL; missing/failed renders text alone. */}
+              <ClubLogo club={firstLock.awayClub ?? null} size={22} style={{ marginRight: '0.4em' }} />
+              {firstLock.headline}
+              <ClubLogo club={firstLock.homeClub ?? null} size={22} style={{ marginLeft: '0.4em' }} />
+            </h2>
             {firstLock.slots.length > 0 ? (
               <div className="af-carry-slots">
                 {firstLock.slots.map((s, i) => (

@@ -118,6 +118,9 @@ export type Dash34Data = {
     countdownLabel?: string | null
     kickoffLabel: string
     headline: string
+    /** Away/home club for the band's club marks. NFL only; null renders the text alone. */
+    awayClub?: string | null
+    homeClub?: string | null
     slots: Array<{ key?: string | null; label: string; tone?: 'bad' | 'warn' | null }>
     openHref: string
     openLabel: string
@@ -161,6 +164,8 @@ export type Dash34Data = {
      */
     position?: string | null
     team?: string | null
+    /** NFL gate for the club mark beside the code — codes collide across sports. */
+    sport?: string | null
     status?: string | null
     /** Human form, e.g. "7 of 61". */
     exposure?: string | null
