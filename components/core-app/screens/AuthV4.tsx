@@ -151,6 +151,7 @@ function PasswordField({
 
 const PROVIDERS: { id: SocialProvider; label: string }[] = [
   { id: 'google', label: 'Google' },
+  { id: 'facebook', label: 'Facebook' },
   { id: 'apple', label: 'Apple' },
   { id: 'spotify', label: 'Spotify' },
   { id: 'discord', label: 'Discord' },
