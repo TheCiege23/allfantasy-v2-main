@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ClubLogo } from '@/components/core-app/ClubLogo'
+import { Dash34When } from '@/components/core-app/screens/Dashboard34Live'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-dash-carryover.css'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
@@ -26,6 +27,27 @@ import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
  * in-flight work and is not edited. Countdown renders the server paint
  * statically — the triage panel above already carries live kickoff urgency.
  */
+/**
+ * Static server paint, deliberately coarse. No ticker mounts here — the triage
+ * panel above carries live kickoff urgency, and the 34a page keeps the precise
+ * Dash34Countdown — so a to-the-minute '3d 02:48' would sit frozen and read as
+ * a live clock that stopped. 'in 3d 3h' is honest about its own precision.
+ * Falls back to the loader's pre-formatted string when no ISO target exists.
+ */
+function coarseCountdown(toIso: string | null | undefined, fallback: string): string {
+  if (!toIso) return fallback
+  const t = new Date(toIso).getTime()
+  if (Number.isNaN(t)) return fallback
+  const mins = Math.floor((t - Date.now()) / 60000)
+  if (mins <= 0) return 'underway'
+  if (mins < 60) return `in ${mins}m`
+  const hours = Math.floor(mins / 60)
+  if (hours < 24) return `in ${hours}h`
+  const days = Math.floor(hours / 24)
+  const remHours = hours - days * 24
+  return remHours > 0 ? `in ${days}d ${remHours}h` : `in ${days}d`
+}
+
 export function Dash34Carryover({ data }: { data: Dash34Data | null }) {
   if (!data) return null
   const { firstLock, notice, chimmyBrief, coverage } = data
@@ -37,7 +59,9 @@ export function Dash34Carryover({ data }: { data: Dash34Data | null }) {
         <section className="af-carry-lock" aria-label="Most urgent">
           <div className="af-carry-count">
             <span className="af-carry-count-l">{firstLock.countdownLabel ?? 'FIRST KICKOFF'}</span>
-            <span className="af-carry-count-v af-num">{firstLock.countdown}</span>
+            <span className="af-carry-count-v af-num">
+              {coarseCountdown(firstLock.countdownTo, firstLock.countdown)}
+            </span>
             <span className="af-carry-kick">{firstLock.kickoffLabel}</span>
           </div>
           <div className="af-carry-lockbody">
@@ -85,13 +109,36 @@ export function Dash34Carryover({ data }: { data: Dash34Data | null }) {
             {chimmyBrief.lines.map((l) => (
               <li key={l.key} data-tone={l.tone ?? undefined}>
                 {l.text}
+                {/*
+                  The instant the line ends with — dash34 emits the kickoff line
+                  as `text: '<name> plays next at'` plus `atIso`, so rendering
+                  only `l.text` printed a truncated sentence. Same split and the
+                  same client localiser as ChimmyBrief: the server cannot know
+                  the reader's zone, and this is the value someone sets an
+                  alarm by.
+                */}
+                {l.atIso ? (
+                  <>
+                    {' '}
+                    <span className="af-carry-brief-at af-num">
+                      <Dash34When iso={l.atIso} />
+                    </span>
+                  </>
+                ) : null}
               </li>
             ))}
           </ul>
           <p className="af-carry-caveat">{chimmyBrief.caveat}</p>
-          <Link className="af-carry-more" href={chimmyBrief.moreHref}>
-            {chimmyBrief.moreLabel}
-          </Link>
+          {chimmyBrief.moreHref.startsWith('#') ? null : (
+            /* moreHref can be an in-page anchor into Dashboard34 v2's markup
+               (#af-d2-needs). No such id exists on the /core home — Dashboard3A
+               renders the ranked list itself and is frozen — so a hash href
+               here is a link that scrolls nowhere. The list it points at is
+               already on screen directly below this card. */
+            <Link className="af-carry-more" href={chimmyBrief.moreHref}>
+              {chimmyBrief.moreLabel}
+            </Link>
+          )}
         </section>
       ) : null}
 
