@@ -12,6 +12,26 @@ export function jitterSleep(minMs = 250, maxMs = 500) {
 }
 
 /**
+ * Races `work` against a timeout instead of letting one slow call hold up an entire batch.
+ * `work` itself is never cancelled -- there is no AbortSignal here -- so on timeout the original
+ * promise keeps running to completion (or failure) in the background; this only stops the caller
+ * from waiting on it.
+ */
+export type TimeoutResult<T> = { ok: true; value: T } | { ok: false; timedOut: true };
+
+export async function withTimeout<T>(work: Promise<T>, timeoutMs: number): Promise<TimeoutResult<T>> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const timeout = new Promise<TimeoutResult<T>>((resolve) => {
+      timer = setTimeout(() => resolve({ ok: false, timedOut: true }), timeoutMs);
+    });
+    return await Promise.race([work.then((value) => ({ ok: true as const, value })), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
  * Concurrency-limited runner (no deps).
  */
 export async function runWithConcurrency<T, R>(
