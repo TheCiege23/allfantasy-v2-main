@@ -22,6 +22,20 @@ const UPSERT_BATCH_SIZE = 100
 const IMPORT_BUDGET_MS = 240_000
 
 /**
+ * Headroom reserved so a sport never STARTS with too little time to finish.
+ *
+ * ⚠ THE BUDGET ALONE DOES NOT BOUND THE HANDLER. It is checked BETWEEN sports, so a sport
+ * beginning at 239s runs to completion past the check — and `import-players` returned HTTP 502
+ * at 300,072ms on 2026-08-23 doing exactly that. The completed runs in sync_job_runs cluster at
+ * 240-254s; the 502 runs write NO row at all, because the route records telemetry only after the
+ * importer returns. The failures are invisible in the very table you would check.
+ *
+ * With the reserve, no sport starts after IMPORT_BUDGET_MS - PER_SPORT_RESERVE_MS, so the worst
+ * case is that boundary plus one bounded sport rather than that boundary plus infinity.
+ */
+const PER_SPORT_RESERVE_MS = 45_000
+
+/**
  * Ceiling for the two live provider calls per sport (projections, rankings).
  *
  * These are the only genuinely external operations in the per-sport `Promise.all`; the other
@@ -350,10 +364,10 @@ export async function runSportsDataImporter(options?: {
      * partial updates from other paths. Stopping early leaves those sports untouched rather
      * than starved, and the next scheduled run reaches them.
      */
-    if (Date.now() - startedAt > IMPORT_BUDGET_MS) {
+    if (Date.now() - startedAt > IMPORT_BUDGET_MS - PER_SPORT_RESERVE_MS) {
       skippedSports.push(sport)
       console.warn(
-        `[sports-data-importer] budget exhausted (${IMPORT_BUDGET_MS}ms) — skipping ${sport}`,
+        `[sports-data-importer] budget exhausted (${IMPORT_BUDGET_MS - PER_SPORT_RESERVE_MS}ms usable of ${IMPORT_BUDGET_MS}ms) — skipping ${sport}`,
       )
       continue
     }
@@ -372,7 +386,18 @@ export async function runSportsDataImporter(options?: {
     const [identitySeeds, providerSeeds, latestStats, latestInjuries, latestNews, latestAdp, metaTrends, projectionsResponse, rankingsResponse] =
       await Promise.all([
         loadIdentitySeeds(sport, teamCtx),
-        fetchProviderPlayerSeeds(sport, season, teamCtx),
+        // The only UNBOUNDED provider read in this block. `projections` and `rankings` below were
+        // already wrapped; this one was not, and it is the same apiChain.fetch against the same
+        // providers. An unbounded call here is what turns a 239s start into a 300s edge 502.
+        //
+        // Empty-array fallback matches withTimeout's contract of degrading rather than throwing: a
+        // sport with no provider seeds still imports from its identity and paged sources.
+        withTimeout(
+          fetchProviderPlayerSeeds(sport, season, teamCtx),
+          PROVIDER_FETCH_TIMEOUT_MS,
+          `${sport} player seeds`,
+          [] as PlayerSeed[],
+        ),
         prisma.playerSeasonStats.findMany({
           where: { sport },
           orderBy: { fetchedAt: 'desc' },

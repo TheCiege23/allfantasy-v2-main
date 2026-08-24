@@ -343,10 +343,41 @@ function parseKickoff(e: Record<string, unknown>): Date | null {
   return Number.isNaN(d.getTime()) ? null : d
 }
 
-export async function ingestSchedule(sport: IngestSport, opts?: { season?: string }): Promise<{
+/**
+ * Default slice for one schedule sweep.
+ *
+ * ⚠ THE UPSERTS ARE THE COST, AND THEY ARE SEQUENTIAL. One `eventsseason.php` call returns a
+ * whole season, then this writes it one row at a time. Measured on prod 2026-08-23, the
+ * current-season populations are MLB 2,303 events, NCAAF 866, NCAAB 155 -- and
+ * `import-schedules?source=tsdb-only` returned HTTP 502 at 300,302ms on the fire where NCAAF
+ * led the rotation. The platform edge cuts at 300s, so a sport that cannot finish in one fire
+ * can never finish at all.
+ *
+ * ⚠ THIS IS NOT AN NCAAF PROBLEM. NCAAF surfaced it because rotation put it first, but MLB is
+ * nearly 3x larger and would fail harder on the fire where IT leads. Bounding per-sport rather
+ * than special-casing one sport is the difference between a fix and a coincidence.
+ * ⚠ UNBOUNDED BY DEFAULT, ON PURPOSE. scripts/ingest-thesportsdb.ts exists to do a FULL sweep by
+ * hand; a default budget here would silently truncate it and the operator would never be told.
+ * The cron opts in because the cron is the one with a 300s ceiling over its head.
+ */
+const SCHEDULE_UPSERT_BUDGET_MS = Number.POSITIVE_INFINITY
+
+export async function ingestSchedule(
+  sport: IngestSport,
+  opts?: {
+    season?: string
+    /** Stop upserting once this is spent. Checked BETWEEN rows, never mid-write. */
+    budgetMs?: number
+    /** Injectable clock, so the budget is testable without sleeping. */
+    now?: () => number
+  },
+): Promise<{
   season: string
   fetched: number
   written: number
+  /** Events this fire did not reach. Reported, never silently dropped. */
+  deferred: number
+  budgetExhausted: boolean
 }> {
   const cfg = LEAGUES[sport]
   const season = opts?.season ?? (await resolveCurrentSeason(sport))
@@ -358,7 +389,45 @@ export async function ingestSchedule(sport: IngestSport, opts?: { season?: strin
   const now = new Date()
   let written = 0
 
-  for (const e of events) {
+  /*
+   * OLDEST-FIRST, so successive fires cover the whole season instead of redoing its head.
+   *
+   * A budget over the provider's own ordering would rewrite the same leading rows every six
+   * hours and never reach the tail -- the same starvation `rotateForFairness` exists to stop,
+   * one level down. Rows this sweep has never seen sort first (they have no stored fetchedAt at
+   * all), then the least-recently-written.
+   *
+   * One indexed query, not one per row: the whole (sport, source) keyset comes back at once.
+   */
+  const seen = new Map<string, number>()
+  try {
+    const existing = await prisma.sportsGame.findMany({
+      where: { sport, source: SOURCE },
+      select: { externalId: true, fetchedAt: true },
+    })
+    for (const r of existing) {
+      if (r.externalId) seen.set(r.externalId, r.fetchedAt ? r.fetchedAt.getTime() : 0)
+    }
+  } catch {
+    // Ordering is an optimisation. If it fails, fall through to provider order rather than
+    // failing the sweep -- an unordered write still writes.
+  }
+  const ordered = [...events].sort(
+    (a, b) => (seen.get(str(a.idEvent) ?? "") ?? -1) - (seen.get(str(b.idEvent) ?? "") ?? -1),
+  )
+
+  const clock = opts?.now ?? Date.now
+  const startedAt = clock()
+  const budgetMs = opts?.budgetMs ?? SCHEDULE_UPSERT_BUDGET_MS
+  let deferred = 0
+
+  for (const e of ordered) {
+    // Checked BETWEEN rows. A row started just under the line still completes, which is why the
+    // caller must leave headroom rather than passing every millisecond it has left.
+    if (clock() - startedAt >= budgetMs) {
+      deferred += 1
+      continue
+    }
     const externalId = str(e.idEvent)
     const home = str(e.strHomeTeam)
     const away = str(e.strAwayTeam)
@@ -396,7 +465,13 @@ export async function ingestSchedule(sport: IngestSport, opts?: { season?: strin
     }
   }
 
-  return { season, fetched: events.length, written }
+  return {
+    season,
+    fetched: events.length,
+    written,
+    deferred,
+    budgetExhausted: deferred > 0,
+  }
 }
 
 // ── Player season statistics ───────────────────────────────────────────

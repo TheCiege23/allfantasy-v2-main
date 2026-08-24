@@ -27,6 +27,7 @@ import {
   isImportProviderAvailable,
   supportsImportProviderDiscovery,
 } from '@/lib/league-import/provider-ui-config'
+import { FantraxUpload } from '@/components/core-app/import/FantraxUpload'
 import {
   discoverProviderLeagues,
   fetchImportPreview,
@@ -146,11 +147,28 @@ const FIELD_BY_PROVIDER: Partial<
      */
     help: 'Connect ESPN once under Settings → Connected Accounts, then paste a league ID here. We read the league as you — we never ask for your ESPN password.',
   },
+  /*
+   * ⚠ FANTRAX TAKES A SNAPSHOT ID, NOT A LEAGUE ID, AND THE DIFFERENCE IS THE
+   * WHOLE PROVIDER. Fantrax web leagues are not publicly readable, so there is
+   * nothing to fetch from a league URL — `fetchFantraxLeagueForImport` reads a
+   * CSV snapshot uploaded here first and stamped with the uploader's account.
+   * This entry exists ahead of the availability flag deliberately: the reason
+   * the flag is still false is that selecting Fantrax used to render no field
+   * at all, so the field has to land WITH the flip, not after it.
+   */
+  fantrax: {
+    label: 'Fantrax snapshot',
+    placeholder: 'snapshot id, or username|2025|League Name',
+    help: 'Upload your Fantrax CSV export first — the snapshot id it returns goes here. Fantrax leagues cannot be read from a league ID; nothing there is public.',
+  },
 }
 
 /** Why an unavailable provider cannot be used, in the user's terms. */
 const BLOCKED_REASON: Partial<Record<ImportProvider, string>> = {
-  fantrax: 'Upload pipeline is not accepting new leagues yet.',
+  // Uploads DO work and DO attribute to the uploader — that bug is fixed. What
+  // is missing is a proven upload-then-import run, which is the bar the
+  // availability guard sets. Say that, not something already untrue.
+  fantrax: 'Upload works; turning a snapshot into a league is not switched on yet.',
   mfl: 'Private MFL leagues need an API key, and there is no way to enter one yet.',
   fleaflicker: 'No connected path from this flow yet.',
 }
@@ -808,6 +826,20 @@ export function ImportV4({
           })}
         </div>
 
+        {/*
+          The Fantrax tile is disabled and says why, which leaves a reader with a
+          fact and no action. Uploading a snapshot is the one Fantrax thing that
+          does work today, so the door to it is here rather than nowhere. Not
+          rendered once the uploader is already on screen.
+        */}
+        {defaultProvider !== 'fantrax' && !isImportProviderAvailable('fantrax') ? (
+          <p className="af-im-fx-link">
+            <a href="/import?provider=fantrax">
+              Have a Fantrax CSV export? Bank it now →
+            </a>
+          </p>
+        ) : null}
+
         {/* ── Step 2: the provider's own field ──────────────────────── */}
         {selectable && phase.k !== 'done' ? (
           <div className="af-im-field-block">
@@ -917,6 +949,16 @@ export function ImportV4({
 
         <ReadOnlyPromise />
       </section>
+
+      {/*
+        ⚠ REACHABLE WITHOUT BEING SELECTABLE, AND THAT IS THE POINT. The Fantrax
+        tile stays disabled while `available` is false, so it cannot be clicked —
+        but uploading a snapshot is not importing one, and the upload half works
+        today. `/import?provider=fantrax` opens it so history can be banked now
+        and imported the moment the flag flips, with no re-upload. Anything that
+        made the tile itself clickable would be claiming the import works.
+      */}
+      {defaultProvider === 'fantrax' ? <FantraxUpload /> : null}
 
       {/* ── Discovered leagues ──────────────────────────────────────── */}
       {leagues.length > 0 && phase.k !== 'done' ? (
