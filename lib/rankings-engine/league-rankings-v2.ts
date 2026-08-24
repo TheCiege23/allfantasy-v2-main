@@ -2906,7 +2906,15 @@ export async function computeLeagueRankingsV2(
   }
 
   const maxWeek = Math.min(week, 18)
-  const { weekStats, weeklyPointsByRoster, weeklyOpponentPointsByRoster } = await getWeekStatsFromCache(leagueId, maxWeek)
+  /*
+   * The league's own season, required — the cache module's old 2025 default
+   * would have written live 2026 matchups under seasonYear 2025 in-season.
+   */
+  const { weekStats, weeklyPointsByRoster, weeklyOpponentPointsByRoster } = await getWeekStatsFromCache(
+    leagueId,
+    maxWeek,
+    Number(season)
+  )
 
   const rosterRecords = new Map<number, { wins: number; total: number }>()
   for (const r of rosters) {
