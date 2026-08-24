@@ -662,8 +662,32 @@ describe('Invariant 18: cron draft-pool-prewarm route is correct', () => {
     expect(cronPrewarmSrc).toContain("'scheduled'")
     expect(cronPrewarmSrc).toContain("'in_progress'")
   })
-  it('awaits ensureDraftPoolReady (not fire-and-forget)', () => {
-    expect(cronPrewarmSrc).toContain('await ensureDraftPoolReady')
+  it('awaits ensureDraftPoolReady, bounded by a per-league timeout (not fire-and-forget)', () => {
+    // A bare `await ensureDraftPoolReady(...)` is what let one hung league block the WHOLE batch
+    // until the platform killed the request at maxDuration -- measured in production as
+    // HTTP 504 / "fetch failed" landing within ~1s of the 300000ms mark, three runs running.
+    // withTimeout still calls and awaits ensureDraftPoolReady per league -- it is not
+    // fire-and-forget -- it just refuses to wait past PER_LEAGUE_TIMEOUT_MS for any one league.
+    expect(cronPrewarmSrc).toContain('withTimeout(ensureDraftPoolReady(leagueId)')
+  })
+})
+
+describe('Invariant 18b: cron prewarm bounds one hung league so it cannot fail the whole batch', () => {
+  it('runs leagues through a concurrency-limited runner, not a bare Promise.all', () => {
+    expect(cronPrewarmSrc).toContain('runWithConcurrency(sessions')
+    expect(cronPrewarmSrc).not.toMatch(/Promise\.all\(\s*sessions\.map/)
+  })
+  it('imports runWithConcurrency and withTimeout from the shared async utils', () => {
+    expect(cronPrewarmSrc).toMatch(/import\s*\{\s*runWithConcurrency,\s*withTimeout\s*\}\s*from\s*'@\/lib\/async-utils'/)
+  })
+  it('derives the latest-start deadline from maxDuration, not a hardcoded number', () => {
+    expect(cronPrewarmSrc).toContain('LATEST_START_DEADLINE_MS = maxDuration * 1000')
+  })
+  it('marks work past the deadline as deferred rather than attempting it', () => {
+    expect(cronPrewarmSrc).toContain("action: 'deferred'")
+  })
+  it('marks a per-league timeout distinctly from a real error', () => {
+    expect(cronPrewarmSrc).toContain("action: 'timeout'")
   })
 })
 
