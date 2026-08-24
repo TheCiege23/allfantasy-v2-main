@@ -468,6 +468,197 @@ function psychologyCard(psychology: TradePsychologyContext | null): string {
     </tr>`
 }
 
+/**
+ * 22a — the verdict block. THREE explicit lines, never collapsed into prose.
+ *
+ * ⚠ THIS IS A COPY CONTRACT, NOT A LAYOUT PREFERENCE. Value edge, uncertainty
+ * and the plain-language grade are three different claims with three different
+ * strengths, and a sentence that runs them together lets a reader take the
+ * weakest one as confidently as the strongest. So: one labelled row each.
+ *
+ * The numbers come from `ProjectedGrade`, which already carries `valueEdge`,
+ * `uncertainty` and `letter` — nothing here computes a grade.
+ */
+function verdictBlock(sides: TradeSideGrade[], expectation: TradeExpectation | null): string {
+  if (!expectation) return ''
+  const bySideId = new Map(expectation.sides.map((s) => [s.rosterId, s]))
+
+  const rows = sides
+    .map((side) => {
+      const exp = bySideId.get(side.rosterId)
+      const p = exp?.projected
+      if (!p) return null
+
+      const edgePct = Math.round(p.valueEdge * 100)
+      const edgeText =
+        edgePct === 0
+          ? 'even'
+          : `${edgePct > 0 ? '+' : ''}${edgePct}% ${edgePct > 0 ? 'in their favour' : 'against them'}`
+
+      /*
+       * Uncertainty is printed in the same units as the value net, as a ±. When
+       * the edge does not clear it, the row says so outright — an edge inside
+       * the noise is not an edge, and `insideNoise` already knows.
+       */
+      const uncertaintyText =
+        p.uncertainty == null
+          ? 'not measurable — only one source priced these assets'
+          : `± ${fmt(p.uncertainty)} value${p.insideNoise ? ' — the edge does not clear it' : ''}`
+
+      const plain = p.insideNoise
+        ? 'Too close to call. Both sides can defend this one.'
+        : p.productionDisagrees
+          ? 'Value and last season’s production disagree, so neither is strong enough to assert alone.'
+          : edgePct >= 25
+            ? 'A clear win on value.'
+            : edgePct >= 10
+              ? 'A modest edge on value.'
+              : edgePct <= -25
+                ? 'A clear loss on value.'
+                : edgePct <= -10
+                  ? 'A modest loss on value.'
+                  : 'A fair deal on value.'
+
+      return `
+<tr>
+  <td style="padding:9px 0;border-top:1px solid ${BORDER}">
+    <div style="font-size:12px;font-weight:700;color:${TEXT};margin-bottom:5px">${escapeHtml(side.managerName)} &middot; ${escapeHtml(p.letter)}</div>
+    <div style="font-size:11px;color:${MUTED};line-height:1.7">
+      <span style="color:${FAINT}">Value edge</span> &nbsp;${escapeHtml(edgeText)}<br>
+      <span style="color:${FAINT}">Uncertainty</span> &nbsp;${escapeHtml(uncertaintyText)}<br>
+      <span style="color:${FAINT}">In plain terms</span> &nbsp;${escapeHtml(plain)}
+    </div>
+  </td>
+</tr>`
+    })
+    .filter(Boolean)
+
+  if (rows.length === 0) return ''
+
+  return `
+<tr>
+  <td style="padding:14px 16px;background:${CARD};border:1px solid ${BORDER};border-radius:14px">
+    <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:${FAINT};font-weight:700;margin-bottom:2px">
+      The verdict
+    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0">${rows.join('')}</table>
+  </td>
+</tr>
+<tr><td style="height:12px"></td></tr>`
+}
+
+/**
+ * 22a — the roster-needs callout.
+ *
+ * ⚠ ONLY RENDERED WHEN THERE IS A REAL POSITIONAL GAP. The handoff is explicit
+ * that this must not be forced into every email. `starterGaps` is null when we
+ * could not read rosters at all, and an empty array means we read them and found
+ * nothing — those are different, and neither produces a callout.
+ */
+function rosterNeedsBlock(expectation: TradeExpectation | null): string {
+  if (!expectation) return ''
+  const lines = expectation.sides
+    .map((side) => {
+      const gaps = side.starterGaps
+      if (!gaps || gaps.length === 0) return null
+      const text = gaps.map((g) => `${g.position} (${g.rostered} of ${g.required})`).join(', ')
+      return `<div style="font-size:11px;color:${MUTED};line-height:1.6;margin-top:4px">${escapeHtml(side.managerName)} cannot fill: ${escapeHtml(text)}</div>`
+    })
+    .filter(Boolean)
+
+  if (lines.length === 0) return ''
+
+  return `
+<tr>
+  <td style="padding:12px 16px;background:${CARD};border:1px solid ${BORDER};border-radius:14px">
+    <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:${FAINT};font-weight:700">
+      What this leaves behind
+    </div>
+    ${lines.join('')}
+  </td>
+</tr>
+<tr><td style="height:12px"></td></tr>`
+}
+
+/**
+ * 22a — the forward-looking risk line.
+ *
+ * ⚠ A TRUST COMMITMENT, NOT OPTIONAL COLOUR. Every grade here is a snapshot of
+ * today's information, and the honest thing is to name the specific way it could
+ * age badly rather than to imply the letter is final. The line is DERIVED — a
+ * future pick, an unpriced asset, a single-source valuation — so it is never a
+ * generic hedge glued onto the bottom.
+ */
+function forwardRiskLine(trade: GradedTrade, expectation: TradeExpectation | null): string | null {
+  if (!expectation) return null
+
+  const allAssets = expectation.sides.flatMap((s) => [...s.assetsIn, ...s.assetsOut])
+  const picks = allAssets.filter((a) => a.isPick)
+  const unpriced = allAssets.filter((a) => a.marketValue == null)
+  const thinlySourced = allAssets.filter((a) => a.valueSources.length === 1)
+
+  if (picks.length > 0) {
+    return (
+      `${picks.length === 1 ? 'A future pick is' : `${picks.length} future picks are`} in this deal, ` +
+      `priced at today's expectation of where ${picks.length === 1 ? 'it' : 'they'} will land. ` +
+      `One bad season by the team that owes ${picks.length === 1 ? 'it' : 'them'} and this grade ages badly.`
+    )
+  }
+  if (unpriced.length > 0) {
+    return (
+      `${unpriced.length} ${unpriced.length === 1 ? 'asset carries' : 'assets carry'} no market price at all, ` +
+      `so ${unpriced.length === 1 ? 'it is' : 'they are'} counted as zero above. If that is wrong, the edge is wrong.`
+    )
+  }
+  if (thinlySourced.length > 0) {
+    return (
+      `${thinlySourced.length} ${thinlySourced.length === 1 ? 'asset was' : 'assets were'} priced by a single source, ` +
+      `with nothing to corroborate ${thinlySourced.length === 1 ? 'it' : 'them'}. Treat the edge as softer than it looks.`
+    )
+  }
+  return `Grades move. This one is scored on ${trade.season} information, and a season of production can reverse it.`
+}
+
+/**
+ * 22a — the footer, including the PER-LEAGUE mute.
+ *
+ * ⚠ A GLOBAL UNSUBSCRIBE IS NOT ENOUGH AT 61 LEAGUES, and that is the whole
+ * point of this contract. Someone who wants one noisy league to stop should not
+ * have to choose between it and every trade email they actually want.
+ *
+ * ⚠ THE MUTE LINK GOES TO SETTINGS, NOT TO A ONE-CLICK ENDPOINT, AND THAT IS A
+ * KNOWN GAP. There is no per-user-per-league notification store in this repo —
+ * `lib/league/league-notification-prefs.ts` is a LEAGUE-wide toggle a
+ * commissioner sets, not a personal mute. So the link lands on the real
+ * notifications settings page with the league in the query rather than on an
+ * endpoint that does not exist. When a per-user store lands, this becomes a
+ * signed one-click URL like the global unsubscribe beside it.
+ */
+function emailFooter(params: {
+  baseUrl: string
+  leagueName: string
+  leagueId: string | null
+  /** Signed global unsubscribe URL. Omitted when we cannot mint one. */
+  unsubscribeUrl: string | null
+}): string {
+  const muteHref = params.leagueId
+    ? `${params.baseUrl}/settings?tab=notifications&league=${encodeURIComponent(params.leagueId)}`
+    : `${params.baseUrl}/settings?tab=notifications`
+  const link = (href: string, text: string) =>
+    `<a href="${escapeHtml(href)}" style="color:${MUTED};text-decoration:underline">${escapeHtml(text)}</a>`
+
+  return `
+<tr>
+  <td style="padding-top:16px;border-top:1px solid ${BORDER};color:${FAINT};font-size:11px;line-height:1.7">
+    AllFantasy.ai<br>
+    ${link(muteHref, `Mute ${params.leagueName}`)}
+    &nbsp;&middot;&nbsp;
+    ${link(`${params.baseUrl}/settings?tab=notifications`, 'Change preferences')}
+    ${params.unsubscribeUrl ? `&nbsp;&middot;&nbsp;${link(params.unsubscribeUrl, 'Unsubscribe from all')}` : ''}
+  </td>
+</tr>`
+}
+
 export function buildTradeGradeEmail(params: {
   leagueName: string
   trade: GradedTrade
@@ -480,8 +671,30 @@ export function buildTradeGradeEmail(params: {
    * see it is a separate claim. Omit it and the email is exactly as it was.
    */
   psychology?: TradePsychologyContext | null
+  /**
+   * 22a — footer controls. Absolute origin, because an email has no page to be
+   * relative to; a root-relative href in an inbox resolves against the mail
+   * client's own domain and 404s.
+   */
+  baseUrl?: string
+  /** Powers the per-league mute link. Omit and the footer links to settings. */
+  leagueId?: string | null
+  /** Signed global unsubscribe URL. Omit and that link is left out entirely. */
+  unsubscribeUrl?: string | null
 }): TradeGradeEmail {
   const { leagueName, trade, ledgerUrl } = params
+  /*
+   * Falls back to the ledger's own origin. That URL is already absolute and
+   * already points at us, so it is a safer default than a hardcoded domain that
+   * would be wrong in every preview and staging environment.
+   */
+  const baseUrl = params.baseUrl ?? (() => {
+    try {
+      return new URL(ledgerUrl).origin
+    } catch {
+      return ''
+    }
+  })()
   const provisional = hasNoSignal(trade)
   const expectation = params.expectation?.available ? params.expectation : null
   const psychology = params.psychology?.available ? params.psychology : null
@@ -493,9 +706,32 @@ export function buildTradeGradeEmail(params: {
         .filter((x): x is { name: string; p: NonNullable<typeof x.p> } => x.p != null)
     : []
 
+  /*
+   * ⚠ THE SUBJECT NEVER HIDES THE NEWS — league name AND the players involved,
+   * in the subject line itself. At 61 leagues an inbox full of "Trade completed"
+   * is unreadable, and the manager should not have to open the mail to find out
+   * whether it concerns anyone they care about.
+   *
+   * Capped at four names so a twelve-player deal does not produce a subject line
+   * that gets truncated into meaninglessness by the mail client.
+   */
+  const headlineNames = (() => {
+    const names: string[] = []
+    for (const side of trade.sides) {
+      for (const a of side.playersIn) {
+        if (a.name && !names.includes(a.name)) names.push(a.name)
+      }
+    }
+    if (names.length === 0) return ''
+    const shown = names.slice(0, 4)
+    const extra = names.length - shown.length
+    return `${shown.join(', ')}${extra > 0 ? ` +${extra}` : ''}`
+  })()
+  const namePart = headlineNames ? ` \u2014 ${headlineNames}` : ''
+
   // The subject must carry the same caveat as the body. A letter that looks
   // realized in the inbox is not rescued by a disclaimer further down.
-  const subject = !provisional
+  const subjectCore = !provisional
     ? `Trade completed in ${leagueName} — initial grades: ${trade.sides
         .map((s) => `${s.managerName} ${s.initialGrade}`)
         .join(', ')}`
@@ -504,6 +740,7 @@ export function buildTradeGradeEmail(params: {
           .map((x) => `${x.name} ${x.p.letter}`)
           .join(', ')}`
       : `Trade completed in ${leagueName} — too early to grade (no games played yet)`
+  const subject = `${subjectCore}${namePart}`
   const cards = trade.sides
     .map((s) => sideCard(s, provisional, provisional ? bySideId.get(s.rosterId) : undefined))
     .join('')
@@ -514,6 +751,8 @@ export function buildTradeGradeEmail(params: {
     : trade.tie
       ? 'Dead even so far'
       : 'Initial grades'
+
+  const forwardRisk = forwardRiskLine(trade, expectation)
 
   const html = `<!DOCTYPE html>
 <html>
@@ -538,6 +777,8 @@ export function buildTradeGradeEmail(params: {
       </td>
     </tr>
     <tr><td>${cards}</td></tr>
+    ${verdictBlock(trade.sides, expectation)}
+    ${rosterNeedsBlock(expectation)}
     <tr>
       <td style="padding:14px 16px;background:${CARD};border:1px solid ${BORDER};border-radius:14px">
         <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:${FAINT};font-weight:700;margin-bottom:6px">
@@ -554,6 +795,18 @@ export function buildTradeGradeEmail(params: {
         }
       </td>
     </tr>
+    <tr><td style="height:12px"></td></tr>
+    ${
+      forwardRisk
+        ? `<tr>
+      <td style="padding:11px 14px;border:1px solid ${BORDER};border-radius:12px">
+        <div style="font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:${FAINT};font-weight:700;margin-bottom:4px">How this could age badly</div>
+        <div style="font-size:11.5px;line-height:1.6;color:${MUTED}">${escapeHtml(forwardRisk)}</div>
+      </td>
+    </tr>
+    <tr><td style="height:12px"></td></tr>`
+        : ''
+    }
     ${psychologyCard(psychology)}
     <tr>
       <td align="center" style="padding:20px 0 6px 0">
@@ -565,11 +818,12 @@ export function buildTradeGradeEmail(params: {
         </div>
       </td>
     </tr>
-    <tr>
-      <td style="padding-top:16px;border-top:1px solid ${BORDER};color:${FAINT};font-size:11px">
-        AllFantasy.ai
-      </td>
-    </tr>
+    ${emailFooter({
+      baseUrl,
+      leagueName,
+      leagueId: params.leagueId ?? null,
+      unsubscribeUrl: params.unsubscribeUrl ?? null,
+    })}
   </table>
 </div>
 </body>

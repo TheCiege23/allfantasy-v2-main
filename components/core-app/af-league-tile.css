@@ -1,0 +1,273 @@
+/*
+ * 27a — league tile.
+ *
+ * Reads the .af-core token layer (--surface, --line, --accent, the --p-* platform
+ * pairs …). Every surface that renders a tile is already inside `.af-core`; the
+ * dev states preview stamps the class on its own root for the same reason.
+ */
+
+.af-lt {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-left-width: 2px;
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.af-lt:hover {
+  border-color: var(--line2);
+  background: var(--surface2);
+}
+
+.af-lt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Tone drives the left border and the status dot together — one signal. */
+.af-lt[data-tone='neutral'] { border-left-color: var(--line2); }
+.af-lt[data-tone='accent'] { border-left-color: var(--accent); }
+.af-lt[data-tone='live'] { border-left-color: var(--good); }
+.af-lt[data-tone='warn'] { border-left-color: var(--warn); }
+.af-lt[data-tone='gold'] { border-left-color: var(--p-gold-fg); }
+
+/* ── Art + corner platform badge ─────────────────────────────────── */
+
+.af-lt-art {
+  position: relative;
+  flex: none;
+  display: block;
+  border-radius: 9px;
+  overflow: visible;
+}
+
+.af-lt-img,
+.af-lt-fallback {
+  width: 100%;
+  height: 100%;
+  display: block;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.af-lt-fallback {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: -0.02em;
+}
+
+.af-lt[data-variant='rail'] .af-lt-fallback { font-size: 10px; }
+
+/*
+ * The badge. Corner mark on the art, never its own row.
+ *
+ * The ring is `--surface` rather than transparent so the badge reads against
+ * photographic league art — see the component's note.
+ */
+.af-lt-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 15px;
+  height: 15px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  box-shadow: 0 0 0 1.5px var(--surface);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  background: var(--chip);
+  color: var(--muted);
+}
+
+.af-lt[data-variant='rail'] .af-lt-badge {
+  width: 12px;
+  height: 12px;
+  font-size: 7px;
+  border-radius: 4px;
+}
+
+.af-lt:hover .af-lt-badge { box-shadow: 0 0 0 1.5px var(--surface2); }
+
+/* Platform pairs from the token layer. */
+.af-lt-badge[data-platform='sleeper'] { background: var(--p-sleeper-bg); color: var(--p-sleeper-fg); }
+.af-lt-badge[data-platform='espn'] { background: var(--p-espn-bg); color: var(--p-espn-fg); }
+.af-lt-badge[data-platform='yahoo'] { background: var(--p-yahoo-bg); color: var(--p-yahoo-fg); }
+.af-lt-badge[data-platform='cbs'] { background: var(--p-green-bg); color: var(--p-green-fg); }
+.af-lt-badge[data-platform='mfl'] { background: var(--p-gold-bg); color: var(--p-gold-fg); }
+.af-lt-badge[data-platform='fantrax'] { background: var(--tier-blue-soft); color: var(--tier-blue-fg); }
+
+/* ── Body ─────────────────────────────────────────────────────────── */
+
+.af-lt-body {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.af-lt-name {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-weight: 700;
+  font-size: 13.5px;
+  letter-spacing: -0.015em;
+  color: var(--text);
+  /* The truncation the handoff's bug report is about. Still truncates — the fix
+     is that the visible part is now distinguishable, not that it never clips. */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-lt[data-variant='rail'] .af-lt-name { font-size: 12px; }
+
+.af-lt-disambig {
+  flex: none;
+  font-style: normal;
+  font-size: 9px;
+  color: var(--faint);
+  cursor: help;
+}
+
+.af-lt-format {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-lt[data-variant='rail'] .af-lt-format { font-size: 9px; }
+
+.af-lt-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.af-lt-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--line2);
+}
+
+.af-lt[data-tone='accent'] .af-lt-dot { background: var(--accent); }
+.af-lt[data-tone='live'] .af-lt-dot { background: var(--good); }
+.af-lt[data-tone='warn'] .af-lt-dot { background: var(--warn); }
+.af-lt[data-tone='gold'] .af-lt-dot { background: var(--p-gold-fg); }
+
+/* Only the live state pulses. A pulsing dot on four states is a strobe. */
+.af-lt[data-state='live'] .af-lt-dot { animation: af-lt-pulse 1.9s ease-in-out infinite; }
+
+@keyframes af-lt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .af-lt[data-state='live'] .af-lt-dot { animation: none; }
+}
+
+.af-lt-state {
+  flex: none;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--text2);
+}
+
+.af-lt[data-tone='accent'] .af-lt-state { color: var(--accent); }
+.af-lt[data-tone='live'] .af-lt-state { color: var(--good); }
+.af-lt[data-tone='warn'] .af-lt-state { color: var(--warn); }
+.af-lt[data-tone='gold'] .af-lt-state { color: var(--p-gold-fg); }
+
+.af-lt-reason {
+  min-width: 0;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Score ────────────────────────────────────────────────────────── */
+
+.af-lt-score {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  text-align: right;
+}
+
+.af-lt-score-nums {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* A projection is dimmer than a result, and says "proj" beside itself. */
+.af-lt-score[data-projected='true'] .af-lt-score-nums { color: var(--muted); font-weight: 600; }
+.af-lt-score-nums[data-leading='true'] { color: var(--good); }
+.af-lt-score[data-projected='true'] .af-lt-score-nums[data-leading='true'] { color: var(--text2); }
+
+.af-lt-score-sep { font-style: normal; padding: 0 3px; color: var(--faint); }
+
+.af-lt-score-tag {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-lt-score-opp {
+  font-size: 10px;
+  color: var(--faint);
+  max-width: 120px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Rail density ─────────────────────────────────────────────────── */
+
+.af-lt[data-variant='rail'] {
+  gap: 8px;
+  padding: 7px 9px;
+  border-radius: 9px;
+}
+
+.af-lt[data-variant='rail'] .af-lt-status { font-size: 10px; margin-top: 1px; }
+.af-lt[data-variant='rail'] .af-lt-state { font-size: 8.5px; }
+.af-lt[data-variant='rail'] .af-lt-score-nums { font-size: 11px; }
+.af-lt[data-variant='rail'] .af-lt-score-opp { display: none; }

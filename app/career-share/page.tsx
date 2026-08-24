@@ -106,7 +106,7 @@ function LoginRequiredState() {
           <div className="text-xs font-bold uppercase tracking-[0.3em] text-violet-300">Career Share</div>
           <h1 className="mt-4 text-3xl font-black">Sign in to build share-ready posts</h1>
           <p className="mt-3 text-sm leading-6 text-white/55">
-            Generate Grok-powered captions, load your dynasty report, and earn reward tokens after sharing.
+            Chimmy writes the caption, your career data loads itself, and sharing earns you a token once a day.
           </p>
           <Link
             href="/login?callbackUrl=%2Fcareer-share"
@@ -556,10 +556,10 @@ export default function CareerSharePage() {
         <div className="sticky top-0 z-20 border-b border-white/6 bg-[#07071a]/90 backdrop-blur-xl">
           <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
             <div>
-              <div className="mb-0.5 text-xs font-bold uppercase tracking-widest text-violet-400">🚀 AI-Powered</div>
+              <div className="mb-0.5 text-xs font-bold uppercase tracking-widest text-violet-400">Chimmy</div>
               <h1 className="text-xl font-black text-white">Career Share</h1>
               <p className="mt-0.5 text-xs text-white/40">
-                Generate AI captions for any fantasy moment. Earn tokens for sharing.
+                Captions for any fantasy moment. Sharing earns one token, once a day.
               </p>
             </div>
 
@@ -654,7 +654,7 @@ export default function CareerSharePage() {
                 <div className="space-y-4 rounded-2xl border border-white/8 bg-[#0c0c1e] p-5">
                   <p className="text-[10px] font-bold uppercase tracking-widest text-white/40">Career Data (optional)</p>
                   <p className="text-[11px] leading-relaxed text-white/30">
-                    Pull in your AI dynasty report and ranking snapshot. If you skip this, Grok still creates a general career-share caption.
+                    Pull in your dynasty report and ranking snapshot. If you skip this, Chimmy still writes a general career-share caption.
                   </p>
 
                   {rankImported && rankData ? (
@@ -1003,7 +1003,7 @@ export default function CareerSharePage() {
                     <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                       <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" strokeDasharray="40" strokeDashoffset="10" />
                     </svg>
-                    Generating with Grok...
+                    Chimmy is writing…
                   </span>
                 ) : (
                   '✨ Generate Caption'
@@ -1108,7 +1108,7 @@ export default function CareerSharePage() {
                   <div className="mb-4 text-5xl">🚀</div>
                   <h3 className="mb-2 text-lg font-bold text-white">Share Your Fantasy Story</h3>
                   <p className="mx-auto max-w-sm text-sm text-white/40">
-                    Choose a share type, fill in your details, and let Grok AI write the perfect caption for any platform.
+                    Choose a share type, fill in your details, and let Chimmy write the caption for the platform you pick.
                   </p>
                   <div className="mx-auto mt-6 grid max-w-xs grid-cols-2 gap-3 text-xs text-white/30">
                     <div className="flex items-center gap-2">
@@ -1142,7 +1142,7 @@ export default function CareerSharePage() {
                       />
                     ))}
                   </div>
-                  <p className="text-sm text-white/60">Grok is writing your caption...</p>
+                  <p className="text-sm text-white/60">Chimmy is writing your caption…</p>
                 </div>
               ) : null}
 

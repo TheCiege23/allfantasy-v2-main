@@ -1,0 +1,537 @@
+/*
+ * 23a — communications drawer. 23b — the same drawer docked on desktop.
+ *
+ * One stylesheet, one component, two modes. `[data-mode]` is the only thing that
+ * differs: 352px over the page, or 392px beside it.
+ */
+
+.af-cm-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  border: 0;
+  padding: 0;
+  background: rgba(3, 4, 10, 0.62);
+  backdrop-filter: blur(2px);
+  cursor: default;
+}
+
+.af-cm {
+  position: fixed;
+  z-index: 61;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+}
+
+/* Overlay: 352px, covers the page, full height. */
+.af-cm[data-mode='overlay'] {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 352px;
+  max-width: 100vw;
+}
+
+/*
+ * Docked: 392px, beside the content rather than over it. The page's own
+ * container gets `padding-right` from `.af-shell[data-comms-docked]` so nothing
+ * is hidden underneath — the point of docking is that you do not lose your place.
+ */
+.af-cm[data-mode='docked'] {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 392px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────── */
+
+.af-cm-head {
+  flex: none;
+  padding: 14px 15px 0;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-cm-headtop {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.af-cm-title {
+  flex: 1;
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+/* Contract 4 — the scope is always on screen. */
+.af-cm-scopechip {
+  max-width: 140px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-cm-scopechip[data-global='true'] {
+  border-color: var(--line2);
+  background: var(--chip);
+  color: var(--faint);
+}
+
+.af-cm-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.af-cm-close:hover { background: var(--surface); color: var(--text); }
+
+.af-cm-tabs {
+  display: flex;
+  gap: 2px;
+  margin-top: 12px;
+}
+
+.af-cm-tab {
+  flex: 1;
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--faint);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: color 0.13s ease, border-color 0.13s ease;
+}
+
+.af-cm-tab:hover { color: var(--text2); }
+.af-cm-tab[data-on='true'] { color: var(--accent); border-bottom-color: var(--accent); }
+
+.af-cm-audience {
+  margin: 0;
+  padding: 7px 0 9px;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* ── Panel ────────────────────────────────────────────────────────── */
+
+.af-cm-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.af-cm-scope {
+  flex: none;
+  padding: 11px 15px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-cm-scope-label {
+  display: block;
+  margin-bottom: 6px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-cm-scope-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.af-cm-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-cm-chip:hover { background: var(--surface2); }
+
+.af-cm-chip[data-on='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-cm-chip-badge {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  color: var(--faint);
+}
+
+.af-cm-chip[data-on='true'] .af-cm-chip-badge { color: var(--accent); }
+
+.af-cm-scope-note {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-cm-summon {
+  width: 100%;
+  margin-top: 9px;
+  padding: 7px 10px;
+  border: 1px dashed var(--accent-line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-cm-summon:hover { background: var(--accent-soft); }
+
+/* ── Thread ───────────────────────────────────────────────────────── */
+
+.af-cm-thread {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 13px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.af-cm-turn { max-width: 92%; }
+.af-cm-turn[data-role='you'] { align-self: flex-end; text-align: right; }
+
+.af-cm-turn-text {
+  display: inline-block;
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 13px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.af-cm-turn[data-role='you'] .af-cm-turn-text {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--text);
+}
+
+.af-cm-turn[data-role='chimmy'] .af-cm-turn-text {
+  background: var(--chimmy, var(--surface2));
+  border: 1px solid var(--line2);
+  color: var(--text2);
+}
+
+.af-cm-typing { color: var(--faint); font-style: italic; }
+
+/* Contract 1 — a league answer says it is public. */
+.af-cm-public {
+  margin: 5px 0 0;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: var(--warn-soft);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+.af-cm-handoff {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 5px 11px;
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.af-cm-handoff:hover { background: var(--accent-line); }
+
+.af-cm-cost {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.05em;
+  color: var(--faint);
+}
+
+.af-cm-msg { display: flex; flex-direction: column; gap: 2px; }
+
+.af-cm-msg-author {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.af-cm-msg-text {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.af-cm-loading,
+.af-cm-error {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+.af-cm-error { color: var(--bad); }
+
+.af-cm-empty {
+  padding: 20px 4px;
+  text-align: center;
+}
+
+.af-cm-empty--grow { flex: 1; display: flex; flex-direction: column; justify-content: center; }
+
+.af-cm-empty-t {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-cm-empty-b {
+  margin: 7px auto 0;
+  max-width: 40ch;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.af-cm-quick {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 15px;
+}
+
+.af-cm-quickbtn {
+  padding: 8px 11px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.af-cm-quickbtn:hover { background: var(--surface2); border-color: var(--accent-line); }
+
+/* Contracts 2 and 3 — the privacy statements, rendered every open. */
+.af-cm-privacy {
+  flex: none;
+  margin: 13px 15px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line2);
+  border-left: 2px solid var(--accent);
+  border-radius: 9px;
+  background: var(--surface2);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.af-cm-publicbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 9px 15px;
+  border-bottom: 1px solid var(--line);
+  background: var(--warn-soft);
+  font-size: 10.5px;
+  line-height: 1.5;
+  color: var(--warn);
+}
+
+.af-cm-publicbar b { color: var(--text); }
+
+.af-cm-linkbtn {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ── Composer ─────────────────────────────────────────────────────── */
+
+.af-cm-composer {
+  flex: none;
+  display: flex;
+  gap: 7px;
+  padding: 11px 15px 0;
+  border-top: 1px solid var(--line);
+}
+
+.af-cm-input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+.af-cm-input:focus { outline: none; border-color: var(--accent-line); }
+.af-cm-input::placeholder { color: var(--faint); }
+
+.af-cm-send {
+  flex: none;
+  padding: 9px 13px;
+  border: 1px solid var(--accent-line);
+  border-radius: 9px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.af-cm-send:disabled { opacity: 0.45; cursor: default; }
+
+.af-cm-costnote {
+  flex: none;
+  margin: 6px 15px 0;
+  font-size: 10px;
+  color: var(--faint);
+}
+
+/* ── Footer ───────────────────────────────────────────────────────── */
+
+.af-cm-foot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 15px;
+  margin-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.af-cm-footlink {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-cm-footnote {
+  font-size: 9.5px;
+  color: var(--faint);
+  text-align: right;
+}
+
+/* ── Launcher ─────────────────────────────────────────────────────── */
+
+.af-cm-launch {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 59;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 10px 15px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 18px 40px -22px rgba(0, 0, 0, 0.9);
+}
+
+.af-cm-launch:hover { filter: brightness(1.08); }
+
+/*
+ * Docked mode pushes the page rather than covering it. Applied on the shell so
+ * the content column reflows — the whole argument for docking is not losing
+ * your place on the roster behind the panel.
+ */
+.af-shell[data-comms-docked='true'] { padding-right: 392px; }
+
+@media (max-width: 1200px) {
+  /* Below this the page has no room to give up, so docked falls back to overlay. */
+  .af-shell[data-comms-docked='true'] { padding-right: 0; }
+  .af-cm[data-mode='docked'] { width: 352px; box-shadow: var(--shadow); }
+}
+
+@media (max-width: 520px) {
+  .af-cm[data-mode='overlay'],
+  .af-cm[data-mode='docked'] { width: 100vw; }
+  .af-cm-launch { right: 14px; bottom: 76px; }
+}

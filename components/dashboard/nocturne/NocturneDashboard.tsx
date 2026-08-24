@@ -271,10 +271,18 @@ function readRank(p: RankPayload | undefined) {
 const TOOLS = [
   { key: 'waiver', label: 'Waiver Assistant', desc: 'Ranked pickups for every league.', Icon: MousePointerClick, href: '/legacy?tab=waiver', premiumOnly: false },
   { key: 'trade', label: 'Trade Analyzer', desc: 'Fairness scoring on any proposal.', Icon: ArrowLeftRight, href: '/legacy?tab=trade', premiumOnly: true },
-  { key: 'outlook', label: 'Season Outlook', desc: 'Playoff & championship odds.', Icon: LineChart, href: '/af-legacy?tab=pulse', premiumOnly: true },
+  /*
+   * ⚠ THIS HREF WAS `/af-legacy?tab=pulse` AND THAT WAS A ROUTING BUG, NOT A
+   * PLACEHOLDER. The label promises "playoff & championship odds"; the
+   * destination is the Legacy import board's Market tab, which shows neither.
+   * Handoff 26b built the real page — cross-league playoff and title odds
+   * simulated per league — and this is its entry point. See
+   * lib/core-app/seasonOutlook.ts.
+   */
+  { key: 'outlook', label: 'Season Outlook', desc: 'Playoff & championship odds.', Icon: LineChart, href: '/core/season-outlook', premiumOnly: true },
   { key: 'history', label: 'Trade History', desc: 'Every trade, by week.', Icon: History, href: '/af-legacy?tab=finder', premiumOnly: true },
   { key: 'psych', label: 'Manager Psychology', desc: 'Your play style, decoded.', Icon: Brain, href: '/af-legacy?tab=compare', premiumOnly: true },
-  { key: 'social', label: 'Social Media Sharing', desc: 'Share your season highlights.', Icon: Share2, href: '/career-share', premiumOnly: false },
+  { key: 'social', label: 'Social Media Sharing', desc: 'Share your season highlights.', Icon: Share2, href: '/core/share', premiumOnly: false },
   { key: 'compare', label: 'Manager Compare', desc: 'You vs. league average.', Icon: Scale, href: '/af-legacy?tab=compare', premiumOnly: true },
 ] as const
 

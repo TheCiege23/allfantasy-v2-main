@@ -1,0 +1,258 @@
+/* 25b — contact support modal. Reads the .af-core token layer. */
+
+.af-sp-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  border: 0;
+  padding: 0;
+  background: rgba(3, 4, 10, 0.66);
+  backdrop-filter: blur(2px);
+  cursor: default;
+}
+
+.af-sp {
+  position: fixed;
+  z-index: 71;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 24px));
+  max-height: calc(100vh - 48px);
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line2);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.af-sp-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.af-sp-title {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+.af-sp-close {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.af-sp-close:hover { background: var(--surface); color: var(--text); }
+
+.af-sp-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 15px 16px 17px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.af-sp-field { display: flex; flex-direction: column; gap: 6px; }
+
+.af-sp-label {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-sp-label i { font-style: normal; text-transform: none; letter-spacing: 0.02em; }
+
+.af-sp-hint {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--faint);
+}
+
+.af-sp-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+
+.af-sp-chip {
+  padding: 6px 11px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--chip);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.13s ease, border-color 0.13s ease, color 0.13s ease;
+}
+
+.af-sp-chip:hover { background: var(--surface2); }
+
+.af-sp-chip[data-on='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-sp-input,
+.af-sp-select,
+.af-sp-textarea {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.af-sp-textarea { resize: vertical; }
+
+.af-sp-input:focus,
+.af-sp-select:focus,
+.af-sp-textarea:focus { outline: none; border-color: var(--accent-line); }
+
+.af-sp-input::placeholder,
+.af-sp-textarea::placeholder { color: var(--faint); }
+
+/* ── Diagnostics disclosure ───────────────────────────────────────── */
+
+.af-sp-diag {
+  padding: 12px 13px;
+  border: 1px solid var(--line2);
+  border-left: 2px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface2);
+}
+
+.af-sp-diag-t {
+  margin: 0;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.af-sp-diag-b {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-sp-diag-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.af-sp-diag-list label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+.af-sp-diag-list input { flex: none; accent-color: var(--accent); }
+
+.af-sp-diag-label {
+  flex: none;
+  font-size: 11px;
+  color: var(--text2);
+}
+
+.af-sp-diag-value {
+  min-width: 0;
+  flex: 1;
+  text-align: right;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Actions / states ─────────────────────────────────────────────── */
+
+.af-sp-actions { display: flex; gap: 7px; }
+
+.af-sp-btn {
+  padding: 9px 15px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--chip);
+  color: var(--text2);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.af-sp-btn:hover:not(:disabled) { background: var(--surface2); }
+
+.af-sp-btn--primary {
+  border-color: var(--accent-line);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.af-sp-btn--primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+.af-sp-btn:disabled { opacity: 0.45; cursor: default; }
+
+.af-sp-confirm {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+.af-sp-confirm b { color: var(--text); }
+
+.af-sp-note {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+
+.af-sp-error {
+  margin: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(251, 91, 120, 0.3);
+  border-radius: 9px;
+  background: var(--bad-soft);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--bad);
+}

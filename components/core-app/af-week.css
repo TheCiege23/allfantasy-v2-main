@@ -1,0 +1,623 @@
+/*
+ * 24a "Your Week" + 24b "Rivalry Radar".
+ *
+ * One stylesheet for both because they are one screen key behind ?view= and
+ * share the header, the empty state and the button vocabulary. Reads the
+ * .af-core token layer.
+ */
+
+.af-wk {
+  max-width: 1080px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────── */
+
+.af-wk-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.af-wk-eyebrow {
+  margin: 0 0 6px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-wk-title {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+}
+
+.af-wk-sub {
+  margin: 8px 0 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-wk-headactions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.af-wk-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 0.14s ease, border-color 0.14s ease;
+}
+
+.af-wk-btn:hover { background: var(--accent-line); }
+
+.af-wk-btn--ghost {
+  border-color: var(--line2);
+  background: var(--chip);
+  color: var(--text2);
+}
+
+.af-wk-btn--ghost:hover { background: var(--surface2); border-color: var(--line2); }
+
+/* ── Sections ─────────────────────────────────────────────────────── */
+
+.af-wk-section { margin-bottom: 28px; }
+
+.af-wk-sectionhead { margin-bottom: 12px; }
+
+.af-wk-sectiontitle {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-wk-sectionnote {
+  margin: 4px 0 0;
+  max-width: 68ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+/* ── Coin-flip tier ───────────────────────────────────────────────── */
+
+.af-wk-flips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+  gap: 12px;
+}
+
+.af-wk-flip {
+  display: block;
+  padding: 16px 17px;
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--accent);
+  border-radius: 13px;
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: border-color 0.14s ease, background 0.14s ease;
+}
+
+.af-wk-flip:hover { background: var(--surface2); border-color: var(--line2); border-left-color: var(--accent); }
+
+.af-wk-flip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-wk-league {
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-wk-gap {
+  flex: none;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--warn);
+}
+
+.af-wk-flip-prob {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.af-wk-prob {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--text);
+}
+
+.af-wk-prob[data-favoured='true'] { color: var(--good); }
+.af-wk-prob[data-favoured='false'] { color: var(--bad); }
+
+.af-wk-prob-label {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-wk-flip-line {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-top: 10px;
+  min-width: 0;
+}
+
+.af-wk-vs {
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-wk-opp {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-wk-flip-score {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-top: 8px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 13px;
+  color: var(--text2);
+}
+
+.af-wk-flip-score i { font-style: normal; color: var(--faint); }
+
+.af-wk-projtag {
+  margin-left: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Leaning tier ─────────────────────────────────────────────────── */
+
+.af-wk-leans {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 8px;
+}
+
+.af-wk-lean {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  text-decoration: none;
+  color: inherit;
+  transition: background 0.14s ease;
+}
+
+.af-wk-lean:hover { background: var(--surface2); }
+
+.af-wk-lean-league {
+  min-width: 0;
+  flex: 1;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-wk-lean-prob {
+  flex: none;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.af-wk-lean-prob[data-favoured='true'] { color: var(--good); }
+.af-wk-lean-prob[data-favoured='false'] { color: var(--bad); }
+.af-wk-lean-prob--none { color: var(--faint); }
+
+.af-wk-lean-score {
+  flex: none;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--faint);
+  max-width: 130px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-wk-lean[data-unprojected='true'] { border-style: dashed; }
+
+/* ── Footer / empty ───────────────────────────────────────────────── */
+
+.af-wk-foot {
+  margin-top: 26px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface2);
+}
+
+.af-wk-foot p {
+  margin: 0 0 7px;
+  max-width: 80ch;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+
+.af-wk-foot p:last-child { margin-bottom: 0; }
+.af-wk-foot b { color: var(--text2); }
+
+.af-wk-empty {
+  padding: 28px 24px;
+  border: 1px dashed var(--line2);
+  border-radius: 13px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.af-wk-empty-t {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-wk-empty-b {
+  margin: 8px auto 16px;
+  max-width: 56ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+/* ══ 24b — Rivalry Radar ═══════════════════════════════════════════ */
+
+.af-rr-watch {
+  margin-bottom: 26px;
+  padding: 16px 18px;
+  border: 1px solid var(--accent-line);
+  border-radius: 13px;
+  background: var(--accent-soft);
+}
+
+.af-rr-watch-eyebrow {
+  margin: 0 0 5px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.af-rr-watch-title {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+.af-rr-watch-body {
+  margin: 7px 0 0;
+  max-width: 70ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+.af-rr-watch-rule {
+  margin: 9px 0 0;
+  max-width: 74ch;
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-rr-tier { margin-bottom: 28px; }
+
+.af-rr-tierhead { margin-bottom: 12px; }
+
+.af-rr-tiertitle {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.af-rr-tier[data-tone='bad'] .af-rr-tiertitle { color: var(--bad); }
+.af-rr-tier[data-tone='good'] .af-rr-tiertitle { color: var(--good); }
+.af-rr-tier[data-tone='neutral'] .af-rr-tiertitle { color: var(--text); }
+
+.af-rr-tiernote {
+  margin: 4px 0 0;
+  max-width: 72ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-rr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(292px, 1fr));
+  gap: 12px;
+}
+
+.af-rr-card {
+  display: flex;
+  flex-direction: column;
+  padding: 15px 16px;
+  border: 1px solid var(--line);
+  border-left-width: 2px;
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.af-rr-card[data-tone='bad'] { border-left-color: var(--bad); }
+.af-rr-card[data-tone='good'] { border-left-color: var(--good); }
+.af-rr-card[data-tone='neutral'] { border-left-color: var(--line2); }
+
+.af-rr-cardhead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.af-rr-who { min-width: 0; }
+
+.af-rr-opp {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-rr-league {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-rr-record {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.af-rr-record[data-tone='bad'] { color: var(--bad); }
+.af-rr-record[data-tone='good'] { color: var(--good); }
+.af-rr-record[data-tone='neutral'] { color: var(--text2); }
+
+.af-rr-record-label {
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-rr-small {
+  margin: 12px 0 0;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-rr-stats {
+  display: flex;
+  gap: 22px;
+  margin: 13px 0 0;
+}
+
+.af-rr-stats dt {
+  margin: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-rr-stats dd {
+  margin: 2px 0 0;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-rr-stats dd[data-sign='pos'] { color: var(--good); }
+.af-rr-stats dd[data-sign='neg'] { color: var(--bad); }
+
+.af-rr-closest {
+  margin: 12px 0 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-rr-closest b {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-rr-today {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+}
+
+.af-rr-today-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-rr-today-prob {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+}
+
+.af-rr-today-prob[data-favoured='true'] { color: var(--good); }
+.af-rr-today-prob[data-favoured='false'] { color: var(--bad); }
+
+.af-rr-today-gap {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.af-rr-today-none {
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-rr-open {
+  margin-top: 13px;
+  align-self: flex-start;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-rr-open:hover { text-decoration: underline; }
+
+/* ── Mobile ───────────────────────────────────────────────────────── */
+
+/*
+ * The same two tiers, stacked. Coin flips go full-width and stay large; the rest
+ * stays compact. Never a horizontal scroller — the handoff rules that out
+ * explicitly, and a row of off-screen matchups is a row nobody reads.
+ */
+@media (max-width: 640px) {
+  .af-wk-title { font-size: 21px; }
+  .af-wk-flips { grid-template-columns: 1fr; }
+  .af-wk-leans { grid-template-columns: 1fr 1fr; }
+  .af-rr-grid { grid-template-columns: 1fr; }
+  .af-wk-headactions { width: 100%; }
+  .af-wk-prob { font-size: 30px; }
+}
+
+/*
+ * Platform tint on a plain text span.
+ *
+ * ⚠ NOT `.af-platform`. That class in af-core.css sets a solid BACKGROUND — it
+ * is the badge treatment, correct on the rail's square marks and on the league
+ * tile's corner badge, and wrong on a league NAME, where it paints a filled
+ * block behind the words. These rules give the same identification with a dot
+ * instead.
+ */
+.af-wk-league::before,
+.af-wk-lean-league::before,
+.af-rr-league::before,
+.af-so-league::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--line2);
+}
+
+.af-wk-league[data-platform='sleeper']::before,
+.af-wk-lean-league[data-platform='sleeper']::before,
+.af-rr-league[data-platform='sleeper']::before,
+.af-so-league[data-platform='sleeper']::before { background: var(--p-sleeper-fg); }
+
+.af-wk-league[data-platform='espn']::before,
+.af-wk-lean-league[data-platform='espn']::before,
+.af-rr-league[data-platform='espn']::before,
+.af-so-league[data-platform='espn']::before { background: var(--p-espn-fg); }
+
+.af-wk-league[data-platform='yahoo']::before,
+.af-wk-lean-league[data-platform='yahoo']::before,
+.af-rr-league[data-platform='yahoo']::before,
+.af-so-league[data-platform='yahoo']::before { background: var(--p-yahoo-fg); }
+
+.af-wk-league[data-platform='cbs']::before,
+.af-wk-lean-league[data-platform='cbs']::before,
+.af-rr-league[data-platform='cbs']::before,
+.af-so-league[data-platform='cbs']::before { background: var(--p-green-fg); }
