@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
+import CommsDock, { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/CommsDock'
 import { useMemo, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
@@ -49,6 +50,12 @@ export type CoreNavKey =
   | 'rankings'
   | 'commissioner'
   | 'tools'
+  // Handoff screens 24a/24b, 26b, 26a and 22c. All behind the same catch-all
+  // route as everything else here — the repo is at Vercel's 2048-route ceiling.
+  | 'week'
+  | 'season-outlook'
+  | 'share'
+  | 'notifications'
 
 type NavItem = {
   key: CoreNavKey
@@ -72,6 +79,20 @@ export type AfCoreShellProps = {
   warRoomLive?: boolean
   /** Keeps league-scoped nav links pointed at the league in context. */
   selectedLeagueId?: string | null
+  /**
+   * Feeds the communications drawer (23a/23b) and the support modal (25b), both
+   * mounted once here so every screen inherits them. Omitted on surfaces that
+   * have no league context to offer.
+   */
+  comms?: {
+    leagues: Array<{ id: string; name: string; platform: string }>
+    chimmyTokenCost: number | null
+    /** League-scoped screens dock the panel beside the content instead of over it. */
+    dockable: boolean
+    supportEmail: string | null
+  } | null
+  /** Unread count for the Notifications nav badge. Omitted when zero. */
+  notificationCount?: number
   children: React.ReactNode
 }
 
@@ -120,6 +141,9 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         : '/core/waivers',
     },
     { key: 'players', label: 'Player Finder', glyph: '●', href: '/core/players' },
+    // 24a — every matchup at once, ordered by what needs a decision. Cross-league,
+    // so no ?league= on it: scoping this to one league is the thing it replaces.
+    { key: 'week', label: 'Your week', glyph: '◱', href: '/core/week' },
     {
       key: 'war-room',
       label: 'War Room',
@@ -150,6 +174,8 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     // shipped "Career" with ◷ — which is Waivers' glyph, so the rail had the same
     // mark twice.
     { key: 'career', label: 'Your career', glyph: '★', href: '/core/career' },
+    // 26b — replaces the dashboard entry that pointed at /af-legacy?tab=pulse.
+    { key: 'season-outlook', label: 'Season Outlook', glyph: '◎', href: '/core/season-outlook' },
     {
       key: 'rankings',
       label: 'Rankings',
@@ -166,6 +192,18 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       badge:
         props.commissionerCount && props.commissionerCount > 0
           ? { text: String(props.commissionerCount), tone: 'count' }
+          : undefined,
+    },
+    {
+      key: 'notifications',
+      label: 'Notifications',
+      glyph: '◐',
+      href: '/core/notifications',
+      // Only when something is actually unread — a badge with nothing behind it
+      // is an invented notification, the same rule ChimmyFab follows.
+      badge:
+        props.notificationCount && props.notificationCount > 0
+          ? { text: String(props.notificationCount), tone: 'count' }
           : undefined,
     },
     { key: 'tools', label: 'Tools', glyph: '⚙', href: '/core/tools' },
@@ -198,7 +236,7 @@ function HelpDot({ title, body }: { title: string; body: string }) {
 
 export function AfCoreShell(props: AfCoreShellProps) {
   const items = useMemo(() => navItems(props), [props])
-  const { leagues, syncAge, plan, weekLabel, active, children } = props
+  const { leagues, syncAge, plan, weekLabel, active, children, comms } = props
 
   return (
     <div className="af-core af-shell">
@@ -289,6 +327,20 @@ export function AfCoreShell(props: AfCoreShellProps) {
             Connect a platform
           </Link>
         </div>
+
+        {/*
+          25b's entry point. A button rather than a link to /support because the
+          modal keeps the user where they are and attaches the page they were on
+          — which is the diagnostic that makes a report actionable. /support is
+          still there for anyone who arrives at it directly.
+        */}
+        <button
+          type="button"
+          className="af-nav-support"
+          onClick={() => window.dispatchEvent(new CustomEvent(SUPPORT_OPEN_EVENT))}
+        >
+          Contact support
+        </button>
       </aside>
 
       {/* ── Main column ─────────────────────────────────────────────── */}
@@ -355,6 +407,24 @@ export function AfCoreShell(props: AfCoreShellProps) {
           {children}
         </main>
       </div>
+
+      {/*
+        23a/23b + 25b, mounted once for the whole shell.
+
+        Both are overlays that must survive navigation — the drawer's entire
+        product argument is "never a page you navigate to and lose your place",
+        and a per-screen mount would unmount it on every link. Same placement
+        reasoning as GeoRestrictionNotice above.
+      */}
+      {comms ? (
+        <CommsDock
+          leagues={comms.leagues}
+          pageLeagueId={props.selectedLeagueId ?? null}
+          chimmyTokenCost={comms.chimmyTokenCost}
+          dockable={comms.dockable}
+          supportEmail={comms.supportEmail}
+        />
+      ) : null}
     </div>
   )
 }

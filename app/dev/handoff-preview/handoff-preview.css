@@ -1,0 +1,294 @@
+/*
+ * Dev handoff preview chrome. Deliberately plain — the point of the page is the
+ * components it hosts, and a styled wrapper competing with them makes the
+ * preview harder to read, not easier.
+ */
+
+.hp {
+  min-height: 100vh;
+  padding: 36px 22px 80px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+}
+
+.hp-head {
+  max-width: 880px;
+  margin: 0 auto 44px;
+}
+
+.hp-eyebrow {
+  margin: 0 0 8px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.hp-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+}
+
+.hp-sub {
+  margin: 10px 0 0;
+  max-width: 76ch;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.hp-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+.hp-navlink {
+  padding: 6px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.hp-navlink:hover { background: var(--accent-line); }
+
+.hp-navlink--alt {
+  border-color: var(--line2);
+  background: var(--chip);
+  color: var(--text2);
+}
+
+.hp-section {
+  max-width: 880px;
+  margin: 0 auto 52px;
+  padding-top: 26px;
+  border-top: 1px solid var(--line);
+}
+
+.hp-sechead { margin-bottom: 18px; }
+
+.hp-sectitle {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+}
+
+.hp-secblurb {
+  margin: 7px 0 0;
+  max-width: 80ch;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--faint);
+}
+
+.hp-subhead {
+  margin: 28px 0 10px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.hp-note {
+  margin: 10px 0 0;
+  max-width: 80ch;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.hp-note--warn {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--warn-soft);
+  border-left: 2px solid var(--warn);
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--text2);
+}
+
+.hp-note code {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.hp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 14px;
+  font-size: 11.5px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.hp-toggle input { accent-color: var(--accent); }
+
+/* ── Tiles ────────────────────────────────────────────────────────── */
+
+.hp-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.hp-tilewrap { position: relative; }
+
+.hp-tilelabel {
+  position: absolute;
+  top: -8px;
+  left: 10px;
+  z-index: 1;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid var(--line2);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.hp-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-width: 400px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+
+.hp-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.hp-splitlabel {
+  margin: 0 0 7px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+/* ── Phone ────────────────────────────────────────────────────────── */
+
+.hp-phonerow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  align-items: flex-start;
+}
+
+.hp-phonenote {
+  flex: 1;
+  min-width: 260px;
+  max-width: 46ch;
+}
+
+.hp-phonenote p {
+  margin: 0 0 11px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.hp-phonenote b { color: var(--text); }
+.hp-phonenote a { color: var(--accent); }
+
+/* ── Emails ───────────────────────────────────────────────────────── */
+
+.hp-emails {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+.hp-email {
+  border: 1px solid var(--line2);
+  border-radius: 13px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.hp-subject {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 10px 13px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface2);
+}
+
+.hp-subject-label {
+  flex: none;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.hp-subject-text {
+  min-width: 0;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.hp-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: #0b0b0f;
+}
+
+/* ── List ─────────────────────────────────────────────────────────── */
+
+.hp-list {
+  margin: 0;
+  padding-left: 20px;
+  max-width: 82ch;
+}
+
+.hp-list li {
+  margin-bottom: 12px;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+.hp-list a {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.hp-list a:hover { text-decoration: underline; }
+.hp-list b { color: var(--text2); }

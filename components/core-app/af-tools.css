@@ -55,3 +55,166 @@
 .af-tl-out { font-size: 11px; color: var(--faint); }
 
 .af-tl-card-desc { font-size: 12.5px; line-height: 1.45; color: var(--muted); }
+
+/* ══ 25a — job-grouped hub additions ═══════════════════════════════ */
+
+.af-tl-grouphead { display: flex; flex-direction: column; gap: 4px; }
+
+.af-tl-groupnote {
+  margin: 0;
+  max-width: 74ch;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.af-tl-cardwrap { display: flex; flex-direction: column; gap: 5px; }
+
+/* The card's left border is the urgency signal — same vocabulary as the league
+   tile, so "there is a clock on this" reads the same way in both places. */
+.af-tl-card { border-left-width: 2px; }
+.af-tl-card[data-tone='urgent'] { border-left-color: var(--bad); }
+.af-tl-card[data-tone='soon'] { border-left-color: var(--warn); }
+.af-tl-card[data-tone='calm'] { border-left-color: var(--line2); }
+.af-tl-card[data-tone='none'] { border-left-color: var(--line2); }
+
+.af-tl-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.af-tl-card-badges {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* Token price. Always before the click — never after. */
+.af-tl-cost {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.af-tl-tier {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--chip);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.af-tl-tier[data-tier='commissioner'] {
+  border-color: rgba(246, 196, 69, 0.35);
+  background: var(--p-gold-soft);
+  color: var(--p-gold-fg);
+}
+
+.af-tl-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.af-tl-livedot {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--line2);
+}
+
+.af-tl-live[data-tone='urgent'] { color: var(--bad); }
+.af-tl-live[data-tone='urgent'] .af-tl-livedot { background: var(--bad); }
+.af-tl-live[data-tone='soon'] { color: var(--warn); }
+.af-tl-live[data-tone='soon'] .af-tl-livedot { background: var(--warn); }
+
+.af-tl-alts {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  padding: 0 4px;
+}
+
+.af-tl-alts-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-tl-alt {
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px dotted var(--line2);
+}
+
+.af-tl-alt:hover { color: var(--accent); border-bottom-color: var(--accent-line); }
+
+.af-tl-scopenote {
+  margin: 0;
+  max-width: 88ch;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface2);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+
+.af-tl-decision {
+  padding: 15px 16px;
+  border: 1px solid var(--warn-soft);
+  border-left: 2px solid var(--warn);
+  border-radius: 12px;
+  background: var(--warn-soft);
+}
+
+.af-tl-decision-eyebrow {
+  margin: 0 0 5px;
+  font: 700 9.5px/1 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+
+.af-tl-decision-title {
+  margin: 0;
+  font: 800 14px/1.3 'Archivo', system-ui, sans-serif;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-tl-decision-body {
+  margin: 7px 0 0;
+  max-width: 84ch;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text2);
+}

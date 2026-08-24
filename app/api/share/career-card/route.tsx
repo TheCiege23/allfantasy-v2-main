@@ -3,6 +3,8 @@ import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getCareerCard } from '@/lib/dashboard-intel/careerCardService'
+import { getShareCardData } from '@/lib/core-app/shareCard'
+import { ShareCard, SHARE_CARD_SIZE } from '@/components/career/ShareCard'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -10,6 +12,19 @@ export const runtime = 'nodejs'
 /**
  * Shareable Manager Career Card (1200×630 PNG) — the viewer's aggregated
  * Legacy identity. Auth-gated, SELF only; shared as an image, never a URL.
+ *
+ * ⚠ TWO CARDS BEHIND ONE ROUTE, AND THE DEFAULT IS UNCHANGED. `?design=13b`
+ * returns handoff 13b's 620×780 card; anything else returns the original
+ * 1200×630 image. Folded in here rather than given its own route because this
+ * repo sits against Vercel's 2048-route ceiling, and because the default output
+ * is referenced as an OG image — changing its dimensions or content in place
+ * would silently rewrite every link preview already in the wild.
+ *
+ * ⚠ THE TWO CARDS READ DIFFERENT SERVICES ON PURPOSE. The original is built on
+ * `getCareerCard`, which is Sleeper-only and scores trades and drafts. 13b's
+ * build rule 2 requires every number to trace to a value shown on 13a, so it
+ * reads `getCareerData` — the same source the career page renders. They are not
+ * interchangeable and must not be merged into one payload.
  */
 
 function gradeLine(grades: Record<string, number>): string {
@@ -19,10 +34,34 @@ function gradeLine(grades: Record<string, number>): string {
     .join('  ')
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const session = (await getServerSession(authOptions as never)) as { user?: { id?: string } } | null
   const userId = session?.user?.id
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  if (new URL(req.url).searchParams.get('design') === '13b') {
+    const share = await getShareCardData(userId)
+    if (!share) {
+      return NextResponse.json(
+        { error: 'No completed seasons yet — import past seasons to build a career card.' },
+        { status: 404 },
+      )
+    }
+    /*
+     * ⚠ NO CUSTOM FONT IS LOADED, AND THE DESIGN ASKS FOR TWO. 13b specifies
+     * Archivo and JetBrains Mono. This repo ships no font binaries and forbids
+     * next/font/google, so embedding either would mean fetching from a CDN on
+     * every export — a network dependency on a request path, to change a
+     * typeface. Both sibling share routes already render in the default sans for
+     * the same reason. The in-app preview at /core/career?view=share does use
+     * the real faces; this image does not, and that is the one place the export
+     * and the preview differ.
+     */
+    return new ImageResponse(<ShareCard data={share} />, {
+      width: SHARE_CARD_SIZE.width,
+      height: SHARE_CARD_SIZE.height,
+    })
+  }
 
   const card = await getCareerCard(userId)
   if (!card) {

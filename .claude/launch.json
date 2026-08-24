@@ -4,14 +4,68 @@
     {
       "name": "next-dev",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true
     },
     {
+      "// next-dev-handoff": "Handoff 22a-27a review server. Own dist dir: a dev server killed mid-compile leaves the previous one locked on Windows, and Next then hangs at Starting forever rather than reporting the lock, so it must not share one with a concurrent session. Runs the local node rather than the npm scripts npx -y node@20, which sat for five minutes without producing a dist dir or a log line.",
+      "name": "next-dev-handoff",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-handoff",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "// next-dev-21a": "Handoff 21a review server. Its own dist dir because a dev server killed mid-compile leaves the previous one locked on Windows, and Next then hangs at 'Starting...' forever rather than reporting the lock.",
+      "name": "next-dev-21a",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "node@20",
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-21a",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
+      "name": "next-dev-visuals",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "-y",
+        "node@20",
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-visuals",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
+    },
+    {
       "name": "next-start",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "start"],
+      "runtimeArgs": [
+        "run",
+        "start"
+      ],
       "port": 3000,
       "autoPort": true,
       "env": {
@@ -21,7 +75,10 @@
     {
       "name": "next-dev-partner-sandbox",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true,
       "env": {
@@ -31,7 +88,10 @@
     {
       "name": "next-dev-visual-qa",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": [
+        "run",
+        "dev"
+      ],
       "port": 3000,
       "autoPort": true,
       "env": {
@@ -41,7 +101,10 @@
     {
       "name": "prisma-studio",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["prisma", "studio"],
+      "runtimeArgs": [
+        "prisma",
+        "studio"
+      ],
       "port": 5555
     }
   ]

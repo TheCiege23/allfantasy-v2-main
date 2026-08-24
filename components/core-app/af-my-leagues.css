@@ -1,0 +1,765 @@
+/*
+ * Screen 21a — My Leagues.
+ *
+ * Every colour here is a var() from the .af-core token layer in af-core.css, so
+ * the screen follows light/dark with the rest of the product and no literal is
+ * authored against one mode. MyLeaguesV4 imports af-core.css and puts `af-core`
+ * on its root for exactly that reason — see the note at its import.
+ */
+
+.af-ml {
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 22px 20px 72px;
+  color: var(--text);
+  font-family: Archivo, system-ui, sans-serif;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+.af-ml-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.af-ml-title {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+}
+
+.af-ml-sub {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.af-ml-sub strong {
+  color: var(--text);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 800;
+}
+
+.af-ml-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-ml-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 800;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: filter 0.15s ease, background-color 0.15s ease;
+}
+
+.af-ml-btn:hover {
+  filter: brightness(1.08);
+}
+
+.af-ml-btn--ghost {
+  background-color: var(--chip);
+  border-color: var(--chip-line);
+  color: var(--text);
+}
+
+.af-ml-btn--ghost:hover {
+  background-color: var(--line);
+}
+
+/* ── Controls ───────────────────────────────────────────────────────────── */
+.af-ml-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.af-ml-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1 1 260px;
+  min-width: 220px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  min-height: 44px;
+}
+
+.af-ml-search-icon {
+  color: var(--faint);
+  font-size: 16px;
+  margin-right: 8px;
+}
+
+.af-ml-search-input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  min-width: 0;
+}
+
+.af-ml-search-input::placeholder {
+  color: var(--faint);
+}
+
+.af-ml-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  min-height: 44px;
+}
+
+.af-ml-select-label {
+  color: var(--faint);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 800;
+}
+
+.af-ml-select select {
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* The native dropdown paints its own list; give the options a readable ground
+   in dark mode, where a transparent select would inherit the page background. */
+.af-ml-select select option {
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+.af-ml-toggle,
+.af-ml-view-btn {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background-color: var(--surface);
+  color: var(--text2);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.af-ml-toggle[data-on='true'] {
+  background-color: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.af-ml-view {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 14px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+}
+
+.af-ml-view-btn {
+  min-height: 36px;
+  border: 0;
+  background: transparent;
+  border-radius: 10px;
+  padding: 0 12px;
+}
+
+.af-ml-view-btn[data-on='true'] {
+  background-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+/* ── Filter chips ───────────────────────────────────────────────────────── */
+.af-ml-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.af-ml-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--chip-line);
+  background-color: var(--chip);
+  color: var(--text2);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.af-ml-chip:hover {
+  border-color: var(--line2);
+}
+
+.af-ml-chip[data-on='true'] {
+  background-color: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+.af-ml-chip-n {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-ml-chip[data-on='true'] .af-ml-chip-n {
+  color: var(--accent);
+}
+
+.af-ml-chip--clear {
+  color: var(--faint);
+}
+
+/* ── Account-wide notice ────────────────────────────────────────────────── */
+.af-ml-notice {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  border-radius: 14px;
+  border: 1px solid var(--warn-soft);
+  background-color: var(--warn-soft);
+}
+
+.af-ml-notice-t {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-ml-notice-p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text2);
+  max-width: 72ch;
+}
+
+/* ── Tiers ──────────────────────────────────────────────────────────────── */
+.af-ml-tier {
+  margin-bottom: 30px;
+  scroll-margin-top: 16px;
+}
+
+.af-ml-tier-head {
+  margin-bottom: 12px;
+}
+
+.af-ml-tier-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.af-ml-tier-n {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text2);
+  background-color: var(--chip);
+  border: 1px solid var(--chip-line);
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.af-ml-tier-blurb {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 78ch;
+}
+
+/*
+ * Densities follow the handoff: 3-up for "needs you", 4-up in season, 6-up quiet.
+ * auto-fill with a min track keeps them responsive without a media-query ladder.
+ */
+.af-ml-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.af-ml-grid[data-view='grid'][data-tier='needs'] {
+  grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
+}
+
+.af-ml-grid[data-view='grid'][data-tier='playing'] {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.af-ml-grid[data-view='grid'][data-tier='quiet'] {
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+}
+
+.af-ml-grid[data-view='list'] {
+  grid-template-columns: 1fr;
+}
+
+/* ── Card ───────────────────────────────────────────────────────────────── */
+.af-ml-card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border-radius: 14px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-left: 3px solid transparent;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.af-ml-card:hover {
+  border-color: var(--line2);
+}
+
+/* Severity on the left border — the handoff's red/amber rule. */
+.af-ml-card[data-tone='bad'] {
+  border-left-color: var(--bad);
+}
+
+.af-ml-card[data-tone='warn'] {
+  border-left-color: var(--warn);
+}
+
+.af-ml-card[data-view='list'] {
+  flex-direction: row;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.af-ml-card[data-view='list'] .af-ml-card-top {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.af-ml-card[data-view='list'] .af-ml-card-body {
+  flex: 2 1 260px;
+  min-width: 0;
+}
+
+.af-ml-card[data-view='list'] .af-ml-open {
+  margin-left: auto;
+  width: auto;
+  padding: 0 16px;
+}
+
+.af-ml-card-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.af-ml-tile {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  background-color: var(--chip);
+  color: var(--text2);
+}
+
+.af-ml-tile[data-platform='sleeper'] { background-color: var(--p-sleeper-bg); color: var(--p-sleeper-fg); }
+.af-ml-tile[data-platform='espn'] { background-color: var(--p-espn-bg); color: var(--p-espn-fg); }
+.af-ml-tile[data-platform='yahoo'] { background-color: var(--p-yahoo-bg); color: var(--p-yahoo-fg); }
+.af-ml-tile[data-platform='allfantasy'] { background-color: var(--accent-soft); color: var(--accent); }
+
+.af-ml-card-id {
+  min-width: 0;
+  flex: 1;
+}
+
+.af-ml-card-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-ml-card-meta {
+  margin: 2px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.af-ml-role {
+  flex: 0 0 auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background-color: var(--good-soft);
+  color: var(--good);
+}
+
+.af-ml-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.af-ml-reason {
+  margin: 0;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--text2);
+}
+
+.af-ml-reason[data-tone='bad'] {
+  color: var(--bad);
+}
+
+.af-ml-reason[data-tone='warn'] {
+  color: var(--warn);
+}
+
+.af-ml-card-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.af-ml-tag {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  padding: 3px 7px;
+  border-radius: 6px;
+  background-color: var(--chip);
+  color: var(--muted);
+  border: 1px solid var(--chip-line);
+}
+
+.af-ml-tag[data-tone='bad'] { background-color: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.af-ml-tag[data-tone='warn'] { background-color: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.af-ml-tag[data-tone='good'] { background-color: var(--good-soft); color: var(--good); border-color: transparent; }
+.af-ml-tag[data-tone='live'] { background-color: var(--accent-soft); color: var(--accent); border-color: transparent; }
+
+.af-ml-note {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.af-ml-open {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  margin-top: auto;
+  padding: 0 12px;
+  border-radius: 10px;
+  background-color: var(--chip);
+  border: 1px solid var(--chip-line);
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 800;
+  text-decoration: none;
+  transition: background-color 0.15s ease;
+}
+
+.af-ml-open:hover {
+  background-color: var(--line);
+}
+
+/* The blocking tier gets the accent fill — it is the one you are meant to press. */
+.af-ml-card[data-tone='bad'] .af-ml-open,
+.af-ml-card[data-tone='warn'] .af-ml-open {
+  background-color: var(--accent);
+  border-color: transparent;
+  color: var(--accent-ink);
+}
+
+/* ── Overflow tile ──────────────────────────────────────────────────────── */
+.af-ml-more {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  min-height: 96px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px dashed var(--line2);
+  background: transparent;
+  color: var(--text2);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.af-ml-more:hover {
+  border-color: var(--accent-line);
+  background-color: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-ml-more-n {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.af-ml-more-l {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.af-ml-collapse {
+  margin-top: 10px;
+  background: transparent;
+  border: 0;
+  color: var(--faint);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* ── History ────────────────────────────────────────────────────────────── */
+.af-ml-hist {
+  display: grid;
+  gap: 6px;
+}
+
+.af-ml-hist-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background-color: var(--surface2);
+  border: 1px solid var(--line);
+  color: var(--text2);
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.af-ml-hist-row:hover {
+  border-color: var(--line2);
+  color: var(--text);
+}
+
+.af-ml-hist-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.af-ml-hist-meta {
+  flex: 0 0 auto;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.af-ml-hist-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* ── Empty ──────────────────────────────────────────────────────────────── */
+.af-ml-empty {
+  padding: 34px 20px;
+  border-radius: 16px;
+  border: 1px dashed var(--line2);
+  text-align: center;
+  margin-bottom: 26px;
+}
+
+.af-ml-empty-t {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.af-ml-empty-p {
+  margin: 7px auto 0;
+  max-width: 56ch;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.af-ml-empty-actions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+/* ── Footer + coverage ──────────────────────────────────────────────────── */
+.af-ml-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px;
+  border-radius: 16px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  margin-top: 8px;
+}
+
+.af-ml-foot-t {
+  display: block;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.af-ml-foot-p {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+  max-width: 70ch;
+}
+
+.af-ml-foot-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.af-ml-cover {
+  margin-top: 26px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background-color: var(--surface2);
+}
+
+.af-ml-cover-h {
+  margin: 0 0 9px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-ml-cover-list {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.af-ml-cover-list strong {
+  color: var(--text2);
+  font-weight: 800;
+}
+
+/* ── Mobile: single column, same copy, 44px+ targets ────────────────────── */
+@media (max-width: 720px) {
+  .af-ml {
+    padding: 16px 14px 56px;
+  }
+
+  .af-ml-title {
+    font-size: 24px;
+  }
+
+  /* Chips scroll horizontally rather than wrapping into a tall block. */
+  .af-ml-chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+
+  .af-ml-chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .af-ml-grid[data-view='grid'][data-tier='needs'],
+  .af-ml-grid[data-view='grid'][data-tier='playing'],
+  .af-ml-grid[data-view='grid'][data-tier='quiet'] {
+    grid-template-columns: 1fr;
+  }
+
+  .af-ml-card[data-view='list'] {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .af-ml-card[data-view='list'] .af-ml-open {
+    margin-left: 0;
+    width: 100%;
+  }
+}

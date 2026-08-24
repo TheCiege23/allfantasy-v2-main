@@ -3,6 +3,7 @@ import 'server-only'
 import { prisma } from '@/lib/prisma'
 import { getBaseUrl } from '@/lib/get-base-url'
 import { sendTemplatedEmail } from '@/lib/resend-client'
+import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
 import { buildTradeGradeEmail } from '@/lib/trade-intel/tradeGradeEmail'
 import { loadTradePsychology } from '@/lib/trade-intel/tradePsychologyLoader'
@@ -161,6 +162,21 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
           ledgerUrl,
           expectation,
           psychology: entitled ? psychology : null,
+          /*
+           * 22a's footer. `leagueId` powers the PER-LEAGUE mute — at 61 leagues,
+           * a global unsubscribe is not a real choice, because it makes silencing
+           * one noisy league cost you every trade email you actually wanted.
+           *
+           * The unsubscribe token is minted per RECIPIENT, inside this loop. It
+           * is signed over their own address, so hoisting it out of the loop
+           * would send every member of the league the same link and let any one
+           * of them unsubscribe the rest.
+           */
+          baseUrl: getBaseUrl(),
+          leagueId: afLeagues[0].id,
+          unsubscribeUrl: `${getBaseUrl()}/api/email/unsubscribe?token=${encodeURIComponent(
+            createEmailUnsubscribeToken(recipient.email),
+          )}`,
         })
         const sent = await sendTemplatedEmail({ to: recipient.email, subject, html }).catch(
           () => ({ ok: false as const }),
