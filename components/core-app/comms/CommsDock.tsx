@@ -30,6 +30,8 @@ export type CommsDockProps = {
   pageLeagueId: string | null
   /** Tokens per Chimmy answer, from the real pricing matrix. Null = not charged. */
   chimmyTokenCost: number | null
+  /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
+  homeSignals?: string | null
   /** True on league-scoped screens, where docking beside the content pays off. */
   dockable?: boolean
   /** Prefills the support form's reply address. */
@@ -54,6 +56,7 @@ export function CommsDock({
   leagues,
   pageLeagueId,
   chimmyTokenCost,
+  homeSignals = null,
   dockable = false,
   supportEmail = null,
   unread = 0,
@@ -147,6 +150,7 @@ export function CommsDock({
         leagues={leagues}
         pageLeagueId={pageLeagueId}
         chimmyTokenCost={chimmyTokenCost}
+        homeSignals={homeSignals}
         initialTab={tab}
       />
 

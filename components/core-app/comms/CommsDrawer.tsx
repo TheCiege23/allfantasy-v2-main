@@ -69,6 +69,8 @@ export type CommsDrawerProps = {
   pageLeagueId: string | null
   /** Tokens per Chimmy message, read from the real pricing matrix. */
   chimmyTokenCost: number | null
+  /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
+  homeSignals?: string | null
   initialTab?: CommsTab
 }
 
@@ -129,6 +131,7 @@ function ChimmyPanel({
   onScope,
   tokenCost,
   publicMode,
+  homeSignals,
 }: {
   leagues: CommsLeague[]
   scopeId: string | null
@@ -136,6 +139,8 @@ function ChimmyPanel({
   tokenCost: number | null
   /** League tab: answers are visible to the whole league and say so. */
   publicMode: boolean
+  /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
+  homeSignals: string | null
 }) {
   const [turns, setTurns] = useState<ChatTurn[]>([])
   const [draft, setDraft] = useState('')
@@ -171,6 +176,13 @@ function ChimmyPanel({
         const form = new FormData()
         form.append('message', question)
         if (scopeId) form.append('leagueId', scopeId)
+        /*
+         * What the home is telling this user right now, so the assistant they
+         * opened from the brief holds the brief's own facts instead of
+         * re-deriving them and disagreeing on the same screen. Ids and counts
+         * only; the server resolves names it has already confirmed they hold.
+         */
+        if (homeSignals) form.append('homeSignals', homeSignals)
         form.append(
           'conversation',
           JSON.stringify(
@@ -474,12 +486,18 @@ function LeaguePanel({
             Back to chat
           </button>
         </div>
+        {/*
+          ⚠ NO HOME SIGNALS ON THE PUBLIC TAB. Answers here are posted to
+          everyone in the league. Grounding one in this user's own home state
+          would put their other leagues' problems in front of their rivals.
+        */}
         <ChimmyPanel
           leagues={leagues}
           scopeId={scopeId}
           onScope={onScope}
           tokenCost={chimmyTokenCost}
           publicMode
+          homeSignals={null}
         />
       </div>
     )
@@ -789,6 +807,7 @@ export function CommsDrawer({
   leagues,
   pageLeagueId,
   chimmyTokenCost,
+  homeSignals = null,
   initialTab = 'chimmy',
 }: CommsDrawerProps) {
   const [tab, setTab] = useState<CommsTab>(initialTab)
@@ -903,6 +922,7 @@ export function CommsDrawer({
             onScope={setScopeId}
             tokenCost={chimmyTokenCost}
             publicMode={false}
+            homeSignals={homeSignals}
           />
         ) : tab === 'huddle' ? (
           <UnbuiltPanel
