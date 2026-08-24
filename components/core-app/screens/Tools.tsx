@@ -1,157 +1,135 @@
 'use client'
 
 import Link from 'next/link'
+import type { ToolCard, ToolsHubData } from '@/lib/core-app/toolsHub'
 import '@/components/core-app/af-tools.css'
 
 /**
- * Tools — the launcher for everything that lives outside the core shell.
+ * 25a — Tools, grouped by the job you came here to do.
  *
- * ⚠ THIS CLOSES TWO LEDGER ITEMS AT ONCE. It was one of three rail slots
- * rendering "has not been built yet", and it is also where the seven orphaned
- * link-outs go. Every destination below is a route that already works today and
- * that /core simply had no way to reach — so retiring /dashboard without this
- * would have stranded them: live pages with no door.
+ * ⚠ THIS REPLACED A FLAT ALPHABETICAL LAUNCHER, AND THE GROUPING IS THE POINT.
+ * "Decide something today" is deadline-bound and every card in it shows what is
+ * actually pending; "Understand something" has no clock and shows a real
+ * statistic instead; "Share something" produces an artefact. A tool's group is
+ * the fastest signal about whether it is worth opening right now.
  *
- * ⚠ EVERY HREF HERE WAS CHECKED TO BE A REAL ROUTE. The Commissioner Hub card on
- * that surface promised "recruit managers with one shareable link" and pointed at
- * /import — the league-import page. A launcher full of confident links to the
- * wrong places is worse than no launcher, because it looks authoritative.
+ * ⚠ EVERY HREF HERE IS A ROUTE THAT EXISTS. The version of this screen that
+ * shipped before carried a Commissioner Hub card promising "recruit managers
+ * with one shareable link" pointed at /import — the league-import page. A
+ * launcher full of confident links to the wrong places is worse than no
+ * launcher, because it looks authoritative. That rule survives this rewrite.
+ *
+ * ⚠ URGENCY AND PRICE COME FROM THE LOADER, NOT FROM THIS FILE. See
+ * `lib/core-app/toolsHub.ts` — it reads the shared issue queue and the real
+ * token pricing matrix. Nothing on this screen is a literal.
  */
 
-type Tool = {
-  href: string
-  title: string
-  desc: string
-  /** Opens outside the core shell — worth signalling before the click. */
-  leavesShell?: boolean
+export type ToolsProps = {
+  data: ToolsHubData
 }
 
-const GROUPS: Array<{ heading: string; tools: Tool[] }> = [
-  {
-    heading: 'Your leagues',
-    tools: [
-      {
-        href: '/commissioner-hub',
-        title: 'Commissioner Hub',
-        desc: 'Run the leagues you commission — settings, integrity, recaps.',
-        leavesShell: true,
-      },
-      {
-        href: '/war-room',
-        title: 'War Room',
-        desc: 'Draft-room intelligence and live pick support.',
-        leavesShell: true,
-      },
-      {
-        href: '/af-rankings',
-        title: 'Rankings',
-        desc: 'Your AF Rank and where you sit against other managers.',
-        leavesShell: true,
-      },
-      {
-        href: '/trade-finder',
-        title: 'Trade Finder',
-        /*
-          Sleeper-only is stated up front, not discovered after the click.
-          /api/trade-finder reads the league straight from sleeper-client and
-          needs a linked Sleeper identity, so an ESPN, Yahoo or manual league
-          cannot be served here at all. This file's own rule: a launcher
-          pointing at the wrong place is worse than no launcher.
-        */
-        desc: 'Find trades that fit your roster and your league. Sleeper leagues only.',
-        leavesShell: true,
-      },
-    ],
-  },
-  {
-    heading: 'Add a league',
-    tools: [
-      {
-        href: '/import?returnTo=%2Fcore%2Ftools',
-        title: 'Import a league',
-        desc: 'Bring in a league from Sleeper, ESPN or Yahoo.',
-      },
-      {
-        href: '/create-league',
-        title: 'Create a league',
-        desc: 'Start one from scratch and invite managers.',
-        leavesShell: true,
-      },
-      {
-        href: '/af-legacy',
-        title: 'AF Legacy',
-        desc: 'Career history tools and past-season imports.',
-        leavesShell: true,
-      },
-    ],
-  },
-  {
-    heading: 'Account',
-    tools: [
-      {
-        href: '/tokens',
-        title: 'Tokens',
-        desc: 'Your balance, what actions cost, and top-ups.',
-        leavesShell: true,
-      },
-      {
-        href: '/pricing',
-        title: 'Plans',
-        desc: 'Compare tiers and what each one unlocks.',
-        leavesShell: true,
-      },
-      {
-        href: '/settings?tab=billing',
-        title: 'Billing',
-        desc: 'Payment method, invoices and cancellation.',
-        leavesShell: true,
-      },
-      {
-        href: '/settings',
-        title: 'Settings',
-        desc: 'Profile, notifications, language and connected accounts.',
-        leavesShell: true,
-      },
-      {
-        href: '/support',
-        title: 'Support',
-        desc: 'Get help from a person.',
-        leavesShell: true,
-      },
-    ],
-  },
-]
+function TierBadge({ tier }: { tier: ToolCard['tier'] }) {
+  if (tier === 'free') return null
+  const label = tier === 'commissioner' ? 'Commissioner' : tier === 'pro' ? 'Pro' : 'Plan'
+  return (
+    <span className="af-tl-tier" data-tier={tier}>
+      {label}
+    </span>
+  )
+}
 
-export function Tools() {
+function Card({ tool }: { tool: ToolCard }) {
+  return (
+    <div className="af-tl-cardwrap">
+      <Link href={tool.href} className="af-tl-card" data-tone={tool.live?.tone ?? 'none'}>
+        <span className="af-tl-card-head">
+          <span className="af-tl-card-title">
+            {tool.title}
+            {tool.leavesShell ? (
+              <span className="af-tl-out" aria-label="opens the full page" title="Opens the full page">
+                ↗
+              </span>
+            ) : null}
+          </span>
+          <span className="af-tl-card-badges">
+            {/* Price before the click. Never revealed after. */}
+            {tool.tokenCost != null ? (
+              <span className="af-tl-cost af-num" title="Tokens per run">
+                {tool.tokenCost}
+              </span>
+            ) : null}
+            <TierBadge tier={tool.tier} />
+          </span>
+        </span>
+
+        <span className="af-tl-card-desc">{tool.desc}</span>
+
+        {/* The live line. A tool card with no context is a bare tool name. */}
+        {tool.live ? (
+          <span className="af-tl-live" data-tone={tool.live.tone}>
+            <i className="af-tl-livedot" aria-hidden />
+            {tool.live.text}
+          </span>
+        ) : null}
+      </Link>
+
+      {/*
+        Alternates. These are live routes doing the same job — see the open
+        decision panel below. Listed rather than hidden, because hiding a working
+        route is a retirement decision nobody has taken.
+      */}
+      {tool.alternates && tool.alternates.length > 0 ? (
+        <div className="af-tl-alts">
+          <span className="af-tl-alts-label">Also:</span>
+          {tool.alternates.map((a) => (
+            <Link key={a.href} href={a.href} className="af-tl-alt">
+              {a.label}
+            </Link>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export function Tools({ data }: ToolsProps) {
   return (
     <div className="af-tl">
       <header className="af-tl-head">
         <h1 className="af-tl-title">Tools</h1>
         <p className="af-tl-sub">
-          Everything that lives outside the main screens. All of these open the full page.
+          Grouped by what you came to do. Anything with a deadline shows it here, before you open it.
         </p>
       </header>
 
-      {GROUPS.map((group) => (
-        <section key={group.heading} className="af-tl-group">
-          <h2 className="af-tl-heading">{group.heading}</h2>
+      {data.groups.map((group) => (
+        <section key={group.id} className="af-tl-group">
+          <div className="af-tl-grouphead">
+            <h2 className="af-tl-heading">{group.heading}</h2>
+            <p className="af-tl-groupnote">{group.note}</p>
+          </div>
           <div className="af-tl-grid">
             {group.tools.map((tool) => (
-              <Link key={tool.href} href={tool.href} className="af-tl-card">
-                <span className="af-tl-card-title">
-                  {tool.title}
-                  {tool.leavesShell ? (
-                    <span className="af-tl-out" aria-label="opens the full page">
-                      ↗
-                    </span>
-                  ) : null}
-                </span>
-                <span className="af-tl-card-desc">{tool.desc}</span>
-              </Link>
+              <Card key={tool.id} tool={tool} />
             ))}
           </div>
         </section>
       ))}
+
+      <p className="af-tl-scopenote">{data.leagueScopedNote}</p>
+
+      {/*
+        The pending product decision, on the page rather than only in a comment.
+        The handoff asks that implementation not silently pick a direction; the
+        honest version of "not picking" is saying so where it can be seen.
+      */}
+      {data.openDecision ? (
+        <aside className="af-tl-decision">
+          <p className="af-tl-decision-eyebrow af-label">Open decision</p>
+          <h2 className="af-tl-decision-title">{data.openDecision.title}</h2>
+          <p className="af-tl-decision-body">{data.openDecision.body}</p>
+        </aside>
+      ) : null}
     </div>
   )
 }

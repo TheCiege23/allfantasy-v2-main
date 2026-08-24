@@ -388,3 +388,26 @@
     padding: 14px 12px 32px;
   }
 }
+
+/*
+ * 25b — the support entry point in the primary nav. A button, not a link: the
+ * modal keeps the user on the page they are reporting about, which is the whole
+ * value of the diagnostic context it attaches.
+ */
+.af-nav-support {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--faint);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.13s ease, color 0.13s ease;
+}
+
+.af-nav-support:hover { background: var(--chip); color: var(--text2); }

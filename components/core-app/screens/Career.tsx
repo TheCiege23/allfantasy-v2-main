@@ -378,7 +378,10 @@ function CareerMobile({ data }: { data: CareerData }) {
               </section>
             ) : null}
 
-            {/* Share generator does not exist yet — see the desktop action row. */}
+            {/* 26a — the generator exists now. Same destination as the desktop row. */}
+            <Link href="/core/share" className="af-cr-btn af-cr-btn--primary">
+              Share a card
+            </Link>
           </>
         )}
       </div>
@@ -513,6 +516,13 @@ function CareerDesktop({ data, view }: { data: CareerData; view: string }) {
         </div>
         <div className="af-cr-actions">
           <Link className="af-cr-btn af-cr-btn--ghost" href="/core/career?view=records">Records</Link>
+          {/*
+            Handoff 26a. This action used to have nowhere to go — the generator
+            behind the share card did not exist, and the mobile column carried a
+            comment saying so. It exists now, at /core/share, and it reads this
+            same career payload rather than asking the user to load it again.
+          */}
+          <Link className="af-cr-btn af-cr-btn--ghost" href="/core/share">Share a card</Link>
         </div>
       </nav>
 

@@ -1,0 +1,406 @@
+/* 26b — Season Outlook. Reads the .af-core token layer. */
+
+.af-so { max-width: 1120px; }
+
+.af-so-head { margin-bottom: 20px; }
+
+.af-so-eyebrow {
+  margin: 0 0 6px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-so-title { margin: 0; font-size: 26px; letter-spacing: -0.035em; }
+
+.af-so-sub {
+  margin: 8px 0 0;
+  max-width: 66ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Summary tiles ────────────────────────────────────────────────── */
+
+.af-so-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.af-so-tile {
+  padding: 14px 15px;
+  border: 1px solid var(--line);
+  border-top: 2px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.af-so-tile[data-tone='good'] { border-top-color: var(--good); }
+.af-so-tile[data-tone='warn'] { border-top-color: var(--warn); }
+.af-so-tile[data-tone='accent'] { border-top-color: var(--accent); }
+
+.af-so-tile-v {
+  display: block;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1;
+  color: var(--text);
+}
+
+.af-so-tile-l {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+
+.af-so-basis {
+  margin: 0 0 22px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface2);
+  max-width: 96ch;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+
+/* ── Table ────────────────────────────────────────────────────────── */
+
+/*
+ * The table scrolls inside its own container rather than pushing the page
+ * sideways — six columns of league data do not fit a phone and never will.
+ */
+.af-so-tablewrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+  margin-bottom: 24px;
+}
+
+.af-so-table {
+  width: 100%;
+  min-width: 720px;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.af-so-table thead th {
+  padding: 11px 13px;
+  text-align: left;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.af-so-table tbody tr { border-bottom: 1px solid var(--line); }
+.af-so-table tbody tr:last-child { border-bottom: 0; }
+.af-so-table tbody tr:hover { background: var(--surface2); }
+
+.af-so-table th[scope='row'] {
+  padding: 12px 13px;
+  text-align: left;
+  font-weight: 400;
+  min-width: 200px;
+}
+
+.af-so-table td { padding: 12px 13px; vertical-align: top; }
+
+.af-so-num { text-align: right; }
+.af-so-table td.af-so-num,
+.af-so-table th.af-so-num {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  white-space: nowrap;
+  color: var(--text2);
+}
+
+.af-so-league {
+  display: block;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.af-so-league:hover { color: var(--accent); }
+
+.af-so-leaguemeta {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  letter-spacing: 0.03em;
+  color: var(--faint);
+}
+
+.af-so-pct { font-weight: 800; }
+.af-so-pct[data-band='high'] { color: var(--good); }
+.af-so-pct[data-band='mid'] { color: var(--warn); }
+.af-so-pct[data-band='low'] { color: var(--bad); }
+
+.af-so-decides {
+  max-width: 34ch;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-so-noteam { color: var(--faint); font-style: italic; }
+
+/* ── Callout panels ───────────────────────────────────────────────── */
+
+.af-so-panels {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.af-so-panel {
+  padding: 16px 17px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.af-so-panel--swing {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+}
+
+.af-so-panel-eyebrow {
+  margin: 0 0 5px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-so-panel--swing .af-so-panel-eyebrow { color: var(--accent); }
+
+.af-so-panel-title {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.028em;
+  color: var(--text);
+}
+
+.af-so-panel-body {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+.af-so-branch {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.af-so-branch-arm {
+  flex: 1;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.af-so-branch-arm[data-tone='good'] { border-color: rgba(52, 211, 153, 0.3); }
+.af-so-branch-arm[data-tone='bad'] { border-color: rgba(251, 91, 120, 0.3); }
+.af-so-branch-arm[data-tone='accent'] { border-color: var(--accent-line); }
+
+.af-so-branch-l {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-so-branch-v {
+  display: block;
+  margin-top: 3px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  color: var(--text);
+}
+
+.af-so-branch-arm[data-tone='good'] .af-so-branch-v { color: var(--good); }
+.af-so-branch-arm[data-tone='bad'] .af-so-branch-v { color: var(--bad); }
+.af-so-branch-arm[data-tone='accent'] .af-so-branch-v { color: var(--accent); }
+
+.af-so-panel-cta {
+  display: inline-block;
+  margin-top: 13px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.af-so-panel-cta:hover { text-decoration: underline; }
+
+.af-so-priorities {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+
+.af-so-priorities li {
+  display: flex;
+  gap: 11px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-so-priorities li:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.af-so-pri-rank {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--chip);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text2);
+}
+
+.af-so-pri-body { min-width: 0; }
+
+.af-so-pri-league {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.af-so-pri-league:hover { color: var(--accent); }
+
+.af-so-pri-reason {
+  display: block;
+  margin-top: 2px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* ── Empty + withheld ─────────────────────────────────────────────── */
+
+.af-so-empty {
+  padding: 30px 24px;
+  border: 1px dashed var(--line2);
+  border-radius: 13px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.af-so-empty-t {
+  margin: 0;
+  font-family: var(--font-archivo, 'Archivo', system-ui, sans-serif);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.af-so-empty-b {
+  margin: 8px auto 16px;
+  max-width: 58ch;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.af-so-cta {
+  display: inline-flex;
+  padding: 8px 15px;
+  border-radius: 9px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.af-so-withheld {
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface2);
+}
+
+.af-so-withheld-t {
+  margin: 0 0 8px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-so-withheld ul { margin: 0; padding-left: 18px; }
+
+.af-so-withheld li {
+  margin-bottom: 5px;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-so-withheld b { color: var(--text2); }
+
+@media (max-width: 640px) {
+  .af-so-title { font-size: 21px; }
+  .af-so-tiles { grid-template-columns: 1fr 1fr; }
+}
+
+/* See the note in af-week.css: a league NAME gets a colour dot, never the
+   filled `.af-platform` badge background. Repeated here because Season Outlook
+   does not import that stylesheet. */
+.af-so-league::before {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: middle;
+  background: var(--line2);
+}
+.af-so-league[data-platform='sleeper']::before { background: var(--p-sleeper-fg); }
+.af-so-league[data-platform='espn']::before { background: var(--p-espn-fg); }
+.af-so-league[data-platform='yahoo']::before { background: var(--p-yahoo-fg); }
+.af-so-league[data-platform='cbs']::before { background: var(--p-green-fg); }

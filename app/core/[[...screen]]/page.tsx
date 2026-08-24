@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
@@ -43,6 +44,16 @@ import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll } from '@/lib/core-app/weekAll'
+import YourWeek from '@/components/core-app/screens/YourWeek'
+import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
+import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
+import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
+import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
+import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
+import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
+import CareerShare from '@/components/core-app/screens/CareerShare'
+import { buildToolsHub } from '@/lib/core-app/toolsHub'
+import { getTokenSpendRuleMatrixEntry } from '@/lib/tokens/pricing-matrix'
 
 export const dynamic = 'force-dynamic'
 
@@ -75,6 +86,19 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   rankings: 'rankings',
   commissioner: 'commissioner',
   tools: 'tools',
+  /*
+   * The five handoff screens added in this change. Segments on the same
+   * catch-all as everything else — five sibling routes for five screens is
+   * exactly the spend that pushed this repo against Vercel's 2048-route
+   * ceiling, and the shell is identical on all of them.
+   *
+   * `week` carries Rivalry Radar behind ?view=rivalries rather than taking its
+   * own key: same data layer, same header, same empty state.
+   */
+  week: 'week',
+  'season-outlook': 'season-outlook',
+  share: 'share',
+  notifications: 'notifications',
 }
 
 function titleCase(slug: string): string {
@@ -290,6 +314,108 @@ export default async function AfCorePage({
   const now = new Date()
 
   /*
+   * ── 24a / 24b / 26b / 22c / 26a ────────────────────────────────────
+   *
+   * Each is loaded only when it is the screen being rendered. Two of them are
+   * genuinely expensive — the outlook runs ten thousand simulations per league,
+   * and the week board reads every WeeklyMatchup row the user's leagues have —
+   * so paying for either on /core/trades would be a cost for something nobody
+   * is looking at. Same rule the 34a home loader follows.
+   *
+   * They take `playedLeagues`, never `leagues`: the unfiltered list carries AF
+   * Legacy board rows (hasUnifiedRecord: false), 543 of them on one production
+   * account against 60 real teams, and none of them has a schedule to read.
+   */
+  const weekLeagues = playedLeagues.map((l) => ({
+    id: l.id,
+    name: l.name,
+    platform: String(l.platform ?? ''),
+    platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+  }))
+
+  const rivalriesView = activeKey === 'week' && sp.view === 'rivalries'
+
+  const weekBoard =
+    activeKey === 'week' && !rivalriesView
+      ? await getWeekBoard(userId, weekLeagues).catch(() => null)
+      : null
+
+  const rivalries = rivalriesView
+    ? await getRivalryRadar(userId, weekLeagues).catch(() => null)
+    : null
+
+  const outlook =
+    activeKey === 'season-outlook'
+      ? await getSeasonOutlook(
+          userId,
+          playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name,
+            platform: String(l.platform ?? ''),
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            settings: (l as { settings?: unknown }).settings ?? null,
+          })),
+        ).catch(() => null)
+      : null
+
+  const notifications =
+    activeKey === 'notifications'
+      ? await getNotificationsCenter({ userId, issues, now }).catch(() => null)
+      : null
+
+  /*
+   * ⚠ THE NAV BADGE IS ITS OWN READ, AND IT HAS TO BE. The first version drove it
+   * off `notifications?.unread`, which is only loaded when the notifications
+   * screen is the one being rendered — so the badge appeared exactly on the page
+   * where it was least useful and was absent everywhere else. This is an indexed
+   * count on (userId, readAt), which is cheap enough to pay on every screen.
+   *
+   * It counts STORED notifications only. The derived "act today" rows are part
+   * of the same unread number on the screen itself, but they are recomputed per
+   * request and are not worth a second pass here just to bump a badge.
+   */
+  const unreadNotifications = await prisma.platformNotification
+    .count({ where: { userId, readAt: null } })
+    .catch(() => 0)
+
+  // 26a reads the same career payload the career screen does — no second source
+  // of truth for the numbers that end up on a card the user posts publicly.
+  const shareCareer =
+    activeKey === 'share' ? await getCareerData(userId).catch(() => null) : null
+
+  /*
+   * The Tools hub's stat teasers. Counted, not estimated — `LeagueTrade` is the
+   * table the Trades screen itself reads, so the teaser and the screen behind it
+   * cannot disagree. A `catch` returns null rather than 0, because "we could not
+   * count" and "there are none" are different claims and the card says so.
+   */
+  /*
+   * ⚠ THE JOIN IS `history.sleeperLeagueId`, WHICH IS THE PLATFORM ID, NOT
+   * `League.id`. `LeagueTrade` has no leagueId column at all — it hangs off
+   * `LeagueTradeHistory`, which is keyed on (sleeperLeagueId, sleeperUsername).
+   * That table is ingestion PROGRESS, so its row exists whether or not any trade
+   * was ever loaded; counting the child rows is what actually answers "how many
+   * trades do we hold".
+   */
+  const tradesOnFile =
+    activeKey === 'tools' && weekLeagues.some((l) => l.platformLeagueId)
+      ? await prisma.leagueTrade
+          .count({
+            where: {
+              history: {
+                sleeperLeagueId: {
+                  in: weekLeagues
+                    .map((l) => l.platformLeagueId)
+                    .filter((v): v is string => typeof v === 'string' && v.length > 0),
+                },
+              },
+            },
+          })
+          .catch(() => null)
+      : null
+
+
+  /*
    * The 34a home. Only loaded when it is the screen being rendered — it reads
    * rosters and the injury feed, and paying for that on /core/trades would be a
    * cost for something nobody is looking at.
@@ -427,6 +553,28 @@ export default async function AfCorePage({
 
   const commissionerCount = playedLeagues.filter((l) => Boolean(l.isCommissioner)).length
 
+  /*
+   * The Chimmy price the drawer shows BEFORE the user sends anything, read from
+   * the real catalog rather than typed in. `ai_chimmy_chat_message` is the rule
+   * /api/chat/chimmy actually spends against.
+   */
+  const chimmyTokenCost = getTokenSpendRuleMatrixEntry('ai_chimmy_chat_message')?.tokenCost ?? null
+
+  /*
+   * 23b docks the drawer beside the content on league-scoped screens — a roster
+   * or a matchup, where "who should I flex" is asked about the thing on screen.
+   * Cross-league screens overlay instead: there is no single place to lose.
+   */
+  const dockable =
+    selectedLeagueId != null &&
+    (activeKey === 'my-team' ||
+      activeKey === 'matchup' ||
+      activeKey === 'trades' ||
+      activeKey === 'waivers' ||
+      activeKey === 'draft-hq' ||
+      activeKey === 'war-room' ||
+      activeKey === 'home')
+
   return (
     <AfCoreShell
       active={activeKey}
@@ -436,6 +584,17 @@ export default async function AfCorePage({
       weekLabel={dash34?.weekLabel ?? null}
       plan={plan}
       commissionerCount={commissionerCount}
+      notificationCount={unreadNotifications}
+      comms={{
+        leagues: playedLeagues.slice(0, 12).map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: String(l.platform ?? 'manual').toLowerCase(),
+        })),
+        chimmyTokenCost,
+        dockable,
+        supportEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null,
+      }}
     >
       {leagueHome ? (
         <LeagueHome
@@ -536,8 +695,133 @@ export default async function AfCorePage({
           detail={playerDetail}
           leagueCount={leagues.length}
         />
+      ) : activeKey === 'week' ? (
+        /*
+         * 24a and 24b share one screen key. `?view=rivalries` picks the panel —
+         * they read the same WeeklyMatchup rows through the same pairing, and two
+         * sibling routes for one data layer is the spend that pushed this repo
+         * against the route ceiling.
+         */
+        rivalriesView ? (
+          rivalries ? (
+            <RivalryRadar data={rivalries} weekHref="/core/week" />
+          ) : (
+            <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+              <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+                Rivalry Radar
+              </h1>
+              <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+                We could not read your matchup history just now. This is a read failure on our side,
+                not a sign that you have never played anybody.
+              </p>
+            </div>
+          )
+        ) : weekBoard ? (
+          <YourWeek data={weekBoard} rivalriesHref="/core/week?view=rivalries" />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Your week
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read this week&apos;s matchups just now. This is a read failure on our
+              side, not a week with no games.
+            </p>
+          </div>
+        )
+      ) : activeKey === 'season-outlook' ? (
+        outlook ? (
+          <SeasonOutlook data={outlook} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Season Outlook
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not run the simulations just now. This is a read failure on our side, not a
+              season with nothing left to decide.
+            </p>
+          </div>
+        )
+      ) : activeKey === 'notifications' ? (
+        notifications ? (
+          <NotificationsCenter data={notifications} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Notifications
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read your notifications just now. This is a read failure on our side, not
+              an empty inbox.
+            </p>
+          </div>
+        )
+      ) : activeKey === 'share' ? (
+        shareCareer ? (
+          <CareerShare
+            career={shareCareer}
+            leagues={playedLeagues.slice(0, 12).map((l) => ({
+              id: l.id,
+              name: l.name,
+              platform: String(l.platform ?? 'manual').toLowerCase(),
+            }))}
+            selectedLeagueId={selectedLeagueId}
+            /*
+             * ⚠ NULL BECAUSE THE CALL IS NOT CHARGED, NOT BECAUSE WE DID NOT LOOK.
+             * /api/share/generate-copy takes no token spend and has no rule in
+             * lib/tokens/pricing-matrix.ts. The button says "included in your
+             * plan" rather than printing a price we do not take. If a caption
+             * spend rule is ever added, read it here the way the drawer reads
+             * `ai_chimmy_chat_message`.
+             */
+            tokenCost={null}
+            /*
+             * The real reward, from server/api-route-modules/legacy/share-reward:
+             * tokensAwarded is 1 and the route gates on one share per day. The
+             * handoff flags the vague "earn tokens for sharing" copy as a bug
+             * precisely because it states no number.
+             */
+            reward={{ tokensPerShare: 1, oncePerDay: true }}
+          />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Career Share
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              We could not read your career just now, and this card is built from it. This is a read
+              failure on our side, not a career with nothing in it.
+            </p>
+          </div>
+        )
       ) : activeKey === 'tools' ? (
-        <Tools />
+        <Tools
+          data={buildToolsHub({
+            issues,
+            stats: {
+              leaguesPlayed: playedLeagues.length,
+              /*
+               * Read, not estimated. These feed the "Understand something" cards'
+               * stat teasers, and a teaser that overstates what is on file is the
+               * same lie as an invented deadline.
+               */
+              tradesOnFile,
+              /*
+               * ⚠ LEAGUES, AND THE FIELD IS NAMED FOR IT. This briefly read
+               * `seasonsOnFile: playedLeagues.length`, which put a league count
+               * under the word "seasons" on the Manager Psychology card — a
+               * dynasty league running six years is one league and six seasons,
+               * so the two are not interchangeable. Career history is a separate
+               * read and is not worth paying for to fill a teaser.
+               */
+              connectedLeagues: playedLeagues.filter(
+                (l) => (l as { platformLeagueId?: string | null }).platformLeagueId,
+              ).length,
+            },
+            selectedLeagueId,
+          })}
+        />
       ) : activeKey === 'rankings' ? (
         rankingsView === 'compare' ? (
           <RankingsCompare result={compare} query={compareQuery} />
