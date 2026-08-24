@@ -1,12 +1,13 @@
 import { prisma } from './prisma';
 import { normalizeTeamAbbrev } from './team-abbrev';
 import { recordProviderSync } from './provider-sync-logger';
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 import {
   shouldIncludeInjuryInFanoutBatch,
   type InjurySyncFanoutRow,
 } from '@/lib/realtime-events/injuryFanoutPolicy';
 
-const SITE_API = 'https://site.api.espn.com/apis/site/v2/sports/football/nfl'; // db-first-exception: provider adapter layer
+const SITE_API = `${ESPN_SITE_API_BASE}/football/nfl`; // db-first-exception: provider adapter layer
 const CORE_API = 'https://sports.core.api.espn.com/v2/sports/football/leagues/nfl'; // db-first-exception: provider adapter layer
 
 const ESPN_TEAM_IDS: Record<string, number> = {

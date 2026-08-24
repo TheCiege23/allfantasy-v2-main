@@ -5,30 +5,36 @@ import type { CareerData, PrestigeComponent } from '@/lib/core-app/career'
 import '@/components/core-app/af-career.css'
 
 /**
- * Career — the trophy room (handoff 33a), desktop frame.
+ * Career — handoff 13a, desktop frame.
  *
- * ⚠ THIS REPLACED AN EARLIER CAREER SCREEN OF MY OWN INVENTION. There was no
- * career design in the first two handoffs, so the interim version was a guess.
- * This one follows 33a, which is marked final fidelity.
+ * ⚠ THIS SCREEN HAS NOW BEEN CUT TWICE. An interim version was invented before
+ * any career design existed; 33a replaced that with the trophy room; 13a is a
+ * later handoff for the same screen and replaces the trophy room's frame. Four
+ * pieces of 33a survive the re-cut by explicit decision — the platform filter,
+ * the legacy contribution arithmetic, the ring shelf and the READ-ONLY / tab
+ * stats row — because each does work 13a has no slot for. `CareerDesktop`
+ * carries the reasoning for each.
  *
  * ⚠ EVERY FIGURE COMES FROM getCareerData, WHICH READS IMPORTED HISTORY. None of
  * the handoff's demo values (@guap, 187-134, 47.7, the 2024 Dynasty Dragons ring)
  * are hard-coded anywhere. Where the design shows something imports cannot
- * answer, this says so rather than printing the mock's number:
+ * answer, the card keeps its place and names the missing data rather than
+ * printing the mock's number:
  *
- *   Rivalry / Awards   named as unmeasured under the legacy bar
- *   Hall of Fame       omitted — no entries exist to render
- *   Badge case         deferred at your direction
- *   Trusted score      omitted — no reputation rows for this path
+ *   Rivalry / Awards   shown on the legacy card, dashed, marked NOT MEASURED
+ *   Reputation         card renders; no trade/dispute/lineup records exist
+ *   Hall of Fame       card renders; the table has never held a row
+ *   Achievements       card renders; no definitions and no unlock records
+ *   Awards & records   card renders; no awards ledger
  *   Title odds         omitted from the open slot; needs a projection
  *
  * The tabs are links, not state, so the view is deep-linkable exactly as the
- * handoff asks (`?view=seasons`). Only Trophy room is implemented; the others
- * are marked so nobody clicks into a blank panel.
+ * handoff asks (`?view=seasons`). Only Overview is implemented; the others are
+ * marked so nobody clicks into a blank panel.
  */
 
 const TABS = [
-  { key: 'trophy', label: 'Trophy room' },
+  { key: 'overview', label: 'Overview' },
   { key: 'seasons', label: 'Seasons' },
   { key: 'hall', label: 'Hall of Fame' },
   { key: 'records', label: 'Records' },
@@ -381,7 +387,7 @@ function CareerMobile({ data }: { data: CareerData }) {
 }
 
 export function Career({ data, view }: { data: CareerData; view?: string | null }) {
-  const active = TABS.some((t) => t.key === view) ? (view as string) : 'trophy'
+  const active = TABS.some((t) => t.key === view) ? (view as string) : 'overview'
   return (
     <>
       <CareerDesktop data={data} view={active} />
@@ -397,9 +403,9 @@ function UnbuiltView({ label }: { label: string }) {
       <p className="af-cr-empty-t">{label} is not built yet.</p>
       <p className="af-cr-empty-b">
         It is in the design and listed here so the tabs match it, but the panel behind it does not
-        exist — so this says so rather than showing you an empty one. Trophy room is the built view.
+        exist — so this says so rather than showing you an empty one. Overview is the built view.
       </p>
-      <Link href="/core/career" className="af-cr-btn af-cr-btn--primary">Back to Trophy room</Link>
+      <Link href="/core/career" className="af-cr-btn af-cr-btn--primary">Back to Overview</Link>
     </div>
   )
 }
@@ -435,324 +441,437 @@ function PlatformFilter({ data }: { data: CareerData }) {
   )
 }
 
+/**
+ * Career overview — handoff 13a.
+ *
+ * ⚠ 13a SUPERSEDES 33a FOR THIS SCREEN, BUT NOT WHOLESALE. 33a's trophy room was
+ * a fixed identity rail beside one column; 13a is a full-width identity banner
+ * over 340 / 1fr / 300. Four things 33a had and 13a has no slot for are kept at
+ * the user's explicit direction, because each does work the new design does not
+ * replace:
+ *
+ *   Platform filter      `career.ts` reads BOTH data sources specifically so this
+ *                        can exist — legacy rows can only ever answer "Sleeper",
+ *                        so a filter built on them alone would silently drop
+ *                        every ESPN and Yahoo season.
+ *   Contribution math    `score × weight% = contribution` per legacy dimension.
+ *                        13a shows a weight label only; without the arithmetic
+ *                        the total cannot be audited, which is the disclosure
+ *                        principle 13a's own build rule 1 rests on.
+ *   Ring shelf           championships as rings that link to the league they were
+ *                        won in. 13a demotes these to text in the timeline and
+ *                        loses the link, so the shelf stays below the timeline.
+ *   READ-ONLY + tab stats
+ *
+ * ⚠ NOTHING HERE IS INVENTED. Reputation, Hall of Fame, achievements and awards
+ * are all in 13a and none has a populated table behind it, so each renders as a
+ * card naming the missing data. Same for rivalry and awards on the legacy card:
+ * shown with their design weights, dashed and labelled unmeasured, never scored
+ * zero — a zero would drag a real total down to represent data we never had.
+ */
 function CareerDesktop({ data, view }: { data: CareerData; view: string }) {
-  const {
-    prestige,
-    legacy,
-    titles,
-    activeLeagues,
-    leagueCounts,
-    distinctLeagues,
-    currentSeason,
-  } = data
+  const { prestige, legacy, titles, activeLeagues, leagueCounts, currentSeason } = data
 
   const record = data.games > 0 ? `${nf(data.wins)}–${nf(data.losses)}` : null
   const openSlot = activeLeagues[0] ?? null
 
   return (
-    <div className="af-cr af-cr-desktop">
-      {/* ── Identity ───────────────────────────────────────────────────── */}
-      <aside className="af-cr-id">
-        <div className="af-cr-idhead">
-          <svg className="af-cr-crest" width="24" height="26" viewBox="0 0 24 26" aria-hidden="true">
-            <path d="M12 1 22 6.5v13L12 25 2 19.5v-13Z" fill="none" stroke="var(--accent)" strokeWidth="1.5" />
-            <text x="12" y="16" textAnchor="middle" fill="var(--accent)"
-              style={{ font: "800 8px var(--font-archivo, 'Archivo'), sans-serif" }}>AF</text>
-          </svg>
-          <span className="af-cr-eyebrow">
-            {data.firstSeason && data.lastSeason
-              ? `CAREER · ${data.firstSeason}—${data.lastSeason}`
-              : 'CAREER'}
-          </span>
-          <span className="af-cr-ro">READ-ONLY</span>
+    <div className="af-c13">
+      {/* ── header: eyebrow, read-only marker, tabs, tab stats, actions ──── */}
+      <div className="af-cr-idhead" style={{ padding: '0 2px' }}>
+        <svg className="af-cr-crest" width="24" height="26" viewBox="0 0 24 26" aria-hidden="true">
+          <path d="M12 1 22 6.5v13L12 25 2 19.5v-13Z" fill="none" stroke="var(--accent)" strokeWidth="1.5" />
+          <text x="12" y="16" textAnchor="middle" fill="var(--accent)"
+            style={{ font: "800 8px var(--font-archivo, 'Archivo'), sans-serif" }}>AF</text>
+        </svg>
+        <span className="af-cr-eyebrow">
+          {data.firstSeason && data.lastSeason
+            ? `YOUR CAREER · ${data.firstSeason}—${data.lastSeason}`
+            : 'YOUR CAREER'}
+        </span>
+        {/* Kept from 33a: this screen writes nothing, and says so. */}
+        <span className="af-cr-ro">READ-ONLY</span>
+      </div>
+
+      <nav className="af-cr-tabs" aria-label="Career views">
+        {TABS.map((t) =>
+          t.key === view ? (
+            <span key={t.key} className="af-cr-tab" aria-current="page">{t.label}</span>
+          ) : (
+            <Link key={t.key} className="af-cr-tab" href={`/core/career?view=${t.key}`}>
+              {t.label}
+            </Link>
+          ),
+        )}
+        {/* Kept from 33a. */}
+        <div className="af-cr-tabstats">
+          <span className="af-cr-tabstat">{nf(data.distinctLeagues)} leagues</span>
+          <span className="af-cr-tabstat">{nf(data.leaguesPlayed)} league-seasons</span>
+          {data.sports.length > 0 ? (
+            <span className="af-cr-tabstat">{data.sports.join(' · ')}</span>
+          ) : null}
         </div>
-
-        <div className="af-cr-hero">
-          {/*
-            The bundle ships rank art for level 14 only, and the ladder is 25
-            levels. Rather than show the wrong badge to everyone who is not a
-            level 14, the slot states the level until the other 24 arrive.
-          */}
-          <div className="af-cr-badge--none">
-            {data.prestige ? `RANK ART\nPENDING` : 'NO RANK YET'}
-          </div>
-          <h1 className="af-cr-handle">{data.handle ?? 'Your career'}</h1>
-          <div className="af-cr-chips">
-            {data.level != null ? (
-              <span className="af-cr-chip af-cr-chip--lvl">
-                LVL {data.level}{data.levelName ? ` · ${data.levelName.toUpperCase()}` : ''}
-              </span>
-            ) : null}
-          </div>
-          <p className="af-cr-subline">
-            {data.seasonsPlayed} {data.seasonsPlayed === 1 ? 'season' : 'seasons'} ·{' '}
-            {nf(distinctLeagues)} {distinctLeagues === 1 ? 'league' : 'leagues'}
-            {data.sports.length ? ` · ${data.sports.map((s) => s.toUpperCase()).join(', ')}` : ''} ·{' '}
-            {nf(data.leaguesPlayed)} completed league-seasons
-          </p>
-        </div>
-
-        {prestige ? (
-          <section className="af-cr-panel af-cr-prestige">
-            <Gauge value={prestige.total} />
-            <div className="af-cr-comps">
-              <h2 className="af-cr-comphead">
-                GM PRESTIGE
-                <HelpDot body="Championships 30%, career win rate 20%, tenure 20%, league diversity 15%, playoff appearances 15%. Each part is capped so one huge number can't carry the score — a capped part shows as MAXED." />
-              </h2>
-              {prestige.components.map((c) => (
-                <div key={c.key} className="af-cr-comp">
-                  <span className="af-cr-comp-label">{c.label}</span>
-                  <span className="af-cr-track">
-                    <i className="af-cr-fill" style={{ width: `${c.ratio * 100}%`, background: componentTone(c) }} />
-                  </span>
-                  <span className={`af-cr-comp-val${c.saturated ? ' af-cr-comp-val--max' : ''}`}>
-                    {c.saturated ? 'MAXED' : c.display}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
-
-        {data.xp ? (
-          <section className="af-cr-panel af-cr-panel--xp">
-            <h2 className="af-cr-xphead">
-              CAREER XP{data.level != null ? ` · LEVEL ${data.level} OF 25` : ''}
-              <HelpDot left body="XP accrues from recorded results across every league you have imported — wins, playoff berths and championships each carry a different weight." />
-            </h2>
-            <div className="af-cr-xprow">
-              <span className="af-cr-xpval">{nf(data.xp.total)}</span>
-              {data.levelName ? <span className="af-cr-xptier">{data.levelName.toUpperCase()}</span> : <span className="af-cr-xptier" />}
-              {data.xp.nextThreshold != null ? (
-                <span className="af-cr-xpnext">next {nf(data.xp.nextThreshold)}</span>
-              ) : null}
-            </div>
-            {data.xp.progressPct != null ? (
-              <div className="af-cr-xpbar">
-                <i style={{ width: `${Math.max(0, Math.min(data.xp.progressPct, 100))}%` }} />
-              </div>
-            ) : null}
-            <div className="af-cr-xpfoot">
-              <span className="af-cr-xpfoot-txt">
-                {data.xp.toNext != null && data.nextLevelName
-                  ? `${nf(data.xp.toNext)} XP to ${data.nextLevelName}`
-                  : 'Top of the ladder'}
-              </span>
-              <Link className="af-cr-xplink" href="/core/rankings">Rankings →</Link>
-            </div>
-          </section>
-        ) : null}
-
-        <div className="af-cr-spacer" />
-
-        {/*
-          The handoff's action row is "Share career card" + "Records". The share
-          generator (frames 26a/13b) does not exist, so that button is not here —
-          a primary CTA that goes nowhere is worse than an empty slot, and it was
-          pointing at ?share=1 which nothing reads. Records is a real destination
-          now that the tab renders something.
-        */}
         <div className="af-cr-actions">
           <Link className="af-cr-btn af-cr-btn--ghost" href="/core/career?view=records">Records</Link>
         </div>
-      </aside>
+      </nav>
 
-      {/* ── Main ──────────────────────────────────────────────────────── */}
-      <div className="af-cr-main">
-        <nav className="af-cr-tabs" aria-label="Career views">
-          {TABS.map((t) =>
-            t.key === view ? (
-              <span key={t.key} className="af-cr-tab" aria-current="page">{t.label}</span>
-            ) : (
-              <Link key={t.key} className="af-cr-tab" href={`/core/career?view=${t.key}`}>
-                {t.label}
-              </Link>
-            )
-          )}
-          <div className="af-cr-tabstats">
-            <span className="af-cr-tabstat">
-              <span className="af-cr-tabstat-l">RECORD</span>
-              <span className={`af-cr-tabstat-v${record ? '' : ' af-cr-tabstat-v--none'}`}>
-                {record ?? 'no games'}
-              </span>
+      {view !== 'overview' ? (
+        <UnbuiltView label={TABS.find((t) => t.key === view)?.label ?? 'This view'} />
+      ) : data.isEmpty ? (
+        <div className="af-cr-empty">
+          <p className="af-cr-empty-t">No completed seasons yet.</p>
+          <p className="af-cr-empty-b">
+            This page is built from finished seasons. You have {activeLeagues.length}{' '}
+            {activeLeagues.length === 1 ? 'league' : 'leagues'} in progress — once they finish, your
+            record, rings and career arc land here. Nothing is shown until then rather than a page of
+            zeroes.
+          </p>
+          <Link href="/import?returnTo=%2Fcore%2Fcareer" className="af-cr-btn af-cr-btn--primary">
+            Import past seasons
+          </Link>
+        </div>
+      ) : (
+        <>
+          {/* ── identity banner ──────────────────────────────────────────── */}
+          <section className="af-c13-banner">
+            <span className="af-c13-av" aria-hidden="true">
+              {(data.handle ?? '?').charAt(0).toUpperCase()}
             </span>
-            <span className="af-cr-tabstat">
-              <span className="af-cr-tabstat-l">WIN %</span>
-              <span className={`af-cr-tabstat-v${data.winRate != null ? ' af-cr-tabstat-v--good' : ' af-cr-tabstat-v--none'}`}>
-                {data.winRate != null ? (data.winRate * 100).toFixed(1) : '—'}
-              </span>
-            </span>
-            <span className="af-cr-tabstat">
-              <span className="af-cr-tabstat-l">RINGS</span>
-              <span className="af-cr-tabstat-v af-cr-tabstat-v--warn">{data.championships}</span>
-            </span>
-          </div>
-        </nav>
-
-        <div className="af-cr-body">
-          {view !== 'trophy' ? (
-            <UnbuiltView label={TABS.find((t) => t.key === view)?.label ?? 'This view'} />
-          ) : data.isEmpty ? (
-            <div className="af-cr-empty">
-              <p className="af-cr-empty-t">No completed seasons yet.</p>
-              <p className="af-cr-empty-b">
-                The trophy room is built from finished seasons. You have {activeLeagues.length}{' '}
-                {activeLeagues.length === 1 ? 'league' : 'leagues'} in progress — once they finish, your
-                record, rings and career arc land here. Nothing is shown until then rather than a page
-                of zeroes.
+            <div className="af-c13-who">
+              <h1 className="af-c13-handle">
+                {data.handle ? `@${data.handle}` : 'Your career'}
+                {data.level != null ? (
+                  <span className="af-c13-chip">
+                    LVL {data.level}
+                    {data.levelName ? ` · ${data.levelName.toUpperCase()}` : ''}
+                  </span>
+                ) : null}
+                {/*
+                  13a puts a TRUSTED · 78 chip here. There are no reputation rows
+                  on this path, so the chip keeps its place and names what it is
+                  waiting on rather than printing the mock's number.
+                */}
+                <span
+                  className="af-c13-chip af-c13-chip--unmeasured"
+                  title="Reputation scoring needs completed-trade, dispute and lineup-consistency records, none of which are being written yet."
+                >
+                  TRUSTED · NOT SCORED
+                </span>
+              </h1>
+              <p className="af-c13-subline">
+                {data.firstSeason ? `Since ${data.firstSeason}` : 'Career'}
+                {data.sports.length > 0 ? ` · ${data.sports.join(', ')}` : ''}
+                {` · ${nf(leagueCounts.active)} live ${leagueCounts.active === 1 ? 'league' : 'leagues'}`}
+                {` · ${nf(data.leaguesPlayed)} league-seasons of history`}
               </p>
-              <Link href="/import?returnTo=%2Fcore%2Fcareer" className="af-cr-btn af-cr-btn--primary">
-                Import past seasons
-              </Link>
             </div>
-          ) : (
-            <>
-              <PlatformFilter data={data} />
-
-              {/* B1. Shelf */}
-              <div className="af-cr-sechead">
-                <h2 className="af-cr-sectitle">
-                  THE SHELF · {data.championships} {data.championships === 1 ? 'CHAMPIONSHIP' : 'CHAMPIONSHIPS'}
-                </h2>
-                <span className="af-cr-sechint">Every ring links to the league it was won in</span>
+            <div className="af-c13-stats">
+              <div className="af-c13-stat">
+                <span>Championships</span>
+                <b className="warn">{data.championships}</b>
               </div>
-              {titles.length === 0 ? (
-                <div className="af-cr-empty">
-                  <p className="af-cr-empty-t">No championships on record yet.</p>
-                  <p className="af-cr-empty-b">
-                    {nf(data.leaguesPlayed)} completed league-seasons and no title so far. The shelf fills
-                    the first time you win one.
+              <div className="af-c13-stat">
+                <span>Record</span>
+                <b>{record ?? '—'}</b>
+              </div>
+              <div className="af-c13-stat">
+                <span>Win %</span>
+                <b className="good">
+                  {data.winRate != null ? (Math.round(data.winRate * 1000) / 10).toFixed(1) : '—'}
+                </b>
+              </div>
+              <div className="af-c13-stat">
+                <span>Seasons</span>
+                <b>{nf(data.seasonsPlayed)}</b>
+              </div>
+            </div>
+          </section>
+
+          {/* Kept from 33a. */}
+          <PlatformFilter data={data} />
+
+          <div className="af-c13-body">
+            {/* ── left column ──────────────────────────────────────────── */}
+            <div className="af-c13-col">
+              {prestige ? (
+                <section className="af-c13-card">
+                  <p className="af-c13-head">
+                    GM prestige
+                    <span className="sp" />
+                    <HelpDot body="Championships 30%, win rate 20%, tenure 20%, leagues 15%, playoff appearances 15%. Each is capped, so one huge number cannot carry the score." />
                   </p>
-                </div>
-              ) : (
-                <div className="af-cr-shelf">
-                  {titles.slice(0, 3).map((t) => (
-                    <div key={`${t.season}-${t.leagueName}`} className="af-cr-ring">
-                      <div className="af-cr-ring-top">
-                        <span className="af-cr-ring-glyph" aria-hidden="true">◉</span>
-                        <span className="af-cr-ring-year">{t.season}</span>
-                        <span className="af-cr-plat" data-platform={t.platform} title={t.platform}>
-                          {t.platform.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <h3 className="af-cr-ring-name">{t.leagueName}</h3>
-                        {t.record ? <p className="af-cr-ring-detail">{t.record}</p> : null}
-                      </div>
-                      {t.settingsLabel ? <span className="af-cr-ring-set">{t.settingsLabel}</span> : null}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 12 }}>
+                    <Gauge value={prestige.total} />
+                  </div>
+                  {prestige.components.map((c) => (
+                    <div key={c.key} className="af-c13-row">
+                      <span>{c.label}</span>
+                      <span className="af-c13-track">
+                        <i style={{ width: `${c.ratio * 100}%`, background: componentTone(c) }} />
+                      </span>
+                      <span className="v">{c.saturated ? 'MAXED' : c.display}</span>
                     </div>
                   ))}
-                  {/* Open slot — the live league, never counted in the career. */}
-                  <div className="af-cr-slot">
-                    <span className="af-cr-slot-l">
-                      OPEN SLOT{currentSeason ? ` · ${currentSeason}` : ''}
+                </section>
+              ) : null}
+
+              {data.xp ? (
+                <section className="af-c13-card">
+                  <p className="af-c13-head">Career XP</p>
+                  <p className="af-c13-big">
+                    {nf(data.xp.total)}
+                    {data.levelName ? <small>{data.levelName.toUpperCase()}</small> : null}
+                  </p>
+                  <span className="af-c13-track" style={{ display: 'block', marginTop: 12 }}>
+                    <i style={{ width: `${data.xp.progressPct ?? 0}%`, background: 'var(--accent)' }} />
+                  </span>
+                  {data.xp.toNext != null && data.nextLevelName ? (
+                    <p className="af-c13-note">
+                      {nf(data.xp.toNext)} XP to {data.nextLevelName}.
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
+
+              <section className="af-c13-card">
+                <p className="af-c13-head">Reputation</p>
+                <p className="af-c13-none">
+                  13a shows an overall and a commissioner-trust score built from completed trades,
+                  dispute history and lineup consistency. None of those are recorded per manager, so
+                  there is nothing to score — this is unmeasured, not zero.
+                </p>
+              </section>
+            </div>
+
+            {/* ── centre column ────────────────────────────────────────── */}
+            <div className="af-c13-col">
+              {legacy ? (
+                <section className="af-c13-card">
+                  <p className="af-c13-head">
+                    Legacy score
+                    <span className="sp" />
+                    <span className="af-c13-big warn" style={{ fontSize: 26 }}>
+                      {legacy.total}
                     </span>
-                    {openSlot ? (
-                      <>
-                        <p className="af-cr-slot-h">{openSlot.leagueName}</p>
-                        <p className="af-cr-slot-p">
-                          {openSlot.record
-                            ? `${openSlot.record} this season`
-                            : 'Season has not started'}
-                          {leagueCounts.active > 1 ? ` · ${leagueCounts.active} leagues live` : ''}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="af-cr-slot-p">No leagues in progress this season.</p>
-                    )}
+                    <HelpDot
+                      left
+                      body="Each dimension is scored 0-100 from recorded results, then multiplied by its weight. Weights are re-normalised across the dimensions that can actually be scored, so an unmeasurable one does not silently drag the total down."
+                    />
+                  </p>
+                  <div className="af-cr-stack">
+                    {legacy.dimensions.map((d) => (
+                      <i
+                        key={d.key}
+                        style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }}
+                      />
+                    ))}
                   </div>
+                  <div className="af-c13-lgrid" style={{ marginTop: 14 }}>
+                    {legacy.dimensions.map((d) => (
+                      <div key={d.key} className="af-c13-ldim">
+                        <p className="af-c13-ldimhead">
+                          {d.label}
+                          <b>{d.score}</b>
+                        </p>
+                        <span className="af-c13-track" style={{ display: 'block', marginTop: 7 }}>
+                          <i style={{ width: `${d.score}%`, background: LEGACY_COLORS[d.key] }} />
+                        </span>
+                        {/* Kept from 33a: the arithmetic, not just the weight. */}
+                        <p className="af-c13-ldimmeta">
+                          {d.score} × {Math.round(d.weight * 100)}% = {d.contribution.toFixed(1)}
+                        </p>
+                      </div>
+                    ))}
+                    {legacy.unavailable.map((label) => (
+                      <div key={label} className="af-c13-ldim af-c13-ldim--none">
+                        <p className="af-c13-ldimhead">
+                          {label}
+                          <b>—</b>
+                        </p>
+                        <span className="af-c13-track" style={{ display: 'block', marginTop: 7 }} />
+                        <p className="af-c13-ldimmeta">NOT MEASURED</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="af-c13-note">
+                    13a lists six dimensions. Rivalry needs head-to-head results against a named
+                    manager and awards needs an awards record; an imported season carries a record,
+                    not an opponent ledger. Both are shown unweighted rather than scored zero, and the
+                    four above are re-normalised across what can be scored.
+                  </p>
+                </section>
+              ) : null}
+
+              <section className="af-c13-card">
+                <p className="af-c13-head">
+                  Season timeline
+                  <span className="sp" />
+                  <span>
+                    {data.firstSeason && data.lastSeason
+                      ? `${data.firstSeason} — ${data.lastSeason}`
+                      : ''}
+                  </span>
+                </p>
+                <CareerArc data={data} />
+                {titles.length > 0 ? (
+                  <div style={{ marginTop: 14 }}>
+                    {titles.slice(0, 4).map((t) => (
+                      <div
+                        key={`ms-${t.season}-${t.leagueName}`}
+                        className="af-c13-row"
+                        style={{ gridTemplateColumns: '54px minmax(0,1fr) auto' }}
+                      >
+                        <span className="v" style={{ color: 'var(--warn)' }}>
+                          {t.season}
+                        </span>
+                        <span
+                          style={{
+                            fontWeight: 700,
+                            color: 'var(--text)',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          Champion — {t.leagueName}
+                        </span>
+                        <span className="v">{t.record ?? t.settingsLabel ?? ''}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="af-c13-note">No championship seasons to mark on the timeline yet.</p>
+                )}
+              </section>
+
+              {/* Kept from 33a — 13a has no equivalent that links a ring to its league. */}
+              <section className="af-c13-card">
+                <div className="af-cr-sechead">
+                  <h2 className="af-cr-sectitle">
+                    THE SHELF · {data.championships}{' '}
+                    {data.championships === 1 ? 'CHAMPIONSHIP' : 'CHAMPIONSHIPS'}
+                  </h2>
+                  <span className="af-cr-sechint">Every ring links to the league it was won in</span>
                 </div>
-              )}
-
-              {/* B2. Lower grid */}
-              <div className="af-cr-lower">
-                <div className="af-cr-lowerleft">
-                  <section className="af-cr-card">
-                    <div className="af-cr-sechead">
-                      <h2 className="af-cr-sectitle">CAREER ARC · WIN RATE BY SEASON</h2>
-                      <span className="af-cr-legend"><i className="af-cr-dot" />title season</span>
-                    </div>
-                    <CareerArc data={data} />
-                  </section>
-
-                  {legacy ? (
-                    <section className="af-cr-card">
-                      <div className="af-cr-legacyhead">
-                        <h2 className="af-cr-sectitle">LEGACY SCORE · WHAT MAKES THE {legacy.total}</h2>
-                        <span className="af-cr-legacytotal">{legacy.total}</span>
-                        <HelpDot left body="Each dimension is scored 0-100 from recorded results, then multiplied by its weight. The bar is those products stacked — they add up to your score." />
+                {titles.length === 0 ? (
+                  <p className="af-c13-none">
+                    {nf(data.leaguesPlayed)} completed league-seasons and no title so far. The shelf
+                    fills the first time you win one.
+                  </p>
+                ) : (
+                  <div className="af-cr-shelf">
+                    {titles.slice(0, 3).map((t) => (
+                      <div key={`${t.season}-${t.leagueName}`} className="af-cr-ring">
+                        <div className="af-cr-ring-top">
+                          <span className="af-cr-ring-glyph" aria-hidden="true">
+                            ◉
+                          </span>
+                          <span className="af-cr-ring-year">{t.season}</span>
+                          <span className="af-cr-plat" data-platform={t.platform} title={t.platform}>
+                            {t.platform.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <h3 className="af-cr-ring-name">{t.leagueName}</h3>
+                          {t.record ? <p className="af-cr-ring-detail">{t.record}</p> : null}
+                        </div>
+                        {t.settingsLabel ? (
+                          <span className="af-cr-ring-set">{t.settingsLabel}</span>
+                        ) : null}
                       </div>
-                      <div className="af-cr-stack">
-                        {legacy.dimensions.map((d) => (
-                          <i key={d.key} style={{ width: `${d.contribution}%`, background: LEGACY_COLORS[d.key] }} />
-                        ))}
-                      </div>
-                      <div className="af-cr-lgrid">
-                        {legacy.dimensions.map((d) => (
-                          <div key={d.key} className="af-cr-lrow">
-                            <span className="af-cr-swatch" style={{ background: LEGACY_COLORS[d.key] }} />
-                            <span className="af-cr-lname">{d.label}</span>
-                            <span className="af-cr-lmath">{d.score} × {Math.round(d.weight * 100)}%</span>
-                            <span className="af-cr-lcontrib">{d.contribution.toFixed(1)}</span>
-                          </div>
-                        ))}
-                      </div>
-                      {legacy.unavailable.length ? (
+                    ))}
+                    <div className="af-cr-slot">
+                      <span className="af-cr-slot-l">
+                        OPEN SLOT{currentSeason ? ` · ${currentSeason}` : ''}
+                      </span>
+                      {openSlot ? (
                         <>
-                          <div className="af-cr-divider" />
-                          <p className="af-cr-missing">
-                            {legacy.unavailable.join(' and ')} are not scored. {legacy.unavailable.length > 1 ? 'They need' : 'It needs'}{' '}
-                            head-to-head results and an awards record, and an import carries a season
-                            record rather than an opponent ledger. The weights above are re-normalised
-                            across what is measurable, so the score is not quietly depressed by data
-                            nobody has.
+                          <p className="af-cr-slot-h">{openSlot.leagueName}</p>
+                          <p className="af-cr-slot-p">
+                            {openSlot.record
+                              ? `${openSlot.record} this season`
+                              : 'Season has not started'}
+                            {leagueCounts.active > 1 ? ` · ${leagueCounts.active} leagues live` : ''}
                           </p>
                         </>
-                      ) : null}
-                    </section>
-                  ) : null}
-                </div>
-
-                <div className="af-cr-side">
-                  <div className="af-cr-counts">
-                    <div className="af-cr-count">
-                      <span className="af-cr-count-l">ACTIVE</span>
-                      <span className="af-cr-count-v">{leagueCounts.active}</span>
-                    </div>
-                    <div className="af-cr-count">
-                      <span className="af-cr-count-l">ARCHIVED</span>
-                      <span className="af-cr-count-v">{leagueCounts.archived}</span>
-                    </div>
-                    <div className="af-cr-count">
-                      <span className="af-cr-count-l">PLAYOFFS</span>
-                      <span className="af-cr-count-v">{nf(data.playoffAppearances)}</span>
+                      ) : (
+                        <p className="af-cr-slot-p">No leagues in progress this season.</p>
+                      )}
                     </div>
                   </div>
+                )}
+              </section>
+            </div>
 
-                  {/*
-                    Hall of Fame and the badge case are the design's other two
-                    right-column cards. Badges are deferred at your direction, and
-                    no hall-of-fame entries exist to render — an empty card that
-                    says "2 entries" with nothing in it would be worse than the
-                    card not being here yet.
-                  */}
-                  <section className="af-cr-card">
-                    <h2 className="af-cr-sectitle">LEAGUES</h2>
-                    <p className="af-cr-caption">
-                      {nf(distinctLeagues)} leagues across {data.seasonsPlayed}{' '}
-                      {data.seasonsPlayed === 1 ? 'season' : 'seasons'} — {leagueCounts.active} live,{' '}
-                      {leagueCounts.archived} archived
-                      {leagueCounts.completed > 0 ? `, ${leagueCounts.completed} finished this season` : ''}.
-                      A league is archived when it has history but no entry this season.
+            {/* ── right column ─────────────────────────────────────────── */}
+            <div className="af-c13-col">
+              <section className="af-c13-card">
+                <p className="af-c13-head">
+                  AF rank
+                  {data.level != null ? <span className="sp">LEVEL {data.level} OF 25</span> : null}
+                </p>
+                {data.level != null ? (
+                  <>
+                    <p
+                      style={{
+                        margin: 0,
+                        font: "900 21px/1.1 var(--font-archivo, Archivo), system-ui, sans-serif",
+                        color: 'var(--text)',
+                      }}
+                    >
+                      {data.levelName}
                     </p>
-                  </section>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                    <span className="af-c13-track" style={{ display: 'block', marginTop: 12 }}>
+                      <i
+                        style={{ width: `${data.xp?.progressPct ?? 0}%`, background: 'var(--accent)' }}
+                      />
+                    </span>
+                    {data.xp?.toNext != null && data.nextLevelName ? (
+                      <p className="af-c13-note">
+                        {nf(data.xp.toNext)} XP to {data.nextLevelName}.
+                      </p>
+                    ) : null}
+                  </>
+                ) : (
+                  <p className="af-c13-none">Your career has not been ranked yet.</p>
+                )}
+                <p style={{ marginTop: 12 }}>
+                  <Link className="af-cr-xplink" href="/core/rankings">
+                    Rankings →
+                  </Link>
+                </p>
+              </section>
+
+              <section className="af-c13-card">
+                <p className="af-c13-head">Hall of fame</p>
+                <p className="af-c13-none">
+                  No entries. The Hall of Fame table has never been populated for an account on this
+                  path, so there is nothing to list — empty, not hidden.
+                </p>
+              </section>
+
+              <section className="af-c13-card">
+                <p className="af-c13-head">Achievements</p>
+                <p className="af-c13-none">
+                  13a shows five achievements with a rarity and an XP reward each. No achievement
+                  definitions or per-user unlock records exist yet, so there is no set to show
+                  progress against.
+                </p>
+              </section>
+
+              <section className="af-c13-card">
+                <p className="af-c13-head">Awards &amp; records</p>
+                <p className="af-c13-none">
+                  Awards won and league records held both need an awards ledger. Imported seasons
+                  carry a final standing and a champion flag, and nothing else that resolves to an
+                  award.
+                </p>
+              </section>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

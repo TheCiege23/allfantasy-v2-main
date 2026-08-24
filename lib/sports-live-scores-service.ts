@@ -1,11 +1,13 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { redactSecrets } from '@/lib/security/redactSecrets'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import type { LeagueSport } from '@prisma/client'
 import { DEFAULT_SPORT, isSupportedSport, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { fetchWithChain } from '@/lib/workers/api-chain'
 import { legacySupportedSportToApiChain } from '@/lib/workers/api-config'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 export const LIVE_SCORES_FRESHNESS_MS = 60 * 1000
 
@@ -291,7 +293,7 @@ export async function fetchEspnScoreboard(
     const dates = options.dates?.length ? options.dates : [null]
     const rows: LiveScoreRow[] = []
     for (const date of dates) {
-      const url = new URL(`https://site.api.espn.com/apis/site/v2/sports/${path}/scoreboard`)
+      const url = new URL(`${ESPN_SITE_API_BASE}/${path}/scoreboard`)
       if (date) url.searchParams.set('dates', date)
       const response = await fetch(url.toString(), { cache: 'no-store' })
       if (!response.ok) continue
@@ -476,8 +478,12 @@ export function buildRollingInsightsScheduleSeasonUrl(input: {
   return url.toString()
 }
 
+/**
+ * Delegates to the shared redactor. This used to strip only `RSC_token=`, so a diagnostic preview
+ * carrying any other credential — a bearer header, a connection string — was stored verbatim.
+ */
 function redactTokens(value: string): string {
-  return value.replace(/RSC_token=([^&\s]+)/gi, 'RSC_token=<redacted>')
+  return redactSecrets(value)
 }
 
 function safeObjectKeys(value: unknown): string[] {

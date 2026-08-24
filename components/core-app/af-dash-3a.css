@@ -135,7 +135,16 @@
 .af3a-import p { margin: 6px 0 11px; color: var(--muted); font: 400 12px/1.45 'Archivo', system-ui, sans-serif; }
 
 /* ── Main ─────────────────────────────────────────────────────────────────── */
-.af3a-main { min-width: 0; padding: 18px 24px 40px; background: var(--bg); background-image: var(--hero); }
+/*
+ * `overflow-x: clip` is a guard, not decoration. The help popovers are absolutely
+ * positioned and hidden with `visibility`, which does NOT remove them from the
+ * document's scroll area — a badge near the right edge therefore put a horizontal
+ * scrollbar on the whole page while displaying nothing (measured: scrollWidth 2180
+ * vs clientWidth 2113). `clip` rather than `hidden` because `hidden` creates a
+ * scroll container and would break any future `position: sticky` descendant; there
+ * are none in this sheet today, and this keeps it that way by not mattering.
+ */
+.af3a-main { min-width: 0; padding: 18px 24px 40px; background: var(--bg); background-image: var(--hero); overflow-x: clip; }
 .af3a-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
 .af3a-search {
   display: flex;

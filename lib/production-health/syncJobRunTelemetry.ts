@@ -17,6 +17,7 @@
  */
 
 import { prisma } from "@/lib/prisma"
+import { redactAndCap } from "@/lib/security/redactSecrets"
 
 export type SyncJobOutcome = {
   rowsRead?: number
@@ -53,8 +54,20 @@ function num(value: number | undefined): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0
 }
 
+/**
+ * Everything written to `errorMessage` and to `metadata.errors` goes through here.
+ *
+ * This used to strip only `sk-` keys, which is the wrong half of the problem for this repo:
+ * Rolling Insights passes `RSC_token` as a QUERY PARAMETER and TheSportsDB puts its key in a URL
+ * PATH SEGMENT, so any provider error carrying a URL landed here verbatim. That matters more now
+ * that routes deliberately pass their full error detail in — `cron/waivers` redacts its HTTP
+ * response to "discovery_failed" in production but hands the real message to telemetry.
+ *
+ * Redaction happens before the length cap, never after: slicing first can cut a secret in half
+ * and leave the front of it readable.
+ */
 function sanitize(text: string): string {
-  return text.replace(/sk-[A-Za-z0-9_-]+/g, "sk-***").slice(0, 500)
+  return redactAndCap(text, 500)
 }
 
 /**

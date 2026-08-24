@@ -2,6 +2,7 @@ import { prisma } from '@/lib/prisma';
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev';
 import { createHash } from 'crypto';
 import { SUPPORTED_SPORTS, type SupportedSport } from '@/lib/sport-scope';
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 const NEWS_FRESHNESS_MS = 30 * 60 * 1000;
 
@@ -65,7 +66,7 @@ interface NewsArticle {
   sentiment: string | null;
 }
 
-/** ESPN `site.api.espn.com` sports path segment per league (multi-sport news ingest). */
+/** ESPN `site.web.api.espn.com` sports path segment per league (multi-sport news ingest). */
 const ESPN_NEWS_SPORTS_PATH: Record<SupportedSport, string> = {
   NFL: 'football/nfl',
   NBA: 'basketball/nba',
@@ -314,7 +315,7 @@ export async function fetchESPNNewsForSport(
   const path = ESPN_NEWS_SPORTS_PATH[sport];
   const limit = opts?.limit ?? 35;
   const teamQ = opts?.team ? `&team=${encodeURIComponent(opts.team)}` : '';
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/news?limit=${limit}${teamQ}`;
+  const url = `${ESPN_SITE_API_BASE}/${path}/news?limit=${limit}${teamQ}`;
 
   try {
     const response = await fetch(url, { next: { revalidate: 300 } });

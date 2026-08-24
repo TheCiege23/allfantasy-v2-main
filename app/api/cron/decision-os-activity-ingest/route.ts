@@ -136,6 +136,26 @@ const WEEK_FETCH_CONCURRENCY = 6
 const RELAY_BUDGET_MS = 60_000
 /** Small batches keep the per-batch overshoot past `relayDeadline` correspondingly small. */
 const RELAY_BATCH_SIZE = 100
+
+/**
+ * Budget for a `?relayOnly=1` fire, which skips discovery and ingest entirely.
+ *
+ * ⚠ WHY THIS MODE EXISTS. The relay is the LAST phase of a handler that measured 290,461ms
+ * against a 300s edge ceiling on 2026-08-23. `OutboxRelay.run()` checks `shouldStop()` BEFORE
+ * its first `runOnce()`, so once ingest has spent the budget the relay breaks out having
+ * fetched nothing: 0 dispatched, no error, and `attempts` left at 0 on every row. It looked
+ * exactly like "there was nothing to do".
+ *
+ * It was not nothing. Prod held 7,645 pending rows, ALL with attempts=0, none claimed, none
+ * backed off, the oldest available since 2026-07-21 -- the relay had never touched one since
+ * it landed in #518 on 2026-08-20. A shared budget cannot fix this, because whichever phase
+ * runs last is the one starved, so the drain needs its own fire.
+ *
+ * 240s against the 300s ceiling, matching CRON_RUN_BUDGET_MS in lib/cron/runBudget.ts (#598).
+ * The 60s of headroom is not padding: the budget is checked only BETWEEN batches, so a batch
+ * started at 239s runs to completion past the check and the response still has to return.
+ */
+const RELAY_ONLY_BUDGET_MS = 240_000
 const LEAGUE_CAP = 40
 const WEEKS = 18
 
@@ -250,8 +270,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
+  // `?relayOnly=1` drains the outbox and does nothing else. Same second-vercel.json-entry
+  // pattern as `import-schedules?source=tsdb-only`: one route, two schedules, and no new route
+  // at the 2048-route ceiling.
+  const relayOnly = new URL(request.url).searchParams.get("relayOnly") === "1"
+
+  /*
+   * ⚠ A DISTINCT JOB NAME PER MODE, AND THE REASON MATTERS.
+   *
+   * Both vercel.json entries hit this one route. Sharing a heartbeat name would let the daily
+   * ?discover=1 fire satisfy a probe on the drain -- reporting the drain healthy on a day it
+   * never ran. That is precisely the shared-probe false green fixed in #602, where import-scores
+   * probed the same SportsGame column import-schedules writes and read `ok 6m` for a job that
+   * had not run at all.
+   *
+   * Separate names make the drain independently observable, which is the whole point here: it
+   * was invisible for three days behind a green 200.
+   */
+  const jobName = relayOnly ? "cron-decision-os-relay-drain" : "cron-decision-os-activity-ingest"
+
   const summary = await withSyncJobRun(
-    { jobName: "cron-decision-os-activity-ingest", trigger: "cron" },
+    { jobName, trigger: "cron" },
     async () => {
       const startedAt = Date.now()
 
@@ -263,7 +302,7 @@ export async function GET(request: Request) {
           storeUnavailable: true, discovered: 0, processed: 0, failed: 0, skippedForTime: 0, created: 0, updated: 0,
           errors: [] as string[],
           // Keep the shape identical on both return paths so `summary.relay` stays a single type.
-          relay: { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null },
+          relay: { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null, starved: false },
           managerProjection: { managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null },
         }
       }
@@ -271,7 +310,7 @@ export async function GET(request: Request) {
         delegate as ConstructorParameters<typeof PrismaImportedActivityStore>[0],
       )
 
-      const leagues = (await prisma.league
+      const leagues = relayOnly ? ([] as LeagueRow[]) : (await prisma.league
         .findMany({
           where: {
             platform: "sleeper",
@@ -313,8 +352,12 @@ export async function GET(request: Request) {
       // ── Outbox drain (see the header note). Bounded by RELAY_BUDGET_MS; whatever is left
       // stays `pending` and is picked up by the next fire, so a large backlog drains across
       // days rather than blowing this fire's `maxDuration`.
-      const relayDeadline = startedAt + INGEST_BUDGET_MS + RELAY_BUDGET_MS
-      const relay = { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null }
+      const relayDeadline = startedAt + (relayOnly ? RELAY_ONLY_BUDGET_MS : INGEST_BUDGET_MS + RELAY_BUDGET_MS)
+      const relay = { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null, starved: false }
+      // Detected BEFORE run(), because run() breaks out silently: it checks shouldStop() ahead of
+      // its first batch, so a closed window is indistinguishable from an empty outbox in the
+      // summary. That is exactly how this hid from 2026-08-20 to 2026-08-23.
+      relay.starved = Date.now() > relayDeadline
       try {
         const outboxRelay = new OutboxRelay(new PrismaOutboxStore(prisma as unknown as PrismaLike), {
           // Both durable consumers, matching scripts/run-outbox-relay.ts. NOTE: do NOT use
@@ -357,7 +400,9 @@ export async function GET(request: Request) {
       // option at the 2048-route ceiling. Idempotent (absolute tallies, not increments), and it
       // skips any league that already has native snapshots, so it cannot overwrite first-party data.
       const managerProjection = { managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null }
-      try {
+      // Skipped on a relay-only fire: the drain above may legitimately consume the full 240s, and
+      // this phase would then push the handler into the same 300s edge 502 the mode exists to avoid.
+      if (!relayOnly) try {
         const r = await projectImportedManagerSnapshots(prisma as never)
         managerProjection.managersWritten = r.managersWritten
         managerProjection.leaguesConsidered = r.leaguesConsidered
@@ -383,6 +428,9 @@ export async function GET(request: Request) {
       ],
       warnings: [
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
+        // A relay whose window closed before its first batch reports 0/0 with no error, which reads
+        // as "nothing to do". Name it -- this is the failure that hid 7,645 rows for three days.
+        ...(s.relay.starved ? ["outbox relay skipped: its window closed before the first batch"] : []),
         // Dead-lettered rows will never be retried by the relay — they need a human.
         ...(s.relay.deadLettered > 0 ? [`${s.relay.deadLettered} outbox events dead-lettered`] : []),
       ],

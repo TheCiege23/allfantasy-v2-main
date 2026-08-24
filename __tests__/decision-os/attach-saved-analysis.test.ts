@@ -8,7 +8,7 @@ vi.mock('@/lib/decision-os/three-brain/phase3/readLeagueIntelligence', () => ({
   readLeagueIntelligence: (...a: unknown[]) => readMock(...a),
 }))
 
-import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
+import { attachSavedAnalysis, leaguesWithSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import type { Decision } from '@/lib/decision-os/core/decision'
 
 function makeDecision(decisionType = 'manager.waiver.claim'): Decision {
@@ -79,6 +79,79 @@ describe('attachSavedAnalysis — the cheap path', () => {
     expect(readMock).toHaveBeenCalledTimes(1)
     expect(out.enriched).toBe(true)
     expect(out.decision.explanation).not.toBe('DETERMINISTIC')
+  })
+})
+
+describe('leaguesWithSavedAnalysis — the fan-out guard', () => {
+  function groupByDb(rows: Array<{ leagueId: string }>) {
+    const groupBy = vi.fn(async () => rows)
+    return { groupBy, db: { decisionIntelligenceRun: { groupBy } } as never }
+  }
+
+  it('answers for MANY leagues in ONE query', async () => {
+    // The whole point. commissionerHubHealth maps over every league a user has inside an
+    // unbounded Promise.all; one count per league is how this repo previously took a production
+    // Postgres OOM (53200). N must collapse to 1.
+    const { groupBy, db } = groupByDb([{ leagueId: 'L2' }])
+    const ids = Array.from({ length: 40 }, (_, i) => `L${i}`)
+    const out = await leaguesWithSavedAnalysis(db, 'u1', ids)
+    expect(groupBy).toHaveBeenCalledTimes(1)
+    expect(out.has('L2')).toBe(true)
+    expect(out.size).toBe(1)
+  })
+
+  it('filters to succeeded runs for this user only', async () => {
+    const { groupBy, db } = groupByDb([{ leagueId: 'L1' }])
+    await leaguesWithSavedAnalysis(db, 'u1', ['L1', 'L2'])
+    const arg = groupBy.mock.calls[0][0] as { where: Record<string, unknown>; by: string[] }
+    expect(arg.by).toEqual(['leagueId'])
+    expect(arg.where).toMatchObject({ userId: 'u1', status: 'succeeded' })
+  })
+
+  it('dedupes the input so a repeated league is not asked about twice', async () => {
+    const { groupBy, db } = groupByDb([])
+    await leaguesWithSavedAnalysis(db, 'u1', ['L1', 'L1', 'L1', 'L2'])
+    const arg = groupBy.mock.calls[0][0] as { where: { leagueId: { in: string[] } } }
+    expect(arg.where.leagueId.in).toEqual(['L1', 'L2'])
+  })
+
+  it('does NOT query at all for an empty or junk league list', async () => {
+    const { groupBy, db } = groupByDb([])
+    expect((await leaguesWithSavedAnalysis(db, 'u1', [])).size).toBe(0)
+    expect((await leaguesWithSavedAnalysis(db, 'u1', ['', '  '] as never)).size).toBe(0)
+    expect(groupBy).not.toHaveBeenCalled()
+  })
+
+  it('fails CLOSED to an empty set when the query throws', async () => {
+    // Enrich nothing rather than degrade a commissioner surface over decoration.
+    const db = { decisionIntelligenceRun: { groupBy: async () => { throw new Error('db down') } } } as never
+    expect((await leaguesWithSavedAnalysis(db, 'u1', ['L1'])).size).toBe(0)
+  })
+
+  it('fails closed when the delegate is missing entirely', async () => {
+    expect((await leaguesWithSavedAnalysis({} as never, 'u1', ['L1'])).size).toBe(0)
+  })
+})
+
+describe('knownHasRun — do not repeat the batched question', () => {
+  it('skips the per-league count when the caller already batched it', async () => {
+    readMock.mockResolvedValue({ status: 'ready', result })
+    const count = vi.fn(async () => 1)
+    const db = { decisionIntelligenceRun: { count } } as never
+    const out = await attachSavedAnalysis({
+      db, decision: makeDecision(), leagueId: 'L1', userId: 'u1',
+      tool: 'manager_intelligence', knownHasRun: true,
+    })
+    expect(count).not.toHaveBeenCalled()
+    expect(out.enriched).toBe(true)
+  })
+
+  it('still counts when the caller has NOT batched it', async () => {
+    readMock.mockResolvedValue({ status: 'ready', result })
+    const count = vi.fn(async () => 1)
+    const db = { decisionIntelligenceRun: { count } } as never
+    await attachSavedAnalysis({ db, decision: makeDecision(), leagueId: 'L1', userId: 'u1', tool: 'manager_intelligence' })
+    expect(count).toHaveBeenCalledTimes(1)
   })
 })
 

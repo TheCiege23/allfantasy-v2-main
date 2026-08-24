@@ -1821,6 +1821,8 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.legal.notRecorded": "Not recorded",
     "settings.legal.yes": "Yes",
     "settings.legal.no": "No",
+    "settings.legal.agreedAtSignup": "Agreed at sign-up",
+    "settings.legal.linkNoGambling": "No-gambling policy",
     "settings.legal.linkDisclaimer": "Disclaimer",
     "settings.legal.linkTerms": "Terms of Service",
     "settings.legal.linkPrivacy": "Privacy Policy",

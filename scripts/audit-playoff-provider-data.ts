@@ -1,3 +1,4 @@
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 /**
  * Read-only NBA/NHL playoff provider proof audit.
  *
@@ -351,7 +352,7 @@ async function auditTheSportsDb(sport: Sport, seasonYear: number): Promise<Provi
 }
 
 async function auditEspn(sport: Sport, seasonYear: number): Promise<ProviderSummary> {
-  const url = `https://site.api.espn.com/apis/site/v2/sports/${ESPN_PATH[sport]}/scoreboard`
+  const url = `${ESPN_SITE_API_BASE}/${ESPN_PATH[sport]}/scoreboard`
   try {
     const payload = await fetchJson(url)
     return summarize({

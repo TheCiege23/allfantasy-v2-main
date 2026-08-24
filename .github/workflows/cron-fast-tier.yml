@@ -1,0 +1,92 @@
+name: Cron fast tier
+
+# Drives the 12 sub-hourly crons declared in vercel.json from a single long-running job.
+#
+# WHY THIS EXISTS
+# GitHub schedules cannot fire more often than hourly, and the host's scheduler — which is what
+# actually executed these — is unavailable while the Vercel account is on hold. The slow tier
+# (.github/workflows/cron-slow-tier.yml) covers the 25 hourly-or-slower jobs by firing one request
+# per trigger. That approach cannot express "every 2 minutes", so this workflow instead starts
+# hourly and TICKS INTERNALLY for the rest of the hour.
+#
+# ⚠ THIS IS A WORKAROUND FOR A BILLING OUTAGE, NOT AN ARCHITECTURE.
+# DELETE THIS WORKFLOW when the host's scheduler returns. Leaving both running double-fires every
+# fast job: two live-score-ticks every two minutes, each holding a 105s internal poll loop against
+# the same provider.
+#
+# COST: this repo is PUBLIC, so Actions minutes are unmetered. Do not port this to a private repo
+# without doing the arithmetic first — a 55-minute job every hour is ~40,000 minutes a month, and
+# the free allowance for private repos is 2,000.
+#
+# REQUIRED CONFIGURATION (identical to the slow tier)
+#   repository variable  APP_URL      e.g. https://www.allfantasy.ai
+#   repository secret    CRON_SECRET  the same value the deployed app reads
+# With either missing the script logs a notice and exits green rather than failing every hour.
+#
+# ⚠ SCHEDULES ONLY FIRE FROM THE DEFAULT BRANCH. Use workflow_dispatch to test from a branch.
+#
+# ⚠ GAPS ARE EXPECTED. GitHub queues scheduled runs behind a shared pool and can delay them by
+# many minutes under load; the window is 55m against a 60m trigger, so a late start leaves a real
+# hole. This restores most of the cadence, not all of it — a 2-minute job is not guaranteed to be
+# 2 minutes late at worst, and nothing here should be relied on for correctness that a missed tick
+# would break.
+
+on:
+  schedule:
+    - cron: "0 * * * *"
+  workflow_dispatch:
+    inputs:
+      window_minutes:
+        description: "How long to keep ticking (minutes). Default 55."
+        required: false
+        default: "55"
+      dry_run:
+        description: "List the jobs and their intervals without sending requests."
+        type: boolean
+        required: false
+        default: false
+
+# One loop at a time. A new hourly run REPLACES a lingering one rather than queueing behind it:
+# queueing would let two loops tick the same jobs at once, which is the exact double-fire this
+# workflow otherwise takes care to avoid.
+concurrency:
+  group: cron-fast-tier
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  tick:
+    runs-on: ubuntu-latest
+    # Above the 55m window plus drain, below the hour. The window is the real control; this is the
+    # backstop for a loop that somehow fails to exit.
+    timeout-minutes: 58
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # No `npm ci`. The loop uses only the Node standard library and global fetch, so installing
+      # would be most of the runtime for nothing — same reasoning as cron-slow-tier.yml.
+      #
+      # Every ${{ }} value goes through `env:` and is referenced as "$VAR", never interpolated into
+      # the script text. A workflow_dispatch input is attacker-controlled text as far as the shell
+      # is concerned, and this repo is public.
+      - name: Tick fast-tier crons
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          INPUT_WINDOW: ${{ inputs.window_minutes }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          WINDOW="${INPUT_WINDOW:-55}"
+          case "$WINDOW" in
+            ''|*[!0-9]*) echo "::error::window_minutes must be a positive integer"; exit 1 ;;
+          esac
+          DRY=""
+          if [ "${INPUT_DRY_RUN:-false}" = "true" ]; then DRY="--dry-run"; fi
+          node scripts/cron-fast-tier-loop.mjs --window-minutes "$WINDOW" $DRY

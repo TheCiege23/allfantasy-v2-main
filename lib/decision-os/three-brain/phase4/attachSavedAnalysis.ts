@@ -39,6 +39,12 @@ export async function attachSavedAnalysis<TAction = unknown>(input: {
   leagueId: string
   userId: string
   tool: IntelligenceTool
+  /**
+   * Set by a caller that has ALREADY established this league has a succeeded run, via
+   * `leaguesWithSavedAnalysis`. Skips gate 1 so a fan-out does not issue one count per league on
+   * top of the single batched query it just ran.
+   */
+  knownHasRun?: boolean
 }): Promise<AttachOutcome<TAction>> {
   const { decision, leagueId, userId, tool } = input
   const db = input.db ?? defaultPrisma
@@ -54,10 +60,13 @@ export async function attachSavedAnalysis<TAction = unknown>(input: {
     }
 
     // Gate 1 — the cheap one. One indexed count instead of rebuilding an evidence packet.
-    const runs = await db.decisionIntelligenceRun.count({
-      where: { userId, leagueId, status: 'succeeded' },
-    })
-    if (runs === 0) return { decision, enriched: false, reason: 'no_succeeded_run' }
+    // Skipped when the caller batched it already; see `leaguesWithSavedAnalysis`.
+    if (!input.knownHasRun) {
+      const runs = await db.decisionIntelligenceRun.count({
+        where: { userId, leagueId, status: 'succeeded' },
+      })
+      if (runs === 0) return { decision, enriched: false, reason: 'no_succeeded_run' }
+    }
 
     // Gate 2 — the real read. Entitlement-checked; returns `locked` for a user who may not see it.
     const read = await readLeagueIntelligence({
@@ -81,5 +90,43 @@ export async function attachSavedAnalysis<TAction = unknown>(input: {
     // The Decision is already complete without this. Returning it unchanged is the correct
     // degraded answer, and the routes that call this cannot be allowed to fail here.
     return { decision, enriched: false, reason: 'attach_failed' }
+  }
+}
+
+/**
+ * Which of `leagueIds` have a succeeded run for this user — in ONE query.
+ *
+ * FOR FAN-OUTS. `attachSavedAnalysis` is cheap for a single decision, but a caller that maps over
+ * every league a user owns turns "one indexed count" into N concurrent counts.
+ * `commissionerHubHealth` does exactly that (`await Promise.all(snapshots.map(...))`, unbounded),
+ * and this repo has already taken a production Postgres OOM (53200) from an unbounded per-league
+ * fan-out. One `groupBy` replaces N counts, and the expensive `readLeagueIntelligence` then runs
+ * only for leagues that can actually produce something — which is none of them while AI spend is
+ * disabled.
+ *
+ * FAILS CLOSED. On any error this returns an EMPTY set, so the caller enriches nothing rather than
+ * degrading a commissioner surface over decoration.
+ */
+export async function leaguesWithSavedAnalysis(
+  db: PrismaLike,
+  userId: string,
+  leagueIds: readonly string[],
+): Promise<Set<string>> {
+  // trim(), not length > 0: a whitespace-only id is not a league id, and letting one through
+  // spends a query to learn nothing. Caught by its own test.
+  const ids = [...new Set(leagueIds.map((id) => (typeof id === 'string' ? id.trim() : '')).filter(Boolean))]
+  if (ids.length === 0) return new Set()
+  try {
+    const rows = await db.decisionIntelligenceRun.groupBy({
+      by: ['leagueId'],
+      where: { userId, leagueId: { in: ids }, status: 'succeeded' },
+    })
+    return new Set(
+      rows
+        .map((r: { leagueId: string | null }) => r.leagueId)
+        .filter((id): id is string => typeof id === 'string' && id.length > 0),
+    )
+  } catch {
+    return new Set()
   }
 }

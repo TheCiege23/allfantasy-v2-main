@@ -310,7 +310,14 @@ export function Dashboard3A({
           <span className="af3a-chip">
             READ-ONLY
           </span>
-          <Help>
+          {/*
+            `left` because this badge sits at the right-hand end of the topbar. A
+            264px popover anchored left ran 67px past the viewport and — since a
+            `visibility: hidden` absolutely-positioned element still extends the
+            document's scroll area — put a horizontal scrollbar on the whole page
+            while showing nothing.
+           */}
+          <Help left>
             <b>AllFantasy never writes to your leagues.</b>
             We read your rosters and tell you what to do. Every change happens on the
             platform itself.
@@ -370,7 +377,21 @@ export function Dashboard3A({
                       <div className="af3a-urgent-body">
                         <h3>
                           {issue.title}
-                          {issue.leagueName ? <span className="af3a-dash"> — {issue.leagueName}</span> : null}
+                          {/*
+                            ⚠ THE TITLE ALREADY CARRIES THE LEAGUE NAME for every
+                            per-league issue (`League data is stale — <name>`), so
+                            appending it again rendered "League data is stale —
+                            Survivor Style Guillotine — Survivor Style Guillotine"
+                            live. This was latent until the stale detector stopped
+                            firing on all 63 leagues: the collapsed aggregate row
+                            carries `leagueName: null`, so it was the only issue
+                            that ever reached this branch. Fixed here rather than
+                            in `CoreIssue.title`, because LeagueHome renders that
+                            title on its own and would lose the name.
+                           */}
+                          {issue.leagueName && !issue.title.includes(issue.leagueName) ? (
+                            <span className="af3a-dash"> — {issue.leagueName}</span>
+                          ) : null}
                         </h3>
                         <p>{issue.meta}</p>
                       </div>

@@ -30,6 +30,7 @@ import { syncNflFoundationSeasonStats } from "@/lib/nfl-data-foundation/nflFound
 
 export const dynamic = "force-dynamic"
 import { ingestPlayerStats } from '@/lib/sports-data/theSportsDbIngest'
+import { createRunBudget, rotateForFairness } from '@/lib/cron/runBudget'
 
 export const maxDuration = 300
 
@@ -39,6 +40,7 @@ async function handle(req: NextRequest) {
   const limitParam = Number(url.searchParams.get("limit"))
   const dryRun = url.searchParams.get("dryRun") === "true"
   const startedAt = Date.now()
+  const budget = createRunBudget()
 
   try {
     const report = await syncNflFoundationSeasonStats({
@@ -60,9 +62,26 @@ async function handle(req: NextRequest) {
      * no stats row first, then least-recently-fetched, so successive runs walk
      * the whole population instead of re-fetching the same head every night.
      */
+    /*
+     * ⚠ THE 300s CEILING IS THE PLATFORM EDGE, NOT maxDuration. Measured 2026-08-23: this route
+     * returned HTTP 502 at ~300,100ms — the edge severs the connection and answers 502 itself, so
+     * no client timeout or maxDuration value buys more time. The work has to fit.
+     *
+     * `syncNflFoundationSeasonStats` above is unbounded, so by the time this block starts an
+     * unknown amount of the ceiling is already spent. Counting players (`maxPlayers: 60`) bounds
+     * WORK but not TIME — a slow provider makes 60 lookups take as long as it likes.
+     *
+     * Rotated so the budget cannot starve the tail: with a fixed order, whichever sport falls past
+     * the cut is skipped on EVERY run, not just this one.
+     */
     const tsdbStats: Record<string, unknown> = {}
+    const deferredSports: string[] = []
     if (url.searchParams.get('tsdb') !== '0' && !dryRun) {
-      for (const sport of ['NFL', 'NBA', 'NHL', 'MLB'] as const) {
+      for (const sport of rotateForFairness(['NFL', 'NBA', 'NHL', 'MLB'] as const)) {
+        if (budget.exhausted()) {
+          deferredSports.push(sport)
+          continue
+        }
         try {
           const r = await ingestPlayerStats(sport, { maxPlayers: 60 })
           tsdbStats[sport] = {
@@ -80,6 +99,9 @@ async function handle(req: NextRequest) {
       ok: true,
       dryRun,
       thesportsdb: tsdbStats,
+      // Named so a partial run is legible rather than looking like a sport that failed silently.
+      deferredSports: deferredSports.length ? deferredSports : undefined,
+      budgetExhausted: budget.exhausted(),
       requestedSeason: report.requestedSeason,
       season: report.season,
       fallbackSeasonUsed: report.fallbackSeasonUsed,

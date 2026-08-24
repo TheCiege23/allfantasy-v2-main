@@ -1,6 +1,7 @@
 import "server-only"
 
 import { prisma } from "@/lib/prisma"
+import { redactAndCap } from "@/lib/security/redactSecrets"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
 import { recordProviderSync } from "@/lib/provider-sync-logger"
 import { normalizePlayerName, normalizeTeamAbbrev } from "@/lib/team-abbrev"
@@ -241,9 +242,13 @@ function clampLimit(value: number | null | undefined): number {
   return Math.min(MAX_IMPORT_LIMIT, Math.floor(parsed))
 }
 
+/**
+ * Delegates to the shared redactor, keeping this module's own 240-char cap. It used to strip only
+ * `sk-` keys — the wrong half for a PROVIDER import path, where the credential at risk is a
+ * Rolling Insights query parameter or a TheSportsDB path segment.
+ */
 function redactError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error)
-  return message.replace(/sk-[A-Za-z0-9_-]+/g, "sk-***").slice(0, 240)
+  return redactAndCap(error, 240)
 }
 
 function payloadLogs(payload: unknown): NormalizedGameLogEntry[] {

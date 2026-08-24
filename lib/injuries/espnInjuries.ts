@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { ESPN_SITE_API_BASE } from '@/lib/providers/espnUrls'
 
 /**
  * espnInjuries — ESPN's public injury feed, for both football codes.
@@ -98,7 +99,7 @@ export async function syncEspnInjuriesToDb(opts: {
     // This module IS the ingestion boundary: its only job is provider fetch ->
     // sports_injuries upsert, which populates the table every DB-first reader
     // (injuryReadPort) consumes.
-    const url = `https://site.api.espn.com/apis/site/v2/sports/${path}/injuries` // db-first-exception: injury ingestion writer, not a read path
+    const url = `${ESPN_SITE_API_BASE}/${path}/injuries` // db-first-exception: injury ingestion writer, not a read path
     const res = await fetch(url, {
       headers: { accept: 'application/json' },
       signal: AbortSignal.timeout(20_000),
