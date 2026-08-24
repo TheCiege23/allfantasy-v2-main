@@ -56,7 +56,16 @@ export async function GET() {
     { path: 'af-legacy', priority: '0.8', changefreq: 'weekly' },
     { path: 'trade-analyzer', priority: '0.8', changefreq: 'weekly' },
     { path: 'mock-draft', priority: '0.7', changefreq: 'weekly' },
-    { path: 'waiver-ai', priority: '0.7', changefreq: 'weekly' },
+    /*
+     * ⚠ /waiver-ai IS DELIBERATELY ABSENT. It carried the SAME title,
+     * description and keywords as /tools/waiver-wire-advisor — byte for byte,
+     * from two hand-written config copies — while serving signed-out visitors
+     * 501 chars whose h1 reads "Sign in to analyze your leagues", against that
+     * page's 2066 chars of real copy. Two sitemap'd URLs cannot both win one
+     * query, and the login wall is the wrong one to enter. The app route is
+     * noindex,follow now (app/waiver-ai/layout.tsx); the landing page below
+     * owns the phrase and its CTA opens /waiver-ai.
+     */
     { path: 'tools-hub', priority: '0.85', changefreq: 'weekly' },
     { path: 'chimmy', priority: '0.8', changefreq: 'weekly' },
     { path: 'pricing', priority: '0.5', changefreq: 'monthly' },
