@@ -118,6 +118,20 @@ function numericOr(value: unknown, fallback: number): number {
 }
 
 /**
+ * Sum whichever roster-capacity slots are actually known, matching the `totalRosterSlots`
+ * convention already computed independently in redraftDefaults.ts / dynastyDefaults.ts /
+ * c2cDefaults.ts / devyDefaults.ts / keeperDefaults.ts / salaryCapDefaults.ts.
+ *
+ * Returns `null`, never `0`, when nothing is known — a league we have no roster-slot data for
+ * is not the same fact as a zero-slot roster, and treating them alike is how a downstream
+ * `rosterSize` ends up written as a confident-looking number for a league it knows nothing about.
+ */
+export function sumKnownRosterSlots(...parts: readonly unknown[]): number | null {
+  const known = parts.filter((p): p is number => typeof p === 'number' && Number.isFinite(p))
+  return known.length > 0 ? known.reduce((sum, n) => sum + n, 0) : null
+}
+
+/**
  * Playoff and waiver defaults ship in two key spellings, both of which are widely consumed:
  * snake_case (the sport-defaults registry shape, e.g. `playoff_start_week`) and camelCase
  * (the format-contract shape, e.g. `playoffStartWeek`).
@@ -327,6 +341,14 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
     playoffWeeks: firstPresent(canonicalPlayoffSettings?.playoffWeeks, playoff.playoff_weeks),
   })
 
+  // Resolved once so the object literal below and the totalRosterSlots sum can never drift apart
+  // — computing the fallback twice is exactly how the roster-size gap this replaces went unnoticed.
+  const resolvedRosterSlots = canonicalRosterSettings.rosterSlots ?? preset?.rosterSlots
+  const resolvedBenchSlots = canonicalRosterSettings.benchSlots ?? preset?.benchSlots
+  const resolvedIrSlots = canonicalRosterSettings.irSlots ?? preset?.irSlots
+  const resolvedTaxiSlots = canonicalRosterSettings.taxiSlots ?? preset?.taxiSlots
+  const resolvedCollegeRosterSlots = canonicalRosterSettings.collegeRosterSlots ?? preset?.collegeRosterSlots
+
   return {
     sport,
     format,
@@ -336,11 +358,31 @@ export function getLeagueDefaults(input: LeagueFoundationDefaultsInput): LeagueF
     rosterSettings: {
       ...roster,
       ...canonicalRosterSettings,
-      rosterSlots: canonicalRosterSettings.rosterSlots ?? preset?.rosterSlots,
-      benchSlots: canonicalRosterSettings.benchSlots ?? preset?.benchSlots,
-      irSlots: canonicalRosterSettings.irSlots ?? preset?.irSlots,
-      taxiSlots: canonicalRosterSettings.taxiSlots ?? preset?.taxiSlots,
-      collegeRosterSlots: canonicalRosterSettings.collegeRosterSlots ?? preset?.collegeRosterSlots,
+      rosterSlots: resolvedRosterSlots,
+      benchSlots: resolvedBenchSlots,
+      irSlots: resolvedIrSlots,
+      taxiSlots: resolvedTaxiSlots,
+      collegeRosterSlots: resolvedCollegeRosterSlots,
+      /**
+       * ⚠ THIS FIELD WAS MISSING, AND ITS ABSENCE WAS SILENT. The canonical league-creation path
+       * (createCanonicalLeagueInTransaction.ts) reads rosterSettings looking for a `roster_size` /
+       * `rosterSize` key that no producer in this file — or anywhere under lib/league-defaults or
+       * lib/league-concepts — has ever written. The lookup missed on every call, `0 || null`
+       * collapsed to `null`, and League.rosterSize was written NULL with no error anywhere.
+       * Verified on prod 2026-08-24: 33 of 34 leagues with NULL rosterSize also have leagueSize
+       * set, i.e. these are configured leagues silently missing ONE field, not abandoned setups.
+       *
+       * collegeRosterSlots is deliberately EXCLUDED from the sum. It is a distinct sub-roster
+       * bucket on the C2C/devy college-to-cash concepts, not verified here to be additive to the
+       * main roster's capacity, and guessing wrong would inflate rosterSize for exactly the
+       * concepts complex enough that a wrong roster cap matters most.
+       */
+      totalRosterSlots: sumKnownRosterSlots(
+        resolvedRosterSlots,
+        resolvedBenchSlots,
+        resolvedIrSlots,
+        resolvedTaxiSlots,
+      ),
     },
     scoringSettings: {
       ...scoring,
