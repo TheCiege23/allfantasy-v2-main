@@ -160,7 +160,14 @@ describe('createCanonicalLeagueInTransaction contract', () => {
           language: 'en',
           leagueType: 'redraft',
           leagueSize: 12,
-          scoring: 'PPR',
+          // 'half_ppr', not 'PPR': the fixture below uses scoringPreset 'fb_half_ppr'.
+          // scoringFormatForPreset (lib/league-concepts/redraftDefaults.ts) and
+          // scoring-presets.ts's build() -- the wizard-facing preset resolver -- independently
+          // agree on 'half_ppr' for this exact preset id. This assertion asserted 'PPR' for two
+          // months (since 2026-06-12) while the file sat in scripts/vitest-failure-baseline.json;
+          // the test was wrong, not the implementation. See scoringFormat below, which is the
+          // SAME underlying variable and was asserted with the same wrong literal.
+          scoring: 'half_ppr',
           playoffTeams: 6,
         }),
       }),
@@ -205,7 +212,9 @@ describe('createCanonicalLeagueInTransaction contract', () => {
         data: expect.objectContaining({
           leagueId: 'league-1',
           formatKey: 'redraft',
-          scoringFormat: 'PPR',
+          // Same value as data.scoring above -- createCanonicalLeagueInTransaction.ts:366 passes
+          // the identical `scoringFormat` local into both calls.
+          scoringFormat: 'half_ppr',
           templateId: 'fb_half_ppr',
         }),
       }),
