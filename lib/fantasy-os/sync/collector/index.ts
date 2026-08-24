@@ -28,3 +28,10 @@ export {
   type SleeperSyncConnection,
   type ApplyScopeResult,
 } from './types'
+// ESPN/Yahoo weekly-matchup parity (rides the same cron heartbeat; see externalMatchupParity.ts).
+export {
+  runExternalMatchupParity,
+  enumerateExternalMatchupConnections,
+  type ExternalMatchupParityResult,
+  type ExternalMatchupLeagueResult,
+} from './externalMatchupParity'
