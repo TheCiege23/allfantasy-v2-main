@@ -10,7 +10,8 @@ import { recordRedraftTradeMarketEvent } from '@/lib/trade-market/redraftTradeMa
 import { shouldRunTradeShadow, shouldRunTradeLive, runTradeShadowForProposal } from '@/lib/decision-os/trade/shadow'
 import { toTradeCard, type TradeCard } from '@/lib/decision-os/trade/tradeCardAdapter'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
-import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
+import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/parity'
+import { createTradeOsLoaders } from '@/lib/decision-os/trade-os'
 import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 
 export const dynamic = 'force-dynamic'
@@ -279,9 +280,24 @@ export async function POST(req: NextRequest) {
 
   let decisionOs: { decisionId: string; card: TradeCard; completeness: number; uncertaintySources: string[] } | null = null
 
+  /*
+   * Trade OS feed, built ONCE per request so drainOutcomes() sees every fact this request resolved.
+   * Both branches below get the same instance.
+   *
+   * ⚠ THIS CHANGES WHERE FACTS COME FROM, NEVER HOW A DECISION IS MADE. The shadow runner already
+   * accepts `loadWorldFacts` as an optional dependency with a live default, so supplying it swaps
+   * grounding and nothing else.
+   *
+   * SAFE BEFORE THE TABLE EXISTS. `domain_os_facts` is declared in schema.prisma but has never been
+   * migrated, so in production every read throws 42P01, `safeRead` swallows it, and the feed falls
+   * through to the live derivation -- byte-identical to not wiring this at all. That is deliberate:
+   * it lets the hit rate be MEASURED before anyone migrates a table for it.
+   */
+  const { drainOutcomes: drainTradeOsOutcomes, ...tradeOsLoaders } = createTradeOsLoaders()
+
   if (isLive && shadowArgs) {
     try {
-      const liveResult = await runTradeShadowForProposal(shadowArgs)
+      const liveResult = await runTradeShadowForProposal(shadowArgs, tradeOsLoaders)
       if (liveResult.ran && liveResult.result) {
         const { decision } = liveResult.result
         // Attach a saved three-brain analysis, if this user has one for this league. Same seam
@@ -328,12 +344,17 @@ export async function POST(req: NextRequest) {
       leagueId,
     })) {
       try {
-        await runTradeShadowForProposal(shadowArgs)
+        await runTradeShadowForProposal(shadowArgs, tradeOsLoaders)
       } catch {
         // shadow must never affect the legacy response
       }
     }
   }
+
+  // One event carrying where each fact actually came from. Signal-level TTLs are short (5min
+  // waiver, 3min trade), so the store only pays on repeat requests inside that window -- a
+  // property of real traffic, not of this code. If served_store stays 0, the cache is overhead.
+  emitFeedOutcomes('trade', drainTradeOsOutcomes())
 
   return NextResponse.json({ proposal: created, valueSnapshot: snapshotRow, ...(decisionOs ? { decisionOs } : {}) })
 }
