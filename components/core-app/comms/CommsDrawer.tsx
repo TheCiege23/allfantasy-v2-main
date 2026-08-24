@@ -381,19 +381,25 @@ function LeaguePanel({
     try {
       const res = await fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40`)
       if (!res.ok) throw new Error(`Chat returned ${res.status}`)
+      /*
+       * Wire shape is /api/league/chat's toClientMessage (reached via the
+       * /api/app proxy): flat `authorName` / `text`, not a nested `user` row —
+       * that nested shape was the bracket-pool chat's, which this drawer was
+       * wrongly pointed at (and 403'd every fantasy league).
+       */
       const data = (await res.json()) as {
         messages?: Array<{
           id: string
-          message: string
+          text?: string | null
           createdAt: string
-          user?: { displayName?: string | null; username?: string | null } | null
+          authorName?: string | null
         }>
       }
       setMessages(
         (data.messages ?? []).map((m) => ({
           id: m.id,
-          author: m.user?.displayName || m.user?.username || 'Someone',
-          message: m.message,
+          author: m.authorName || 'Someone',
+          message: m.text ?? '',
           createdAt: m.createdAt,
         })),
       )
@@ -787,6 +793,7 @@ export function CommsDrawer({
 }: CommsDrawerProps) {
   const [tab, setTab] = useState<CommsTab>(initialTab)
   const [scopeId, setScopeId] = useState<string | null>(pageLeagueId)
+  const panelRef = useRef<HTMLElement | null>(null)
 
   /*
    * ⚠ 23b's CORE VALUE PROP, AND IT IS REAL. A docked drawer follows the page:
@@ -810,6 +817,21 @@ export function CommsDrawer({
     return () => window.removeEventListener('keydown', onKey)
   }, [open, mode, onClose])
 
+  /*
+   * Full-screen overlay hygiene: the page behind must not scroll, and focus
+   * must land inside the dialog so keyboard and screen-reader users arrive
+   * where the action is. Docked (23b) is part of the page and gets neither.
+   */
+  useEffect(() => {
+    if (!open || mode !== 'overlay') return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    panelRef.current?.focus()
+    return () => {
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open, mode])
+
   if (!open) return null
 
   const scopeName = leagues.find((l) => l.id === scopeId)?.name ?? null
@@ -828,6 +850,8 @@ export function CommsDrawer({
       <aside
         className="af-cm"
         data-mode={mode}
+        ref={panelRef}
+        tabIndex={-1}
         role={mode === 'overlay' ? 'dialog' : 'complementary'}
         aria-modal={mode === 'overlay' ? true : undefined}
         aria-label="Communications"

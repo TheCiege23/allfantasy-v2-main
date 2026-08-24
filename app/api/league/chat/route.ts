@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { resolveLeagueAccess } from '@/lib/league-access'
 import {
   createLeagueChatMessage,
   getLeagueChatMessages,
@@ -36,23 +37,16 @@ function readBbChannelKeyFromMetadata(metadata: Record<string, unknown> | undefi
   return null
 }
 
+/*
+ * Membership via lib/league-access — THE canonical predicate (owner,
+ * RedraftLeagueMember, Roster.platformUserId, LeagueTeam.claimedByUserId).
+ * The inline check this replaces accepted only owner + claimed teams, which
+ * 403'd roster-backed members of imported leagues — the largest membership
+ * population (see lib/league-access.ts). Strict superset of the old check:
+ * non-members still get 403.
+ */
 async function canAccessLeague(leagueId: string, userId: string) {
-  const league = await prisma.league.findFirst({
-    where: { id: leagueId },
-    select: {
-      id: true,
-      userId: true,
-      teams: {
-        select: {
-          claimedByUserId: true,
-        },
-      },
-    },
-  })
-
-  if (!league) return false
-  if (league.userId === userId) return true
-  return league.teams.some((team) => team.claimedByUserId === userId)
+  return (await resolveLeagueAccess(leagueId, userId)) != null
 }
 
 function createdAtToUnixMs(createdAt: string): number {
