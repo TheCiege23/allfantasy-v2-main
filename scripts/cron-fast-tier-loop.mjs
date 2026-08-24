@@ -33,6 +33,7 @@
  */
 
 import process from 'node:process'
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readVercelCrons, classifyCrons } from './cron-tier.mjs'
@@ -44,6 +45,32 @@ import { readVercelCrons, classifyCrons } from './cron-tier.mjs'
  * that then completes. 180s leaves the handler room to answer for itself.
  */
 const DEFAULT_TIMEOUT_MS = 180_000
+
+/**
+ * Headroom over a route's OWN declared budget, so the route always answers before we give up.
+ *
+ * ⚠ A SINGLE GLOBAL TIMEOUT WAS WRONG, AND IT SILENTLY BROKE FOUR JOBS. This file previously used
+ * one 180s value, justified by a comment reading "above the largest fast-tier maxDuration (120s on
+ * live-score-tick and import-scores)". Two routes were checked; twelve exist. FOUR declare 300:
+ *
+ *   fantasy-os-exec-sync  300s      alert-sweep         300s
+ *   draft-pool-prewarm    300s      trade-grade-notify  300s
+ *
+ * Each reported `timed out after 180000ms` while its handler was still legitimately working.
+ * draft-pool-prewarm read as 0-for-3 permanently broken; it was being killed at 180s by this loop,
+ * not failing.
+ *
+ * That is exactly the trap cron-dispatch.mjs documents and sets 600s to avoid: a client timeout at
+ * or below the server's own budget reports a failure over work that then completes.
+ */
+const TIMEOUT_MARGIN_MS = 30_000
+
+/** Assumed budget for a route that declares none, matching Next's own default. */
+const ASSUMED_MAX_DURATION_MS = 60_000
+
+/** Floor and ceiling. The ceiling is the largest declared budget (300s) plus the margin. */
+const MIN_JOB_TIMEOUT_MS = 60_000
+const MAX_JOB_TIMEOUT_MS = 330_000
 
 /** Default window. Under the hour so a delayed next run cannot overlap this one for long. */
 const DEFAULT_WINDOW_MINUTES = 55
@@ -180,6 +207,40 @@ export function insideOutage(at, outages, windowMs = HOST_OUTAGE_WINDOW_MS) {
 }
 
 /**
+ * The `maxDuration` a route declares for itself, in ms, or null when it declares none.
+ *
+ * Read from source rather than configured here on purpose: a second list of budgets would drift
+ * from the routes the moment someone changed one, and drift is exactly what produced the 180s bug.
+ * `readFile` is injected so this stays testable without touching the filesystem.
+ */
+export function routeMaxDurationMs(jobPath, readFile) {
+  const clean = String(jobPath).split('?')[0].replace(/^\/+|\/+$/g, '')
+  for (const ext of ['ts', 'tsx', 'js']) {
+    try {
+      const src = readFile(`app/${clean}/route.${ext}`)
+      const m = src.match(/maxDuration\s*=\s*(\d+)/)
+      return m ? Number(m[1]) * 1000 : null
+    } catch {
+      // try the next extension
+    }
+  }
+  return null
+}
+
+/**
+ * Per-job request timeout: the route's own budget plus headroom, clamped.
+ *
+ * ⚠ THE LONG TIMEOUTS CANNOT STARVE THE FAST JOBS, which is what makes this safe. Every route
+ * declaring 300s is on a 15- or 30-minute cadence, so 330s is a fraction of its interval. The
+ * 1- and 2-minute jobs declare 60-120s and get 90-150s. A job still never overlaps ITSELF -- the
+ * in-flight guard skips rather than queues -- so a slow call costs missed ticks, never a pile-up.
+ */
+export function timeoutForJob(maxDurationMs) {
+  const budget = maxDurationMs ?? ASSUMED_MAX_DURATION_MS
+  return Math.min(MAX_JOB_TIMEOUT_MS, Math.max(MIN_JOB_TIMEOUT_MS, budget + TIMEOUT_MARGIN_MS))
+}
+
+/**
  * A job failed every time it was tried, enough times to mean configuration rather than weather.
  *
  * ⚠ ATTEMPTS LOST TO A HOST OUTAGE DO NOT COUNT. A low-frequency job fires only a handful of times
@@ -267,7 +328,15 @@ async function main() {
       console.log(`::warning::Skipping ${c.path}: cannot derive an interval from "${c.schedule}".`)
       continue
     }
-    jobs.push({ path: c.path, schedule: c.schedule, intervalMs })
+    const maxDurationMs = routeMaxDurationMs(c.path, (rel) => fs.readFileSync(rel, 'utf8'))
+    jobs.push({
+      path: c.path,
+      schedule: c.schedule,
+      intervalMs,
+      // An explicit --timeout still wins, for smoke tests; otherwise each job gets its own.
+      timeoutMs: args.timeoutMs === DEFAULT_TIMEOUT_MS ? timeoutForJob(maxDurationMs) : args.timeoutMs,
+      maxDurationMs,
+    })
   }
 
   if (jobs.length === 0) {
@@ -276,7 +345,13 @@ async function main() {
   }
 
   console.log(`Fast-tier loop: ${jobs.length} job(s), window ${args.windowMinutes}m`)
-  for (const j of jobs) console.log(`  ${j.schedule.padEnd(14)} every ${j.intervalMs / 1000}s  ${j.path}`)
+  for (const j of jobs) {
+    const budget = j.maxDurationMs == null ? 'no maxDuration' : `maxDuration ${j.maxDurationMs / 1000}s`
+    console.log(
+      `  ${j.schedule.padEnd(14)} every ${String(j.intervalMs / 1000).padStart(4)}s` +
+        `  timeout ${String(j.timeoutMs / 1000).padStart(3)}s (${budget})  ${j.path}`,
+    )
+  }
   if (excluded?.length) console.log(`  (${excluded.length} cron(s) excluded by cron-tier.mjs — not handled here)`)
   console.log()
 
@@ -291,7 +366,15 @@ async function main() {
     return 0
   }
 
-  const stats = new Map(jobs.map((j) => [j.path, { attempts: 0, succeeded: 0, skipped: 0, lastError: null }]))
+  // `failures` backs detectHostOutages/isSystemicFailure below -- both read `.kind` off every
+  // entry unconditionally. Omitting it here crashed the loop the first time it ran a full
+  // window in production: jobs.flatMap((j) => stats.get(j.path).failures) turned the missing
+  // array into a literal `undefined` per job, and `.kind` on that `undefined` is what threw
+  // ("Cannot read properties of undefined (reading 'kind')"), before a single summary line
+  // printed.
+  const stats = new Map(
+    jobs.map((j) => [j.path, { attempts: 0, succeeded: 0, skipped: 0, lastError: null, failures: [] }]),
+  )
   const inFlight = new Set()
   let concurrency = 0
 
@@ -308,13 +391,18 @@ async function main() {
     concurrency += 1
     const s = stats.get(job.path)
     s.attempts += 1
-    callJob(baseUrl, secret, job.path, args.timeoutMs)
+    callJob(baseUrl, secret, job.path, job.timeoutMs)
       .then((r) => {
         if (r.ok) {
           s.succeeded += 1
           console.log(`${hhmmss(Date.now())}  OK   ${job.path} (${r.elapsedMs}ms)`)
         } else {
           s.lastError = r.error
+          // The other half of the bug above: without this push, `failures` stayed permanently
+          // empty, so detectHostOutages() could never find a host outage and isSystemicFailure()
+          // could never flag a broken route -- the classification this loop exists to make was
+          // wired up on the read side only.
+          s.failures.push({ at: Date.now(), kind: classifyFailure(r.status, r.error), error: r.error })
           console.log(`${hhmmss(Date.now())}  FAIL ${job.path} — ${r.error} (${r.elapsedMs}ms)`)
           if (r.body) console.log(`        ${r.body.replace(/\n/g, ' ')}`)
         }
@@ -359,7 +447,8 @@ async function main() {
   }
 
   // Let anything in flight finish so its result is reported rather than lost with the process.
-  const drainUntil = Date.now() + args.timeoutMs
+  // Drain for the LONGEST per-job timeout, or a slow job still in flight is abandoned unreported.
+  const drainUntil = Date.now() + Math.max(...jobs.map((j) => j.timeoutMs), args.timeoutMs)
   while (inFlight.size > 0 && Date.now() < drainUntil) await sleep(500)
 
   console.log(`\n=== fast-tier summary (${Math.round((Date.now() - startedAt) / 1000)}s) ===`)
