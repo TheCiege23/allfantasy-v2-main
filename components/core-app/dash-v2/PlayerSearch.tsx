@@ -7,12 +7,19 @@ import { useEffect, useId, useRef, useState } from 'react'
  * Top-bar player search with autocomplete.
  *
  * ⚠ THIS REPLACED A LINK, AND THE REASON THE LINK EXISTED STILL APPLIES. The bar
- * used to be an `<a>` to /core/players, deliberately: a box that looks like
- * search but does nothing until JS mounts is worse than a control that
- * navigates. So this keeps that property — the form's action is the same
- * /core/players search, and submitting works with JavaScript disabled or before
- * hydration. The dropdown is an enhancement on top of a control that already
- * worked, not a replacement for it.
+ * used to be a plain `<a>`, deliberately: a box that looks like search but does
+ * nothing until JS mounts is worse than a control that navigates. So this keeps
+ * that property — the form's action is a real page (/players) that renders with
+ * JavaScript disabled or before hydration. The dropdown is an enhancement on top
+ * of a control that already worked, not a replacement for it.
+ *
+ * ⚠ A HIT NAVIGATES TO /players/{slug} — THE ACTUAL PLAYER FINDER, NOT A DEAD END.
+ * This used to push `/core/players?player=<id>` with `id` being SportsPlayer's raw
+ * cuid. `getPlayerDetail` looks players up by `externalId` (a provider id), not by
+ * that cuid, so the lookup never matched and every selection landed on Player
+ * Finder with no player found. `/api/players/search` now returns the same `slug`
+ * the public player page is keyed on (see lib/core-app/playerSlug.ts), so a result
+ * here and a result on /players resolve to the identical URL for the same person.
  *
  * ⚠ NO NEW ROUTE. /api/players/search already exists and is built for exactly
  * this: its own header documents a 250ms-debounced autocomplete, it returns
@@ -30,6 +37,7 @@ type Hit = {
   position: string | null
   team: string | null
   imageUrl: string | null
+  slug: string
 }
 
 function initialsOf(name: string): string {
@@ -102,7 +110,7 @@ export function PlayerSearch({ leagueCount = null }: { leagueCount?: number | nu
   function go(hit: Hit) {
     setOpen(false)
     setQ('')
-    router.push(`/core/players?player=${encodeURIComponent(hit.id)}`)
+    router.push(`/players/${hit.slug}`)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -130,7 +138,7 @@ export function PlayerSearch({ leagueCount = null }: { leagueCount?: number | nu
 
   return (
     <div className="af-d2-topbar-search-wrap" ref={wrapRef}>
-      <form action="/core/players" method="get" className="af-d2-topbar-search" role="search">
+      <form action="/players" method="get" className="af-d2-topbar-search" role="search">
         <span className="af-d2-topbar-search-icon" aria-hidden>
           ⌕
         </span>

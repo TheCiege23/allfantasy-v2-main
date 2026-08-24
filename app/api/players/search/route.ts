@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { buildRateLimit429, consumeRateLimit, getClientIp } from '@/lib/rate-limit';
+import { playerSlug } from '@/lib/core-app/playerSlug';
 
 const querySchema = z.object({
   q: z.string().min(2),
@@ -45,15 +46,30 @@ export async function GET(req: Request) {
   const players = await (prisma as any).sportsPlayer.findMany({
     where: {
       ...(sportUpper ? { sport: sportUpper } : {}),
+      // A result with no sleeperId has no public /players/{slug} page — see
+      // lib/core-app/playerSlug.ts. Filtering here, not just at link-build time,
+      // means every hit this endpoint returns is guaranteed clickable rather than
+      // a dead end the caller has to silently drop.
+      sleeperId: { not: null },
       OR: [
         { name: { contains: q, mode: 'insensitive' } },
         { position: { contains: q, mode: 'insensitive' } },
       ],
     },
-    select: { id: true, name: true, position: true, team: true, imageUrl: true, sleeperId: true, age: true, number: true, college: true },
+    select: { id: true, name: true, sport: true, position: true, team: true, imageUrl: true, sleeperId: true, age: true, number: true, college: true },
     take: limit,
     orderBy: { name: 'asc' },
   });
 
-  return NextResponse.json(players);
+  const withSlug = players
+    .map((p: { name: string; sport: string; sleeperId: string | null }) => ({
+      ...p,
+      slug: playerSlug(p),
+    }))
+    // Belt-and-suspenders: the where-clause already requires sleeperId, but
+    // playerSlug also refuses an unknown sport or an unkebabable name — a hit
+    // this endpoint cannot address is dropped rather than sent to the client.
+    .filter((p: { slug: string | null }) => p.slug !== null);
+
+  return NextResponse.json(withSlug);
 }
