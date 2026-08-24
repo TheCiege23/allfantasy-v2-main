@@ -1,6 +1,6 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 104,
+  "count": 103,
   "failingFiles": [
     "__tests__/active-nav-state-resolver.test.ts",
     "__tests__/admin-page-render.test.tsx",
@@ -25,7 +25,6 @@
     "__tests__/commissioner-os/commissionerOsContext.test.ts",
     "__tests__/commissionerPickEditService.test.ts",
     "__tests__/community-insights-api.test.ts",
-    "__tests__/create-canonical-league-transaction-contract.test.ts",
     "__tests__/create-league-v2-media-priority.test.ts",
     "__tests__/cron/backfill-player-headshots.test.ts",
     "__tests__/cron/import-projections-cron.test.ts",
