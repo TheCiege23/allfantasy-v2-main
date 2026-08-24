@@ -366,7 +366,15 @@ async function main() {
     return 0
   }
 
-  const stats = new Map(jobs.map((j) => [j.path, { attempts: 0, succeeded: 0, skipped: 0, lastError: null }]))
+  // `failures` backs detectHostOutages/isSystemicFailure below -- both read `.kind` off every
+  // entry unconditionally. Omitting it here crashed the loop the first time it ran a full
+  // window in production: jobs.flatMap((j) => stats.get(j.path).failures) turned the missing
+  // array into a literal `undefined` per job, and `.kind` on that `undefined` is what threw
+  // ("Cannot read properties of undefined (reading 'kind')"), before a single summary line
+  // printed.
+  const stats = new Map(
+    jobs.map((j) => [j.path, { attempts: 0, succeeded: 0, skipped: 0, lastError: null, failures: [] }]),
+  )
   const inFlight = new Set()
   let concurrency = 0
 
@@ -390,6 +398,11 @@ async function main() {
           console.log(`${hhmmss(Date.now())}  OK   ${job.path} (${r.elapsedMs}ms)`)
         } else {
           s.lastError = r.error
+          // The other half of the bug above: without this push, `failures` stayed permanently
+          // empty, so detectHostOutages() could never find a host outage and isSystemicFailure()
+          // could never flag a broken route -- the classification this loop exists to make was
+          // wired up on the read side only.
+          s.failures.push({ at: Date.now(), kind: classifyFailure(r.status, r.error), error: r.error })
           console.log(`${hhmmss(Date.now())}  FAIL ${job.path} — ${r.error} (${r.elapsedMs}ms)`)
           if (r.body) console.log(`        ${r.body.replace(/\n/g, ' ')}`)
         }
