@@ -20,7 +20,14 @@ function row(over: Partial<TriageBookRow> = {}): TriageBookRow {
     name: 'Ashton Jeanty',
     imageUrl: null,
     leagues: [
-      { id: 'l1', name: 'Bla bla bla', platform: 'sleeper', imageUrl: null, slot: 'starter' },
+      {
+        id: 'l1',
+        name: 'Bla bla bla',
+        platform: 'sleeper',
+        imageUrl: null,
+        slot: 'starter',
+        bench: [{ name: 'Tyjae Spears', position: 'RB' }],
+      },
       { id: 'l2', name: 'Guillotine League 26', platform: 'sleeper', imageUrl: null, slot: 'bench' },
       { id: 'l3', name: 'Work League', platform: 'espn', imageUrl: null, slot: 'ir' },
     ],
@@ -119,6 +126,45 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
       <Dash3ATriage book={[row({ value: null })]} now={NOW} valueBasis={BASIS} />,
     )
     expect(unpriced.container.querySelectorAll('.af-triage-basis').length).toBe(0)
+  })
+
+  describe('replacement cover', () => {
+    it('names bench cover you already own, inside the league it applies to', () => {
+      const { container } = render(<Dash3ATriage book={[row()]} now={NOW} valueBasis={BASIS} />)
+      expect(container.textContent).toContain('cover: Tyjae Spears')
+    })
+
+    it('offers no cover for a league where he is benched — nothing to decide there', () => {
+      const benched = row({
+        leagues: [
+          {
+            id: 'l2',
+            name: 'Work League',
+            platform: 'espn',
+            imageUrl: null,
+            slot: 'bench',
+            bench: [{ name: 'Should Not Show', position: 'RB' }],
+          },
+        ],
+      })
+      const { container } = render(<Dash3ATriage book={[benched]} now={NOW} valueBasis={BASIS} />)
+      expect(container.textContent).not.toContain('Should Not Show')
+    })
+
+    it('says nothing rather than something vague when the bench holds no cover', () => {
+      const noCover = row({
+        leagues: [
+          { id: 'l1', name: 'Bla bla bla', platform: 'sleeper', imageUrl: null, slot: 'starter', bench: [] },
+        ],
+      })
+      const { container } = render(<Dash3ATriage book={[noCover]} now={NOW} valueBasis={BASIS} />)
+      expect(container.textContent).not.toContain('cover:')
+    })
+
+    it('sends you to free agents, not to a search for the injured player', () => {
+      const { container } = render(<Dash3ATriage book={[row()]} now={NOW} valueBasis={BASIS} />)
+      expect(container.textContent).toContain('Find a free agent')
+    })
   })
 
   it('still renders nothing when no starter is in doubt', () => {

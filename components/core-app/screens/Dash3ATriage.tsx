@@ -34,6 +34,13 @@ type TriageLeague = {
   imageUrl: string | null
   /** Null when the roster could not be read — the chip then shows no slot. */
   slot?: TriageSlot | null
+  /**
+   * Same-position players on YOUR bench in this league, best asset first.
+   * Only ever populated where he is starting. Empty means the bench holds no
+   * same-position cover — which is itself the answer, and the reason the free
+   * agent link matters there.
+   */
+  bench?: Array<{ name: string; position: string | null }>
 }
 
 export type TriageBookRow = {
@@ -212,6 +219,20 @@ export function Dash3ATriage({
                             {SLOT_LABEL[l.slot]}
                           </span>
                         ) : null}
+                        {/*
+                          Cover you already own, in this league. Free agents
+                          need that league's whole player pool and a
+                          rostered-elsewhere exclusion — a per-league scan that
+                          must not run for 61 leagues on a render — so they
+                          live behind the CTA below. An empty bench here is not
+                          a gap in the data; it is the reason to go look.
+                        */}
+                        {l.slot === 'starter' && (l.bench?.length ?? 0) > 0 ? (
+                          <span className="af-triage-bench">
+                            {' '}
+                            cover: {l.bench!.map((b) => b.name).join(', ')}
+                          </span>
+                        ) : null}
                       </Link>
                     ))}
                     {p.leagues.length > 6 ? (
@@ -226,7 +247,7 @@ export function Dash3ATriage({
                 className="af-triage-cta"
                 href={`/core/players?q=${encodeURIComponent(p.name)}`}
               >
-                Find a replacement
+                Find a free agent
               </Link>
             </li>
           )

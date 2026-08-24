@@ -239,3 +239,11 @@
   font-size: 10.5px;
   color: var(--muted);
 }
+
+/* Cover already on the user's own bench in that league. Deliberately quiet —
+   it is an answer, not an alarm, and it sits inside the league chip so the
+   reader never has to work out which league it applies to. */
+.af-triage-bench {
+  color: var(--good);
+  font-weight: 600;
+}

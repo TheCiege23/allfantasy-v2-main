@@ -1179,6 +1179,63 @@ export async function getDash34Data(
    * leagues carry the player. One builder, one ordering — the cap is the only
    * difference, so it is a constant rather than two code paths.
    */
+  /**
+   * Who on YOUR OWN BENCH could take the slot, in a given league.
+   *
+   * ⚠ ZERO ADDITIONAL QUERIES, AND THAT IS WHY IT IS BENCH-ONLY. Every roster
+   * is already in memory from the single read above, every position is already
+   * resolved, and the market prices were already fetched for the ordering — so
+   * this is a filter, not a fetch. Free agents are a different matter:
+   * answering "who is available in this league" needs that league's full
+   * player pool plus a rostered-elsewhere exclusion, which is a per-league
+   * scan. Doing that across 61 leagues on a page render is the exact fan-out
+   * that took production Postgres down once already, so it stays behind a
+   * click.
+   *
+   * Same position only. A flex swap depends on the league's slot template,
+   * which this loader does not read, and offering a tight end for a running
+   * back because both are "flex somewhere" would be a guess dressed as advice.
+   *
+   * Ordered by the same market rank the book is ordered by, so the first name
+   * offered is the best asset available rather than the first one iterated.
+   * A bench player who is himself flagged is not a replacement.
+   */
+  function benchAlternativesFor(
+    leagueId: string,
+    injuredId: string,
+    position: string | null,
+  ): Array<{ name: string; position: string | null }> {
+    if (!position) return []
+    const roster = rosterByLeague.get(leagueId)
+    if (!roster) return []
+
+    const out: Array<{ name: string; position: string | null; rank: number | null }> = []
+    for (const pid of roster.all) {
+      if (pid === injuredId) continue
+      if (roster.starters.has(pid)) continue
+      if (roster.reserve.has(pid) || roster.taxi.has(pid)) continue
+      const p = playerById.get(pid)
+      if (!p || !p.position) continue
+      if (p.position.toUpperCase() !== position.toUpperCase()) continue
+      if (designationOf(pid)) continue
+      out.push({
+        name: p.name,
+        position: p.position,
+        rank: valueBySleeperId.get(pid)?.overallRank ?? null,
+      })
+    }
+
+    out.sort((x, y) => {
+      if (x.rank !== y.rank) {
+        if (x.rank == null) return 1
+        if (y.rank == null) return -1
+        return x.rank - y.rank
+      }
+      return x.name.localeCompare(y.name)
+    })
+    return out.slice(0, 2).map((o) => ({ name: o.name, position: o.position }))
+  }
+
   const BOOK_LIMIT = 40
   const totalActive = active.length
 
@@ -1255,6 +1312,15 @@ export async function getDash34Data(
                    * slot rather than defaulting to bench.
                    */
                   slot: b.slotByLeague.get(id) ?? null,
+                  /*
+                   * Only where he is actually STARTING — a benched player
+                   * needs no replacement, and offering one there is noise on a
+                   * card whose whole job is picking out the decisions.
+                   */
+                  bench:
+                    b.slotByLeague.get(id) === 'starter'
+                      ? benchAlternativesFor(id, b.sleeperId, b.position)
+                      : [],
                 }
               : null
           })
@@ -1267,6 +1333,7 @@ export async function getDash34Data(
               platform: string
               imageUrl: string | null
               slot: 'starter' | 'bench' | 'ir' | 'taxi' | null
+              bench: Array<{ name: string; position: string | null }>
             } => x !== null,
           )
           .sort((a, b2) => a.name.localeCompare(b2.name)),
