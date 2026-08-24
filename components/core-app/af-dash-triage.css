@@ -185,3 +185,16 @@
     display: none;
   }
 }
+
+.af-triage-overflow {
+  display: block;
+  margin-top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim, var(--text));
+  text-decoration: none;
+}
+.af-triage-overflow:hover {
+  color: var(--text);
+  text-decoration: underline;
+}

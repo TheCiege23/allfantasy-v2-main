@@ -6,11 +6,12 @@ import '@/components/core-app/af-dash-triage.css'
  * Pre-kickoff injury triage on the post-login home.
  *
  * ⚠ THE DATA WAS ALREADY THERE; ONLY THE RENDER WAS MISSING. getDash34Data has
- * always built this book on the /dashboard request — every flagged player
- * across every league, with headshot, per-league exposure, starting counts and
- * the club's next kickoff — and Dashboard3A consumed only the league list from
- * the same payload. A user opening the product before kickoff saw rivalry
- * records and XP, not who is OUT. This panel renders the book above the home.
+ * always built this book on the home request — every flagged player across
+ * every league, with headshot, per-league exposure, starting counts and the
+ * club's next kickoff — and Dashboard3A consumed only the league list from
+ * the same payload. This panel renders the DECISION slice of that book:
+ * starters who may not play, capped at six, nothing else (see the filter
+ * comment in the component).
  *
  * Deliberately a SEPARATE component file: Dashboard3A.tsx carries another
  * session's in-flight work, and this panel must not touch it. It mounts from
@@ -56,18 +57,31 @@ function kickoffLabel(iso: string | null, now: Date): string | null {
 }
 
 export function Dash3ATriage({ book, now }: { book: TriageBookRow[] | null; now: Date }) {
-  if (!book || book.length === 0) return null
+  /*
+   * ⚠ DECISIONS ONLY. The loader's full book (BOOK_LIMIT rows, every
+   * designation, benched IR stashes included) read as a meaningless wall of
+   * headshots on the home — founder-reported 2026-08-24. The home strip keeps
+   * only rows that demand a lineup decision: a player the user is STARTING
+   * somewhere whose status says they may not play (tone 'bad' — out,
+   * doubtful, suspended, IR). Everything else already has a home in
+   * /my-players, the full cross-league exposure audit. Most days this
+   * renders nothing at all, and that is the intended resting state.
+   */
+  const rows = (book ?? []).filter((p) => p.tone === 'bad' && p.startingIn > 0)
+  if (rows.length === 0) return null
+  const visible = rows.slice(0, 6)
+  const overflow = rows.length - visible.length
 
   return (
-    <section className="af-core af-triage" aria-label="Injury triage">
+    <section className="af-core af-triage" aria-label="Starters in doubt">
       <div className="af-triage-head">
-        <h2 className="af-triage-title">Moving your book</h2>
+        <h2 className="af-triage-title">Starters in doubt</h2>
         <span className="af-triage-sub">
-          flagged players across your leagues, most urgent first
+          in your lineups but may not play — most urgent first
         </span>
       </div>
       <ul className="af-triage-list">
-        {book.map((p) => {
+        {visible.map((p) => {
           const kickoff = kickoffLabel(p.nextKickoffAt, now)
           return (
             <li key={`${p.name}|${p.team ?? ''}`} className="af-triage-row" data-tone={p.tone}>
@@ -132,6 +146,11 @@ export function Dash3ATriage({ book, now }: { book: TriageBookRow[] | null; now:
           )
         })}
       </ul>
+      {overflow > 0 ? (
+        <Link className="af-triage-overflow" href="/my-players">
+          +{overflow} more starters flagged — full exposure audit
+        </Link>
+      ) : null}
     </section>
   )
 }

@@ -1090,15 +1090,6 @@ export default async function AfCorePage({
         dash34 ? (
           <>
             {/*
-              Pre-kickoff injury triage — getDash34Data computes this book on
-              this very request. A separate component (not a Dashboard3A edit)
-              because that file carries another session's in-flight work.
-            */}
-            <Dash3ATriage
-              book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
-              now={now}
-            />
-            {/*
               34a's four unique sections (first-lock band, honesty notice,
               Chimmy brief, coverage list) — carried over so the cutover
               loses nothing 3A doesn't render. See Dash34Carryover's header
@@ -1115,6 +1106,17 @@ export default async function AfCorePage({
               snapshot={homeUserOs}
               leagueId={homeUserOsLeague?.id ?? null}
               leagueName={homeUserOsLeague?.name ?? null}
+            />
+            {/*
+              Starters in doubt — the DECISION slice of the injury book (see
+              Dash3ATriage's filter). ⚠ DELIBERATELY NOT FIRST: as a leading
+              wall of headshots it buried the page under noise
+              (founder-reported 2026-08-24); it now sits under the first-lock
+              band and renders nothing on days with no lineup decisions.
+            */}
+            <Dash3ATriage
+              book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
+              now={now}
             />
             {/*
               3a mounted as the screen BODY. It ships its own rail/nav/topbar
