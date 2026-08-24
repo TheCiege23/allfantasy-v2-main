@@ -519,14 +519,26 @@ function verdictBlock(sides: TradeSideGrade[], expectation: TradeExpectation | n
                   ? 'A modest loss on value.'
                   : 'A fair deal on value.'
 
+      /*
+       *   and · below are the REAL characters, deliberately not named entities.
+       *
+       * sendNotificationEmail strips every tag and escapes the remainder, so an entity written
+       * into this source survives the strip and is escaped into visible text -- managers
+       * literally read the entity name. See sendTemplatedEmail in lib/resend-client.ts.
+       * The guard in __tests__/trade-intel/tradeGradeEmail.test.ts has covered this since
+       * 2026-08-13; it regressed in f5ec2ed74 and this restores it.
+       *
+       * A JS comment, NOT an HTML one: an HTML comment would ship inside every email, and
+       * spelling the entities out in it would trip the guard it exists to explain.
+       */
       return `
 <tr>
   <td style="padding:9px 0;border-top:1px solid ${BORDER}">
-    <div style="font-size:12px;font-weight:700;color:${TEXT};margin-bottom:5px">${escapeHtml(side.managerName)} &middot; ${escapeHtml(p.letter)}</div>
+    <div style="font-size:12px;font-weight:700;color:${TEXT};margin-bottom:5px">${escapeHtml(side.managerName)} \u00B7 ${escapeHtml(p.letter)}</div>
     <div style="font-size:11px;color:${MUTED};line-height:1.7">
-      <span style="color:${FAINT}">Value edge</span> &nbsp;${escapeHtml(edgeText)}<br>
-      <span style="color:${FAINT}">Uncertainty</span> &nbsp;${escapeHtml(uncertaintyText)}<br>
-      <span style="color:${FAINT}">In plain terms</span> &nbsp;${escapeHtml(plain)}
+      <span style="color:${FAINT}">Value edge</span> \u00A0${escapeHtml(edgeText)}<br>
+      <span style="color:${FAINT}">Uncertainty</span> \u00A0${escapeHtml(uncertaintyText)}<br>
+      <span style="color:${FAINT}">In plain terms</span> \u00A0${escapeHtml(plain)}
     </div>
   </td>
 </tr>`
@@ -652,9 +664,9 @@ function emailFooter(params: {
   <td style="padding-top:16px;border-top:1px solid ${BORDER};color:${FAINT};font-size:11px;line-height:1.7">
     AllFantasy.ai<br>
     ${link(muteHref, `Mute ${params.leagueName}`)}
-    &nbsp;&middot;&nbsp;
+    \u00A0\u00B7\u00A0
     ${link(`${params.baseUrl}/settings?tab=notifications`, 'Change preferences')}
-    ${params.unsubscribeUrl ? `&nbsp;&middot;&nbsp;${link(params.unsubscribeUrl, 'Unsubscribe from all')}` : ''}
+    ${params.unsubscribeUrl ? `\u00A0\u00B7\u00A0${link(params.unsubscribeUrl, 'Unsubscribe from all')}` : ''}
   </td>
 </tr>`
 }
