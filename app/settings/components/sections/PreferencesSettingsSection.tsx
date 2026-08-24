@@ -15,7 +15,7 @@ import {
   type SupportedSport,
 } from "@/lib/sport-scope"
 import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
-import { SUPPORTED_LANGUAGES, getLanguageDisplayName, type LanguageCode } from "@/lib/i18n/constants"
+import { SELECTABLE_LANGUAGES, getLanguageOptionLabel, type LanguageCode } from "@/lib/i18n/constants"
 import type { SettingsOnSave, SettingsProfile } from "./settings-types"
 
 export function PreferencesSettingsSection({
@@ -100,7 +100,9 @@ export function PreferencesSettingsSection({
           role="radiogroup"
           aria-label={t("settings.preferences.languageToggleAria")}
         >
-          {SUPPORTED_LANGUAGES.map((l) => (
+          {/* SELECTABLE, not SUPPORTED: future-only languages (fr/ar) have zero
+              bundled strings and are not offered — see lib/i18n/constants. */}
+          {SELECTABLE_LANGUAGES.map((l) => (
             <button
               key={l}
               type="button"
@@ -122,7 +124,7 @@ export function PreferencesSettingsSection({
               role="radio"
               aria-checked={lang === l}
             >
-              {getLanguageDisplayName(l)}
+              {getLanguageOptionLabel(l)}
             </button>
           ))}
         </div>

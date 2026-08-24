@@ -10,7 +10,7 @@ import {
 } from "@/lib/signup/SignupFlowController"
 import { LEGACY_IMPORT_PROVIDERS, type LegacyImportProvider } from "@/lib/signup/LegacyImportOnboardingService"
 import { SIGNUP_TIMEZONES } from "@/lib/signup/timezones"
-import { SUPPORTED_LANGUAGES, DEFAULT_LANG, getLanguageDisplayName, type LanguageCode } from "@/lib/i18n/constants"
+import { SELECTABLE_LANGUAGES, SUPPORTED_LANGUAGES, DEFAULT_LANG, getLanguageOptionLabel, type LanguageCode } from "@/lib/i18n/constants"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"
 
 const AVATAR_PRESET_EMOJIS: Record<AvatarPresetId, string> = {
@@ -419,7 +419,7 @@ export default function AdvancedOptionsSection({
           Language
         </label>
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {SUPPORTED_LANGUAGES.map((lang) => (
+          {SELECTABLE_LANGUAGES.map((lang) => (
             <button
               key={lang}
               type="button"
@@ -434,7 +434,7 @@ export default function AdvancedOptionsSection({
                 {SIGNUP_LANGUAGE_BADGES[lang]}
               </span>
               <span>
-                <strong className="block text-sm">{getLanguageDisplayName(lang)}</strong>
+                <strong className="block text-sm">{getLanguageOptionLabel(lang)}</strong>
                 <small style={{ color: "var(--muted)" }}>{lang === DEFAULT_LANG ? "Default language" : "Available language"}</small>
               </span>
             </button>

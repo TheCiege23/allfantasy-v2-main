@@ -7,7 +7,7 @@ import { checkUsernameAvailability, suggestUsername } from "@/lib/signup/Usernam
 import { validateAvatarUploadFile } from "@/lib/signup/AvatarPickerService"
 import { AVATAR_PRESETS, AVATAR_PRESET_LABELS, type AvatarPresetId } from "@/lib/signup/avatar-presets"
 import { SIGNUP_TIMEZONES, DEFAULT_SIGNUP_TIMEZONE } from "@/lib/signup/timezones"
-import { SUPPORTED_LANGUAGES, DEFAULT_LANG, getLanguageDisplayName, type LanguageCode } from "@/lib/i18n/constants"
+import { SELECTABLE_LANGUAGES, SUPPORTED_LANGUAGES, DEFAULT_LANG, getLanguageOptionLabel, type LanguageCode } from "@/lib/i18n/constants"
 import { IdentityImageRenderer } from "@/components/identity/IdentityImageRenderer"
 import "@/components/auth/nocturne-auth.css"
 
@@ -469,9 +469,9 @@ export default function OnboardingForm({
           onChange={(e) => setLanguage(e.target.value as LanguageCode)}
           style={{ appearance: "auto" }}
         >
-          {SUPPORTED_LANGUAGES.map((lang) => (
+          {SELECTABLE_LANGUAGES.map((lang) => (
             <option key={lang} value={lang}>
-              {LANGUAGE_BADGES[lang]} · {getLanguageDisplayName(lang)}
+              {LANGUAGE_BADGES[lang]} · {getLanguageOptionLabel(lang)}
             </option>
           ))}
         </select>
