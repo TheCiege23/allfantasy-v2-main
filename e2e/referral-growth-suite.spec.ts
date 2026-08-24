@@ -86,7 +86,7 @@ async function loginUser(page: Page, credentials: TestCredentials): Promise<void
       csrfToken: csrf.csrfToken!,
       login: credentials.username,
       password: credentials.password,
-      callbackUrl: "/dashboard",
+      callbackUrl: "/core",
       json: "true",
     },
     timeout: 20_000,
@@ -95,8 +95,8 @@ async function loginUser(page: Page, credentials: TestCredentials): Promise<void
   expect(signInRes.ok(), `Sign in failed: ${signInBody}`).toBeTruthy()
   expect(signInBody.includes("CredentialsSignin")).toBeFalsy()
 
-  await page.goto("/dashboard", { waitUntil: "domcontentloaded" })
-  await expect(page).toHaveURL(/\/dashboard/)
+  await page.goto("/core", { waitUntil: "domcontentloaded" })
+  await expect(page).toHaveURL(/\/core/)
 }
 
 test.describe.configure({ timeout: 240_000, mode: "serial" })

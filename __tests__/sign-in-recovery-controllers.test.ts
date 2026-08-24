@@ -54,7 +54,7 @@ describe('Sign-in and recovery controllers', () => {
         provider: 'x',
         callbackUrl: 'https://bad.site',
       })
-    ).toContain(encodeURIComponent('/dashboard'))
+    ).toContain(encodeURIComponent('/core'))
   })
 
   it('returns provider fallback metadata', () => {
