@@ -51,7 +51,16 @@ export async function GET() {
      */
     { path: 'es', priority: '0.9', changefreq: 'weekly' },
     { path: 'app', priority: '0.9', changefreq: 'weekly' },
-    { path: 'bracket', priority: '0.9', changefreq: 'weekly' },
+    /*
+     * ⚠ /bracket (singular) IS DELIBERATELY ABSENT. It 307s to /brackets —
+     * measured — so this was the highest-priority static entry in the whole
+     * sitemap after the homepage, 0.9, pointing at a redirect. Its layout
+     * builds real metadata via getSEOPageConfig('bracket-challenge'), and none
+     * of it can reach a crawler for the same reason /mock-draft's cannot: the
+     * redirect answers first. The destination /brackets is listed below at 0.8
+     * and now carries its own canonical, and /tools/bracket-challenge is the
+     * public landing page for the phrase.
+     */
     { path: 'brackets', priority: '0.8', changefreq: 'weekly' },
     { path: 'af-legacy', priority: '0.8', changefreq: 'weekly' },
     { path: 'trade-analyzer', priority: '0.8', changefreq: 'weekly' },

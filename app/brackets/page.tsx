@@ -1,3 +1,6 @@
+import type { Metadata } from "next"
+import { buildSeoMeta } from "@/lib/seo"
+import { BRACKETS_DESCRIPTION, BRACKETS_TITLE } from "./seo"
 import Link from "next/link"
 import Image from "next/image"
 import {
@@ -75,6 +78,22 @@ type SportCard = {
   status: "live" | "soon"
   Icon: typeof Trophy
 }
+
+/*
+ * THE CANONICAL LIVES HERE, NOT ON layout.tsx. Next merges metadata by
+ * top-level field, so a canonical on the layout is inherited by all five routes
+ * under /brackets — discover, join, world-cup, world-cup/create,
+ * world-cup/discover — and each would declare itself a duplicate of this page.
+ * Measured when it was briefly on the layout: all five emitted
+ * `canonical .../brackets`, /brackets/world-cup included, which has its own
+ * title. See ./seo.ts.
+ */
+export const metadata: Metadata = buildSeoMeta({
+  title: BRACKETS_TITLE,
+  description: BRACKETS_DESCRIPTION,
+  canonicalPath: "/brackets",
+})
+
 
 const SPORT_CARDS: SportCard[] = [
   { key: "worldCup", href: "/brackets/world-cup", status: "live", Icon: Globe2 },
