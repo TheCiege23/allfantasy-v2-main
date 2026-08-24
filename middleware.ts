@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { SELECTABLE_LANGUAGES } from "@/lib/i18n/constants"
 import type { NextRequest } from "next/server"
 import { getToken } from "next-auth/jwt"
 
@@ -316,11 +317,38 @@ function applyApiSecurityHeaders(pathname: string, response: NextResponse): Next
 function nextWithRouteHeaders(request: NextRequest, pathname: string): NextResponse {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set("x-af-pathname", pathname)
-  return NextResponse.next({
+
+  /*
+   * ⚠ ?lang= MUST REACH <html lang> ON THE FIRST RENDER. The root layout reads
+   * the af_lang COOKIE (layouts cannot see searchParams), so the Spanish
+   * landing at /?lang=es served lang="en" until this override: rewrite the
+   * request's cookie header so this render resolves the requested language,
+   * and stamp the response cookie so it sticks. Selectable languages only —
+   * an arbitrary value must not reach the html attribute.
+   */
+  const langParam = request.nextUrl.searchParams.get("lang")
+  const validLang =
+    langParam && (SELECTABLE_LANGUAGES as readonly string[]).includes(langParam) ? langParam : null
+  if (validLang) {
+    const cookieHeader = requestHeaders.get("cookie") ?? ""
+    const kept = cookieHeader.split(/;\s*/).filter((c) => c && !c.startsWith("af_lang="))
+    kept.push(`af_lang=${validLang}`)
+    requestHeaders.set("cookie", kept.join("; "))
+  }
+
+  const response = NextResponse.next({
     request: {
       headers: requestHeaders,
     },
   })
+  if (validLang) {
+    response.cookies.set("af_lang", validLang, {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    })
+  }
+  return response
 }
 
 /**

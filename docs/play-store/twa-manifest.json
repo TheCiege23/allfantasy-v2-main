@@ -1,0 +1,56 @@
+{
+  "packageId": "ai.allfantasy.app",
+  "host": "allfantasy.ai",
+  "name": "AllFantasy",
+  "launcherName": "AllFantasy",
+  "display": "standalone",
+  "themeColor": "#06b6d4",
+  "themeColorDark": "#020617",
+  "navigationColor": "#020617",
+  "navigationColorDark": "#020617",
+  "navigationDividerColor": "#020617",
+  "navigationDividerColorDark": "#020617",
+  "backgroundColor": "#020617",
+  "enableNotifications": true,
+  "startUrl": "/core",
+  "iconUrl": "https://allfantasy.ai/icons/icon-512.png",
+  "maskableIconUrl": "https://allfantasy.ai/icons/icon-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "My Leagues",
+      "shortName": "Leagues",
+      "url": "https://allfantasy.ai/leagues",
+      "chosenIconUrl": "https://allfantasy.ai/icons/icon-96.png"
+    },
+    {
+      "name": "Trade Analyzer",
+      "shortName": "Trades",
+      "url": "https://allfantasy.ai/trade-analyzer",
+      "chosenIconUrl": "https://allfantasy.ai/icons/icon-96.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://allfantasy.ai/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://allfantasy.ai/",
+  "minSdkVersion": 21,
+  "orientation": "portrait",
+  "fingerprints": [],
+  "additionalTrustedOrigins": ["www.allfantasy.ai"],
+  "retainedBundles": [],
+  "appVersion": "1.0.0"
+}

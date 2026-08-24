@@ -2,7 +2,7 @@
   "id": "/app",
   "name": "AllFantasy.ai",
   "short_name": "AllFantasy",
-  "description": "AI-powered fantasy sports — trade analyzer, draft assistant, waiver AI, and more.",
+  "description": "AI-powered fantasy sports \u2014 trade analyzer, draft assistant, waiver AI, and more.",
   "start_url": "/core",
   "scope": "/",
   "display": "standalone",
@@ -10,33 +10,12 @@
   "orientation": "portrait",
   "background_color": "#020617",
   "theme_color": "#06b6d4",
-  "iarc_rating_id": "e1f4d9f6-9f8f-4a4a-9d7f-0b3f8d5e9b40",
-  "categories": ["sports", "games", "productivity"],
-  "lang": "en",
-  "prefer_related_applications": false,
-  "related_applications": [
-    {
-      "platform": "play",
-      "id": "ai.allfantasy.app",
-      "url": "https://play.google.com/store/apps/details?id=ai.allfantasy.app"
-    }
+  "categories": [
+    "sports",
+    "games",
+    "productivity"
   ],
-  "share_target": {
-    "action": "/share",
-    "method": "POST",
-    "enctype": "multipart/form-data",
-    "params": {
-      "title": "title",
-      "text": "text",
-      "url": "url",
-      "files": [
-        {
-          "name": "files",
-          "accept": ["text/plain", "application/json", "image/*"]
-        }
-      ]
-    }
-  },
+  "lang": "en",
   "icons": [
     {
       "src": "/icons/icon-72.png",
@@ -91,18 +70,6 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/branding/allfantasy-ai-for-fantasy-sports-logo.png",
-      "sizes": "1024x682",
-      "type": "image/jpeg"
-    },
-    {
-      "src": "/icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png"
     }
   ],
   "shortcuts": [
