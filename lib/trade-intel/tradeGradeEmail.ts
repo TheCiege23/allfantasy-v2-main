@@ -53,7 +53,23 @@ const GRADE_COLORS: Record<GradeLetter, { bg: string; fg: string }> = {
 }
 const PROVISIONAL_COLORS = { bg: '#1f1f27', fg: '#a1a1aa' }
 
-export function escapeHtml(value: string): string {
+export /*
+ * ⚠ SPACERS ARE A REAL NON-BREAKING SPACE CHARACTER (U+00A0), NEVER THE HTML ENTITY FORM.
+ *
+ * This body is assembled by string concatenation and then handed to senders that escape it again,
+ * so the entity form has already shipped once double-escaped -- managers read the entity as literal
+ * text in their inbox. A U+00A0 character survives escaping unchanged, because it is a character
+ * rather than markup.
+ *
+ * `__tests__/trade-intel/tradeGradeEmail.test.ts` asserts the entity never reaches the output. It
+ * caught this the moment it came back (f5ec2ed74 reintroduced seven of them) -- but the failure was
+ * unreadable for hours because the ratchet reported only a filename, which is what
+ * scripts/vitest-ratchet.mjs now fixes.
+ *
+ * The written-out entity is deliberately avoided even in this comment, so a source-level grep for
+ * it stays a reliable check.
+ */
+function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -524,9 +540,9 @@ function verdictBlock(sides: TradeSideGrade[], expectation: TradeExpectation | n
   <td style="padding:9px 0;border-top:1px solid ${BORDER}">
     <div style="font-size:12px;font-weight:700;color:${TEXT};margin-bottom:5px">${escapeHtml(side.managerName)} &middot; ${escapeHtml(p.letter)}</div>
     <div style="font-size:11px;color:${MUTED};line-height:1.7">
-      <span style="color:${FAINT}">Value edge</span> &nbsp;${escapeHtml(edgeText)}<br>
-      <span style="color:${FAINT}">Uncertainty</span> &nbsp;${escapeHtml(uncertaintyText)}<br>
-      <span style="color:${FAINT}">In plain terms</span> &nbsp;${escapeHtml(plain)}
+      <span style="color:${FAINT}">Value edge</span>  ${escapeHtml(edgeText)}<br>
+      <span style="color:${FAINT}">Uncertainty</span>  ${escapeHtml(uncertaintyText)}<br>
+      <span style="color:${FAINT}">In plain terms</span>  ${escapeHtml(plain)}
     </div>
   </td>
 </tr>`
@@ -652,9 +668,9 @@ function emailFooter(params: {
   <td style="padding-top:16px;border-top:1px solid ${BORDER};color:${FAINT};font-size:11px;line-height:1.7">
     AllFantasy.ai<br>
     ${link(muteHref, `Mute ${params.leagueName}`)}
-    &nbsp;&middot;&nbsp;
+     &middot; 
     ${link(`${params.baseUrl}/settings?tab=notifications`, 'Change preferences')}
-    ${params.unsubscribeUrl ? `&nbsp;&middot;&nbsp;${link(params.unsubscribeUrl, 'Unsubscribe from all')}` : ''}
+    ${params.unsubscribeUrl ? ` &middot; ${link(params.unsubscribeUrl, 'Unsubscribe from all')}` : ''}
   </td>
 </tr>`
 }
