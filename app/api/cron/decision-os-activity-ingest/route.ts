@@ -27,6 +27,7 @@ import {
 // re-exports server-only-tainted modules. Same reason `scripts/run-outbox-relay.ts` does this.
 import { createIntelligenceSnapshotConsumer } from "@/lib/intelligence/projections/snapshotProjection"
 import { projectImportedManagerSnapshots } from "@/lib/intelligence/projections/importedManagerProjection"
+import { projectImportedLeagueSnapshots } from "@/lib/intelligence/projections/importedLeagueProjection"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -304,6 +305,7 @@ export async function GET(request: Request) {
           // Keep the shape identical on both return paths so `summary.relay` stays a single type.
           relay: { fetched: 0, dispatched: 0, retried: 0, deadLettered: 0, relayFailed: 0, relayError: null as string | null, starved: false },
           managerProjection: { managersWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null },
+          leagueProjection: { leaguesWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null },
         }
       }
       const store = new PrismaImportedActivityStore(
@@ -412,19 +414,42 @@ export async function GET(request: Request) {
         managerProjection.error = error instanceof Error ? error.message : "manager_projection_failed"
       }
 
-      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, relay, managerProjection }
+      /*
+       * League coverage for the same imported activity.
+       *
+       * ⚠ THE MANAGER HALF EXISTED AND THE LEAGUE HALF DID NOT, WHICH IS THE WHOLE GAP.
+       * intelligence_league_snapshot is fed only by the domain-event consumer, and getPlatformEvents()
+       * is called almost entirely from lib/redraft/* -- the NATIVE product. Production has 56 sleeper
+       * leagues and 1 native, so league intelligence described a product nobody uses: 29 snapshots,
+       * max 6 events, none with 10+. Manager coverage was 677 over the same period purely because
+       * projectImportedManagerSnapshots exists.
+       *
+       * Same isolation as the phases above: enrichment must never fail the ingest that fed it.
+       */
+      const leagueProjection = { leaguesWritten: 0, leaguesConsidered: 0, leaguesSkippedNative: 0, error: null as string | null }
+      if (!relayOnly) try {
+        const r = await projectImportedLeagueSnapshots(prisma as never)
+        leagueProjection.leaguesWritten = r.leaguesWritten
+        leagueProjection.leaguesConsidered = r.leaguesConsidered
+        leagueProjection.leaguesSkippedNative = r.leaguesSkippedNative
+      } catch (error) {
+        leagueProjection.error = error instanceof Error ? error.message : "league_projection_failed"
+      }
+
+      return { storeUnavailable: false, discovered: leagues.length, processed, failed, skippedForTime, created, updated, errors, relay, managerProjection, leagueProjection }
     },
     (s) => ({
       rowsRead: s.discovered,
       // Projected events are real writes too — count them so the relay's progress is visible
       // in SyncJobRun telemetry rather than hidden inside the ingest job's numbers.
-      rowsWritten: s.created + s.updated + s.relay.dispatched + s.managerProjection.managersWritten,
+      rowsWritten: s.created + s.updated + s.relay.dispatched + s.managerProjection.managersWritten + s.leagueProjection.leaguesWritten,
       rowsSkipped: s.skippedForTime,
       errors: [
         ...(s.storeUnavailable ? ["imported_activity_store_unavailable"] : s.errors),
         // A relay failure must be visible, not swallowed by the isolating catch above.
         ...(s.relay.relayError ? [`outbox_relay: ${s.relay.relayError}`] : []),
         ...(s.managerProjection.error ? [`manager_projection: ${s.managerProjection.error}`] : []),
+        ...(s.leagueProjection.error ? [`league_projection: ${s.leagueProjection.error}`] : []),
       ],
       warnings: [
         ...(s.skippedForTime > 0 ? [`${s.skippedForTime} leagues deferred by the ${INGEST_BUDGET_MS / 1000}s ingest budget`] : []),
@@ -448,6 +473,7 @@ export async function GET(request: Request) {
     skippedForTime: summary.skippedForTime,
     relay: summary.relay,
     managerProjection: summary.managerProjection,
+    leagueProjection: summary.leagueProjection,
     created: summary.created,
     updated: summary.updated,
     errors: summary.errors,
