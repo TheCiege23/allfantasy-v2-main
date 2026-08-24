@@ -21,7 +21,6 @@ import {
   normalizeToContract,
 } from '@/lib/ai-context-envelope';
 import { normalizeToSupportedSport } from '@/lib/sport-scope';
-import { getPlayerValuesContext } from '@/lib/player-values/playerValuesLoader';
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow';
 
 function parseLeagueContext(raw: string | undefined): LeagueContextInput {
@@ -109,16 +108,10 @@ export async function POST(req: Request) {
     const factLayerPrompt = [mandatorySuffix, contextToPromptV1(tradeContext), intelPrompt].filter(Boolean).join('\n\n')
     const dataGapsPrompt = buildDataGapsPrompt(tradeContext)
 
-    const playerValuesRef = getPlayerValuesContext({
-      sport: normalizedSport,
-      format: 'dynasty',
-    })
-
     const stageBStart = Date.now()
     const consensus = await runPeerReviewAnalysis({
       factLayerPrompt,
       dataGapsPrompt: dataGapsPrompt || undefined,
-      referenceContext: playerValuesRef || undefined,
     })
     const stageBLatency = Date.now() - stageBStart
 

@@ -19,6 +19,7 @@
  */
 import { emitDecisionTelemetry, type DecisionTelemetryEvent } from '@/lib/decision-os/core/telemetry'
 import { persistParityEvent } from './durableParityStore'
+import { recordDecisionOsFeed } from '@/lib/telemetry/decision-os-feed'
 
 /**
  * Emit, then durably record. Never throws: `persistParityEvent` swallows its own failures and does
@@ -94,13 +95,26 @@ export function emitFeedOutcomes(
     if (entries.length === 0) return
     const by = { store: 0, live: 0, unavailable: 0 } as Record<string, number>
     for (const [, o] of entries) by[o.servedFrom] = (by[o.servedFrom] ?? 0) + 1
+    const sources = entries.map(([k, o]) => `${k}:${o.servedFrom}`).join(",")
     emitDecisionTelemetry("decision.os_feed", domain, {
       served_store: by.store,
       served_live: by.live,
       served_unavailable: by.unavailable,
       // Per-source, so a domain with one hot and one cold fact kind is legible rather than
       // averaged into a single misleading hit rate.
-      sources: entries.map(([k, o]) => `${k}:${o.servedFrom}`).join(","),
+      sources,
+    })
+    // The console line above is log-drain-only and unqueryable in production, and the
+    // store-vs-live split is the ONLY evidence for whether `domain_os_facts` is worth
+    // migrating — so a durable copy goes through the same persistent path recordLlmUsage
+    // uses (ApiUsageEvent; no new table). Fire-and-forget and never throws; request paths
+    // accept a lost write the same way durableParityStore documents.
+    recordDecisionOsFeed({
+      domain,
+      servedStore: by.store,
+      servedLive: by.live,
+      servedUnavailable: by.unavailable,
+      sources,
     })
   } catch {
     // measuring the cache must never break the request

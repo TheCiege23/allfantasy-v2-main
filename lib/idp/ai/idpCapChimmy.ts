@@ -14,8 +14,7 @@ import type { IdpScoringPreset } from '@/lib/idp/types'
 import { computeIdpFantasyPoints, getMergedScoringRulesForLeague } from '@/lib/idp/scoringEngine'
 import { generateDeterministicWeeklyStatLine } from '@/lib/idp/statIngestionEngine'
 import {
-  resolveIdpAiProfile,
-  buildMockWaiverPool,
+  buildIdpWaiverPool,
   parseIdpPlayers,
   type IdPlayerRow,
 } from '@/lib/idp/ai/idpChimmy'
@@ -398,29 +397,31 @@ export function scoreDefender(
   }
 }
 
-function statsFromDeterministic(
+/*
+ * ⚠ STILL FABRICATED — weekly lines come from the hash generator, so every
+ * action that reaches this context (defender_eval, player_analysis) stays 503
+ * in the route's readiness gate until it reads real FantasyStatLine weeks.
+ */
+async function statsFromDeterministic(
   leagueId: string,
   playerId: string,
   week: number,
 ): Promise<IDPWeeklyStats[]> {
-  return Promise.all(
-    [3, 2, 1, 0].map(async (ago) => {
-      const w = Math.max(1, week - ago)
-      const pr = await resolveIdpAiProfile(leagueId, playerId, w)
-      const line = generateDeterministicWeeklyStatLine(playerId, w)
-      return {
-        week: w,
-        idpPoints: pr.seasonAvg + ((ago + playerId.length) % 5) * 0.3,
-        soloTackles: line.idp_solo_tackle ?? 4,
-        assistedTackles: line.idp_assist_tackle ?? 2,
-        sacks: line.idp_sack ?? 0.5,
-        interceptions: line.idp_interception ?? 0,
-        passDeflections: line.idp_pass_defended ?? 1,
-        forcedFumbles: line.idp_forced_fumble ?? 0,
-        snapsPlayed: 40 + (pr.snapShare % 35),
-      }
-    }),
-  )
+  const rules = await getMergedScoringRulesForLeague(leagueId)
+  return [3, 2, 1, 0].map((ago) => {
+    const w = Math.max(1, week - ago)
+    const line = generateDeterministicWeeklyStatLine(playerId, w)
+    return {
+      week: w,
+      idpPoints: computeIdpFantasyPoints(line, rules).total,
+      soloTackles: line.idp_solo_tackle ?? 4,
+      assistedTackles: line.idp_assist_tackle ?? 2,
+      sacks: line.idp_sack ?? 0.5,
+      interceptions: line.idp_interception ?? 0,
+      passDeflections: line.idp_pass_defended ?? 1,
+      forcedFumbles: line.idp_forced_fumble ?? 0,
+    }
+  })
 }
 
 export async function buildDefenderEvaluationContext(
@@ -543,7 +544,7 @@ export async function getCapSpaceAdvice(leagueId: string, rosterId: string): Pro
     orderBy: { salary: 'desc' },
   })
   const expiring = contracts.filter((c) => c.yearsRemaining <= 1)
-  const pool = await buildMockWaiverPool(leagueId, 1, 6)
+  const pool = await buildIdpWaiverPool(leagueId, 6)
   const waiverNote = pool.slice(0, 4).map((w) => `${w.name} (${w.position})`).join(', ')
 
   const res = await openaiChatText({
@@ -557,7 +558,7 @@ Team cap status:
   Dead money: $${summary.deadMoney.toFixed(1)}M
   Total cap used: $${summary.totalCapUsed.toFixed(1)}M / $${totalCap.toFixed(1)}M
   Expiring contracts: ${expiring.map((e) => `${e.playerName} ($${e.salary.toFixed(1)}M)`).join('; ') || 'none noted'}
-  Synthetic waiver names (illustrative): ${waiverNote}
+  Unrostered defenders in this league (real waiver options): ${waiverNote || 'none found'}
 
 Identify the best 3 cap moves this team can make.
 For each: what to do, why, cap savings, and the risk.
