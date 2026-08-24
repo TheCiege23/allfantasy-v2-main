@@ -1,6 +1,7 @@
 import "server-only"
 
 import fs from "fs"
+import { readVercelCrons as readCronScheduleFromDisk } from "@/lib/production-health/cronRegistry"
 import path from "path"
 import { prisma } from "@/lib/prisma"
 
@@ -220,17 +221,15 @@ function requiredLabel(req: EnvRequirement): string {
   return parts.join("; ")
 }
 
+/**
+ * ⚠ THIS WAS A THIRD PRIVATE COPY OF "read the cron list", AND IT DRIFTED. It
+ * now delegates to the implementation in `lib/production-health/cronRegistry`,
+ * which carries the reasoning: the schedule moved to `cron-schedule.json`, and
+ * a `vercel.json`-only read returns nothing. Three copies is how one surface
+ * reports a clean bill of health while another reports the truth.
+ */
 function readVercelCrons(): Array<{ path: string; schedule: string }> {
-  try {
-    const filePath = path.join(process.cwd(), "vercel.json")
-    const raw = fs.readFileSync(filePath, "utf8")
-    const parsed = JSON.parse(raw) as { crons?: Array<{ path?: unknown; schedule?: unknown }> }
-    return (parsed.crons ?? [])
-      .filter((row): row is { path: string; schedule: string } => typeof row.path === "string" && typeof row.schedule === "string")
-      .map((row) => ({ path: row.path, schedule: row.schedule }))
-  } catch {
-    return []
-  }
+  return readCronScheduleFromDisk()
 }
 
 function cronRow(input: {

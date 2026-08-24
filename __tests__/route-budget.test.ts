@@ -134,7 +134,9 @@ function getProductionSignals(): number {
   ).length
   const netExcluded = excludedTotal - keptInExcluded
   let crons = 0
-  try { crons = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')).crons?.length ?? 0 } catch {}
+  // The cron registry moved to cron-schedule.json; vercel.json is the pre-extraction fallback.
+  try { crons = JSON.parse(readFileSync(join(root, 'cron-schedule.json'), 'utf8')).crons?.length ?? 0 } catch {}
+  if (!crons) { try { crons = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')).crons?.length ?? 0 } catch {} }
   return (sourceTotal - netExcluded) + crons
 }
 
@@ -155,11 +157,25 @@ describe('Every scheduled cron survives the production build', () => {
   // filesToKeep. `app/api/cron` is excluded from the build wholesale, so a scheduled-but-not-kept
   // cron is invoked on schedule and 404s every single time — silently, forever. Nothing asserted
   // that vercel.json and the keep-list agreed, so each instance had to be found by hand.
-  it('every /api/cron/* path in vercel.json is in FILES_KEPT', () => {
-    const vercelJson = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8')) as {
-      crons?: { path: string }[]
+  it('every /api/cron/* path in the cron registry is in FILES_KEPT', () => {
+    // The registry moved out of vercel.json (the Hobby plan refuses to build a
+    // sub-daily cron declaration), so read cron-schedule.json first and keep
+    // vercel.json as the pre-extraction fallback. The `scheduled.length > 0`
+    // floor below is what caught this move — an empty read must never pass.
+    const readCrons = (): { path: string }[] => {
+      for (const file of ['cron-schedule.json', 'vercel.json']) {
+        try {
+          const parsed = JSON.parse(readFileSync(join(root, file), 'utf8')) as {
+            crons?: { path: string }[]
+          }
+          if (parsed.crons?.length) return parsed.crons
+        } catch {
+          /* try the next candidate */
+        }
+      }
+      return []
     }
-    const scheduled = (vercelJson.crons ?? [])
+    const scheduled = readCrons()
       .map((c) => c.path.split('?')[0]!)
       .filter((p) => p.startsWith('/api/cron/'))
 
