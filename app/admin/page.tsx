@@ -6,6 +6,7 @@ import {
   type AdminCommandCenterMetrics,
   type AdminMetric,
 } from "@/lib/admin-dashboard/AdminCommandCenterService"
+import { AdminCommandCenterOverview } from "@/components/admin/AdminCommandCenterOverview"
 import { AiAuditLogsPanel } from "@/components/admin/AiAuditLogsPanel"
 import { CampaignAttributionPanel } from "@/components/admin/CampaignAttributionPanel"
 import { BetaInvitePanel } from "@/components/admin/BetaInvitePanel"
@@ -1544,6 +1545,14 @@ export default async function AdminPage({
           </div>
         </header>
 
+        {/*
+          29a — the verdict leads. It is rendered BEFORE the overview deck and
+          before any metric section on purpose: the handoff's core fix is that
+          /admin answers "is anything wrong?" before it shows a number. Moving
+          this below anything undoes the fix.
+        */}
+        <AdminCommandCenterOverview metrics={data} />
+
         <AdminOverviewDeck data={data} accessSource={gate.source} />
 
         <Section id="morning-dashboard" title="Morning Dashboard" items={data.morning} />
@@ -1552,7 +1561,10 @@ export default async function AdminPage({
         <Section title="Tokens & AI" items={[...data.tokens, ...data.ai]} />
         <Section title="World Cup" items={data.worldCup} />
         <Section title="System Health" items={data.health} />
+        {/* #crons and #env are the anchors the verdict strip links into. */}
         <div id="production-readiness">
+          <span id="crons" />
+          <span id="env" />
           <ProductionReadinessPanel data={data.productionReadiness} />
         </div>
         <TrafficGeoPanel data={data.productionReadiness} metrics={data.traffic} />
@@ -1574,6 +1586,7 @@ export default async function AdminPage({
         <ProviderTeamReconciliationPanel data={data.providerTeamReconciliation} />
         <Section title="Integrity / Fraud Signals" items={data.integrity} />
         <Section title="Admin Data Quality" items={data.dataQuality} />
+        <span id="providers" />
         <AccordionSection id="provider-health" title="Sports API Health" eyebrow="providers" defaultOpen={false}>
           <ProviderHealthPanel rows={data.providerHealth ?? []} />
         </AccordionSection>

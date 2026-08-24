@@ -56,6 +56,38 @@ export interface SeasonComparisonPoint {
 }
 
 /**
+ * 30a — league health by week, this season against last, for the line chart
+ * that carries a labelled target overlay.
+ *
+ * `lastSeason` is nullable per point on purpose: a league in its first season
+ * has no comparison, and a zero would draw a line along the floor that reads as
+ * "last season was catastrophic" rather than "there was no last season".
+ */
+export interface LeagueHealthWeek {
+  weekLabel: string
+  thisSeason: number
+  lastSeason: number | null
+}
+
+/**
+ * 30a — the manager-activity leaderboard. `priorActionsPerWeek` is what makes
+ * the call-out comparative ("both were above 12 in September") rather than a
+ * bare ranking, so it is required, not optional.
+ */
+export interface ManagerActivityEntry {
+  managerName: string
+  actionsPerWeek: number
+  priorActionsPerWeek: number
+}
+
+/** 30a — points for and against per team, drawn as grouped columns. */
+export interface TeamPointsEntry {
+  teamName: string
+  pointsFor: number
+  pointsAgainst: number
+}
+
+/**
  * One cohesive snapshot rather than eight separate fetches — this is one
  * executive dashboard page conceptually, the same reasoning Mission
  * Control's own `MissionControlKpis` already applies to bundle several
@@ -70,6 +102,16 @@ export interface LeagueAnalyticsSnapshot {
   transactionsByWeek: TransactionWeek[]
   rosterUtilization: RosterUtilizationEntry[]
   seasonComparison: SeasonComparisonPoint[]
+  /**
+   * 30a additions. Arrays and a nullable scalar, so a client with no analog can
+   * return `[]` / `null` honestly rather than fabricating — the same rule the
+   * five fields above already follow (see live.ts's top comment).
+   */
+  healthByWeek: LeagueHealthWeek[]
+  /** The league-health target drawn as a labelled overlay. Null = no target set. */
+  healthTarget: number | null
+  managerActivity: ManagerActivityEntry[]
+  pointsForAgainst: TeamPointsEntry[]
   generatedAt: string
 }
 

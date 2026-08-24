@@ -292,3 +292,11 @@
 
 .hp-list a:hover { text-decoration: underline; }
 .hp-list b { color: var(--text2); }
+
+/* 31a — both music variants stacked so the collapsed/full difference is visible. */
+.hp-music {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+}
