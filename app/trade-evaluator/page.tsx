@@ -1075,9 +1075,17 @@ function TradeHubInner() {
                 onChange={(event) => setSport(normalizeToSupportedSport(event.target.value))}
                 className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"
               >
+                {/*
+                  ⚠ NON-NFL SPORTS ARE OFFERED BUT NOT PICKABLE. The valuation
+                  pipeline behind this page prices only NFL assets — every other
+                  sport resolved each player to 0 and let the narration paper
+                  over it. Disabled-with-Soon is honest; a grade built on zeros
+                  is not. Re-enable per sport when its value source exists.
+                */}
                 {SUPPORTED_SPORTS.map((supportedSport) => (
-                  <option key={supportedSport} value={supportedSport}>
+                  <option key={supportedSport} value={supportedSport} disabled={supportedSport !== 'NFL'}>
                     {SPORT_LABELS[supportedSport]}
+                    {supportedSport !== 'NFL' ? ' (Soon)' : ''}
                   </option>
                 ))}
               </select>
