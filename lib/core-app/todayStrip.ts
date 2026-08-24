@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveCurrentWeek } from './currentWeek'
 import type { SectionState } from './leagueHome'
 
 /**
@@ -146,13 +147,12 @@ async function resolveRecord(
    * league-id spaces. Measured: 0 rows match on `id`, and joining on it returns
    * an empty set with no error. Same hazard `weekAll.ts` documents.
    */
-  const latest = await prisma.weeklyMatchup
-    .findFirst({
-      where: { leagueId: { in: platformIds } },
-      orderBy: [{ seasonYear: 'desc' }, { week: 'desc' }],
-      select: { seasonYear: true, week: true },
-    })
-    .catch(() => null)
+  /*
+   * ⚠ AND THE EARLIEST UNPLAYED WEEK, NOT `max(week)` — a bootstrapped season
+   * writes all 18 weeks as 0-0 rows before kickoff, so the maximum picks week
+   * 18 in August. See lib/core-app/currentWeek.ts.
+   */
+  const latest = await resolveCurrentWeek(platformIds)
 
   if (!latest) {
     return { available: false, reason: 'no matchup has been scored for your leagues yet' }

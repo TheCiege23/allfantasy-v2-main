@@ -1,0 +1,114 @@
+/* Who you play this week (DashScheduleBand.tsx) — the schedule half of the
+   matchup question, sitting above the scored-only section in Dashboard3A.
+   Token-authored on the af-core palette (the component root carries
+   .af-core, so --surface/--line/--accent resolve).
+
+   Deliberately QUIETER than .af-drafts and .af-carry-lock: a live draft and a
+   locking kickoff are deadlines, this is orientation. Neutral surface, accent
+   only on the opponent name — the one word you came here to read. There is no
+   empty state: zero matchups renders nothing at all. */
+
+.af-sched {
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 12px 16px;
+}
+
+.af-sched-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.af-sched-kicker {
+  color: var(--accent);
+}
+.af-sched-when {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.af-sched-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+}
+
+.af-sched-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    'league plat'
+    'vs vs';
+  gap: 2px 8px;
+  align-items: baseline;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  padding: 9px 11px;
+  text-decoration: none;
+  color: inherit;
+}
+.af-sched-card:hover {
+  border-color: var(--accent-line);
+  background: var(--chip);
+}
+
+.af-sched-league {
+  grid-area: league;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  /* 61 leagues means long names; one line, truncated, never a reflowed card. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.af-sched-plat {
+  grid-area: plat;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.af-sched-vs {
+  grid-area: vs;
+  font-size: 12px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-sched-vs b {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.af-sched-foot {
+  margin: 9px 0 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-sched-all {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: none;
+}
+.af-sched-all:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+  .af-sched {
+    padding: 10px 12px;
+  }
+  .af-sched-grid {
+    grid-template-columns: 1fr;
+  }
+}

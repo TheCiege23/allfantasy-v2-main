@@ -16,6 +16,7 @@ import type { UserLeague } from '@/app/dashboard/types'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover } from '@/components/core-app/screens/Dash34Carryover'
+import { DashScheduleBand } from '@/components/core-app/screens/DashScheduleBand'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
@@ -593,7 +594,7 @@ export default async function AfCorePage({
     ? (playedLeagues.find((l) => l.id === homeUserOsAnchorId) ?? playedLeagues[0] ?? null)
     : null
 
-  const [homeCareer, homeWeek, homeExposure, homeRivals, homeUserOs] = isHome3a
+  const [homeCareer, homeWeek, homeExposure, homeRivals, homeUserOs, homeSchedule] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
         getWeekAll(userId, weekLeagues).catch(() => null),
@@ -602,8 +603,19 @@ export default async function AfCorePage({
         homeUserOsLeague
           ? resolveUserOsSnapshot(homeUserOsLeague.id, userId).catch(() => null)
           : Promise.resolve(null),
+        /*
+         * WHO you play, which getWeekAll cannot answer: it drops every 0-0 row
+         * by design, so before a week is scored the matchup section has
+         * nothing to render. getWeekBoard pairs on matchupId without ever
+         * reading points, and costs three set-based queries plus one shared
+         * cached kickoff read no matter how many leagues — the same shape as
+         * its neighbours here, not a per-league fan-out. `activeKey` is 'home'
+         * on this branch and 'week' on the other caller above, so the two are
+         * mutually exclusive and nothing is fetched twice.
+         */
+        getWeekBoard(userId, weekLeagues).catch(() => null),
       ])
-    : [null, null, null, null, null]
+    : [null, null, null, null, null, null]
 
   /*
    * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
@@ -1221,6 +1233,19 @@ export default async function AfCorePage({
             <Dash3ATriage
               book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
               now={now}
+            />
+            {/*
+              WHO you play this week, immediately above the section that can
+              only show scores. Until a week is scored — every week before
+              kickoff, and all of preseason — Dashboard3A's matchup grid is an
+              empty frame, because both of its sources drop unscored rows on
+              purpose. This band answers the half of the question that IS
+              knowable: opponent, league, first kickoff. It renders nothing
+              when the read fails or no league has a schedule on file.
+            */}
+            <DashScheduleBand
+              board={homeSchedule}
+              syncLabel={syncAge.stale ? null : syncAge.label}
             />
             {/*
               3a mounted as the screen BODY. It ships its own rail/nav/topbar
