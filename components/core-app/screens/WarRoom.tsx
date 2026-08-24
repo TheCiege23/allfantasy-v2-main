@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import '@/components/core-app/af-war-room.css'
+import DraftMusicWidget from '@/components/core-app/draft-music/DraftMusicWidget'
 import type { BoardCell, BoardColumn, WarRoomData } from '@/lib/core-app/warRoom'
 
 /**
@@ -147,6 +148,14 @@ export function WarRoom({ data }: WarRoomProps) {
           )}
         </div>
       </header>
+
+      {/*
+        31a — the music widget, collapsed by default and in NORMAL FLOW between
+        the status bar and the board. Not floating, not overlaid: a strip that
+        covers a pick during a draft is worse than no music at all. It never
+        autoplays — audio starts only when someone presses play.
+      */}
+      <DraftMusicWidget variant="collapsed" playlistName={`${data.league.name} draft`} />
 
       {/* ── Board ───────────────────────────────────────────────────── */}
       <section className="af-frame af-wr-section">

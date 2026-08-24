@@ -260,6 +260,16 @@ export function Partners() {
               never act on a user&apos;s behalf. Processing and retention terms are part of the
               conversation, not fine print.
             </p>
+            {/*
+              A content link, deliberately NOT a second button in the CTA band
+              above — that slot is one ask on purpose. This one goes to a page
+              that exists, so the next click keeps its promise.
+            */}
+            <p className="af-lp-boundary">
+              <Link href="/core/business" className="af-lp-crosslink">
+                Why offseason retention is the thing to buy →
+              </Link>
+            </p>
           </div>
 
           <DemoForm />

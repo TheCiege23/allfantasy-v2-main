@@ -1034,3 +1034,11 @@
     font-size: 12px;
   }
 }
+
+/* Content link out of the B2B band into 30b, the retention case at /core/business. */
+.af-lp-crosslink {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+.af-lp-crosslink:hover { text-decoration: underline; }

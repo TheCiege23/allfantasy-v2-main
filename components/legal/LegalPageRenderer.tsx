@@ -1,6 +1,6 @@
 export { default } from "@/components/legal/LegalPageShell"
 export {
-  LEGAL_LAST_UPDATED,
+  legalLastUpdated,
   LegalBox,
   LegalCallout,
   LegalGrid,
