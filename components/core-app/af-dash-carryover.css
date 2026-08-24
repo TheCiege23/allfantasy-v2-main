@@ -14,10 +14,10 @@
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;
-  border: 1px solid var(--border);
-  border-left: 4px solid var(--accent-amber, #f5a524);
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--warn);
   border-radius: 14px;
-  background: var(--panel);
+  background: var(--surface);
   padding: 12px 16px;
 }
 
@@ -27,9 +27,12 @@
   min-width: 110px;
 }
 .af-carry-count-l {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 .af-carry-count-v {
@@ -60,18 +63,18 @@
 .af-carry-slot {
   font-size: 10.5px;
   font-weight: 700;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 1px 8px;
   color: var(--muted);
 }
 .af-carry-slot[data-tone='bad'] {
-  color: var(--accent-red-strong, #ff8589);
-  border-color: color-mix(in srgb, var(--accent-red, #e5484d) 45%, transparent);
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
 }
 .af-carry-slot[data-tone='warn'] {
-  color: var(--accent-amber-strong, #f5a524);
-  border-color: color-mix(in srgb, var(--accent-amber, #f5a524) 45%, transparent);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
 }
 
 .af-carry-open,
@@ -79,9 +82,9 @@
   flex-shrink: 0;
   font-size: 12px;
   font-weight: 700;
-  color: var(--accent-cyan-strong, var(--text));
+  color: var(--accent);
   text-decoration: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 10px;
   padding: 7px 13px;
   white-space: nowrap;
@@ -96,9 +99,9 @@
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
-  border: 1px solid color-mix(in srgb, var(--accent-amber, #f5a524) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
   border-radius: 14px;
-  background: color-mix(in srgb, var(--accent-amber, #f5a524) 7%, var(--panel));
+  background: color-mix(in srgb, var(--warn) 7%, var(--surface));
   padding: 12px 16px;
 }
 .af-carry-notice-b {
@@ -117,15 +120,18 @@
 }
 
 .af-carry-brief {
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--panel);
+  background: var(--surface);
   padding: 14px 16px;
 }
 .af-carry-brief-l {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
   color: var(--muted);
 }
 .af-carry-brief-h {
@@ -143,21 +149,27 @@
   font-size: 13px;
   color: var(--text);
   padding: 3px 0;
-  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent);
 }
 .af-carry-brief-lines li:first-child {
   border-top: none;
 }
 .af-carry-brief-lines li[data-tone='bad'] {
-  color: var(--accent-red-strong, #ff8589);
+  color: var(--bad);
 }
 .af-carry-brief-lines li[data-tone='warn'] {
-  color: var(--accent-amber-strong, #f5a524);
+  color: var(--warn);
 }
 .af-carry-caveat {
   margin: 0 0 8px;
   font-size: 11.5px;
   color: var(--muted);
+}
+/* The localised kickoff instant a brief line ends with (Dash34When). Inherits
+   the line's tone colour; weight alone marks it as the operative value. */
+.af-carry-brief-at {
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .af-carry-coverage {

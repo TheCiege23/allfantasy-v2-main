@@ -7,6 +7,7 @@ import { prisma } from '@/lib/prisma'
 import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
+import { mergeDash34Issues } from '@/lib/core-app/mergeDash34Issues'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
@@ -16,6 +17,7 @@ import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover } from '@/components/core-app/screens/Dash34Carryover'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
+import { DashDraftsBand } from '@/components/core-app/screens/DashDraftsBand'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
@@ -59,7 +61,7 @@ import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
-import { getWeekAll } from '@/lib/core-app/weekAll'
+import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
 import YourWeek from '@/components/core-app/screens/YourWeek'
 import RivalryRadar from '@/components/core-app/screens/RivalryRadar'
 import { getWeekBoard, getRivalryRadar } from '@/lib/core-app/weekBoard'
@@ -282,7 +284,7 @@ export default async function AfCorePage({
    * It also omitted `lastSyncByLeague`, which defaults every league to "never
    * read" and made the stale detector fire on all of them unconditionally.
    */
-  const { issues } = deriveOutstandingIssues({
+  const { issues: derivedIssues } = deriveOutstandingIssues({
     leagues: playedLeagues,
     lastSyncByLeague: lastSyncByLeagueFrom(
       playedLeagues as unknown as Array<{ id: string; lastSyncedAt?: Date | string | null }>,
@@ -459,7 +461,7 @@ export default async function AfCorePage({
 
   const notifications =
     activeKey === 'notifications'
-      ? await getNotificationsCenter({ userId, issues, now }).catch(() => null)
+      ? await getNotificationsCenter({ userId, issues: derivedIssues, now }).catch(() => null)
       : null
 
   /*
@@ -544,6 +546,19 @@ export default async function AfCorePage({
       : null
 
   /*
+   * ONE URGENCY VOICE. dash34's brief states urgent facts — "N leagues have a
+   * starter who cannot play", "N drafts are on the clock" — that
+   * deriveOutstandingIssues cannot detect (its only live detectors are
+   * stale_sync and draft_upcoming). Ask Chimmy's count and the "Nothing is
+   * waiting on you" empty state key off this array, so without the merge the
+   * queue could read clean while the brief two cards up says otherwise.
+   * Synthesized from reads the loader already performed (the injury feed and
+   * the draft stage), never invented — and dash34 is null on every non-home
+   * screen, so the merge is the identity everywhere else.
+   */
+  const issues = mergeDash34Issues(derivedIssues, dash34)
+
+  /*
    * The 3a home panels — the same loader set app/dashboard/page.tsx ran before
    * that route retired into a redirect here. Loaded ONLY when the 3a home is
    * the screen being rendered, never for the dashboard-v2 segment. Exposure and
@@ -557,38 +572,68 @@ export default async function AfCorePage({
   /*
    * P4-5: the /core home's ONE Decision OS read — the deterministic user-os
    * snapshot for the league that most needs the user right now. "Most urgent"
-   * is the head of the issues queue (already sorted severity-then-deadline
-   * inside deriveOutstandingIssues), falling back to the first played league.
+   * follows the same ladder the home itself leads with: dash34's first
+   * priority === 'urgent' league (a starter who cannot play), then its first
+   * priority === 'draft' league, then the head of the issues queue (already
+   * sorted severity-then-deadline inside deriveOutstandingIssues), falling
+   * back to the first played league.
    * One league only, loaded only when the 3a home renders, and resolved
    * directly rather than through /api/decision-os/user-os: membership is
    * already established by the league list read above, and
    * resolveUserOsSnapshot scopes every fact to the caller's own managerId.
    * It never throws, and a null here renders NOTHING — see DashUserOs.
    */
+  const dash34Ranked = dash34?.allLeagues ?? dash34?.leagues ?? []
+  const homeUserOsAnchorId =
+    dash34Ranked.find((l) => l.priority === 'urgent')?.id ??
+    dash34Ranked.find((l) => l.priority === 'draft')?.id ??
+    issues.find((i) => i.leagueId != null)?.leagueId ??
+    null
   const homeUserOsLeague = isHome3a
-    ? (playedLeagues.find((l) => l.id === issues.find((i) => i.leagueId != null)?.leagueId) ??
-        playedLeagues[0] ??
-        null)
+    ? (playedLeagues.find((l) => l.id === homeUserOsAnchorId) ?? playedLeagues[0] ?? null)
     : null
 
-  const [homeCareer, homeWeek, homeExposure, homeRivals, homeMatchups, homeUserOs] = isHome3a
+  const [homeCareer, homeWeek, homeExposure, homeRivals, homeUserOs] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
         getWeekAll(userId, weekLeagues).catch(() => null),
         getCrossLeagueExposure(userId, playedLeagues.map((l) => l.id)).catch(() => null),
         getRivalRecords(userId, playedLeagues.map((l) => l.id)).catch(() => null),
-        Promise.all(
-          playedLeagues.slice(0, 4).map((l) =>
-            getMatchupData(l.id, userId)
-              .then((m) => ({ id: l.id, m }))
-              .catch(() => ({ id: l.id, m: null })),
-          ),
-        ),
         homeUserOsLeague
           ? resolveUserOsSnapshot(homeUserOsLeague.id, userId).catch(() => null)
           : Promise.resolve(null),
       ])
-    : [null, null, null, null, null, null]
+    : [null, null, null, null, null]
+
+  /*
+   * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
+   * matchup grid shows `scored.slice(0, 4)` — live-scored leagues first, then
+   * weekAll's scored rows — and `scoredMatchupLeagueIds` replicates that exact
+   * derivation from the same inputs. Pricing `playedLeagues.slice(0, 4)` paid
+   * several queries per league for cards showing a DIFFERENT league — or,
+   * before the season starts, no card at all. When the scored set is empty,
+   * nothing is priced: zero round-trips instead of four.
+   *
+   * Serial after the Promise.all because it needs `homeWeek`; it only runs
+   * when at least one card will render, which is exactly when the work is
+   * visible.
+   */
+  const scoredIds = isHome3a
+    ? scoredMatchupLeagueIds(
+        (dash34?.leagues ?? []).filter((l) => l.score).map((l) => l.id),
+        homeWeek,
+      )
+    : []
+  const homeMatchups =
+    scoredIds.length > 0
+      ? await Promise.all(
+          scoredIds.map((id) =>
+            getMatchupData(id, userId)
+              .then((m) => ({ id, m }))
+              .catch(() => ({ id, m: null })),
+          ),
+        )
+      : null
 
   /*
    * Only leagues whose BOTH lineups priced land here. An absent entry renders no
@@ -599,6 +644,27 @@ export default async function AfCorePage({
   for (const { id, m } of homeMatchups ?? []) {
     if (m?.winProbability.available) winProb[id] = m.winProbability.data.pWin
   }
+
+  /*
+   * Drafts on the clock — the same cross-league aggregator the dashboard-v2
+   * segment reads (three set-based queries regardless of league count), called
+   * here ONLY for the 3a home. `isHome3a` is false when segment ===
+   * 'dashboard-v2', so the v2 dispatch below never pays for this twice.
+   * playedLeagues, NOT leagues, for the same AF-Legacy reason as the v2 call
+   * site — the unfiltered list carries hundreds of past-season board rows. A
+   * loader failure is null, and null renders NOTHING — see DashDraftsBand.
+   */
+  const homeDrafts = isHome3a
+    ? await getDraftHqAll(
+        userId,
+        playedLeagues.map((l) => ({
+          id: l.id,
+          name: l.name,
+          platform: String(l.platform ?? ''),
+          imageUrl: (l as { avatarUrl?: string | null }).avatarUrl ?? null,
+        })),
+      ).catch(() => null)
+    : null
 
   /*
    * The activation funnel signal, carried over from /dashboard when that route
@@ -1119,6 +1185,14 @@ export default async function AfCorePage({
          */
         dash34 ? (
           <>
+            {/*
+              Drafts on the clock — leads the home whenever any league's draft
+              is live right now (the founder's week). One card per live draft,
+              capped at 4 with a Draft HQ overflow link. Zero live drafts, or a
+              loader failure, renders NOTHING — see DashDraftsBand's header for
+              the honesty rules (raw status shown, no invented timers).
+            */}
+            <DashDraftsBand data={homeDrafts} now={now} />
             {/*
               34a's four unique sections (first-lock band, honesty notice,
               Chimmy brief, coverage list) — carried over so the cutover

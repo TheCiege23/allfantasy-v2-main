@@ -146,7 +146,7 @@ export function Dash3ATriage({ book, now }: { book: TriageBookRow[] | null; now:
                 className="af-triage-cta"
                 href={`/core/players?q=${encodeURIComponent(p.name)}`}
               >
-                See the move
+                Find a replacement
               </Link>
             </li>
           )

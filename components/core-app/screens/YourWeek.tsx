@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { WeekBoard, WeekMatchup } from '@/lib/core-app/weekBoard'
+import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 /*
  * ⚠ THE VALUE COMES FROM `weekBoardRules`, THE TYPES FROM `weekBoard`. The types
  * are erased at build time so importing them from the `server-only` loader is
@@ -105,6 +106,15 @@ function LeaningCard({ matchup }: { matchup: WeekMatchup }) {
 
 export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
   const total = data.coinFlips.length + data.leaning.length + data.unprojected.length
+  /*
+   * Phase-aware empty state — before the first stated regular-season kickoff,
+   * "import or re-sync" is the wrong advice. Null when no source states a
+   * kickoff; the sync copy then stands. See lib/core-app/seasonPhase.ts.
+   */
+  const preseasonKickoffLabel =
+    data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
+      ? kickoffDayLabel(data.firstKickoffAt)
+      : null
 
   return (
     <div className="af-wk">
@@ -205,16 +215,26 @@ export function YourWeek({ data, rivalriesHref }: YourWeekProps) {
       ) : null}
 
       {total === 0 ? (
-        <div className="af-wk-empty">
-          <p className="af-wk-empty-t">No schedule is on file for this week.</p>
-          <p className="af-wk-empty-b">
-            This screen is built from synced matchups. Nothing has been read for your leagues yet,
-            so there is nothing to rank — that is a gap in what we have, not a week with no games.
-          </p>
-          <Link href="/import" className="af-btn af-wk-btn">
-            Import or re-sync a league
-          </Link>
-        </div>
+        preseasonKickoffLabel ? (
+          <div className="af-wk-empty">
+            <p className="af-wk-empty-t">The season has not started yet.</p>
+            <p className="af-wk-empty-b">
+              Matchups fill in as weeks are scored — first kickoff {preseasonKickoffLabel}. There
+              is nothing to rank before then.
+            </p>
+          </div>
+        ) : (
+          <div className="af-wk-empty">
+            <p className="af-wk-empty-t">No schedule is on file for this week.</p>
+            <p className="af-wk-empty-b">
+              This screen is built from synced matchups. Nothing has been read for your leagues yet,
+              so there is nothing to rank — that is a gap in what we have, not a week with no games.
+            </p>
+            <Link href="/import" className="af-btn af-wk-btn">
+              Import or re-sync a league
+            </Link>
+          </div>
+        )
       ) : null}
 
       {/* The model basis. Always rendered when any probability was shown. */}

@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getFirstStatedKickoff } from './seasonPhase'
 
 /**
  * 26b — Season Outlook. Playoff and championship odds for every active league,
@@ -142,6 +143,12 @@ export type SeasonOutlook = {
   basis: string
   /** Leagues excluded, and why — never silently dropped. */
   withheld: Array<{ leagueName: string; reason: string }>
+  /**
+   * First future kickoff a source STATES is regular season, ISO — null when
+   * none is stated. Drives the phase-aware empty state; see
+   * lib/core-app/seasonPhase.ts.
+   */
+  firstKickoffAt: string | null
 }
 
 // ── Model ──────────────────────────────────────────────────────────────
@@ -354,6 +361,14 @@ export async function getSeasonOutlook(
         `full count would not finish inside one page load.`
       : '')
 
+  /*
+   * Phase context for the empty state — one cached findFirst (see
+   * lib/core-app/seasonPhase.ts), so the screen can tell "nothing synced"
+   * from "season not started" and stop prescribing a re-sync for a season
+   * that simply has not kicked off.
+   */
+  const firstKickoffAt = await getFirstStatedKickoff()
+
   const empty: SeasonOutlook = {
     leagues: [],
     summary: { makingPlayoffs: 0, clinched: 0, onTheBubble: 0, bestTitle: null },
@@ -361,6 +376,7 @@ export async function getSeasonOutlook(
     priorities: [],
     basis: describeBasis(ITERATIONS),
     withheld: [],
+    firstKickoffAt,
   }
 
   const platformIds = leagues
@@ -766,5 +782,6 @@ export async function getSeasonOutlook(
     priorities,
     basis: describeBasis(runIterations),
     withheld,
+    firstKickoffAt,
   }
 }

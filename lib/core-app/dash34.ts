@@ -1,5 +1,7 @@
 import 'server-only'
 
+import { unstable_cache } from 'next/cache'
+
 import { prisma } from '@/lib/prisma'
 import { getTeamInfo } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
@@ -150,6 +152,32 @@ function isUnavailable(status: string): boolean {
   )
 }
 
+/**
+ * Designations that hold for a season, not a news cycle. IR, PUP, NFI and a
+ * suspension stay true for months, so a report older than the freshness
+ * window is still the current fact. Built on the same normalized strings
+ * `isUnavailable` reads, so the two can never disagree about what "IR" means.
+ */
+function isSeasonScoped(status: string): boolean {
+  const s = status.trim().toLowerCase()
+  return (
+    s === 'ir' ||
+    s.includes('inj res') ||
+    s.includes('injured reserve') ||
+    s.includes('pup') ||
+    s.includes('nfi') ||
+    s.startsWith('susp')
+  )
+}
+
+/**
+ * How old a week-to-week designation may be before it stops being shown.
+ * "Questionable, reported 8w ago" is a claim about a game long since played —
+ * rendering it as current news is an invented fact. Season-scoped statuses
+ * (see `isSeasonScoped`) are exempt: an IR stint is still true two months on.
+ */
+const STALE_REPORT_MS = 45 * 24 * 3_600_000
+
 /* ── Formatting ──────────────────────────────────────────────────────────── */
 
 function pad(n: number): string {
@@ -291,6 +319,123 @@ function stageOf(row: Dash34LeagueRow): string | null {
   return raw || null
 }
 
+/* ── Global reads, shared across users ───────────────────────────────────── */
+
+/*
+ * The injury feed, the next-40 games and the NFL fixture list are the three
+ * reads in this loader that carry NO userId — every signed-in home in the same
+ * sports asks the exact same three queries. They are shared through
+ * `unstable_cache` (60s revalidate, keyed by the sorted sports list) so sixty
+ * concurrent home loads cost three queries, not one hundred and eighty. The
+ * user-scoped reads (teams, rosters, players) are deliberately NOT cached.
+ *
+ * ⚠ `unstable_cache` SERIALISES THROUGH JSON, so a Date column comes back as
+ * an ISO STRING on a cache hit but as a Date on a miss. Each cached reader
+ * therefore stores ISO strings explicitly and its wrapper revives them, so
+ * `getDash34Data` sees real Dates on both paths.
+ *
+ * ⚠ THE CLOCK INSIDE THE CACHED READ IS ITS OWN. `now` cannot be part of the
+ * cache key — a millisecond timestamp would defeat the cache — so each query
+ * filters on its own `new Date()` and the wrapper re-filters against the
+ * caller's `now`, dropping games that started inside the revalidation window.
+ */
+
+const readNextGamesCached = unstable_cache(
+  async (sports: string[]) => {
+    const rows = await prisma.sportsGame
+      .findMany({
+        where: { sport: { in: sports }, startTime: { gte: new Date() } },
+        orderBy: { startTime: 'asc' },
+        take: 40,
+        select: {
+          sport: true,
+          startTime: true,
+          week: true,
+          season: true,
+          homeTeam: true,
+          awayTeam: true,
+          /*
+           * Which slate `week` counts within — "pre" | "regular" | "post", or
+           * null meaning "no source has said", never "regular". Selected
+           * explicitly (this model is never read with a bare findMany — the
+           * column reached production before every deployed client knew it,
+           * and a bare read 500s in that window). See
+           * prisma/migrations/20260820200000_sports_game_season_type.
+           */
+          seasonType: true,
+        },
+      })
+      .catch(() => [])
+    return rows.map((g) => ({ ...g, startTime: g.startTime ? g.startTime.toISOString() : null }))
+  },
+  ['dash34-next-games'],
+  { revalidate: 60 },
+)
+
+async function readNextGames(sports: string[], now: Date) {
+  const rows = await readNextGamesCached([...sports].sort()).catch(() => [])
+  return rows
+    .map((g) => ({ ...g, startTime: g.startTime ? new Date(g.startTime) : null }))
+    .filter((g) => g.startTime != null && g.startTime.getTime() >= now.getTime())
+}
+
+const readInjuryFeedCached = unstable_cache(
+  async (sports: string[]) => {
+    const rows = await prisma.sportsInjury
+      .findMany({
+        /*
+         * ⚠ `expiresAt` IS THE WRITER'S OWN FRESHNESS CONTRACT — every ingest
+         * (lib/injuries/rollingInsightsInjuries.ts) stamps it, and retiring a
+         * feed is done by expiring its rows. Reading past it resurrects rows a
+         * writer has already declared dead.
+         */
+        where: { sport: { in: sports }, expiresAt: { gt: new Date() } },
+        orderBy: { fetchedAt: 'desc' },
+        take: 4000,
+        /*
+         * ⚠ `date` IS THE REPORT'S OWN TIMESTAMP; `fetchedAt` IS WHEN WE POLLED.
+         * The card says "reported 30 min ago", which is a claim about the report,
+         * so it reads `date` and shows nothing when `date` is null rather than
+         * silently substituting the poll time — those are two different facts and
+         * only one of them answers "is this news".
+         */
+        select: { playerName: true, status: true, description: true, date: true },
+      })
+      .catch(() => [])
+    return rows.map((i) => ({ ...i, date: i.date ? i.date.toISOString() : null }))
+  },
+  ['dash34-injury-feed'],
+  { revalidate: 60 },
+)
+
+async function readInjuryFeed(sports: string[]) {
+  const rows = await readInjuryFeedCached([...sports].sort()).catch(() => [])
+  return rows.map((i) => ({ ...i, date: i.date ? new Date(i.date) : null }))
+}
+
+const readNflFixturesCached = unstable_cache(
+  async () => {
+    const rows = await prisma.sportsGame
+      .findMany({
+        where: { sport: 'NFL', startTime: { gte: new Date() } },
+        orderBy: { startTime: 'asc' },
+        take: 200,
+        select: { startTime: true, homeTeam: true, awayTeam: true },
+      })
+      .catch(() => [])
+    return rows.map((g) => ({ ...g, startTime: g.startTime ? g.startTime.toISOString() : null }))
+  },
+  ['dash34-nfl-fixtures'],
+  { revalidate: 60 },
+)
+
+async function readNflFixtures(now: Date) {
+  const rows = await readNflFixturesCached().catch(() => [])
+  return rows
+    .map((g) => ({ ...g, startTime: g.startTime ? new Date(g.startTime) : null }))
+    .filter((g) => g.startTime != null && g.startTime.getTime() >= now.getTime())
+}
+
 /* ── The loader ──────────────────────────────────────────────────────────── */
 
 export async function getDash34Data(
@@ -342,32 +487,9 @@ export async function getDash34Data(
     /*
      * Enough future games to cover the next-24-hours feed as well as the single
      * next kickoff, in one read. Ordered by start time so the first row IS the
-     * countdown target.
+     * countdown target. Global — shared through the 60s cache above.
      */
-    prisma.sportsGame
-      .findMany({
-        where: { sport: { in: sports }, startTime: { gte: now } },
-        orderBy: { startTime: 'asc' },
-        take: 40,
-        select: {
-          sport: true,
-          startTime: true,
-          week: true,
-          season: true,
-          homeTeam: true,
-          awayTeam: true,
-          /*
-           * Which slate `week` counts within — "pre" | "regular" | "post", or
-           * null meaning "no source has said", never "regular". Selected
-           * explicitly (this model is never read with a bare findMany — the
-           * column reached production before every deployed client knew it,
-           * and a bare read 500s in that window). See
-           * prisma/migrations/20260820200000_sports_game_season_type.
-           */
-          seasonType: true,
-        },
-      })
-      .catch(() => []),
+    readNextGames(sports, now),
   ])
 
   const teamByLeague = new Map(teams.map((t) => [t.leagueId, t]))
@@ -439,21 +561,13 @@ export async function getDash34Data(
           })
           .catch(() => [])
       : Promise.resolve([]),
-    prisma.sportsInjury
-      .findMany({
-        where: { sport: { in: sports } },
-        orderBy: { fetchedAt: 'desc' },
-        take: 4000,
-        /*
-         * ⚠ `date` IS THE REPORT'S OWN TIMESTAMP; `fetchedAt` IS WHEN WE POLLED.
-         * The card says "reported 30 min ago", which is a claim about the report,
-         * so it reads `date` and shows nothing when `date` is null rather than
-         * silently substituting the poll time — those are two different facts and
-         * only one of them answers "is this news".
-         */
-        select: { playerName: true, status: true, description: true, date: true },
-      })
-      .catch(() => []),
+    /*
+     * The injury feed — filtered to unexpired rows in SQL and shared through
+     * the 60s cache above. The 45-day report-age gate is applied below in the
+     * loader, where the brief, the chips, the urgent counts and the book all
+     * inherit it at once.
+     */
+    readInjuryFeed(sports),
     /*
      * Next kickoff per NFL club, for "when does this player actually play".
      *
@@ -463,17 +577,9 @@ export async function getDash34Data(
      * eight days of fixtures — production carries the same game from two sources
      * (one row with `week`, one without), so the raw count overstates the number
      * of distinct games by about half and the map takes first-seen per club.
+     * Global — shared through the 60s cache above.
      */
-    sports.includes('NFL')
-      ? prisma.sportsGame
-          .findMany({
-            where: { sport: 'NFL', startTime: { gte: now } },
-            orderBy: { startTime: 'asc' },
-            take: 200,
-            select: { startTime: true, homeTeam: true, awayTeam: true },
-          })
-          .catch(() => [])
-      : Promise.resolve([]),
+    sports.includes('NFL') ? readNflFixtures(now) : Promise.resolve([]),
   ])
 
   /**
@@ -539,6 +645,23 @@ export async function getDash34Data(
     const key = i.playerName.trim().toLowerCase()
     if (injuryByName.has(key)) continue
     if (HEALTHY.has(i.status.trim().toLowerCase())) continue
+    /*
+     * ⚠ THE FRESHNESS GATE LIVES HERE, IN THE LOADER, so the brief, the triage
+     * chips, the urgent counts and the book all inherit it at once. A dated
+     * report older than 45 days is last season's news unless the status itself
+     * spans a season (IR, PUP, NFI, suspension — `isSeasonScoped`). A row with
+     * no `date` cannot be judged stale and is kept: it already passed the
+     * writer's own `expiresAt`, and dropping it would hide a designation on
+     * the strength of a missing timestamp rather than a stale one. Kept rows
+     * still carry `reportedAt`, so "reported 3w ago" renders exactly as before.
+     */
+    if (
+      i.date != null &&
+      now.getTime() - i.date.getTime() > STALE_REPORT_MS &&
+      !isSeasonScoped(i.status)
+    ) {
+      continue
+    }
     injuryByName.set(key, { status: i.status, description: i.description, reportedAt: i.date })
   }
 

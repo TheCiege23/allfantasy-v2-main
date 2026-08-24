@@ -263,6 +263,40 @@ export async function getRivalRecords(
   const agg = new Map<string, { name: string; wins: number; losses: number; leagues: Set<string>; last: string | null }>()
   let leaguesRead = 0
 
+  /*
+   * ⚠ ONE READ, NOT ONE PER LEAGUE. This was a serial `findMany` inside the
+   * loop below — on a 60-league account that is 60 awaited round-trips to
+   * render four rows, the same fan-out shape that took production Postgres to
+   * the 53200 OOM. Same pattern as weekAll.ts: fetch every league's rows in
+   * one `leagueId: { in: [...] }` query with only the columns used, group in
+   * JS, and let the loop read its own league's slice from the map.
+   */
+  const allRows = await prisma.weeklyMatchup
+    .findMany({
+      where: { leagueId: { in: leagues.map((l) => l.platformLeagueId) } },
+      select: {
+        leagueId: true,
+        seasonYear: true,
+        week: true,
+        rosterId: true,
+        matchupId: true,
+        pointsFor: true,
+      },
+    })
+    .catch(() => [])
+
+  /*
+   * The element type, not `typeof allRows`: the `.catch(() => [])` above makes
+   * the awaited type a union with `never[]`, and a Map valued at that union
+   * types `push` as taking `never`.
+   */
+  const rowsByPlatformLeague = new Map<string, (typeof allRows)[number][]>()
+  for (const r of allRows) {
+    const list = rowsByPlatformLeague.get(r.leagueId)
+    if (list) list.push(r)
+    else rowsByPlatformLeague.set(r.leagueId, [r])
+  }
+
   for (const league of leagues) {
     const platformLeagueId = league.platformLeagueId
 
@@ -273,12 +307,7 @@ export async function getRivalRecords(
     const myRosterId = Number.parseInt(String(mine.externalId), 10)
     if (!Number.isFinite(myRosterId)) continue
 
-    const rows = await prisma.weeklyMatchup
-      .findMany({
-        where: { leagueId: platformLeagueId },
-        select: { seasonYear: true, week: true, rosterId: true, matchupId: true, pointsFor: true },
-      })
-      .catch(() => [])
+    const rows = rowsByPlatformLeague.get(platformLeagueId) ?? []
     if (rows.length === 0) continue
     leaguesRead += 1
 
