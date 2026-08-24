@@ -254,7 +254,9 @@ export async function getMatchupData(
     : {
         available: false,
         reason: sideProjections
-          ? `no projections on file for ${latest.seasonYear} week ${latest.week} — this week is not one the feed covers`
+          ? sideProjections.leagueScoring.available === false
+            ? sideProjections.leagueScoring.reason
+            : `no starter could be priced for ${latest.seasonYear} week ${latest.week} — the feed does not cover this week, or this league's rules cannot score its stat lines`
           : 'we could not match both sides of this matchup to an imported roster',
       }
 
