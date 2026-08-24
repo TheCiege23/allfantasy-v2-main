@@ -61,7 +61,10 @@ function remapDeprecatedAppRoutes(safe: string): string {
     return `${path.replace(/^\/app/, "")}${search}`
   }
   if (path === "/app/discover" || path.startsWith("/app/discover/")) {
-    return `${path.replace(/^\/app/, "")}${search}`
+    // Bare /discover has no page — the discovery surface lives at /discover/leagues.
+    const stripped = path.replace(/^\/app/, "")
+    const mapped = stripped === "/discover" || stripped === "/discover/" ? "/discover/leagues" : stripped
+    return `${mapped}${search}`
   }
   if (/^\/app\/league\/[^/]+$/.test(path)) {
     const id = path.slice("/app/league/".length)

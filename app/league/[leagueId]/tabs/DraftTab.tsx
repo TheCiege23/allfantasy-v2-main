@@ -548,7 +548,7 @@ export function DraftTab({
           </div>
           {isCommissioner ? (
             <p className="mt-2 text-[10px] leading-relaxed text-white/35">
-              <Link href="/app/discover" className="text-[#ff3d81]/90 underline decoration-[#ff3d81]/30 underline-offset-2 hover:text-[#ff9ec0]">
+              <Link href="/discover/leagues" className="text-[#ff3d81]/90 underline decoration-[#ff3d81]/30 underline-offset-2 hover:text-[#ff9ec0]">
                 League finder
               </Link>{' '}
               matches your league to managers within one rank tier of yours (same, one above, or one below).

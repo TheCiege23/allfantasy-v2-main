@@ -234,7 +234,9 @@ function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null 
     return NextResponse.redirect(url)
   }
   if (pathname === "/app/discover" || pathname.startsWith("/app/discover/")) {
-    url.pathname = pathname.replace(/^\/app/, "")
+    // Bare /discover has no page — the discovery surface lives at /discover/leagues.
+    const stripped = pathname.replace(/^\/app/, "")
+    url.pathname = stripped === "/discover" || stripped === "/discover/" ? "/discover/leagues" : stripped
     return NextResponse.redirect(url)
   }
   return null
