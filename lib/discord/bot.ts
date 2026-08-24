@@ -226,6 +226,7 @@ export const REQUIRED_BOT_PERMISSIONS: ReadonlyArray<{ label: string; bit: bigin
   { label: 'Read message history', bit: 1n << 16n },
   { label: 'Manage channels', bit: 1n << 4n },
   { label: 'Manage webhooks', bit: 1n << 29n },
+  { label: 'Create invite', bit: 1n << 0n },
 ]
 
 const ADMINISTRATOR_BIT = 1n << 3n
@@ -275,4 +276,48 @@ export async function missingBotPermissions(guildId: string): Promise<string[] |
   if (bits === null) return null
   if ((bits & ADMINISTRATOR_BIT) === ADMINISTRATOR_BIT) return []
   return REQUIRED_BOT_PERMISSIONS.filter((p) => (bits & p.bit) !== p.bit).map((p) => p.label)
+}
+
+type DiscordInvite = {
+  code: string
+  max_age: number
+  max_uses: number
+  temporary: boolean
+}
+
+/**
+ * A "join our Discord" link for a linked channel. Reuses an existing permanent
+ * invite if the channel already has one (listing invites needs MANAGE_CHANNELS,
+ * which the bot already holds) rather than minting a new code every time a
+ * member opens the panel — Discord has no cap on invites, but there is no reason
+ * to spray codes either. Falls back to creating one (max_age 0, max_uses 0 —
+ * never expires, unlimited uses) when none exists.
+ *
+ * Requires CREATE_INSTANT_INVITE. A server that installed before this permission
+ * was added will not have granted it — same retroactive-grant gap as every other
+ * permission, surfaced by missingBotPermissions above. Returns null on any
+ * failure; callers must render "no invite available", never a broken link.
+ */
+export async function createOrReuseChannelInvite(channelId: string): Promise<string | null> {
+  if (!isBotConfigured()) return null
+
+  const listRes = await fetch(`${DISCORD_BASE}/channels/${channelId}/invites`, {
+    headers: botHeaders(),
+  })
+  if (listRes.ok) {
+    const invites = (await listRes.json().catch(() => null)) as DiscordInvite[] | null
+    const permanent = Array.isArray(invites)
+      ? invites.find((i) => i.max_age === 0 && !i.temporary)
+      : undefined
+    if (permanent?.code) return `https://discord.gg/${permanent.code}`
+  }
+
+  const createRes = await fetch(`${DISCORD_BASE}/channels/${channelId}/invites`, {
+    method: 'POST',
+    headers: botHeaders(),
+    body: JSON.stringify({ max_age: 0, max_uses: 0, temporary: false, unique: false }),
+  })
+  if (!createRes.ok) return null
+  const created = (await createRes.json().catch(() => null)) as DiscordInvite | null
+  return created?.code ? `https://discord.gg/${created.code}` : null
 }
