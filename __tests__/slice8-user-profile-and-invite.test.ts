@@ -81,8 +81,9 @@ describe('Slice 8 — post-signup callback preserves invite for email flow', () 
 })
 
 describe('Slice 8 — post-signup routing (credential signup)', () => {
-  it('defaults new signup to /dashboard when no invite or verify callback', () => {
-    expect(resolveUnifiedAuthDestinationForSignup({})).toBe('/dashboard')
+  it('defaults new signup to /core when no invite or verify callback', () => {
+    // DEFAULT_POST_AUTH_ROUTE moved from /dashboard to /core.
+    expect(resolveUnifiedAuthDestinationForSignup({})).toBe('/core')
   })
 
   it('preserves invite accept URL from callbackUrl', () => {
@@ -101,20 +102,21 @@ describe('Slice 8 — post-signup routing (credential signup)', () => {
     ).toBe('/verify/email?token=abc')
   })
 
-  it('falls back to /dashboard when callback is unsafe and no safe next', () => {
+  it('falls back to /core when callback is unsafe and no safe next', () => {
     expect(
       resolveUnifiedAuthDestinationForSignup({
         callbackUrl: 'https://evil.example/phish',
       }),
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('does not send successful signup to /login when login is the only callback', () => {
+    // Rejected as an auth-entry surface, falls through to the same /core default.
     expect(
       resolveUnifiedAuthDestinationForSignup({
         callbackUrl: '/login?callbackUrl=%2Fdashboard',
       }),
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('allows /join/ token paths', () => {
