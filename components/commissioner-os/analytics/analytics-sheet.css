@@ -1,0 +1,345 @@
+/*
+ * 30a — spreadsheet charts for Commissioner OS analytics.
+ *
+ * Authored on Commissioner OS's own token layer (--surface / --line / --text /
+ * --accent), never on Tailwind colour words: the global light-mode
+ * `.mode-readable` clamp rewrites those and a chart built on them goes
+ * unreadable in one theme without anyone noticing.
+ */
+
+.cos-sheet {
+  --cos-a: var(--accent, #22d3ee);
+  --cos-b: #7d84a8;
+  --cos-c: #f6c445;
+  --cos-d: #fb5b78;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ── Toolbar ──────────────────────────────────────────────────────────────── */
+
+.cos-sheet-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cos-sheet-ranges {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.1));
+  border-radius: 9px;
+  background: var(--surface2, rgba(255, 255, 255, 0.03));
+}
+
+.cos-sheet-range {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted, #989fc2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cos-sheet-range[aria-pressed='true'] {
+  background: var(--accent, #22d3ee);
+  color: var(--accent-ink, #04050c);
+}
+
+.cos-sheet-range:focus-visible {
+  outline: 2px solid var(--accent, #22d3ee);
+  outline-offset: 1px;
+}
+
+.cos-sheet-bar-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cos-sheet-scope {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--faint, #7d84a8);
+}
+
+/* ── Stat row ─────────────────────────────────────────────────────────────── */
+
+.cos-sheet-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.cos-stat {
+  padding: 12px 14px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  background: var(--surface, rgba(255, 255, 255, 0.02));
+}
+
+.cos-stat-label {
+  display: block;
+  font-size: 11px;
+  color: var(--faint, #7d84a8);
+}
+
+.cos-stat-value {
+  display: block;
+  margin-top: 4px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--text, #eef0fa);
+}
+
+.cos-stat-trend {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--muted, #989fc2);
+}
+
+.cos-stat-trend[data-dir='up'] { color: var(--good, #34d399); }
+.cos-stat-trend[data-dir='down'] { color: var(--bad, #fb5b78); }
+
+/* ── Panels ───────────────────────────────────────────────────────────────── */
+
+.cos-sheet-panel {
+  padding: 16px 18px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 12px;
+  background: var(--surface, rgba(255, 255, 255, 0.02));
+}
+
+.cos-sheet-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.cos-sheet-panel-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text, #eef0fa);
+}
+
+.cos-sheet-panel-note {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted, #989fc2);
+}
+
+.cos-sheet-empty {
+  margin: 0;
+  padding: 14px;
+  border: 1px dashed var(--line2, rgba(255, 255, 255, 0.14));
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--faint, #7d84a8);
+}
+
+.cos-sheet-foot {
+  margin: 10px 0 0;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--faint, #7d84a8);
+}
+
+.cos-sheet-generated {
+  margin: 0;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+  color: var(--faint, #7d84a8);
+}
+
+.cos-sheet-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 10px;
+}
+
+.cos-sheet-cardval {
+  display: block;
+  margin-bottom: 4px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 16px;
+  color: var(--text, #eef0fa);
+}
+
+/* ── Charts ───────────────────────────────────────────────────────────────── */
+
+/* Wide charts scroll in their own box; the page never scrolls sideways. */
+.cos-sheet-plot {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.cos-sheet-svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+}
+
+.cos-sheet-svg--wide { min-width: 680px; }
+
+.cos-grid { stroke: var(--line, rgba(255, 255, 255, 0.09)); stroke-width: 1; }
+
+.cos-axis {
+  fill: var(--faint, #7d84a8);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+}
+
+.cos-axis--rot { font-size: 9px; }
+
+.cos-inline {
+  fill: var(--text2, #c3c9e6);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.cos-line { fill: none; stroke-width: 2.4; stroke-linejoin: round; stroke-linecap: round; }
+.cos-line--a { stroke: var(--cos-a); }
+.cos-line--b { stroke: var(--cos-b); stroke-dasharray: 5 4; }
+
+/* The target overlay is labelled on the chart, never left to the legend. */
+.cos-target {
+  stroke: var(--cos-c);
+  stroke-width: 1.5;
+  stroke-dasharray: 6 4;
+}
+
+.cos-target-chip { fill: var(--cos-c); rx: 3; }
+
+.cos-target-label {
+  fill: #1a1204;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.cos-bar { rx: 2; }
+.cos-bar--a { fill: var(--cos-a); }
+.cos-bar--c { fill: var(--cos-c); }
+.cos-bar--d { fill: var(--cos-d); }
+
+.cos-sheet-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.cos-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted, #989fc2);
+}
+
+.cos-key::before { content: ''; width: 14px; height: 3px; border-radius: 2px; }
+.cos-key--a::before { background: var(--cos-a); }
+.cos-key--c::before { background: var(--cos-c); }
+.cos-key--d::before { background: var(--cos-d); }
+.cos-key--b::before {
+  background: repeating-linear-gradient(90deg, var(--cos-b) 0 5px, transparent 5px 9px);
+}
+.cos-key--target::before {
+  background: repeating-linear-gradient(90deg, var(--cos-c) 0 6px, transparent 6px 10px);
+}
+
+/* ── Leaderboard ──────────────────────────────────────────────────────────── */
+
+.cos-sheet-callout {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--warn, #fbbf24);
+  border-radius: 0 8px 8px 0;
+  background: var(--warn-soft, rgba(251, 191, 36, 0.1));
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2, #c3c9e6);
+}
+
+.cos-lb { margin: 0; padding: 0; list-style: none; }
+
+.cos-lb-row {
+  display: grid;
+  grid-template-columns: 22px minmax(96px, 1.3fr) 3fr 34px 46px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line, rgba(255, 255, 255, 0.06));
+}
+
+.cos-lb-row:last-child { border-bottom: 0; }
+
+.cos-lb-rank {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  color: var(--faint, #7d84a8);
+}
+
+.cos-lb-name {
+  font-size: 12.5px;
+  color: var(--text2, #c3c9e6);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cos-lb-row[data-low='true'] .cos-lb-name { color: var(--bad, #fb5b78); font-weight: 600; }
+
+.cos-lb-track {
+  height: 9px;
+  border-radius: 5px;
+  background: var(--chip, rgba(255, 255, 255, 0.05));
+  overflow: hidden;
+}
+
+.cos-lb-fill {
+  display: block;
+  height: 100%;
+  border-radius: 5px;
+  background: var(--cos-a);
+}
+
+.cos-lb-fill[data-low='true'] { background: var(--cos-d); }
+
+.cos-lb-val {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text, #eef0fa);
+  text-align: right;
+}
+
+.cos-lb-delta {
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+  text-align: right;
+  color: var(--faint, #7d84a8);
+}
+
+.cos-lb-delta[data-dir='down'] { color: var(--bad, #fb5b78); }
+.cos-lb-delta[data-dir='up'] { color: var(--good, #34d399); }
+
+@media (max-width: 620px) {
+  .cos-lb-row { grid-template-columns: 18px minmax(80px, 1fr) 2fr 30px 40px; gap: 6px; }
+  .cos-sheet-panel { padding: 14px; }
+}

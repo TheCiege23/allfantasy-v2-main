@@ -31,6 +31,11 @@ import LandingV4 from '@/components/core-app/screens/LandingV4'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Partners from '@/components/core-app/screens/Partners'
 import { BusinessRetention } from '@/components/core-app/screens/BusinessRetention'
+import { DiscordBridge } from '@/components/core-app/screens/DiscordBridge'
+import { getDiscordBridge } from '@/lib/core-app/discordBridge'
+import { BracketChallenge } from '@/components/core-app/screens/BracketChallenge'
+import { getBracketChallenge } from '@/lib/core-app/bracketChallenge'
+import { resolveSport } from '@/lib/brackets/sportShell'
 import AuthV4 from '@/components/core-app/screens/AuthV4'
 import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens/ImportV4'
 import { Portfolio } from '@/components/core-app/screens/Portfolio'
@@ -101,6 +106,20 @@ const SCREEN_KEYS: Record<string, CoreNavKey> = {
   'season-outlook': 'season-outlook',
   share: 'share',
   notifications: 'notifications',
+  /*
+   * 32a lands on the EXISTING commissioner nav key rather than taking one of its
+   * own. It is a commissioner surface — configuring where a league's chat goes
+   * is not a manager action — so the rail should highlight Commissioner while
+   * you are on it, and the shell needs no new entry.
+   */
+  discord: 'commissioner',
+  /*
+   * 28a. ONE segment for every sport — the sport is a query parameter
+   * (?sport=mlb), not a route. That is the "one shell, every sport" constraint
+   * expressed in the routing layer too, and it keeps six sports at zero
+   * additional routes against Vercel's 2048 ceiling.
+   */
+  bracket: 'tools',
 }
 
 function titleCase(slug: string): string {
@@ -301,6 +320,28 @@ export default async function AfCorePage({
           leagues.map((l) => l.id),
           userId
         ).catch(() => null)
+      : null
+
+  /*
+   * 28a. Not league-scoped — a bracket pool is its own thing, unrelated to the
+   * leagues you play in.
+   */
+  const bracket =
+    segment === 'bracket'
+      ? await getBracketChallenge(resolveSport(typeof sp.sport === 'string' ? sp.sport : null)).catch(
+          () => null,
+        )
+      : null
+
+  /*
+   * 32a. League-scoped and commissioner-only: getDiscordBridge returns null
+   * unless this user owns the league, so a member who guesses the URL gets the
+   * same "pick a league" panel as someone with none selected rather than a
+   * different, informative error.
+   */
+  const discordBridge =
+    segment === 'discord' && selectedLeagueId
+      ? await getDiscordBridge(userId, selectedLeagueId).catch(() => null)
       : null
 
   // My team needs a league in context; without one the screen says which league
@@ -626,7 +667,36 @@ export default async function AfCorePage({
         unread: dash34?.chatUnread ?? 0,
       }}
     >
-      {leagueHome ? (
+      {segment === 'bracket' ? (
+        bracket ? (
+          <BracketChallenge data={bracket} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Bracket Challenge
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              The team list for this sport could not be read just now. Nothing is lost — reload, or
+              pick another sport.
+            </p>
+          </div>
+        )
+      ) : segment === 'discord' ? (
+        discordBridge ? (
+          <DiscordBridge data={discordBridge} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Discord bridge
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              Pick a league you commission from the rail. The bridge is configured per league —
+              which channel a league posts to, and in which direction, only means something inside
+              one league.
+            </p>
+          </div>
+        )
+      ) : leagueHome ? (
         <LeagueHome
           data={leagueHome}
           otherLeagueIssueCount={issues.filter((i) => i.leagueId !== leagueHome.league.id).length}

@@ -20,8 +20,17 @@ export type AdminEmailAudience =
   | "world_cup_users"
   | "world_cup_pool_creators"
   | "world_cup_unfinalized"
+  | "win_back"
   | "waitlist_confirmed"
   | "waitlist_all"
+
+/** A curated audience with a live-computed recipient count, for the segments panel. */
+export type AdminEmailSegmentCount = {
+  id: AdminEmailAudience
+  label: string
+  description: string
+  count: number
+}
 
 export type AdminEmailStatus = {
   configured: boolean
@@ -36,6 +45,13 @@ export type AdminEmailStatus = {
   lastSendAt: string | null
   lastError: string | null
   audiences: Array<{ id: AdminEmailAudience; label: string; description: string }>
+  /**
+   * 29a — live-computed counts for the headline segments so an operator sees who a
+   * campaign would actually reach before composing anything, not just a static
+   * audience list. Kept to a curated subset (not all ten audiences) so this stays a
+   * handful of cheap `count()` queries, not a query per audience on every page load.
+   */
+  segments: AdminEmailSegmentCount[]
 }
 
 export type AdminEmailRecipient = {
@@ -89,6 +105,20 @@ export const EMAIL_AUDIENCES: AdminEmailStatus["audiences"] = [
   { id: "world_cup_users", label: "World Cup users", description: "Users with World Cup entries, participants, or owned pools." },
   { id: "world_cup_pool_creators", label: "World Cup pool creators", description: "Users who created World Cup pools." },
   { id: "world_cup_unfinalized", label: "Unfinalized World Cup brackets", description: "Users with incomplete World Cup entries." },
+  {
+    id: "win_back",
+    label: "Win-back — lapsed free users",
+    description:
+      "Free users whose account is 30+ days old with no login signal in the last 30 days. No active subscription, so a win-back offer costs nothing to send.",
+  },
+]
+
+/** The subset of audiences worth a live count on every admin page load. */
+const SEGMENT_PANEL_AUDIENCES: AdminEmailAudience[] = [
+  "world_cup_unfinalized",
+  "world_cup_pool_creators",
+  "paying",
+  "win_back",
 ]
 
 function hasEnv(name: string): boolean {
@@ -151,6 +181,14 @@ function audienceWhere(audience: AdminEmailAudience): Prisma.AppUserWhereInput {
           },
         },
       }
+    case "win_back": {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      return {
+        userSubscriptions: { none: { status: { in: ACTIVE_SUBSCRIPTION_STATUSES } } },
+        createdAt: { lt: thirtyDaysAgo },
+        identitySignals: { none: { context: "login", createdAt: { gte: thirtyDaysAgo } } },
+      }
+    }
     case "all":
     default:
       return {}
@@ -169,8 +207,26 @@ async function optOutEmailSet(emails: string[]): Promise<Set<string>> {
   return new Set(rows.map((row) => row.email.toLowerCase()))
 }
 
+/**
+ * Live recipient counts for the curated segments a win-back or bracket-nudge
+ * campaign would actually target. Each count is the same `audienceWhere()`
+ * predicate the send path uses, so a number shown here can never disagree with
+ * what a broadcast to that audience would actually reach.
+ */
+async function getEmailSegmentCounts(): Promise<AdminEmailSegmentCount[]> {
+  return Promise.all(
+    SEGMENT_PANEL_AUDIENCES.map(async (id) => {
+      const meta = EMAIL_AUDIENCES.find((audience) => audience.id === id)!
+      const count = await prisma.appUser
+        .count({ where: { email: { contains: "@" }, ...audienceWhere(id) } })
+        .catch(() => 0)
+      return { id, label: meta.label, description: meta.description, count }
+    })
+  )
+}
+
 export async function getEmailCenterStatus(): Promise<AdminEmailStatus> {
-  const [totalUsersWithEmail, productUpdateOptOuts, unsubscribed, pendingEmailOutbox, recentBroadcasts, failures, lastEmail] =
+  const [totalUsersWithEmail, productUpdateOptOuts, unsubscribed, pendingEmailOutbox, recentBroadcasts, failures, lastEmail, segments] =
     await Promise.all([
       prisma.appUser.count({ where: { email: { contains: "@" } } }),
       prisma.emailPreference.count({ where: { productUpdates: false } }),
@@ -193,6 +249,7 @@ export async function getEmailCenterStatus(): Promise<AdminEmailStatus> {
         orderBy: [{ sentAt: "desc" }, { updatedAt: "desc" }],
         select: { sentAt: true, updatedAt: true, lastError: true },
       }),
+      getEmailSegmentCounts(),
     ])
 
   const missingEnv = [
@@ -213,6 +270,7 @@ export async function getEmailCenterStatus(): Promise<AdminEmailStatus> {
     lastSendAt: (lastEmail?.sentAt ?? lastEmail?.updatedAt)?.toISOString() ?? null,
     lastError: lastEmail?.lastError?.slice(0, 180) ?? null,
     audiences: EMAIL_AUDIENCES,
+    segments,
   }
 }
 

@@ -1,3 +1,5 @@
+import { BRIDGE_SURFACES, type DiscordBridgeData } from '@/lib/core-app/discordBridge'
+import type { QueueTrack } from '@/components/core-app/draft-music/DraftMusicWidget'
 import type { GradedTrade } from '@/lib/trade-intel/sleeperTradeGradeService'
 import type { TradeExpectation } from '@/lib/trade-intel/tradeExpectation'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
@@ -359,3 +361,93 @@ export const PREVIEW_EXPECTATION: TradeExpectation = {
     },
   ],
 }
+
+/* ── 32a / 31a fixtures ───────────────────────────────────────────────────── */
+
+
+/**
+ * A fixture league for the Discord bridge preview.
+ *
+ * ⚠ FIXTURE, AND ONLY EVER RENDERED BY THE DEV PREVIEW. The real screen reads
+ * Postgres through `getDiscordBridge`. This exists because /core/discord is
+ * league-scoped and commissioner-only, so there is no way to see the layout
+ * without owning a league with a Discord server attached — which is exactly the
+ * situation a preview page is for.
+ *
+ * `surfacesPending: true` matches production: the `surface` column is authored
+ * but unapplied, so three of the four rows render their disabled state. That is
+ * the honest preview — showing all four wired would preview a screen that does
+ * not exist yet.
+ */
+export const PREVIEW_DISCORD_BRIDGE: DiscordBridgeData = {
+  leagueId: 'preview-league-0003',
+  leagueName: 'Iron Horse Dynasty',
+  botConfigured: true,
+  connected: true,
+  guildName: 'Iron Horse',
+  guildId: '000000000000000000',
+  installUrl: null,
+  surfacesPending: true,
+  mappings: BRIDGE_SURFACES.map((surface) =>
+    surface.id === 'league_chat'
+      ? {
+          surface,
+          mapped: true,
+          available: true,
+          direction: 'both' as const,
+          channelName: 'iron-horse-dynasty',
+          channelUrl: 'https://discord.com/channels/000000000000000000/000000000000000001',
+        }
+      : {
+          surface,
+          mapped: false,
+          available: false,
+          direction: surface.defaultDirection,
+          channelName: null,
+          channelUrl: null,
+        },
+  ),
+  members: [
+    { teamName: 'Priya Natarajan', ownerName: 'Priya', linked: true, discordUsername: 'priya', discordAvatar: null },
+    { teamName: 'The Gridiron Giants', ownerName: 'Marcus', linked: true, discordUsername: 'marcusw', discordAvatar: null },
+    { teamName: 'Waiver Wire Wizards', ownerName: 'Devon', linked: false, discordUsername: null, discordAvatar: null },
+    { teamName: 'Hail Mary Heroes', ownerName: 'Sam', linked: false, discordUsername: null, discordAvatar: null },
+  ],
+}
+
+/**
+ * A queue for the music widget preview.
+ *
+ * ⚠ NO PREVIEW URLs. Spotify does not have a 30-second clip for every track, and
+ * the free-account path has to degrade when it is missing. Leaving these null
+ * previews that degradation rather than the happy path.
+ */
+export const PREVIEW_QUEUE: QueueTrack[] = [
+  {
+    id: 'preview-track-1',
+    trackName: 'Sample Opener',
+    artistName: 'Preview Artist',
+    albumArt: null,
+    durationMs: 214_000,
+    previewUrl: null,
+    addedByName: 'Priya',
+  },
+  {
+    id: 'preview-track-2',
+    trackName: 'Second Round',
+    artistName: 'Another Preview',
+    albumArt: null,
+    durationMs: 187_000,
+    previewUrl: null,
+    addedByName: 'Marcus',
+  },
+  {
+    id: 'preview-track-3',
+    trackName: 'On the Clock',
+    artistName: 'Draft Night',
+    albumArt: null,
+    durationMs: 243_000,
+    previewUrl: null,
+    addedByName: 'Devon',
+  },
+]

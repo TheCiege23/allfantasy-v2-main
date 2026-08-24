@@ -38,6 +38,28 @@ export function buildAnalyticsCsv(snapshot: LeagueAnalyticsSnapshot): string {
   for (const point of snapshot.seasonComparison) {
     lines.push(csvRow(['Season Comparison', point.seasonLabel, point.value]))
   }
+  /*
+   * 30a's sections. The caller passes the snapshot ALREADY filtered by the
+   * on-screen time range (see lib/commissioner-os/analytics/timeRange.ts), so
+   * these rows cannot drift from what the commissioner is looking at.
+   */
+  for (const week of snapshot.healthByWeek) {
+    lines.push(csvRow(['League Health', `${week.weekLabel} — This season`, week.thisSeason]))
+    if (week.lastSeason !== null) {
+      lines.push(csvRow(['League Health', `${week.weekLabel} — Last season`, week.lastSeason]))
+    }
+  }
+  if (snapshot.healthTarget !== null) {
+    lines.push(csvRow(['League Health', 'Target', snapshot.healthTarget]))
+  }
+  for (const entry of snapshot.managerActivity) {
+    lines.push(csvRow(['Manager Activity', `${entry.managerName} — Actions/wk`, entry.actionsPerWeek]))
+    lines.push(csvRow(['Manager Activity', `${entry.managerName} — Prior actions/wk`, entry.priorActionsPerWeek]))
+  }
+  for (const team of snapshot.pointsForAgainst) {
+    lines.push(csvRow(['Points', `${team.teamName} — For`, team.pointsFor]))
+    lines.push(csvRow(['Points', `${team.teamName} — Against`, team.pointsAgainst]))
+  }
 
   return lines.join('\n')
 }
