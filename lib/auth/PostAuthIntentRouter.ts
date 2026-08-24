@@ -6,7 +6,8 @@ import {
 } from "@/lib/auth/postSignupRedirectPolicy"
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute"
 
-export const DEFAULT_POST_AUTH_ROUTE = "/dashboard"
+/** Was /dashboard. /core is now the signed-in home for a fresh login or signup with no specific target. */
+export const DEFAULT_POST_AUTH_ROUTE = "/core"
 export const AUTH_INTENT_STORAGE_KEY = "af_auth_intent"
 
 const SPORTS_APP_INTENTS = new Set(["sports-app", "sports", "webapp", "app"])
@@ -35,7 +36,7 @@ function isSafeInternalPath(value: string | null | undefined): value is string {
 function resolveIntentAlias(intent: string | null | undefined): string | null {
   if (!intent || typeof intent !== "string") return null
   const normalized = intent.trim().toLowerCase()
-  if (SPORTS_APP_INTENTS.has(normalized)) return "/dashboard"
+  if (SPORTS_APP_INTENTS.has(normalized)) return "/core"
   if (BRACKET_INTENTS.has(normalized)) return "/brackets"
   if (LEGACY_INTENTS.has(normalized)) return "/af-legacy"
   if (ADMIN_INTENTS.has(normalized)) return "/admin"
