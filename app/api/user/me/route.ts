@@ -2,7 +2,6 @@ import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { hasAllFantasyTestAccess, hasAiAccess, hasChatAdminAccess, hasPoolAdminAccess, isAfCommissioner, isSiteAdmin } from "@/lib/auth/admin"
-import { prisma } from "@/lib/prisma"
 
 export const dynamic = "force-dynamic"
 
@@ -16,28 +15,11 @@ export async function GET() {
     return NextResponse.json({ user: null, isAdmin: false })
   }
 
+  // Settings honesty (P2-5): this route used to fabricate a `subscriptionTier`
+  // from the ADMIN ALLOWLIST (isAfCommissioner/hasAiAccess) — every real Stripe
+  // subscriber read as "free". Its only consumer, the settings AI tab, is
+  // removed; real plan state comes from /api/subscription/entitlements.
   const isAdmin = isSiteAdmin(session.user)
-  const profile = session.user.id
-    ? await prisma.userProfile
-        .findUnique({
-          where: { userId: session.user.id },
-          select: { notificationPreferences: true },
-        })
-        .catch(() => null)
-    : null
-  const notificationPreferences =
-    profile?.notificationPreferences && typeof profile.notificationPreferences === "object"
-      ? (profile.notificationPreferences as Record<string, unknown>)
-      : {}
-  const aiSettings =
-    notificationPreferences.aiSettings && typeof notificationPreferences.aiSettings === "object"
-      ? notificationPreferences.aiSettings
-      : {}
-  const subscriptionTier = isAfCommissioner(session.user)
-    ? "af_commissioner"
-    : hasAiAccess(session.user)
-      ? "af_pro"
-      : "free"
 
   return NextResponse.json({
     user: {
@@ -47,8 +29,6 @@ export async function GET() {
       username: session.user.username,
     },
     isAdmin,
-    subscriptionTier,
-    aiSettings,
     entitlements: {
       allFantasyTestAccess: hasAllFantasyTestAccess(session.user),
       afCommissioner: isAfCommissioner(session.user),

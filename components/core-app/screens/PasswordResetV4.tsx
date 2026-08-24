@@ -95,7 +95,7 @@ function PasswordRules({ password, confirm }: { password: string; confirm: strin
 export function PasswordResetV4() {
   const searchParams = useSearchParams()
   const requestedReturnTo = searchParams?.get('returnTo') || ''
-  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/dashboard'
+  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/core'
   const loginHref = `/login?callbackUrl=${encodeURIComponent(safeReturnTo)}`
   const startMethod: Method = searchParams?.get('method') === 'sms' ? 'sms' : 'email'
 

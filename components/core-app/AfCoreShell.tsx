@@ -59,6 +59,12 @@ export type CoreNavKey =
   | 'season-outlook'
   | 'share'
   | 'notifications'
+  // Full pages OUTSIDE /core, listed in the shell so the cutover to /core does
+  // not orphan them. No /core segment maps to these keys, so they are never the
+  // active item — they are exits, not screens.
+  | 'live-scores'
+  | 'my-leagues'
+  | 'league-sync'
 
 type NavItem = {
   key: CoreNavKey
@@ -149,6 +155,8 @@ function navItems(props: AfCoreShellProps): NavItem[] {
     // 24a — every matchup at once, ordered by what needs a decision. Cross-league,
     // so no ?league= on it: scoping this to one league is the thing it replaces.
     { key: 'week', label: 'Your week', glyph: '◱', href: '/core/week' },
+    // Cross-league live scoring is a full page at /live, not a /core screen.
+    { key: 'live-scores', label: 'Live Scores', glyph: '◉', href: '/live' },
     {
       key: 'war-room',
       label: 'War Room',
@@ -167,6 +175,12 @@ function navItems(props: AfCoreShellProps): NavItem[] {
         : '/core/draft-hq',
     },
     { key: 'portfolio', label: 'Portfolio', glyph: '◈', href: '/core/portfolio' },
+    // 21a's My Leagues and the connect/re-sync dashboard it links to. League
+    // Sync is the ONLY entry point to the Yahoo OAuth handoff and per-league
+    // re-sync, so the shell must reach it or the /core cutover quietly removes
+    // both.
+    { key: 'my-leagues', label: 'My Leagues', glyph: '▦', href: '/leagues' },
+    { key: 'league-sync', label: 'League Sync', glyph: '⟳', href: '/leagues/sync' },
     /*
      * Restored: 'career' was pulled from the rail while it rendered "this screen
      * has not been built yet" — an apology occupying prime real estate. The

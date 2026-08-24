@@ -101,6 +101,39 @@ type ProfileBody = {
   chimmyTtsVoiceId?: string | null
 }
 
+/**
+ * Merge an incoming notificationPreferences payload over the stored JSON without
+ * dropping keys the caller does not know about. The column co-locates settings
+ * owned by other features (aiSettings, chimmyAlertPreferences, dashboardToggles,
+ * world-cup prefs, accentColor, fantasyPreferences); each caller sends only the
+ * slice it manages. Incoming top-level keys win; when both sides hold plain
+ * objects they merge one level deep so a partial nested payload cannot erase
+ * sibling sub-keys either.
+ */
+function mergeNotificationPreferences(
+  prev: Record<string, unknown>,
+  incoming: Record<string, unknown>
+): Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...prev }
+  for (const [key, value] of Object.entries(incoming)) {
+    const prevValue = merged[key]
+    const bothPlainObjects =
+      value !== null &&
+      typeof value === "object" &&
+      !Array.isArray(value) &&
+      prevValue != null &&
+      typeof prevValue === "object" &&
+      !Array.isArray(prevValue)
+    merged[key] = bothPlainObjects
+      ? {
+          ...(prevValue as Record<string, unknown>),
+          ...(value as Record<string, unknown>),
+        }
+      : value
+  }
+  return merged
+}
+
 async function handleProfileWrite(req: Request, userId: string) {
   try {
   await ensureUserProfileForUserId(userId)
@@ -130,9 +163,13 @@ async function handleProfileWrite(req: Request, userId: string) {
   let mergedNotificationPreferences: Record<string, unknown> | null | undefined
 
   if (rawNotificationPreferences !== undefined) {
+    // A bare `{ ...rawNotificationPreferences }` wholesale-replaced the stored
+    // JSON, erasing every co-located key the notifications tab never sends
+    // (aiSettings, chimmyAlertPreferences, dashboardToggles, world-cup prefs).
+    // Merge over the stored value instead; explicit `null` still clears it.
     mergedNotificationPreferences =
       rawNotificationPreferences && typeof rawNotificationPreferences === "object"
-        ? { ...rawNotificationPreferences }
+        ? mergeNotificationPreferences(prevNp, rawNotificationPreferences)
         : null
   }
 

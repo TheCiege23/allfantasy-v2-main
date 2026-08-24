@@ -466,3 +466,32 @@
 }
 
 .af-nav-support:hover { background: var(--chip); color: var(--text2); }
+
+/* ── Screen 3a embedded as the /core home ─────────────────────────────────
+ * Dashboard3A ships its own rail, nav and topbar because it was built to
+ * render standalone at /dashboard, outside this shell. Mounted as the home
+ * screen INSIDE AfCoreShell those would double the chrome — two league
+ * rails, two navs, two plan chips, and a second GeoRestrictionNotice — so
+ * the embedded copy suppresses them and the shell's own chrome stands.
+ * Scoped under .af-content so any standalone render is untouched, and done
+ * here rather than in Dashboard3A.tsx / af-dash-3a.css because both carry
+ * another session's in-flight work. The two-class selectors outrank the
+ * one-class originals whatever the import order.
+ */
+.af-content .af3a-shell {
+  display: block;
+  min-height: 0;
+}
+.af-content .af3a-rail,
+.af-content .af3a-nav,
+.af-content .af3a-topbar {
+  display: none;
+}
+/* The shell already renders GeoRestrictionNotice once for every screen. */
+.af-content .af3a-main > .af-geo {
+  display: none;
+}
+/* .af-content already pads; the standalone main's padding would double it. */
+.af-content .af3a-main {
+  padding: 0;
+}

@@ -172,7 +172,7 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
             {data.syncAge.stale ? '⚠ ' : ''}
             {data.syncAge.label}
           </span>
-          <Link href="/dashboard" className="af-btn af-btn--ghost af-lh-back">
+          <Link href="/core" className="af-btn af-btn--ghost af-lh-back">
             Back to home →
           </Link>
         </div>
@@ -388,7 +388,7 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
             {otherLeagueIssueCount} more {otherLeagueIssueCount === 1 ? 'issue lives' : 'issues live'}{' '}
             outside this league.
           </p>
-          <Link href="/dashboard" className="af-lh-cardlink">
+          <Link href="/core" className="af-lh-cardlink">
             Back to home →
           </Link>
         </section>

@@ -185,9 +185,9 @@ describe('Slice 8 — canonicalizeProductRoute', () => {
     expect(canonicalizeProductRoute('/bracket/leagues/xyz')).toBe('/brackets/leagues/xyz')
   })
 
-  it('sends external and /api paths to /dashboard', () => {
-    expect(canonicalizeProductRoute('https://evil.example/x')).toBe('/dashboard')
-    expect(canonicalizeProductRoute('/api/auth/session')).toBe('/dashboard')
+  it('sends external and /api paths to /core', () => {
+    expect(canonicalizeProductRoute('https://evil.example/x')).toBe('/core')
+    expect(canonicalizeProductRoute('/api/auth/session')).toBe('/core')
   })
 })
 

@@ -173,9 +173,9 @@ describe('canonicalizeProductRoute — bracket pool paths preserved', () => {
     expect(canonicalizeProductRoute('/leagues/season-9')).toBe('/league/season-9')
   })
 
-  it('maps external URLs and /api paths to /dashboard', () => {
-    expect(canonicalizeProductRoute('https://evil.example/x')).toBe('/dashboard')
-    expect(canonicalizeProductRoute('/api/auth/session')).toBe('/dashboard')
+  it('maps external URLs and /api paths to /core', () => {
+    expect(canonicalizeProductRoute('https://evil.example/x')).toBe('/core')
+    expect(canonicalizeProductRoute('/api/auth/session')).toBe('/core')
   })
 })
 

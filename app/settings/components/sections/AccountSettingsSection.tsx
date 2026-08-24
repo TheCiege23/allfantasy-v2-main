@@ -15,6 +15,8 @@ export function AccountSettingsSection({
   const { t, tInterpolate } = useLanguage()
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleteConfirm, setDeleteConfirm] = useState("")
+  const [deleteBusy, setDeleteBusy] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
   // No caller currently passes a real planLabel prop (it's always null) — this page never queried
   // a real plan before. Fall back to a live client-side entitlement check rather than always
   // showing "Free" regardless of the user's actual subscription.
@@ -44,11 +46,31 @@ export function AccountSettingsSection({
             : t("settings.account.planFree")
   const planDisplay = planLabel?.trim() || (ents.loading ? "..." : derivedPlanDisplay)
 
-  const deletionMailto = `mailto:support@allfantasy.ai?subject=${encodeURIComponent(
-    "Account deletion request"
-  )}&body=${encodeURIComponent(
-    "I confirm I want my AllFantasy account deleted. My username / email on file: "
-  )}`
+  // Real erasure flow (app/api/user/delete): revokes OAuth links + reset tokens,
+  // nulls the password hash, and anonymizes PII in one transaction. This button
+  // used to be a mailto to support while that tested endpoint already existed.
+  const handleDeleteAccount = async () => {
+    if (deleteConfirm !== "DELETE" || deleteBusy) return
+    setDeleteBusy(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch("/api/user/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      })
+      if (!res.ok) {
+        setDeleteError("Account deletion failed. Please try again.")
+        return
+      }
+      // PII is erased and auth is revoked — sign the user out and leave.
+      await signOut({ callbackUrl: "/" })
+    } catch {
+      setDeleteError("Account deletion failed. Please try again.")
+    } finally {
+      setDeleteBusy(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -106,6 +128,7 @@ export function AccountSettingsSection({
           onClick={() => {
             setDeleteOpen(true)
             setDeleteConfirm("")
+            setDeleteError(null)
           }}
           className="rounded-xl border px-4 py-2 text-sm font-semibold"
           style={{
@@ -147,30 +170,25 @@ export function AccountSettingsSection({
               autoComplete="off"
               data-testid="settings-account-delete-confirm-input"
             />
+            {deleteError && (
+              <p className="mt-2 text-xs" style={{ color: "var(--accent-red-strong)" }}>
+                {deleteError}
+              </p>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
-              {deleteConfirm === "DELETE" ? (
-                <a
-                  href={deletionMailto}
-                  className="rounded-xl border px-4 py-2 text-sm font-semibold"
-                  style={{
-                    borderColor: "color-mix(in srgb, var(--accent-red) 55%, var(--border))",
-                    color: "var(--accent-red-strong)",
-                  }}
-                  data-testid="settings-account-delete-email"
-                >
-                  {t("settings.account.emailSupportDelete")}
-                </a>
-              ) : (
-                <span
-                  className="rounded-xl border px-4 py-2 text-sm font-semibold opacity-40"
-                  style={{
-                    borderColor: "color-mix(in srgb, var(--accent-red) 55%, var(--border))",
-                    color: "var(--accent-red-strong)",
-                  }}
-                >
-                  {t("settings.account.emailSupportDelete")}
-                </span>
-              )}
+              <button
+                type="button"
+                onClick={() => void handleDeleteAccount()}
+                disabled={deleteConfirm !== "DELETE" || deleteBusy}
+                className="rounded-xl border px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-40"
+                style={{
+                  borderColor: "color-mix(in srgb, var(--accent-red) 55%, var(--border))",
+                  color: "var(--accent-red-strong)",
+                }}
+                data-testid="settings-account-delete-submit"
+              >
+                {deleteBusy ? t("settings.account.deleting") : t("settings.account.confirmDeleteCta")}
+              </button>
               <button
                 type="button"
                 onClick={() => setDeleteOpen(false)}

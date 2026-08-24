@@ -1837,15 +1837,16 @@ export const translations: Record<string, Record<string, string>> = {
     "settings.account.signOut": "Sign out",
     "settings.account.deleteHeading": "Delete account",
     "settings.account.deleteIntro":
-      "This is permanent. To proceed, open the confirmation and type DELETE exactly, then contact support to complete verification.",
+      "This is permanent. Your sign-in methods are removed and your personal data is erased immediately. To proceed, open the confirmation and type DELETE exactly.",
     "settings.account.startDeletion": "Start account deletion",
     "settings.account.confirmDeletionTitle": "Confirm account deletion",
     "settings.account.confirmDeletionBeforeWord": "Type",
     "settings.account.confirmDeletionAfterWord":
-      "to unlock the support email. We will verify ownership before removing data.",
+      "to confirm. Your personal data is erased immediately and you will be signed out.",
     "settings.account.deletePlaceholder": "DELETE",
-    "settings.account.emailSupportDelete": "Email support to delete",
-    "settings.account.deletionFooter": "Final deletion is completed by support after identity checks.",
+    "settings.account.confirmDeleteCta": "Delete my account permanently",
+    "settings.account.deleting": "Deleting…",
+    "settings.account.deletionFooter": "Deletion is immediate and cannot be undone. Leagues you were in keep an anonymized member record.",
 
     "settings.billing.currentPlan": "Current plan",
     "settings.billing.afFree": "AF Free",

@@ -166,7 +166,7 @@ function redirectDeprecatedWebRoutes(request: NextRequest): NextResponse | null 
   const url = request.nextUrl.clone()
   const { pathname } = url
   if (pathname === "/web" || pathname === "/web/" || pathname.startsWith("/web/")) {
-    url.pathname = "/dashboard"
+    url.pathname = "/core"
     return NextResponse.redirect(url)
   }
   return null
@@ -217,7 +217,7 @@ function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null 
   const { pathname } = url
 
   if (pathname === "/app" || pathname === "/app/") {
-    url.pathname = "/dashboard"
+    url.pathname = "/core"
     return NextResponse.redirect(url)
   }
   if (pathname.startsWith("/app/leagues")) {
@@ -242,11 +242,32 @@ function redirectDeprecatedAppRoutes(request: NextRequest): NextResponse | null 
   return null
 }
 
+/**
+ * `/dashboard` retires behind `/core` — the canonical signed-in home (P2-3).
+ * Blanket `/dashboard(/*)` redirect that preserves the query string: `?league=`
+ * is the league-scoped state of the home screen on both routes. The two live
+ * non-home sub-surfaces that still have pages (`/dashboard/admin/*`,
+ * `/dashboard/dispersal`) are exempt, and `/dashboard/brackets/world-cup/*`
+ * never reaches here — next.config redirects run before middleware.
+ */
+function redirectDeprecatedDashboardRoutes(request: NextRequest): NextResponse | null {
+  const url = request.nextUrl.clone()
+  const { pathname } = url
+  if (pathname !== "/dashboard" && !pathname.startsWith("/dashboard/")) return null
+  if (pathname.startsWith("/dashboard/admin") || pathname.startsWith("/dashboard/dispersal")) {
+    return null
+  }
+  url.pathname = "/core"
+  return NextResponse.redirect(url)
+}
+
 function redirectLegacyMarketingRoutes(request: NextRequest): NextResponse | null {
   const web = redirectDeprecatedWebRoutes(request)
   if (web) return web
   const bracket = redirectDeprecatedBracketSingularRoutes(request)
   if (bracket) return bracket
+  const dashboard = redirectDeprecatedDashboardRoutes(request)
+  if (dashboard) return dashboard
   return redirectDeprecatedAppRoutes(request)
 }
 

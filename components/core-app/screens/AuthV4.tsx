@@ -72,7 +72,7 @@ function Shield() {
  * defines /signup as step 1 of an "auth → connect → choose-leagues" journey
  * (4b → 4c → 4d), and both later surfaces exist: /import is the connect screen
  * and league selection follows it. What does NOT exist yet is the routing —
- * SignUp still hands off to `callbackUrl` (/dashboard by default) rather than
+ * SignUp still hands off to `callbackUrl` (/core by default) rather than
  * into the journey, and neither later screen draws this bar.
  *
  * So this is deliberately a static indicator of where the reader is, not a
@@ -492,7 +492,7 @@ function AuthInner({ mode }: { mode: AuthMode }) {
   const params = useSearchParams()
   // Honour the callbackUrl the rest of the app already passes around, so a
   // deep link that bounced through sign-in returns where it started.
-  const callbackUrl = params?.get('callbackUrl')?.trim() || '/dashboard'
+  const callbackUrl = params?.get('callbackUrl')?.trim() || '/core'
 
   return mode === 'signin' ? (
     <SignIn callbackUrl={callbackUrl} />

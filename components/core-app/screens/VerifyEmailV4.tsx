@@ -67,7 +67,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
   const verified = searchParams?.get('verified')
   const methodParam = searchParams?.get('method')
   const requestedReturnTo = searchParams?.get('returnTo') || ''
-  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/dashboard'
+  const safeReturnTo = requestedReturnTo.startsWith('/') ? requestedReturnTo : '/core'
 
   const [tab, setTab] = useState<Tab>(methodParam === 'phone' ? 'phone' : 'email')
   const [sending, setSending] = useState(false)
@@ -259,7 +259,7 @@ export function VerifyEmailV4({ email, alreadyVerified, signedIn }: VerifyEmailV
             were.
           </RecoverySub>
           <Link href={safeReturnTo} className="af-rc-btn af-rc-btn--block">
-            Continue{safeReturnTo === '/dashboard' ? ' to dashboard' : ''}
+            Continue{safeReturnTo === '/core' ? ' home' : ''}
           </Link>
           <p className="af-rc-foot">Redirecting in {Math.max(0, countdown)}s…</p>
         </RecoveryCard>

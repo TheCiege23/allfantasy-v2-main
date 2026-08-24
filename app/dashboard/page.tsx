@@ -40,10 +40,12 @@ export const dynamic = 'force-dynamic'
  * signal, and a cut-over that silently stopped counting activations would be
  * invisible until someone asked why the funnel died.
  *
- * ⚠ WHY THIS IS NOT A REDIRECT TO /core/dashboard-v2. A redirect would make the
- * post-sign-in home a second hop, lose the callbackUrl contract, and leave two
- * URLs claiming to be the dashboard. The screen is a component; this route
- * renders it.
+ * ⚠ SUPERSEDED (P2-1): /core is the one canonical home now and this route
+ * retires as a redirect to it — the founder decision resolved the "two URLs
+ * claiming to be the dashboard" concern by making /core the only claimant.
+ * Everything below the redirect is dead code, kept in place until the route
+ * is removed wholesale; /core's home branch runs the same loader set,
+ * including recordDashboardActivation.
  *
  * ⚠ `playedLeagues`, NOT `leagues`. Rows with `hasUnifiedRecord: false` are AF
  * Legacy board snapshots from the career import — 543 of them on one production
@@ -72,6 +74,14 @@ export default async function DashboardPage({
 }) {
   const rawLeague = searchParams?.league
   const selectedLeagueId = typeof rawLeague === 'string' && rawLeague.trim() ? rawLeague.trim() : null
+  /*
+   * P2-1: /core serves this composition now. Belt and braces with the P2-3
+   * middleware; ?league= is forwarded because /core reads the same parameter
+   * (and Dashboard3A's own rail still links /dashboard?league=…).
+   */
+  redirect(
+    selectedLeagueId ? `/core?league=${encodeURIComponent(selectedLeagueId)}` : '/core',
+  )
   const missingEnvVars = getDashboardMissingEnvVars()
   if (missingEnvVars.length > 0) {
     const issue = createDashboardRuntimeIssue(missingEnvVars)

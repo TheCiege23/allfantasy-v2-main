@@ -23,7 +23,7 @@ export function resolveUnifiedAuthDestination(
   })
 }
 
-/** Post-signup: default `/dashboard`, preserve invite/join/verify and product intents; never `/login`. */
+/** Post-signup: default `/core`, preserve invite/join/verify and product intents; never `/login`. */
 export function resolveUnifiedAuthDestinationForSignup(
   input: UnifiedAuthOrchestratorInput
 ): string {
