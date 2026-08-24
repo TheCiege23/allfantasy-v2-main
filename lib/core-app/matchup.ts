@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { resolveCurrentWeekForLeague } from './currentWeek'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
 import { loadSideProjections, winProbabilityFor } from './matchupProjections'
 
@@ -124,11 +125,15 @@ export async function getMatchupData(
     },
   })
 
-  const latest = await prisma.weeklyMatchup.findFirst({
-    where: { leagueId: platformLeagueId, ...(weekParam ? { week: weekParam } : {}) },
-    orderBy: [{ seasonYear: 'desc' }, { week: 'desc' }],
-    select: { week: true, seasonYear: true },
-  })
+  /*
+   * ⚠ THE EARLIEST UNPLAYED WEEK, NOT `max(week)`. This screen named your
+   * WEEK-18 opponent as this week's for as long as the sync bootstrapped a
+   * full unscored season ahead of kickoff — a wrong answer delivered with
+   * total confidence, which is worse than the empty state it replaced. An
+   * explicit ?week= still wins; only the inference changed. See
+   * lib/core-app/currentWeek.ts.
+   */
+  const latest = await resolveCurrentWeekForLeague(platformLeagueId, weekParam ?? null)
 
   if (!latest) {
     const noWeek = {
