@@ -11,6 +11,7 @@ import {
   type RedraftRosterRow,
   type RedraftTradeAssetInput,
   type RedraftTradeSettings,
+  type TradeDecisionOsCard,
 } from '@/lib/redraft/client'
 
 type Step = 'partner' | 'assets' | 'review'
@@ -139,6 +140,14 @@ export function TradeCenterModal({
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [successId, setSuccessId] = useState<string | null>(null)
+  /*
+   * Decision OS Slice 3 — the deterministic evaluation POST /api/redraft/trade-proposals already
+   * computes and returns with the created proposal. Until now the client's response type
+   * (`{ proposal }`) typed it away, so the route paid for an evaluation nobody saw — the same
+   * discard WaiverWirePage's Phase 1 card fixed on the waiver surface. Null when the live runner
+   * is off or had nothing to say; the success view simply says less in that case.
+   */
+  const [decisionOs, setDecisionOs] = useState<TradeDecisionOsCard | null>(null)
 
   const rosterRowById = useMemo(() => {
     const m = new Map<string, RedraftRosterRow>()
@@ -159,6 +168,7 @@ export function TradeCenterModal({
     setReason('')
     setError(null)
     setSuccessId(null)
+    setDecisionOs(null)
     const defaultProposer = myRosterId && standings.some((r) => r.id === myRosterId)
       ? myRosterId
       : standings[0]?.id ?? ''
@@ -275,6 +285,7 @@ export function TradeCenterModal({
         assets: apiAssets,
       })
       setSuccessId(res.proposal?.id ?? 'created')
+      setDecisionOs(res.decisionOs ?? null)
       onSubmitted?.()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to submit trade')
@@ -350,6 +361,29 @@ export function TradeCenterModal({
           <p className="text-[12px] text-white/60">
             {proposerName} → {receiverName}. The other manager can now review and respond.
           </p>
+          {decisionOs ? (
+            /*
+             * Same render contract as WaiverWirePage's Phase 1 Decision OS card: the
+             * four-answers text, legality, and an honesty number. Deliberately NO letter
+             * grade — the engine's fallback grade is indistinguishable from a zero-data
+             * grade, so this states data completeness, the claim it can actually back.
+             */
+            <div
+              className="mx-auto max-w-md rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2 text-left"
+              data-testid="trade-decision-os-card"
+            >
+              <div className="flex items-center justify-between gap-2 text-xs text-violet-200/80">
+                <span className="font-medium text-violet-200">Decision OS</span>
+                <span>
+                  Data completeness {Math.round(decisionOs.completeness)}/100
+                  {!decisionOs.card.legal ? ' · Blocked by league rules' : ''}
+                </span>
+              </div>
+              <p className="text-sm text-white">{decisionOs.card.title}</p>
+              <p className="mt-0.5 text-xs text-white/70">{decisionOs.card.subtitle}</p>
+              <p className="mt-1 text-xs text-[#ffb8d1]">{decisionOs.card.detail}</p>
+            </div>
+          ) : null}
         </div>
       ) : step === 'partner' ? (
         <div className="space-y-3">

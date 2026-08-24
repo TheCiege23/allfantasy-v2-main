@@ -14,6 +14,8 @@ import type { UserLeague } from '@/app/dashboard/types'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
 import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { Dash34Carryover } from '@/components/core-app/screens/Dash34Carryover'
+import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
+import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
@@ -522,7 +524,25 @@ export default async function AfCorePage({
    * work nobody sees.
    */
   const isHome3a = activeKey === 'home' && segment !== 'dashboard-v2' && !selectedLeagueId
-  const [homeCareer, homeWeek, homeExposure, homeRivals, homeMatchups] = isHome3a
+
+  /*
+   * P4-5: the /core home's ONE Decision OS read — the deterministic user-os
+   * snapshot for the league that most needs the user right now. "Most urgent"
+   * is the head of the issues queue (already sorted severity-then-deadline
+   * inside deriveOutstandingIssues), falling back to the first played league.
+   * One league only, loaded only when the 3a home renders, and resolved
+   * directly rather than through /api/decision-os/user-os: membership is
+   * already established by the league list read above, and
+   * resolveUserOsSnapshot scopes every fact to the caller's own managerId.
+   * It never throws, and a null here renders NOTHING — see DashUserOs.
+   */
+  const homeUserOsLeague = isHome3a
+    ? (playedLeagues.find((l) => l.id === issues.find((i) => i.leagueId != null)?.leagueId) ??
+        playedLeagues[0] ??
+        null)
+    : null
+
+  const [homeCareer, homeWeek, homeExposure, homeRivals, homeMatchups, homeUserOs] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
         getWeekAll(userId, weekLeagues).catch(() => null),
@@ -535,8 +555,11 @@ export default async function AfCorePage({
               .catch(() => ({ id: l.id, m: null })),
           ),
         ),
+        homeUserOsLeague
+          ? resolveUserOsSnapshot(homeUserOsLeague.id, userId).catch(() => null)
+          : Promise.resolve(null),
       ])
-    : [null, null, null, null, null]
+    : [null, null, null, null, null, null]
 
   /*
    * Only leagues whose BOTH lineups priced land here. An absent entry renders no
@@ -1082,6 +1105,17 @@ export default async function AfCorePage({
               for what was deliberately NOT carried and why.
             */}
             <Dash34Carryover data={dash34} />
+            {/*
+              P4-5: the first /core surface that reads Decision OS at all — the
+              deterministic user-os card for the most urgent league. Renders
+              NOTHING on any failure or coverage gap; see DashUserOs's header
+              for the render-nothing rules.
+            */}
+            <DashUserOs
+              snapshot={homeUserOs}
+              leagueId={homeUserOsLeague?.id ?? null}
+              leagueName={homeUserOsLeague?.name ?? null}
+            />
             {/*
               3a mounted as the screen BODY. It ships its own rail/nav/topbar
               for the standalone render it was built for; af-core-shell.css
