@@ -36,11 +36,14 @@ describe('Unified auth flow controllers', () => {
       })
     ).toBe('/dashboard')
 
+    // '/brackets' isn't on the signup allowlist (only canonicalizeProductRoute's
+    // general preservation covers it), so this candidate is rejected and falls
+    // through to DEFAULT_POST_AUTH_ROUTE, which moved from /dashboard to /core.
     expect(
       resolveSignupRedirectPath({
         callbackUrl: '/brackets',
       })
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('signup redirect skips /login and prefers a safe next', () => {
@@ -51,11 +54,12 @@ describe('Unified auth flow controllers', () => {
       })
     ).toBe('/invite/accept?code=ABC')
 
+    // '/login' is an auth-entry surface, always rejected -> same fallback as above.
     expect(
       resolveSignupRedirectPath({
         callbackUrl: '/login',
       })
-    ).toBe('/dashboard')
+    ).toBe('/core')
   })
 
   it('routes post-signup to phone verify when method is phone', () => {
