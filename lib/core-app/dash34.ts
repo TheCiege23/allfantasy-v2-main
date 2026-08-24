@@ -3,6 +3,7 @@ import 'server-only'
 import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
+import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { getTeamInfo } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
 import type {
@@ -487,7 +488,19 @@ const readInjuryFeedCached = unstable_cache(
          * silently substituting the poll time — those are two different facts and
          * only one of them answers "is this news".
          */
-        select: { playerName: true, status: true, description: true, date: true },
+        /*
+         * `position` and `team` are selected only to DISAMBIGUATE a shared
+         * name — two athletes called Josh Allen are told apart by them, and
+         * without them the matcher can only refuse. Neither is rendered.
+         */
+        select: {
+          playerName: true,
+          status: true,
+          description: true,
+          date: true,
+          position: true,
+          team: true,
+        },
       })
       .catch(() => [])
     return rows.map((i) => ({ ...i, date: i.date ? i.date.toISOString() : null }))
@@ -743,6 +756,36 @@ export async function getDash34Data(
     })
   }
 
+  /*
+   * ⚠ THE JOIN THAT CAN MAKE A PLAYER VANISH. `SportsInjury` carries no usable
+   * player id, so a designation is bound to a roster player by NAME. The first
+   * cut lowercased both sides and took the first hit, which fails two ways:
+   * a suffix or punctuation difference drops the player out of the book
+   * entirely — silently, because a miss is indistinguishable from healthy —
+   * and two athletes sharing a name get each other's injury.
+   *
+   * `resolveVerifiedMatch` is the repo's canonical matcher (the one
+   * lib/injuries/injuryReadPort.ts uses): it verifies a shared name against
+   * position and club, and REFUSES rather than guessing when it still cannot
+   * tell them apart — the QB-Josh-Allen-versus-LB-Josh-Allen case. Refusals
+   * are collected and stated in the coverage list instead of disappearing.
+   *
+   * Only the MATCHING moves here. The feed read stays the shared, cached,
+   * user-independent query it was, so sixty concurrent home loads still cost
+   * one read rather than sixty.
+   */
+  const injuryIndex = buildNameIndex(
+    injuryRows
+      .filter((i) => Boolean(i.status))
+      .map((i) => ({
+        name: i.playerName,
+        position: i.position ?? null,
+        team: i.team ?? null,
+        row: i,
+      })),
+  )
+  const ambiguousInjuryNames = new Set<string>()
+
   const injuryByName = new Map<
     string,
     { status: string; description: string | null; reportedAt: Date | null }
@@ -785,7 +828,23 @@ export async function getDash34Data(
   } | null {
     const p = playerById.get(playerId)
     if (!p) return null
-    const inj = injuryByName.get(p.name.trim().toLowerCase())
+
+    /*
+     * Verified identity first. A refusal is recorded and treated as "we hold
+     * nothing" — which is the honest answer, and never "healthy".
+     */
+    const verified = resolveVerifiedMatch(injuryIndex, {
+      name: p.name,
+      position: p.position,
+      team: p.team,
+    })
+    if (verified.reason === 'ambiguous') {
+      ambiguousInjuryNames.add(p.name)
+      return null
+    }
+    if (!verified.match) return null
+
+    const inj = injuryByName.get(verified.match.row.playerName.trim().toLowerCase())
     if (!inj) return null
     return {
       name: p.name,
@@ -1513,6 +1572,25 @@ export async function getDash34Data(
        */
       { label: 'Pending trade offers and waiver claims', reason: 'only completed transactions are read' },
       { label: 'League chatter', reason: 'Discord and platform chat are not ingested' },
+      /*
+       * ⚠ THE MISS THAT USED TO BE INVISIBLE. When two athletes share a name
+       * and neither position nor club can tell them apart, the matcher refuses
+       * rather than binding one of them an injury that may be the other's. The
+       * player then carries no designation here — and saying so is the whole
+       * point: before this, a name that failed to match simply vanished from
+       * the book, and a screen with a missing player looks exactly like a
+       * screen with a healthy one.
+       */
+      ...(ambiguousInjuryNames.size > 0
+        ? [
+            {
+              label: `Injury status for ${[...ambiguousInjuryNames].slice(0, 3).join(', ')}${
+                ambiguousInjuryNames.size > 3 ? ` and ${ambiguousInjuryNames.size - 3} more` : ''
+              }`,
+              reason: 'more than one player shares that name and we will not guess which',
+            },
+          ]
+        : []),
     ],
   }
 }
