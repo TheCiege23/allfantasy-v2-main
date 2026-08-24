@@ -57,10 +57,19 @@ Consequences to watch for:
 | **Spotify** | `SPOTIFY_CLIENT_ID`, `SPOTIFY_CLIENT_SECRET` | `NEXT_PUBLIC_ENABLE_SPOTIFY_AUTH` | `{NEXTAUTH_URL}/api/auth/callback/spotify` (Redirect URI in Spotify Developer Dashboard) |
 | **Discord** | `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET` | `NEXT_PUBLIC_ENABLE_DISCORD_AUTH` | `{NEXTAUTH_URL}/api/auth/callback/discord` (Redirect in Discord Developer Portal → OAuth2) |
 
+> ⚠️ **Spotify needs TWO redirect URIs registered, not one.** The table row above is
+> sign-in (NextAuth). The Connected-Accounts / music-widget **connect flow**
+> (`/api/auth/spotify`) redirects to `{NEXTAUTH_URL}/api/auth/spotify/callback`
+> (override: `SPOTIFY_REDIRECT_URI`). Both flows hit the same Spotify app and share one
+> scope list (`lib/spotify/scopes.ts`, enforced by `__tests__/spotify-scope-contract.test.ts`),
+> so register BOTH URIs in the Spotify Developer Dashboard — a missing connect-flow URI
+> only fails when a user hits Settings → Connected accounts, which the sign-in smoke
+> tests below never exercise.
+
 Setup steps per provider:
 
 - [ ] **Google** — In Google Cloud Console → APIs & Services → Credentials, create an OAuth 2.0 Client ID (Web application). Add the callback URI above. Configure the OAuth consent screen (scopes: email, profile). Copy client ID/secret into env; set the public flag.
-- [ ] **Spotify** — In the Spotify Developer Dashboard, create an app, add the Redirect URI above under Settings. Copy client ID/secret; set the public flag.
+- [ ] **Spotify** — In the Spotify Developer Dashboard, create an app, add BOTH Redirect URIs — the sign-in URI above and the connect-flow URI `{NEXTAUTH_URL}/api/auth/spotify/callback` (see the note above) — under Settings. Copy client ID/secret; set the public flag.
 - [ ] **Discord** — In the Discord Developer Portal, use a dedicated NextAuth OAuth2 app (⚠️ **separate** from the existing Discord *bot/account-linking* integration at `/api/auth/discord/callback` — do not reuse those credentials; see the note in `lib/auth.ts`). Add the callback URI above as an **additional** redirect. Scopes: `identify`, `email`. Copy client ID/secret; set the public flag.
 
 ### 1c. Per-provider smoke test (run all 8 for EACH of Google, Spotify, Discord)

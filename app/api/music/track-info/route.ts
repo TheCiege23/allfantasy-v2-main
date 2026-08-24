@@ -1,4 +1,5 @@
 import { getTheAudioDbApiKeyOrFallback } from '@/lib/env/sports-media-keys';
+import { fetchJsonWithTimeout, fetchPreviewUrl } from '@/lib/music/preview-url';
 import type { NextRequest } from 'next/server';
 
 type AudioDbTrack = {
@@ -17,62 +18,6 @@ type MappedTrack = {
   duration?: number;
   previewUrl?: string;
 };
-
-async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 5000): Promise<T | null> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      next: { revalidate: 3600 },
-    });
-
-    if (!response.ok) return null;
-    return (await response.json()) as T;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-async function fetchPreviewUrl(artist: string, track: string): Promise<string | undefined> {
-  // Prefer MP3 previews first (better codec support in Chromium-based runtimes).
-  try {
-    const deezerQueries = [
-      `${artist} ${track}`,
-      `artist:\"${artist}\" track:\"${track}\"`,
-      artist,
-    ];
-
-    for (const q of deezerQueries) {
-      const data = await fetchJsonWithTimeout<any>(
-        `https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=1&output=json`,
-        4000
-      );
-      if (!data) continue;
-      const preview = data?.data?.[0]?.preview;
-      if (typeof preview === 'string' && preview.length > 0) {
-        return preview;
-      }
-    }
-  } catch {
-    // Fall back to iTunes lookup below.
-  }
-
-  try {
-    const term = encodeURIComponent(`${artist} ${track}`);
-    const data = await fetchJsonWithTimeout<any>(
-      `https://itunes.apple.com/search?term=${term}&entity=song&limit=1`,
-      4000
-    );
-    if (!data) return undefined;
-    return data?.results?.[0]?.previewUrl;
-  } catch {
-    return undefined;
-  }
-}
 
 async function mapTrackWithPreview(rawTrack: AudioDbTrack, fallbackArtist: string): Promise<MappedTrack> {
   const artist = rawTrack.strArtist || fallbackArtist || 'Unknown Artist';

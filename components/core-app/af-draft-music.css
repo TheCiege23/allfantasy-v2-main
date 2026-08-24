@@ -108,6 +108,8 @@
   color: var(--muted);
 }
 
+.af-dm-msg a { color: var(--dm-green); font-weight: 600; }
+
 .af-dm-pending {
   margin: 0 0 10px;
   padding: 9px 11px;
@@ -227,6 +229,8 @@
   color: #04120a;
   font-size: 13px;
 }
+
+.af-dm-tbtn:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .af-dm-tbtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
