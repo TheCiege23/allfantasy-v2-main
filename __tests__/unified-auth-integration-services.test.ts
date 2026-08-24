@@ -45,6 +45,8 @@ describe("Unified auth integration services", () => {
   })
 
   it("downgrades admin destination when user is non-admin", () => {
+    // DEFAULT_POST_AUTH_ROUTE moved from /dashboard to /core; this is the fallback
+    // a downgraded non-admin lands on, not an explicit /dashboard request.
     expect(
       resolvePostAuthIntentDestination({
         callbackUrl: "/admin",

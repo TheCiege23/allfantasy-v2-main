@@ -765,9 +765,13 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     /**
-     * After OAuth (e.g. Google), always land on the app dashboard so users are not
-     * dropped back on `/login` when `url` resolves incorrectly for the deployment.
+     * After OAuth (e.g. Google), always land on /core so users are not dropped
+     * back on `/login` when `url` resolves incorrectly for the deployment.
      * (NEXTAUTH_URL must match the site origin for OAuth callbacks.)
+     *
+     * Was `/dashboard` — /core is now the signed-in home. Scoped narrowly here:
+     * canonicalizeProductRoute()'s own DASHBOARD fallback (unrelated legacy paths
+     * — /api, /app, /web, /af-legacy, external URLs) is untouched on purpose.
      */
     async redirect({ url, baseUrl }) {
       const base = baseUrl.replace(/\/$/, "");

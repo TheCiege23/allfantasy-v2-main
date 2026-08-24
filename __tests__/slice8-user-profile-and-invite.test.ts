@@ -82,6 +82,7 @@ describe('Slice 8 — post-signup callback preserves invite for email flow', () 
 
 describe('Slice 8 — post-signup routing (credential signup)', () => {
   it('defaults new signup to /core when no invite or verify callback', () => {
+    // DEFAULT_POST_AUTH_ROUTE moved from /dashboard to /core.
     expect(resolveUnifiedAuthDestinationForSignup({})).toBe('/core')
   })
 
@@ -110,6 +111,7 @@ describe('Slice 8 — post-signup routing (credential signup)', () => {
   })
 
   it('does not send successful signup to /login when login is the only callback', () => {
+    // Rejected as an auth-entry surface, falls through to the same /core default.
     expect(
       resolveUnifiedAuthDestinationForSignup({
         callbackUrl: '/login?callbackUrl=%2Fdashboard',

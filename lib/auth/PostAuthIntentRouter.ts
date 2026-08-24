@@ -6,6 +6,7 @@ import {
 } from "@/lib/auth/postSignupRedirectPolicy"
 import { canonicalizeProductRoute } from "@/lib/routing/canonicalizeProductRoute"
 
+/** Was /dashboard. /core is now the signed-in home for a fresh login or signup with no specific target. */
 export const DEFAULT_POST_AUTH_ROUTE = "/core"
 export const AUTH_INTENT_STORAGE_KEY = "af_auth_intent"
 
