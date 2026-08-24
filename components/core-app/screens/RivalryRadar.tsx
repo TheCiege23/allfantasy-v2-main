@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { RivalryCard, RivalryRadar as RivalryRadarData } from '@/lib/core-app/weekBoard'
+import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import '@/components/core-app/af-week.css'
 
 /**
@@ -145,6 +146,17 @@ function Tier({
 
 export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
   const anything = data.theyOwnYou.length + data.youOwnThem.length + data.even.length > 0
+  /*
+   * Phase-aware empty state. Before the first stated regular-season kickoff,
+   * "import or re-sync" prescribes a fix for something that is not broken —
+   * there are no scored weeks anywhere yet. The instant comes from the loader
+   * (lib/core-app/seasonPhase.ts); when no source states one, this stays null
+   * and the sync copy stands rather than a guessed date.
+   */
+  const preseasonKickoffLabel =
+    data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
+      ? kickoffDayLabel(data.firstKickoffAt)
+      : null
 
   return (
     <div className="af-wk af-rr">
@@ -229,17 +241,27 @@ export function RivalryRadar({ data, weekHref }: RivalryRadarProps) {
       />
 
       {!anything ? (
-        <div className="af-wk-empty">
-          <p className="af-wk-empty-t">No head-to-head history yet.</p>
-          <p className="af-wk-empty-b">
-            This view is computed from synced matchups across every season we hold. Nothing has been
-            read for your leagues yet, so there are no series to compare — that is a gap in what we
-            have, not a sign you have never played anybody.
-          </p>
-          <Link href="/import" className="af-btn af-wk-btn">
-            Import or re-sync a league
-          </Link>
-        </div>
+        preseasonKickoffLabel ? (
+          <div className="af-wk-empty">
+            <p className="af-wk-empty-t">The season has not started yet.</p>
+            <p className="af-wk-empty-b">
+              Rivalries are read from scored weeks, and none have been played this season. Records
+              build as weeks are scored — first kickoff {preseasonKickoffLabel}.
+            </p>
+          </div>
+        ) : (
+          <div className="af-wk-empty">
+            <p className="af-wk-empty-t">No head-to-head history yet.</p>
+            <p className="af-wk-empty-b">
+              This view is computed from synced matchups across every season we hold. Nothing has
+              been read for your leagues yet, so there are no series to compare — that is a gap in
+              what we have, not a sign you have never played anybody.
+            </p>
+            <Link href="/import" className="af-btn af-wk-btn">
+              Import or re-sync a league
+            </Link>
+          </div>
+        )
       ) : null}
     </div>
   )

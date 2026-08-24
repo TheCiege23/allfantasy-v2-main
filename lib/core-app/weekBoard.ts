@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getFirstStatedKickoff } from './seasonPhase'
 
 /**
  * 24a "Your Week" and 24b "Rivalry Radar" — one read, two views.
@@ -106,6 +107,12 @@ export type WeekBoard = {
   }
   /** Leagues of the user's that carry no schedule for this week at all. */
   withoutSchedule: number
+  /**
+   * First future kickoff a source STATES is regular season, ISO — null when
+   * none is stated. Lets the empty state say "the season has not started"
+   * instead of prescribing a re-sync. See lib/core-app/seasonPhase.ts.
+   */
+  firstKickoffAt: string | null
 }
 
 export type RivalryCard = {
@@ -147,6 +154,12 @@ export type RivalryRadar = {
   oneToWatch: RivalryCard | null
   /** How much history the whole view is built from. */
   totals: { seasons: number; meetings: number; platforms: number }
+  /**
+   * First future kickoff a source STATES is regular season, ISO — null when
+   * none is stated. Drives the phase-aware empty state; see
+   * lib/core-app/seasonPhase.ts.
+   */
+  firstKickoffAt: string | null
 }
 
 // ── Math ───────────────────────────────────────────────────────────────
@@ -390,6 +403,16 @@ function pairRows(rows: MatchupRow[]): Pairing[] {
 // ── 24a — Your Week ────────────────────────────────────────────────────
 
 export async function getWeekBoard(userId: string, leagues: LeagueInput[]): Promise<WeekBoard> {
+  /*
+   * The phase read runs beside the history read: it is what lets the empty
+   * state distinguish "nothing synced" from "season not started", and it is
+   * one cached findFirst — see lib/core-app/seasonPhase.ts.
+   */
+  const [history, firstKickoffAt] = await Promise.all([
+    readHistory(userId, leagues).catch(() => null),
+    getFirstStatedKickoff(),
+  ])
+
   const empty: WeekBoard = {
     season: null,
     week: null,
@@ -398,9 +421,9 @@ export async function getWeekBoard(userId: string, leagues: LeagueInput[]): Prom
     unprojected: [],
     model: { basis: 'No completed weeks are on file yet, so nothing here is projected.', sampleSize: 0 },
     withoutSchedule: leagues.length,
+    firstKickoffAt,
   }
 
-  const history = await readHistory(userId, leagues).catch(() => null)
   if (!history?.latest) return empty
 
   const { latest, leagueByPlatformId, myRosters, rosterNames } = history
@@ -486,12 +509,21 @@ export async function getWeekBoard(userId: string, leagues: LeagueInput[]): Prom
       sampleSize,
     },
     withoutSchedule: Math.max(0, leagues.length - leaguesSeen.size),
+    firstKickoffAt,
   }
 }
 
 // ── 24b — Rivalry Radar ────────────────────────────────────────────────
 
 export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): Promise<RivalryRadar> {
+  /*
+   * Phase read beside the history read — same reasoning as getWeekBoard above.
+   */
+  const [history, firstKickoffAt] = await Promise.all([
+    readHistory(userId, leagues).catch(() => null),
+    getFirstStatedKickoff(),
+  ])
+
   const empty: RivalryRadar = {
     season: null,
     week: null,
@@ -500,9 +532,9 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
     even: [],
     oneToWatch: null,
     totals: { seasons: 0, meetings: 0, platforms: 0 },
+    firstKickoffAt,
   }
 
-  const history = await readHistory(userId, leagues).catch(() => null)
   if (!history?.latest) return empty
 
   const { latest, leagueByPlatformId, myRosters, rosterNames } = history
@@ -661,5 +693,6 @@ export async function getRivalryRadar(userId: string, leagues: LeagueInput[]): P
     even,
     oneToWatch,
     totals: { seasons: seasons.size, meetings, platforms: platforms.size },
+    firstKickoffAt,
   }
 }

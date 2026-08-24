@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import type { SeasonOutlook as SeasonOutlookData } from '@/lib/core-app/seasonOutlook'
+import { kickoffDayLabel } from '@/lib/core-app/kickoffLabel'
 import '@/components/core-app/af-season-outlook.css'
 
 /**
@@ -45,6 +46,15 @@ function Tile({ value, label, tone }: { value: string; label: string; tone?: 'go
 
 export function SeasonOutlook({ data }: SeasonOutlookProps) {
   const hasLeagues = data.leagues.length > 0
+  /*
+   * Phase-aware empty state — before the first stated regular-season kickoff,
+   * "import or re-sync" is the wrong advice. Null when no source states a
+   * kickoff; the sync copy then stands. See lib/core-app/seasonPhase.ts.
+   */
+  const preseasonKickoffLabel =
+    data.firstKickoffAt && new Date(data.firstKickoffAt).getTime() > Date.now()
+      ? kickoffDayLabel(data.firstKickoffAt)
+      : null
 
   return (
     <div className="af-so">
@@ -192,17 +202,28 @@ export function SeasonOutlook({ data }: SeasonOutlookProps) {
           </section>
         </>
       ) : (
-        <div className="af-so-empty">
-          <p className="af-so-empty-t">Nothing can be simulated yet.</p>
-          <p className="af-so-empty-b">
-            Odds are computed from synced matchups — each team&apos;s completed weeks in its own
-            league&apos;s scoring. None of your leagues has enough of that on file, so there is
-            nothing to run. That is a gap in what we have read, not a season with no games.
-          </p>
-          <Link href="/import" className="af-so-cta">
-            Import or re-sync a league
-          </Link>
-        </div>
+        preseasonKickoffLabel ? (
+          <div className="af-so-empty">
+            <p className="af-so-empty-t">The season has not started yet.</p>
+            <p className="af-so-empty-b">
+              Odds are simulated from each team&apos;s completed weeks, and none have been played
+              this season. They start filling in as weeks are scored — first kickoff{' '}
+              {preseasonKickoffLabel}.
+            </p>
+          </div>
+        ) : (
+          <div className="af-so-empty">
+            <p className="af-so-empty-t">Nothing can be simulated yet.</p>
+            <p className="af-so-empty-b">
+              Odds are computed from synced matchups — each team&apos;s completed weeks in its own
+              league&apos;s scoring. None of your leagues has enough of that on file, so there is
+              nothing to run. That is a gap in what we have read, not a season with no games.
+            </p>
+            <Link href="/import" className="af-so-cta">
+              Import or re-sync a league
+            </Link>
+          </div>
+        )
       )}
 
       {/*

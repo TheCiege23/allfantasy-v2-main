@@ -167,3 +167,37 @@ export async function getWeekAll(
     record,
   }
 }
+
+/**
+ * The league ids whose matchup cards Dashboard3A will actually render.
+ *
+ * The 3a screen builds its `scored` list as: leagues carrying a LIVE score
+ * first (`Dash34League.score` — null on every production row today, since no
+ * score reader exists), then this loader's scored rows for the remaining
+ * leagues, sliced to four. Win-probability pricing must target exactly that
+ * set — pricing `playedLeagues.slice(0, 4)` paid four `getMatchupData`
+ * round-trips per home load while the cards rendered a DIFFERENT four (or,
+ * before the season starts, none at all). Derived here, beside the row shape
+ * it reads, so the server and the screen cannot silently drift apart.
+ */
+export function scoredMatchupLeagueIds(
+  liveScoredIds: string[],
+  week: Pick<WeekAllData, 'rows'> | null | undefined,
+  limit = 4,
+): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const id of liveScoredIds) {
+    if (seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+    if (out.length >= limit) return out
+  }
+  for (const r of week?.rows ?? []) {
+    if (seen.has(r.leagueId)) continue
+    seen.add(r.leagueId)
+    out.push(r.leagueId)
+    if (out.length >= limit) return out
+  }
+  return out
+}
