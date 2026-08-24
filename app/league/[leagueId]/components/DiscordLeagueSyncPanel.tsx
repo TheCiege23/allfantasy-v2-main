@@ -7,6 +7,8 @@ import type { SubPanelContext } from './LeagueSettingsSubPanels'
 
 type LeagueStatus = {
   botConfigured: boolean
+  /** Null when we could not reach Discord — unknown, not "fine". */
+  missingPermissions: string[] | null
   discordConnected: boolean
   discordGuildId: string | null
   channel: {
@@ -168,6 +170,25 @@ export function DiscordLeagueSyncPanel({ ctx }: { ctx: SubPanelContext }) {
           >
             Create Discord channel
           </button>
+        </div>
+      ) : null}
+
+      {status.channel && status.missingPermissions && status.missingPermissions.length > 0 ? (
+        <div className="rounded-xl border border-amber-400/30 bg-amber-400/[0.07] p-3 text-[11px]">
+          <p className="font-semibold text-amber-200">Discord sync is missing permissions</p>
+          <p className="mt-1 text-amber-100/75">
+            This server added the bot before we corrected the install link, so it never granted{' '}
+            <strong className="text-amber-100">{status.missingPermissions.join(', ')}</strong>.
+            Creating channels and pulling messages will keep failing here until an admin re-runs
+            the install for this server.
+          </p>
+          <a
+            href="/api/discord/bot-install"
+            className="mt-2 inline-flex items-center gap-2 rounded-lg bg-amber-400/20 px-3 py-1.5 font-semibold text-amber-100 hover:bg-amber-400/30"
+          >
+            <DiscordIcon size={14} />
+            Re-invite bot with full permissions
+          </a>
         </div>
       ) : null}
 
