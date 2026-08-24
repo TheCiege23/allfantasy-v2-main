@@ -219,9 +219,64 @@
  * no radius, and the input painted as a raw white browser control. Only the
  * topbar's own sizing stays here.
  */
-.af-shell .af-search {
+.af-shell .af-search-wrap {
+  position: relative;
   flex: 0 1 380px;
+}
+.af-shell .af-search {
+  width: 100%;
   height: 36px;
+}
+.af-shell .af-search:focus-within { border-color: var(--accent-line); }
+.af-shell .af-search-input::-webkit-search-cancel-button { appearance: none; }
+
+/* ── Topbar search autocomplete ──────────────────────────────────────── */
+.af-shell .af-search-ac {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  max-height: 380px;
+  overflow-y: auto;
+}
+.af-shell .af-search-ac-empty { padding: 12px 10px; font-size: 12px; color: var(--muted); }
+.af-shell .af-search-ac-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+.af-shell .af-search-ac-row.is-active { background: var(--chip); }
+.af-shell .af-search-ac-text { display: flex; flex-direction: column; min-width: 0; }
+.af-shell .af-search-ac-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-shell .af-search-ac-meta {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 
 .af-topbar-right {

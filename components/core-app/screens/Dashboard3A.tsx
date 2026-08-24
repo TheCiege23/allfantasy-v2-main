@@ -1,6 +1,9 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useEffect, useId, useRef, useState } from 'react'
+import MiniPlayerImg from '@/components/MiniPlayerImg'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen renders at /dashboard
  * OUTSIDE AfCoreShell, which is what imports the token layer for everything
@@ -143,6 +146,180 @@ function platformClass(platform: string | null | undefined): string {
   const p = (platform ?? '').toLowerCase()
   if (p === 'sleeper' || p === 'espn' || p === 'yahoo') return `af3a-p-${p}`
   return 'af3a-p-none'
+}
+
+type PlayerHit = {
+  id: string
+  name: string
+  position: string | null
+  team: string | null
+  imageUrl: string | null
+  sleeperId: string | null
+  slug: string
+}
+
+/**
+ * The topbar search. Types into an actual `<input>` and routes to the specific
+ * player you picked — `/players/{slug}`, the real Player Finder screen.
+ *
+ * ⚠ THIS WAS A `<Link href="/players">` WRAPPING FAKE INPUT CHROME. There was no
+ * `<input>` at all — a dot and a span styled to look like a search field — so
+ * clicking anywhere on it navigated immediately, before you could type anything,
+ * straight to `/players`: the plain SEO index (names grouped by position, no
+ * photo, no league, no slot). That page exists on purpose for crawl structure
+ * (see app/players/page.tsx) but it is not the search result of typing a name,
+ * and it is not the screen this product's Player Finder handoff describes.
+ *
+ * Debounced against `/api/players/search` the same way `dash-v2/PlayerSearch`
+ * already does, for the same reason: the endpoint is rate-limited per IP.
+ */
+function TopSearch() {
+  const router = useRouter()
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<PlayerHit[]>([])
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(-1)
+  const [loading, setLoading] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const listId = useId()
+
+  useEffect(() => {
+    const term = q.trim()
+    if (term.length < 2) {
+      setHits([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const ctl = new AbortController()
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/players/search?q=${encodeURIComponent(term)}&limit=8`, {
+          signal: ctl.signal,
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          setHits([])
+          return
+        }
+        const data = (await res.json()) as PlayerHit[]
+        setHits(Array.isArray(data) ? data : [])
+        setActive(-1)
+      } catch {
+        // Aborted or offline — leave the previous list rather than flashing empty.
+      } finally {
+        setLoading(false)
+      }
+    }, 250)
+    return () => {
+      clearTimeout(t)
+      ctl.abort()
+    }
+  }, [q])
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
+
+  function go(hit: PlayerHit) {
+    setOpen(false)
+    setQ('')
+    router.push(`/players/${hit.slug}`)
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setOpen(false)
+      return
+    }
+    if (!open || hits.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActive((i) => (i + 1) % hits.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((i) => (i <= 0 ? hits.length - 1 : i - 1))
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault()
+      const hit = hits[active]
+      if (hit) go(hit)
+    }
+  }
+
+  const showList = open && q.trim().length >= 2
+
+  return (
+    <div className="af3a-search-wrap" ref={wrapRef}>
+      {/*
+        A real `<a>` is the no-JS fallback: /players is a real page, so this
+        still works with JavaScript disabled or before hydration — the dropdown
+        below is an enhancement on top of a control that already worked.
+       */}
+      <form action="/players" method="get" className="af3a-search" role="search">
+        <span className="af3a-search-dot" aria-hidden />
+        <input
+          type="search"
+          name="q"
+          className="af3a-search-input"
+          placeholder="Search any player or league"
+          aria-label="Search any player or league"
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={showList}
+          aria-controls={showList ? listId : undefined}
+          aria-autocomplete="list"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+        />
+        <kbd>⌘K</kbd>
+      </form>
+
+      {showList ? (
+        <ul className="af3a-search-ac" id={listId} role="listbox" aria-label="Player results">
+          {hits.length === 0 ? (
+            <li className="af3a-search-ac-empty" role="presentation">
+              {loading ? 'Searching…' : 'No players match that.'}
+            </li>
+          ) : (
+            hits.map((hit, i) => (
+              <li key={hit.id} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={i === active}
+                  className={`af3a-search-ac-row${i === active ? ' is-active' : ''}`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => go(hit)}
+                >
+                  <MiniPlayerImg
+                    sleeperId={hit.sleeperId}
+                    name={hit.name}
+                    avatarUrl={hit.imageUrl}
+                    size={28}
+                  />
+                  <span className="af3a-search-ac-text">
+                    <span className="af3a-search-ac-name">{hit.name}</span>
+                    <span className="af3a-search-ac-meta">
+                      {[hit.position, hit.team].filter(Boolean).join(' · ') || '—'}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
+    </div>
+  )
 }
 
 /** "in 1h 04m" / "3:00a". Relative while it is close, absolute once it is not. */
@@ -295,18 +472,7 @@ export function Dashboard3A({
       {/* ── Main ─────────────────────────────────────────────────────────── */}
       <main className="af3a-main">
         <div className="af3a-topbar">
-          {/*
-            ⚠ THIS WAS A `div` WITH A `<kbd>⌘K</kbd>` AND NOTHING BEHIND EITHER.
-            No input, no handler, no shortcut — the whole component has zero
-            `onClick`/`useEffect`/`useState`, so the most prominent control on the
-            dashboard did nothing at all and advertised a keybinding that was never
-            bound. Now it goes to Player Finder, which is the search surface that
-            actually exists, and the ⌘K hint is gone rather than left lying.
-           */}
-          <Link className="af3a-search" href="/players">
-            <span className="af3a-search-dot" />
-            <span className="af3a-search-ph">Search any player or league</span>
-          </Link>
+          <TopSearch />
           <span className="af3a-chip">
             READ-ONLY
           </span>

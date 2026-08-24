@@ -146,23 +146,37 @@
  */
 .af3a-main { min-width: 0; padding: 18px 24px 40px; background: var(--bg); background-image: var(--hero); overflow-x: clip; }
 .af3a-topbar { display: flex; align-items: center; gap: 10px; margin-bottom: 22px; flex-wrap: wrap; }
+.af3a-search-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 220px;
+  max-width: 480px;
+}
 .af3a-search {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex: 1;
-  min-width: 220px;
+  width: 100%;
   padding: 11px 14px;
   border-radius: 11px;
   border: 1px solid var(--line2);
   background: var(--surface);
 }
-.af3a-search-dot { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line2); }
-.af3a-search-ph { color: var(--muted); font: 400 13px/1 'Archivo', system-ui, sans-serif; }
-/* The bar is a link to Player Finder now, so it has to read as one on hover. */
-a.af3a-search { text-decoration: none; }
-a.af3a-search:hover { border-color: var(--accent-line); text-decoration: none; }
-a.af3a-search:hover .af3a-search-ph { color: var(--text2); }
+.af3a-search:focus-within { border-color: var(--accent-line); }
+.af3a-search-dot { width: 13px; height: 13px; border-radius: 50%; border: 1px solid var(--line2); flex: none; }
+.af3a-search-input {
+  flex: 1;
+  min-width: 0;
+  appearance: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text2);
+  font: 400 13px/1 'Archivo', system-ui, sans-serif;
+}
+.af3a-search-input::placeholder { color: var(--muted); }
+.af3a-search-input:focus { outline: none; }
+.af3a-search-input::-webkit-search-cancel-button { appearance: none; }
 .af3a-search kbd {
   margin-left: auto;
   padding: 3px 6px;
@@ -171,6 +185,55 @@ a.af3a-search:hover .af3a-search-ph { color: var(--text2); }
   background: var(--chip);
   color: var(--muted);
   font: 700 10px/1 'JetBrains Mono', monospace;
+}
+
+/* ── Search autocomplete ──────────────────────────────────────────────── */
+.af3a-search-ac {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line2);
+  box-shadow: var(--shadow);
+  max-height: 380px;
+  overflow-y: auto;
+}
+.af3a-search-ac-empty { padding: 12px 10px; font-size: 12px; color: var(--muted); }
+.af3a-search-ac-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  appearance: none;
+  background: none;
+  border: 0;
+  border-radius: 9px;
+  padding: 7px 8px;
+  text-align: left;
+  cursor: pointer;
+  min-height: 44px;
+}
+.af3a-search-ac-row.is-active { background: var(--chip); }
+.af3a-search-ac-text { display: flex; flex-direction: column; min-width: 0; }
+.af3a-search-ac-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af3a-search-ac-meta {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
 }
 .af3a-chip {
   display: inline-flex;

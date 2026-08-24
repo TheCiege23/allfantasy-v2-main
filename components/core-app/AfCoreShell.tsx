@@ -1,10 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import CommsDock from '@/components/core-app/comms/CommsDock'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
-import { useMemo, useState } from 'react'
+import MiniPlayerImg from '@/components/MiniPlayerImg'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-core-shell.css'
 
@@ -213,6 +215,171 @@ function navItems(props: AfCoreShellProps): NavItem[] {
   ]
 }
 
+type TopSearchHit = {
+  id: string
+  name: string
+  position: string | null
+  team: string | null
+  imageUrl: string | null
+  sleeperId: string | null
+  slug: string
+}
+
+/**
+ * The shell's topbar search. Types into a real `<input>` and routes to
+ * `/players/{slug}` — the same destination the dashboard and dash-v2 search
+ * bars use, so every entry point in the app lands the same person on the same
+ * page.
+ *
+ * ⚠ THIS WAS `<input>` WITH NO NAME, NO FORM, AND ZERO HANDLERS. Typing into it
+ * did literally nothing — no request, no navigation, no fallback. It was the
+ * least functional of the app's three "search any player or league" controls,
+ * the other two (dashboard, dash-v2 topbar) at least navigated somewhere.
+ */
+function TopSearch() {
+  const router = useRouter()
+  const [q, setQ] = useState('')
+  const [hits, setHits] = useState<TopSearchHit[]>([])
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(-1)
+  const [loading, setLoading] = useState(false)
+  const wrapRef = useRef<HTMLDivElement>(null)
+  const listId = useId()
+
+  useEffect(() => {
+    const term = q.trim()
+    if (term.length < 2) {
+      setHits([])
+      setLoading(false)
+      return
+    }
+    setLoading(true)
+    const ctl = new AbortController()
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/players/search?q=${encodeURIComponent(term)}&limit=8`, {
+          signal: ctl.signal,
+          cache: 'no-store',
+        })
+        if (!res.ok) {
+          setHits([])
+          return
+        }
+        const data = (await res.json()) as TopSearchHit[]
+        setHits(Array.isArray(data) ? data : [])
+        setActive(-1)
+      } catch {
+        // Aborted or offline — leave the previous list rather than flashing empty.
+      } finally {
+        setLoading(false)
+      }
+    }, 250)
+    return () => {
+      clearTimeout(t)
+      ctl.abort()
+    }
+  }, [q])
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [])
+
+  function go(hit: TopSearchHit) {
+    setOpen(false)
+    setQ('')
+    router.push(`/players/${hit.slug}`)
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Escape') {
+      setOpen(false)
+      return
+    }
+    if (!open || hits.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setActive((i) => (i + 1) % hits.length)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setActive((i) => (i <= 0 ? hits.length - 1 : i - 1))
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault()
+      const hit = hits[active]
+      if (hit) go(hit)
+    }
+  }
+
+  const showList = open && q.trim().length >= 2
+
+  return (
+    <div className="af-search-wrap" ref={wrapRef}>
+      {/* Real page for the no-JS/pre-hydration fallback — /players is a real route. */}
+      <form action="/players" method="get" className="af-search" role="search">
+        <span className="af-search-icon" aria-hidden>
+          ○
+        </span>
+        <input
+          className="af-search-input"
+          name="q"
+          type="search"
+          placeholder="Search any player or league"
+          aria-label="Search any player or league"
+          autoComplete="off"
+          role="combobox"
+          aria-expanded={showList}
+          aria-controls={showList ? listId : undefined}
+          aria-autocomplete="list"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={onKeyDown}
+        />
+        <span className="af-search-kbd af-num" aria-hidden>
+          ⌘K
+        </span>
+      </form>
+
+      {showList ? (
+        <ul className="af-search-ac" id={listId} role="listbox" aria-label="Player results">
+          {hits.length === 0 ? (
+            <li className="af-search-ac-empty" role="presentation">
+              {loading ? 'Searching…' : 'No players match that.'}
+            </li>
+          ) : (
+            hits.map((hit, i) => (
+              <li key={hit.id} role="presentation">
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={i === active}
+                  className={`af-search-ac-row${i === active ? ' is-active' : ''}`}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => go(hit)}
+                >
+                  <MiniPlayerImg sleeperId={hit.sleeperId} name={hit.name} avatarUrl={hit.imageUrl} size={28} />
+                  <span className="af-search-ac-text">
+                    <span className="af-search-ac-name">{hit.name}</span>
+                    <span className="af-search-ac-meta">
+                      {[hit.position, hit.team].filter(Boolean).join(' · ') || '—'}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
+    </div>
+  )
+}
+
 function HelpDot({ title, body }: { title: string; body: string }) {
   const [open, setOpen] = useState(false)
   return (
@@ -349,19 +516,7 @@ export function AfCoreShell(props: AfCoreShellProps) {
       {/* ── Main column ─────────────────────────────────────────────── */}
       <div className="af-main">
         <header className="af-topbar">
-          <label className="af-search" aria-label="Search any player or league">
-            <span className="af-search-icon" aria-hidden>
-              ○
-            </span>
-            <input
-              className="af-search-input"
-              placeholder="Search any player or league"
-              type="search"
-            />
-            <span className="af-search-kbd af-num" aria-hidden>
-              ⌘K
-            </span>
-          </label>
+          <TopSearch />
 
           <div className="af-topbar-right">
             <span className="af-readonly">
