@@ -48,6 +48,35 @@ function mapReviewToTradeReviewType(mode: string): string {
   return 'commissioner'
 }
 
+/**
+ * Direct notice to the PROPOSER when their offer is accepted or rejected — the
+ * `trade_accept_reject` settings category. The league-wide `fanout` above goes
+ * out as `league_announcements`; before this, the accept/reject toggle in
+ * notification settings governed an event no code fired. Dynamic import (same
+ * pattern as `fanout`) and fire-and-forget: a notification failure must never
+ * fail the trade action itself.
+ */
+async function notifyProposerOfDecision(input: {
+  leagueId: string
+  tradeId: string
+  proposerUserId: string
+  type: 'trade_accepted' | 'trade_rejected'
+  title: string
+  body?: string
+}) {
+  const { ingest, tradeEvent } = await import('@/lib/notification-engine')
+  await ingest(
+    tradeEvent({
+      userIds: [input.proposerUserId],
+      leagueId: input.leagueId,
+      type: input.type,
+      tradeId: input.tradeId,
+      title: input.title,
+      body: input.body,
+    }),
+  ).catch(() => {})
+}
+
 export async function createAfLeagueTrade(input: CreateLeagueTradeInput & { currentWeek?: number | null }): Promise<{ id: string }> {
   const league = await prisma.league.findUnique({ where: { id: input.leagueId } })
   if (!league) throw new Error('League not found')
@@ -221,6 +250,13 @@ export async function acceptAfLeagueTrade(input: {
 
   if (reviewType === 'instant') {
     await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId })
+    await notifyProposerOfDecision({
+      leagueId: input.leagueId,
+      tradeId: trade.id,
+      proposerUserId: trade.proposedByUserId,
+      type: 'trade_accepted',
+      title: 'Your trade offer was accepted',
+    })
     return { status: 'processed' }
   }
 
@@ -242,6 +278,14 @@ export async function acceptAfLeagueTrade(input: {
       actorUserId: input.userId,
       meta: { tradeId: trade.id },
       dedupeKey: `af_trade:${trade.id}:awaiting_comm`,
+    })
+    await notifyProposerOfDecision({
+      leagueId: input.leagueId,
+      tradeId: trade.id,
+      proposerUserId: trade.proposedByUserId,
+      type: 'trade_accepted',
+      title: 'Your trade offer was accepted',
+      body: 'It now goes to commissioner review before processing.',
     })
     return { status: 'awaiting_commissioner' }
   }
@@ -265,10 +309,25 @@ export async function acceptAfLeagueTrade(input: {
       meta: { tradeId: trade.id },
       dedupeKey: `af_trade:${trade.id}:votes`,
     })
+    await notifyProposerOfDecision({
+      leagueId: input.leagueId,
+      tradeId: trade.id,
+      proposerUserId: trade.proposedByUserId,
+      type: 'trade_accepted',
+      title: 'Your trade offer was accepted',
+      body: 'It now enters the league veto window before processing.',
+    })
     return { status: 'awaiting_votes' }
   }
 
   await finalizeAfLeagueTradeProcessing({ tradeId: trade.id, actorUserId: input.userId })
+  await notifyProposerOfDecision({
+    leagueId: input.leagueId,
+    tradeId: trade.id,
+    proposerUserId: trade.proposedByUserId,
+    type: 'trade_accepted',
+    title: 'Your trade offer was accepted',
+  })
   return { status: 'processed' }
 }
 
@@ -411,6 +470,14 @@ export async function commissionerAfTradeDecision(input: {
       reason: 'commissioner_reject',
     })
     await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
+    await notifyProposerOfDecision({
+      leagueId: input.leagueId,
+      tradeId: trade.id,
+      proposerUserId: trade.proposedByUserId,
+      type: 'trade_rejected',
+      title: 'Your trade offer was rejected',
+      body: 'The commissioner rejected this trade.',
+    })
     return
   }
 
@@ -443,6 +510,13 @@ export async function rejectAfLeagueTrade(input: { tradeId: string; leagueId: st
     reason: 'rejected',
   })
   await captureLiveTradeOutcome({ tradeId: trade.id, leagueId: input.leagueId, status: 'rejected' })
+  await notifyProposerOfDecision({
+    leagueId: input.leagueId,
+    tradeId: trade.id,
+    proposerUserId: trade.proposedByUserId,
+    type: 'trade_rejected',
+    title: 'Your trade offer was rejected',
+  })
 }
 
 export async function cancelAfLeagueTrade(input: { tradeId: string; leagueId: string; userId: string }): Promise<void> {

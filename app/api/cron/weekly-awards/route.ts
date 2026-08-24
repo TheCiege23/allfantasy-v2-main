@@ -4,7 +4,10 @@ import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getLeagueH2H } from '@/lib/league-history/sleeperH2HService'
 import { createLeagueChatMessage } from '@/lib/league-chat/LeagueChatMessageService'
-import { sendNotificationEmail } from '@/lib/resend-client'
+import { sendTemplatedEmail } from '@/lib/resend-client'
+import { renderDigestEmail } from '@/lib/notifications/designedEmail'
+import { escapeHtml } from '@/lib/trade-intel/tradeGradeEmail'
+import { getBaseUrl } from '@/lib/get-base-url'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
 export const dynamic = 'force-dynamic'
@@ -314,14 +317,23 @@ async function postRecapForLeague(
   let emailsSent = 0
   if (process.env.WEEKLY_RECAP_EMAIL_ENABLED === '1') {
     const recipients = await memberEmails(afLeagueId, ownerUserId)
-    const bodyHtml = lines.map((l) => l.replace(/&/g, '&amp;').replace(/</g, '&lt;')).join('<br/>')
+    const baseUrl = getBaseUrl()
+    // sendTemplatedEmail sends this HTML as-is, so the per-line breaks survive.
+    // The old sendNotificationEmail path stripped every tag and RE-escaped the
+    // pre-escaped source, so the recap arrived as one flat paragraph with
+    // visible "&amp;" entities. escapeHtml at the leaf; the shell owns the chrome.
+    const html = renderDigestEmail({
+      eyebrow: `Week ${awards.week} recap · ${awards.season}`,
+      title: leagueName,
+      bodyHtml: lines.map((l) => escapeHtml(l)).join('<br/>'),
+      cta: { href: `${baseUrl}/league/${afLeagueId}`, label: 'Open your league' },
+      baseUrl,
+    })
     for (const to of recipients) {
-      const sent = await sendNotificationEmail({
+      const sent = await sendTemplatedEmail({
         to,
         subject: `Week ${awards.week} recap — ${leagueName}`,
-        bodyHtml,
-        actionHref: `/league/${afLeagueId}`,
-        actionLabel: 'Open your league',
+        html,
       }).catch(() => ({ ok: false as const }))
       if (sent.ok) emailsSent += 1
     }

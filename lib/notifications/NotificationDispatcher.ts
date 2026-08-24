@@ -4,7 +4,7 @@ import { getSettingsProfile } from "@/lib/user-settings"
 import { resolveNotificationPreferences } from "@/lib/notification-settings/NotificationPreferenceResolver"
 import { getDeliveryMethodAvailability } from "@/lib/notification-settings/DeliveryMethodResolver"
 import type { NotificationCategoryId, NotificationPreferences } from "@/lib/notification-settings/types"
-import { sendNotificationEmail } from "@/lib/resend-client"
+import { sendNotificationEmail, sendTemplatedEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
 import { sendPushToUser, isPushCategory } from "@/lib/push-notifications"
 import { retryWithBackoff } from "@/lib/error-handling"
@@ -32,6 +32,15 @@ export type DispatchNotificationParams = {
    * (e.g. when applyChannelPrefs has already stripped email/sms/push).
    */
   skipChannels?: { email?: boolean; sms?: boolean; push?: boolean }
+  /**
+   * A fully designed email for this dispatch — subject + leaf-escaped HTML from
+   * a real renderer (the draftEmails / tradeGradeEmail family). Sent through
+   * sendTemplatedEmail instead of the plain-paragraph sendNotificationEmail
+   * wrapper, behind exactly the same category / availability /
+   * undeliverable-domain gates. Content is per-recipient, so pass it only on
+   * single-user dispatches.
+   */
+  emailOverride?: { subject: string; html: string }
 }
 
 /**
@@ -53,6 +62,7 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
     severity = "medium",
     dedupePrefix,
     skipChannels,
+    emailOverride,
   } = params
 
   for (const userId of userIds) {
@@ -114,13 +124,19 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         try {
           await retryWithBackoff(
             async () => {
-              const result = await sendNotificationEmail({
-                to: profile.email!,
-                subject: title,
-                bodyHtml: body ?? title,
-                actionHref,
-                actionLabel: actionLabel ?? "Open",
-              })
+              const result = emailOverride
+                ? await sendTemplatedEmail({
+                    to: profile.email!,
+                    subject: emailOverride.subject,
+                    html: emailOverride.html,
+                  })
+                : await sendNotificationEmail({
+                    to: profile.email!,
+                    subject: title,
+                    bodyHtml: body ?? title,
+                    actionHref,
+                    actionLabel: actionLabel ?? "Open",
+                  })
               if (!result.ok) {
                 const err = new Error(result.error ?? "Email send failed") as Error & { status?: number }
                 err.status = 503

@@ -198,13 +198,19 @@ export function buildDraftStartingEmail(params: DraftStartingEmailParams): Draft
     baseUrl,
   } = params
 
-  const when =
-    minutesUntilStart >= 60
+  // Zero (or negative) minutes means the sender fired at the start transition
+  // itself — say "now" rather than the false countdown "in 0 minutes".
+  const startingNow = minutesUntilStart <= 0
+  const when = startingNow
+    ? 'now'
+    : minutesUntilStart >= 60
       ? `${Math.round(minutesUntilStart / 60)} hour${Math.round(minutesUntilStart / 60) === 1 ? '' : 's'}`
       : `${minutesUntilStart} minutes`
 
   // The subject never hides the news: league, when, and the slot.
-  const subject = `${leagueName} drafts in ${when} — you pick ${pickSlot}`
+  const subject = startingNow
+    ? `${leagueName} is drafting now — you pick ${pickSlot}`
+    : `${leagueName} drafts in ${when} — you pick ${pickSlot}`
 
   /*
    * The empty-queue warning. Only when the queue is genuinely empty — a warning
@@ -286,7 +292,7 @@ export function buildDraftStartingEmail(params: DraftStartingEmailParams): Draft
 
   const inner = [
     header(
-      `Draft · starts in ${when}`,
+      startingNow ? 'Draft · starting now' : `Draft · starts in ${when}`,
       leagueName,
       `You pick ${pickSlot}.`,
       null,

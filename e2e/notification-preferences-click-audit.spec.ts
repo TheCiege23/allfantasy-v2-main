@@ -214,20 +214,23 @@ test.describe("@db @notifications notification preferences click audit", () => {
     const globalToggle = page.getByTestId("notifications-global-toggle")
     await globalToggle.uncheck()
 
-    // Category expand/collapse and toggle wiring
-    const lineupHeader = page.getByRole("button", { name: /Lineup reminders/i }).first()
-    if ((await lineupHeader.getAttribute("aria-expanded")) !== "true") {
-      await lineupHeader.click()
-    }
-    await expect(lineupHeader).toHaveAttribute("aria-expanded", "true")
-    await page.getByRole("checkbox", { name: "Lineup reminders enabled" }).uncheck()
-    await page.getByRole("checkbox", { name: "Lineup reminders Email" }).uncheck()
-    await page.getByRole("checkbox", { name: "Lineup reminders SMS" }).check()
-
+    // Category expand/collapse and toggle wiring. `lineup_reminders` no longer
+    // renders a toggle (no automatic lineup reminder fires yet), so the audit
+    // drives Matchup results instead — and asserts the dead toggle is gone.
+    await expect(page.getByRole("button", { name: /Lineup reminders/i })).toHaveCount(0)
     const matchupHeader = page.getByRole("button", { name: /Matchup results/i }).first()
-    await matchupHeader.click()
+    if ((await matchupHeader.getAttribute("aria-expanded")) !== "true") {
+      await matchupHeader.click()
+    }
     await expect(matchupHeader).toHaveAttribute("aria-expanded", "true")
-    await expect(lineupHeader).toHaveAttribute("aria-expanded", "false")
+    await page.getByRole("checkbox", { name: "Matchup results enabled" }).uncheck()
+    await page.getByRole("checkbox", { name: "Matchup results Email" }).uncheck()
+    await page.getByRole("checkbox", { name: "Matchup results SMS" }).check()
+
+    const waiverHeader = page.getByRole("button", { name: /Waiver processing/i }).first()
+    await waiverHeader.click()
+    await expect(waiverHeader).toHaveAttribute("aria-expanded", "true")
+    await expect(matchupHeader).toHaveAttribute("aria-expanded", "false")
 
     // Save flow
     await page.getByTestId("notifications-save-button").click()
@@ -240,20 +243,20 @@ test.describe("@db @notifications notification preferences click audit", () => {
       throw new Error("Patched preferences were not captured")
     }
     expect(patchedPrefs.globalEnabled).toBe(false)
-    const patchedLineup = patchedPrefs.categories.lineup_reminders
-    expect(patchedLineup.enabled).toBe(false)
-    expect(patchedLineup.email).toBe(false)
-    expect(patchedLineup.sms).toBe(true)
+    const patchedMatchup = patchedPrefs.categories.matchup_results
+    expect(patchedMatchup.enabled).toBe(false)
+    expect(patchedMatchup.email).toBe(false)
+    expect(patchedMatchup.sms).toBe(true)
 
     // Persist after reload
     await page.reload()
     await expect(page.getByTestId("notifications-global-toggle")).not.toBeChecked()
-    const lineupHeaderAfterReload = page.getByRole("button", { name: /Lineup reminders/i }).first()
-    if ((await lineupHeaderAfterReload.getAttribute("aria-expanded")) !== "true") {
-      await lineupHeaderAfterReload.click()
+    const matchupHeaderAfterReload = page.getByRole("button", { name: /Matchup results/i }).first()
+    if ((await matchupHeaderAfterReload.getAttribute("aria-expanded")) !== "true") {
+      await matchupHeaderAfterReload.click()
     }
-    await expect(page.getByRole("checkbox", { name: "Lineup reminders enabled" })).not.toBeChecked()
-    await expect(page.getByRole("checkbox", { name: "Lineup reminders SMS" })).toBeChecked()
+    await expect(page.getByRole("checkbox", { name: "Matchup results enabled" })).not.toBeChecked()
+    await expect(page.getByRole("checkbox", { name: "Matchup results SMS" })).toBeChecked()
 
     // Reset flow
     await page.getByTestId("notifications-reset-button").click()

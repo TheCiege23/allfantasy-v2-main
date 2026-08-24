@@ -21,6 +21,16 @@ import { EnableWebPushCard } from "@/components/notifications/EnableWebPushCard"
 
 const CHIMMY_SHORTCUTS_DISABLED_KEY = "af_chimmy_shortcuts_disabled"
 
+/**
+ * Every rendered control must govern an event some code actually fires.
+ * `lineup_reminders` stays a valid stored/dispatch category (the QA
+ * league-reminder route still dispatches under it), but no automatic lineup
+ * reminder exists yet — a real one needs lineup-lock times the platform does
+ * not durably populate — so its toggle is hidden until a sender exists.
+ */
+const HIDDEN_CATEGORY_IDS: ReadonlySet<NotificationCategoryId> = new Set(["lineup_reminders"])
+const VISIBLE_CATEGORY_IDS = NOTIFICATION_CATEGORY_IDS.filter((id) => !HIDDEN_CATEGORY_IDS.has(id))
+
 export function NotificationsSettingsSection({
   profile,
   onRefetch,
@@ -31,12 +41,12 @@ export function NotificationsSettingsSection({
   const { t } = useLanguage()
   const resolved = resolveNotificationPreferences(profile?.notificationPreferences as NotificationPreferences | null)
   const [prefs, setPrefs] = useState<NotificationPreferences>(resolved)
-  const [expandedCategory, setExpandedCategory] = useState<NotificationCategoryId | null>("lineup_reminders")
+  const [expandedCategory, setExpandedCategory] = useState<NotificationCategoryId | null>("matchup_results")
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
   const [remoteUpdatePending, setRemoteUpdatePending] = useState(false)
-  const [testCategory, setTestCategory] = useState<NotificationCategoryId>("lineup_reminders")
+  const [testCategory, setTestCategory] = useState<NotificationCategoryId>("matchup_results")
   const [testing, setTesting] = useState(false)
   const [testResultMessage, setTestResultMessage] = useState<string | null>(null)
   const [testResultTone, setTestResultTone] = useState<"success" | "info" | "error" | null>(null)
@@ -98,7 +108,7 @@ export function NotificationsSettingsSection({
     setTestResultTone(null)
     setPrefs((prev) => {
       const categories = { ...prev.categories }
-      for (const id of NOTIFICATION_CATEGORY_IDS) {
+      for (const id of VISIBLE_CATEGORY_IDS) {
         categories[id] = { ...(categories[id] ?? { ...defaultCh }), email }
       }
       return { ...prev, categories }
@@ -112,15 +122,15 @@ export function NotificationsSettingsSection({
     setTestResultTone(null)
     setPrefs((prev) => {
       const categories = { ...prev.categories }
-      for (const id of NOTIFICATION_CATEGORY_IDS) {
+      for (const id of VISIBLE_CATEGORY_IDS) {
         categories[id] = { ...(categories[id] ?? { ...defaultCh }), inApp }
       }
       return { ...prev, categories }
     })
   }
 
-  const allEmailOn = NOTIFICATION_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.email === true)
-  const allPushOn = NOTIFICATION_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.inApp === true)
+  const allEmailOn = VISIBLE_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.email === true)
+  const allPushOn = VISIBLE_CATEGORY_IDS.every((id) => prefs.categories?.[id]?.inApp === true)
 
   const handleSave = async () => {
     setSaving(true)
@@ -305,7 +315,7 @@ export function NotificationsSettingsSection({
       <div className="space-y-2">
         <p className="text-sm font-medium text-[var(--muted2)]">{t("settings.notifications.byCategory")}</p>
         <ul className="space-y-2">
-          {NOTIFICATION_CATEGORY_IDS.map((categoryId) => (
+          {VISIBLE_CATEGORY_IDS.map((categoryId) => (
             <li key={categoryId}>
               <NotificationCategoryRenderer
                 categoryId={categoryId}
@@ -343,7 +353,7 @@ export function NotificationsSettingsSection({
             onChange={(e) => setTestCategory(e.target.value as NotificationCategoryId)}
             className="rounded-lg border border-[var(--border)] bg-[var(--panel)] px-3 py-2 text-sm text-[var(--text)]"
           >
-            {NOTIFICATION_CATEGORY_IDS.map((id) => (
+            {VISIBLE_CATEGORY_IDS.map((id) => (
               <option key={id} value={id}>{NOTIFICATION_CATEGORY_LABELS[id]}</option>
             ))}
           </select>
