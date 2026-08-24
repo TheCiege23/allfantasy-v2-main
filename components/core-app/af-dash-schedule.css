@@ -112,3 +112,16 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Guillotine / survivor: the lowest score is eliminated, so the weekly stake is
+   existential. Marked with --bad because it is a threat, not a category. */
+.af-sched-elim {
+  margin-right: 5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--bad) 18%, transparent);
+  color: var(--bad);
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}

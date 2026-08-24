@@ -435,6 +435,8 @@ export default async function AfCorePage({
     name: l.name,
     platform: String(l.platform ?? ''),
     platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+    /* Only to flag elimination formats — the list already carries it. */
+    leagueType: (l as { leagueType?: string | null }).leagueType ?? null,
   }))
 
   const rivalriesView = activeKey === 'week' && sp.view === 'rivalries'

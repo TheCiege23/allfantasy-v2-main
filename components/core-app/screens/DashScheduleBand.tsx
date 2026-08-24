@@ -108,7 +108,21 @@ export function DashScheduleBand({
             <span className="af-sched-vs">
               vs <b><OpponentLabel matchup={m} /></b>
             </span>
-            <span className="af-sched-plat af-num">{m.platform.toUpperCase()}</span>
+            <span className="af-sched-plat af-num">
+              {/*
+                Guillotine and survivor leagues eliminate the lowest score each
+                week — an existential stake a head-to-head card does not carry,
+                and the one thing about this matchup that changes how you play
+                it. The chip states the format; the chop-line distance needs
+                scoring that does not exist yet, so it is not implied here.
+              */}
+              {m.elimination ? (
+                <span className="af-sched-elim" title="Lowest score is eliminated this week">
+                  ELIM
+                </span>
+              ) : null}
+              {m.platform.toUpperCase()}
+            </span>
           </Link>
         ))}
       </div>

@@ -107,6 +107,9 @@ export async function calculateAndSaveRank(userId: string): Promise<CalculateRan
             select: {
               wins: true,
               losses: true,
+              /* Part of the played-games gate below: a 0-0-1 season has been
+                 played, and must not be treated as an unplayed one. */
+              ties: true,
               isChampion: true,
               finalStanding: true,
               playoffSeed: true,
@@ -126,13 +129,24 @@ export async function calculateAndSaveRank(userId: string): Promise<CalculateRan
         if (rows.has(key)) continue
 
         const playoffCutoff = ll.playoffTeams ?? null
+        /*
+         * ⚠ A PLAYOFF BERTH REQUIRES GAMES — the same gate career.ts already
+         * applies. `playoffSeed` and `finalStanding` are populated on leagues
+         * that have not played a snap (seeding, not a result), so without this
+         * the 2026 rows come back 0-0-0 and still credit a berth. Measured on
+         * production via the career page: 25 playoff appearances across 54
+         * leagues that had not played a game. Every one of those was worth
+         * RANK_XP_PER_PLAYOFF_APPEARANCE in the number shown on the profile.
+         */
+        const playedGames = (roster.wins ?? 0) + (roster.losses ?? 0) + (roster.ties ?? 0) > 0
         const madePlayoffs =
-          roster.isChampion === true ||
-          (playoffCutoff != null && roster.playoffSeed != null
-            ? roster.playoffSeed <= playoffCutoff
-            : playoffCutoff != null && roster.finalStanding != null
-              ? roster.finalStanding <= playoffCutoff
-              : false)
+          playedGames &&
+          (roster.isChampion === true ||
+            (playoffCutoff != null && roster.playoffSeed != null
+              ? roster.playoffSeed <= playoffCutoff
+              : playoffCutoff != null && roster.finalStanding != null
+                ? roster.finalStanding <= playoffCutoff
+                : false))
 
         rows.set(key, {
           key,
@@ -165,8 +179,20 @@ export async function calculateAndSaveRank(userId: string): Promise<CalculateRan
     const careerLosses = allRows.reduce((s, r) => s + r.losses, 0)
     const careerChampionships = allRows.filter((r) => r.wonChampionship).length
     const careerPlayoffAppearances = allRows.filter((r) => r.madePlayoffs).length
-    const careerSeasonsPlayed = allRows.length
-    const careerLeaguesPlayed = new Set(allRows.map((r) => r.season)).size
+    /*
+     * ⚠ THESE TWO WERE SWAPPED. Each row is one league-season, so `allRows.length`
+     * counts league-seasons — which is what "leagues played" means here — while
+     * the distinct `season` values are the seasons played. Persisting them the
+     * other way round put ~6 in the leagues column and hundreds in the seasons
+     * column on a real account.
+     *
+     * The XP term below deliberately still multiplies DISTINCT SEASONS by
+     * RANK_XP_PER_DISTINCT_SEASON: that is what the constant means and what the
+     * old code computed, so this correction changes the two persisted numbers
+     * without moving anyone's XP or level.
+     */
+    const careerSeasonsPlayed = new Set(allRows.map((r) => r.season)).size
+    const careerLeaguesPlayed = allRows.length
 
     const leagueSizeBonus = allRows.reduce((sum, r) => {
       return sum + Math.max(0, r.leagueSize - 10) * RANK_XP_LEAGUE_SIZE_MULTIPLIER
@@ -176,7 +202,7 @@ export async function calculateAndSaveRank(userId: string): Promise<CalculateRan
       careerWins * RANK_XP_PER_IMPORT_WIN +
       careerPlayoffAppearances * RANK_XP_PER_PLAYOFF_APPEARANCE +
       careerChampionships * RANK_XP_PER_CHAMPIONSHIP +
-      careerLeaguesPlayed * RANK_XP_PER_DISTINCT_SEASON +
+      careerSeasonsPlayed * RANK_XP_PER_DISTINCT_SEASON +
       leagueSizeBonus
 
     const xpTotal = BigInt(xpNum)

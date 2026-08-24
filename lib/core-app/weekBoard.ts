@@ -61,6 +61,17 @@ const SIGMA_FLOOR = 12
 export { COIN_FLIP_POINTS } from './weekBoardRules'
 import { COIN_FLIP_POINTS } from './weekBoardRules'
 
+/**
+ * Guillotine and survivor leagues eliminate the LOWEST score each week, so the
+ * weekly stake is existential rather than a head-to-head result. Read off
+ * `League.leagueType`, where the create wizard and the importers both record
+ * the format — no new query, no guess.
+ */
+export function isEliminationFormat(leagueType: string | null | undefined): boolean {
+  const t = String(leagueType ?? '').toLowerCase()
+  return t.includes('guillotine') || t.includes('survivor')
+}
+
 // ── Types ──────────────────────────────────────────────────────────────
 
 export type WeekOpponent = {
@@ -76,6 +87,12 @@ export type WeekMatchup = {
   season: number
   week: number
   opponent: WeekOpponent
+  /**
+   * True for guillotine/survivor leagues, where the LOWEST score each week is
+   * eliminated. The weekly stake is categorically different from head-to-head,
+   * so surfaces say so; nothing else about the card changes.
+   */
+  elimination: boolean
   /** Null when either side has too little history — see MIN_WEEKS_FOR_PROJECTION. */
   projection: {
     you: number
@@ -199,6 +216,8 @@ type LeagueInput = {
   name?: string | null
   platform?: string | null
   platformLeagueId?: string | null
+  /** `League.leagueType`. Carried through only to flag elimination formats. */
+  leagueType?: string | null
 }
 
 type MatchupRow = {
@@ -216,7 +235,7 @@ type History = {
   /** Every row, all seasons, for leagues the user is in. */
   rows: MatchupRow[]
   /** platformLeagueId → league metadata. */
-  leagueByPlatformId: Map<string, { id: string; name: string; platform: string }>
+  leagueByPlatformId: Map<string, { id: string; name: string; platform: string; elimination: boolean }>
   /** "platformLeagueId:rosterId" → the user owns this roster. */
   myRosters: Map<string, number>
   /** "platformLeagueId:rosterId" → team name, when one is on file. */
@@ -269,13 +288,17 @@ async function readHistory(userId: string, leagues: LeagueInput[]): Promise<Hist
 
   if (rows.length === 0) return null
 
-  const leagueByPlatformId = new Map<string, { id: string; name: string; platform: string }>()
+  const leagueByPlatformId = new Map<
+    string,
+    { id: string; name: string; platform: string; elimination: boolean }
+  >()
   for (const l of leagues) {
     if (!l.platformLeagueId) continue
     leagueByPlatformId.set(l.platformLeagueId, {
       id: l.id,
       name: l.name?.trim() || 'League',
       platform: String(l.platform ?? 'manual').toLowerCase(),
+      elimination: isEliminationFormat(l.leagueType),
     })
   }
 
@@ -468,6 +491,7 @@ export async function getWeekBoard(userId: string, leagues: LeagueInput[]): Prom
       season: pair.season,
       week: pair.week,
       opponent,
+      elimination: meta.elimination,
       projection: null,
       yourSampleWeeks: mineProfile?.n ?? 0,
       href: `/core/matchup?league=${encodeURIComponent(meta.id)}`,

@@ -128,6 +128,49 @@ export type AfCoreShellProps = {
  */
 const RAIL_TILE_LIMIT = 8
 
+/**
+ * The rail groups, and why it has them: twenty flat entries ran the column past
+ * a thousand pixels, so Settings and Contact support sat below the fold, and
+ * league-scoped tools were interleaved with cross-league screens under no
+ * heading that said which was which.
+ *
+ * Membership is declared here rather than on each item so adding a nav entry
+ * stays a one-line change — and an entry missing from every group still renders
+ * (see the leftovers rule) rather than silently disappearing from the product.
+ */
+const NAV_GROUPS: Array<{ label: string | null; keys: CoreNavKey[] }> = [
+  { label: null, keys: ['home'] },
+  {
+    label: 'This league',
+    keys: ['my-team', 'matchup', 'trades', 'waivers', 'draft-hq', 'war-room'],
+  },
+  {
+    label: 'Across leagues',
+    keys: ['week', 'live-scores', 'players', 'season-outlook', 'portfolio', 'my-leagues'],
+  },
+  {
+    label: 'You',
+    keys: ['career', 'rankings', 'notifications', 'commissioner', 'league-sync', 'tools', 'settings'],
+  },
+]
+
+function groupNavItems(items: NavItem[]): Array<{ label: string | null; items: NavItem[] }> {
+  const byKey = new Map(items.map((i) => [i.key, i]))
+  const used = new Set<CoreNavKey>()
+  const groups = NAV_GROUPS.map((g) => {
+    const picked = g.keys
+      .map((k) => byKey.get(k))
+      .filter((x): x is NavItem => Boolean(x))
+    for (const i of picked) used.add(i.key)
+    return { label: g.label, items: picked }
+  })
+  /* Anything not claimed by a group keeps its place at the end. A nav entry
+     added later must never vanish because someone forgot to list it. */
+  const leftovers = items.filter((i) => !used.has(i.key))
+  if (leftovers.length > 0) groups.push({ label: null, items: leftovers })
+  return groups.filter((g) => g.items.length > 0)
+}
+
 function navItems(props: AfCoreShellProps): NavItem[] {
   return [
     { key: 'home', label: 'Home', glyph: '▣', href: '/core' },
@@ -457,6 +500,7 @@ function HelpDot({ title, body }: { title: string; body: string }) {
 
 export function AfCoreShell(props: AfCoreShellProps) {
   const items = useMemo(() => navItems(props), [props])
+  const navGroups = useMemo(() => groupNavItems(items), [items])
   const { leagues, syncAge, plan, weekLabel, active, children, comms } = props
 
   return (
@@ -527,24 +571,31 @@ export function AfCoreShell(props: AfCoreShellProps) {
       {/* ── Primary nav ─────────────────────────────────────────────── */}
       <aside className="af-nav">
         <div className="af-nav-items">
-          {items.map((item) => (
-            <Link
-              key={item.key}
-              href={item.href}
-              className="af-nav-item"
-              data-active={item.key === active}
-              aria-current={item.key === active ? 'page' : undefined}
-            >
-              <span className="af-nav-glyph" aria-hidden>
-                {item.glyph}
-              </span>
-              <span className="af-nav-label">{item.label}</span>
-              {item.badge ? (
-                <span className="af-nav-badge" data-tone={item.badge.tone}>
-                  {item.badge.text}
-                </span>
+          {navGroups.map((group, gi) => (
+            <div className="af-nav-group" key={group.label ?? `g${gi}`}>
+              {group.label ? (
+                <span className="af-nav-grouplabel">{group.label}</span>
               ) : null}
-            </Link>
+              {group.items.map((item) => (
+                <Link
+                  key={item.key}
+                  href={item.href}
+                  className="af-nav-item"
+                  data-active={item.key === active}
+                  aria-current={item.key === active ? 'page' : undefined}
+                >
+                  <span className="af-nav-glyph" aria-hidden>
+                    {item.glyph}
+                  </span>
+                  <span className="af-nav-label">{item.label}</span>
+                  {item.badge ? (
+                    <span className="af-nav-badge" data-tone={item.badge.tone}>
+                      {item.badge.text}
+                    </span>
+                  ) : null}
+                </Link>
+              ))}
+            </div>
           ))}
         </div>
 

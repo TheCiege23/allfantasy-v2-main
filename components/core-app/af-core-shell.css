@@ -522,3 +522,19 @@
   box-shadow: none;
   color: var(--text);
 }
+
+/* Rail groups — twenty flat entries put Settings below the fold and mixed
+   league-scoped tools in with cross-league screens. The label is a quiet
+   separator, not a heading competing with the items under it. */
+.af-nav-group {
+  display: contents;
+}
+.af-nav-grouplabel {
+  margin: 12px 0 4px;
+  padding: 0 12px;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
