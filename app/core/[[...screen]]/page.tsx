@@ -30,6 +30,7 @@ import { getWarRoomData } from '@/lib/core-app/warRoom'
 import LandingV4 from '@/components/core-app/screens/LandingV4'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Partners from '@/components/core-app/screens/Partners'
+import { BusinessRetention } from '@/components/core-app/screens/BusinessRetention'
 import AuthV4 from '@/components/core-app/screens/AuthV4'
 import ImportV4, { type ImportPreviewState } from '@/components/core-app/screens/ImportV4'
 import { Portfolio } from '@/components/core-app/screens/Portfolio'
@@ -159,6 +160,20 @@ export default async function AfCorePage({
    */
   if (segment === 'partners') {
     return <Partners />
+  }
+
+  /*
+   * 30b — the B2B retention case, at /core/business.
+   *
+   * Ungated and outside AfCoreShell for the same reason `partners` is: it is a
+   * partner-facing page for people who are NOT signed in. It sits beside
+   * `partners` rather than replacing it — `partners` is the offer ("here is
+   * what we run over your data"), this is the argument for it ("here is why
+   * offseason retention is the thing to buy"). Its demo CTA deep-links into the
+   * one working demo form at /core/partners#demo rather than growing a second.
+   */
+  if (segment === 'business') {
+    return <BusinessRetention />
   }
 
   // Auth previews are ungated for the same reason the landing is: sign-in and
@@ -603,6 +618,12 @@ export default async function AfCorePage({
         chimmyTokenCost,
         dockable,
         supportEmail: (session?.user as { email?: string | null } | undefined)?.email ?? null,
+        /*
+         * Carried over from the /core home's old floating bubble, which the
+         * shell's launcher replaced. Without this the badge would simply have
+         * disappeared when that bubble was removed.
+         */
+        unread: dash34?.chatUnread ?? 0,
       }}
     >
       {leagueHome ? (

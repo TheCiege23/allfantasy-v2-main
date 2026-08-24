@@ -291,11 +291,25 @@ const filesToKeep = new Set([
 // (regression #284, and again in the Aug 2026 dispatcher consolidation).
 // Fail the build loudly instead of shipping silently-dead crons.
 ;(function assertScheduledCronsSurviveExclusion() {
+  // ⚠ READ cron-schedule.json FIRST. The schedule moved out of vercel.json (the
+  // Hobby plan refuses to build a sub-daily cron declaration). Left pointing at
+  // vercel.json alone this guard reads zero crons and passes vacuously —
+  // printing "0 scheduled cron(s) verified" — which is precisely how it went
+  // dark while people emptied vercel.json to get a deploy out.
   let crons = []
-  try {
-    crons = JSON.parse(fs.readFileSync(path.join(repoRoot, 'vercel.json'), 'utf8')).crons || []
-  } catch {
-    return // no vercel.json → nothing scheduled → nothing to guard
+  for (const file of ['cron-schedule.json', 'vercel.json']) {
+    try {
+      const found = JSON.parse(fs.readFileSync(path.join(repoRoot, file), 'utf8')).crons || []
+      if (found.length) {
+        crons = found
+        break
+      }
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  if (crons.length === 0) {
+    return // neither file declares a cron → nothing scheduled → nothing to guard
   }
   const problems = []
   for (const cron of crons) {

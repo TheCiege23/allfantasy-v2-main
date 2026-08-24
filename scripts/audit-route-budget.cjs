@@ -4,6 +4,7 @@ const path = require('path')
 const repoRoot = process.cwd()
 const appRoot = path.join(repoRoot, 'app')
 const vercelConfigPath = path.join(repoRoot, 'vercel.json')
+const cronSchedulePath = path.join(repoRoot, 'cron-schedule.json')
 const buildScriptPath = path.join(repoRoot, 'scripts', 'vercel-next-build.cjs')
 
 const GREEN_LIMIT = 1900
@@ -217,7 +218,9 @@ const sourceRouteCount = pageRoutes.length + apiRoutes.length + nonApiRouteHandl
 
 const vercelConfig = readJson(vercelConfigPath) || {}
 const vercelCounts = {
-  crons: countArray(vercelConfig.crons),
+  // The cron schedule moved to cron-schedule.json; every other key below is
+  // still genuine vercel.json config, so only this one is redirected.
+  crons: countArray((readJson(cronSchedulePath) || vercelConfig).crons),
   rewrites: countArray(vercelConfig.rewrites),
   redirects: countArray(vercelConfig.redirects),
   headers: countArray(vercelConfig.headers),

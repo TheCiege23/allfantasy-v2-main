@@ -34,7 +34,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { slowTierSchedules, classifyCrons } from './cron-tier.mjs'
+import { slowTierSchedules, classifyCrons, readCronSchedule } from './cron-tier.mjs'
 
 /**
  * Slow-tier crons are fired by GitHub Actions, not by the host, and a workflow's `schedule:`
@@ -53,8 +53,12 @@ const CEILING = 60
 const reportOnly = process.argv.includes('--report')
 const root = process.cwd()
 
-const config = JSON.parse(readFileSync(join(root, 'vercel.json'), 'utf8'))
-const crons = config.crons ?? []
+// The schedule lives in cron-schedule.json now; read it through the shared
+// loader so this check, the dispatcher and the freshness monitor cannot end up
+// disagreeing about what is declared. `readCronSchedule` throws on an empty
+// schedule rather than reporting "0 crons declared", which would pass this
+// budget check vacuously.
+const crons = readCronSchedule(root)
 
 const basePath = (p) => String(p).split('?')[0]
 
