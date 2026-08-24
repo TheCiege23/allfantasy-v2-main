@@ -311,12 +311,13 @@ export async function buildLeagueDecisionContext(
     })
 
   let fcPlayers: any[] = []
+  const leaguePpr = scoringType === 'PPR' ? 1 : scoringType === 'Half PPR' ? 0.5 : 0
   try {
     fcPlayers = await fetchFantasyCalcValues({
       isDynasty: leagueSettings2.type === 2,
       numQbs: isSF ? 2 : 1,
       numTeams,
-      ppr: 1,
+      ppr: leaguePpr,
     })
   } catch { fcPlayers = [] }
 
@@ -325,6 +326,8 @@ export async function buildLeagueDecisionContext(
     isSuperFlex: isSF,
     fantasyCalcPlayers: fcPlayers,
     numTeams,
+    ppr: leaguePpr,
+    isDynasty: leagueSettings2.type === 2,
   }
 
   const allPlayerNames = new Set<string>()

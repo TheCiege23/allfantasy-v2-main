@@ -13,6 +13,10 @@ export interface ValuationContext {
   numTeams?: number;
   rosterConfig?: LeagueRosterConfig;
   playerPositionOverrides?: Record<string, string>;
+  /** League scoring; defaults to full PPR when the caller has no league context. */
+  ppr?: 0 | 0.5 | 1;
+  /** League format; defaults to dynasty when the caller has no league context. */
+  isDynasty?: boolean;
 }
 
 export interface AssetValue {
@@ -61,17 +65,17 @@ let _fcPlayersCacheKey: string = '';
 async function getFantasyCalcPlayers(ctx: ValuationContext): Promise<FantasyCalcPlayer[]> {
   if (ctx.fantasyCalcPlayers) return ctx.fantasyCalcPlayers;
 
-  const cacheKey = `${ctx.isSuperFlex}-${ctx.numTeams ?? 12}`;
+  const cacheKey = `${ctx.isDynasty ?? true}-${ctx.isSuperFlex}-${ctx.numTeams ?? 12}-${ctx.ppr ?? 1}`;
   if (_fcPlayersCache && _fcPlayersCacheKey === cacheKey) {
     return _fcPlayersCache;
   }
 
   try {
     const players = await fetchFantasyCalcValues({
-      isDynasty: true,
+      isDynasty: ctx.isDynasty ?? true,
       numQbs: ctx.isSuperFlex ? 2 : 1,
       numTeams: ctx.numTeams ?? 12,
-      ppr: 1,
+      ppr: ctx.ppr ?? 1,
     });
     _fcPlayersCache = players;
     _fcPlayersCacheKey = cacheKey;
@@ -575,22 +579,23 @@ export async function computeDualModeTradeDelta(
   trade: UserTrade,
   viewerUserId: string,
   isSuperFlex: boolean,
-  sleeperUserId?: string
+  sleeperUserId?: string,
+  leagueContext?: Pick<ValuationContext, 'isDynasty' | 'numTeams' | 'ppr'>
 ): Promise<{
   atTheTime: TradeDelta | null;
   withHindsight: TradeDelta | null;
   comparison: string;
 }> {
-  const atTimeCtx = createValuationContext(trade, isSuperFlex, 'atTime');
-  const hindsightCtx = createValuationContext(trade, isSuperFlex, 'hindsight');
+  const atTimeCtx = { ...createValuationContext(trade, isSuperFlex, 'atTime'), ...leagueContext };
+  const hindsightCtx = { ...createValuationContext(trade, isSuperFlex, 'hindsight'), ...leagueContext };
 
   let fcPlayers: FantasyCalcPlayer[] = [];
   try {
     fcPlayers = await fetchFantasyCalcValues({
-      isDynasty: true,
+      isDynasty: leagueContext?.isDynasty ?? true,
       numQbs: isSuperFlex ? 2 : 1,
-      numTeams: 12,
-      ppr: 1
+      numTeams: leagueContext?.numTeams ?? 12,
+      ppr: leagueContext?.ppr ?? 1
     });
   } catch (e) {
     console.warn('FantasyCalc fetch failed:', e);

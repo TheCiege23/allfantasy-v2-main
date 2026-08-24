@@ -77,7 +77,7 @@ export function TradeSimulationStrip({
   return (
     <SimulationPanel
       title="Sim this trade"
-      description="Rest-of-season Monte Carlo for the sender: compares your listed package vs the package you receive. Uses synthetic league fill beyond these assets."
+      description="Rest-of-season Monte Carlo estimate for the sender: compares your listed package vs the package you receive. Projections are synthetic placeholders, not real player projections."
       requestBody={requestBody}
       tradeFocusTeamId="sender"
       className="mt-6"
