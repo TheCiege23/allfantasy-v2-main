@@ -1,18 +1,31 @@
 name: Cron fast tier
 
-# Drives the 12 sub-hourly crons declared in vercel.json from a single long-running job.
+# Drives the 12 sub-hourly crons declared in cron-schedule.json from a single long-running job.
 #
 # WHY THIS EXISTS
-# GitHub schedules cannot fire more often than hourly, and the host's scheduler — which is what
-# actually executed these — is unavailable while the Vercel account is on hold. The slow tier
+# GitHub schedules cannot fire more often than hourly. The slow tier
 # (.github/workflows/cron-slow-tier.yml) covers the 25 hourly-or-slower jobs by firing one request
 # per trigger. That approach cannot express "every 2 minutes", so this workflow instead starts
 # hourly and TICKS INTERNALLY for the rest of the hour.
 #
-# ⚠ THIS IS A WORKAROUND FOR A BILLING OUTAGE, NOT AN ARCHITECTURE.
-# DELETE THIS WORKFLOW when the host's scheduler returns. Leaving both running double-fires every
-# fast job: two live-score-ticks every two minutes, each holding a 105s internal poll loop against
-# the same provider.
+# 🛑 THIS IS THE EXECUTOR NOW. DO NOT DELETE IT.
+# It began as a workaround for a billing outage, and this comment used to say "DELETE THIS WORKFLOW
+# when the host's scheduler returns." That is no longer true and following it takes production
+# down. PR #621 (merged 2026-08-24) moved the registry out of vercel.json into cron-schedule.json;
+# vercel.json is now `{}`, so Vercel registers ZERO cron jobs and these two workflows are the only
+# thing running any of the 42.
+#
+# Acting on the old instruction on 2026-08-24 caused a ~3-hour total cron outage: both tiers were
+# disabled the same night #621 emptied vercel.json, `vercel crons ls` returned "No cron jobs
+# found", and nothing detected it — the only things that could have noticed were themselves crons.
+# Recovered with `gh workflow enable "Cron fast tier"` / `"Cron slow tier"`.
+#
+# ⚠ IF VERCEL-NATIVE CRONS ARE EVER RESTORED, disable these — but confirm with `vercel crons ls`
+# against the LIVE project first, never by assumption. A green deploy with crons declared in
+# vercel.json proves nothing about registration: on 2026-08-23 two production builds succeeded with
+# all 42 declared while Vercel had registered none of them. Leaving both schedulers running
+# double-fires every fast job: two live-score-ticks every two minutes, each holding a 105s internal
+# poll loop against the same provider.
 #
 # COST: this repo is PUBLIC, so Actions minutes are unmetered. Do not port this to a private repo
 # without doing the arithmetic first — a 55-minute job every hour is ~40,000 minutes a month, and

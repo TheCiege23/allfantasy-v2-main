@@ -1,5 +1,5 @@
 import Link from "next/link"
-import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
+import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPageRenderer"
 import { DISCLAIMER_PAGE_TITLE, DISCLAIMER_PAGE_SECTIONS } from "@/lib/legal/DisclaimerPageService"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 
@@ -21,7 +21,7 @@ export default async function DisclaimerPage({ searchParams }: DisclaimerPagePro
   return (
     <LegalPageRenderer
       title={DISCLAIMER_PAGE_TITLE}
-      description={`Last updated: ${LEGAL_LAST_UPDATED}`}
+      description={`Last updated: ${legalLastUpdated("disclaimer")}`}
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to Sign Up" : "Back to Home"}
     >

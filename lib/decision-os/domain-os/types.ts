@@ -36,7 +36,7 @@ export const OS_SCOPE_LEVELS = ['app', 'league', 'user'] as const
 export type OsScopeLevel = (typeof OS_SCOPE_LEVELS)[number]
 
 /** Which feed produced this. One row space, partitioned by domain. */
-export type OsDomain = 'lineup' | 'waiver' | 'trade'
+export type OsDomain = 'lineup' | 'waiver' | 'trade' | 'draft'
 
 export interface OsFactEnvelope<T> {
   facts: T

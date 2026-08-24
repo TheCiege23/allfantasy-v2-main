@@ -2,7 +2,27 @@ import Link from "next/link"
 import type { ReactNode } from "react"
 import "./legal-page.css"
 
-const LEGAL_LAST_UPDATED = "March 2026"
+/**
+ * Per-route last-updated stamps. Privacy carries August 2026 for the Discord
+ * integration disclosure; the other routes are unchanged since March 2026.
+ */
+const LEGAL_LAST_UPDATED_BY_PAGE = {
+  privacy: "August 2026",
+  terms: "March 2026",
+  disclaimer: "March 2026",
+  dataDeletion: "March 2026",
+  aiTransparency: "March 2026",
+  contact: "March 2026",
+  mission: "March 2026",
+  noGamblingPolicy: "March 2026",
+} as const
+
+type LegalPageKey = keyof typeof LEGAL_LAST_UPDATED_BY_PAGE
+
+/** The last-updated stamp for one legal route. */
+function legalLastUpdated(page: LegalPageKey): string {
+  return LEGAL_LAST_UPDATED_BY_PAGE[page]
+}
 
 /**
  * The one shell every legal route renders through — handoff 17a's build note
@@ -10,11 +30,13 @@ const LEGAL_LAST_UPDATED = "March 2026"
  * stamp, footer nav row"), which this component already was. Restyling it here
  * moves all eight legal routes to the new design at once.
  *
- * ⚠ THE LAST-UPDATED STAMP IS ONE MAINTAINED CONSTANT, NOT A PER-PAGE STRING.
- * 17a requires it to be "a real, maintained field". Every page reads
- * LEGAL_LAST_UPDATED from here, so the eight routes cannot drift apart — and a
- * page that changes without this constant changing is a bug the single source
- * makes visible rather than one that hides on whichever page nobody reopened.
+ * ⚠ THE LAST-UPDATED STAMPS LIVE IN ONE TABLE, NEVER AS PER-PAGE STRINGS.
+ * 17a requires the stamp to be "a real, maintained field". Routes now carry their
+ * own dates, because revising Privacy must not date-stamp Terms as revised — but
+ * every date is declared in LEGAL_LAST_UPDATED_BY_PAGE above, so the eight routes
+ * stay reviewable side by side and a page that changes without its entry changing
+ * is still a bug this table makes visible rather than one that hides on whichever
+ * page nobody reopened.
  */
 
 interface LegalPageShellProps {
@@ -142,4 +164,5 @@ export function LegalPolicyGrid({
   )
 }
 
-export { LEGAL_LAST_UPDATED }
+export { legalLastUpdated, LEGAL_LAST_UPDATED_BY_PAGE }
+export type { LegalPageKey }

@@ -1,6 +1,6 @@
 import Link from "next/link"
 import LegalPageRenderer, {
-  LEGAL_LAST_UPDATED,
+  legalLastUpdated,
   LegalBox,
   LegalCallout,
 } from "@/components/legal/LegalPageRenderer"
@@ -38,7 +38,7 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
   return (
     <LegalPageRenderer
       title="Delete my data"
-      description={`Last updated: ${LEGAL_LAST_UPDATED}`}
+      description={`Last updated: ${legalLastUpdated("dataDeletion")}`}
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to sign up" : "Back to home"}
     >

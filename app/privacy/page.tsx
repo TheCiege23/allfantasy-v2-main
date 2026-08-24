@@ -1,6 +1,6 @@
 import Link from "next/link"
 import LegalPageRenderer, {
-  LEGAL_LAST_UPDATED,
+  legalLastUpdated,
   LegalBox,
   LegalCallout,
   LegalGrid,
@@ -41,7 +41,7 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
   return (
     <LegalPageRenderer
       title="Privacy Policy"
-      description={`Last updated: ${LEGAL_LAST_UPDATED}`}
+      description={`Last updated: ${legalLastUpdated("privacy")}`}
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to sign up" : "Back to home"}
     >
@@ -131,6 +131,60 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
         </p>
       </section>
 
+      <section id="discord-integration">
+        <h2>Discord integration</h2>
+        <p>
+          Connecting Discord is optional. If you never link a Discord account or add our bot to a
+          Discord server, nothing in this section applies to you.
+        </p>
+
+        <LegalGrid>
+          <LegalBox eyebrow="Your Discord account">
+            <ul>
+              <li>Discord user ID, username and avatar</li>
+              <li>The email address on your Discord account</li>
+              <li>Access and refresh tokens for the connection</li>
+              <li>When the connection was made</li>
+            </ul>
+          </LegalBox>
+          <LegalBox eyebrow="Linked servers and channels">
+            <ul>
+              <li>Server (guild) ID and name</li>
+              <li>Channel ID and name for each synced channel</li>
+              <li>Webhook credentials we create in order to post</li>
+              <li>Which league member linked the server</li>
+            </ul>
+          </LegalBox>
+        </LegalGrid>
+
+        <h3>
+          <span className="af-legal-eyebrow">Message sync</span>
+        </h3>
+        <p>
+          A commissioner can connect an AllFantasy league to a Discord channel. Outbound sync posts
+          league activity into that channel through a webhook. Inbound sync is{" "}
+          <strong>off by default</strong> and has to be turned on deliberately.
+        </p>
+        <p>
+          When inbound sync is on, we read messages from that linked channel and copy the message
+          text, together with the author&apos;s Discord display name and avatar, into your AllFantasy
+          league chat, where it is stored. This applies to{" "}
+          <strong>everyone who posts in that channel</strong>, including people who do not have an
+          AllFantasy account. We also keep a record linking each Discord message to its AllFantasy
+          counterpart so the same message is not copied twice.
+        </p>
+        <p>
+          We read only the specific channels a league has been linked to. We do not read direct
+          messages, and we do not read other channels in your server.
+        </p>
+
+        <LegalCallout tone="accent">
+          <strong>Turning it off:</strong> you can disconnect Discord at any time from your account
+          settings, and a commissioner can disable sync or unlink a channel from the league&apos;s
+          Discord settings. Removing the bot from a Discord server ends all sync for that server.
+        </LegalCallout>
+      </section>
+
       <LegalGrid>
         <section id="how-we-use-it">
           <h2>3. How we use it</h2>
@@ -159,6 +213,11 @@ export default async function PrivacyPage({ searchParams }: PrivacyPageProps) {
         <p>
           We may share information with service providers, when required by law, to protect rights,
           or in connection with a business transfer.
+        </p>
+        <p>
+          If your league has Discord sync turned on, the league activity and chat messages you post
+          in AllFantasy are sent to the linked Discord channel. Once delivered, that content lives in
+          Discord and is governed by Discord&apos;s own privacy policy, not this one.
         </p>
         {/* 17a requires this line to stay visually distinct rather than buried. */}
         <LegalCallout tone="accent">

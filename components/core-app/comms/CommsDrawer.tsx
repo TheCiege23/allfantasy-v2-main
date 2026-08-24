@@ -7,9 +7,9 @@ import '@/components/core-app/af-comms.css'
 /**
  * 23a — the communications drawer. 23b — the same drawer, docked on desktop.
  *
- * ⚠ ONE SHELL, FOUR PANELS — NOT FOUR SCREENS. The handoff's build note is
- * explicit, and the reason is the product argument for a drawer at all: "never a
- * page you navigate to and lose your place". Four routes would be four
+ * ⚠ ONE SHELL, MULTIPLE PANELS — NOT SEPARATE SCREENS. The handoff's build note
+ * is explicit, and the reason is the product argument for a drawer at all:
+ * "never a page you navigate to and lose your place". Five routes would be five
  * navigations. Header, tab bar and scope chip live here once; each tab supplies
  * only its body.
  *
@@ -19,8 +19,8 @@ import '@/components/core-app/af-comms.css'
  * layouts — they are one, because every copy contract below has to hold in both,
  * and two files is how one of them quietly stops holding.
  *
- * ⚠ THE FOUR COPY CONTRACTS, AND WHERE EACH LIVES. All four are trust
- * disclosures, not decoration, and none of them is conditional:
+ * ⚠ THE COPY CONTRACTS, AND WHERE EACH LIVES. Every one is a trust disclosure,
+ * not decoration, and none of them is conditional:
  *
  *   1. A LEAGUE-TAB ANSWER SAYS IT IS PUBLIC — `PUBLIC_ANSWER_NOTICE`, rendered
  *      on every @chimmy answer in the league tab. Everyone in the league sees it.
@@ -30,6 +30,12 @@ import '@/components/core-app/af-comms.css'
  *      Sleeper or ESPN messages, and saying so is the commitment.
  *   4. CHIMMY ALWAYS SHOWS ITS CURRENT SCOPE — the chip in the header. A user must
  *      never have to guess what an answer was grounded in.
+ *   5. DISCORD SAYS WHO CONTROLS IT — `DISCORD_PRIVACY`. Only the commissioner
+ *      can connect, disconnect, or re-map the bridge; the tab shows a real
+ *      invite (`createOrReuseChannelInvite`, minted with the bot's actual
+ *      CREATE_INSTANT_INVITE grant) rather than pretending the server can be
+ *      created on someone's behalf — Discord's own API refuses that past 10
+ *      guilds, so the flow is always "join the one your commissioner made".
  *
  * ⚠ AUTO-SCOPE IS FUNCTIONALLY REAL, NOT ILLUSTRATIVE. 23b's core value prop is
  * that a docked Chimmy follows the page: open it on a league's roster and the
@@ -43,7 +49,7 @@ import '@/components/core-app/af-comms.css'
  * than retyped per answer.
  */
 
-export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms'
+export type CommsTab = 'league' | 'chimmy' | 'huddle' | 'dms' | 'discord'
 
 export type CommsLeague = {
   id: string
@@ -76,6 +82,10 @@ const DM_PRIVACY =
   'AllFantasy DMs are separate from Sleeper and ESPN messages. We do not read them, mirror them, or send ' +
   'anything back to those platforms.'
 
+const DISCORD_PRIVACY =
+  "Only your commissioner can connect, disconnect, or change what's bridged. The bot can see the one " +
+  'channel they link — nothing else in the server — and edits or deletes made in either place do not sync.'
+
 /**
  * The only phrasing allowed when Chimmy suggests a roster change.
  *
@@ -96,6 +106,7 @@ const TABS: Array<{ id: CommsTab; label: string; audience: string }> = [
   { id: 'chimmy', label: 'Chimmy', audience: 'Just you' },
   { id: 'huddle', label: 'Huddle', audience: 'Everyone on AllFantasy' },
   { id: 'dms', label: 'DMs', audience: 'One person' },
+  { id: 'discord', label: 'Discord', audience: "Everyone in one league's server" },
 ]
 
 type ChatTurn = {
@@ -570,6 +581,199 @@ function UnbuiltPanel({
   )
 }
 
+// ── Discord panel ──────────────────────────────────────────────────────
+
+type DiscordStatus = {
+  botConfigured: boolean
+  isCommissioner: boolean
+  missingPermissions: string[] | null
+  /** Null when no channel is linked yet, or Discord couldn't be reached just now. */
+  inviteUrl: string | null
+  channel: {
+    channelName: string | null
+    guildName: string | null
+    channelUrl: string
+  } | null
+}
+
+/**
+ * 32a's `/core/discord` screen is the commissioner's full configuration surface
+ * (direction picker, member linking, surface mapping). This tab is deliberately
+ * smaller: a member-facing entry point that answers "is there a Discord for this
+ * league, and how do I get into it" without leaving the drawer. Commissioners get
+ * a link out to the full screen; nobody gets a control this tab cannot back with
+ * a real API call — there is no "create a server" button here, because Discord's
+ * own API refuses bot-created guilds past a 10-guild cap, so the honest flow is
+ * always "join the one your commissioner already made".
+ */
+function DiscordPanel({
+  leagues,
+  scopeId,
+  onScope,
+}: {
+  leagues: CommsLeague[]
+  scopeId: string | null
+  onScope: (id: string | null) => void
+}) {
+  const [status, setStatus] = useState<DiscordStatus | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
+
+  useEffect(() => {
+    if (!scopeId) {
+      setStatus(null)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    setError(null)
+    fetch(`/api/discord/league?leagueId=${encodeURIComponent(scopeId)}`)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Discord status returned ${res.status}`)
+        return res.json() as Promise<DiscordStatus>
+      })
+      .then((data) => {
+        if (!cancelled) setStatus(data)
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(
+            e instanceof Error
+              ? `Could not load Discord status (${e.message}).`
+              : 'Could not load Discord status.',
+          )
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [scopeId])
+
+  if (!scopeId) {
+    return (
+      <div className="af-cm-panel">
+        <div className="af-cm-scope">
+          <span className="af-cm-scope-label">League</span>
+          <div className="af-cm-scope-chips">
+            {leagues.slice(0, 8).map((l) => (
+              <button key={l.id} type="button" className="af-cm-chip" onClick={() => onScope(l.id)}>
+                {l.name}
+              </button>
+            ))}
+          </div>
+          <p className="af-cm-scope-note">
+            Discord belongs to one league at a time. Pick which one.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="af-cm-panel">
+      <div className="af-cm-scope">
+        <span className="af-cm-scope-label">League</span>
+        <div className="af-cm-scope-chips">
+          {leagues.slice(0, 6).map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              className="af-cm-chip"
+              data-on={l.id === scopeId}
+              onClick={() => onScope(l.id)}
+            >
+              {l.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="af-cm-privacy">{DISCORD_PRIVACY}</div>
+
+      <div className="af-cm-empty af-cm-empty--grow">
+        {loading ? (
+          <p className="af-cm-empty-t">Checking Discord…</p>
+        ) : error ? (
+          <>
+            <p className="af-cm-empty-t">Couldn&apos;t load Discord</p>
+            <p className="af-cm-empty-b">{error}</p>
+          </>
+        ) : !status?.botConfigured ? (
+          <>
+            <p className="af-cm-empty-t">Discord isn&apos;t set up on this deployment</p>
+            <p className="af-cm-empty-b">There is no bot configured to relay for any league right now.</p>
+          </>
+        ) : !status.channel ? (
+          status.isCommissioner ? (
+            <>
+              <p className="af-cm-empty-t">No Discord channel yet for {scope?.name}</p>
+              <p className="af-cm-empty-b">
+                Create a server in Discord (or use one you already have), invite the bot in, then link
+                a channel from the full Discord settings screen.
+              </p>
+              <Link href="/core/discord" className="af-cm-linkbtn">
+                Set up Discord →
+              </Link>
+            </>
+          ) : (
+            <>
+              <p className="af-cm-empty-t">No Discord yet for {scope?.name}</p>
+              <p className="af-cm-empty-b">
+                Your commissioner hasn&apos;t connected a Discord server to this league.
+              </p>
+            </>
+          )
+        ) : (
+          <>
+            <p className="af-cm-empty-t">
+              #{status.channel.channelName ?? 'channel'}
+              {status.channel.guildName ? ` in ${status.channel.guildName}` : ''}
+            </p>
+            {status.missingPermissions && status.missingPermissions.length > 0 ? (
+              <p className="af-cm-empty-b af-cm-warn">
+                This server is missing permissions it needs ({status.missingPermissions.join(', ')})
+                {status.isCommissioner
+                  ? ' — re-invite the bot from Discord settings.'
+                  : ' — ask your commissioner to reconnect the bot.'}
+              </p>
+            ) : null}
+            <div className="af-cm-actions">
+              {status.inviteUrl ? (
+                <a
+                  href={status.inviteUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="af-cm-linkbtn"
+                >
+                  Join our Discord ↗
+                </a>
+              ) : null}
+              <a
+                href={status.channel.channelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="af-cm-linkbtn"
+              >
+                Open channel ↗
+              </a>
+              {status.isCommissioner ? (
+                <Link href="/core/discord" className="af-cm-linkbtn">
+                  Manage Discord
+                </Link>
+              ) : null}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── The drawer ─────────────────────────────────────────────────────────
 
 export function CommsDrawer({
@@ -657,7 +861,7 @@ export function CommsDrawer({
             ))}
           </nav>
 
-          {/* Who can see what you type here. The four tabs' whole distinction. */}
+          {/* Who can see what you type here. The tabs' whole distinction. */}
           <p className="af-cm-audience">{TABS.find((t) => t.id === tab)!.audience}</p>
         </header>
 
@@ -682,12 +886,14 @@ export function CommsDrawer({
             privacy={HUDDLE_PRIVACY}
             missing="There is no cross-league social feed in this codebase yet — the only feed endpoint is tournament-scoped and needs a tournament id, so it cannot back a global one."
           />
-        ) : (
+        ) : tab === 'dms' ? (
           <UnbuiltPanel
             title="DMs"
             privacy={DM_PRIVACY}
             missing="There is no direct-message store in this codebase yet. When it lands, each thread has to carry the league it came from — at 61 leagues a name on its own is not enough context to know who you are talking to."
           />
+        ) : (
+          <DiscordPanel leagues={leagues} scopeId={scopeId} onScope={setScopeId} />
         )}
 
         <footer className="af-cm-foot">

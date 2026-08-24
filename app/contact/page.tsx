@@ -1,5 +1,5 @@
 import Link from "next/link"
-import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalPageRenderer"
+import LegalPageRenderer, { legalLastUpdated } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 
 interface ContactPageProps {
@@ -20,7 +20,7 @@ export default async function ContactPage({ searchParams }: ContactPageProps) {
   return (
     <LegalPageRenderer
       title="Contact"
-      description={`Last updated: ${LEGAL_LAST_UPDATED}`}
+      description={`Last updated: ${legalLastUpdated("contact")}`}
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to Sign Up" : "Back to Home"}
     >

@@ -12,7 +12,8 @@ import { shouldRunWaiverShadow, shouldRunWaiverLive, runWaiverShadowForEngine } 
 import { toWaiverCard, type WaiverCard } from '@/lib/decision-os/waiver/waiverCardAdapter'
 import { attachSavedAnalysis } from '@/lib/decision-os/three-brain/phase4/attachSavedAnalysis'
 import { getDecisionShadowScopeFilters } from '@/lib/decision-os/core/shadow'
-import { emitLiveTelemetry } from '@/lib/decision-os/core/parity'
+import { emitLiveTelemetry, emitFeedOutcomes } from '@/lib/decision-os/core/parity'
+import { createWaiverOsLoaders } from '@/lib/decision-os/waiver-os'
 import { prisma } from '@/lib/prisma'
 
 const SUPPORTED_SPORTS_ENUM = SUPPORTED_SPORTS as [
@@ -221,9 +222,24 @@ export const POST = withApiUsage({
     const liveStart = Date.now()
     let decisionOs: { decisionId: string; card: WaiverCard; confidence: number; legal: boolean } | null = null
 
+    /*
+     * Waiver OS feed, built ONCE per request so drainOutcomes() sees every fact this request resolved.
+     * Both branches below get the same instance.
+     *
+     * ⚠ THIS CHANGES WHERE FACTS COME FROM, NEVER HOW A DECISION IS MADE. The shadow runner already
+     * accepts `loadWorldFacts` as an optional dependency with a live default, so supplying it swaps
+     * grounding and nothing else.
+     *
+     * SAFE BEFORE THE TABLE EXISTS. `domain_os_facts` is declared in schema.prisma but has never been
+     * migrated, so in production every read throws 42P01, `safeRead` swallows it, and the feed falls
+     * through to the live derivation -- byte-identical to not wiring this at all. That is deliberate:
+     * it lets the hit rate be MEASURED before anyone migrates a table for it.
+     */
+    const { drainOutcomes: drainWaiverOsOutcomes, ...waiverOsLoaders } = createWaiverOsLoaders()
+
     if (isLive && input.leagueId) {
       try {
-        const liveResult = await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis })
+        const liveResult = await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis }, waiverOsLoaders)
         if (liveResult.ran && liveResult.result) {
           const { decision } = liveResult.result
           // Attach a saved three-brain analysis, if this user has one for this league. This is the
@@ -270,13 +286,18 @@ export const POST = withApiUsage({
         })
       ) {
         try {
-          await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis })
+          await runWaiverShadowForEngine({ userId, leagueId: input.leagueId, engineInput: input, legacyAnalysis: analysis }, waiverOsLoaders)
         } catch {
           // shadow must never affect the legacy response
         }
       }
     }
 
+    // One event carrying where each fact actually came from. The waiver signal TTL is 5min, so
+    // the store only pays on repeat requests inside that window -- a property of real traffic,
+    // not of this code. If served_store stays 0, the cache is overhead and the migration is not
+    // worth doing.
+    emitFeedOutcomes('waiver', drainWaiverOsOutcomes())
     return NextResponse.json({
       success: true,
       analysis,

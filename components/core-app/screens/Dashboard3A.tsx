@@ -148,6 +148,18 @@ function platformClass(platform: string | null | undefined): string {
   return 'af3a-p-none'
 }
 
+/**
+ * A league or profile image, falling back to the letter tile it would
+ * otherwise render. `useState` rather than a plain `onError` swap because a
+ * broken <img> icon left in place is worse than the letter it replaces — the
+ * CDN 404s for some Sleeper avatar ids.
+ */
+function Mark({ src, alt, letter }: { src: string | null | undefined; alt: string; letter: string }) {
+  const [failed, setFailed] = useState(false)
+  if (!src || failed) return <>{letter}</>
+  return <img src={src} alt={alt} className="af3a-mark-img" onError={() => setFailed(true)} loading="lazy" />
+}
+
 type PlayerHit = {
   id: string
   name: string
@@ -355,6 +367,20 @@ export function Dashboard3A({
   const rest = issues.slice(3, 8)
   const leagues = data?.leagues ?? []
   /*
+   * ⚠ THE RAIL IS A SWITCHER OVER EVERY LEAGUE YOU PLAY, NOT THE "NEEDS
+   * ATTENTION" QUEUE. `data.leagues` above is `getDash34Data`'s capped,
+   * ranked-by-urgency list (max 8, and only the ones something is flagged on)
+   * — so on an account with 63 leagues and 4 flagged, the rail rendered
+   * exactly 4 tiles with nothing past them, even though 59 quiet leagues
+   * exist. `allLeagues` is the SAME loader's uncapped list (needs + quiet),
+   * built for the Dashboard v2 left panel — it is the actual inventory, and
+   * matches what AfCoreShell's rail already switches over.
+   */
+  const railLeagues = data?.allLeagues ?? leagues
+  const RAIL_TILE_LIMIT = 8
+  const railShown = railLeagues.slice(0, RAIL_TILE_LIMIT)
+  const railOverflow = railLeagues.length - railShown.length
+  /*
    * ⚠ `data.leagues` IS NOT EVERY LEAGUE, AND THIS HEADER CLAIMED IT WAS.
    * `getDash34Data` caps that array at LIST_LIMIT = 8 because 34a's main column
    * is a queue, not an inventory — so "8 total" was rendered for an account with
@@ -413,22 +439,35 @@ export function Dashboard3A({
       <aside className="af3a-rail" aria-label="Platforms">
         <div className="af3a-shield" aria-label="AllFantasy">AF</div>
         <div className="af3a-rail-line" />
-        {leagues.slice(0, 4).map((l) => (
+        {railShown.map((l) => (
           <Link
             key={l.id}
             href={`/dashboard?league=${encodeURIComponent(l.id)}`}
             className={`af3a-tile ${platformClass(l.platform)}`}
             title={l.name ?? 'League'}
           >
-            {platformTile(l.platform)}
+            <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={platformTile(l.platform)} />
           </Link>
         ))}
+        {railOverflow > 0 ? (
+          <Link
+            href="/core/portfolio"
+            className="af3a-tile af3a-tile-more"
+            title={`${railOverflow} more ${railOverflow === 1 ? 'league' : 'leagues'} — open Portfolio`}
+          >
+            +{railOverflow > 99 ? '99' : railOverflow}
+          </Link>
+        ) : null}
         <Link href="/import" className="af3a-tile af3a-tile-add" title="Import a league">
           +
         </Link>
         <div className="af3a-rail-spacer" />
         <Link href="/settings" className="af3a-avatar" title="Profile, settings and modes">
-          {(career?.handle ?? 'G').slice(0, 1).toUpperCase()}
+          <Mark
+            src={career?.avatarUrl}
+            alt={career?.handle ?? 'Profile'}
+            letter={(career?.handle ?? 'G').slice(0, 1).toUpperCase()}
+          />
         </Link>
       </aside>
 
@@ -798,6 +837,7 @@ export function Dashboard3A({
                 <div className="af3a-exposure">
                   {exposure.data.rows.map((row) => (
                     <div key={row.playerId} className="af3a-exp">
+                      <MiniPlayerImg sleeperId={row.playerId} name={row.name} size={24} className="af3a-exp-img" />
                       <span className="af3a-exp-name">
                         {row.name}
                         {row.position ? <em> {row.position}</em> : null}
@@ -844,7 +884,7 @@ export function Dashboard3A({
                     href={`/dashboard?league=${encodeURIComponent(l.id)}`}
                   >
                     <span className={`af3a-tile ${platformClass(l.platform)}`}>
-                      {platformTile(l.platform)}
+                      <Mark src={l.imageUrl} alt={l.name ?? 'League'} letter={platformTile(l.platform)} />
                     </span>
                     <span className="af3a-league-body">
                       <b>{l.name ?? 'Untitled league'}</b>
