@@ -1,6 +1,6 @@
 import Link from "next/link"
 import LegalPageRenderer, {
-  LEGAL_LAST_UPDATED,
+  legalLastUpdated,
   LegalCallout,
   LegalPolicyGrid,
 } from "@/components/legal/LegalPageRenderer"
@@ -25,7 +25,7 @@ export default async function TermsPage({ searchParams }: TermsPageProps) {
   return (
     <LegalPageRenderer
       title={TERMS_PAGE_TITLE}
-      description={`Last updated: ${LEGAL_LAST_UPDATED}`}
+      description={`Last updated: ${legalLastUpdated("terms")}`}
       backHref={fromSignup ? signupHref : "/"}
       backLabel={fromSignup ? "Back to sign up" : "Back to home"}
     >
