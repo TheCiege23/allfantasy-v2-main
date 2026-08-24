@@ -55,7 +55,16 @@ export async function GET() {
     { path: 'brackets', priority: '0.8', changefreq: 'weekly' },
     { path: 'af-legacy', priority: '0.8', changefreq: 'weekly' },
     { path: 'trade-analyzer', priority: '0.8', changefreq: 'weekly' },
-    { path: 'mock-draft', priority: '0.7', changefreq: 'weekly' },
+    /*
+     * ⚠ /mock-draft IS DELIBERATELY ABSENT, for a blunter reason than /waiver-ai
+     * below it. app/mock-draft/page.tsx calls redirect('/login?callbackUrl=...')
+     * for any visitor without a session, so a crawler fetching this URL gets a
+     * 307 and no document — measured. Its `metadata` block is real but only ever
+     * names the browser tab for a signed-in user; it cannot reach a search
+     * engine. Submitting the URL anyway asked Google to crawl a redirect at
+     * priority 0.7. /tools/mock-draft-simulator is the public page for this
+     * tool, is 200, and stays in the sitemap.
+     */
     /*
      * ⚠ /waiver-ai IS DELIBERATELY ABSENT. It carried the SAME title,
      * description and keywords as /tools/waiver-wire-advisor — byte for byte,
