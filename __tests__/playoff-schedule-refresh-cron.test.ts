@@ -146,7 +146,7 @@ describe("playoff schedule refresh cron route", () => {
 describe("playoff schedule refresh cron Vercel config", () => {
   it("registers the ESPN schedule refresh during 16:00-19:00 UTC", () => {
     const root = resolve(__dirname, "..")
-    const json = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8")) as { crons?: Array<{ path: string; schedule: string }> }
+    const json = JSON.parse(readFileSync(resolve(root, "cron-schedule.json"), "utf8")) as { crons?: Array<{ path: string; schedule: string }> }
     const entry = json.crons?.find((cron) => cron.path === "/api/brackets/playoffs/cron/refresh-schedule?sport=all&provider=espn")
 
     expect(entry).toEqual({

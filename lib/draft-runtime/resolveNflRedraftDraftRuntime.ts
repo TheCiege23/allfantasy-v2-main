@@ -1,4 +1,5 @@
 import { resolveCanonicalLeagueRules } from '@/lib/league-runtime'
+import type { CanonicalLeagueRules } from '@/lib/league-runtime'
 import { buildSessionSnapshot } from '@/lib/live-draft-engine/DraftSessionService'
 import { getResolvedDraftPoolForLeague } from '@/lib/draft-room/getResolvedDraftPoolForLeague'
 import {
@@ -110,14 +111,31 @@ function playerCoverage(players: DraftRuntimePlayer[]) {
   }
 }
 
+/**
+ * Injectable fact loaders, matching the pattern the lineup/waiver/trade shadow runners use.
+ *
+ * ⚠ ONLY THE RULES ARE INJECTABLE, AND THAT IS DELIBERATE. The session snapshot changes on every
+ * pick, and the resolved pool is parameterised by the already-drafted names — so neither can be
+ * served from a cache without offering a player who is already gone. Draft OS declares a single
+ * source for the same reason. See lib/decision-os/draft-os/index.ts.
+ */
+export interface DraftRuntimeDeps {
+  loadRules: (leagueId: string) => Promise<CanonicalLeagueRules | null>
+}
+
+const defaultDraftRuntimeDeps: DraftRuntimeDeps = {
+  loadRules: (leagueId) => resolveCanonicalLeagueRules(leagueId),
+}
+
 export async function resolveNflRedraftDraftRuntime(input: {
   leagueId: string
   viewerRosterId?: string | null
   managerStates?: DraftRuntimeManagerState[]
   queueByRosterId?: Record<string, DraftRuntimeQueueEntry[]>
   now?: Date
-}): Promise<NflRedraftDraftRuntimeResolved> {
-  const rules = await resolveCanonicalLeagueRules(input.leagueId)
+}, deps: Partial<DraftRuntimeDeps> = {}): Promise<NflRedraftDraftRuntimeResolved> {
+  const loadRules = deps.loadRules ?? defaultDraftRuntimeDeps.loadRules
+  const rules = await loadRules(input.leagueId)
   if (!rules) return { ok: false, reason: 'league_not_found' }
   if (rules.general.sport !== 'NFL' || rules.general.format !== 'redraft') {
     return { ok: false, reason: 'not_nfl_redraft' }
