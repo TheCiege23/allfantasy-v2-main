@@ -75,3 +75,66 @@ export async function mirrorActiveSleeperDrafts(
 
   return summary
 }
+
+/**
+ * Per-league throttled mirror for the draft-room live-sync poll.
+ *
+ * The cron scan above refreshes every board once a minute; a room someone is actually
+ * watching deserves better. This piggybacks the existing poll: the same one-direction
+ * sync, throttled per league so N viewers cost the same as one, and a no-op for
+ * sessions with no `sleeperDraftId`. Never throws — a mirror failure must not degrade
+ * the poll response it rides on.
+ */
+const MIRROR_TICK_THROTTLE_MS = 15_000
+const MAX_MIRROR_TICK_STATE = 250
+
+type MirrorTickState = {
+  lastRunAt: number
+  inFlight: Promise<void> | null
+}
+
+const mirrorTickGlobal = globalThis as typeof globalThis & {
+  __afSleeperMirrorTickState?: Map<string, MirrorTickState>
+}
+
+const mirrorTickState =
+  mirrorTickGlobal.__afSleeperMirrorTickState ??
+  (mirrorTickGlobal.__afSleeperMirrorTickState = new Map<string, MirrorTickState>())
+
+function pruneMirrorTickState() {
+  if (mirrorTickState.size <= MAX_MIRROR_TICK_STATE) return
+  const sorted = [...mirrorTickState.entries()].sort((a, b) => a[1].lastRunAt - b[1].lastRunAt)
+  const overflow = mirrorTickState.size - MAX_MIRROR_TICK_STATE
+  for (let i = 0; i < overflow; i += 1) mirrorTickState.delete(sorted[i][0])
+}
+
+export async function mirrorSleeperDraftForLeagueThrottled(leagueId: string): Promise<void> {
+  const now = Date.now()
+  const current = mirrorTickState.get(leagueId)
+  if (current?.inFlight) {
+    await current.inFlight
+    return
+  }
+  if (current && now - current.lastRunAt < MIRROR_TICK_THROTTLE_MS) return
+
+  const tick = (async () => {
+    const session = await prisma.draftSession.findUnique({
+      where: { leagueId },
+      select: { id: true, sleeperDraftId: true, status: true },
+    })
+    if (!session?.sleeperDraftId) return
+    if (!(MIRRORABLE as readonly string[]).includes(session.status)) return
+    await syncDraftFromSleeper(session.sleeperDraftId, session.id)
+  })()
+    .catch((e) => {
+      // Stale by one throttle window beats a degraded poll response.
+      console.error('[mirrorSleeperDraftForLeagueThrottled]', leagueId, e instanceof Error ? e.message : e)
+    })
+    .finally(() => {
+      mirrorTickState.set(leagueId, { lastRunAt: Date.now(), inFlight: null })
+      pruneMirrorTickState()
+    })
+
+  mirrorTickState.set(leagueId, { lastRunAt: current?.lastRunAt ?? 0, inFlight: tick })
+  await tick
+}

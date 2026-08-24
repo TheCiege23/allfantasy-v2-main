@@ -3,6 +3,7 @@ import { requireCronAuth } from '@/app/api/cron/_auth'
 import { resolveCadence } from '@/lib/fantasy-os/sync/season'
 import { runDueSleeperLeagues } from '@/lib/fantasy-os/sync/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
+import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
 
 /**
  * Fantasy OS — season-aware Sleeper read-model refresh heartbeat (durable cron entrypoint).
@@ -95,7 +96,20 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...heartbeat, executed: true, summary, profiles })
+    // Draft materialization rides the same heartbeat: a Sleeper league whose synced
+    // status has reached pre_draft/drafting gets a DraftSession + sleeperDraftId here,
+    // so the draft-tick mirror can populate its board without anyone visiting the page.
+    // Bounded and swallowed — same contract as the profile refresh above.
+    let draftSessions: unknown = null
+    try {
+      draftSessions = await materializeSleeperDraftSessions({ maxLeagues: 25 })
+    } catch (draftErr) {
+      draftSessions = {
+        error: draftErr instanceof Error ? draftErr.message.slice(0, 160) : 'draft session materialization failed',
+      }
+    }
+
+    return NextResponse.json({ ...heartbeat, executed: true, summary, profiles, draftSessions })
   } catch (err) {
     return NextResponse.json(
       { ...heartbeat, executed: false, error: err instanceof Error ? err.message : 'sync failed' },

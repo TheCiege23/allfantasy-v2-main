@@ -52,6 +52,9 @@ export interface DraftSessionSnapshot {
   auction?: AuctionSessionSnapshot
   /** True when long timer or overnight pause (slow draft). */
   isSlowDraft?: boolean
+  /** Sleeper `draft_id` when this board mirrors an externally-hosted Sleeper draft.
+   * The mirror never writes `timerEndAt`, so mirrored rooms have no pick clock. */
+  sleeperDraftId?: string | null
   /** Keeper draft: config and locks for board. */
   keeper?: KeeperSessionSnapshot
   /** Devy draft: which rounds are devy-only. */
