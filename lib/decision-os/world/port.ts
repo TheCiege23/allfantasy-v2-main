@@ -705,7 +705,9 @@ export async function loadProjectionRows(
   const clean = Array.from(new Set(ids.filter((x) => typeof x === 'string' && x.length > 0))).slice(0, 200)
   if (clean.length === 0) return []
   const rows = await prisma.fantasyProjection.findMany({
-    where: { playerId: { in: clean }, sport, season, week },
+    // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not a
+    // provider feed; consumers of this port expect provider rows.
+    where: { playerId: { in: clean }, sport, season, week, source: { not: 'allfantasy' } },
     orderBy: { expiresAt: 'desc' },
     select: {
       playerId: true,

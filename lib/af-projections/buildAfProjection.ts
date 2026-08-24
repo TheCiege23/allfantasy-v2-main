@@ -137,6 +137,14 @@ export interface BuildProjectionInput {
    * NOT a statement of health, and is treated purely as missing coverage.
    */
   injuryStatus?: string | null
+  /**
+   * Pre-computed opponent-history adjustment for the target week, from
+   * lib/projections/opponentAdjustment.ts (already shrunk, recency-weighted and capped
+   * there). Applied only to history-derived bases: a forward-looking provider projection
+   * already prices the matchup, and layering our own opponent effect on top of it would
+   * count the same matchup twice.
+   */
+  opponentAdjustment?: { points: number; reason: string } | null
   scoringFormat: ScoringFormat
   /** True when the baseline season precedes the season being projected. */
   basisIsPriorSeason: boolean
@@ -287,12 +295,21 @@ export function buildAfProjection(input: BuildProjectionInput): ProjectionOutcom
     basisIsPriorSeason: input.basisIsPriorSeason,
   })
 
-  // No adjustments are applied in this increment. Saying so explicitly — rather than
-  // emitting a plausible-looking reason string — is the point: `adjustmentReason` must name
-  // adjustments that actually happened, so it stays null until opponent/weather/injury
-  // layers land.
+  // `adjustmentReason` must name adjustments that actually happened — it stays null unless
+  // a layer really moved the number.
   const adjustmentsApplied: string[] = []
-  const afProjection = baselineProjection
+  let afProjection = baselineProjection
+
+  // Opponent-history layer. Skipped for forward-projection bases (the provider already
+  // priced the matchup — applying ours too would double-count it), and floored at 0 so a
+  // bad matchup can never project negative points.
+  const opponentAdj = input.opponentAdjustment ?? null
+  const basisIsForwardProjection =
+    basis === 'sleeper_weekly_projection' || basis === 'sleeper_weekly_idp_projection'
+  if (opponentAdj && opponentAdj.points !== 0 && !basisIsForwardProjection) {
+    afProjection = Math.max(0, baselineProjection + opponentAdj.points)
+    adjustmentsApplied.push(`opponent_history: ${opponentAdj.reason}`)
+  }
 
   const notes: string[] = []
   if (idpBreakdown?.approximations.length) {

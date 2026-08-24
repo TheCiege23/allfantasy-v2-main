@@ -46,7 +46,7 @@ export async function assembleDiscoveryLeague(leagueId: string): Promise<Assembl
   // Batch projections (latest per player) → value.
   const projRows = allPlayerIds.length
     ? await prisma.fantasyProjection.findMany({
-        where: { playerId: { in: allPlayerIds }, sport: season.sport },
+        where: { playerId: { in: allPlayerIds }, sport: season.sport, source: { not: 'allfantasy' } },
         select: { playerId: true, projectedPoints: true, fetchedAt: true },
         orderBy: { fetchedAt: 'desc' },
       })

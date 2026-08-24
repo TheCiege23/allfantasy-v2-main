@@ -17,7 +17,15 @@ import type { Prisma } from '@prisma/client'
 
 import { prisma } from '@/lib/prisma'
 
-import { buildAfProjection, type WeeklyRawStats } from './buildAfProjection'
+import {
+  buildAfProjection,
+  type BuildProjectionInput,
+  type WeeklyRawStats,
+} from './buildAfProjection'
+import {
+  computeDefenseVsPositionAdjustment,
+  computeOpponentAdjustment,
+} from '@/lib/projections/opponentAdjustment'
 import { extractSeasonAggregate, perGameRates, toWeeklyObservation } from './core'
 import type { ProjectionOutcome, ScoringFormat, WeeklyObservation } from './types'
 
@@ -41,6 +49,16 @@ export interface WriteSnapshotsResult {
   fromForwardProjection: number
   /** Players whose weekly logs were unreachable because no sleeperId is mapped. */
   withoutWeeklyData: number
+  /** Week-scoped snapshot rows written alongside the week-null season baseline. */
+  weeklyWritten: number
+  /** The week those rows were written for; null when weekly writing was off. */
+  weeklyWeek: number | null
+  /** Stated reason weekly rows were skipped; null when they were written. */
+  weeklySkippedReason: string | null
+  /** AF weekly numbers mirrored into FantasyProjection as source='allfantasy'. */
+  mirroredProjections: number
+  /** Weekly rows not mirrored because no sleeperId is mapped for the player. */
+  mirrorSkippedNoSleeperId: number
   errors: string[]
 }
 
@@ -52,8 +70,17 @@ export interface WriteSnapshotsOptions {
   targetSeason?: number
   scoringFormat?: ScoringFormat
   idpPreset?: string
-  /** Week the projection applies to. Defaults to 1 (preseason baseline). */
+  /**
+   * Week the projection applies to. Defaults to the CURRENT regular-season week per
+   * Sleeper's season state, falling back to 1 (preseason baseline) outside it.
+   */
   targetWeek?: number
+  /**
+   * Also write week-scoped AFProjectionSnapshot rows (week = targetWeek) and mirror them
+   * into FantasyProjection as source='allfantasy'. Defaults to on exactly when the Sleeper
+   * season state says the regular season is underway; pass true with targetWeek to backfill.
+   */
+  writeWeeklySnapshots?: boolean
   /** Compute and report without writing. */
   dryRun?: boolean
   now?: Date
@@ -83,7 +110,35 @@ export async function writeAfProjectionSnapshots(
   if (!Number.isFinite(sourceSeason)) {
     throw new Error(`no fantasy_stat_lines found for sport=${sport}; run import-stat-lines first`)
   }
-  const targetSeason = opts.targetSeason ?? sourceSeason + 1
+  /*
+   * Current-week resolution (Sleeper season state). The Sleeper forward look and the weekly
+   * snapshot rows must track the week actually being played — previously targetWeek was
+   * effectively hardcoded to 1 and every snapshot was a week-null season baseline. Best
+   * effort: on failure, or outside the regular season, the preseason behaviour is kept.
+   */
+  let inRegularSeason: { week: number; season: number } | null = null
+  if (opts.targetWeek == null && sport === 'NFL') {
+    try {
+      const { getNflState } = await import('@/lib/sleeper-client')
+      const state = await getNflState()
+      const stateWeek = typeof state?.week === 'number' && Number.isInteger(state.week) ? state.week : null
+      const stateSeason = Number(state?.season)
+      const seasonType = typeof state?.season_type === 'string' ? state.season_type : null
+      if (
+        seasonType === 'regular' &&
+        stateWeek != null && stateWeek >= 1 && stateWeek <= 18 &&
+        Number.isFinite(stateSeason)
+      ) {
+        inRegularSeason = { week: stateWeek, season: stateSeason }
+      }
+    } catch (err) {
+      errors.push(`Sleeper season state fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+  // In-season the projection applies to the season BEING PLAYED (Sleeper's own season id):
+  // once current-season stat lines start landing, `sourceSeason + 1` would mislabel every
+  // weekly row as next year's.
+  const targetSeason = opts.targetSeason ?? inRegularSeason?.season ?? sourceSeason + 1
 
   const statLines = await prisma.fantasyStatLine.findMany({
     where: { sport, season: String(sourceSeason) },
@@ -102,7 +157,7 @@ export async function writeAfProjectionSnapshots(
 
   const games = await prisma.playerGameStat.findMany({
     where: { sportType: sport, season: sourceSeason },
-    select: { playerId: true, weekOrRound: true, normalizedStatMap: true },
+    select: { playerId: true, weekOrRound: true, normalizedStatMap: true, opponent: true },
   })
   const obsBySleeper = new Map<string, WeeklyObservation[]>()
   const rawBySleeper = new Map<string, WeeklyRawStats[]>()
@@ -150,8 +205,11 @@ export async function writeAfProjectionSnapshots(
   // players. Reuses the cached getWeekBoard (6h TTL) rather than re-fetching. A projection
   // FOR the week being played outranks anything inferred from completed games, so this is
   // the strongest input the engine has; failure is non-fatal and falls back to history.
-  const targetWeek = opts.targetWeek ?? 1
-  let weekBoard: Record<string, { stats: Record<string, number>; position: string | null }> | null = null
+  const targetWeek = opts.targetWeek ?? inRegularSeason?.week ?? 1
+  let weekBoard: Record<
+    string,
+    { stats: Record<string, number>; position: string | null; opponent?: string | null }
+  > | null = null
   try {
     const { getWeekBoard } = await import('@/lib/sports-data/sleeperMarketService')
     const board = await getWeekBoard(String(targetSeason), targetWeek)
@@ -159,6 +217,56 @@ export async function writeAfProjectionSnapshots(
     if (!board) errors.push(`Sleeper week board ${targetSeason}/${targetWeek} returned nothing.`)
   } catch (err) {
     errors.push(`Sleeper week board fetch failed: ${err instanceof Error ? err.message : String(err)}`)
+  }
+
+  // Weekly snapshots only when a real regular-season week is being played (or the caller
+  // explicitly asked). Preseason keeps today's behaviour: season baseline only.
+  const writeWeekly = opts.writeWeeklySnapshots ?? inRegularSeason != null
+  const weeklySkippedReason = writeWeekly
+    ? null
+    : 'regular season not underway per Sleeper season state — season baseline only'
+
+  // --- opponent-history inputs (weekly snapshot only) ---------------------------------
+  // Wires lib/projections/opponentAdjustment.ts (previously zero callers). All evidence is
+  // the PlayerGameStat rows loaded above, read in the run's scoring format so the adjustment
+  // shares the baseline's unit; the target-week opponent comes from the same Sleeper
+  // projection rows the forward look fetched. The season baseline never carries a matchup
+  // adjustment — it is not a week-specific forecast.
+  const ptsKey = `pts_${scoringFormat}`
+  const historyBySleeper = new Map<string, Array<{ opponent: string; points: number }>>()
+  /** `${opponent}|${position}` -> weekOrRound -> points that position scored on that defense. */
+  const allowedByDefensePos = new Map<string, Map<number, number>>()
+  const leagueAvgAllowedByPos = new Map<string, number>()
+  if (writeWeekly) {
+    for (const g of games) {
+      const m = g.normalizedStatMap as Record<string, unknown> | null
+      const raw = m && typeof m === 'object' ? m[ptsKey] : null
+      const points = typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+      if (points == null || !g.opponent) continue
+      historyBySleeper.set(g.playerId, [
+        ...(historyBySleeper.get(g.playerId) ?? []),
+        { opponent: g.opponent, points },
+      ])
+      const pos = weekBoard?.[g.playerId]?.position ?? null
+      if (!pos) continue
+      const key = `${g.opponent}|${pos}`
+      const perWeek = allowedByDefensePos.get(key) ?? new Map<number, number>()
+      perWeek.set(g.weekOrRound, (perWeek.get(g.weekOrRound) ?? 0) + points)
+      allowedByDefensePos.set(key, perWeek)
+    }
+    const sums = new Map<string, { total: number; games: number }>()
+    for (const [key, perWeek] of allowedByDefensePos) {
+      const pos = key.split('|')[1]
+      const s = sums.get(pos) ?? { total: 0, games: 0 }
+      for (const pts of perWeek.values()) {
+        s.total += pts
+        s.games += 1
+      }
+      sums.set(pos, s)
+    }
+    for (const [pos, s] of sums) {
+      if (s.games > 0) leagueAvgAllowedByPos.set(pos, s.total / s.games)
+    }
   }
 
   const result: WriteSnapshotsResult = {
@@ -176,6 +284,11 @@ export async function writeAfProjectionSnapshots(
     usedTackleSplitEstimate: 0,
     fromForwardProjection: 0,
     withoutWeeklyData: 0,
+    weeklyWritten: 0,
+    weeklyWeek: writeWeekly ? targetWeek : null,
+    weeklySkippedReason,
+    mirroredProjections: 0,
+    mirrorSkippedNoSleeperId: 0,
     errors,
   }
 
@@ -200,7 +313,7 @@ export async function writeAfProjectionSnapshots(
     const sleeperId = sleeperByCanonical.get(line.playerId)
     if (!sleeperId) result.withoutWeeklyData++
 
-    const outcome: ProjectionOutcome = buildAfProjection({
+    const buildInput: BuildProjectionInput = {
       aggregate,
       weekly: sleeperId ? obsBySleeper.get(sleeperId) ?? [] : [],
       weeklyRaw: sleeperId ? rawBySleeper.get(sleeperId) ?? [] : [],
@@ -211,7 +324,8 @@ export async function writeAfProjectionSnapshots(
       scoringFormat,
       basisIsPriorSeason: sourceSeason < targetSeason,
       idpRules,
-    })
+    }
+    const outcome: ProjectionOutcome = buildAfProjection(buildInput)
 
     if (!outcome.ok) {
       bumpRefusal(result, outcome.reason)
@@ -257,6 +371,7 @@ export async function writeAfProjectionSnapshots(
 
     if (opts.dryRun) {
       result.written++
+      if (writeWeekly) result.weeklyWritten++
       continue
     }
 
@@ -288,6 +403,169 @@ export async function writeAfProjectionSnapshots(
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err)
       if (errors.length < 20) errors.push(`${playerName}: ${message.slice(0, 160)}`)
+    }
+
+    /*
+     * Week-scoped snapshot + FantasyProjection mirror (regular season only).
+     *
+     * The week row re-runs the pure build with the opponent-history layer so the WEEK number
+     * can genuinely diverge from the pass-through; the week-null season baseline above stays
+     * matchup-free on purpose. The mirror lands at the provider grain (Sleeper id, season
+     * string, scoringPresetId 'ppr') — `source` is part of the model's unique key, so
+     * 'allfantasy' rows coexist with 'sleeper' rows instead of colliding, and the accuracy
+     * retro-scorer can join both to the same actuals by Sleeper id.
+     */
+    if (writeWeekly) {
+      const opponent = sleeperId ? weekBoard?.[sleeperId]?.opponent ?? null : null
+      let weeklyOutcome: ProjectionOutcome = outcome
+      let opponentFactors: Record<string, unknown> | null = null
+      if (opponent && sleeperId) {
+        const history = historyBySleeper.get(sleeperId) ?? []
+        const vsThisDefense = history.filter((h) => h.opponent === opponent)
+        // The player's own typical output — the value the opponent effect is measured against.
+        const baselineAverage = history.length
+          ? history.reduce((sum, h) => sum + h.points, 0) / history.length
+          : outcome.baselineProjection
+        const playerVsDefense = computeOpponentAdjustment({
+          gamesVsOpponent: vsThisDefense.map((h) => ({ season: sourceSeason, fantasyPoints: h.points })),
+          baselineAverage,
+          currentSeason: targetSeason,
+          opponentLabel: opponent,
+        })
+        const allowedRows = allowedByDefensePos.get(`${opponent}|${position}`)
+        const defenseVsPosition = computeDefenseVsPositionAdjustment({
+          allowedToPosition: allowedRows ? [...allowedRows.values()] : [],
+          leagueAverageAllowed: leagueAvgAllowedByPos.get(position) ?? 0,
+          positionLabel: position,
+          opponentLabel: opponent,
+        })
+        // Each component is shrunk and capped at ±4 by the module; the combined move is
+        // capped at ±4 too, so two weak signals cannot stack past one strong one.
+        const combined =
+          Math.round(Math.max(-4, Math.min(4, playerVsDefense.points + defenseVsPosition.points)) * 100) / 100
+        opponentFactors = {
+          opponent,
+          evidenceSeason: sourceSeason,
+          playerVsDefense,
+          defenseVsPosition,
+          combinedPoints: combined,
+        }
+        if (combined !== 0) {
+          weeklyOutcome = buildAfProjection({
+            ...buildInput,
+            opponentAdjustment: {
+              points: combined,
+              reason: [
+                playerVsDefense.points !== 0 ? playerVsDefense.reason : null,
+                defenseVsPosition.points !== 0 ? defenseVsPosition.reason : null,
+              ]
+                .filter(Boolean)
+                .join('; '),
+            },
+          })
+        }
+      }
+      if (weeklyOutcome.ok) {
+        const weeklyKey = snapshotKey(line.playerId, targetSeason, targetWeek, null)
+        try {
+          const weeklyFactors = JSON.parse(
+            JSON.stringify({
+              engine: 'af-projections/v1',
+              basis: weeklyOutcome.basis,
+              scoringFormat,
+              sourceSeason,
+              idpPreset: weeklyOutcome.idp ? idpPreset : null,
+              weeklyWeeksUsed: weeklyOutcome.weeklyWeeksUsed,
+              confidenceScore: weeklyOutcome.confidence.score,
+              confidenceReasons: weeklyOutcome.confidence.reasons,
+              adjustmentsApplied: weeklyOutcome.adjustmentsApplied,
+              // Null when no opponent was on file for the target week — stated, not guessed.
+              opponentAdjustment: opponentFactors,
+              perGameRates: aggregate ? perGameRates(aggregate) : null,
+              idp: weeklyOutcome.idp ?? null,
+            }),
+          ) as Prisma.InputJsonValue
+          const weeklyData = {
+            playerId: line.playerId,
+            playerName,
+            sport,
+            position,
+            week: targetWeek,
+            season: targetSeason,
+            baselineProjection: weeklyOutcome.baselineProjection,
+            weatherAdjustment: 0,
+            afProjection: weeklyOutcome.afProjection,
+            adjustmentFactors: weeklyFactors,
+            adjustmentReason: weeklyOutcome.adjustmentReason,
+            confidenceLevel: weeklyOutcome.confidence.level,
+            computedAt: now,
+            snapshotLookupKey: weeklyKey,
+          }
+          await prisma.aFProjectionSnapshot.upsert({
+            where: { snapshotLookupKey: weeklyKey },
+            create: weeklyData,
+            update: weeklyData,
+          })
+          result.weeklyWritten++
+
+          if (!sleeperId) {
+            result.mirrorSkippedNoSleeperId++
+          } else if (scoringFormat === 'ppr') {
+            // Mirrored ONLY at the 'ppr' preset the provider rows are stored under; a
+            // half_ppr/std run mirrored as 'ppr' would be a mislabeled number.
+            const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+            const mirrorStats = JSON.parse(
+              JSON.stringify({
+                name: playerName,
+                position,
+                week: targetWeek,
+                projectedPoints: weeklyOutcome.afProjection,
+                engine: 'af-projections/v1',
+                basis: weeklyOutcome.basis,
+                scoringFormat,
+                canonicalPlayerId: line.playerId,
+                adjustmentsApplied: weeklyOutcome.adjustmentsApplied,
+                confidenceLevel: weeklyOutcome.confidence.level,
+                note: 'AF engine scalar projection — no per-stat component line exists for this source.',
+              }),
+            ) as Prisma.InputJsonValue
+            await prisma.fantasyProjection.upsert({
+              where: {
+                uniq_fantasy_projection_player_week_scoring_source: {
+                  playerId: sleeperId,
+                  sport,
+                  season: String(targetSeason),
+                  week: targetWeek,
+                  scoringPresetId: 'ppr',
+                  source: 'allfantasy',
+                },
+              },
+              update: {
+                projectedPoints: weeklyOutcome.afProjection,
+                stats: mirrorStats,
+                fetchedAt: now,
+                expiresAt,
+              },
+              create: {
+                playerId: sleeperId,
+                sport,
+                season: String(targetSeason),
+                week: targetWeek,
+                scoringPresetId: 'ppr',
+                projectedPoints: weeklyOutcome.afProjection,
+                stats: mirrorStats,
+                source: 'allfantasy',
+                fetchedAt: now,
+                expiresAt,
+              },
+            })
+            result.mirroredProjections++
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err)
+          if (errors.length < 20) errors.push(`${playerName} (weekly): ${message.slice(0, 160)}`)
+        }
+      }
     }
   }
 

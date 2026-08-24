@@ -206,7 +206,7 @@ export async function getPlayerImpact(
         select: { sleeperId: true, name: true, position: true, team: true },
       }),
       prisma.fantasyProjection.findMany({
-        where: { playerId: { in: rosterIds }, season: at.season, week: at.week },
+        where: { playerId: { in: rosterIds }, season: at.season, week: at.week, source: { not: 'allfantasy' } },
         select: { playerId: true, stats: true },
       }),
       /*

@@ -48,6 +48,9 @@ function toProjection(row: {
  */
 export async function latestProjectionWeek(): Promise<{ season: string; week: number } | null> {
   const row = await prisma.fantasyProjection.findFirst({
+    // AF mirror rows (source 'allfantasy') are engine output for the accuracy loop, not the
+    // provider feed — they must not decide, or serve as, "the week the feed holds".
+    where: { source: { not: 'allfantasy' } },
     orderBy: [{ season: 'desc' }, { week: 'desc' }],
     select: { season: true, week: true },
   })
@@ -66,7 +69,7 @@ export async function lookupProjections(
   if (!when) return new Map()
 
   const rows = await prisma.fantasyProjection.findMany({
-    where: { playerId: { in: [...ids] }, season: when.season, week: when.week },
+    where: { playerId: { in: [...ids] }, season: when.season, week: when.week, source: { not: 'allfantasy' } },
     select: { playerId: true, projectedPoints: true, stats: true },
   })
   return new Map(rows.map((r) => [r.playerId, toProjection(r)]))
@@ -96,7 +99,7 @@ export async function positionRanks(
   if (!when) return new Map()
 
   const all = await prisma.fantasyProjection.findMany({
-    where: { season: when.season, week: when.week },
+    where: { season: when.season, week: when.week, source: { not: 'allfantasy' } },
     select: { playerId: true, projectedPoints: true, stats: true },
   })
 

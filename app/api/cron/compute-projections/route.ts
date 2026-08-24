@@ -97,6 +97,12 @@ async function handle(req: NextRequest) {
     return raw && /^\d{4}$/.test(raw) ? Number(raw) : undefined
   }
 
+  // Optional explicit week (1-18). When present it also forces weekly snapshot rows — the
+  // manual backfill path; scheduled runs let the writer resolve the week from Sleeper state.
+  const weekRaw = url.searchParams.get('week')
+  const parsedWeek = weekRaw && /^\d{1,2}$/.test(weekRaw) ? Number(weekRaw) : undefined
+  const targetWeek = parsedWeek != null && parsedWeek >= 1 && parsedWeek <= 18 ? parsedWeek : undefined
+
   const startedAt = Date.now()
   try {
     const run = () =>
@@ -106,6 +112,8 @@ async function handle(req: NextRequest) {
         targetSeason: num('targetSeason'),
         scoringFormat,
         idpPreset,
+        targetWeek,
+        ...(targetWeek != null ? { writeWeeklySnapshots: true } : {}),
         dryRun,
       })
 
@@ -138,6 +146,9 @@ async function handle(req: NextRequest) {
               refusalRate: Number(v.refusalRate.toFixed(4)),
               refusalsByReason: result.refusalsByReason,
               noSourceSeasonYet: v.noSourceSeasonYet,
+              weeklyWritten: result.weeklyWritten ?? 0,
+              weeklyWeek: result.weeklyWeek ?? null,
+              mirroredProjections: result.mirroredProjections ?? 0,
             },
           }
         })
@@ -169,6 +180,13 @@ async function handle(req: NextRequest) {
         usedTackleSplitEstimate: r.usedTackleSplitEstimate,
         /** No sleeperId mapped, so weekly logs were unreachable — expect ~47% for NFL. */
         withoutWeeklyData: r.withoutWeeklyData,
+        /** Week-scoped rows written alongside the season baseline (regular season only). */
+        weeklyWritten: r.weeklyWritten,
+        weeklyWeek: r.weeklyWeek,
+        weeklySkippedReason: r.weeklySkippedReason ?? undefined,
+        /** AF weekly numbers mirrored into FantasyProjection as source='allfantasy'. */
+        mirroredProjections: r.mirroredProjections,
+        mirrorSkippedNoSleeperId: r.mirrorSkippedNoSleeperId,
         /**
          * Reported even when the run is not a failure, because a coverage gap that leaves no trace
          * is how the last outage stayed invisible for six days. `ok:false` with HTTP 200 says

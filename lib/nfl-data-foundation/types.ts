@@ -31,6 +31,13 @@ export type CanonicalNflProjection = {
   floor: number | null
   ceiling: number | null
   restOfSeason: number | null
+  /**
+   * The two inputs the blended number was built from, labeled by origin: the provider's
+   * weekly projection (fantasy_projections) and the AF engine's weekly number
+   * (af_projection_snapshots). Null means that side genuinely had no row — never a 0.
+   */
+  providerWeeklyProjection?: number | null
+  afWeeklyProjection?: number | null
   confidence: number
   confidenceLevel: 'high' | 'medium' | 'low' | 'none'
   unavailable: boolean
