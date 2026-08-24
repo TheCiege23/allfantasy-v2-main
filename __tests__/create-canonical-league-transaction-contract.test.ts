@@ -160,12 +160,33 @@ describe('createCanonicalLeagueInTransaction contract', () => {
           language: 'en',
           leagueType: 'redraft',
           leagueSize: 12,
-          scoring: 'PPR',
+          // 'half_ppr', not 'PPR': the fixture below uses scoringPreset 'fb_half_ppr'.
+          // scoringFormatForPreset (lib/league-concepts/redraftDefaults.ts) and
+          // scoring-presets.ts's build() -- the wizard-facing preset resolver -- independently
+          // agree on 'half_ppr' for this exact preset id. This assertion asserted 'PPR' for two
+          // months (since 2026-06-12) while the file sat in scripts/vitest-failure-baseline.json;
+          // the test was wrong, not the implementation. See scoringFormat below, which is the
+          // SAME underlying variable and was asserted with the same wrong literal.
+          scoring: 'half_ppr',
           playoffTeams: 6,
         }),
       }),
     )
     const leagueCreateArg = tx.league.create.mock.calls[0]?.[0]
+    /**
+     * Regression guard, deliberately asserted on the captured call arg rather than folded into
+     * the `objectContaining` block above: `rosterSize` used to read `rosterSettings['roster_size']`
+     * / `rosterSettings['rosterSize']`, two keys no producer under lib/league-defaults or
+     * lib/league-concepts has ever written. Every call missed both, the 0 fallback collapsed
+     * through `|| null`, and every manual league was created with NULL rosterSize. Verified on
+     * prod 2026-08-24: 33 of 34 NULL-rosterSize leagues have leagueSize set, i.e. configured
+     * leagues silently missing this one field.
+     *
+     * A number is not the same claim as a non-zero one — the old `0 || null` collapse means a
+     * silent-failure 0 and a real answer would look identical to `expect.any(Number)` alone.
+     */
+    expect(typeof leagueCreateArg.data.rosterSize).toBe('number')
+    expect(leagueCreateArg.data.rosterSize).toBeGreaterThan(0)
     expect(leagueCreateArg.data.settings).toEqual(
       expect.objectContaining({
         foundation_defaults: expect.objectContaining({
@@ -191,7 +212,9 @@ describe('createCanonicalLeagueInTransaction contract', () => {
         data: expect.objectContaining({
           leagueId: 'league-1',
           formatKey: 'redraft',
-          scoringFormat: 'PPR',
+          // Same value as data.scoring above -- createCanonicalLeagueInTransaction.ts:366 passes
+          // the identical `scoringFormat` local into both calls.
+          scoringFormat: 'half_ppr',
           templateId: 'fb_half_ppr',
         }),
       }),
