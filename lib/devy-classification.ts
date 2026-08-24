@@ -106,7 +106,7 @@ export interface ClassificationResult {
   errors: string[]
 }
 
-const TOP_CFB_TEAMS = [
+export const TOP_CFB_TEAMS = [
   'Alabama', 'Ohio State', 'Georgia', 'Texas', 'Michigan', 'USC', 'Oregon',
   'Penn State', 'LSU', 'Clemson', 'Notre Dame', 'Florida State', 'Tennessee',
   'Oklahoma', 'Florida', 'Texas A&M', 'Wisconsin', 'Iowa', 'Miami',
@@ -120,11 +120,15 @@ const TOP_CFB_TEAMS = [
 
 const FANTASY_POSITIONS = new Set(['QB', 'RB', 'WR', 'TE'])
 
-export async function ingestCFBDRosters(season?: number): Promise<{ ingested: number; rosterYear: number; errors: string[] }> {
+export async function ingestCFBDRosters(
+  season?: number,
+  options?: { teams?: readonly string[]; shouldStop?: () => boolean },
+): Promise<{ ingested: number; rosterYear: number; teamsProcessed: string[]; errors: string[] }> {
   const currentYear = new Date().getFullYear()
   let year = season || currentYear
   let ingested = 0
   const errors: string[] = []
+  const teamsProcessed: string[] = []
 
   const testRoster = await getCFBTeamRoster('Alabama', year)
   if (testRoster.length === 0 && year === currentYear) {
@@ -132,7 +136,8 @@ export async function ingestCFBDRosters(season?: number): Promise<{ ingested: nu
     console.log(`[DevySync] Current year roster not available, falling back to ${year}`)
   }
 
-  for (const team of TOP_CFB_TEAMS) {
+  for (const team of options?.teams ?? TOP_CFB_TEAMS) {
+    if (options?.shouldStop?.()) break
     try {
       const roster = await getCFBTeamRoster(team, year)
       const fantasyPlayers = roster.filter(p => FANTASY_POSITIONS.has(p.position))
@@ -217,13 +222,14 @@ export async function ingestCFBDRosters(season?: number): Promise<{ ingested: nu
         }
       }
 
+      teamsProcessed.push(team)
       await new Promise(r => setTimeout(r, 200))
     } catch (err: any) {
       errors.push(`Team ${team} fetch failed: ${err.message?.slice(0, 100)}`)
     }
   }
 
-  return { ingested, rosterYear: year, errors }
+  return { ingested, rosterYear: year, teamsProcessed, errors }
 }
 
 export async function ingestCFBDStats(season?: number): Promise<{ updated: number; errors: string[] }> {

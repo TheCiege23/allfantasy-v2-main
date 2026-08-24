@@ -144,6 +144,26 @@ async function handle(req: NextRequest) {
       }
     }
 
+    // Structural devy pool refresh (new rosters / classes) rides along here
+    // because this is the only scheduled devy write path in production:
+    // runFullDevySync has zero callers and seedCollegePlayers is reachable only
+    // via excluded routes or the Redis worker. Bounded to a rotating slice of
+    // TOP_CFB_TEAMS per run (~10-15s) and stops between teams once the handler
+    // budget is spent. Runs BEFORE intel enrichment so rows seeded this run are
+    // already in the pool that enrichment drains.
+    let devyPool: unknown = { skipped: 'deferred: run budget exhausted before phase start' }
+    if (budget.exhausted()) {
+      deferredPhases.push('devyPool')
+    } else try {
+      const { refreshDevyPoolSlice } = await import('@/lib/devy-pool-refresh')
+      devyPool = await refreshDevyPoolSlice(budget)
+    } catch (poolError) {
+      // Maintenance must never fail the player import it rides along with.
+      const message = poolError instanceof Error ? poolError.message : String(poolError)
+      console.error('[cron/import-players] devy pool refresh failed:', message)
+      devyPool = { error: message.slice(0, 200) }
+    }
+
     // Devy intel metrics ride along here because this is a built, scheduled
     // player-data cron. The natural home, /api/devy/automation, is excluded
     // from the production build by scripts/vercel-next-build.cjs (route budget)
@@ -207,6 +227,7 @@ async function handle(req: NextRequest) {
       deferredPhases: deferredPhases.length ? deferredPhases : undefined,
       budgetExhausted: budget.exhausted(),
       budgetElapsedMs: budget.elapsedMs(),
+      devyPool,
       devyIntel,
       psychProfiles,
       sports: result.sports,
