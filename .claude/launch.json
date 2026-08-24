@@ -106,6 +106,21 @@
         "studio"
       ],
       "port": 5555
+    },
+    {
+      "// next-dev-visuals-b2": "Handoff batch 28a-34a review server. Own dist dir: a dev server killed mid-compile leaves the previous one locked on Windows and Next then hangs at Starting forever, so it must not share a dist dir with a concurrent session.",
+      "name": "next-dev-visuals-b2",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "node_modules/next/dist/bin/next",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "AF_NEXT_DIST_DIR": ".next-dev-visuals-b2",
+        "NODE_OPTIONS": "--max-old-space-size=6144"
+      }
     }
   ]
 }

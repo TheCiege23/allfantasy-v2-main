@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it } from "vitest"
 import { LeagueAnalyticsView } from "@/components/commissioner-os/analytics/LeagueAnalyticsView"
 import { stubAnalyticsClient } from "@/lib/commissioner-os/analytics/decision-os-client/stub"
@@ -64,6 +64,16 @@ describe("commissioner-os analytics — CSV export", () => {
     transactionsByWeek: [{ weekLabel: 'Wk 6', tradeCount: 2, waiverClaimCount: 9 }],
     rosterUtilization: [{ teamName: 'Priya Natarajan', utilizationPercent: 98 }],
     seasonComparison: [{ seasonLabel: '2025', value: 91 }],
+    /*
+     * 30a's four fields, left empty here on purpose: this block asserts the CSV
+     * row count, and an empty section contributes no rows, so the arithmetic in
+     * the test below stays about the sections it was written for. The 30a
+     * sections get their own row-count assertion underneath.
+     */
+    healthByWeek: [],
+    healthTarget: null,
+    managerActivity: [],
+    pointsForAgainst: [],
     generatedAt: new Date().toISOString(),
   }
 
@@ -73,6 +83,28 @@ describe("commissioner-os analytics — CSV export", () => {
     // header + 1 kpi + 2 trend points + 1 balance metric + 1 scoring bucket + 2 transaction rows (trades+waivers) + 1 roster entry + 1 season point
     expect(rows).toHaveLength(1 + 1 + 2 + 1 + 1 + 2 + 1 + 1)
     expect(rows[0]).toBe('Section,Label,Value')
+  })
+
+  it("adds a row per 30a data point when those sections are present", () => {
+    const csv = buildAnalyticsCsv({
+      ...snapshot,
+      healthByWeek: [{ weekLabel: 'Wk 1', thisSeason: 71, lastSeason: 68 }],
+      healthTarget: 75,
+      managerActivity: [{ managerName: 'Sam Rivera', actionsPerWeek: 4, priorActionsPerWeek: 13 }],
+      pointsForAgainst: [{ teamName: 'Sam Rivera', pointsFor: 1191.2, pointsAgainst: 1366.4 }],
+    })
+    // 2 health rows (this + last season) + 1 target + 2 manager rows + 2 points rows
+    expect(csv.split('\n')).toHaveLength(1 + 1 + 2 + 1 + 1 + 2 + 1 + 1 + 2 + 1 + 2 + 2)
+    expect(csv).toContain('League Health,Target,75')
+  })
+
+  it("omits the last-season row when a league has no comparison season", () => {
+    const csv = buildAnalyticsCsv({
+      ...snapshot,
+      healthByWeek: [{ weekLabel: 'Wk 1', thisSeason: 71, lastSeason: null }],
+    })
+    expect(csv).toContain('League Health,Wk 1 — This season,71')
+    expect(csv).not.toContain('Last season')
   })
 
   it("escapes values containing commas or quotes", () => {
@@ -103,9 +135,16 @@ describe("commissioner-os analytics — view", () => {
     render(<LeagueAnalyticsView snapshot={response.data} dataMode="demo" />)
 
     const images = screen.getAllByRole('img')
-    // League Trends + Scoring Distribution + Roster Utilization + Season Comparison = 4 charts
-    expect(images.length).toBe(4)
-    expect(images.some((img) => img.getAttribute('aria-label')?.includes('League trends'))).toBe(true)
+    /*
+     * 30a replaced the four generic charts with three the handoff names:
+     * league health by week, transactions by week, and points for/against.
+     * Manager activity is a ranked bar LIST, not an SVG, so it is asserted
+     * separately below rather than counted here.
+     */
+    expect(images.length).toBe(3)
+    expect(images.some((img) => img.getAttribute('aria-label')?.includes('League health by week'))).toBe(true)
+    expect(images.some((img) => img.getAttribute('aria-label')?.includes('Weekly transactions'))).toBe(true)
+    expect(images.some((img) => img.getAttribute('aria-label')?.includes('Points for and against'))).toBe(true)
   })
 
   it("renders the transaction analytics table and competitive balance metrics", async () => {
@@ -113,7 +152,12 @@ describe("commissioner-os analytics — view", () => {
     render(<LeagueAnalyticsView snapshot={response.data} dataMode="demo" />)
 
     for (const week of response.data!.transactionsByWeek) {
-      expect(screen.getByText(week.weekLabel)).toBeInTheDocument()
+      /*
+       * getAllByText, not getByText: 30a puts league health and transactions on
+       * the same weekly axis, so a week label legitimately appears on both
+       * charts. One match would mean a chart is missing.
+       */
+      expect(screen.getAllByText(week.weekLabel).length).toBeGreaterThan(0)
     }
     for (const metric of response.data!.competitiveBalance) {
       expect(screen.getByText(metric.label)).toBeInTheDocument()
@@ -129,6 +173,59 @@ describe("commissioner-os analytics — view", () => {
   it("renders ErrorState with a default message when snapshot is null but no explicit error is set", () => {
     render(<LeagueAnalyticsView snapshot={null} dataMode="stub" />)
     expect(screen.getByRole('alert')).toBeInTheDocument()
+  })
+
+  it("names the drop comparatively rather than just ranking managers", async () => {
+    const response = await demoAnalyticsClient.getSnapshot()
+    render(<LeagueAnalyticsView snapshot={response.data} dataMode="demo" />)
+    /*
+     * The copy contract: the call-out must state the actual drop, not a bare
+     * ranking. Two demo managers sit below the threshold and both were well
+     * above it earlier, so the sentence has to carry both numbers.
+     */
+    const note = screen.getByRole('note')
+    expect(note).toHaveTextContent(/2 managers are below 5 actions a week/i)
+    expect(note).toHaveTextContent(/above 12 earlier this season/i)
+  })
+
+  it("labels the target on the chart itself, not only in the legend", async () => {
+    const response = await demoAnalyticsClient.getSnapshot()
+    render(<LeagueAnalyticsView snapshot={response.data} dataMode="demo" />)
+    expect(screen.getByText(/TARGET 75/)).toBeInTheDocument()
+  })
+
+  it("says a section is unwired rather than drawing an empty chart", async () => {
+    const response = await demoAnalyticsClient.getSnapshot()
+    render(
+      <LeagueAnalyticsView
+        snapshot={{ ...response.data!, pointsForAgainst: [], managerActivity: [] }}
+        dataMode="live"
+      />,
+    )
+    /*
+     * An empty chart frame reads as "this league has no activity". The view must
+     * say the section is not wired instead.
+     */
+    expect(screen.getByText(/No scoring totals for this league yet/i)).toBeInTheDocument()
+    expect(screen.getByText(/No per-manager activity for this league yet/i)).toBeInTheDocument()
+  })
+
+  it("narrows every week-indexed section together when the range changes", async () => {
+    const response = await demoAnalyticsClient.getSnapshot()
+    render(<LeagueAnalyticsView snapshot={response.data} dataMode="demo" />)
+
+    // Eleven weeks of health data to start.
+    expect(screen.getAllByText('Wk 1').length).toBeGreaterThan(0)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 4 weeks' }))
+
+    /*
+     * The filter is applied once to the whole snapshot, so the early weeks must
+     * disappear from every week-indexed chart at once — this is the same object
+     * the CSV export receives. Week 11 survives on both charts, hence getAll.
+     */
+    expect(screen.queryByText('Wk 1')).not.toBeInTheDocument()
+    expect(screen.getAllByText('Wk 11').length).toBeGreaterThan(0)
   })
 
   it("hides the preview data banner in live mode", async () => {
