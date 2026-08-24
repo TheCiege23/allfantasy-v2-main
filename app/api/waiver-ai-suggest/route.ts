@@ -5,6 +5,7 @@ import { prisma } from '@/lib/prisma';
 import { openaiChatJson, parseJsonContentFromChatCompletion } from '@/lib/openai-client';
 import { buildWaiverRecommendationContext } from '@/lib/ai/SportAwareRecommendationService';
 import { resolveSportVariantContext } from '@/lib/league-defaults-orchestrator/SportVariantContextResolver';
+import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver';
 import { z } from 'zod';
 
 const requestSchema = z.object({
@@ -73,9 +74,30 @@ export async function POST(req: Request) {
     });
     const leagueSummary = `Scoring: ${league.scoringType || 'standard'}. Variant: ${variantContext.displayLabel}.`;
 
+    // Ground the model in the real player pool: exclude every player rostered in
+    // this league (the route already loads all teams' rosters) and only allow
+    // suggestions drawn from the DB-backed sport pool.
+    const rosteredNames = new Set<string>();
+    for (const team of league.teams ?? []) {
+      for (const p of (team.roster || []) as any[]) {
+        const n = String(p?.name || p?.player_name || '').trim().toLowerCase();
+        if (n) rosteredNames.add(n);
+      }
+    }
+    const pool = await getPlayerPoolForLeague(league.id, variantContext.sport, { limit: 220 }).catch(() => []);
+    const availablePool = pool
+      .filter((p) => p.full_name && !rosteredNames.has(p.full_name.trim().toLowerCase()))
+      .slice(0, 120);
+    const availableNames = new Set(availablePool.map((p) => p.full_name.trim().toLowerCase()));
+    const poolBlock = availablePool.length
+      ? `\nAVAILABLE PLAYERS — you may ONLY suggest players from this list, using these exact names:\n${availablePool
+          .map((p) => `- ${p.full_name} (${p.position || '?'}${p.team_abbreviation ? `, ${p.team_abbreviation}` : ''})${p.injury_status ? ` [${p.injury_status}]` : ''}`)
+          .join('\n')}\n`
+      : '';
+
     const systemPrompt = `You are an expert fantasy sports waiver wire analyst for NFL, NHL, MLB, NBA, NCAA Football, NCAA Basketball, and Soccer.
 Analyze league and team context to suggest realistic waiver wire pickups for the selected sport.
-Focus on likely available players (not stars), recent role changes, usage trends, matchups, and roster needs.
+${availablePool.length ? 'Suggest ONLY players from the provided AVAILABLE PLAYERS list — never invent or substitute names.' : 'Focus on likely available players (not stars), recent role changes, usage trends, matchups, and roster needs.'}
 Return ONLY valid JSON.`;
 
     const positionFocus = rosterWeakness ? `\nFOCUS: Prioritize ${rosterWeakness} suggestions - the user specifically needs help at this position.` : '';
@@ -85,6 +107,7 @@ Return ONLY valid JSON.`;
 ${leagueContext}
 ${leagueSummary}
 ${rosterSummary}${positionFocus}
+${poolBlock}
 
 Return JSON:
 {
@@ -116,7 +139,12 @@ Sort by priority descending. Be specific about matchups and usage trends. Only s
     }
 
     const parsed = parseJsonContentFromChatCompletion(result.json);
-    const suggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
+    const rawSuggestions = Array.isArray(parsed?.suggestions) ? parsed.suggestions : [];
+    // Belt and braces: when a real pool was provided, drop any name the model
+    // invented anyway — a hallucinated player must never reach a client.
+    const suggestions = availableNames.size > 0
+      ? rawSuggestions.filter((s: any) => availableNames.has(String(s?.playerName ?? '').trim().toLowerCase()))
+      : rawSuggestions;
 
     return NextResponse.json({ suggestions });
   } catch (err) {

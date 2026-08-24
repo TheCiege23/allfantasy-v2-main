@@ -25,6 +25,8 @@ const LeagueSettingsSchema = z.object({
   isTEP: z.boolean().optional(),
   numTeams: z.number().int().min(2).max(40).optional(),
   isDynasty: z.boolean().optional(),
+  faabBudget: z.number().min(0).nullable().optional(),
+  faabRemaining: z.number().min(0).nullable().optional(),
 })
 
 const AssetValueSchema = z.object({
