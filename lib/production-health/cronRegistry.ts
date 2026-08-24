@@ -174,16 +174,41 @@ export function buildCronRegistry(crons: RawCron[], routeExists: (pathname: stri
 
 // ───────────────────────────── IO wrappers ────────────────────────────────
 
+/**
+ * Reads the cron schedule from `cron-schedule.json`, falling back to `vercel.json`.
+ *
+ * ⚠ THE SCHEDULE MOVED OUT OF vercel.json. Vercel will not build a deployment
+ * declaring a sub-daily cron on the Hobby plan, and it has not executed any of
+ * these since the Railway move — both tiers fire from GitHub Actions. Reading
+ * only `vercel.json` now returns nothing.
+ *
+ * ⚠ `catch { return [] }` IS THE BUG THIS SURFACE REPORTS AS HEALTH. An empty
+ * read here does not render "unknown", it renders "zero crons declared" — a
+ * clean bill of health for a system that is entirely undeclared. It is kept
+ * (this is a read-only dashboard, not a build gate, and throwing would take the
+ * page down) but it now has to miss BOTH files to happen.
+ *
+ * ⚠ OPEN QUESTION — DOES EITHER FILE EXIST IN THE LAMBDA? This runs in deployed
+ * app code where `process.cwd()` is `/var/task`, and Next does not trace
+ * `vercel.json` or `cron-schedule.json` into the server output by default. If
+ * neither ships, this has been returning `[]` in production since it was written
+ * and only ever worked locally and in CI. Confirm against a real deployment
+ * before trusting this surface; the fix is `outputFileTracingIncludes`.
+ */
 export function readVercelCrons(cwd: string = process.cwd()): RawCron[] {
-  try {
-    const raw = fs.readFileSync(path.join(cwd, "vercel.json"), "utf8")
-    const parsed = JSON.parse(raw) as { crons?: Array<{ path?: unknown; schedule?: unknown }> }
-    return (parsed.crons ?? [])
-      .filter((c): c is RawCron => typeof c.path === "string" && typeof c.schedule === "string")
-      .map((c) => ({ path: c.path, schedule: c.schedule }))
-  } catch {
-    return []
+  for (const file of ["cron-schedule.json", "vercel.json"]) {
+    try {
+      const raw = fs.readFileSync(path.join(cwd, file), "utf8")
+      const parsed = JSON.parse(raw) as { crons?: Array<{ path?: unknown; schedule?: unknown }> }
+      const crons = (parsed.crons ?? [])
+        .filter((c): c is RawCron => typeof c.path === "string" && typeof c.schedule === "string")
+        .map((c) => ({ path: c.path, schedule: c.schedule }))
+      if (crons.length > 0) return crons
+    } catch {
+      /* try the next candidate */
+    }
   }
+  return []
 }
 
 export function routeExistsOnDisk(pathname: string, cwd: string = process.cwd()): boolean {

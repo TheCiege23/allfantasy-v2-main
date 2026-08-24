@@ -646,7 +646,7 @@ const resolvedPoolSrc = readFileSync(
 // ---------------------------------------------------------------------------
 
 const cronPrewarmSrc = readFileSync(resolve(root, 'app/api/cron/draft-pool-prewarm/route.ts'), 'utf8')
-const vercelJson = readFileSync(resolve(root, 'vercel.json'), 'utf8')
+const vercelJson = readFileSync(resolve(root, 'cron-schedule.json'), 'utf8')
 const topBarSrc = readFileSync(resolve(root, 'components/app/draft-room/DraftTopBar.tsx'), 'utf8')
 const draftSessionSvcSrc = readFileSync(resolve(root, 'lib/live-draft-engine/DraftSessionService.ts'), 'utf8')
 

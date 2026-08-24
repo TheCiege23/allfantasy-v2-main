@@ -174,7 +174,7 @@ describe("import-projections cron route", () => {
 describe("import-projections cron Vercel config", () => {
   it("registers a daily cadence", () => {
     const root = resolve(__dirname, "..", "..")
-    const json = JSON.parse(readFileSync(resolve(root, "vercel.json"), "utf8")) as {
+    const json = JSON.parse(readFileSync(resolve(root, "cron-schedule.json"), "utf8")) as {
       crons?: Array<{ path: string; schedule: string }>
     }
     const entry = json.crons?.find((cron) => cron.path === "/api/cron/import-projections")

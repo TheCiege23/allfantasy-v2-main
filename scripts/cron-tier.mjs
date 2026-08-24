@@ -23,8 +23,10 @@
  * tier hosted elsewhere, a host outage can only ever take the fast tier -- the slow tier keeps
  * writing, and the freshness monitor can still see the gap.
  *
- * `vercel.json` stays the single source of truth for WHAT runs and HOW OFTEN. This module only
- * answers WHICH SCHEDULER should fire it.
+ * `cron-schedule.json` is the single source of truth for WHAT runs and HOW OFTEN. This module only
+ * answers WHICH SCHEDULER should fire it. (That registry lived in `vercel.json` until the Hobby
+ * plan started refusing to build any deployment declaring a sub-daily cron; `readCronSchedule`
+ * below still falls back to it so the move stays bisectable.)
  */
 
 import fs from 'node:fs'
@@ -73,13 +75,54 @@ export const SLOW_TIER_EXCLUSIONS = {
   },
 }
 
-export function readVercelCrons(cwd = process.cwd()) {
-  const raw = fs.readFileSync(path.join(cwd, 'vercel.json'), 'utf8')
-  const parsed = JSON.parse(raw)
-  return (parsed.crons ?? [])
-    .filter((c) => typeof c?.path === 'string' && typeof c?.schedule === 'string')
-    .map((c) => ({ path: c.path, schedule: c.schedule }))
+/**
+ * Reads the schedule from `cron-schedule.json`, falling back to `vercel.json`.
+ *
+ * WHY THE SCHEDULE LEFT vercel.json. Vercel refuses to build a deployment that
+ * declares a sub-daily cron on the Hobby plan — 42 of these are declared and the
+ * first one it meets fires every ten minutes, so every deploy failed at build
+ * time. (Cron expressions are deliberately not quoted inside this block: a
+ * stepped field ends with the same two characters that close a comment.)
+ * Vercel has not EXECUTED any of them since the Railway move either: both tiers
+ * are fired from GitHub Actions (`cron-fast-tier.yml`, `cron-slow-tier.yml`)
+ * through this module. The declaration was blocking deploys and buying nothing.
+ *
+ * The workaround people were using was emptying `vercel.json` to `{}` on local
+ * disk before each `vercel --prod`, which is worse than it sounds: production
+ * then matches no commit, and the keep-line guard in `vercel-next-build.cjs`
+ * reads zero crons and passes vacuously, so the guard that exists because this
+ * regressed twice goes dark exactly when it is needed.
+ *
+ * KEEP THE FALLBACK. It lets this land independently of the `vercel.json` edit
+ * and keeps `git bisect` working across the change.
+ *
+ * ⚠ EMPTY IS NEVER CORRECT HERE, SO IT THROWS. Returning `[]` is how every
+ * silent failure in this system happened: the dead cron reporting healthy
+ * (#602), the starved fast tier (#607), the keep-line guard verifying nothing.
+ * A missing schedule is a broken checkout, not "nothing scheduled".
+ */
+export function readCronSchedule(cwd = process.cwd()) {
+  for (const file of ['cron-schedule.json', 'vercel.json']) {
+    let raw
+    try {
+      raw = fs.readFileSync(path.join(cwd, file), 'utf8')
+    } catch {
+      continue
+    }
+    const crons = JSON.parse(raw).crons ?? []
+    if (crons.length === 0) continue
+    return crons
+      .filter((c) => typeof c?.path === 'string' && typeof c?.schedule === 'string')
+      .map((c) => ({ path: c.path, schedule: c.schedule }))
+  }
+  throw new Error(
+    'No cron schedule found. Expected a non-empty `crons` array in ' +
+      'cron-schedule.json (preferred) or vercel.json.',
+  )
 }
+
+/** @deprecated Name kept so existing importers keep working. Prefer readCronSchedule. */
+export const readVercelCrons = readCronSchedule
 
 /**
  * Classifies every declared cron. Returns all buckets rather than just the one a caller wants, so
