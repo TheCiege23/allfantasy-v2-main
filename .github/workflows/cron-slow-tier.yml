@@ -1,20 +1,27 @@
 name: Cron slow tier
 
-# Fires the 25 hourly-or-slower crons declared in vercel.json against the deployed app.
+# Fires the 25 hourly-or-slower crons declared in cron-schedule.json against the deployed app.
 #
 # WHY THIS EXISTS
-# All 41 crons stopped on the Vercel -> Railway move: vercel.json declares them, Vercel executes
-# them, and Vercel is blocked. Nothing noticed for six days, because the only things that could
+# All 41 crons stopped on the Vercel -> Railway move: vercel.json declared them, Vercel executed
+# them, and Vercel was blocked. Nothing noticed for six days, because the only things that could
 # have noticed were themselves crons. Hosting the slow tier here means a host outage can never
 # again take out *everything* -- the slow tier keeps writing timestamps, and
 # `.github/workflows/cron-freshness.yml` can still see the gap.
 #
-# The fast tier (12 sub-hourly jobs, including two every-minute) stays on the host. GitHub Actions
-# schedules have a 5-minute floor and queue behind the shared runner pool, which is fine for a
-# nightly ingest and useless for live-score-tick.
+# 🛑 THIS IS THE EXECUTOR NOW. DO NOT DELETE IT.
+# PR #621 (merged 2026-08-24) moved the registry out of vercel.json into cron-schedule.json.
+# vercel.json is `{}`, so Vercel registers ZERO cron jobs -- this workflow and the fast tier are
+# the only things running any of the 42. Disabling both on 2026-08-24 caused a ~3-hour total cron
+# outage. See the header of cron-fast-tier.yml for the full account and the `vercel crons ls`
+# check to run before ever turning these off.
+#
+# The fast tier (12 sub-hourly jobs, including two every-minute) is a separate workflow because
+# GitHub Actions schedules have a 5-minute floor and queue behind the shared runner pool, which is
+# fine for a nightly ingest and useless for live-score-tick.
 #
 # REQUIRED CONFIGURATION
-#   repository variable  APP_URL      e.g. https://your-app.up.railway.app
+#   repository variable  APP_URL      e.g. https://allfantasy.ai
 #   repository secret    CRON_SECRET  the same value the deployed app reads
 # With either missing this workflow logs a notice and exits green, rather than failing every run.
 #
