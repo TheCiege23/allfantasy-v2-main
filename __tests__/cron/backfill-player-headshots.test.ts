@@ -225,7 +225,7 @@ describe('Structured response + observability', () => {
 })
 
 describe('Vercel cron schedule', () => {
-  const src = read('vercel.json')
+  const src = read('cron-schedule.json')
 
   it('vercel.json includes the new cron at /api/cron/backfill-player-headshots', () => {
     expect(src).toMatch(/\/api\/cron\/backfill-player-headshots/)

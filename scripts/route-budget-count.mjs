@@ -116,7 +116,10 @@ const disabled = new Set()
 for (const d of DISABLE) for (const f of walk(join(root, d))) if (!KEEP.has(f)) disabled.add(f)
 const production = all.filter((f) => !disabled.has(f))
 let crons = 0
-try { crons = JSON.parse(readFileSync('vercel.json', 'utf8')).crons?.length || 0 } catch {}
+// cron-schedule.json is where the schedule lives; vercel.json is the
+// pre-extraction fallback. Count only, so a swallowed catch is fine here.
+try { crons = JSON.parse(readFileSync('cron-schedule.json', 'utf8')).crons?.length || 0 } catch {}
+if (!crons) { try { crons = JSON.parse(readFileSync('vercel.json', 'utf8')).crons?.length || 0 } catch {} }
 
 console.log(`mode: ${baseline ? 'BASELINE (pre-cleanup)' : 'CURRENT (post-cleanup)'}`)
 console.log(`  total route+page files:       ${all.length}`)
