@@ -592,6 +592,8 @@ export async function buildSessionSnapshot(
     updatedAt: session.updatedAt.toISOString(),
     auction,
     isSlowDraft,
+    /** Set when this session mirrors an externally-hosted Sleeper draft (lib/draft/sleeperSync). */
+    sleeperDraftId: session.sleeperDraftId ?? null,
     keeper,
     devy,
     commissionerAiDraft,

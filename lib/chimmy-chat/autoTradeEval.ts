@@ -18,7 +18,13 @@ type TradeCheckRow = {
 
 const PROCESSED_LIMIT = 500
 
-function toGradeScore(grade: string | null | undefined): { score: number; grade: string } {
+/**
+ * ⚠ RETURNS NULL FOR AN UNGRADED TRADE. This used to default to 50/"C", which
+ * announced an invented "Trade score: 50/100 (C)" for trades that were never
+ * graded — indistinguishable from a real C. No grade means no score, and the
+ * message must say so instead.
+ */
+function toGradeScore(grade: string | null | undefined): { score: number; grade: string } | null {
   const normalized = String(grade ?? '').trim().toUpperCase()
   const map: Record<string, number> = {
     'A+': 95,
@@ -37,7 +43,7 @@ function toGradeScore(grade: string | null | undefined): { score: number; grade:
   if (Number.isFinite(score)) {
     return { score, grade: normalized }
   }
-  return { score: 50, grade: 'C' }
+  return null
 }
 
 function toRecommendation(score: number): string {
@@ -130,16 +136,15 @@ export async function resolveTradeEvalIdentity(): Promise<{ sleeperUsername: str
 }
 
 function buildAutoEvalMessage(row: TradeCheckRow): string {
-  const { score, grade } = toGradeScore(row.aiGrade)
-  const recommendation = toRecommendation(score)
+  const graded = toGradeScore(row.aiGrade)
   const leagueName = row.leagueName?.trim() || 'your league'
   const verdict = row.aiVerdict ? `Verdict: ${row.aiVerdict}.` : ''
   const href = tradeAnalyzerHref(row.leagueId)
 
   return [
     `Incoming trade/counter offer in ${leagueName}`,
-    `Trade score: ${score}/100 (${grade})`,
-    `Recommendation: ${recommendation}`,
+    graded ? `Trade score: ${graded.score}/100 (${graded.grade})` : `This trade hasn't been graded yet — not enough data to score it honestly.`,
+    graded ? `Recommendation: ${toRecommendation(graded.score)}` : '',
     verdict,
     `[Open AI Trade Analyzer for a deeper response](${href})`,
   ]

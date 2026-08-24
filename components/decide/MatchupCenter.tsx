@@ -21,7 +21,12 @@ function Side({ s, right = false }: { s: MatchupSide; right?: boolean }) {
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexDirection: right ? 'row-reverse' : 'row', flex: 1, minWidth: 0 }}>
       {av ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={av} alt="" style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flex: 'none' }} />
+        <img
+          src={av}
+          alt=""
+          style={{ width: 26, height: 26, borderRadius: '50%', objectFit: 'cover', flex: 'none' }}
+          onError={(e) => { e.currentTarget.style.display = 'none' }}
+        />
       ) : null}
       <div style={{ minWidth: 0, textAlign: right ? 'right' : 'left' }}>
         <div style={{ fontWeight: 800, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

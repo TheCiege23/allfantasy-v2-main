@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { computeWinProbability, type MatchupPlayer } from '@/lib/projections/winProbability'
 
 /**
@@ -20,6 +21,22 @@ export type SideProjection = {
   /** Starters we could not price — surfaced, never silently treated as zero. */
   unprojected: number
   projectedRemaining: number
+}
+
+/**
+ * Both sides, priced under THIS league's own scoring — or not at all.
+ *
+ * ⚠ SAME STANCE AS playerImpact: REFUSE rather than fall back to the generic
+ * full-PPR number. A standard projection silently substituted for a
+ * league-specific one is indistinguishable from the real thing on screen, and
+ * it is wrong in exactly the leagues that differ most from default. When
+ * `leagueScoring` is unavailable the sides carry no priced starters, so a
+ * caller that forgets to check still cannot leak a generic number.
+ */
+export type SideProjections = {
+  you: SideProjection
+  opponent: SideProjection
+  leagueScoring: { available: true } | { available: false; reason: string }
 }
 
 /**
@@ -54,7 +71,7 @@ export async function loadSideProjections(args: {
   week: number
   yourPlatformUserId: string | null
   opponentPlatformUserId: string | null
-}): Promise<{ you: SideProjection; opponent: SideProjection } | null> {
+}): Promise<SideProjections | null> {
   const { leagueId, season, week } = args
   if (!args.yourPlatformUserId || !args.opponentPlatformUserId) return null
 
@@ -64,6 +81,15 @@ export async function loadSideProjections(args: {
   })
   if (rosters.length < 2) return null
 
+  // The league's own scoring rules — the SAME extraction playerImpact uses, so
+  // the Matchup screen and the game-day screen cannot disagree about one
+  // league's rules or one player's price.
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { settings: true },
+  })
+  const scoring = extractScoringSettings(league?.settings)
+
   const byUser = new Map(rosters.map((r) => [r.platformUserId, startersOf(r.playerData)]))
   const yourIds = byUser.get(args.yourPlatformUserId) ?? []
   const oppIds = byUser.get(args.opponentPlatformUserId) ?? []
@@ -72,7 +98,11 @@ export async function loadSideProjections(args: {
   const lookupIds = [...yourIds, ...oppIds].filter(isResolvableId)
   const projections = await prisma.fantasyProjection.findMany({
     where: { playerId: { in: lookupIds }, season: String(season), week },
-    select: { playerId: true, projectedPoints: true, stats: true },
+    // `stats` carries the FULL component stat line the import cron preserves so
+    // consumers can rescore under league settings (see app/api/cron/
+    // import-projections). The generic `projectedPoints` total is deliberately
+    // not read here — a PPR number is not this league's number.
+    select: { playerId: true, stats: true },
   })
   const byPlayer = new Map(projections.map((p) => [p.playerId, p]))
 
@@ -86,19 +116,42 @@ export async function loadSideProjections(args: {
         unprojected++
         continue
       }
-      const pts = Number(proj.projectedPoints)
+      /*
+       * ⚠ RESCORED UNDER THE LEAGUE'S OWN RULES, NEVER READ FROM THE GENERIC
+       * pts_ppr TOTAL. The feed nests component stats one level down; the outer
+       * object is metadata (name/team/week) and scoring it would be
+       * meaningless. A starter whose stats the rules cannot score is unpriced —
+       * not zero — same as a starter the feed does not carry.
+       */
+      const s = (proj.stats ?? {}) as Record<string, unknown>
+      const scored = scoring
+        ? computeLeagueProjectedPoints((s.stats ?? null) as Record<string, unknown> | null, scoring)
+        : null
+      if (!scored) {
+        unprojected++
+        continue
+      }
       starters.push({
         playerId: id,
-        projectedPoints: Number.isFinite(pts) ? pts : null,
+        projectedPoints: scored.points,
         actualPoints: 0,
         isFinal: false,
       })
-      if (Number.isFinite(pts)) projectedRemaining += pts
+      projectedRemaining += scored.points
     }
     return { starters, unprojected, projectedRemaining: Math.round(projectedRemaining * 100) / 100 }
   }
 
-  return { you: build(yourIds), opponent: build(oppIds) }
+  return {
+    you: build(yourIds),
+    opponent: build(oppIds),
+    leagueScoring: scoring
+      ? { available: true }
+      : {
+          available: false,
+          reason: 'we hold no scoring settings for this league, and a generic projection would not be yours',
+        },
+  }
 }
 
 /**
@@ -111,16 +164,22 @@ export async function loadSideProjections(args: {
  * result toward whichever side has full coverage.
  */
 export function winProbabilityFor(
-  sides: { you: SideProjection; opponent: SideProjection },
+  sides: SideProjections,
   currentPoints: { you: number; opponent: number }
 ):
   | { available: true; data: { pWin: number; projectedMargin: number; confidence: string; detail: string } }
   | { available: false; reason: string } {
+  // "No rules" and "no projection" are DIFFERENT failures — blaming the feed
+  // for a missing league import sends someone hunting the wrong problem.
+  if (!sides.leagueScoring.available) {
+    return { available: false, reason: sides.leagueScoring.reason }
+  }
+
   const totalUnprojected = sides.you.unprojected + sides.opponent.unprojected
   if (totalUnprojected > 0) {
     return {
       available: false,
-      reason: `${totalUnprojected} starter${totalUnprojected === 1 ? '' : 's'} have no projection on file — counting them as zero would tilt the result toward the other side`,
+      reason: `${totalUnprojected} starter${totalUnprojected === 1 ? '' : 's'} could not be priced under this league's scoring — no projection on file, or stats its rules do not cover — and counting them as zero would tilt the result toward the other side`,
     }
   }
 

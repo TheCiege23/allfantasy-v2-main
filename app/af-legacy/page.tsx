@@ -2792,6 +2792,37 @@ function AFLegacyContent() {
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /*
+   * ⚠ GUEST RESUME — the funnel used to LOSE a finished import on reload.
+   * guest-import sets an HttpOnly af_guest_session cookie and
+   * /api/guest-mode/status returns the imported identity, but nothing here
+   * ever asked: a guest who completed the ~1-minute import and reloaded (or
+   * came back later) landed on the pitch screen with no path to their report
+   * except re-importing from scratch. On mount, if a guest session exists and
+   * nothing is loaded, render their CACHED profile — this reads what the
+   * completed import already built; it does not re-import.
+   */
+  useEffect(() => {
+    if (username || importStatus !== 'idle') return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/guest-mode/status', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = (await res.json()) as { isGuest?: boolean; sleeperUsername?: string | null }
+        if (cancelled || !data.isGuest || !data.sleeperUsername) return
+        setUsernameState(data.sleeperUsername)
+        setImportStatus('complete')
+        await loadProfile(data.sleeperUsername)
+      } catch {
+        /* no guest session — nothing to resume */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
   
   // Load Fantrax username and leagues from sessionStorage on mount
   useEffect(() => {

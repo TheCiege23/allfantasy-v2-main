@@ -11,7 +11,10 @@ describe("user-settings core services", () => {
     })
 
     expect(result.preferredLanguage).toBe("en")
-    expect(result.themePreference).toBe("light")
+    // Dark is the deliberate default since the launch audit: the flagship
+    // signed-in surfaces are authored dark and the light clamp is partial —
+    // a fresh user landed in the theme the product handles worst.
+    expect(result.themePreference).toBe("dark")
     expect(typeof result.timezone).toBe("string")
   })
 

@@ -285,6 +285,35 @@ function clampScore(value: unknown, fallback = 50) {
   return Math.max(0, Math.min(100, Math.round(score)))
 }
 
+type LinkedLeague = {
+  id: string
+  sleeperLeagueId?: string | null
+  platformLeagueId?: string | null
+  unifiedLeagueId?: string | null
+  hasUnifiedRecord?: boolean
+  isDynasty?: boolean
+  leagueType?: string | null
+  format?: string | null
+  scoring?: string | null
+}
+
+function formatFromLinkedLeague(league: LinkedLeague): LeagueFormat {
+  if (league.isDynasty) return "dynasty"
+  const raw = (league.leagueType ?? league.format ?? "").toLowerCase()
+  if (raw.includes("dynasty")) return "dynasty"
+  if (raw.includes("keeper")) return "keeper"
+  return "redraft"
+}
+
+function scoringFromLinkedLeague(league: LinkedLeague): ScoringFormat | null {
+  const raw = (league.scoring ?? "").toLowerCase()
+  if (!raw) return null
+  if (raw.includes("half")) return "Half PPR"
+  if (raw.includes("standard") || raw === "std") return "Standard"
+  if (raw.includes("ppr")) return "PPR"
+  return null
+}
+
 function humanizeKey(value: string) {
   return value
     .replace(/[_-]+/g, " ")
@@ -780,6 +809,7 @@ function TradeHubInner() {
   const searchParams = useSearchParams()
   const previewSender = searchParams?.get("previewSender") ?? ""
   const previewReceiver = searchParams?.get("previewReceiver") ?? ""
+  const linkedLeagueIdParam = searchParams?.get("leagueId") ?? ""
 
   const [sender, setSender] = useState<TradeSide>(() => emptySide("Sender Team", previewSender))
   const [receiver, setReceiver] = useState<TradeSide>(() => emptySide("Receiver Team", previewReceiver))
@@ -788,6 +818,7 @@ function TradeHubInner() {
   const [sport, setSport] = useState<SupportedSport>(DEFAULT_SPORT)
   const [scoring, setScoring] = useState<ScoringFormat>("PPR")
   const [asOfDate, setAsOfDate] = useState("")
+  const [linkedLeagueId, setLinkedLeagueId] = useState("")
   const [phase, setPhase] = useState<PhaseKey>("plan")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<TradeResult | null>(null)
@@ -815,6 +846,38 @@ function TradeHubInner() {
       resultRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
     }
   }, [result])
+
+  useEffect(() => {
+    if (!linkedLeagueIdParam) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/league/list")
+        if (!res.ok) return
+        const data = (await res.json()) as { leagues?: LinkedLeague[] }
+        const league = (data.leagues ?? []).find(
+          (l) =>
+            l.id === linkedLeagueIdParam ||
+            l.sleeperLeagueId === linkedLeagueIdParam ||
+            l.platformLeagueId === linkedLeagueIdParam
+        )
+        if (!league || cancelled) return
+        // Only a unified (native League.id) row passes the API's membership
+        // gate — a legacy/Sleeper-space id would 403 the whole evaluation.
+        if (league.hasUnifiedRecord) {
+          setLinkedLeagueId(String(league.unifiedLeagueId ?? league.id))
+        }
+        setFormat(formatFromLinkedLeague(league))
+        const leagueScoring = scoringFromLinkedLeague(league)
+        if (leagueScoring) setScoring(leagueScoring)
+      } catch {
+        /* league-blind evaluation still works */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [linkedLeagueIdParam])
 
   const resetTrade = useCallback(() => {
     setSender(emptySide("Sender Team"))
@@ -858,6 +921,7 @@ function TradeHubInner() {
         body: JSON.stringify({
           trade_id: `trade_${Date.now()}`,
           confirmTokenSpend: true,
+          ...(linkedLeagueId ? { leagueId: linkedLeagueId } : {}),
           sender: {
             manager_name: sender.teamName.trim() || "Sender Team",
             is_af_pro: sender.isProMember,
@@ -918,7 +982,7 @@ function TradeHubInner() {
       timers.forEach((timer) => window.clearTimeout(timer))
       setLoading(false)
     }
-  }, [asOfDate, canEvaluate, format, qbFormat, receiver, scoring, sender, sport])
+  }, [asOfDate, canEvaluate, format, linkedLeagueId, qbFormat, receiver, scoring, sender, sport])
 
   return (
     <div className="min-h-screen bg-[#07071a] text-white">
@@ -1075,9 +1139,17 @@ function TradeHubInner() {
                 onChange={(event) => setSport(normalizeToSupportedSport(event.target.value))}
                 className="min-h-[44px] w-full rounded-xl border border-white/10 bg-[#101224] px-3 py-3 text-base text-white focus:border-cyan-500/40 focus:outline-none sm:min-h-0 sm:text-sm"
               >
+                {/*
+                  ⚠ NON-NFL SPORTS ARE OFFERED BUT NOT PICKABLE. The valuation
+                  pipeline behind this page prices only NFL assets — every other
+                  sport resolved each player to 0 and let the narration paper
+                  over it. Disabled-with-Soon is honest; a grade built on zeros
+                  is not. Re-enable per sport when its value source exists.
+                */}
                 {SUPPORTED_SPORTS.map((supportedSport) => (
-                  <option key={supportedSport} value={supportedSport}>
+                  <option key={supportedSport} value={supportedSport} disabled={supportedSport !== 'NFL'}>
                     {SPORT_LABELS[supportedSport]}
+                    {supportedSport !== 'NFL' ? ' (Soon)' : ''}
                   </option>
                 ))}
               </select>

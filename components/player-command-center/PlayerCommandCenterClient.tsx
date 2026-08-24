@@ -312,6 +312,7 @@ export default function PlayerCommandCenterClient() {
   const [query, setQuery] = React.useState("")
   const [urgentOnly, setUrgentOnly] = React.useState(false)
   const [expanded, setExpanded] = React.useState<string | null>(null)
+  const [failedHeadshots, setFailedHeadshots] = React.useState<Set<string>>(new Set())
 
   const load = React.useCallback(async () => {
     setLoading(true)
@@ -403,6 +404,7 @@ export default function PlayerCommandCenterClient() {
             const isOpen = expanded === item.canonicalPlayerId
             const urgencyByLeague = new Map(item.urgency.appearances.map((a) => [a.canonicalLeagueId, a]))
             const lock = lockLabel(item.urgency.minutesToLock)
+            const headshot = item.headshotUrl && !failedHeadshots.has(item.headshotUrl) ? item.headshotUrl : null
             return (
               <div key={item.canonicalPlayerId} className="rounded-2xl border border-white/10 bg-white/5">
                 <button
@@ -410,9 +412,14 @@ export default function PlayerCommandCenterClient() {
                   onClick={() => setExpanded(isOpen ? null : item.canonicalPlayerId)}
                   className="flex w-full items-center gap-3 p-4 text-left"
                 >
-                  {item.headshotUrl ? (
+                  {headshot ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.headshotUrl} alt="" className="h-10 w-10 rounded-full bg-white/10 object-cover" />
+                    <img
+                      src={headshot}
+                      alt=""
+                      className="h-10 w-10 rounded-full bg-white/10 object-cover"
+                      onError={() => setFailedHeadshots((prev) => new Set(prev).add(headshot))}
+                    />
                   ) : (
                     <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white/70">
                       {initials(item.displayName)}

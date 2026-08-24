@@ -151,6 +151,7 @@ function PasswordField({
 
 const PROVIDERS: { id: SocialProvider; label: string }[] = [
   { id: 'google', label: 'Google' },
+  { id: 'facebook', label: 'Facebook' },
   { id: 'apple', label: 'Apple' },
   { id: 'spotify', label: 'Spotify' },
   { id: 'discord', label: 'Discord' },
@@ -293,6 +294,16 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  /*
+   * ⚠ THE SLEEPER HANDLE IS THE IMPORT KEY, COLLECTED AT THE DOOR. The
+   * commissioner gate on Sleeper imports requires a linked Sleeper account
+   * (sleeperUserId or sleeperUsername on the profile), and before this field
+   * existed NO surface wrote either — a direct signup could never import the
+   * league they came here to import. /api/auth/register already resolves and
+   * stores the handle when present; this just finally sends it. Optional on
+   * purpose: not everyone plays on Sleeper.
+   */
+  const [sleeperHandle, setSleeperHandle] = useState('')
   const [disclaimer, setDisclaimer] = useState(false)
   const [terms, setTerms] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -336,6 +347,7 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
           disclaimerAgreed: disclaimer,
           termsAgreed: terms,
           verificationMethod: 'EMAIL',
+          ...(sleeperHandle.trim() ? { sleeperUsername: sleeperHandle.trim() } : {}),
         }),
       })
 
@@ -424,6 +436,20 @@ function SignUp({ callbackUrl }: { callbackUrl: string }) {
             placeholder="8+ characters"
           />
         </div>
+
+        <label className="af-au-field">
+          <span className="af-label">Sleeper username (optional)</span>
+          <input
+            type="text"
+            autoComplete="off"
+            placeholder="your_sleeper_username"
+            value={sleeperHandle}
+            onChange={(e) => setSleeperHandle(e.target.value)}
+          />
+          <span className="af-au-hint">
+            Link it now and your Sleeper leagues import in one click after signup.
+          </span>
+        </label>
 
         <label className="af-au-check">
           <input

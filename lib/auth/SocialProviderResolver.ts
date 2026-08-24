@@ -23,8 +23,24 @@ const MANUALLY_SUSPENDED_PROVIDERS = new Set<SocialProvider>([
   'facebook', // Meta platform review — re-enable once resolved
 ])
 
+/**
+ * Explicit per-provider override for a manual suspension, so going live is an
+ * env flip instead of a code change. Facebook's whole stack (NextAuth
+ * provider, signIn callback, this resolver) is already built; the suspension
+ * exists only because the Meta app was under platform review. Once the Meta
+ * app is Live with Facebook Login configured, setting
+ * NEXT_PUBLIC_ENABLE_FACEBOOK_AUTH=true (plus FACEBOOK_CLIENT_ID/SECRET)
+ * turns the button on everywhere. The flag is an explicit human decision —
+ * exactly what the suspension comment asks for — just expressed in env
+ * config rather than a deploy.
+ */
+function isSuspensionOverridden(provider: SocialProvider): boolean {
+  if (provider === 'facebook') return process.env.NEXT_PUBLIC_ENABLE_FACEBOOK_AUTH === 'true'
+  return false
+}
+
 export function isSocialProviderEnabled(provider: SocialProvider): boolean {
-  if (MANUALLY_SUSPENDED_PROVIDERS.has(provider)) return false
+  if (MANUALLY_SUSPENDED_PROVIDERS.has(provider) && !isSuspensionOverridden(provider)) return false
 
   if (provider === 'google') {
     // Accept either the explicit public flag OR (server-side) the presence of credentials.

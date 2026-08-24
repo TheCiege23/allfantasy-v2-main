@@ -16,6 +16,7 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import DashboardV2 from '@/components/core-app/screens/DashboardV2'
 import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
+import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
@@ -277,19 +278,31 @@ export default async function DashboardPage({
     }
 
     return (
-      <Dashboard3A
-        issues={issuesAll}
-        exposure={exposure}
-        rivals={rivals}
-        winProb={winProb}
-        data={dash34}
-        career={career}
-        week={week}
-        weekLabel={dash34?.weekLabel ?? null}
-        planName={planName}
-        commissionerCount={playedLeagues.filter((l) => Boolean(l.isCommissioner)).length}
-        nowLabel={syncAge.stale ? null : syncAge.label}
-      />
+      <>
+        {/*
+          Pre-kickoff injury triage — getDash34Data has always computed this
+          book on this very request; it was passed to Dashboard3A and never
+          rendered. A separate component (not a Dashboard3A edit) because that
+          file carries another session's in-flight work.
+        */}
+        <Dash3ATriage
+          book={(dash34?.book ?? null) as unknown as TriageBookRow[] | null}
+          now={now}
+        />
+        <Dashboard3A
+          issues={issuesAll}
+          exposure={exposure}
+          rivals={rivals}
+          winProb={winProb}
+          data={dash34}
+          career={career}
+          week={week}
+          weekLabel={dash34?.weekLabel ?? null}
+          planName={planName}
+          commissionerCount={playedLeagues.filter((l) => Boolean(l.isCommissioner)).length}
+          nowLabel={syncAge.stale ? null : syncAge.label}
+        />
+      </>
     )
   } catch (error) {
     if (isAppRouterRedirectError(error)) {

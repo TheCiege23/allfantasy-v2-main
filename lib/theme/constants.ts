@@ -9,8 +9,16 @@ export type ThemeId = 'light' | 'dark' | 'legacy' | 'system'
 export const THEME_STORAGE_KEY = 'af_mode'
 export const THEME_COOKIE_KEY = 'af_mode'
 
-/** Default theme when none is stored (must match layout script default). */
-export const DEFAULT_THEME: ThemeId = 'light'
+/**
+ * Default theme when none is stored (must match layout script default).
+ *
+ * ⚠ DARK ON PURPOSE. The flagship signed-in surfaces are authored dark, and the
+ * light-mode readability clamp covers only part of their palette — a fresh user
+ * defaulted to light landed on the screens the product renders worst. Default
+ * dark puts new users in the theme the product is actually built for; light
+ * remains one toggle away.
+ */
+export const DEFAULT_THEME: ThemeId = 'dark'
 
 export const THEME_IDS: ThemeId[] = ['light', 'dark', 'legacy', 'system']
 

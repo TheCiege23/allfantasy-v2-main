@@ -260,6 +260,20 @@
   text-transform: uppercase;
 }
 
+/* Platform label ahead of the impact card's league name — league names are
+   user-authored, and a bare one can read as template debris. */
+.af-pf-impact-platform {
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, var(--text) 10%, transparent);
+  color: var(--muted);
+  margin-right: 8px;
+}
+
 .af-pf-table-action {
   text-align: right;
   white-space: nowrap;

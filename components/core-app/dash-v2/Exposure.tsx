@@ -1,4 +1,4 @@
-import { Dash34Ago, Dash34When } from '@/components/core-app/screens/Dashboard34Live'
+import { Dash34Ago, Dash34Img, Dash34When } from '@/components/core-app/screens/Dashboard34Live'
 import type { Dash34Data } from '@/components/core-app/screens/Dashboard34'
 
 /**
@@ -76,8 +76,10 @@ export function Exposure({ data }: { data: Dash34Data | null }) {
               <div className="af-d2-exp-row">
                 <span className="af-d2-exp-mark" data-tone={tone} aria-hidden>
                   {row.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={row.imageUrl} alt="" />
+                    <Dash34Img
+                      src={row.imageUrl}
+                      fallback={<span className="af-num">{row.initials}</span>}
+                    />
                   ) : (
                     <span className="af-num">{row.initials}</span>
                   )}
@@ -167,8 +169,10 @@ export function Exposure({ data }: { data: Dash34Data | null }) {
                       <li key={lg.id} className="af-d2-exp-league">
                         <span className="af-d2-exp-league-tile" aria-hidden>
                           {lg.imageUrl ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={lg.imageUrl} alt="" />
+                            <Dash34Img
+                              src={lg.imageUrl}
+                              fallback={lg.name.trim().slice(0, 2).toUpperCase()}
+                            />
                           ) : (
                             lg.name.trim().slice(0, 2).toUpperCase()
                           )}

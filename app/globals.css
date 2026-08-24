@@ -768,6 +768,21 @@ html[data-mode="light"] .mode-readable [class*="bg-[#110b1e]"],
 html[data-mode="light"] .mode-readable [class*="bg-[#111938]"],
 html[data-mode="light"] .mode-readable [class*="bg-[#1a1a2e]"],
 html[data-mode="light"] .mode-readable [class*="bg-[#1a1f3a]"],
+/* 2026-08-24 audit sweep: the highest-traffic dark hexes the clamp missed —
+   measured on /dashboard, /league/*, draft room, and the AI-tools modals,
+   where an unclamped panel plus the clamp's own text-white rule rendered
+   dark-on-dark. */
+html[data-mode="light"] .mode-readable [class*="bg-[#030a20]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#050814]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#070b14]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#0b0e2a]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#0b1020]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#0c1018]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#0f141d]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#121725]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#12163e]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#131929]"],
+html[data-mode="light"] .mode-readable [class*="bg-[#242838]"],
 /* gradient from-stops */
 html[data-mode="light"] .mode-readable [class*="from-[#07071a]"],
 html[data-mode="light"] .mode-readable [class*="from-[#0a0a0f]"],

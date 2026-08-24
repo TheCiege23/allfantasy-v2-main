@@ -11,6 +11,13 @@ export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // server-only-free module because the client link builder needs them too.
 import { parsePlayerRef } from './playerRef'
 export { playerRef, parsePlayerRef } from './playerRef'
+// The Player Command Center's replacement engine — reused as-is for the
+// "recommended moves" section rather than re-deriving free agents here.
+import {
+  resolveReplacementOptions,
+  type ClaimTarget,
+  type ReplacementCandidate,
+} from '@/lib/shared-services/league-hub/replacementOptions'
 
 /**
  * Player Finder — "one name in, every platform, league, slot, injury and the
@@ -65,6 +72,26 @@ export type LeagueSlot = {
   isYours: boolean
 }
 
+/**
+ * One league's pickup answer, produced by the Player Command Center's engine
+ * (lib/shared-services/league-hub/replacementOptions). Bench swaps are NOT
+ * repeated here — `impact` already prices those under each league's own
+ * scoring; this carries the outside-the-roster half of the move.
+ */
+export type RecommendedMove = {
+  leagueId: string
+  leagueName: string
+  platform: string
+  /** The projection week the options were priced against. */
+  projectionWeek: number | null
+  /** The searched player's own standard-scoring projection, when the feed carries him. */
+  affectedProjection: number | null
+  /** Best unrostered players at his position, projection desc, capped by the engine at 3. */
+  freeAgents: ReplacementCandidate[]
+  /** Where a claim actually happens: our waiver wire, or the provider's own page. */
+  claimTarget: ClaimTarget
+}
+
 export type PlayerDetail = {
   player: PlayerMatch
   identityResolved: boolean
@@ -100,7 +127,12 @@ export type PlayerDetail = {
    * player" — it is "which of my leagues needs me in the next four minutes".
    */
   impact: SectionState<LeagueImpact[]>
-  recommendedMoves: UnavailableSection
+  /**
+   * ⚠ These deltas are STANDARD scoring — the engine prices the open pool
+   * against the one projection feed — and the UI must say so, because the
+   * impact section directly above shows league-scored numbers.
+   */
+  recommendedMoves: SectionState<RecommendedMove[]>
   freshness: { label: string; stale: boolean }
 }
 
@@ -185,26 +217,52 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
 }
 
 /**
- * Which of the user's leagues roster this player, and in which slot.
+ * Which of the user's leagues roster this player ON THE USER'S OWN TEAM, and in
+ * which slot.
+ *
+ * ⚠ YOUR ROSTER, NOT ANY ROSTER. This used to fetch every roster in each league
+ * and report the first one containing the player — so any league where ANY
+ * manager had him was listed as yours, wearing that manager's slot (searching
+ * Josh Allen showed "STARTER" in 47 leagues the viewer didn't roster him in).
+ * Ownership resolves through the claimed-team predicate — the same one
+ * getPlayerImpact uses: LeagueTeam.claimedByUserId → the roster matched on
+ * platformUserId, externalId OR our own User uuid. The third candidate is not
+ * optional: without it only 38 of 106 claimed teams found their roster.
  *
  * Slot precedence matters: a player listed in both `players` and `starters` is a
  * STARTER, not a bench player. `players` is the catch-all, so it is checked last.
  */
 async function resolveLeagueSlots(
   sleeperId: string,
-  leagueIds: string[]
+  leagueIds: string[],
+  userId: string | null | undefined
 ): Promise<LeagueSlot[]> {
-  if (leagueIds.length === 0) return []
+  if (leagueIds.length === 0 || !userId) return []
+
+  const teams = await prisma.leagueTeam.findMany({
+    where: { claimedByUserId: userId, leagueId: { in: leagueIds } },
+    select: { leagueId: true, platformUserId: true, externalId: true },
+  })
+  if (teams.length === 0) return []
+
+  const candidatesByLeague = new Map<string, Set<string>>()
+  for (const t of teams) {
+    const set = candidatesByLeague.get(t.leagueId) ?? new Set<string>()
+    for (const c of [t.platformUserId, t.externalId, userId]) if (c) set.add(c)
+    candidatesByLeague.set(t.leagueId, set)
+  }
+  const claimedLeagueIds = [...candidatesByLeague.keys()]
+  const allCandidates = [...new Set([...candidatesByLeague.values()].flatMap((s) => [...s]))]
 
   const leagues = await prisma.league.findMany({
-    where: { id: { in: leagueIds } },
+    where: { id: { in: claimedLeagueIds } },
     select: { id: true, name: true, platform: true, leagueType: true },
   })
   const byId = new Map(leagues.map((l) => [l.id, l]))
 
   const rosters = await prisma.roster.findMany({
-    where: { leagueId: { in: leagueIds } },
-    select: { leagueId: true, playerData: true },
+    where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
+    select: { leagueId: true, platformUserId: true, playerData: true },
   })
 
   const out: LeagueSlot[] = []
@@ -212,6 +270,9 @@ async function resolveLeagueSlots(
 
   for (const r of rosters) {
     if (claimed.has(r.leagueId)) continue
+    // The candidate union spans every claimed team; accept only a roster whose
+    // platformUserId belongs to THIS league's own candidate set.
+    if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
     const pd = (r.playerData ?? {}) as Record<string, unknown>
 
     for (const key of SLOT_ORDER) {
@@ -277,7 +338,7 @@ export async function getPlayerDetail(
         reason:
           'we have no platform id for this player, so we cannot tell which of your leagues roster him',
       }
-    : { available: true, data: await resolveLeagueSlots(row.sleeperId!, userLeagueIds) }
+    : { available: true, data: await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId) }
 
   // Injuries come from the ESPN writer — TheSportsDB serves none at all.
   const injuryRow = await prisma.sportsInjury
@@ -365,6 +426,59 @@ export async function getPlayerDetail(
       }
 
   /*
+   * ⚠ THE OUTSIDE HALF OF "THE MOVE TO MAKE". `impact` prices the bench swap
+   * under each league's own scoring; this adds who is UNROSTERED and better,
+   * with a real claim link, via the same engine the Player Command Center uses.
+   * Bounded on purpose: only leagues where he is on YOUR roster, starters
+   * first, capped — the engine scans a whole league's rosters per call, and
+   * this is a page view, not a cron. A league the engine cannot answer for is
+   * dropped rather than guessed at; if none survive, the section says so.
+   */
+  const MOVE_LEAGUE_CAP = 4
+  const moveLeagues =
+    userId && row.sleeperId && leagues.available
+      ? [...leagues.data]
+          .sort((a, b) => Number(b.slot === 'STARTER') - Number(a.slot === 'STARTER'))
+          .slice(0, MOVE_LEAGUE_CAP)
+      : []
+
+  const moveRows = (
+    await Promise.all(
+      moveLeagues.map(async (l) => {
+        const r = await resolveReplacementOptions({
+          appUserId: userId!,
+          leagueId: l.leagueId,
+          affectedPlayerId: row.sleeperId!,
+        }).catch(() => null)
+        if (!r || r.freeAgentOptions.length === 0) return null
+        return {
+          leagueId: l.leagueId,
+          leagueName: l.leagueName,
+          platform: l.platform,
+          projectionWeek: r.projectionWeek,
+          affectedProjection: r.affectedProjection,
+          freeAgents: r.freeAgentOptions,
+          claimTarget: r.claimTarget,
+        }
+      })
+    )
+  ).filter((m): m is RecommendedMove => m !== null)
+
+  const recommendedMoves: PlayerDetail['recommendedMoves'] =
+    moveRows.length > 0
+      ? { available: true, data: moveRows }
+      : {
+          available: false,
+          reason: !userId
+            ? 'sign in to see pickup options for your own leagues'
+            : !row.sleeperId
+              ? 'we hold no Sleeper id for this player, so we cannot weigh him against your rosters'
+              : !leagues.available || leagues.data.length === 0
+                ? 'he is not on any of your rosters, so there is no lineup hole to fill'
+                : 'no unrostered player we can price would fill his slot in the leagues we checked',
+        }
+
+  /*
    * ⚠ EVERYTHING BELOW HANGS ON `sleeperId`, AND IT IS NULLABLE. The projection
    * feed is keyed by Sleeper id; a player we hold only under a TheSportsDB
    * external id cannot be joined to it at all. That is a real and common gap —
@@ -434,11 +548,7 @@ export async function getPlayerDetail(
     // stays an honest gap rather than being approximated from targets.
     snapShare: { available: false, reason: 'snap share is not ingested by any current provider' },
     positionRank: rank,
-    recommendedMoves: {
-      available: false,
-      reason:
-        'a move recommendation needs this player weighed against your actual lineup, which we do not yet compute',
-    },
+    recommendedMoves,
     freshness: { label: age.label, stale: age.stale },
   }
 }

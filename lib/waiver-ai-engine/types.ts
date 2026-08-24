@@ -23,6 +23,8 @@ export type WaiverAIEngineInput = {
     isTEP?: boolean
     numTeams?: number
     isDynasty?: boolean
+    faabBudget?: number | null
+    faabRemaining?: number | null
   }
   availablePlayers: Array<{
     playerId?: string

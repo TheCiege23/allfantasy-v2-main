@@ -137,17 +137,17 @@ export function SimulationPanel({
       ) : null}
       {trade && tradeFocusTeamId ? (
         <div className="mt-4 rounded-lg border border-white/10 bg-black/25 px-3 py-3 text-[12px] text-white/80">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">Trade impact (sender)</div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/45">Trade impact estimate (sender)</div>
           <div className="mt-2 grid grid-cols-2 gap-2 tabular-nums">
             <div>
               Δ Avg wins <span className="text-cyan-200/90">{(trade.winDelta[tradeFocusTeamId] ?? 0).toFixed(2)}</span>
             </div>
             <div>
-              Δ Playoff odds{' '}
+              Δ Playoff odds (est.){' '}
               <span className="text-cyan-200/90">{((trade.playoffDelta[tradeFocusTeamId] ?? 0) * 100).toFixed(1)} pts</span>
             </div>
             <div>
-              Δ Title odds{' '}
+              Δ Title odds (est.){' '}
               <span className="text-cyan-200/90">{((trade.championshipDelta[tradeFocusTeamId] ?? 0) * 100).toFixed(2)} pts</span>
             </div>
             <div>
@@ -156,7 +156,8 @@ export function SimulationPanel({
             </div>
           </div>
           <p className="mt-2 text-[10px] text-white/40">
-            Uses listed trade assets only; bench is synthetic padding. For directional insight, not accounting precision.
+            Estimates from a simulation seeded with placeholder projections — listed trade assets only, synthetic bench padding.
+            Directional insight, not real playoff or title odds.
           </p>
         </div>
       ) : null}

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { getInjuryReport } from '@/lib/data/players'
 import { prisma } from '@/lib/prisma'
 import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
-import { createDemoInjuries, uiKeyToDataSport } from '@/lib/startSit/shared'
+import { uiKeyToDataSport } from '@/lib/startSit/shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -173,11 +173,15 @@ export async function GET(req: Request) {
     }
 
     if (injuries.length === 0) {
-      return NextResponse.json({ injuries: createDemoInjuries(sport) })
+      // ⚠ EMPTY, NEVER DEMO. This used to return createDemoInjuries — invented
+      // practice reports naming a real player ("Tyreek Hill — Limited practice
+      // Thu"), labelled "Sports ingest", whenever the feed was empty. An empty
+      // report is an answer; a fabricated one is a lie with a real name on it.
+      return NextResponse.json({ injuries: [], note: 'No injury designations on file for this slate.' })
     }
     return NextResponse.json({ injuries })
   } catch (e) {
     console.warn('[start-sit/injuries]', e)
-    return NextResponse.json({ injuries: createDemoInjuries(sport) })
+    return NextResponse.json({ injuries: [], note: 'Injury feed unavailable right now.' })
   }
 }

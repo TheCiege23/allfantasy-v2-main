@@ -10,6 +10,7 @@ import { loadTradePsychology } from '@/lib/trade-intel/tradePsychologyLoader'
 import { canAccessForUser } from '@/lib/access/canAccessForUser'
 import { loadTradeExpectation } from '@/lib/trade-intel/tradeExpectationLoader'
 import { currentCompletedTradeIds } from '@/lib/trade-intel/sleeperTradeSync'
+import { isUndeliverableEmailDomain } from '@/lib/email/undeliverableDomains'
 
 /**
  * tradeNotifyService — "your league just traded" with INSTANT grades.
@@ -122,12 +123,32 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
     // Keep the id alongside the address: manager psychology is premium, and the
     // entitlement is per recipient, so the email can no longer be built once and
     // blasted to a list.
+    /*
+     * ⚠ PREFERENCES AND DELIVERABILITY ARE CHECKED HERE, BEFORE ANY SEND.
+     * This loop used to email every attached user unconditionally: the
+     * unsubscribe link in the footer demonstrably did not stop the next
+     * sweep (nothing read EmailPreference), and RFC-reserved fixture
+     * addresses kept getting hit, burning the sending domain's reputation.
+     */
+    const candidateEmails = [...new Set(users.map((u) => u.email).filter((e): e is string => !!e))]
+    const prefRows = await prisma.emailPreference
+      .findMany({
+        where: { email: { in: candidateEmails } },
+        select: { email: true, tradeAlerts: true, unsubscribedAt: true },
+      })
+      .catch(() => [] as { email: string; tradeAlerts: boolean; unsubscribedAt: Date | null }[])
+    const blocked = new Set(
+      prefRows.filter((p) => p.unsubscribedAt != null || p.tradeAlerts === false).map((p) => p.email),
+    )
+
     const recipients: Array<{ id: string; email: string }> = []
     const seenEmails = new Set<string>()
     for (const u of users) {
       const email = u.email
       if (!email || seenEmails.has(email)) continue
       seenEmails.add(email)
+      if (blocked.has(email)) continue
+      if (isUndeliverableEmailDomain(email)) continue
       recipients.push({ id: u.id, email })
     }
     if (recipients.length === 0) return base

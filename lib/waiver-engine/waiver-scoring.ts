@@ -46,6 +46,8 @@ export type WaiverCandidate = {
   playerName: string
   position: string
   team: string | null
+  /** Candidate's own bye week, when known — a player on bye cannot cover that week's cluster. */
+  byeWeek?: number | null
   age: number | null
   value: number
   assetValue: AssetValue
@@ -74,6 +76,10 @@ export type WaiverScoringContext = {
   rosterPlayers: WaiverRosterPlayer[]
   teamNeeds: TeamNeedsMap
   currentWeek: number
+  /** League FAAB budget (real units); null/absent falls back to 100. */
+  faabBudget?: number | null
+  /** User's remaining FAAB; caps the suggested bid. */
+  faabRemaining?: number | null
   analyticsMap?: Map<string, PlayerAnalytics>
   trendingMap?: Map<string, CrowdTrendData>
 }
@@ -233,7 +239,7 @@ function computeNeedFit(
   candidate: WaiverCandidate,
   ctx: WaiverScoringContext,
 ): number {
-  const { position, team } = candidate
+  const { position } = candidate
   const { teamNeeds } = ctx
 
   let slotFitScore = 0
@@ -256,7 +262,8 @@ function computeNeedFit(
   let byeWeekBonus = 0
   for (const cluster of teamNeeds.byeWeekClusters) {
     if (cluster.positionsAffected.includes(position)) {
-      const teamBye = team ? (candidate.team ? 0 : 0) : 0
+      // A candidate who is themselves on bye that week cannot cover the cluster.
+      if (candidate.byeWeek != null && candidate.byeWeek === cluster.week) continue
       if (cluster.severity === 'critical') byeWeekBonus = Math.max(byeWeekBonus, 25)
       else if (cluster.severity === 'moderate') byeWeekBonus = Math.max(byeWeekBonus, 15)
       else byeWeekBonus = Math.max(byeWeekBonus, 8)
@@ -366,7 +373,9 @@ function computeDrivers(
   })
 
   const byeCluster = ctx.teamNeeds.byeWeekClusters.find(
-    c => c.positionsAffected.includes(candidate.position)
+    c =>
+      c.positionsAffected.includes(candidate.position) &&
+      !(candidate.byeWeek != null && candidate.byeWeek === c.week)
   )
   if (byeCluster) {
     drivers.push({
@@ -643,14 +652,16 @@ function getRecommendation(composite: number, dims: WaiverDimensions): ScoredWai
   return 'Monitor'
 }
 
-function computeFaabBid(composite: number, value: number, goal: UserGoal): number {
+function computeFaabBid(composite: number, ctx: WaiverScoringContext): number {
+  const budget = ctx.faabBudget != null && ctx.faabBudget > 0 ? ctx.faabBudget : 100
   const basePct = composite / 100
-  let bid = Math.round(basePct * 30)
+  let bid = Math.round(basePct * 0.3 * budget)
 
-  if (goal === 'win-now' && composite >= 70) bid = Math.round(bid * 1.3)
-  if (goal === 'rebuild' && composite < 50) bid = Math.max(1, Math.round(bid * 0.6))
+  if (ctx.goal === 'win-now' && composite >= 70) bid = Math.round(bid * 1.3)
+  if (ctx.goal === 'rebuild' && composite < 50) bid = Math.max(1, Math.round(bid * 0.6))
 
-  return clamp(bid, 0, 100)
+  const remaining = ctx.faabRemaining != null && ctx.faabRemaining >= 0 ? ctx.faabRemaining : budget
+  return clamp(bid, 0, Math.min(budget, remaining))
 }
 
 function computeFaabEfficiencyScore(target: ScoredWaiverTarget): number {
@@ -725,7 +736,7 @@ export function scoreWaiverCandidates(
       .sort((a, b) => b.score - a.score)
       .slice(0, 3)
 
-    const faabBid = computeFaabBid(compositeScore, candidate.value, ctx.goal)
+    const faabBid = computeFaabBid(compositeScore, ctx)
 
     scored.push({
       playerId: candidate.playerId,

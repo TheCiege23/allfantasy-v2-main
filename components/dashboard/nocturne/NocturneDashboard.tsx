@@ -1488,11 +1488,12 @@ function gradePct(grade: string | null): number {
 // ── Small presentational components ───────────────────────────────────────────
 function Avatar({ name, image, size }: { name: string; image?: string | null; size: number }) {
   const initials = name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'AF'
+  const [failed, setFailed] = useState(false)
   // Plain <img>, not next/image: the avatar URL may be an external provider
   // (Discord/Google) not in the images allowlist, and it needs no optimization.
-  if (image) {
+  if (image && !failed) {
     // eslint-disable-next-line @next/next/no-img-element
-    return <img src={image} alt="" width={size} height={size} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} />
+    return <img src={image} alt="" width={size} height={size} style={{ width: size, height: size, borderRadius: '50%', objectFit: 'cover' }} onError={() => setFailed(true)} />
   }
   return <div style={{ width: size, height: size, borderRadius: '50%', background: 'var(--color-accent-800)', display: 'grid', placeItems: 'center', font: `700 ${Math.round(size * 0.4)}px ui-monospace,Menlo,monospace`, color: 'var(--color-accent-100)' }}>{initials}</div>
 }

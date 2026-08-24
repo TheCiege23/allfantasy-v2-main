@@ -12,6 +12,7 @@ import { Exposure } from '@/components/core-app/dash-v2/Exposure'
 import { TodayRecord } from '@/components/core-app/dash-v2/TodayRecord'
 import { LeagueHealth } from '@/components/core-app/dash-v2/LeagueHealth'
 import { Next24 } from '@/components/core-app/dash-v2/Next24'
+import { LivePlays } from '@/components/core-app/dash-v2/LivePlays'
 import { TopBar } from '@/components/core-app/dash-v2/TopBar'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import { MobileChrome } from '@/components/core-app/dash-v2/MobileChrome'
@@ -21,6 +22,7 @@ import type { PortfolioData } from '@/lib/core-app/portfolio'
 import type { DraftHqAllData } from '@/lib/core-app/draftHqAll'
 import type { WeekAllData } from '@/lib/core-app/weekAll'
 import type { TodayStripData } from '@/lib/core-app/todayStrip'
+import type { LiveEvent } from '@/lib/live/eventDetector'
 // af-core.css carries the .af-core token layer. This screen renders OUTSIDE
 // AfCoreShell (it brings its own left panel), so the shell does not import it
 // here — without this line every var(--surface) / var(--line) below computes to
@@ -57,6 +59,7 @@ export function DashboardV2({
   drafts = null,
   week = null,
   strip = null,
+  plays = [],
   nowIso,
   planName = null,
   syncedLabel = null,
@@ -80,6 +83,9 @@ export function DashboardV2({
    * which gates are open on production and why.
    */
   strip?: TodayStripData | null
+  /** The live play feed (readPlayByPlayFeed). [] on a quiet day — normal, not
+   *  an error; the component's empty state says so itself. */
+  plays?: LiveEvent[]
   /** Server instant for the bar clock; localised after hydration. */
   nowIso: string
   planName?: string | null
@@ -300,6 +306,19 @@ export function DashboardV2({
             }
           />
           <YourWeek data={week} />
+        </section>
+
+        <section>
+          {/*
+            The play feed the live-scores API has been shipping as `plays` with
+            no renderer anywhere — LivePlays existed unimported. Empty outside
+            game windows is normal, and the component states that itself.
+          */}
+          <SectionHeader
+            label="Live plays"
+            counter={plays.length > 0 ? `${plays.length} PLAYS` : null}
+          />
+          <LivePlays events={plays} />
         </section>
 
         <section>

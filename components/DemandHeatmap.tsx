@@ -276,19 +276,19 @@ export default function DemandHeatmap({ leagueId, week, compact = false }: Deman
 
             <div className="flex gap-2 pt-1">
               <a
-                href={`/legacy/trade-hub?leagueId=${data.leagueId}&pos=${encodeURIComponent(activeCell.pos)}&mode=generate`}
+                href={`/af-legacy?tab=trade&leagueId=${data.leagueId}&pos=${encodeURIComponent(activeCell.pos)}&mode=generate`}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-cyan-500/15 text-cyan-400 hover:bg-cyan-500/25 transition-colors border border-cyan-500/20"
               >
                 Generate Offers
               </a>
               <a
-                href={`/legacy/trading-partners?leagueId=${data.leagueId}&pos=${encodeURIComponent(activeCell.pos)}`}
+                href={`/af-legacy?tab=finder&leagueId=${data.leagueId}&pos=${encodeURIComponent(activeCell.pos)}`}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-colors border border-white/10"
               >
                 Find Overpayers
               </a>
               <a
-                href={`/legacy/trade-hub?leagueId=${data.leagueId}`}
+                href={`/af-legacy?tab=trade&leagueId=${data.leagueId}`}
                 className="px-3 py-1.5 text-xs font-medium rounded-lg bg-white/5 text-gray-300 hover:bg-white/10 transition-colors border border-white/10"
               >
                 Open Trade Hub

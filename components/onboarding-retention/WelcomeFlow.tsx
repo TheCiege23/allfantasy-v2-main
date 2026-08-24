@@ -192,7 +192,7 @@ export function WelcomeFlow({
             <Link href="/leagues" className={`${btnClass} ${primaryBtn} text-center`}>
               Create league
             </Link>
-            <Link href="/app/discover" className={`${btnClass} ${secondaryBtn} text-center`}>
+            <Link href="/discover/leagues" className={`${btnClass} ${secondaryBtn} text-center`}>
               Join league
             </Link>
             <Link href="/brackets/leagues/new" className={`${btnClass} ${secondaryBtn} text-center`}>

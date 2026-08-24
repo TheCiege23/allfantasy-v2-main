@@ -116,6 +116,12 @@
   gap: 6px;
 }
 
+/* One-line helper under an optional field (e.g. the Sleeper handle). */
+.af-au-hint {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
 .af-au-field-head {
   display: flex;
   align-items: baseline;
