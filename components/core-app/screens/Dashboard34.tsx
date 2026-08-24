@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import OpenCommsButton from '@/components/core-app/comms/OpenCommsButton'
-import { Dash34Countdown, Dash34Time } from './Dashboard34Live'
+import { Dash34Countdown, Dash34Img, Dash34Time } from './Dashboard34Live'
 import '@/components/core-app/af-dash34.css'
 
 /**
@@ -290,7 +290,7 @@ function initials(name: string): string {
 function LeagueTile({ l }: { l: Dash34League }) {
   return (
     <span className="af-d34-tile" data-platform={l.platform} aria-hidden="true">
-      {l.imageUrl ? <img src={l.imageUrl} alt="" /> : initials(l.name)}
+      {l.imageUrl ? <Dash34Img src={l.imageUrl} fallback={initials(l.name)} /> : initials(l.name)}
     </span>
   )
 }
@@ -601,7 +601,11 @@ function Desktop({ data, leagueId }: { data: Dash34Data; leagueId: string | null
           <section className="af-d34-card af-d34-brief">
             <div className="af-d34-briefhead">
               {brief.avatarUrl ? (
-                <img className="af-d34-avatar" src={brief.avatarUrl} alt="" />
+                <Dash34Img
+                  className="af-d34-avatar"
+                  src={brief.avatarUrl}
+                  fallback={<span className="af-d34-avatar" aria-hidden="true" />}
+                />
               ) : (
                 <span className="af-d34-avatar" aria-hidden="true" />
               )}

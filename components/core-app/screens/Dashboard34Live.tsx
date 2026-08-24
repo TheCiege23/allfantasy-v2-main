@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 /**
  * The two pieces of Dashboard 34a that cannot be rendered on the server.
@@ -161,4 +161,28 @@ function utcDayLabel(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
   return `${UTC_DAYS[d.getUTCDay()]} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`
+}
+
+/**
+ * An <img> that swaps to its fallback when the src 404s.
+ *
+ * Client-side for the same structural reason as everything else in this file —
+ * an onError handler cannot be attached from a server component. The failed src
+ * is remembered rather than a boolean so a new src gets a fresh attempt.
+ */
+export function Dash34Img({
+  src,
+  className,
+  fallback = null,
+}: {
+  src: string
+  className?: string
+  fallback?: ReactNode
+}) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  if (src === failedSrc) return <>{fallback}</>
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img className={className} src={src} alt="" onError={() => setFailedSrc(src)} />
+  )
 }

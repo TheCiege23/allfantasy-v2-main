@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import Link from 'next/link'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-player-finder.css'
@@ -63,6 +64,33 @@ export type PlayerFinderProps = {
 
 function Unavailable({ reason }: { reason: string }) {
   return <p className="af-pf-unavailable">{reason}</p>
+}
+
+/**
+ * The detail headshot, with the one-letter placeholder as the fallback for a
+ * missing image AND for one the CDN 404s. The failed src is remembered rather
+ * than a boolean so a different player's image gets a fresh attempt.
+ */
+function Headshot({ src, name }: { src: string | null; name: string }) {
+  const [failedSrc, setFailedSrc] = useState<string | null>(null)
+  if (!src || src === failedSrc) {
+    return (
+      <div className="af-pf-headshot af-pf-headshot--none" aria-hidden>
+        {name.charAt(0)}
+      </div>
+    )
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="af-pf-headshot"
+      src={src}
+      alt=""
+      width={72}
+      height={72}
+      onError={() => setFailedSrc(src)}
+    />
+  )
 }
 
 function StatTile({
@@ -211,20 +239,7 @@ export function PlayerFinder({
         {detail ? (
           <section className="af-card af-pf-detail">
             <header className="af-pf-detail-head">
-              {detail.player.imageUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  className="af-pf-headshot"
-                  src={detail.player.imageUrl}
-                  alt=""
-                  width={72}
-                  height={72}
-                />
-              ) : (
-                <div className="af-pf-headshot af-pf-headshot--none" aria-hidden>
-                  {detail.player.name.charAt(0)}
-                </div>
-              )}
+              <Headshot src={detail.player.imageUrl} name={detail.player.name} />
 
               <div className="af-pf-identity">
                 <h2 className="af-display af-pf-name">{detail.player.name}</h2>
