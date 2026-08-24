@@ -506,3 +506,19 @@
 .af-content .af3a-main {
   padding: 0;
 }
+
+/* ── User OS card embedded on the /core home (DashUserOs) ─────────────────
+ * UserOsCard ships the decision-os `card-premium` skin, grounded on the
+ * app-global surface tokens. On the /core home it sits directly among the
+ * `.af3a-card`s, so its ground, border and radius are re-based here onto the
+ * af-core tokens to match them — scoped under .af-content like the 3a embed
+ * above, and keyed to the dashboard variant only so the league Decide
+ * surface's copy of the same component is untouched.
+ */
+.af-content [data-testid='user-os-card-dashboard'] {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: none;
+  color: var(--text);
+}

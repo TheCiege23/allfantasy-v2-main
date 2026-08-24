@@ -4,9 +4,9 @@
 
 .af-triage {
   margin: 0 0 18px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 14px;
-  background: var(--panel);
+  background: var(--surface);
   padding: 14px 16px 10px;
 }
 
@@ -20,11 +20,13 @@
 
 .af-triage-title {
   margin: 0;
-  font-size: 13px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--text);
+  color: var(--muted);
 }
 
 .af-triage-sub {
@@ -43,13 +45,13 @@
   align-items: flex-start;
   gap: 12px;
   padding: 10px 2px;
-  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
 }
 .af-triage-row:first-child {
   border-top: none;
 }
 .af-triage-row[data-tone='bad'] {
-  box-shadow: inset 3px 0 0 var(--accent-red, #e5484d);
+  box-shadow: inset 3px 0 0 var(--bad);
   padding-left: 10px;
 }
 
@@ -106,12 +108,12 @@
   border-radius: 999px;
 }
 .af-triage-status[data-tone='bad'] {
-  background: color-mix(in srgb, var(--accent-red, #e5484d) 18%, transparent);
-  color: var(--accent-red-strong, #ff8589);
+  background: color-mix(in srgb, var(--bad) 18%, transparent);
+  color: var(--bad);
 }
 .af-triage-status[data-tone='warn'] {
-  background: color-mix(in srgb, var(--accent-amber, #f5a524) 18%, transparent);
-  color: var(--accent-amber-strong, #f5a524);
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
 }
 
 .af-triage-line2 {
@@ -142,7 +144,7 @@
   font-size: 11px;
   color: var(--muted);
   text-decoration: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 999px;
   padding: 2px 9px;
   max-width: 220px;
@@ -169,9 +171,9 @@
   align-self: center;
   font-size: 11.5px;
   font-weight: 700;
-  color: var(--accent-cyan-strong, var(--text));
+  color: var(--accent);
   text-decoration: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--line);
   border-radius: 10px;
   padding: 6px 12px;
   white-space: nowrap;
@@ -191,7 +193,7 @@
   margin-top: 8px;
   font-size: 12px;
   font-weight: 600;
-  color: var(--text-dim, var(--text));
+  color: var(--text2);
   text-decoration: none;
 }
 .af-triage-overflow:hover {

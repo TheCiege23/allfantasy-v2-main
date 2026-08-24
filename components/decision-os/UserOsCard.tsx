@@ -100,6 +100,21 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
 
   const { teamHealth, activitySummary } = snapshot
 
+  /*
+   * Self-view honesty (variant="dashboard", the /core home). The event store is
+   * sparsely populated, so a 0 count here is indistinguishable from never-measured:
+   * zero-count chips are hidden rather than rendered as measured zeros, and the
+   * Retention-risk panel — a judgment built on those same counts — is suppressed
+   * entirely. The league and commissioner variants are unchanged.
+   */
+  const isSelfView = variant === 'dashboard'
+  const statChips = [
+    { label: 'Trades', value: activitySummary.tradeEventCount },
+    { label: 'Waiver claims', value: activitySummary.waiverEventCount },
+    { label: 'Lineup activity', value: activitySummary.lineupEventCount },
+    { label: 'Draft picks', value: activitySummary.draftEventCount },
+  ].filter((chip) => !isSelfView || chip.value > 0)
+
   return (
     <section data-testid={`user-os-card-${variant}`} className={decisionOsCardClassName} aria-label="Your Team">
       <div className="border-b border-subtle bg-surface-muted/60 px-5 py-4">
@@ -120,17 +135,31 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
         </div>
       </div>
 
-      <div className="grid gap-4 p-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <div className={isSelfView ? 'grid gap-4 p-5' : 'grid gap-4 p-5 xl:grid-cols-[1.1fr_0.9fr]'}>
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            <StatChip label="Trades" value={activitySummary.tradeEventCount} />
-            <StatChip label="Waiver claims" value={activitySummary.waiverEventCount} />
-            <StatChip label="Lineup activity" value={activitySummary.lineupEventCount} />
-            <StatChip label="Draft picks" value={activitySummary.draftEventCount} />
-          </div>
+          {isSelfView ? (
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted">
+              Your activity in AllFantasy (last 90 days)
+            </p>
+          ) : null}
+          {statChips.length > 0 ? (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {statChips.map((chip) => (
+                <StatChip key={chip.label} label={chip.label} value={chip.value} />
+              ))}
+            </div>
+          ) : (
+            /* Reachable only in the self view (the filter passes everything
+               elsewhere): every count is 0, which for this event store means
+               nothing was recorded — a labeled absence, not four zero chips. */
+            <p className="text-sm leading-6 text-muted" data-testid="user-os-activity-none">
+              No activity recorded for this league yet.
+            </p>
+          )}
           <TrendPanel trend={snapshot.leagueTrend} />
         </div>
 
+        {isSelfView ? null : (
         <aside className="space-y-4">
           <DecisionOsPanel title="Retention risk" className="bg-surface-muted">
             {/* Phase 36: human-readable label — never the raw snake_case enum, and
@@ -149,6 +178,7 @@ export default function UserOsCard({ snapshot, variant = 'league' }: UserOsCardP
             )}
           </DecisionOsPanel>
         </aside>
+        )}
       </div>
     </section>
   )
