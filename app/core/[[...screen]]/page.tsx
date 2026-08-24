@@ -60,6 +60,8 @@ import { RankingsCompare } from '@/components/core-app/screens/RankingsCompare'
 import { getRankingsData, getCompareData, type CompareResult } from '@/lib/core-app/rankings'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
+import { getPlayFeed } from '@/lib/live/playFeedPresentation'
+import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll, scoredMatchupLeagueIds } from '@/lib/core-app/weekAll'
@@ -594,7 +596,16 @@ export default async function AfCorePage({
     ? (playedLeagues.find((l) => l.id === homeUserOsAnchorId) ?? playedLeagues[0] ?? null)
     : null
 
-  const [homeCareer, homeWeek, homeExposure, homeRivals, homeUserOs, homeSchedule] = isHome3a
+  const [
+    homeCareer,
+    homeWeek,
+    homeExposure,
+    homeRivals,
+    homeUserOs,
+    homeSchedule,
+    homeStrip,
+    homePlays,
+  ] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
         getWeekAll(userId, weekLeagues).catch(() => null),
@@ -614,8 +625,29 @@ export default async function AfCorePage({
          * mutually exclusive and nothing is fetched twice.
          */
         getWeekBoard(userId, weekLeagues).catch(() => null),
+        /*
+         * The game-day pair. Both were built for the dashboard-v2 segment and
+         * mounted nowhere else, so the home had nothing that moved during the
+         * six hours a manager actually sits in it. getPlayFeed is
+         * readPlayByPlayFeed plus headshots and a composed headline; both
+         * return quiet values off a slate ([] and an unavailable record), and
+         * the band renders nothing on them.
+         */
+        getTodayStrip(
+          userId,
+          playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name,
+            sport: (l as { sport?: string | null }).sport ?? null,
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+            /* The health tile's primary gate — see the v2 caller's note. */
+            lastSyncedAt: (l as { lastSyncedAt?: Date | string | null }).lastSyncedAt ?? null,
+          })),
+          now,
+        ).catch(() => null),
+        getPlayFeed(12).catch(() => []),
       ])
-    : [null, null, null, null, null, null]
+    : [null, null, null, null, null, null, null, []]
 
   /*
    * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
@@ -1204,6 +1236,14 @@ export default async function AfCorePage({
               loader failure, renders NOTHING — see DashDraftsBand's header for
               the honesty rules (raw status shown, no invented timers).
             */}
+            {/*
+              Game day leads everything while a slate is live — a running game
+              outranks a draft clock and a countdown. It renders only inside a
+              game window (a play detected in the last few hours, or a scored
+              matchup of the user's), so outside one this is not a quiet band,
+              it is no band at all.
+            */}
+            <DashGameDayBand strip={homeStrip} plays={homePlays} now={now} />
             <DashDraftsBand data={homeDrafts} now={now} />
             {/*
               34a's four unique sections (first-lock band, honesty notice,
