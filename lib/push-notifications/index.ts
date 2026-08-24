@@ -11,7 +11,15 @@ export {
   sendPushToUser,
 } from "./push-service"
 
-/** Categories that trigger a browser push when user has subscribed. */
+/**
+ * Categories that trigger a browser push when the user has subscribed.
+ *
+ * ⚠ THE THREE AT THE BOTTOM WERE MISSING, AND THEY ARE THE ONES PEOPLE ASK
+ * FOR. An injury to a starter and a trade landing are the two events a manager
+ * actually wants their phone to buzz for, and both were absent here — so the
+ * dispatcher filtered them out before push was ever considered, however
+ * completely the rest of the stack was built.
+ */
 export const PUSH_NOTIFICATION_CATEGORIES = [
   "ai_alerts",
   "chat_mentions",
@@ -22,6 +30,9 @@ export const PUSH_NOTIFICATION_CATEGORIES = [
   "commissioner_alerts",
   "draft_intel_alerts",
   "autocoach",
+  "injury_alerts",
+  "trade_proposals",
+  "trade_accept_reject",
 ] as const
 
 export type PushNotificationCategory = (typeof PUSH_NOTIFICATION_CATEGORIES)[number]

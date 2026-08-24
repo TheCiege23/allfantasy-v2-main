@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getBaseUrl } from '@/lib/get-base-url'
+import { sendPushToUser } from '@/lib/push-notifications'
 import { sendTemplatedEmail } from '@/lib/resend-client'
 import { createEmailUnsubscribeToken } from '@/lib/email/marketing-email'
 import { getTradeGrades } from '@/lib/trade-intel/sleeperTradeGradeService'
@@ -203,6 +204,29 @@ export async function detectAndNotifyLeague(sleeperLeagueId: string): Promise<Le
           () => ({ ok: false as const }),
         )
         if (sent.ok) base.emailsSent += 1
+
+        /*
+         * ⚠ AND THE PHONE. This service emailed and stopped, so a trade landing
+         * — one of the two things a manager actually wants a buzz for — never
+         * reached anyone's home screen, even though the whole push stack ships:
+         * the subscription table, the send service, and a service worker that
+         * already carries trade action buttons and a league-scoped deep link.
+         *
+         * Sent per recipient, after the email, and deliberately not gated on
+         * the email preferences above: those govern email. Push is opt-in by
+         * construction — a user only has a subscription because they granted
+         * permission — and this loop has already applied the league-level
+         * filters that decide whether this person hears about this trade at
+         * all. No subscription is the normal case and costs one indexed read.
+         */
+        await sendPushToUser(recipient.id, {
+          title: `Trade accepted in ${leagueName}`,
+          body: subject,
+          href: `/league/${afLeagues[0].id}?view=legacy`,
+          tag: `trade:${afLeagues[0].id}:${trade.id}`,
+          type: 'trade',
+          leagueId: afLeagues[0].id,
+        }).catch(() => [])
       }
     }
     return base

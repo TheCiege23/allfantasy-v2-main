@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { resolveAppUserIds } from '@/lib/notifications/resolveAppUserIds'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
 import { buildDraftStartingEmail } from './draftEmails'
 import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
@@ -30,7 +31,15 @@ export async function getAppUserIdForRoster(rosterId: string): Promise<string | 
 }
 
 /**
- * All league member app user ids (roster owners). Excludes orphans.
+ * All league member AllFantasy user ids (roster owners). Excludes orphans.
+ *
+ * ⚠ IT NOW RETURNS WHAT ITS NAME PROMISES. `Roster.platformUserId` is our user
+ * id on a native league and the SLEEPER user id on an imported one, and this
+ * used to hand the raw column straight to callers — every one of which feeds a
+ * notification dispatch that looks profiles up by our id and silently skips
+ * what it does not recognise. Every member of every imported league was
+ * dropped without an error. `resolveRecipients` translates through
+ * `UserProfile.sleeperUserId`; see lib/notifications/resolveAppUserIds.ts.
  */
 export async function getLeagueMemberAppUserIds(leagueId: string): Promise<string[]> {
   const rosters = await prisma.roster.findMany({
@@ -41,7 +50,7 @@ export async function getLeagueMemberAppUserIds(leagueId: string): Promise<strin
   for (const r of rosters) {
     if (r.platformUserId && !String(r.platformUserId).startsWith('orphan-')) ids.add(r.platformUserId)
   }
-  return Array.from(ids)
+  return resolveAppUserIds(Array.from(ids))
 }
 
 /**
