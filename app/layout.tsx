@@ -31,7 +31,10 @@ export const metadata: Metadata = {
     title: 'AllFantasy – Fantasy Sports Tools Powered by Chimmy',
     description:
       'AllFantasy combines fantasy sports leagues, bracket challenges, and Chimmy-powered tools to help players draft smarter, analyze trades, and dominate their leagues.',
-    canonical: 'https://allfantasy.ai/',
+    // canonicalPath, not a hardcoded host: the origin resolves through
+    // getPublicSiteOrigin like the sitemap does, so the homepage canonical can
+    // never name a host that redirects to the other one.
+    canonicalPath: '/',
     keywords: [
       'fantasy sports',
       'fantasy football tools',
