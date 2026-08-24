@@ -730,19 +730,25 @@ async function runSingleSportAnalysis(args: RunArgs): Promise<{
     }
   }
 
-  const injRows =
-    SUPPORTED_SPORTS.includes(sportStr as (typeof SUPPORTED_SPORTS)[number])
-      ? await prisma.injuryReportRecord.findMany({
-          where: { sport: sportStr },
-          orderBy: { reportDate: 'desc' },
-          take: 80,
-          select: { playerName: true, status: true },
-        })
-      : []
-
+  /*
+   * ⚠ CANONICAL PORT, NOT injuryReportRecord. The old read had no recency
+   * filter on a table with no scheduled writer — measured 108 days frozen in
+   * prod — so months-old "Questionable/Out" badges were attached to live
+   * waiver candidates. The port serves the fed table (SportsInjury), one row
+   * per player, and we drop stale rows outright: no badge beats a wrong badge.
+   */
   const injuryByName = new Map<string, string>()
-  for (const r of injRows) {
-    injuryByName.set(r.playerName.toLowerCase(), r.status)
+  if (SUPPORTED_SPORTS.includes(sportStr as (typeof SUPPORTED_SPORTS)[number])) {
+    try {
+      const { listInjuryFacts } = await import('@/lib/injuries/injuryReadPort')
+      const factList = await listInjuryFacts({ sport: sportStr, limit: 300 })
+      for (const f of factList.facts) {
+        if (f.stale || !f.status) continue
+        injuryByName.set(f.playerName.toLowerCase(), String(f.status))
+      }
+    } catch {
+      dataGaps.push(`Injury designations unavailable for ${sportStr}.`)
+    }
   }
 
   let nflBundle: NflValuationBundle | null = null
