@@ -1,0 +1,177 @@
+/* 34a sections carried onto the unified /core home (Dash34Carryover.tsx).
+   Token-authored on the af-core palette; compact by design — these sit between
+   the triage panel and the 3a body and must not shout over either. */
+
+.af-carry {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0 0 18px;
+}
+
+.af-carry-lock {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent-amber, #f5a524);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 12px 16px;
+}
+
+.af-carry-count {
+  display: flex;
+  flex-direction: column;
+  min-width: 110px;
+}
+.af-carry-count-l {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.af-carry-count-v {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-carry-kick {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.af-carry-lockbody {
+  flex: 1;
+  min-width: 200px;
+}
+.af-carry-lockh {
+  margin: 0 0 4px;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+.af-carry-slots {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.af-carry-slot {
+  font-size: 10.5px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 1px 8px;
+  color: var(--muted);
+}
+.af-carry-slot[data-tone='bad'] {
+  color: var(--accent-red-strong, #ff8589);
+  border-color: color-mix(in srgb, var(--accent-red, #e5484d) 45%, transparent);
+}
+.af-carry-slot[data-tone='warn'] {
+  color: var(--accent-amber-strong, #f5a524);
+  border-color: color-mix(in srgb, var(--accent-amber, #f5a524) 45%, transparent);
+}
+
+.af-carry-open,
+.af-carry-more {
+  flex-shrink: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-cyan-strong, var(--text));
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 13px;
+  white-space: nowrap;
+}
+.af-carry-open:hover,
+.af-carry-more:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+.af-carry-notice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  border: 1px solid color-mix(in srgb, var(--accent-amber, #f5a524) 40%, transparent);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-amber, #f5a524) 7%, var(--panel));
+  padding: 12px 16px;
+}
+.af-carry-notice-b {
+  flex: 1;
+  min-width: 220px;
+}
+.af-carry-notice-t {
+  display: block;
+  font-size: 13.5px;
+  color: var(--text);
+}
+.af-carry-notice-p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.af-carry-brief {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 14px 16px;
+}
+.af-carry-brief-l {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+}
+.af-carry-brief-h {
+  margin: 4px 0 8px;
+  font-size: 15.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-carry-brief-lines {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+.af-carry-brief-lines li {
+  font-size: 13px;
+  color: var(--text);
+  padding: 3px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.af-carry-brief-lines li:first-child {
+  border-top: none;
+}
+.af-carry-brief-lines li[data-tone='bad'] {
+  color: var(--accent-red-strong, #ff8589);
+}
+.af-carry-brief-lines li[data-tone='warn'] {
+  color: var(--accent-amber-strong, #f5a524);
+}
+.af-carry-caveat {
+  margin: 0 0 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.af-carry-coverage {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-carry-coverage summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.af-carry-coverage ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.af-carry-coverage li {
+  margin-bottom: 4px;
+}

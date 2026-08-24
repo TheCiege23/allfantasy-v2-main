@@ -1,15 +1,20 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActivation'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
-import Dashboard34 from '@/components/core-app/screens/Dashboard34'
+import Dashboard3A from '@/components/core-app/screens/Dashboard3A'
+import { Dash3ATriage, type TriageBookRow } from '@/components/core-app/screens/Dash3ATriage'
+import { Dash34Carryover } from '@/components/core-app/screens/Dash34Carryover'
+import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
@@ -217,6 +222,16 @@ export default async function AfCorePage({
   const userId = session?.user?.id
   if (!userId) {
     redirect(`/login?callbackUrl=${encodeURIComponent(`/core${segment ? `/${segment}` : ''}`)}`)
+  }
+
+  /*
+   * 'commissioner' was the one nav key still rendering the generic "not built
+   * yet" panel — while the Commissioner Hub exists as a full page. Redirect
+   * rather than apologise. Matched on `segment`, not `navKey`: /core/discord
+   * shares the commissioner nav key and must keep rendering its own screen.
+   */
+  if (segment === 'commissioner') {
+    redirect('/commissioner-hub')
   }
 
   // Unknown segment: fall back to home rather than 404ing a nav link.
@@ -496,6 +511,57 @@ export default async function AfCorePage({
     (activeKey === 'home' || segment === 'dashboard-v2') && !selectedLeagueId
       ? await getDash34Data(userId, leagues as unknown as Dash34LeagueRow[], now).catch(() => null)
       : null
+
+  /*
+   * The 3a home panels — the same loader set app/dashboard/page.tsx ran before
+   * that route retired into a redirect here. Loaded ONLY when the 3a home is
+   * the screen being rendered, never for the dashboard-v2 segment. Exposure and
+   * rivals read every played league, but the win probability is priced ONLY for
+   * the four leagues whose matchup cards actually render — getMatchupData runs
+   * several queries per league, and pricing 60 of them to display four would be
+   * work nobody sees.
+   */
+  const isHome3a = activeKey === 'home' && segment !== 'dashboard-v2' && !selectedLeagueId
+  const [homeCareer, homeWeek, homeExposure, homeRivals, homeMatchups] = isHome3a
+    ? await Promise.all([
+        getCareerData(userId).catch(() => null),
+        getWeekAll(userId, weekLeagues).catch(() => null),
+        getCrossLeagueExposure(userId, playedLeagues.map((l) => l.id)).catch(() => null),
+        getRivalRecords(userId, playedLeagues.map((l) => l.id)).catch(() => null),
+        Promise.all(
+          playedLeagues.slice(0, 4).map((l) =>
+            getMatchupData(l.id, userId)
+              .then((m) => ({ id: l.id, m }))
+              .catch(() => ({ id: l.id, m: null })),
+          ),
+        ),
+      ])
+    : [null, null, null, null, null]
+
+  /*
+   * Only leagues whose BOTH lineups priced land here. An absent entry renders no
+   * percentage at all rather than a hedged one — a greyed-out probability still
+   * reads as a probability.
+   */
+  const winProb: Record<string, number> = {}
+  for (const { id, m } of homeMatchups ?? []) {
+    if (m?.winProbability.available) winProb[id] = m.winProbability.data.pWin
+  }
+
+  /*
+   * The activation funnel signal, carried over from /dashboard when that route
+   * retired into a redirect here — a cut-over that silently stopped counting
+   * activations would be invisible until someone asked why the funnel died.
+   * Contract unchanged: not awaited, never throws, idempotent per user, and a
+   * null league list means "unknown", not "zero".
+   */
+  if (isHome3a) {
+    void recordDashboardActivation({
+      userId,
+      leagueCount: leagueListPayload ? leagueListPayload.leagues.length : null,
+      getCookie: (name) => cookies().get(name)?.value,
+    })
+  }
 
   /*
    * Dashboard v2 — served AFTER the session gate (a signed-in surface that needs
@@ -999,7 +1065,43 @@ export default async function AfCorePage({
          * "not yet watched" disclosure, is carried across as `coverage`.
          */
         dash34 ? (
-          <Dashboard34 data={dash34} />
+          <>
+            {/*
+              Pre-kickoff injury triage — getDash34Data computes this book on
+              this very request. A separate component (not a Dashboard3A edit)
+              because that file carries another session's in-flight work.
+            */}
+            <Dash3ATriage
+              book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
+              now={now}
+            />
+            {/*
+              34a's four unique sections (first-lock band, honesty notice,
+              Chimmy brief, coverage list) — carried over so the cutover
+              loses nothing 3A doesn't render. See Dash34Carryover's header
+              for what was deliberately NOT carried and why.
+            */}
+            <Dash34Carryover data={dash34} />
+            {/*
+              3a mounted as the screen BODY. It ships its own rail/nav/topbar
+              for the standalone render it was built for; af-core-shell.css
+              suppresses that chrome under .af-content so the shell's own
+              rail, nav and topbar stand alone.
+            */}
+            <Dashboard3A
+              issues={issues}
+              exposure={homeExposure}
+              rivals={homeRivals}
+              winProb={winProb}
+              data={dash34}
+              career={homeCareer}
+              week={homeWeek}
+              weekLabel={dash34.weekLabel ?? null}
+              planName={plan?.name ?? null}
+              commissionerCount={commissionerCount}
+              nowLabel={syncAge.stale ? null : syncAge.label}
+            />
+          </>
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
