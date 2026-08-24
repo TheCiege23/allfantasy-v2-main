@@ -420,6 +420,17 @@
   text-decoration: underline;
 }
 
+/* Discord tab: missing-permissions notice inside an otherwise-neutral empty state. */
+.af-cm-warn { color: var(--warn); }
+
+/* Discord tab: join / open / manage links, wrapping rather than truncating on narrow docked mode. */
+.af-cm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin-top: 10px;
+}
+
 /* ── Composer ─────────────────────────────────────────────────────── */
 
 .af-cm-composer {
