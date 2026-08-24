@@ -341,7 +341,7 @@ export function DashboardV2({
 
         <section>
           {/*
-            "Moving your book", not "Player exposure". The list is INJURY-LED, so a
+            "Injury watch", not "Player exposure". The list is INJURY-LED, so a
             header promising exposure implies a complete roster table. The "?"
             carries that caveat at the TOP of the section — the footnote saying the
             same thing sits below the rows, which is after the misreading has
@@ -359,7 +359,7 @@ export function DashboardV2({
             so this is not a dead link, and it costs no new route.
           */}
           <SectionHeader
-            label="Moving your book"
+            label="Injury watch"
             hint="Injury-led: it lists the players carrying a status worth flagging, ordered by how many of your leagues hold them. This is what you are most exposed to that is currently a problem — not a full table of everyone you roster."
             hintLabel="What this list covers"
             counter={
