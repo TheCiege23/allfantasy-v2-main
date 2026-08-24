@@ -815,6 +815,32 @@ export async function createCanonicalLeagueInTransaction(
   await tx.leagueEntrySlot.createMany({ data: slotData })
 
   const auctionBudget = body.draftType.toLowerCase().includes('auction') ? 200 : null
+  // Dynasty devy-rounds opt-in (Option B slice): the trailing startup rounds become
+  // devy-only, mirroring the devy format's default (getLeagueDefaults writes
+  // devyRounds = [rounds - 1, rounds]). The live-draft engine keys off
+  // DraftSession.devyConfig, not leagueType, so no DevyLeagueConfig row is created
+  // and the build-excluded /devy surfaces stay untouched.
+  const dynastyDevySetup = (body.conceptSetup ?? {}) as Record<string, unknown>
+  const dynastyDevyRoundCount =
+    formatId === 'dynasty' &&
+    sport === 'NFL' &&
+    coreDraft !== 'auction' &&
+    draftRounds > 1 &&
+    dynastyDevySetup.devyRoundsEnabled === true
+      ? Math.max(1, Math.min(4, Math.floor(readNumber(dynastyDevySetup, 'devyRoundCount', 2)), draftRounds - 1))
+      : 0
+  const dynastyDevyConfig =
+    dynastyDevyRoundCount > 0
+      ? {
+          enabled: true,
+          devyRounds: Array.from(
+            { length: dynastyDevyRoundCount },
+            (_, i) => draftRounds - dynastyDevyRoundCount + 1 + i,
+          ),
+        }
+      : null
+  const sessionDevyConfig =
+    (draftSettings.devyConfig as Record<string, unknown> | null | undefined) ?? dynastyDevyConfig
   await tx.draftSession.create({
     data: {
       leagueId: league.id,
@@ -829,7 +855,7 @@ export async function createCanonicalLeagueInTransaction(
       sessionKind: 'live',
       cpuAutoPick: true,
       aiAutoPick: isAuto,
-      ...(draftSettings.devyConfig ? { devyConfig: draftSettings.devyConfig as Prisma.InputJsonValue } : {}),
+      ...(sessionDevyConfig ? { devyConfig: sessionDevyConfig as Prisma.InputJsonValue } : {}),
       ...(draftSettings.c2cConfig ? { c2cConfig: draftSettings.c2cConfig as Prisma.InputJsonValue } : {}),
       ...(keeperBootstrap
         ? {

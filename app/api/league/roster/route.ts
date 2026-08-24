@@ -11,6 +11,7 @@ import { resolveFullLineupLockContext } from '@/lib/roster-lineup-engine/lineupL
 import type { UnifiedPlayerWireDto } from '@/lib/player-data/serializeUnifiedPlayerForApi'
 import { getRedraftDefaultContract } from '@/lib/league-concepts/redraftDefaults'
 import { isNflRedraftCoreDashboardLeague } from '@/lib/league/is-nfl-redraft-core-dashboard'
+import { buildCollegeRightsViewModel, type CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 
 const SLEEPER = 'https://api.sleeper.app/v1' // db-first-exception: base URL constant, fetch calls use template literals
 const CACHE = { next: { revalidate: 300 } } as const
@@ -286,9 +287,35 @@ const leagueWeek = weekFromLeagueSettings(league.settings)
       unifiedRoster = []
     }
 
+    // College rights bucket (Option B devy slice). DevyRights has no Prisma relation
+    // to DevyPlayer, so join manually by devyPlayerId. Zero rows -> null so the
+    // roster tab renders no section at all; a load failure also degrades to null
+    // (logged) rather than blocking the roster.
+    let collegeRights: CollegeRightsViewModel | null = null
+    try {
+      const rightsRows = await prisma.devyRights.findMany({
+        where: { leagueId, rosterId: roster.id },
+        select: { id: true, devyPlayerId: true, state: true, seasonYear: true },
+        orderBy: { createdAt: 'asc' },
+      })
+      if (rightsRows.length > 0) {
+        const devyPlayers = await prisma.devyPlayer.findMany({
+          where: { id: { in: [...new Set(rightsRows.map((r) => r.devyPlayerId))] } },
+          select: { id: true, name: true, position: true, school: true },
+        })
+        collegeRights = buildCollegeRightsViewModel(rightsRows, devyPlayers)
+      }
+    } catch (e) {
+      console.warn('[league/roster] college rights load failed', {
+        leagueId,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
+
     return NextResponse.json({
       source: 'db' as const,
       rosterId: roster.id,
+      collegeRights,
       roster: roster.playerData,
       unifiedRoster,
       faabRemaining: roster.faabRemaining,

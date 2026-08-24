@@ -51,6 +51,8 @@ import {
 } from '@/lib/player-data/adapters/redraftDisplayPlayers'
 import { teamDefenseDisplayNameFromId } from '@/lib/redraft/teamDefenseIdentity'
 import { useLeagueRealtimeRefresh } from '@/hooks/useLeagueRealtimeRefresh'
+import { CollegeRightsSection } from '@/app/league/[leagueId]/components/CollegeRightsSection'
+import type { CollegeRightsViewModel } from '@/lib/devy/collegeRightsBucket'
 
 const TeamTabMatchupBanner = dynamic(
   () =>
@@ -130,6 +132,7 @@ type DbRosterPayload = {
   starterSlots?: ExpandedStarterSlot[]
   canEditLineup?: boolean
   lineupLockHelp?: string | null
+  collegeRights?: CollegeRightsViewModel | null
 }
 
 type SleeperRosterBody = {
@@ -1399,6 +1402,10 @@ export function TeamTab({
     league.isDynasty === true &&
     ((dbParts?.taxi.length ?? 0) > 0 || ((payload as DbRosterPayload)?.slotLimits?.taxi ?? 0) > 0)
   const showDevySectionDb = ((payload as DbRosterPayload)?.slotLimits?.devy ?? 0) > 0
+  const collegeRights =
+    payload && payload.source !== 'sleeper'
+      ? ((payload as DbRosterPayload).collegeRights ?? null)
+      : null
   const dbBenchSlotCount =
     payload && payload.source !== 'sleeper' && lineupLists
       ? Math.max(payload.slotLimits?.bench ?? 0, lineupLists.bench.length)
@@ -2494,6 +2501,10 @@ const maxWeekMenu = useMemo(() => {
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {!loading && !error && !isSleeper && collegeRights ? (
+        <CollegeRightsSection rights={collegeRights} />
       ) : null}
 
       {!loading && !error && payload?.source === 'sleeper' && payload.roster && !sleeperParts ? (

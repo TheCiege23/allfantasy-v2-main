@@ -106,6 +106,10 @@ function buildCanonicalPayload(state: CreateLeagueV2State): Record<string, unkno
     conceptSetup.commissionerAi = d.commissionerAi
     conceptSetup.userAi = d.userAi
     if (d.introVideoUrl) conceptSetup.introVideoUrl = d.introVideoUrl
+    if (lt === 'dynasty' && state.sport === 'NFL' && d.devyRoundsEnabled === true) {
+      conceptSetup.devyRoundsEnabled = true
+      conceptSetup.devyRoundCount = d.devyRoundCount ?? 2
+    }
   }
 
   if (lt === 'keeper' && state.keeper) {
