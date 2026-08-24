@@ -24,6 +24,7 @@ import { createSleeperScopeFetcher } from './sleeperScopeFetcher'
 import { createPrismaSleeperSyncStore } from './prismaSyncStore'
 import { createAutomationSyncLock } from './automationSyncLock'
 import { ensureMatchupsCached } from '@/lib/rankings-engine/sleeper-matchup-cache'
+import { ingestSleeperPlayerScoresForWeek } from '@/lib/sleeper/sync/ingestSleeperPlayerScores'
 
 /** NFL regular season + playoffs. The cache only fetches weeks it lacks. */
 const MAX_WEEKS = 18
@@ -191,6 +192,64 @@ export async function syncConnectedSleeperLeague(
         )
       },
     )
+
+    /*
+     * Per-player weekly scores for the live weeks. `LeaguePlayerWeeklyScore`
+     * had a writer and NO scheduled caller — /live's personalization (My
+     * games, leagues-affected, impact totals) read a table only a manual
+     * script ever filled. This is the scheduled caller.
+     *
+     * Target weeks derive from the WeeklyMatchup rows the call above just
+     * refreshed: the frontier (earliest zero-point week — the week being
+     * played or about to be) and the week before it (in progress on a Sunday,
+     * stat corrections after). The writer itself skips placeholder rows with
+     * no real scoring, so an un-started week costs one request and writes
+     * nothing. Failures are swallowed for the same reason as the matchup
+     * cache: enrichment must never fail a sync that already succeeded.
+     */
+    try {
+      const weekRows = await prisma.weeklyMatchup.groupBy({
+        by: ['week'],
+        where: { leagueId: connection.externalLeagueId, seasonYear: connection.season },
+        _sum: { pointsFor: true },
+        orderBy: { week: 'asc' },
+      })
+      let frontier: number | null = null
+      for (const r of weekRows) {
+        if ((r._sum.pointsFor ?? 0) === 0) {
+          frontier = r.week
+          break
+        }
+      }
+      const targetWeeks = new Set<number>()
+      if (frontier !== null) {
+        targetWeeks.add(frontier)
+        if (frontier > 1) targetWeeks.add(frontier - 1)
+      } else if (weekRows.length > 0) {
+        targetWeeks.add(weekRows[weekRows.length - 1].week)
+      }
+      for (const week of targetWeeks) {
+        const scores = await ingestSleeperPlayerScoresForWeek(
+          connection.externalLeagueId,
+          connection.season,
+          week,
+        )
+        if (scores.error) {
+          console.warn(
+            '[sync] player weekly scores failed',
+            connection.externalLeagueId,
+            week,
+            scores.error,
+          )
+        }
+      }
+    } catch (err: unknown) {
+      console.warn(
+        '[sync] player weekly score ingestion failed',
+        connection.externalLeagueId,
+        err instanceof Error ? err.message : err,
+      )
+    }
   }
 
   return {
