@@ -8,6 +8,7 @@ import { recordDashboardActivation } from '@/lib/analytics/recordDashboardActiva
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
 import { deriveOutstandingIssues, lastSyncByLeagueFrom } from '@/lib/core-app/outstandingIssues'
 import { describeAge } from '@/lib/sports-data/freshnessPolicy'
+import { resolveDashboardAvatarUrl } from '@/lib/dashboard/resolve-dashboard-avatar'
 import { aiAccessResolver } from '@/lib/ai-access/AIAccessResolver'
 import AfCoreShell, { type CoreNavKey, type RailLeague } from '@/components/core-app/AfCoreShell'
 import type { UserLeague } from '@/app/dashboard/types'
@@ -17,7 +18,7 @@ import { Dash34Carryover } from '@/components/core-app/screens/Dash34Carryover'
 import { DashUserOs } from '@/components/core-app/screens/DashUserOs'
 import { resolveUserOsSnapshot } from '@/lib/decision-os/userOs'
 import { getCrossLeagueExposure, getRivalRecords } from '@/lib/core-app/dash3aPanels'
-import { getDash34Data, type Dash34LeagueRow } from '@/lib/core-app/dash34'
+import { getDash34Data, imageOf, type Dash34LeagueRow } from '@/lib/core-app/dash34'
 import LeagueHome from '@/components/core-app/screens/LeagueHome'
 import { getLeagueHomeData } from '@/lib/core-app/leagueHome'
 import PlayerFinder from '@/components/core-app/screens/PlayerFinder'
@@ -260,6 +261,15 @@ export default async function AfCorePage({
     name: l.name,
     platform: String(l.platform ?? 'manual').toLowerCase(),
     mark: PLATFORM_MARK[String(l.platform ?? '').toLowerCase()] ?? l.name.charAt(0).toUpperCase(),
+    /*
+     * ⚠ THE LOADER ALREADY SELECTS avatarUrl AND logoUrl — this mapping used to
+     * drop them, which is why every Sleeper chip rendered 'S' while the My
+     * Leagues rows below showed real images from the SAME rows. imageOf is the
+     * dash34 resolver those rows go through: logoUrl as-is, Sleeper avatar hash
+     * → sleepercdn thumbs URL, anything unresolvable → null so the letter mark
+     * is the genuine fallback rather than a broken <img>.
+     */
+    imageUrl: imageOf(l as unknown as Dash34LeagueRow),
   }))
 
   /*
@@ -463,9 +473,28 @@ export default async function AfCorePage({
    * of the same unread number on the screen itself, but they are recomputed per
    * request and are not worth a second pass here just to bump a badge.
    */
-  const unreadNotifications = await prisma.platformNotification
-    .count({ where: { userId, readAt: null } })
-    .catch(() => 0)
+  const [unreadNotifications, shellUser] = await Promise.all([
+    prisma.platformNotification.count({ where: { userId, readAt: null } }).catch(() => 0),
+    /*
+     * The rail's profile chip. Read fresh from app_users rather than
+     * session.user.image, which is frozen into the JWT at sign-in and goes
+     * stale. avatarUrl is a full sleepercdn URL for Sleeper sign-ins and can be
+     * a bare avatar hash on older rows — resolveDashboardAvatarUrl handles
+     * both. Null is a real state (account has no image) and renders the
+     * display-name initial, not an invented picture.
+     */
+    prisma.appUser
+      .findUnique({
+        where: { id: userId },
+        select: { username: true, displayName: true, avatarUrl: true },
+      })
+      .catch(() => null),
+  ])
+
+  const shellProfile = {
+    name: shellUser?.displayName?.trim() || shellUser?.username?.trim() || null,
+    imageUrl: resolveDashboardAvatarUrl(null, shellUser?.avatarUrl) ?? null,
+  }
 
   // 26a reads the same career payload the career screen does — no second source
   // of truth for the numbers that end up on a card the user posts publicly.
@@ -753,6 +782,7 @@ export default async function AfCorePage({
       plan={plan}
       commissionerCount={commissionerCount}
       notificationCount={unreadNotifications}
+      profile={shellProfile}
       comms={{
         leagues: playedLeagues.slice(0, 12).map((l) => ({
           id: l.id,

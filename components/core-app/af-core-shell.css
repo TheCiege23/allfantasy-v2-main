@@ -63,6 +63,17 @@
   border: 1px solid transparent;
 }
 
+/* A league/profile image fills its tile. RailMark swaps back to the letter
+   when the image is absent or the CDN 404s, so a broken-image glyph never
+   renders. border-radius: inherit keeps the corners clipped to the tile's. */
+.af-rail-tile-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
 /* The alert dot is the only thing on the rail that moves the eye, so it is
    reserved for a league that genuinely needs a decision. */
 .af-rail-dot {
