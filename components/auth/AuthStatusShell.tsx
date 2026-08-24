@@ -96,9 +96,21 @@ export function AuthStatusHeader({
           className="relative h-[60px] w-[60px] object-contain drop-shadow-[0_0_16px_rgba(6,182,212,0.42)]"
         />
       </div>
-      <p className="text-[20px] font-semibold" style={{ color: "var(--text)" }}>
+      {/*
+        * ⚠ THIS WAS A <p>, AND IT IS THE ONLY HEADING THESE SCREENS HAVE.
+        * /forgot-password and /reset-password rendered with NO h1 whatsoever in
+        * the states a real user actually reaches — the chooser and the
+        * set-a-new-password form. The terminal states (success, invalid link)
+        * did have one, buried inside the card, so a grep for "<h1" in these
+        * files came back reassuring while the working screens had nothing.
+        *
+        * Tailwind's preflight resets heading sizes, so the classes below still
+        * fully control the rendering: this is a semantic change only, and
+        * nothing moves on screen.
+        */}
+      <h1 className="text-[20px] font-semibold" style={{ color: "var(--text)" }}>
         {title}
-      </p>
+      </h1>
       <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
         {subtitle}
       </p>

@@ -75,8 +75,23 @@ export function getSoftwareApplicationSchema(opts: {
   description: string
   url: string
   applicationCategory?: string
+  /*
+   * ⚠ `offers` ASSERTS A PRICE, AND THIS HELPER HARDCODED price "0".
+   * That is true of AllFantasy as a platform — there is a real free tier — so
+   * the homepage and /install keep it. It is NOT true of every individual
+   * feature: lib/monetization/feature-monetization-matrix.ts marks ai_chat,
+   * ai_waivers, create_league and planning_tools as requiredPlanId "pro", and
+   * the tool landing pages for those features were declaring them free in
+   * structured data. A rich result reading "Free" for something the app gates
+   * behind AF Pro is a promise the product does not keep — the same failure
+   * mode as an Offer quoting a price checkout will not honour.
+   *
+   * Pass false to say nothing about price, which is honest when the answer
+   * depends on the visitor's plan.
+   */
+  offers?: false
 }): SoftwareApplicationSchema {
-  return {
+  const schema: SoftwareApplicationSchema = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
     name: opts.name,
@@ -86,6 +101,8 @@ export function getSoftwareApplicationSchema(opts: {
     url: opts.url,
     offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
   }
+  if (opts.offers === false) delete (schema as { offers?: unknown }).offers
+  return schema
 }
 
 /** FAQPage schema from Q&A pairs. */

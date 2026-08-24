@@ -1,9 +1,23 @@
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+
 /**
  * SEO landing and discovery page config.
  * Single source for sport slugs, tool slugs, metadata, and internal links.
  */
 
-const BASE = 'https://allfantasy.ai'
+/*
+ * ⚠ THE APEX WAS HARDCODED HERE, AND THE SITEMAP DISAGREES WITH IT.
+ * lib/site-public-origin.ts is the canonical host (https://www.allfantasy.ai)
+ * and the apex 307s to it. app/sitemap.xml/route.ts already resolves through
+ * getPublicSiteOrigin(), so every sport, tool and discovery page was submitted
+ * to crawlers on www while the page itself declared a canonical on the apex —
+ * a canonical pointing at a redirect, contradicting the sitemap that led there.
+ *
+ * This is the same defect 39ab1f8 fixed across 17 files; these four were missed
+ * because the constant is named BASE rather than looking like a URL at the call
+ * site.
+ */
+const BASE = getPublicSiteOrigin()
 
 export type SportSlug =
   | 'fantasy-football'

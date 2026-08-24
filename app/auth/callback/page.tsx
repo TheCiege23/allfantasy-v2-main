@@ -36,7 +36,7 @@ function OAuthCallbackContent() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-cyan-500/20 bg-cyan-500/10">
             <Loader2 className="h-7 w-7 animate-spin text-cyan-300" />
           </div>
-          <h1 className="mt-5 text-2xl font-semibold text-white">Redirecting</h1>
+          <h2 className="mt-5 text-2xl font-semibold text-white">Redirecting</h2>
           <p className="mt-3 text-sm leading-6 text-white/60">
             Sending you back to sign in...
           </p>

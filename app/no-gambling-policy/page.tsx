@@ -3,16 +3,21 @@ import LegalPageRenderer, { LEGAL_LAST_UPDATED } from "@/components/legal/LegalP
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
 import { RESTRICTED_STATES } from "@/lib/geo/restrictedStates"
 import { getFanCredBoundaryDisclosureLong, getFanCredBoundaryChecklist } from "@/lib/legal/FanCredBoundaryDisclosure"
+import type { Metadata } from 'next'
+import { buildSeoMeta } from '@/lib/seo'
 
 interface NoGamblingPolicyPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+// Routed through buildSeoMeta for a canonical and page-specific OpenGraph;
+// see app/terms/page.tsx for why a bare metadata object was not enough.
+export const metadata: Metadata = buildSeoMeta({
   title: "No Gambling Policy | AllFantasy",
   description:
     "AllFantasy's No Gambling Policy: no wagering, no DFS, no paid pick'em. Season-long fantasy sports management and entertainment only.",
-}
+  canonicalPath: '/no-gambling-policy',
+})
 
 export default async function NoGamblingPolicyPage({ searchParams }: NoGamblingPolicyPageProps) {
   const params = searchParams instanceof Promise ? await searchParams : searchParams ?? {}

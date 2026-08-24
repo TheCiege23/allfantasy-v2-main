@@ -48,7 +48,7 @@ function ErrorContent() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-red-500/20 bg-red-500/10">
             <TriangleAlert className="h-7 w-7 text-red-400" />
           </div>
-          <h1 className="mt-5 text-2xl font-semibold text-white">Sign-in Error</h1>
+          <h2 className="mt-5 text-2xl font-semibold text-white">Sign-in Error</h2>
           <p className="mt-3 text-sm leading-6 text-white/80">{message}</p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
             <Link

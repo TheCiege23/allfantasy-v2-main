@@ -14,7 +14,19 @@ export type MonetizationCheckoutRequest = {
 
 export type MonetizationCheckoutResult =
   | { ok: true; url: string; metaEvent?: MetaEventPayload }
-  | { ok: false; error: string }
+  /**
+   * `status` is the HTTP status the checkout endpoint answered with, when there
+   * was one (absent for a network failure or timeout, where no response exists).
+   *
+   * ⚠ IT EXISTS SO A CALLER CAN TELL "YOU ARE NOT SIGNED IN" APART FROM "THIS
+   * PURCHASE FAILED", which are different problems with different remedies and
+   * were previously indistinguishable. Both arrived here as `{ ok: false }` with
+   * a string, so /pricing printed the endpoint's raw `Unauthorized` at a
+   * signed-out visitor who clicked Choose AF Pro and left them there — a dead
+   * end on the one action the page exists for. A 401 is not an error to display;
+   * it is a redirect to make.
+   */
+  | { ok: false; error: string; status?: number }
 
 const CHECKOUT_TIMEOUT_MS = 12_000
 const inFlightCheckoutRequests = new Map<string, Promise<MonetizationCheckoutResult>>()
@@ -74,6 +86,7 @@ export async function resolveCheckoutUrl(
         return {
           ok: false,
           error: data.error ?? "Unable to start checkout. Please try again.",
+          status: response.status,
         }
       }
       return { ok: true, url: data.url, metaEvent: data.metaEvent }

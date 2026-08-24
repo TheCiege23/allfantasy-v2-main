@@ -5,6 +5,7 @@ import { GracefulImage } from '@/components/media/GracefulImage'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { XP_PER_LEVEL, TIERS } from "@/lib/ranking/config"
+import { LEGACY_TAB_TITLES, LEGACY_FALLBACK_TITLE, isLegacyTabId } from "./legacy-tab-seo"
 import FeedbackModal from "@/app/components/FeedbackModal"
 import LegacyTutorial from "@/app/components/LegacyTutorial"
 import SmartRecommendations from "@/app/components/SmartRecommendations"
@@ -1528,26 +1529,17 @@ function AFLegacyContent() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [openLeagueDropdown])
 
-  // Dynamic SEO titles based on active tab
+  /*
+   * The tab titles moved to ./legacy-tab-seo.ts. They were written for search
+   * but only ever reached document.title, which no link-preview scraper reads
+   * and the served HTML never carries — so the route shipped the ROOT layout's
+   * homepage title to every crawler. app/af-legacy/layout.tsx now exports real
+   * metadata built from the SAME map, so the served <title> and this runtime
+   * one cannot disagree. This effect stays because it is a genuine feature for
+   * a signed-in user tabbing around: the browser tab label follows them.
+   */
   useEffect(() => {
-    const seoTitles: Record<Tab, string> = {
-      'overview': 'Fantasy Football Career Profile & Report Card | AllFantasy',
-      'trade': 'Fantasy Football Trade Analyzer (Dynasty & Redraft) | AllFantasy',
-      'finder': 'Fantasy Football Trade Finder Tool | Discover Winning Trades with Chimmy',
-      'player-finder': 'Fantasy Football Player Finder & Value Tool | AllFantasy',
-      'waiver': 'Fantasy Football Waiver Wire AI | Best Pickup Suggestions',
-      'rankings': 'Fantasy Football League Rankings & Power Rankings | AllFantasy',
-      'pulse': 'Fantasy Football Market Pulse & Player Sentiment | AllFantasy',
-      'compare': 'Fantasy Football Player Comparison Tool | Start or Sit with Chimmy',
-      'chat': 'Chimmy, Your Fantasy Football Coach | Personalized Advice & Strategy',
-      'share': 'Share Your Fantasy Football Career Report Card | AllFantasy',
-      'transfer': 'Transfer Fantasy Football Leagues from Sleeper, Yahoo & More',
-      'strategy': 'Season Strategy Planner | Chimmy-Powered Fantasy Football Roadmap',
-      'shop': 'Official AllFantasy Merch | Shop AF Gear on Etsy',
-      'mock-draft': 'Chimmy-Powered Mock Draft Simulator & Predict Board | AllFantasy',
-      'ideas': 'Submit League Ideas | AllFantasy Community',
-    }
-    document.title = seoTitles[activeTab] || 'AF Legacy | AllFantasy'
+    document.title = LEGACY_TAB_TITLES[activeTab] || LEGACY_FALLBACK_TITLE
   }, [activeTab])
 
   // Refetch trade analytics when valuation mode changes
@@ -2763,7 +2755,19 @@ function AFLegacyContent() {
     } else if (tab === 'rankings' && sharedLeague) {
       handleActiveTabChange('rankings')
       setPendingShareLeague(sharedLeague)
-    } else if (tab && ['overview', 'trade', 'finder', 'player-finder', 'waiver', 'compare', 'chat', 'mock-draft', 'share', 'rankings', 'transfer', 'strategy', 'shop', 'ideas', 'pulse'].includes(tab)) {
+    } else if (tab && isLegacyTabId(tab)) {
+      /*
+       * `isLegacyTabId` replaced a FOURTH hardcoded copy of the tab list, after
+       * the `Tab` union, the title map and getLegacyFeedbackToolLabel. Derived
+       * from the shared map so an added tab cannot end up deep-linkable but
+       * untitled, or titled but not deep-linkable.
+       *
+       * An unrecognised `?tab=` still falls through and silently renders
+       * overview. `/af-legacy?tab=players` is linked from the fantasy-news
+       * aggregator and there IS no `players` tab, so that link has always
+       * landed on the wrong screen. Flagged rather than fixed here: the wrong
+       * half is the href, and it belongs to that component.
+       */
       handleActiveTabChange(tab as Tab)
       if (tab === 'chat') {
         const promptParam = searchParams?.get('prompt') ?? null
@@ -4744,12 +4748,19 @@ function AFLegacyContent() {
             <div className="grid lg:grid-cols-2 gap-8 items-center">
               {/* Left: Hero copy */}
               <div className="max-w-xl">
-                <h2 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white leading-tight">
+                {/*
+                  h1, not h2. This is the page's only top-level heading and it
+                  was an h2, so /af-legacy rendered ZERO h1 elements — measured
+                  in a browser after hydration. The nearest h1 in this file
+                  belongs to the "Legacy mode is temporarily disabled" branch,
+                  which is why grepping for one came back reassuring.
+                */}
+                <h1 className="text-2xl sm:text-3xl md:text-4xl font-extrabold text-white leading-tight">
                   Turn your fantasy history into a{" "}
                   <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-300 to-purple-300">
                     Legacy Profile
                   </span>
-                </h2>
+                </h1>
 
                 <p className="mt-2 sm:mt-3 text-sm sm:text-base text-white/65">
                   Import your fantasy history from Sleeper today. Yahoo, MFL, and Fantrax tools are still limited and do not yet support full historical imports.

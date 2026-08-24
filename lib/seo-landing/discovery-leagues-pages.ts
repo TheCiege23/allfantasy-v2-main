@@ -1,9 +1,13 @@
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
+
 /**
  * PROMPT 229 — Discovery SEO pages for fantasy football, basketball, and baseball leagues.
  * Routes: /fantasy-football/leagues, /fantasy-basketball/leagues, /fantasy-baseball/leagues
  */
 
-const BASE = 'https://allfantasy.ai'
+// Resolved through getPublicSiteOrigin(); see lib/seo-landing/config.ts for why
+// the hardcoded apex was wrong.
+const BASE = getPublicSiteOrigin()
 
 export type DiscoveryLeaguesSlug = 'fantasy-football' | 'fantasy-basketball' | 'fantasy-baseball'
 

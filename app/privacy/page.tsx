@@ -6,15 +6,29 @@ import LegalPageRenderer, {
   LegalGrid,
 } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from "next"
+import { buildSeoMeta } from "@/lib/seo"
 
 interface PrivacyPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+/*
+ * ⚠ THIS WENT BACK TO A BARE OBJECT IN #613 AND THAT DROPS THE CANONICAL.
+ * 5430ed57 routed all eight LegalPageShell pages through buildSeoMeta precisely
+ * because a bare { title, description } sets those two fields and nothing else:
+ * no canonical, and the homepage's OpenGraph falls through, so sharing this page
+ * previewed it as "draft smarter, analyze trades, and dominate their leagues".
+ * /privacy also takes ?from=signup&next=... and is linked that way from the
+ * signup form, so without a canonical every distinct `next` is a separate
+ * indexable URL. #613's relayout is kept in full; only the metadata call is
+ * restored.
+ */
+export const metadata: Metadata = buildSeoMeta({
   title: "Privacy Policy | AllFantasy",
   description: "Privacy Policy for AllFantasy — the fantasy sports intelligence platform",
-}
+  canonicalPath: "/privacy",
+})
 
 /**
  * Handoff 17a — privacy policy.

@@ -4,6 +4,7 @@
  */
 
 import { SPORT_CONFIG, type SportSlug } from './config'
+import { getPublicSiteOrigin } from '@/lib/site-public-origin'
 
 export interface SportSeoPageConfig {
   title: string
@@ -14,7 +15,9 @@ export interface SportSeoPageConfig {
   keywords?: string[]
 }
 
-const BASE = 'https://allfantasy.ai'
+// Resolved through getPublicSiteOrigin(); see lib/seo-landing/config.ts for why
+// the hardcoded apex was wrong.
+const BASE = getPublicSiteOrigin()
 
 /** Map flat route slug to existing SPORT_CONFIG or custom config for NCAA combined page. */
 export const SPORT_PAGE_SLUGS = [

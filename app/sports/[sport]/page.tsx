@@ -8,6 +8,7 @@ import {
 } from '@/lib/seo-landing/config'
 import SportLandingClient from './SportLandingClient'
 import { buildMetadata } from '@/lib/seo'
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export async function generateStaticParams() {
   return SPORT_SLUGS.map((sport) => ({ sport }))
@@ -24,7 +25,7 @@ export async function generateMetadata({
     return buildMetadata({
       title: 'AllFantasy – Fantasy Sports Tools',
       description: 'AI-powered fantasy sports tools and league management.',
-      canonical: 'https://allfantasy.ai/tools-hub',
+      canonical: `${getPublicSiteOrigin()}/tools-hub`,
     })
   }
 

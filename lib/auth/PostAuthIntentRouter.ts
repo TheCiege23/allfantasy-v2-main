@@ -1,4 +1,9 @@
-import { loginUrlWithIntent, safeRedirectPath, signupUrlWithIntent } from "@/lib/auth/auth-intent-resolver"
+import {
+  isSafeInternalPath,
+  loginUrlWithIntent,
+  safeRedirectPath,
+  signupUrlWithIntent,
+} from "@/lib/auth/auth-intent-resolver"
 import {
   isAllowedSignupPostAuthDestination,
   isAuthEntrySurfacePathname,
@@ -26,11 +31,17 @@ export interface PostAuthIntentInput {
   forSignup?: boolean
 }
 
-function isSafeInternalPath(value: string | null | undefined): value is string {
-  if (!value || typeof value !== "string") return false
-  const trimmed = value.trim()
-  return trimmed.startsWith("/") && !trimmed.startsWith("//")
-}
+/*
+ * ⚠ THIS WAS A SECOND, WEAKER COPY OF THE SAME CHECK, AND IT HAD THE SAME HOLE.
+ *
+ * It tested `startsWith("//")` only, which a browser-normalised backslash walks
+ * straight through: `/\host` resolves as `//host`, i.e. another origin. The
+ * identical bug was confirmed exploitable through /login's callbackUrl (see
+ * auth-intent-resolver.ts for the browser evidence), and this module decides
+ * post-auth destinations for UnifiedAuthOrchestrator, SignupFlowController and
+ * AuthRedirectResolver — the same class of decision, so it inherits the fix
+ * rather than keeping a private copy that has to be remembered separately.
+ */
 
 function resolveIntentAlias(intent: string | null | undefined): string | null {
   if (!intent || typeof intent !== "string") return null

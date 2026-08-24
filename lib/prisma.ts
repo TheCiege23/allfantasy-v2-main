@@ -3,7 +3,7 @@
  *
  * We do not use `import "server-only"` here yet: webpack still bundles client paths that
  * transitively import this module (e.g. mock-draft → player-media). Module splits
- * (orphan-platform-ids, mood-options, player-media-urls, rank-xp-constants, SportTeamMetadataRegistry.db)
+ * (orphan-platform-ids, player-media-urls, rank-xp-constants, SportTeamMetadataRegistry.db)
  * reduce leakage; re-add `server-only` once no client graph pulls `@/lib/prisma`.
  */
 import { PrismaClient, Prisma } from "@prisma/client";

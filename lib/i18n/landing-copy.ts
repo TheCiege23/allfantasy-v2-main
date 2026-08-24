@@ -20,6 +20,27 @@ export type LandingLang = (typeof LANDING_LANGS)[number]
 
 export const DEFAULT_LANDING_LANG: LandingLang = 'en'
 
+/**
+ * Where each language of the landing page lives.
+ *
+ * ⚠ PATHS, NEVER QUERY STRINGS, AND THAT IS A HARD CONSTRAINT RATHER THAN A
+ * STYLE CHOICE. Spanish used to live at `/?lang=es`, and Next 14.2 strips the
+ * search string when resolving `alternates` against `metadataBase` — so the
+ * Spanish document declared the ENGLISH url as its canonical and all three
+ * `hreflang` alternates collapsed onto one address. See the header comment in
+ * components/landing/landing-route.tsx for the measurements.
+ *
+ * The canonical, the self-referencing `hreflang`, the sibling `hreflang`, the
+ * WebPage JSON-LD node, the analytics beacon path and the on-page language
+ * switch are all generated from this one table, so they cannot drift into
+ * disagreeing about where a language lives. A third language needs an entry
+ * here and a route directory — nothing else.
+ */
+export const LANDING_PATHS: Record<LandingLang, string> = {
+  en: '/',
+  es: '/es',
+}
+
 /** Narrows an untrusted `?lang=` value; anything unrecognised falls back to English. */
 export function resolveLandingLang(raw: string | string[] | undefined): LandingLang {
   const value = Array.isArray(raw) ? raw[0] : raw
@@ -44,6 +65,13 @@ export type LandingCopy = {
   nav: {
     how: string
     pricing: string
+    /**
+     * Label for the in-page `#faq` jump. The FAQ section has always had an id
+     * and, until this was added, nothing on the page linked to it — so the four
+     * answers a hesitant visitor most needs ("is this gambling?", "what does it
+     * cost?") had no navigation path at all.
+     */
+    faq: string
     forCommissioners: string
     signIn: string
     /** Primary CTA when the reader is already signed in. */
@@ -71,6 +99,18 @@ export type LandingCopy = {
   reasons: { h2: string; items: Reason[] }
   pricing: { h2: string; body: string; ctaPrimary: string; ctaSecondary: string }
   faq: { h2: string; items: Faq[] }
+  /**
+   * The discovery band's own strings. The LINKS are not here on purpose: they
+   * are built from SPORT_CONFIG/TOOL_CONFIG in lib/seo-landing/config, so the
+   * homepage cannot advertise a sport or tool page that does not exist, and a
+   * slug added there appears here for free.
+   *
+   * Their anchor text is each destination's own `headline` and is therefore not
+   * translated — same rule the platform brands follow in `connects`. The pages
+   * behind those links are English, and a Spanish label promising a Spanish page
+   * would be the same broken promise the `?lang=` metadata work existed to fix.
+   */
+  discover: { label: string; h2: string; body: string; bySport: string; byTool: string }
   network: { label: string; h2: string; body: string; cards: NetworkCard[] }
   footer: {
     playerFinder: string
@@ -97,7 +137,17 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
   nav: {
     how: 'How it works',
     pricing: 'Pricing',
-    forCommissioners: 'For commissioners',
+    faq: 'FAQ',
+    /*
+     * ⚠ "Commissioner plans", NOT "For commissioners". The href is /pricing and
+     * has to stay /pricing: AF Commissioner is a real tier described there, and
+     * the only other commissioner surfaces in the repo (/commissioner-hub,
+     * /commissioner-os) call getServerSession and bounce a logged-out reader to
+     * /login — so pointing marketing traffic at them would trade a vague label
+     * for a dead end. The old label promised a commissioner PAGE and delivered a
+     * pricing table; this one names what is actually on the other side.
+     */
+    forCommissioners: 'Commissioner plans',
     signIn: 'Sign in',
     goToDashboard: 'Go to dashboard',
     partners: 'Partners',
@@ -173,6 +223,13 @@ const EN = (prices: MonthlyPriceRange | null): LandingCopy => ({
       },
     ],
   },
+  discover: {
+    label: 'Explore',
+    h2: 'Tools and sports we cover',
+    body: 'Every sport and every tool has its own page, with what it does and how to start.',
+    bySport: 'By sport',
+    byTool: 'By tool',
+  },
   network: {
     label: 'From Brown Pig LLC',
     h2: 'Apps that solve real problems',
@@ -224,7 +281,8 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
   nav: {
     how: 'Cómo funciona',
     pricing: 'Precios',
-    forCommissioners: 'Para comisionados',
+    faq: 'Preguntas',
+    forCommissioners: 'Planes para comisionados',
     signIn: 'Iniciar sesión',
     goToDashboard: 'Ir al panel',
     partners: 'Socios',
@@ -299,6 +357,13 @@ const ES = (prices: MonthlyPriceRange | null): LandingCopy => ({
           : 'Gratis para siempre para jugadores. Cualquier plan de pago se cancela cuando quieras.',
       },
     ],
+  },
+  discover: {
+    label: 'Explora',
+    h2: 'Deportes y herramientas que cubrimos',
+    body: 'Cada deporte y cada herramienta tiene su propia página, con qué hace y cómo empezar.',
+    bySport: 'Por deporte',
+    byTool: 'Por herramienta',
   },
   network: {
     label: 'De Brown Pig LLC',

@@ -43,20 +43,72 @@ export async function GET() {
   const staticPages = [
     { path: 'blog', priority: '0.8', changefreq: 'weekly' },
     { path: '', priority: '1.0', changefreq: 'weekly' },
+    /*
+     * The Spanish landing. It is a distinct indexable document with its own
+     * canonical — not a variant of `/` — so it needs its own entry here or the
+     * only way a crawler reaches it is the hreflang on the English page.
+     * Lower priority than `/` because English is x-default.
+     */
+    { path: 'es', priority: '0.9', changefreq: 'weekly' },
     { path: 'app', priority: '0.9', changefreq: 'weekly' },
-    { path: 'bracket', priority: '0.9', changefreq: 'weekly' },
+    /*
+     * ⚠ /bracket (singular) IS DELIBERATELY ABSENT. It 307s to /brackets —
+     * measured — so this was the highest-priority static entry in the whole
+     * sitemap after the homepage, 0.9, pointing at a redirect. Its layout
+     * builds real metadata via getSEOPageConfig('bracket-challenge'), and none
+     * of it can reach a crawler for the same reason /mock-draft's cannot: the
+     * redirect answers first. The destination /brackets is listed below at 0.8
+     * and now carries its own canonical, and /tools/bracket-challenge is the
+     * public landing page for the phrase.
+     */
     { path: 'brackets', priority: '0.8', changefreq: 'weekly' },
     { path: 'af-legacy', priority: '0.8', changefreq: 'weekly' },
     { path: 'trade-analyzer', priority: '0.8', changefreq: 'weekly' },
-    { path: 'mock-draft', priority: '0.7', changefreq: 'weekly' },
-    { path: 'waiver-ai', priority: '0.7', changefreq: 'weekly' },
+    /*
+     * ⚠ /mock-draft IS DELIBERATELY ABSENT, for a blunter reason than /waiver-ai
+     * below it. app/mock-draft/page.tsx calls redirect('/login?callbackUrl=...')
+     * for any visitor without a session, so a crawler fetching this URL gets a
+     * 307 and no document — measured. Its `metadata` block is real but only ever
+     * names the browser tab for a signed-in user; it cannot reach a search
+     * engine. Submitting the URL anyway asked Google to crawl a redirect at
+     * priority 0.7. /tools/mock-draft-simulator is the public page for this
+     * tool, is 200, and stays in the sitemap.
+     */
+    /*
+     * ⚠ /waiver-ai IS DELIBERATELY ABSENT. It carried the SAME title,
+     * description and keywords as /tools/waiver-wire-advisor — byte for byte,
+     * from two hand-written config copies — while serving signed-out visitors
+     * 501 chars whose h1 reads "Sign in to analyze your leagues", against that
+     * page's 2066 chars of real copy. Two sitemap'd URLs cannot both win one
+     * query, and the login wall is the wrong one to enter. The app route is
+     * noindex,follow now (app/waiver-ai/layout.tsx); the landing page below
+     * owns the phrase and its CTA opens /waiver-ai.
+     */
     { path: 'tools-hub', priority: '0.85', changefreq: 'weekly' },
     { path: 'chimmy', priority: '0.8', changefreq: 'weekly' },
-    { path: 'zen', priority: '0.6', changefreq: 'weekly' },
-    { path: 'meditation', priority: '0.6', changefreq: 'weekly' },
-    { path: 'breathing', priority: '0.5', changefreq: 'weekly' },
-    { path: 'horoscope', priority: '0.5', changefreq: 'weekly' },
     { path: 'pricing', priority: '0.5', changefreq: 'monthly' },
+    // Spanish pricing — its own canonical and hreflang, so it needs its own entry.
+    { path: 'es/pricing', priority: '0.5', changefreq: 'monthly' },
+    /*
+     * The legal and company pages. None of the eight was published here, which
+     * is the kind of omission that stays invisible until it is urgent: app
+     * store submissions, payment processors and OAuth provider reviews all go
+     * looking for a reachable Terms and Privacy, and "it is linked from the
+     * footer" is a weaker answer than "it is in the sitemap".
+     *
+     * Low priority on purpose. They should be indexed and findable by name, not
+     * competing with the product pages — and every one of them now declares its
+     * own canonical, so the `?from=signup&next=...` variants the signup form
+     * links to consolidate onto these addresses rather than multiplying.
+     */
+    { path: 'terms', priority: '0.3', changefreq: 'yearly' },
+    { path: 'privacy', priority: '0.3', changefreq: 'yearly' },
+    { path: 'disclaimer', priority: '0.3', changefreq: 'yearly' },
+    { path: 'no-gambling-policy', priority: '0.3', changefreq: 'yearly' },
+    { path: 'ai-transparency', priority: '0.3', changefreq: 'yearly' },
+    { path: 'data-deletion', priority: '0.3', changefreq: 'yearly' },
+    { path: 'mission', priority: '0.4', changefreq: 'monthly' },
+    { path: 'contact', priority: '0.4', changefreq: 'monthly' },
   ]
 
   const sportUrls = SPORT_SLUGS.map(

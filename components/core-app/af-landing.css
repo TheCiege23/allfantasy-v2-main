@@ -399,9 +399,72 @@
 .af-lp-reasons,
 .af-lp-pricing,
 .af-lp-faq,
-.af-lp-network {
+.af-lp-discover {
   padding: 52px 40px;
   border-bottom: 1px solid var(--line);
+}
+
+/*
+ * .af-lp-network is NO LONGER in the group above. It now renders after
+ * </footer> as the last element on the page (see LandingV4.tsx), where a
+ * border-BOTTOM would draw a hairline across the very end of the document with
+ * nothing under it. It takes a border-top instead, which is the divider that
+ * actually separates it from the footer above.
+ */
+.af-lp-network {
+  padding: 52px 40px;
+  border-top: 1px solid var(--line);
+}
+
+/* ── Discover band ─────────────────────────────────────────────────────
+ * Two columns of internal links into the /sports/* and /tools/* pages. Dense
+ * on purpose: this is a navigation block, not a feature pitch, so the links
+ * carry the weight and nothing competes with them.
+ */
+.af-lp-discover-body {
+  margin: 10px 0 0;
+  max-width: 60ch;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+
+.af-lp-discover-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 28px;
+  margin-top: 26px;
+}
+
+.af-lp-discover-h3 {
+  margin: 0 0 12px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.af-lp-discover-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 8px 18px;
+}
+
+.af-lp-discover-list a {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text2);
+  text-decoration: none;
+}
+
+.af-lp-discover-list a:hover,
+.af-lp-discover-list a:focus-visible {
+  color: var(--accent);
+  text-decoration: underline;
 }
 
 .af-lp-reason-grid {
@@ -875,6 +938,7 @@
   .af-lp-reasons,
   .af-lp-pricing,
   .af-lp-faq,
+  .af-lp-discover,
   .af-lp-network,
   .af-lp-b2b {
     padding: 36px 16px;

@@ -5,8 +5,9 @@ import { formatInTimezone } from "@/lib/preferences/TimezoneFormattingResolver"
 import { resolveServerRenderPreferences } from "@/lib/preferences/ServerRenderPreferenceResolver"
 import { SUPPORTED_SPORTS } from "@/lib/sport-scope"
 import { BLOG_CATEGORY_LABELS, BLOG_CATEGORIES } from "@/lib/automated-blog/types"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
-const BASE = "https://allfantasy.ai"
+const BASE = getPublicSiteOrigin()
 
 export const dynamic = "force-dynamic"
 
@@ -20,6 +21,22 @@ export const metadata: Metadata = {
     description: "Strategy, waiver wire, draft prep, and rankings for fantasy football, basketball, baseball, hockey, and more.",
     url: `${BASE}/blog`,
     type: "website",
+  },
+  /*
+   * ⚠ openGraph WITHOUT twitter IS A HALF-CONFIGURATION, AND THE HALF THAT WAS
+   * MISSING FELL BACK TO THE HOMEPAGE. Measured on the rendered page before this
+   * change: og:title read "Fantasy Sports Blog | AllFantasy" while twitter:title
+   * read "AllFantasy - Fantasy Sports Tools Powered by Chimmy" and
+   * twitter:description was the homepage's marketing paragraph. Sharing the blog
+   * on X advertised the product, not the blog.
+   *
+   * The ARTICLE pages (app/blog/[slug]/page.tsx) already set both, which is why
+   * this only ever affected the index.
+   */
+  twitter: {
+    card: "summary_large_image",
+    title: "Fantasy Sports Blog | AllFantasy",
+    description: "Strategy, waiver wire, draft prep, and rankings for fantasy football, basketball, baseball, hockey, and more.",
   },
   robots: { index: true, follow: true },
 }

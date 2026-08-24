@@ -57,7 +57,7 @@ export default function ProviderPendingPage() {
               <Info className="h-5 w-5 text-cyan-400" />
             </div>
             <div>
-              <h1 className="text-lg font-semibold text-white">{providerName} sign-in</h1>
+              <h2 className="text-lg font-semibold text-white">{providerName} sign-in</h2>
               <p className="text-xs text-white/50">Provider availability</p>
             </div>
           </div>

@@ -5,16 +5,24 @@ import LegalPageRenderer, {
   LegalCallout,
 } from "@/components/legal/LegalPageRenderer"
 import { getSignupReturnUrl } from "@/lib/legal/LegalRouteResolver"
+import type { Metadata } from "next"
+import { buildSeoMeta } from "@/lib/seo"
 
 interface DataDeletionPageProps {
   searchParams?: Promise<{ from?: string; next?: string }> | { from?: string; next?: string }
 }
 
-export const metadata = {
+/*
+ * ⚠ SAME AS /privacy — #613 replaced buildSeoMeta with a bare object, which
+ * drops the canonical and the page-specific OpenGraph that 5430ed57 added.
+ * #613's relayout is kept in full; only the metadata call is restored.
+ */
+export const metadata: Metadata = buildSeoMeta({
   title: "Data Deletion | AllFantasy",
   description:
     "How to request deletion of your AllFantasy account data and connected service information.",
-}
+  canonicalPath: "/data-deletion",
+})
 
 /**
  * Handoff 17b's data-deletion deliverable, which the mock draws as a sidebar
@@ -43,9 +51,22 @@ export default async function DataDeletionPage({ searchParams }: DataDeletionPag
       backLabel={fromSignup ? "Back to sign up" : "Back to home"}
     >
       <section id="overview">
+        {/*
+          ⚠ "DELETE YOUR PROFILE" IS NOT WHAT THE CODE DOES, and 07fe80d0 corrected
+          this once already before #613's relayout reintroduced it.
+          app/api/user/delete/route.ts revokes authentication and then overwrites
+          the identifying fields with unrecoverable anonymized values — its own
+          header says so: "rosters, and analytics keep an anonymized user row".
+          The row survives on purpose, for referential integrity. Saying "we
+          delete your profile" on the page a user reads to understand their
+          erasure right is the one sentence here that must match the code.
+        */}
         <p>
-          We delete your profile, connected-account tokens and provider links, saved preferences and
-          personalization, and support records we aren&apos;t required to keep.
+          We remove your connected-account tokens and provider links, saved preferences and
+          personalization, and support records we aren&apos;t required to keep. Your account record
+          itself is anonymized rather than dropped — the identifying fields are overwritten with
+          values that cannot be reversed, so leagues, rosters and historical results stay intact
+          without remaining attributable to you.
         </p>
         {/*
           ⚠ 17b's COPY CONTRACT — DELETION DOES NOT CASCADE, AND THE USER HAS TO BE

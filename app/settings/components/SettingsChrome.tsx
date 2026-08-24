@@ -220,7 +220,17 @@ export function SettingsChrome({
       <header className="ns-topbar">
         <div className="ns-brand">
           <span className="ns-brand-mark">AF</span>
-          <span className="ns-brand-title">{t('settings.title')}</span>
+          {/*
+            ⚠ <h1>, NOT <span>. /settings rendered with ZERO h1 elements — measured,
+            the outline began at "Profile" (h2) — so a screen reader had nothing to
+            say about what the page is.
+
+            No hidden heading was added, because the page already HAS a visible
+            title in the right place; it was simply marked up as a span. Tailwind's
+            preflight zeroes h1 font-size, font-weight and margin, and .ns-brand-title
+            supplies the appearance, so this is a semantic change with no visual one.
+          */}
+          <h1 className="ns-brand-title">{t('settings.title')}</h1>
         </div>
 
         <div className="ns-search">

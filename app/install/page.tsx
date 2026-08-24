@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import Link from "next/link"
 import { buildSeoMeta, getSoftwareApplicationSchema, getWebPageSchema } from "@/lib/seo"
 import { PageJsonLd } from "@/components/seo/JsonLd"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 export const metadata: Metadata = buildSeoMeta({
   title: "Install AllFantasy App – Mobile Fantasy Tools",
@@ -29,7 +30,7 @@ export default function InstallPage() {
       name: "AllFantasy",
       description:
         "AI-powered fantasy sports platform with trade analysis, waiver recommendations, mock drafts, bracket challenges, and league management.",
-      url: "https://allfantasy.ai/install",
+      url: `${getPublicSiteOrigin()}/install`,
       applicationCategory: "SportsApplication",
     }),
   ]

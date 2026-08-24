@@ -294,6 +294,18 @@ export function Dashboard3A({
 
       {/* ── Main ─────────────────────────────────────────────────────────── */}
       <main className="af3a-main">
+        {/*
+          ⚠ THE SIGNED-IN HOME HAD NO <h1> AT ALL. Measured on the rendered page:
+          zero h1 elements, the outline starting at "Outstanding issues" (h2).
+
+          A screen reader announcing this page had nothing to say about what it
+          IS — a user landing here from the /login bounce got a list of section
+          headings with no title above them. The design deliberately has no
+          visible title bar (the topbar is search plus status chips), so the
+          heading is visually hidden rather than drawn: the accessible name is
+          the missing part, not the pixels.
+        */}
+        <h1 className="af3a-sr-only">Your dashboard</h1>
         <div className="af3a-topbar">
           {/*
             ⚠ THIS WAS A `div` WITH A `<kbd>⌘K</kbd>` AND NOTHING BEHIND EITHER.
@@ -703,7 +715,17 @@ export function Dashboard3A({
               <Link className="af3a-tool" href="/trade-evaluator"><i>⇄</i>Trade analyzer</Link>
               <Link className="af3a-tool" href="/core/waivers"><i>◷</i>Waiver assistant</Link>
               <Link className="af3a-tool" href="/mock-draft"><i>▤</i>Mock draft</Link>
-              <Link className="af3a-tool" href="/rankings"><i>★</i>Rankings</Link>
+              {/*
+                ⚠ "Power rankings", NOT "Rankings" — there are TWO Rankings on this
+                screen and they are different products. The sidebar's "Rankings"
+                goes to /af-rankings ("AF Rankings", the career-level ladder, which
+                is why it carries the LVL tag); this one goes to /rankings, whose
+                own title is "League Power Rankings". Both were labelled the same
+                word, so which product a reader got depended on which half of the
+                screen they happened to click. The label now matches the
+                destination's own name.
+              */}
+              <Link className="af3a-tool" href="/rankings"><i>★</i>Power rankings</Link>
             </div>
           </section>
         </div>

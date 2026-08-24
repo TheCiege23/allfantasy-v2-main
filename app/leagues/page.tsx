@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth"
 import { MyLeaguesV4 } from "@/components/core-app/screens/MyLeaguesV4"
 import { getMyLeaguesData } from "@/lib/core-app/myLeagues"
 import { buildMetadata, getSEOPageConfig } from "@/lib/seo"
+import { getPublicSiteOrigin } from "@/lib/site-public-origin"
 
 /**
  * /leagues — cut over to the 21a "My Leagues" view.
@@ -28,7 +29,18 @@ export const metadata = buildMetadata(
   getSEOPageConfig("leagues") ?? {
     title: "My Leagues | AllFantasy",
     description: "Every league you play, sorted by what needs you.",
-    canonical: "https://allfantasy.ai/leagues",
+    /*
+     * ⚠ THIS WAS THE HARDCODED APEX AGAIN. 39ab1f8 and d662343a spent five
+     * commits removing `https://allfantasy.ai` literals because
+     * lib/site-public-origin.ts defines the canonical origin as
+     * https://www.allfantasy.ai and the apex 307s to it — so an apex canonical
+     * points a crawler at a redirect. The 21a cutover reintroduced one here.
+     *
+     * And it is NOT dead fallback code: SEO_PAGE_CONFIG has no "leagues" entry,
+     * only the type union and the segment map do, so getSEOPageConfig("leagues")
+     * returns undefined and this object is what /leagues actually emits.
+     */
+    canonical: `${getPublicSiteOrigin()}/leagues`,
   }
 )
 
