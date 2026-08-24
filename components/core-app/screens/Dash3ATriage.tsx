@@ -25,7 +25,16 @@ import '@/components/core-app/af-dash-triage.css'
  *   adds no medical judgement of its own.
  */
 
-type TriageLeague = { id: string; name: string; platform: string; imageUrl: string | null }
+export type TriageSlot = 'starter' | 'bench' | 'ir' | 'taxi'
+
+type TriageLeague = {
+  id: string
+  name: string
+  platform: string
+  imageUrl: string | null
+  /** Null when the roster could not be read — the chip then shows no slot. */
+  slot?: TriageSlot | null
+}
 
 export type TriageBookRow = {
   initials: string
@@ -42,6 +51,13 @@ export type TriageBookRow = {
   exposureCount: number
   exposureTotal: number
   startingIn: number
+  benchIn?: number
+  irIn?: number
+  taxiIn?: number
+  /** What the feed said, e.g. "Ruled out — ankle." Null when none was given. */
+  description?: string | null
+  /** Market price, or null. Absent means no price on file — never "worthless". */
+  value?: { value: number; overallRank: number | null; positionRank: number | null } | null
   reportedAt: string | null
   reportedAgo: string | null
   nextKickoffAt: string | null
@@ -59,7 +75,38 @@ function kickoffLabel(iso: string | null, now: Date): string | null {
   return `kickoff in ${Math.round(mins / (60 * 24))}d`
 }
 
-export function Dash3ATriage({ book, now }: { book: TriageBookRow[] | null; now: Date }) {
+const SLOT_LABEL: Record<TriageSlot, string> = {
+  starter: 'STARTER',
+  bench: 'bench',
+  ir: 'IR',
+  taxi: 'taxi',
+}
+
+/** "starter in 3 · bench in 5 · IR in 1" — only the counts that are non-zero. */
+function slotSummary(p: TriageBookRow): string {
+  return [
+    p.startingIn > 0 ? `starter in ${p.startingIn}` : null,
+    (p.benchIn ?? 0) > 0 ? `bench in ${p.benchIn}` : null,
+    (p.irIn ?? 0) > 0 ? `IR in ${p.irIn}` : null,
+    (p.taxiIn ?? 0) > 0 ? `taxi in ${p.taxiIn}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+export function Dash3ATriage({
+  book,
+  now,
+  valueBasis,
+}: {
+  book: TriageBookRow[] | null
+  now: Date
+  /**
+   * What the prices on these rows are. Stated once for the panel rather than
+   * per row, and omitted entirely when no row carries a price.
+   */
+  valueBasis?: { format: string; qbFormat: string } | null
+}) {
   /*
    * ⚠ DECISIONS ONLY. The loader's full book (BOOK_LIMIT rows, every
    * designation, benched IR stashes included) read as a meaningless wall of
@@ -117,21 +164,54 @@ export function Dash3ATriage({ book, now }: { book: TriageBookRow[] | null; now:
                 <div className="af-triage-line2">
                   <span className="af-triage-exposure">
                     {p.exposure} leagues
-                    {p.startingIn > 0 ? ` · starting in ${p.startingIn}` : ''}
+                    {slotSummary(p) ? ` · ${slotSummary(p)}` : ''}
                   </span>
+                  {p.value ? (
+                    /*
+                     * Rank leads because it is cross-positional and needs no
+                     * scale to read; the raw price follows it. Absent renders
+                     * nothing at all — a player we hold no price for must not
+                     * look like a player priced at nothing.
+                     */
+                    <span className="af-triage-value af-num">
+                      {p.value.overallRank != null ? `#${p.value.overallRank} overall` : null}
+                      {p.value.overallRank != null && p.value.positionRank != null ? ' · ' : ''}
+                      {p.value.positionRank != null && p.position
+                        ? `${p.position}${p.value.positionRank}`
+                        : null}
+                    </span>
+                  ) : null}
                   {p.reportedAgo ? (
                     <span className="af-triage-ago">reported {p.reportedAgo}</span>
                   ) : null}
                   {kickoff ? <span className="af-triage-kickoff">{kickoff}</span> : null}
                 </div>
+                {p.description ? (
+                  /* The feed's own sentence. Never paraphrased into a timeline —
+                     no injury table here holds an expected return. */
+                  <p className="af-triage-note">{p.description}</p>
+                ) : null}
                 {p.leagues.length > 0 ? (
                   <div className="af-triage-leagues">
                     {p.leagues.slice(0, 6).map((l) => (
-                      <Link key={l.id} href={`/league/${l.id}`} className="af-triage-league">
+                      <Link
+                        key={l.id}
+                        href={`/league/${l.id}`}
+                        className="af-triage-league"
+                        data-slot={l.slot ?? undefined}
+                      >
                         <span className="af-triage-league-platform">
                           {l.platform.toUpperCase()}
                         </span>
                         {l.name}
+                        {/* Where he sits in THIS league — the difference between
+                            "act here" and "no action needed". Absent when the
+                            roster could not be read; never defaulted to bench. */}
+                        {l.slot ? (
+                          <span className="af-triage-slot" data-slot={l.slot}>
+                            {SLOT_LABEL[l.slot]}
+                          </span>
+                        ) : null}
                       </Link>
                     ))}
                     {p.leagues.length > 6 ? (
@@ -156,6 +236,19 @@ export function Dash3ATriage({ book, now }: { book: TriageBookRow[] | null; now:
         <Link className="af-triage-overflow" href="/my-players">
           +{overflow} more starters flagged — full exposure audit
         </Link>
+      ) : null}
+      {valueBasis && rows.some((r) => r.value) ? (
+        /*
+         * Said once for the panel. The price is captured at 12 teams and full
+         * PPR and varies only dynasty/redraft and 1QB/superflex — it is NOT
+         * tuned to this account's TE-premium or superflex settings, and
+         * pretending otherwise would be the quiet kind of lie this screen
+         * exists to avoid.
+         */
+        <p className="af-triage-basis">
+          Ranks are FantasyCalc {valueBasis.format.toLowerCase()} {valueBasis.qbFormat === 'ONE_QB' ? '1QB' : 'superflex'} prices at
+          12 teams, full PPR — not adjusted for your scoring. NFL only.
+        </p>
       ) : null}
     </section>
   )

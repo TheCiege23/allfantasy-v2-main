@@ -120,6 +120,12 @@ export type Dash34Result = Dash34Data & {
    * none: every deadline on this product hangs off it.
    */
   weekLabel: string | null
+  /**
+   * What the prices on the book's rows actually are, so a surface can state it
+   * once instead of implying a number tuned to a league it never saw. Null
+   * when no row carries a price at all.
+   */
+  valueBasis: { format: 'DYNASTY' | 'REDRAFT'; qbFormat: 'ONE_QB' } | null
 }
 
 /* ── Injury vocabulary ───────────────────────────────────────────────────── */
@@ -379,6 +385,88 @@ async function readNextGames(sports: string[], now: Date) {
     .filter((g) => g.startTime != null && g.startTime.getTime() >= now.getTime())
 }
 
+/**
+ * Market value and rank for a set of players, newest capture per player.
+ *
+ * ⚠ THIS IS THE FIX FOR "IT SHOULDN'T BE RANDOM". The book used to order by
+ * how many of your lineups a player sat in, then how many leagues held him,
+ * then ALPHABETICALLY — so a deep-bench IR stash rostered in thirty leagues
+ * outranked a starting RB1 rostered in seven, and ties were broken by name.
+ * Nothing in that ordering knew a first-round back from a waiver flier.
+ * `overallRank` does, and it is cross-positional, so an RB and a WR can be
+ * compared at all.
+ *
+ * ⚠ FANTASYCALC ONLY, DELIBERATELY. The other ingested source is
+ * FantasyPros-derived and carries a licence restriction this product cannot
+ * meet — the same boundary lib/core-app/trades.ts draws and documents.
+ *
+ * ⚠ AND THE PRICE IS NOT YOUR LEAGUE'S PRICE. It is captured at 12 teams and
+ * full PPR, varying only dynasty/redraft and 1QB/superflex, so it is not
+ * adjusted for TE premium or your scoring. The card says so rather than
+ * implying a number tuned to a league it never saw. NFL only: FantasyCalc
+ * prices no other sport, and a missing row renders NOTHING — never a zero,
+ * never a last-place rank, because "no data" and "worthless" must not look
+ * alike.
+ *
+ * Cached like the injury feed: the answer is identical for every user, so
+ * concurrent home loads share one read.
+ */
+const readPlayerValuesCached = unstable_cache(
+  async (sleeperIds: string[], format: string, qbFormat: string) => {
+    if (sleeperIds.length === 0) return []
+    const rows = await prisma.playerValueSnapshot
+      .findMany({
+        where: { sleeperId: { in: sleeperIds }, source: 'FANTASYCALC', format, qbFormat },
+        orderBy: { capturedAt: 'desc' },
+        select: {
+          sleeperId: true,
+          value: true,
+          overallRank: true,
+          positionRank: true,
+          capturedAt: true,
+        },
+      })
+      .catch(() => [])
+    return rows.map((r) => ({
+      sleeperId: r.sleeperId,
+      value: r.value,
+      overallRank: r.overallRank,
+      positionRank: r.positionRank,
+      capturedAt: r.capturedAt.toISOString(),
+    }))
+  },
+  ['dash34-player-values'],
+  { revalidate: 60 },
+)
+
+export type PlayerValueRead = {
+  value: number
+  overallRank: number | null
+  positionRank: number | null
+  capturedAt: string
+}
+
+/** Newest capture per player. Rows arrive newest-first, so first wins. */
+async function readPlayerValues(
+  sleeperIds: string[],
+  format: 'DYNASTY' | 'REDRAFT',
+  qbFormat: 'ONE_QB' | 'SUPERFLEX',
+): Promise<Map<string, PlayerValueRead>> {
+  const out = new Map<string, PlayerValueRead>()
+  const rows = await readPlayerValuesCached([...sleeperIds].sort(), format, qbFormat).catch(() => [])
+  for (const r of rows) {
+    if (!out.has(r.sleeperId)) {
+      out.set(r.sleeperId, {
+        value: r.value,
+        overallRank: r.overallRank,
+        positionRank: r.positionRank,
+        capturedAt: r.capturedAt,
+      })
+    }
+  }
+  return out
+}
+
 const readInjuryFeedCached = unstable_cache(
   async (sports: string[]) => {
     const rows = await prisma.sportsInjury
@@ -461,6 +549,7 @@ export async function getDash34Data(
       totalLeagues: 0,
       brief: null,
       book: null,
+      valueBasis: null,
       legacyCount,
       weekLabel: null,
     }
@@ -521,17 +610,35 @@ export async function getDash34Data(
         .catch(() => [])
     : []
 
-  /** leagueId → { all players, starters } from that roster. */
-  const rosterByLeague = new Map<string, { all: string[]; starters: Set<string> }>()
+  /**
+   * leagueId → the roster, split by slot.
+   *
+   * ⚠ ALL FOUR SETS ARE KEPT, AND THREE OF THEM USED TO BE THROWN AWAY. The
+   * first cut collapsed everything into `all` + `starters`, so the book could
+   * say "starting in 4" and nothing else — a manager looking at an injured
+   * player across 61 leagues cannot act on that. "Starter in 3, bench in 5, IR
+   * in 1" is the sentence, and reserve/taxi were already parsed to build `all`.
+   */
+  const rosterByLeague = new Map<
+    string,
+    { all: string[]; starters: Set<string>; reserve: Set<string>; taxi: Set<string> }
+  >()
   const everyPlayerId = new Set<string>()
   for (const r of rosters) {
     const pd = (r.playerData ?? {}) as Record<string, unknown>
     const starters = asIds(pd.starters)
-    const all = [...new Set([...asIds(pd.players), ...starters, ...asIds(pd.reserve), ...asIds(pd.taxi)])]
+    const reserve = asIds(pd.reserve)
+    const taxi = asIds(pd.taxi)
+    const all = [...new Set([...asIds(pd.players), ...starters, ...reserve, ...taxi])]
     // First roster wins — a league should only produce one for a given user, and
     // overwriting on a duplicate would silently pick an arbitrary one.
     if (!rosterByLeague.has(r.leagueId)) {
-      rosterByLeague.set(r.leagueId, { all, starters: new Set(starters) })
+      rosterByLeague.set(r.leagueId, {
+        all,
+        starters: new Set(starters),
+        reserve: new Set(reserve),
+        taxi: new Set(taxi),
+      })
     }
     for (const id of all) everyPlayerId.add(id)
   }
@@ -704,7 +811,14 @@ export async function getDash34Data(
     description: string | null
     reportedAt: Date | null
     leagues: Set<string>
+    /** The roster id that produced this entry — the join key for value. */
+    sleeperId: string
     startingIn: number
+    benchIn: number
+    irIn: number
+    taxiIn: number
+    /** leagueId → the slot this player occupies there. */
+    slotByLeague: Map<string, 'starter' | 'bench' | 'ir' | 'taxi'>
   }
   const book = new Map<string, BookEntry>()
   /**
@@ -736,11 +850,29 @@ export async function getDash34Data(
         if (isStarter) startingUnavailable++
       }
 
+      /*
+       * One slot per player per league, decided once. Starter wins over
+       * everything (a player listed both places is playing), then IR, then
+       * taxi, then bench. A league whose roster we could not read contributes
+       * no slot at all rather than a defaulted "bench".
+       */
+      const slot: 'starter' | 'bench' | 'ir' | 'taxi' = isStarter
+        ? 'starter'
+        : roster.reserve.has(pid)
+          ? 'ir'
+          : roster.taxi.has(pid)
+            ? 'taxi'
+            : 'bench'
+
       const key = d.name.trim().toLowerCase()
       const entry = book.get(key)
       if (entry) {
         entry.leagues.add(leagueId)
-        if (isStarter) entry.startingIn++
+        entry.slotByLeague.set(leagueId, slot)
+        if (slot === 'starter') entry.startingIn++
+        else if (slot === 'ir') entry.irIn++
+        else if (slot === 'taxi') entry.taxiIn++
+        else entry.benchIn++
       } else {
         book.set(key, {
           name: d.name,
@@ -752,7 +884,12 @@ export async function getDash34Data(
           description: d.description,
           reportedAt: d.reportedAt,
           leagues: new Set([leagueId]),
-          startingIn: isStarter ? 1 : 0,
+          sleeperId: pid,
+          startingIn: slot === 'starter' ? 1 : 0,
+          benchIn: slot === 'bench' ? 1 : 0,
+          irIn: slot === 'ir' ? 1 : 0,
+          taxiIn: slot === 'taxi' ? 1 : 0,
+          slotByLeague: new Map([[leagueId, slot]]),
         })
       }
     }
@@ -985,11 +1122,47 @@ export async function getDash34Data(
    */
   const BOOK_LIMIT = 40
   const totalActive = active.length
-  const bookRows = [...book.values()]
+
+  /*
+   * ONE price scale for a cross-league list. The book spans every league at
+   * once, so it cannot use each league's own format — it picks the account's
+   * dominant one and the card names it, rather than mixing dynasty and redraft
+   * prices in a single ordering and calling the result a ranking.
+   *
+   * Superflex is not derivable here (it needs roster_positions, which this
+   * loader does not read), so ONE_QB is assumed and said out loud.
+   */
+  const dynastyCount = active.filter((row) => Boolean(row.isDynasty)).length
+  const valueFormat: 'DYNASTY' | 'REDRAFT' =
+    dynastyCount * 2 >= totalActive ? 'DYNASTY' : 'REDRAFT'
+  const bookEntries = [...book.values()]
+  const valueBySleeperId = await readPlayerValues(
+    bookEntries.map((b) => b.sleeperId).filter(Boolean),
+    valueFormat,
+    'ONE_QB',
+  )
+  const rankOf = (b: BookEntry): number | null =>
+    valueBySleeperId.get(b.sleeperId)?.overallRank ?? null
+
+  const bookRows = bookEntries
     .sort((a, b) => {
       const au = isUnavailable(a.status)
       const bu = isUnavailable(b.status)
       if (au !== bu) return au ? -1 : 1
+      /*
+       * ⚠ MARKET RANK IS THE PRIMARY ORDER, AND EXPOSURE IS A TIEBREAK. It was
+       * the other way round, which is why a bench stash held everywhere led a
+       * starting RB1. An unranked player sorts AFTER every ranked one — never
+       * to a sentinel rank, because "we hold no price" must not read as "worth
+       * nothing".
+       */
+      const ar = rankOf(a)
+      const br = rankOf(b)
+      if (ar !== br) {
+        if (ar == null) return 1
+        if (br == null) return -1
+        return ar - br
+      }
       if (b.startingIn !== a.startingIn) return b.startingIn - a.startingIn
       if (b.leagues.size !== a.leagues.size) return b.leagues.size - a.leagues.size
       return a.name.localeCompare(b.name)
@@ -1016,10 +1189,27 @@ export async function getDash34Data(
                   name: leagueDisplayName(row.name),
                   platform: String(row.platform ?? ''),
                   imageUrl: imageOf(row),
+                  /*
+                   * Which slot he occupies in THIS league — the difference
+                   * between "you must act here" and "no action needed". Null
+                   * when the roster could not be read; the chip then shows no
+                   * slot rather than defaulting to bench.
+                   */
+                  slot: b.slotByLeague.get(id) ?? null,
                 }
               : null
           })
-          .filter((x): x is { id: string; name: string; platform: string; imageUrl: string | null } => x !== null)
+          .filter(
+            (
+              x,
+            ): x is {
+              id: string
+              name: string
+              platform: string
+              imageUrl: string | null
+              slot: 'starter' | 'bench' | 'ir' | 'taxi' | null
+            } => x !== null,
+          )
           .sort((a, b2) => a.name.localeCompare(b2.name)),
         note: [b.position, b.status].filter(Boolean).join(' · '),
         /*
@@ -1042,6 +1232,29 @@ export async function getDash34Data(
         exposureTotal: totalActive,
         /* How many of those leagues have them in the lineup, not just rostered. */
         startingIn: b.startingIn,
+        /*
+         * The rest of the split. "Starting in 4" alone cannot be acted on
+         * across 61 leagues; "starter in 3, bench in 5, IR in 1" can. Reserve
+         * and taxi were already parsed to build the roster — they were simply
+         * discarded before reaching here.
+         */
+        benchIn: b.benchIn,
+        irIn: b.irIn,
+        taxiIn: b.taxiIn,
+        /*
+         * What the feed actually said, e.g. "Ruled out — ankle. Did not
+         * practice Friday." It was selected, stored and carried this far, then
+         * dropped at this map — the card had a status word and no update. Null
+         * stays null: nothing is synthesised about a timeline, because no
+         * injury table in this database holds an expected return.
+         */
+        description: b.description,
+        /*
+         * Market price and rank, or absent. See readPlayerValues for the
+         * licence boundary, the format caveat, and why a miss renders nothing
+         * at all rather than a last-place rank.
+         */
+        value: valueBySleeperId.get(b.sleeperId) ?? null,
         /*
          * ⚠ REAL OR ABSENT. `SportsInjury.date` is non-null on all 5,209 production
          * rows, so this is normally set — but it is emitted as null rather than
@@ -1265,6 +1478,11 @@ export async function getDash34Data(
     brief: null,
     chimmyBrief,
     book: bookRows.length > 0 ? bookRows : null,
+    /*
+     * What the prices on those rows actually are, so the card can say it
+     * instead of implying a number tuned to a league it never saw.
+     */
+    valueBasis: valueBySleeperId.size > 0 ? { format: valueFormat, qbFormat: 'ONE_QB' as const } : null,
     legacyCount,
     weekLabel:
       nextGame && nextGameWeek != null

@@ -1299,6 +1299,7 @@ export default async function AfCorePage({
             <Dash3ATriage
               book={(dash34.book ?? null) as unknown as TriageBookRow[] | null}
               now={now}
+              valueBasis={dash34.valueBasis ?? null}
             />
             {/*
               WHO you play this week, immediately above the section that can

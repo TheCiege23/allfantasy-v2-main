@@ -200,3 +200,42 @@
   color: var(--text);
   text-decoration: underline;
 }
+
+/* Market rank beside the exposure line. Quiet — it orders the list, it is not
+   the headline. */
+.af-triage-value {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* The feed's own sentence about what happened. */
+.af-triage-note {
+  margin: 3px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+/* Which slot he occupies in a given league. STARTER is the one that demands
+   action, so it is the only one that carries colour. */
+.af-triage-slot {
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  background: var(--chip);
+  color: var(--muted);
+}
+.af-triage-slot[data-slot='starter'] {
+  background: color-mix(in srgb, var(--bad) 20%, transparent);
+  color: var(--bad);
+}
+
+/* The price caveat, stated once for the panel. */
+.af-triage-basis {
+  margin: 8px 0 0;
+  font-size: 10.5px;
+  color: var(--muted);
+}
