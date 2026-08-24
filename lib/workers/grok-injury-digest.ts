@@ -2,6 +2,7 @@ import 'server-only'
 
 import type { GrokChatRequest, GrokChatResponse } from '@/lib/ai-external/grok-types'
 import { getGrokConfigFromEnv } from '@/lib/ai-external/grok'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { prisma } from '@/lib/prisma'
 import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
@@ -50,12 +51,11 @@ async function buildDigestForSport(sport: string): Promise<{ summary: string; bu
       take: 20,
       select: { title: true, source: true, playerName: true },
     }),
-    prisma.injuryReportRecord.findMany({
-      where: { sport, reportDate: { gte: since } },
-      orderBy: { reportDate: 'desc' },
-      take: 25,
-      select: { playerName: true, team: true, status: true, notes: true },
-    }),
+    // Canonical injury read port — TTL-respected, one row per player, freshest
+    // source wins; same 48h window via maxAgeHours.
+    listInjuryFacts({ sport, maxAgeHours: 48, limit: 25 })
+      .then((l) => l.facts)
+      .catch(() => []),
   ])
 
   if (newsRows.length === 0 && injuryRows.length === 0) return null
@@ -67,7 +67,8 @@ async function buildDigestForSport(sport: string): Promise<{ summary: string; bu
 
   const headlines = newsRows.map((n) => `- ${n.title}${n.playerName ? ` (${n.playerName})` : ''}`).join('\n')
   const injuries = injuryRows
-    .map((r) => `- ${r.playerName} ${r.team}: ${r.status}${r.notes ? ` — ${r.notes.slice(0, 120)}` : ''}`)
+    .filter((r) => typeof r.status === 'string' && r.status.trim())
+    .map((r) => `- ${r.playerName}${r.team ? ` ${r.team}` : ''}: ${r.status}${r.description ? ` — ${r.description.slice(0, 120)}` : ''}`)
     .join('\n')
 
   const body: GrokChatRequest = {

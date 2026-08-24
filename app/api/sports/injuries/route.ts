@@ -28,17 +28,14 @@ export const GET = withApiUsage({ endpoint: "/api/sports/injuries", tool: "Sport
     }
 
     const normalizedTeam = team ? normalizeTeamAbbrev(team) || team : null;
-    const normalizedInjurySport = parsedSport.isWorldCup ? 'WC_SOCCER' : parsedSport.sport;
 
-    const reportWhere: Record<string, unknown> = {
-      sport: normalizedInjurySport,
-    };
-    if (normalizedTeam) reportWhere.team = normalizedTeam;
-    if (player) reportWhere.playerName = { contains: player, mode: 'insensitive' };
-
-    // Slice 18 follow-on — sportsInjury reads go through the canonical injury
-    // read port: TTL-respected, ONE row per player, freshest source wins.
-    // The old ad-hoc query returned expired rows and provider duplicates.
+    // Slice 18 follow-on — regular sports are served solely by the canonical
+    // injury read port: TTL-respected, ONE row per player, freshest source
+    // wins. The InjuryReportRecord leg survives ONLY for World Cup: WC_SOCCER
+    // rows are actively written by worldCupDataSyncService and have no
+    // SportsInjury writer, while for every other sport injury_reports has no
+    // scheduled writer (measured 103.8 days stale in prod) and only
+    // re-introduced the stale duplicates the port exists to retire.
     const [factList, injuryReports] = await Promise.all([
       listInjuryFacts({
         sport: parsedSport.sport,
@@ -46,11 +43,17 @@ export const GET = withApiUsage({ endpoint: "/api/sports/injuries", tool: "Sport
         playerNameContains: player,
         limit: 300,
       }),
-      prisma.injuryReportRecord.findMany({
-        where: reportWhere,
-        orderBy: { reportDate: 'desc' },
-        take: 300,
-      }),
+      parsedSport.isWorldCup
+        ? prisma.injuryReportRecord.findMany({
+            where: {
+              sport: 'WC_SOCCER',
+              ...(normalizedTeam ? { team: normalizedTeam } : {}),
+              ...(player ? { playerName: { contains: player, mode: 'insensitive' as const } } : {}),
+            },
+            orderBy: { reportDate: 'desc' },
+            take: 300,
+          })
+        : Promise.resolve([]),
     ]);
 
     const sportsInjuries = factList.facts.map((f) => ({

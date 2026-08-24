@@ -4,6 +4,7 @@
  */
 
 import { prisma } from '@/lib/prisma'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { classifyAvatarSource } from '@/lib/draft-room/classify-avatar-source'
 import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
 import { normalizePlayerList, type NormalizedDraftEntry } from '@/lib/draft-asset-pipeline'
@@ -193,11 +194,6 @@ function injuryNameTeamKey(name: string | null | undefined, team: string | null 
 
 function injuryNameKey(name: string | null | undefined): string {
   return canonicalName(name)
-}
-
-function inferCurrentNflWeek(date: Date = new Date()): number {
-  const day = date.getUTCDate()
-  return Math.max(1, Math.min(18, Math.ceil(day / 7)))
 }
 
 /**
@@ -842,51 +838,28 @@ export async function getResolvedDraftPoolForLeague(
   const injuryByName = new Map<string, InjuryLookupRow>()
   /** Names held by more than one distinct athlete — never bind these by name alone. */
   const injuryNameCollisions = new Set<string>()
-  const injuryRecentCutoff = new Date(Date.now() - 21 * 24 * 60 * 60 * 1000)
-  const inferredWeek = sport === 'NFL' ? inferCurrentNflWeek() : null
   try {
-    const perfInjuries = perfStart(`5a. injuryReportRecord batch load (${sport})`)
-    const injuryRows = await prisma.injuryReportRecord.findMany({
-      where: {
-        sport,
-        ...(typeof inferredWeek === 'number'
-          ? {
-              OR: [
-                { week: inferredWeek },
-                { reportDate: { gte: injuryRecentCutoff } },
-              ],
-            }
-          : {
-              reportDate: { gte: injuryRecentCutoff },
-            }),
-      },
-      orderBy: [{ reportDate: 'desc' }],
-      select: {
-        playerId: true,
-        playerName: true,
-        team: true,
-        status: true,
-        bodyPart: true,
-        notes: true,
-        gameStatus: true,
-        reportDate: true,
-        week: true,
-      },
-      take: 8000,
-    })
+    // Canonical injury read port — TTL-respected, ONE row per player, freshest
+    // source wins. Replaces the InjuryReportRecord batch load (no scheduled
+    // writer; measured 103.8 days stale in prod). Facts carry no provider
+    // playerId, so the id tier below simply never populates and binding runs
+    // on the verified name+team / collision-refusing name tiers — the tiers
+    // that already carried the Slice 15 protections.
+    const perfInjuries = perfStart(`5a. injury read port batch load (${sport})`)
+    const factList = await listInjuryFacts({ sport, maxAgeHours: 21 * 24, limit: 1000 })
     perfInjuries()
 
-    for (const row of injuryRows) {
+    for (const f of factList.facts) {
       const injuryRow: InjuryLookupRow = {
-        playerId: String(row.playerId ?? '').trim(),
-        playerName: String(row.playerName ?? '').trim(),
-        team: String(row.team ?? '').trim(),
-        status: String(row.status ?? '').trim(),
-        bodyPart: row.bodyPart ?? null,
-        notes: row.notes ?? null,
-        gameStatus: row.gameStatus ?? null,
-        reportDate: row.reportDate,
-        week: row.week ?? null,
+        playerId: '',
+        playerName: String(f.playerName ?? '').trim(),
+        team: String(f.team ?? '').trim(),
+        status: typeof f.status === 'string' ? f.status.trim() : '',
+        bodyPart: f.type ?? null,
+        notes: f.description ?? null,
+        gameStatus: null,
+        reportDate: f.fetchedAt,
+        week: f.week ?? null,
       }
       if (!injuryRow.status || !injuryRow.playerName) continue
 
@@ -914,7 +887,7 @@ export async function getResolvedDraftPoolForLeague(
       }
     }
   } catch (error) {
-    console.warn('[draft-pool] injuryReportRecord batch lookup failed; falling back to existing injury fields', {
+    console.warn('[draft-pool] injury read port batch lookup failed; falling back to existing injury fields', {
       leagueId,
       sport,
       error: error instanceof Error ? error.message : String(error),

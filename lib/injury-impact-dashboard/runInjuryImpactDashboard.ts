@@ -5,6 +5,7 @@ import type { LeagueToolAccessErrorCode } from '@/lib/ai-tools/league-tool-conte
 import { leagueToolAccessUserMessage } from '@/lib/ai-tools/league-tool-access-messages'
 import { assertLeagueMemberWithCode } from '@/lib/league/league-access'
 import { openaiChatText } from '@/lib/openai-client'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { prisma } from '@/lib/prisma'
 import { getRosterPlayerIds } from '@/lib/waiver-wire/roster-utils'
 import { attachIntelligenceToChimmyPayload, buildAiToolPayload } from '@/lib/intelligence'
@@ -138,7 +139,9 @@ function rowFromInjuryReport(
   const urg = clamp((baseScoreFromBucket(bucket) / 100) * (opts.isStarter ? 92 : 55), 0, 100)
   const conf = 0.72
   return {
-    playerKey: `${r.sport}:${r.playerId}`,
+    // Port-sourced rows may carry no roster-resolvable playerId — fall back to
+    // the name so distinct players never collapse onto one key.
+    playerKey: `${r.sport}:${r.playerId || r.playerName.toLowerCase()}`,
     name: r.playerName,
     position: '—',
     team: r.team,
@@ -296,15 +299,20 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
 
   const sportWhere = { in: sports as unknown as string[] }
 
-  const [injuryReports, playerInjuries] = await Promise.all([
-    prisma.injuryReportRecord.findMany({
-      where: {
-        sport: sportWhere,
-        reportDate: { gte: since },
-      },
-      orderBy: { reportDate: 'desc' },
-      take: 120,
-    }),
+  // Canonical injury read port (sport-scoped, so one call per sport):
+  // TTL-respected, ONE row per player, freshest source wins. The horizon
+  // window is preserved via maxAgeHours; facts are re-shaped to the
+  // InjuryReportRecord contract below, once the roster identity maps exist.
+  const horizonMaxAgeHours = Math.max(1, Math.ceil((Date.now() - since.getTime()) / 3_600_000))
+  const [factListsBySport, playerInjuries] = await Promise.all([
+    Promise.all(
+      sports.map(async (s) => ({
+        sport: s,
+        facts: await listInjuryFacts({ sport: s, maxAgeHours: horizonMaxAgeHours, limit: 120 })
+          .then((l) => l.facts)
+          .catch(() => []),
+      })),
+    ),
     prisma.sportsPlayerRecord.findMany({
       where: {
         sport: sportWhere,
@@ -330,6 +338,38 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
     if (sp.externalId) nameByRosterId.set(sp.externalId, sp.name)
   }
 
+  const rosterIdByName = new Map<string, string>()
+  for (const sp of sportsPlayers) {
+    const rid = sp.sleeperId ?? sp.externalId
+    if (rid && !rosterIdByName.has(sp.name.toLowerCase())) rosterIdByName.set(sp.name.toLowerCase(), rid)
+  }
+
+  // Port facts re-shaped to the InjuryReportRecord contract the row builders
+  // consume. `playerId` is recovered from the roster identity map by name where
+  // possible so league-scoped roster/starter matching keeps working (the raw
+  // injury_reports provider playerId never matched roster ids either — see
+  // ADR_F2_3_INJURY_STATUS.md). Null-status facts ("no designation stated")
+  // are dropped rather than coerced into a fake status.
+  const injuryReports: InjuryReportRecord[] = factListsBySport.flatMap(({ sport: factSport, facts }) =>
+    facts
+      .filter((f) => typeof f.status === 'string' && f.status.trim())
+      .map((f) => ({
+        id: f.id,
+        sport: factSport,
+        playerId: rosterIdByName.get(f.playerName.trim().toLowerCase()) ?? '',
+        playerName: f.playerName,
+        team: f.team ?? '',
+        status: typeof f.status === 'string' ? f.status : '',
+        bodyPart: f.type,
+        notes: f.description,
+        practice: null,
+        gameStatus: null,
+        reportDate: f.fetchedAt,
+        week: f.week,
+        createdAt: f.fetchedAt,
+      })),
+  )
+
   const isOnRoster = (playerId: string, playerName: string): boolean => {
     if (rosterSet.size === 0) return false
     if (rosterSet.has(playerId)) return true
@@ -350,7 +390,9 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
 
   const injByPlayer = new Map<string, InjuryReportRecord>()
   for (const r of injuryReports) {
-    const k = `${r.sport}:${r.playerId}`
+    // Port rows may carry no roster-resolvable playerId — key by name then,
+    // so distinct players never collapse onto the '' id.
+    const k = `${r.sport}:${r.playerId || r.playerName.toLowerCase()}`
     if (!injByPlayer.has(k)) injByPlayer.set(k, r)
   }
 
@@ -661,7 +703,7 @@ export async function runInjuryImpactDashboard(input: InjuryImpactDashboardInput
       `Injury feed is ${staleHours}h stale (latest report ${feedFreshness.latestReportDateIso ?? 'n/a'}). Recency-sensitive calls should verify with provider.`,
     )
   } else if (feedFreshness.latestReportDateIso == null) {
-    dataGaps.push('No injury_report rows returned for this scope — relying on sports_players injuryStatus only.')
+    dataGaps.push('No injury rows returned by the injury read port for this scope — relying on sports_players injuryStatus only.')
   }
 
   let aiEnvelope: AiToolPayloadEnvelope | null = null

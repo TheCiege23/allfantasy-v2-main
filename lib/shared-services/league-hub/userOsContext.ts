@@ -11,6 +11,8 @@
  * looks identical to "nothing to recommend right now."
  */
 import { prisma } from '@/lib/prisma'
+import { resolveInjuryFacts } from '@/lib/injuries/injuryReadPort'
+import { normalizeMatchName } from '@/lib/player-match/verifiedNameMatch'
 import { resolveActiveLeagueContext } from './activeLeagueContext'
 import { resolveRedraftCurrentWeek } from '@/lib/redraft/resolveRedraftCurrentWeek'
 import { isDomainSupportedForSport, NFL_ONLY_DOMAINS_LIST } from './sportSupport'
@@ -72,7 +74,7 @@ export interface UserOsContext {
   } | null
   /** Every team's real standing — used for strategy/playoff-path context, never another team's private roster contents. */
   standings: UserOsTeamStanding[]
-  /** Live `InjuryReportRecord` rows for every player id appearing in the viewer's own lineup — keyed for O(1) lookup. */
+  /** Live injury facts from the canonical injury read port for every player in the viewer's own lineup — keyed by lineup player id for O(1) lookup. */
   injuryByPlayerId: Map<string, UserOsInjuryRecord>
   syncFreshness: SyncFreshness
   /** Cached `SeasonForecastSnapshot` (read-only — this assembler never triggers a new simulation). Null when none exists yet. */
@@ -171,31 +173,31 @@ export async function assembleUserOsContext(args: {
       }
     : null
 
-  const lineupPlayerIds = lineup
-    ? [...lineup.starters, ...lineup.bench, ...lineup.ir].map((p) => p.id).filter(Boolean)
+  const lineupPlayers = lineup
+    ? [...lineup.starters, ...lineup.bench, ...lineup.ir].filter((p) => p.id)
     : []
-  const injuryRows = lineupPlayerIds.length
-    ? await prisma.injuryReportRecord
-        .findMany({
-          // Slice 15 (wrong-row joins): `sport` was missing, so a provider id
-          // that collides across sports could attach another sport's athlete's
-          // injury to this lineup. InjuryReportRecord.sport exists and is
-          // filtered by every other consumer.
-          where: { sport: active.sport, playerId: { in: lineupPlayerIds } },
-          orderBy: { reportDate: 'desc' },
-          select: { playerId: true, status: true, gameStatus: true, reportDate: true },
-        })
-        .catch(() => [])
-    : []
+  // Canonical injury read port — verified name match (position/team disambiguate,
+  // ambiguous names REFUSE), TTL-respected, freshest source wins. Replaces the
+  // InjuryReportRecord playerId join: those provider ids are documented
+  // (ADR_F2_3_INJURY_STATUS.md) to NOT match roster player ids, and the table
+  // was measured 103.8 days stale in prod on 2026-08-10.
+  const injuryResolution = lineupPlayers.length
+    ? await resolveInjuryFacts({
+        sport: String(active.sport ?? 'NFL'),
+        players: lineupPlayers.map((p) => ({ name: p.name, position: p.position || null, team: p.team || null })),
+      }).catch(() => null)
+    : null
   const injuryByPlayerId = new Map<string, UserOsInjuryRecord>()
-  for (const row of injuryRows) {
-    // Rows are ordered newest-first; keep only the first (most recent) per player.
-    if (!injuryByPlayerId.has(row.playerId)) {
-      injuryByPlayerId.set(row.playerId, {
-        playerId: row.playerId,
-        status: row.status,
-        gameStatus: row.gameStatus,
-        reportDate: row.reportDate.toISOString(),
+  for (const p of lineupPlayers) {
+    const fact = injuryResolution?.byPlayer.get(normalizeMatchName(p.name))
+    // A fact with a null status is "no designation stated" — not a claim to keep.
+    if (!fact || typeof fact.status !== 'string' || !fact.status.trim()) continue
+    if (!injuryByPlayerId.has(p.id)) {
+      injuryByPlayerId.set(p.id, {
+        playerId: p.id,
+        status: fact.status,
+        gameStatus: null,
+        reportDate: fact.fetchedAt.toISOString(),
       })
     }
   }
