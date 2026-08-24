@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { getRecentTrades } from './recentTrades'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import { getRivalRecords } from '@/lib/core-app/dash3aPanels'
 import { getDraftHqAll } from './draftHqAll'
@@ -290,6 +291,8 @@ export async function getLeagueHomeData(
       sport: true,
       season: true,
       leagueType: true,
+      /* The trade-grade cache is keyed by the platform's league id. */
+      platformLeagueId: true,
       updatedAt: true,
       // Where the league is in its year. `status` is written by the platform import;
       // `lifecycleState` is our own state machine, which has never run for imported
@@ -319,6 +322,33 @@ export async function getLeagueHomeData(
    */
   const stage = resolveLeagueStage(league)
   const preSeason = isPreDraftOrDrafting(league)
+
+  /*
+   * League buzz, from the trades the grade sweep has already resolved. One
+   * cache read; nothing is recomputed here. A pick is named as a pick — the
+   * two managers traded the pick, and resolving it to whoever it later became
+   * would rewrite the deal they made.
+   */
+  const recentTrades = await getRecentTrades(
+    [{ id: league.id, name: league.name ?? 'League', platformLeagueId: league.platformLeagueId }],
+    new Date(),
+    6,
+  ).catch(() => [])
+  const buzzRows = recentTrades.map((t) => ({
+    id: t.id,
+    actor: t.sides.map((sd) => sd.teamName || sd.managerName).join(' ⇄ '),
+    text: t.sides
+      .map(
+        (sd) =>
+          `${sd.teamName || sd.managerName} got ${
+            sd.received.length > 0
+              ? sd.received.map((a) => a.name).join(', ')
+              : 'nothing we can name'
+          }`,
+      )
+      .join(' · '),
+    at: new Date(t.acceptedAt),
+  }))
 
   const teams = await prisma.leagueTeam.findMany({
     where: { leagueId },
@@ -547,9 +577,26 @@ export async function getLeagueHomeData(
       : { available: false, reason: 'no draft has been set up for this league' },
     commissioner: { available: false, reason: 'votes and commissioner tasks are not ingested for imported leagues' },
     rivalry: resolvedRivalry,
-    buzz: preSeason
-      ? { available: false, reason: 'no league activity yet — trades and waivers start after the draft' }
-      : { available: false, reason: 'league transactions are not ingested for this platform yet' },
+    /*
+     * ⚠ THIS WAS HARD-CODED UNAVAILABLE, AND ITS STATED REASON WAS FALSE:
+     * "league transactions are not ingested for this platform yet". They are.
+     * The trade-grade sweep resolves both sides of every trade in every
+     * imported Sleeper league every 30 minutes and caches the result; this
+     * screen simply never looked. The remaining honest gap is narrower and now
+     * says so — waivers and roster moves are not read, only completed trades.
+     */
+    buzz:
+      buzzRows.length > 0
+        ? { available: true, data: buzzRows }
+        : preSeason
+          ? {
+              available: false,
+              reason: 'no league activity yet — trades and waivers start after the draft',
+            }
+          : {
+              available: false,
+              reason: 'no completed trade in the last two weeks — waivers and roster moves are not read',
+            },
     syncAge: { label: age.label, stale: age.stale },
   }
 }

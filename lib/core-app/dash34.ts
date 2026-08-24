@@ -1504,7 +1504,14 @@ export async function getDash34Data(
       { label: 'AF projections', reason: 'requires per-league scoring rules and a synced roster' },
       { label: 'Records and standings', reason: 'no league result has been read yet' },
       { label: 'Empty lineup slots', reason: 'no lineup reader for imported leagues yet' },
-      { label: 'Trade offers and waiver claims', reason: 'pending transactions are not ingested' },
+      /*
+       * ⚠ NARROWED, BECAUSE THE OLD WORDING WAS FALSE. Completed trades ARE
+       * ingested and graded every 30 minutes, and the home now renders them —
+       * see lib/core-app/recentTrades. What genuinely is not read is the
+       * PENDING side: an offer sitting in your inbox, and a waiver claim before
+       * it processes.
+       */
+      { label: 'Pending trade offers and waiver claims', reason: 'only completed transactions are read' },
       { label: 'League chatter', reason: 'Discord and platform chat are not ingested' },
     ],
   }

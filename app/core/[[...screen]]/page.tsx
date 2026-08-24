@@ -62,6 +62,8 @@ import { getRankingsData, getCompareData, type CompareResult } from '@/lib/core-
 import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
 import { getPlayFeed } from '@/lib/live/playFeedPresentation'
+import { getRecentTrades } from '@/lib/core-app/recentTrades'
+import { DashTradeBand } from '@/components/core-app/screens/DashTradeBand'
 import { hasRegularSeasonStarted } from '@/lib/core-app/seasonPhase'
 import { DashGameDayBand } from '@/components/core-app/screens/DashGameDayBand'
 import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
@@ -610,6 +612,7 @@ export default async function AfCorePage({
     homeStrip,
     homePlays,
     homeRegularSeason,
+    homeTrades,
   ] = isHome3a
     ? await Promise.all([
         getCareerData(userId).catch(() => null),
@@ -659,8 +662,21 @@ export default async function AfCorePage({
          * nothing per viewer.
          */
         hasRegularSeasonStarted('NFL').catch(() => false),
+        /*
+         * Trades that landed in the last fortnight. Reads the cache the
+         * 30-minute grade sweep already fills — see lib/core-app/recentTrades
+         * for why the product has been telling users this data does not exist.
+         */
+        getRecentTrades(
+          playedLeagues.map((l) => ({
+            id: l.id,
+            name: l.name,
+            platformLeagueId: (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
+          })),
+          now,
+        ).catch(() => []),
       ])
-    : [null, null, null, null, null, null, null, [], false]
+    : [null, null, null, null, null, null, null, [], false, []]
 
   /*
    * ⚠ PRICE THE CARDS THAT RENDER, NOT THE FIRST FOUR LEAGUES. Dashboard3A's
@@ -1271,6 +1287,13 @@ export default async function AfCorePage({
               regularSeasonUnderway={homeRegularSeason}
             />
             <DashDraftsBand data={homeDrafts} now={now} />
+            {/*
+              A trade landing is news the moment it lands, and it was the one
+              thing the founder named that no surface showed at all. Below the
+              live/draft bands because it is not a deadline; above the brief
+              because it is a fact about his leagues, not a summary of them.
+            */}
+            <DashTradeBand trades={homeTrades} now={now} />
             {/*
               34a's four unique sections (first-lock band, honesty notice,
               Chimmy brief, coverage list) — carried over so the cutover

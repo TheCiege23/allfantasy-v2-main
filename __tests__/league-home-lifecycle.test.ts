@@ -58,13 +58,26 @@ describe('league home: a pre-season league is not a broken one', () => {
   })
 
   it('says there are no matchups yet rather than none ingested', () => {
-    expect(SRC).toMatch(/matchup: preSeason/)
+    // Asserts the WORDING, not the expression shape: the matchup section was
+    // later lifted into `resolvedMatchup`, which is the same behaviour written
+    // differently, and a scan pinned to `matchup: preSeason` failed on a
+    // refactor that changed nothing a user can see.
     expect(SRC).toContain('no matchups yet')
+    // The preseason branch is what produces that wording.
+    expect(SRC).toContain("preSeason")
+    expect(SRC).toMatch(/reason: 'no matchups yet/)
   })
 
   it('says activity starts after the draft rather than blaming the platform', () => {
-    expect(SRC).toMatch(/buzz: preSeason/)
     expect(SRC).toContain('trades and waivers start after the draft')
+    /*
+     * And the in-season branch must no longer claim the platform's
+     * transactions are unread. They ARE read — the trade-grade sweep resolves
+     * both sides of every trade every 30 minutes — and `buzz` now renders
+     * them. The only honest remaining gap is narrower.
+     */
+    expect(SRC).not.toMatch(/reason: 'league transactions are not ingested for this platform yet'/)
+    expect(SRC).toContain('waivers and roster moves are not read')
   })
 
   it('exposes the stage so the screen can compose, not just re-word', () => {

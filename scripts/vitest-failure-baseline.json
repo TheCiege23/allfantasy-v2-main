@@ -1,6 +1,6 @@
 {
   "note": "Test files already failing when the vitest ratchet was introduced. Shrink this list; never grow it.",
-  "count": 103,
+  "count": 102,
   "failingFiles": [
     "__tests__/active-nav-state-resolver.test.ts",
     "__tests__/admin-page-render.test.tsx",
@@ -48,7 +48,6 @@
     "__tests__/league-create-defaults-api.test.ts",
     "__tests__/league-create-sleeper-import.test.ts",
     "__tests__/league-foundation-defaults.test.ts",
-    "__tests__/league-home-lifecycle.test.ts",
     "__tests__/league-import-commissioner-gate.test.ts",
     "__tests__/league-intro-routes.test.ts",
     "__tests__/league-post-create-handoff-props.test.ts",
