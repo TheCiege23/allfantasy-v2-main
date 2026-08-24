@@ -44,6 +44,9 @@ export const INJURY_STALE_AFTER_HOURS = 36
 /** Source preference when the same player appears from multiple providers. */
 const SOURCE_RANK: Record<string, number> = {
   rolling_insights: 100,
+  // Game-window fold written by /api/cron/alert-sweep from Sleeper's live
+  // players blob — trusted above api_sports, below a same-instant RI row.
+  sleeper_live: 75,
   api_sports: 50,
 }
 

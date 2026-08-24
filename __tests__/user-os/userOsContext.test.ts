@@ -3,6 +3,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+vi.mock('server-only', () => ({}))
+
 const { leagueFindUnique, leagueTeamFindMany, rosterFindFirst, rosterFindFirstForContext, injuryFindMany, forecastFindFirst } =
   vi.hoisted(() => ({
     leagueFindUnique: vi.fn(),
@@ -24,7 +26,7 @@ vi.mock('@/lib/prisma', () => ({
       if (select && 'playerData' in select) return rosterFindFirstForContext(...args)
       return rosterFindFirst(...args)
     } },
-    injuryReportRecord: { findMany: injuryFindMany },
+    sportsInjury: { findMany: injuryFindMany },
     seasonForecastSnapshot: { findFirst: forecastFindFirst },
   },
 }))
@@ -109,16 +111,17 @@ describe('assembleUserOsContext', () => {
     expect(result?.scoring).toBe('Half-PPR')
   })
 
-  it('cross-references live InjuryReportRecord for lineup player ids, keeping only the most recent row per player', async () => {
+  it('cross-references the canonical injury read port for lineup players, keyed by lineup player id (freshest row wins)', async () => {
     leagueFindUnique
       .mockResolvedValueOnce(baseLeague({ userId: 'owner-1', teams: [{ id: 'team-1', isCommissioner: true, isCoCommissioner: false }] }))
       .mockResolvedValueOnce({ isDynasty: false, playoffTeams: 4, playoffStartWeek: 14 })
     rosterFindFirstForContext.mockResolvedValue({
       playerData: { lineup_sections: { starters: [{ id: 'p1', name: 'Player One', position: 'RB', status: 'healthy' }], bench: [], ir: [] } },
     })
+    const factBase = { type: null, description: null, date: null, week: null, team: null, position: 'RB' }
     injuryFindMany.mockResolvedValue([
-      { playerId: 'p1', status: 'questionable', gameStatus: 'game_status', reportDate: new Date('2026-07-11T00:00:00Z') },
-      { playerId: 'p1', status: 'out', gameStatus: null, reportDate: new Date('2026-07-12T00:00:00Z') },
+      { ...factBase, playerName: 'Player One', status: 'questionable', source: 'rolling_insights', fetchedAt: new Date('2026-07-12T00:00:00Z') },
+      { ...factBase, playerName: 'Player One', status: 'out', source: 'api_sports', fetchedAt: new Date('2026-07-11T00:00:00Z') },
     ])
     const { assembleUserOsContext } = await import('@/lib/shared-services/league-hub/userOsContext')
     const result = await assembleUserOsContext({ appUserId: 'owner-1', canonicalLeagueId: 'league-1' })

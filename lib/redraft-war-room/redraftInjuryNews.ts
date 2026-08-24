@@ -1,18 +1,17 @@
 /**
  * REDRAFT INJURY / NEWS LOOKUP — real, sport-isolated, deterministic.
  *
- * The native injury/news provider data lives in `InjuryReportRecord` (injury_reports)
- * and `PlayerNewsRecord` (player_news), populated by the import-injuries / import-news
- * cron sync. (The `sports_core_*` mirror tables are a separate platform-backend
- * foundation that is not migrated in every environment — we read the populated
- * provider tables instead.) Joins are by normalized player name because these rows
- * frequently carry an empty provider playerId.
+ * Injury data comes from the canonical injury read port (`lib/injuries/injuryReadPort`,
+ * backed by `SportsInjury`, fed by the 15-minute import-injuries cron); news lives in
+ * `PlayerNewsRecord` (player_news), populated by the import-news cron sync. Joins are
+ * by normalized player name because provider rows frequently carry an empty playerId.
  *
  * No fabrication: when a player has no matching report, their injury status stays
  * whatever the roster row already had (often null). Names like "Unknown Player" /
  * "General Update" are ignored.
  */
 import { prisma } from '@/lib/prisma'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 
 function normName(name: string): string {
   return String(name ?? '').trim().toLowerCase()
@@ -47,25 +46,22 @@ function sportVariants(sport: string): string[] {
 export async function fetchRedraftInjuryNews(sport: string): Promise<RedraftInjuryNews> {
   const sports = sportVariants(sport)
 
-  const injuryRows = await prisma.injuryReportRecord
-    .findMany({
-      where: { sport: { in: sports } },
-      select: { playerName: true, status: true, gameStatus: true, reportDate: true },
-      orderBy: { reportDate: 'desc' },
-      take: 2000,
-    })
-    .catch(() => [])
+  // Canonical injury read port — TTL-respected, one row per player, freshest
+  // source wins. Replaces the InjuryReportRecord read (measured 103.8 days
+  // stale in prod on 2026-08-10). The port already collapses per player, so
+  // first-hit-wins below only guards against normName-level collisions.
+  const factList = await listInjuryFacts({ sport, limit: 1000 }).catch(() => null)
 
   const injuryByName = new Map<string, RedraftInjuryEntry>()
   let injuriesAsOf: Date | null = null
-  for (const r of injuryRows) {
-    const key = normName(r.playerName)
+  for (const f of factList?.facts ?? []) {
+    const key = normName(f.playerName)
     if (IGNORE_NAMES.has(key)) continue
-    if (!r.status || !r.status.trim()) continue
+    if (typeof f.status !== 'string' || !f.status.trim()) continue
     if (!injuryByName.has(key)) {
-      injuryByName.set(key, { status: r.status, gameStatus: r.gameStatus ?? null, reportDate: r.reportDate })
+      injuryByName.set(key, { status: f.status, gameStatus: null, reportDate: f.fetchedAt })
     }
-    if (!injuriesAsOf || r.reportDate > injuriesAsOf) injuriesAsOf = r.reportDate
+    if (!injuriesAsOf || f.fetchedAt > injuriesAsOf) injuriesAsOf = f.fetchedAt
   }
 
   const latestNews = await prisma.playerNewsRecord

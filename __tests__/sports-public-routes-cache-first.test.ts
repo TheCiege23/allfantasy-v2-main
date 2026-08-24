@@ -173,11 +173,7 @@ describe('public sports data routes are cache-first', () => {
         where: expect.objectContaining({ sport: 'NBA' }),
       })
     )
-    expect(prismaMock.injuryReportRecord.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({ sport: 'NBA' }),
-      })
-    )
+    expect(prismaMock.injuryReportRecord.findMany).not.toHaveBeenCalled()
     expect(body.sport).toBe('NBA')
     expect(body.injuries).toHaveLength(1)
     expect(body.refreshed).toBe(false)

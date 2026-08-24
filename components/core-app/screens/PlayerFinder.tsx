@@ -536,12 +536,73 @@ export function PlayerFinder({
             </section>
 
             {/* ── Recommended moves ─────────────────────────────────── */}
+            {/*
+              The outside half of the move. The bench swap is priced per league
+              in "What this means for your teams" above; this names who is
+              UNROSTERED and better, and where the claim actually happens.
+              ⚠ Deltas here are STANDARD scoring — the engine prices the open
+              pool against the one projection feed — so the head says so rather
+              than letting them read as league-scored like the section above.
+            */}
             <section className="af-pf-block">
               <h3 className="af-label">Recommended moves</h3>
-              <Unavailable reason={gatedReason(detail.recommendedMoves)} />
+              {detail.recommendedMoves.available ? (
+                <ul className="af-pf-impact-list">
+                  {detail.recommendedMoves.data.map((mv) => (
+                    <li key={mv.leagueId} className="af-pf-impact-row">
+                      <div className="af-pf-impact-head">
+                        <span className="af-pf-impact-platform">{mv.platform.toUpperCase()}</span>
+                        <span className="af-pf-league-name">{mv.leagueName}</span>
+                        {mv.projectionWeek != null ? (
+                          <em className="af-pf-impact-pts-note">
+                            best available · week {mv.projectionWeek} · standard scoring
+                          </em>
+                        ) : null}
+                      </div>
+                      <ul className="af-pf-swap-list">
+                        {mv.freeAgents.map((fa) => (
+                          <li key={fa.playerId} className="af-pf-swap">
+                            <span className="af-pf-swap-name">{fa.name}</span>
+                            <span className="af-pf-swap-meta">
+                              {[fa.position, 'unrostered'].filter(Boolean).join(' · ')}
+                            </span>
+                            <span className="af-pf-swap-pts af-num">
+                              {fa.projectedPoints.toFixed(1)}
+                              {fa.delta != null ? (
+                                <em className="af-pf-swap-delta" data-up={fa.delta > 0}>
+                                  {fa.delta > 0 ? '+' : ''}
+                                  {fa.delta.toFixed(1)}
+                                </em>
+                              ) : null}
+                            </span>
+                            {mv.claimTarget.kind === 'native' ? (
+                              <a
+                                className="af-pf-link"
+                                href={`${mv.claimTarget.url}&playerId=${encodeURIComponent(fa.playerId)}`}
+                              >
+                                Claim →
+                              </a>
+                            ) : mv.claimTarget.kind === 'provider' ? (
+                              <a
+                                className="af-pf-link"
+                                href={mv.claimTarget.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                Claim on {mv.claimTarget.provider} →
+                              </a>
+                            ) : null}
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <Unavailable reason={gatedReason(detail.recommendedMoves)} />
+              )}
               <p className="af-pf-readonly-note">
-                When these land they will name the platform and screen — you make the change there.
-                AllFantasy only reads your leagues.
+                Claims happen on the named platform — AllFantasy only reads your leagues.
               </p>
             </section>
           </section>

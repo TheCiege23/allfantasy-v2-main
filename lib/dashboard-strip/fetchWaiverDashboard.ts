@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { getTrendingPlayers } from '@/lib/sleeper-client'
 import { getLeagueRosters } from '@/lib/api-cache/SleeperCacheLayer'
 import type { WaiverDashboardResponse, WaiverDrop, WaiverLeagueRec, WaiverPickup } from '@/app/dashboard/dashboardStripApiTypes'
@@ -28,8 +29,6 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
     select: { sleeperUserId: true },
   })
   const sleeperUserId = profile?.sleeperUserId?.trim() || null
-
-  const sinceInjury = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const leagues = await prisma.league.findMany({
     // Stable, total ordering: season and id are non-null and id is unique, so
@@ -63,33 +62,30 @@ export async function fetchWaiverDashboard(userId: string): Promise<WaiverDashbo
   const recommendations: WaiverLeagueRec[] = []
   const sportsInLeagues = Array.from(new Set(leagues.map((l) => String(l.sport))))
 
+  // Canonical injury read port (sport-scoped, so one call per sport):
+  // TTL-respected, one row per player, freshest source wins. Preserves the
+  // 7-day pulse window via maxAgeHours and the 40-row cap after merging.
   const injuryPulse =
     sportsInLeagues.length > 0
-      ? await prisma.injuryReportRecord
-          .findMany({
-            where: {
-              sport: { in: sportsInLeagues },
-              reportDate: { gte: sinceInjury },
-            },
-            orderBy: { reportDate: 'desc' },
-            take: 40,
-            select: {
-              sport: true,
-              playerName: true,
-              team: true,
-              status: true,
-              reportDate: true,
-            },
-          })
-          .then((rows) =>
-            rows.map((r) => ({
-              sport: r.sport,
-              playerName: r.playerName,
-              team: r.team,
-              status: r.status,
-              reportDate: r.reportDate.toISOString(),
-            }))
+      ? (
+          await Promise.all(
+            sportsInLeagues.map(async (sport) => {
+              const factList = await listInjuryFacts({ sport, maxAgeHours: 7 * 24, limit: 40 }).catch(() => null)
+              return (factList?.facts ?? [])
+                .filter((f) => typeof f.status === 'string' && f.status.trim())
+                .map((f) => ({
+                  sport,
+                  playerName: f.playerName,
+                  team: f.team ?? '',
+                  status: String(f.status),
+                  reportDate: f.fetchedAt.toISOString(),
+                }))
+            })
           )
+        )
+          .flat()
+          .sort((a, b) => (a.reportDate < b.reportDate ? 1 : a.reportDate > b.reportDate ? -1 : 0))
+          .slice(0, 40)
       : []
 
   for (const league of leagues) {
