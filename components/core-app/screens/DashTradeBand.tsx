@@ -12,13 +12,18 @@ import type { RecentTrade } from '@/lib/core-app/recentTrades'
  * trade-grade sweep was resolving both sides of every trade, down to the
  * individual draft picks, every thirty minutes. See lib/core-app/recentTrades.
  *
- * ⚠ WHO GOT WHAT, AND NO GRADE. The sweep's letter is retrospective, scored on
- * points already realised: days after a trade it is measuring nearly nothing,
- * and a 2027 pick contributes zero because that draft has not happened. A
- * letter over an empty measurement is the "C means no data" failure this repo
- * has already been bitten by, so the card states the swap and stops. The full
- * ledger, where the grade has had a season to mean something, is one click
- * away.
+ * ⚠ TWO DIFFERENT QUESTIONS, AND ONLY ONE OF THEM CAN BE ANSWERED TODAY. The
+ * sweep's letter grade is retrospective — scored on points already realised —
+ * so days after a trade it measures nearly nothing and a 2027 pick contributes
+ * zero. That letter is NOT shown here; publishing it would be the "C means no
+ * data" failure this repo has already been bitten by, and the ledger where it
+ * has had a season to mean something is one click away.
+ *
+ * The verdict that IS shown asks whether the deal was balanced ON THE DAY, by
+ * market value of what each side received — the question a manager actually
+ * asks the hour a trade lands, and one the canonical engine can answer now
+ * because it prices a future pick properly instead of at zero. It renders only
+ * when every asset on both sides priced; absent means exactly that.
  *
  * ⚠ A PICK IS NAMED AS A PICK. "2027 4th", never the player it later became —
  * the two managers traded the pick, and resolving it would rewrite the deal
@@ -92,6 +97,31 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
                   </div>
                 ))}
               </div>
+
+              {t.verdict ? (
+                <p className="af-trade-verdict">
+                  <span
+                    className="af-trade-verdict-word"
+                    data-fair={t.verdict.favoursRosterId == null ? 'true' : 'false'}
+                  >
+                    {t.verdict.verdict}
+                  </span>
+                  {t.verdict.fairness != null ? (
+                    <span className="af-trade-fair af-num"> · {t.verdict.fairness}/100 balance</span>
+                  ) : null}
+                  {/*
+                    The engine's own confidence in its inputs, printed beside
+                    the verdict rather than hidden behind it — a balanced-looking
+                    number drawn from thin prices is worth less than the same
+                    number drawn from liquid ones, and the reader should be able
+                    to see which they are looking at.
+                  */}
+                  <span className="af-trade-conf af-num">
+                    {' '}
+                    · {t.verdict.confidence}% confidence · market value on the day
+                  </span>
+                </p>
+              ) : null}
 
               <Link className="af-trade-open" href={`/league/${t.leagueId}?view=legacy`}>
                 Open the trade ledger

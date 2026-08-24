@@ -137,3 +137,25 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* The prospective verdict — market value of what each side received, on the
+   day. Neutral when the deal reads fair; accented when it leans, because
+   "leans" is the part a reader acts on. */
+.af-trade-verdict {
+  margin: 8px 0 0;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.af-trade-verdict-word {
+  font-weight: 800;
+  color: var(--warn);
+}
+.af-trade-verdict-word[data-fair='true'] {
+  color: var(--good);
+}
+.af-trade-fair {
+  font-weight: 700;
+}
+.af-trade-conf {
+  color: var(--muted);
+}

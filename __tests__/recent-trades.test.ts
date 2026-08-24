@@ -6,10 +6,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * were declining to look, and one said so in words that were false.
  */
 
-const { cacheFindMany } = vi.hoisted(() => ({ cacheFindMany: vi.fn() }))
+const { cacheFindMany, valueFindMany } = vi.hoisted(() => ({
+  cacheFindMany: vi.fn(),
+  valueFindMany: vi.fn(),
+}))
 
 vi.mock('@/lib/prisma', () => ({
-  prisma: { sportsDataCache: { findMany: cacheFindMany } },
+  prisma: {
+    sportsDataCache: { findMany: cacheFindMany },
+    playerValueSnapshot: { findMany: valueFindMany },
+  },
 }))
 
 import { getRecentTrades } from '@/lib/core-app/recentTrades'
@@ -31,7 +37,7 @@ function payload(over: Record<string, unknown> = {}) {
               rosterId: 1,
               managerName: 'chxnk',
               teamName: null,
-              playersIn: [{ name: 'Darren Waller', position: 'TE' }],
+              playersIn: [{ playerId: '4988', name: 'Darren Waller', position: 'TE' }],
               picksIn: [],
             },
             {
@@ -39,7 +45,7 @@ function payload(over: Record<string, unknown> = {}) {
               managerName: 'Hustead',
               teamName: null,
               playersIn: [],
-              picksIn: [{ label: '2027 4th' }],
+              picksIn: [{ label: '2027 4th', season: '2027', round: 4 }],
             },
           ],
         },
@@ -51,7 +57,10 @@ function payload(over: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   cacheFindMany.mockReset()
+  valueFindMany.mockReset()
   cacheFindMany.mockResolvedValue([payload()])
+  // By default nothing is priced, so no verdict is published.
+  valueFindMany.mockResolvedValue([])
 })
 
 describe('getRecentTrades', () => {
@@ -71,9 +80,79 @@ describe('getRecentTrades', () => {
     expect(pickAsset.name).toBe('2027 4th')
   })
 
-  it('publishes no grade — the sweep letter is retrospective and would be measuring nothing', async () => {
+  it("never borrows the sweep's retrospective letter", async () => {
+    // That grade is scored on realised points: days after a trade it measures
+    // almost nothing, and a 2027 pick contributes zero. The verdict published
+    // instead is a different question, asked of the day the deal was struck.
     const out = await getRecentTrades(LEAGUES, NOW)
-    expect(JSON.stringify(out)).not.toMatch(/"grade"|initialGrade|currentGrade/)
+    expect(JSON.stringify(out)).not.toMatch(/initialGrade|currentGrade/)
+  })
+
+  describe('the prospective verdict', () => {
+    it('prices a future pick properly instead of at zero, and reaches a verdict', async () => {
+      // Waller priced near a 4th-rounder's discounted value => a fair-ish deal
+      // that the retrospective grader would have scored as a shutout, because
+      // the 2027 draft has not happened.
+      valueFindMany.mockResolvedValue([
+        { sleeperId: '4988', name: 'Darren Waller', value: 272 },
+      ])
+      const out = await getRecentTrades(LEAGUES, NOW)
+      expect(out[0].verdict).not.toBeNull()
+      expect(typeof out[0].verdict?.verdict).toBe('string')
+      expect(out[0].verdict?.confidence).toBeGreaterThanOrEqual(0)
+    })
+
+    it('publishes NOTHING when a traded player has no price on file', async () => {
+      // A partially priced trade systematically favours whoever received the
+      // asset we could not price. Absent is the honest answer.
+      valueFindMany.mockResolvedValue([])
+      const out = await getRecentTrades(LEAGUES, NOW)
+      expect(out[0].verdict).toBeNull()
+    })
+
+    it('refuses to grade a three-team trade as if two teams traded', async () => {
+      cacheFindMany.mockResolvedValue([
+        payload({
+          trades: [
+            {
+              id: 'three',
+              createdIso: NOW.toISOString(),
+              multiTeam: true,
+              sides: [
+                { rosterId: 1, managerName: 'a', teamName: null, playersIn: [{ playerId: '1', name: 'A' }], picksIn: [] },
+                { rosterId: 2, managerName: 'b', teamName: null, playersIn: [{ playerId: '2', name: 'B' }], picksIn: [] },
+                { rosterId: 3, managerName: 'c', teamName: null, playersIn: [{ playerId: '3', name: 'C' }], picksIn: [] },
+              ],
+            },
+          ],
+        }),
+      ])
+      valueFindMany.mockResolvedValue([
+        { sleeperId: '1', name: 'A', value: 1000 },
+        { sleeperId: '2', name: 'B', value: 1000 },
+        { sleeperId: '3', name: 'C', value: 1000 },
+      ])
+      const out = await getRecentTrades(LEAGUES, NOW)
+      expect(out[0].sides).toHaveLength(3)
+      expect(out[0].verdict).toBeNull()
+    })
+
+    it('prices only the trades that will actually render', async () => {
+      valueFindMany.mockResolvedValue([])
+      await getRecentTrades(LEAGUES, NOW, 1)
+      // One read, scoped to the visible trade's players.
+      expect(valueFindMany).toHaveBeenCalledTimes(1)
+      expect(valueFindMany.mock.calls[0][0].where.sleeperId.in).toEqual(['4988'])
+    })
+
+    it('survives a price read failure by withholding the verdict, not the trade', async () => {
+      valueFindMany.mockImplementationOnce(async () => {
+        throw new Error('db down')
+      })
+      const out = await getRecentTrades(LEAGUES, NOW)
+      expect(out).toHaveLength(1)
+      expect(out[0].verdict).toBeNull()
+    })
   })
 
   it('drops a trade older than the recent window', async () => {
