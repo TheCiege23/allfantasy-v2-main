@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { getLeagueDefaults } from '@/lib/league-defaults/getLeagueDefaults'
+import { getLeagueDefaults, sumKnownRosterSlots } from '@/lib/league-defaults/getLeagueDefaults'
 
 describe('getLeagueDefaults', () => {
   it.each([
@@ -147,5 +147,98 @@ describe('getLeagueDefaults snake_case / camelCase agreement', () => {
       expect(defaults.playoffSettings.playoffStartWeek).toBeNull()
       expect(defaults.playoffSettings.championshipWeek).toBeNull()
     }
+  })
+})
+
+/**
+ * `rosterSettings.totalRosterSlots` is a regression guard, not routine coverage.
+ *
+ * `createCanonicalLeagueInTransaction.ts` read `rosterSettings['roster_size']` /
+ * `rosterSettings['rosterSize']` for League.rosterSize — two keys no producer under
+ * lib/league-defaults or lib/league-concepts has ever written. Every manual-league creation
+ * missed both keys, the numeric fallback of 0 collapsed through `|| null`, and the column was
+ * written NULL with no error anywhere. Verified on prod 2026-08-24: 33 of 34 NULL-rosterSize
+ * leagues have leagueSize set — configured leagues silently missing this one field.
+ *
+ * `totalRosterSlots` is the sum of the SAME rosterSlots/benchSlots/irSlots/taxiSlots values the
+ * object already resolves, computed once and reused, so the field and the sum cannot drift apart
+ * the way the old dead lookup did.
+ */
+describe('getLeagueDefaults rosterSettings.totalRosterSlots', () => {
+  const KNOWN_ROSTER_FORMATS = [
+    { sport: 'NFL', format: 'redraft', scoringPreset: 'fb_half_ppr' },
+    { sport: 'NFL', format: 'dynasty', scoringPreset: 'fb_dynasty_ppr' },
+    { sport: 'NFL', format: 'keeper', scoringPreset: 'fb_half_ppr' },
+    { sport: 'NCAAF', format: 'devy', scoringPreset: 'ncaaf_devy_ppr' },
+    { sport: 'NCAAF', format: 'c2c', scoringPreset: 'ncaaf_c2c_ppr' },
+  ] as const
+
+  it.each(KNOWN_ROSTER_FORMATS)(
+    'sums rosterSlots + benchSlots + irSlots + taxiSlots for $format',
+    ({ sport, format, scoringPreset }) => {
+      const { rosterSettings } = getLeagueDefaults({ sport, format, draftType: 'snake', scoringPreset, managerCount: 12 })
+      const { rosterSlots, benchSlots, irSlots, taxiSlots, totalRosterSlots } = rosterSettings as Record<string, unknown>
+
+      // The bug this replaces: this field must exist and be a real positive number, not undefined,
+      // not null, and not the silent-failure value of 0.
+      expect(typeof totalRosterSlots).toBe('number')
+      expect(totalRosterSlots as number).toBeGreaterThan(0)
+
+      const expected = [rosterSlots, benchSlots, irSlots, taxiSlots]
+        .filter((n): n is number => typeof n === 'number')
+        .reduce((sum, n) => sum + n, 0)
+      expect(totalRosterSlots).toBe(expected)
+    },
+  )
+
+  it('excludes collegeRosterSlots from the sum, on a preset where it is set', () => {
+    const { rosterSettings } = getLeagueDefaults({
+      sport: 'NCAAF', format: 'c2c', draftType: 'snake', scoringPreset: 'ncaaf_c2c_ppr', managerCount: 12,
+    })
+    const { rosterSlots, benchSlots, irSlots, taxiSlots, collegeRosterSlots, totalRosterSlots } =
+      rosterSettings as Record<string, unknown>
+
+    // The care point: collegeRosterSlots is a distinct sub-roster bucket on C2C, not verified to
+    // be additive to main roster capacity. Confirms the fixture actually exercises the omission
+    // rather than happening to be 0 for this preset.
+    expect(typeof collegeRosterSlots).toBe('number')
+    expect(collegeRosterSlots as number).toBeGreaterThan(0)
+
+    const withoutCollege = [rosterSlots, benchSlots, irSlots, taxiSlots]
+      .filter((n): n is number => typeof n === 'number')
+      .reduce((sum, n) => sum + n, 0)
+    expect(totalRosterSlots).toBe(withoutCollege)
+    expect(totalRosterSlots).not.toBe(withoutCollege + (collegeRosterSlots as number))
+  })
+})
+
+/**
+ * `sumKnownRosterSlots` unit tests, direct rather than only through `getLeagueDefaults`.
+ *
+ * Every real concept preset in the catalog happens to populate rosterSlots/benchSlots/irSlots,
+ * so testing only through `getLeagueDefaults` output can never exercise the "nothing is known"
+ * branch — a mutation that replaces `null` with `0` there passes every preset-based test and
+ * still ships the exact silent-zero failure this function exists to prevent.
+ */
+describe('sumKnownRosterSlots', () => {
+  it('returns null, never 0, when nothing is known', () => {
+    expect(sumKnownRosterSlots(undefined, undefined, undefined, undefined)).toBeNull()
+    expect(sumKnownRosterSlots()).toBeNull()
+  })
+
+  it('sums only the parts that are actual numbers', () => {
+    expect(sumKnownRosterSlots(9, 6, 1, undefined)).toBe(16)
+    expect(sumKnownRosterSlots(9, undefined, undefined, undefined)).toBe(9)
+  })
+
+  it('ignores non-numeric and non-finite values rather than propagating them', () => {
+    expect(sumKnownRosterSlots(9, 6, 1, Number.NaN)).toBe(16)
+    expect(sumKnownRosterSlots(9, '6' as unknown, null, undefined)).toBe(9)
+  })
+
+  it('treats an explicit 0 as known, distinct from "nothing is known"', () => {
+    // A concept whose bench really is 0 (e.g. best ball) must not be indistinguishable from one
+    // with no data recorded for bench at all.
+    expect(sumKnownRosterSlots(18, 0, 0, undefined)).toBe(18)
   })
 })

@@ -147,6 +147,8 @@ export type LegacyDimension = {
 export type CareerData = {
   /** Display handle. Null rather than a placeholder if we have no name. */
   handle: string | null
+  /** `AppUser.avatarUrl` — the account's own profile image, not a league avatar. */
+  avatarUrl: string | null
   /** 25-rung ladder position, from the canonical XP engine. Null if never scored. */
   level: number | null
   levelName: string | null
@@ -407,18 +409,20 @@ export async function getCareerData(
    * engine's output; `getLevelFromXp` is the one ladder.
    */
   let handle: string | null = null
+  let avatarUrl: string | null = null
   let xpTotal: number | null = null
   try {
     const [appUser, rows] = await Promise.all([
       prisma.appUser.findUnique({
         where: { id: userId },
-        select: { username: true, displayName: true },
+        select: { username: true, displayName: true, avatarUrl: true },
       }),
       prisma.$queryRaw<Array<{ xp_total: bigint | number | null }>>`
         SELECT xp_total FROM user_profiles WHERE "userId" = ${userId} LIMIT 1
       `,
     ])
     handle = appUser?.displayName?.trim() || appUser?.username?.trim() || null
+    avatarUrl = appUser?.avatarUrl?.trim() || null
     const raw = rows[0]?.xp_total
     if (raw != null) xpTotal = Number(raw)
   } catch (err) {
@@ -810,6 +814,7 @@ export async function getCareerData(
 
   return {
     handle,
+    avatarUrl,
     level: level?.level ?? null,
     levelName: level?.name ?? null,
     nextLevelName: level?.nextLevel?.name ?? null,
