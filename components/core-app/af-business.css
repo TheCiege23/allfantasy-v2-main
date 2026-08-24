@@ -1,0 +1,446 @@
+/*
+ * 30b — B2B, the retention case. Reads the .af-core token layer.
+ *
+ * ⚠ AUTHOR ON TOKENS OR HEX, NEVER ON TAILWIND COLOUR WORDS. The global
+ * light-mode `.mode-readable` clamp rewrites `bg-white` and friends; a chart
+ * built on those goes unreadable in one theme and nobody notices until a
+ * partner is looking at it.
+ */
+
+.af-biz {
+  --biz-cross: var(--accent);
+  --biz-single: #7d84a8;
+  --biz-iso: #6366f1;
+}
+
+/* ── MODEL banner ─────────────────────────────────────────────────────────── */
+
+.af-biz-modelbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--warn-soft);
+  background: color-mix(in srgb, var(--warn) 12%, var(--bg));
+  backdrop-filter: blur(8px);
+}
+
+.af-biz-modelbar-tag {
+  flex: none;
+  padding: 3px 8px;
+  border-radius: 5px;
+  background: var(--warn);
+  color: #1a1204;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.af-biz-modelbar-text {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+.af-biz-modelbar-strong { color: var(--warn); }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+
+.af-biz-hero {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 64px 22px 40px;
+}
+
+.af-biz-hero-eyebrow { color: var(--accent); }
+
+.af-biz-hero-title {
+  margin: 12px 0 0;
+  font-size: clamp(30px, 4.4vw, 46px);
+  line-height: 1.08;
+  letter-spacing: -0.038em;
+  color: var(--text);
+}
+
+.af-biz-hero-body {
+  margin: 18px 0 0;
+  max-width: 62ch;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--muted);
+}
+
+.af-biz-hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.af-biz-btn-primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
+  font-weight: 700;
+}
+
+.af-biz-btn-ghost {
+  background: var(--chip);
+  color: var(--text2);
+  border: 1px solid var(--chip-line);
+}
+
+/* ── Figures ──────────────────────────────────────────────────────────────── */
+
+.af-biz-body {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 22px 80px;
+  display: flex;
+  flex-direction: column;
+  gap: 34px;
+}
+
+.af-biz-fig {
+  margin: 0;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+
+.af-biz-fig-head { margin-bottom: 14px; }
+
+.af-biz-fig-title {
+  margin: 0;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
+.af-biz-fig-caption {
+  margin: 6px 0 0;
+  max-width: 64ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* Wide charts scroll inside their own box; the page body never scrolls sideways. */
+.af-biz-fig-plot {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.af-biz-svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+}
+
+/* ── Assumption line — required under every chart ─────────────────────────── */
+
+.af-biz-assume {
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line2);
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+
+.af-biz-assume-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 6px;
+  border: 1px solid var(--line2);
+  border-radius: 4px;
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  vertical-align: 1px;
+}
+
+/* ── Chart primitives ─────────────────────────────────────────────────────── */
+
+.af-biz-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+
+.af-biz-axis {
+  fill: var(--faint);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10px;
+}
+
+.af-biz-axis-title {
+  fill: var(--faint);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+.af-biz-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.af-biz-line--cross { stroke: var(--biz-cross); }
+.af-biz-line--single {
+  stroke: var(--biz-single);
+  stroke-dasharray: 5 4;
+}
+
+.af-biz-dot--cross { fill: var(--biz-cross); }
+.af-biz-dot--single { fill: var(--biz-single); }
+
+.af-biz-callout-rule {
+  stroke: var(--text);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  opacity: 0.5;
+}
+
+.af-biz-callout-text {
+  fill: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.af-biz-callout-sub {
+  fill: var(--muted);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 10.5px;
+}
+
+.af-biz-area { stroke-width: 2; }
+.af-biz-area--cross {
+  fill: color-mix(in srgb, var(--biz-cross) 22%, transparent);
+  stroke: var(--biz-cross);
+}
+.af-biz-area--single {
+  fill: color-mix(in srgb, var(--biz-single) 30%, transparent);
+  stroke: var(--biz-single);
+}
+
+.af-biz-bar { fill: var(--biz-cross); opacity: 0.85; }
+
+.af-biz-barval {
+  fill: var(--text);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* Isometric faces. Front is the measured one — it gets the strongest value. */
+.af-biz-iso-front { fill: var(--biz-iso); }
+.af-biz-iso-top { fill: color-mix(in srgb, var(--biz-iso) 70%, #ffffff); }
+.af-biz-iso-side { fill: color-mix(in srgb, var(--biz-iso) 72%, #000000); }
+
+.af-biz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.af-biz-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.af-biz-key::before {
+  content: '';
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+
+.af-biz-key--cross::before { background: var(--biz-cross); }
+.af-biz-key--single::before {
+  background: repeating-linear-gradient(90deg, var(--biz-single) 0 5px, transparent 5px 9px);
+}
+
+/* ── Calculator ───────────────────────────────────────────────────────────── */
+
+.af-biz-calc {
+  padding: 24px;
+  border: 1px solid var(--accent-line);
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--accent-soft), var(--surface) 62%);
+}
+
+.af-biz-calc-head { margin-bottom: 18px; }
+
+.af-biz-calc-title {
+  margin: 10px 0 0;
+  font-size: 22px;
+  letter-spacing: -0.028em;
+  color: var(--text);
+}
+
+.af-biz-calc-sub {
+  margin: 8px 0 0;
+  max-width: 60ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.af-biz-calc-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.af-biz-field { display: block; }
+
+.af-biz-field-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text2);
+}
+
+.af-biz-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.af-biz-input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1px solid var(--line2);
+  border-radius: 9px;
+  background: var(--surface2);
+  color: var(--text);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.af-biz-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.af-biz-input--prefixed { padding-left: 26px; }
+
+.af-biz-input-prefix,
+.af-biz-input-suffix {
+  position: absolute;
+  color: var(--faint);
+  font-family: var(--font-jetbrains-mono, 'JetBrains Mono', ui-monospace, monospace);
+  font-size: 14px;
+  pointer-events: none;
+}
+
+.af-biz-input-prefix { left: 12px; }
+.af-biz-input-suffix { right: 12px; }
+
+.af-biz-calc-out {
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--line2);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+
+.af-biz-calc-headline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.af-biz-calc-headline-v {
+  font-size: clamp(30px, 5vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  color: var(--accent);
+}
+
+.af-biz-calc-headline-l {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.af-biz-calc-breakdown {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+
+.af-biz-calc-breakdown dt {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-biz-calc-breakdown dd {
+  margin: 4px 0 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-biz-calc-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.af-biz-calc-delta { color: var(--good); }
+
+/* ── Close ────────────────────────────────────────────────────────────────── */
+
+.af-biz-close {
+  padding: 28px 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  text-align: center;
+}
+
+.af-biz-close-title {
+  margin: 0;
+  font-size: 22px;
+  letter-spacing: -0.028em;
+  color: var(--text);
+}
+
+.af-biz-close-body {
+  margin: 10px auto 0;
+  max-width: 56ch;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.af-biz-close .af-biz-hero-cta { justify-content: center; }
+
+@media (max-width: 640px) {
+  .af-biz-hero { padding: 40px 18px 28px; }
+  .af-biz-body { padding: 0 18px 56px; gap: 24px; }
+  .af-biz-fig { padding: 16px; }
+  .af-biz-calc { padding: 18px; }
+}
