@@ -332,6 +332,13 @@ export function PlayerFinder({
                       data-starting={im.isStarting}
                     >
                       <div className="af-pf-impact-head">
+                        {/*
+                          Platform chip BEFORE the name. League names are
+                          user-authored ("Insert Name Here" is a real production
+                          league) — bare, one reads as a broken template; behind
+                          a platform label it reads as the league it is.
+                        */}
+                        <span className="af-pf-impact-platform">{im.platform.toUpperCase()}</span>
                         <span className="af-pf-league-name">{im.leagueName}</span>
                         {/*
                           The EXACT slot when we resolved it ("SUPER_FLEX"),

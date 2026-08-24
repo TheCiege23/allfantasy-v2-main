@@ -313,11 +313,17 @@ export default async function AfCorePage({
     activeKey === 'career' && sp.view === 'share' && career ? toShareCard(career) : null
 
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
+  /*
+   * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
+   * unfiltered list carries AF Legacy board rows (hasUnifiedRecord: false), and
+   * passing them here inflated "on N of your M leagues" to the 604 count and let
+   * career-import snapshots into the every-platform table.
+   */
   const playerDetail =
     activeKey === 'players' && selectedPlayerId
       ? await getPlayerDetail(
           selectedPlayerId,
-          leagues.map((l) => l.id),
+          playedLeagues.map((l) => l.id),
           userId
         ).catch(() => null)
       : null
@@ -793,7 +799,7 @@ export default async function AfCorePage({
           query={playerQuery}
           matches={playerMatches}
           detail={playerDetail}
-          leagueCount={leagues.length}
+          leagueCount={playedLeagues.length}
         />
       ) : activeKey === 'week' ? (
         /*

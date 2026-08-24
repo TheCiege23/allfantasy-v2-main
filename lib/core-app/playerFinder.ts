@@ -185,26 +185,52 @@ export async function searchPlayers(query: string, limit = 12): Promise<PlayerMa
 }
 
 /**
- * Which of the user's leagues roster this player, and in which slot.
+ * Which of the user's leagues roster this player ON THE USER'S OWN TEAM, and in
+ * which slot.
+ *
+ * ⚠ YOUR ROSTER, NOT ANY ROSTER. This used to fetch every roster in each league
+ * and report the first one containing the player — so any league where ANY
+ * manager had him was listed as yours, wearing that manager's slot (searching
+ * Josh Allen showed "STARTER" in 47 leagues the viewer didn't roster him in).
+ * Ownership resolves through the claimed-team predicate — the same one
+ * getPlayerImpact uses: LeagueTeam.claimedByUserId → the roster matched on
+ * platformUserId, externalId OR our own User uuid. The third candidate is not
+ * optional: without it only 38 of 106 claimed teams found their roster.
  *
  * Slot precedence matters: a player listed in both `players` and `starters` is a
  * STARTER, not a bench player. `players` is the catch-all, so it is checked last.
  */
 async function resolveLeagueSlots(
   sleeperId: string,
-  leagueIds: string[]
+  leagueIds: string[],
+  userId: string | null | undefined
 ): Promise<LeagueSlot[]> {
-  if (leagueIds.length === 0) return []
+  if (leagueIds.length === 0 || !userId) return []
+
+  const teams = await prisma.leagueTeam.findMany({
+    where: { claimedByUserId: userId, leagueId: { in: leagueIds } },
+    select: { leagueId: true, platformUserId: true, externalId: true },
+  })
+  if (teams.length === 0) return []
+
+  const candidatesByLeague = new Map<string, Set<string>>()
+  for (const t of teams) {
+    const set = candidatesByLeague.get(t.leagueId) ?? new Set<string>()
+    for (const c of [t.platformUserId, t.externalId, userId]) if (c) set.add(c)
+    candidatesByLeague.set(t.leagueId, set)
+  }
+  const claimedLeagueIds = [...candidatesByLeague.keys()]
+  const allCandidates = [...new Set([...candidatesByLeague.values()].flatMap((s) => [...s]))]
 
   const leagues = await prisma.league.findMany({
-    where: { id: { in: leagueIds } },
+    where: { id: { in: claimedLeagueIds } },
     select: { id: true, name: true, platform: true, leagueType: true },
   })
   const byId = new Map(leagues.map((l) => [l.id, l]))
 
   const rosters = await prisma.roster.findMany({
-    where: { leagueId: { in: leagueIds } },
-    select: { leagueId: true, playerData: true },
+    where: { leagueId: { in: claimedLeagueIds }, platformUserId: { in: allCandidates } },
+    select: { leagueId: true, platformUserId: true, playerData: true },
   })
 
   const out: LeagueSlot[] = []
@@ -212,6 +238,9 @@ async function resolveLeagueSlots(
 
   for (const r of rosters) {
     if (claimed.has(r.leagueId)) continue
+    // The candidate union spans every claimed team; accept only a roster whose
+    // platformUserId belongs to THIS league's own candidate set.
+    if (!r.platformUserId || !candidatesByLeague.get(r.leagueId)?.has(r.platformUserId)) continue
     const pd = (r.playerData ?? {}) as Record<string, unknown>
 
     for (const key of SLOT_ORDER) {
@@ -277,7 +306,7 @@ export async function getPlayerDetail(
         reason:
           'we have no platform id for this player, so we cannot tell which of your leagues roster him',
       }
-    : { available: true, data: await resolveLeagueSlots(row.sleeperId!, userLeagueIds) }
+    : { available: true, data: await resolveLeagueSlots(row.sleeperId!, userLeagueIds, userId) }
 
   // Injuries come from the ESPN writer — TheSportsDB serves none at all.
   const injuryRow = await prisma.sportsInjury
