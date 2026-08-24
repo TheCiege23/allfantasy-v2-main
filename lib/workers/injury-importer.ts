@@ -59,19 +59,29 @@ export async function runInjuryImporter(options?: {
     })
 
     if (Array.isArray(response.data) && response.data.length > 0) {
-      rows = response.data.map((injury: any) => ({
-        sport,
-        playerId: String(injury.playerId ?? injury.externalId ?? ''),
-        playerName: String(injury.playerName ?? injury.player ?? 'Unknown Player'),
-        team: normalizeTeamAbbrev(injury.team) ?? injury.team ?? 'FA',
-        status: String(injury.status ?? 'questionable'),
-        bodyPart: typeof injury.bodyPart === 'string' ? injury.bodyPart : null,
-        notes: typeof injury.notes === 'string' ? injury.notes : null,
-        practice: priorityWindow ? 'limited' : null,
-        gameStatus: typeof injury.status === 'string' ? injury.status : null,
-        reportDate: injury.reportDate ? new Date(injury.reportDate) : new Date(),
-        week,
-      }))
+      /*
+       * ⚠ NOTHING HERE IS INVENTED ANY MORE. This mapper used to default a
+       * missing status to 'questionable' (an invented designation attached to
+       * a real name) and stamp practice='limited' on EVERY player during the
+       * Wed–Sat window (no provider we ingest carries practice participation
+       * at all — the Player Finder documents exactly that). A row with no
+       * stated designation is dropped, not decorated.
+       */
+      rows = response.data
+        .filter((injury: any) => typeof injury.status === 'string' && injury.status.trim().length > 0)
+        .map((injury: any) => ({
+          sport,
+          playerId: String(injury.playerId ?? injury.externalId ?? ''),
+          playerName: String(injury.playerName ?? injury.player ?? 'Unknown Player'),
+          team: normalizeTeamAbbrev(injury.team) ?? injury.team ?? 'FA',
+          status: String(injury.status),
+          bodyPart: typeof injury.bodyPart === 'string' ? injury.bodyPart : null,
+          notes: typeof injury.notes === 'string' ? injury.notes : null,
+          practice: null,
+          gameStatus: injury.status,
+          reportDate: injury.reportDate ? new Date(injury.reportDate) : new Date(),
+          week,
+        }))
     } else {
       const legacyRows = await prisma.sportsInjury.findMany({
         where: { sport },
@@ -79,19 +89,22 @@ export async function runInjuryImporter(options?: {
         take: 1000,
       })
 
-      rows = legacyRows.map((injury) => ({
-        sport,
-        playerId: injury.playerId ?? injury.externalId,
-        playerName: injury.playerName,
-        team: injury.team ?? 'FA',
-        status: injury.status ?? 'questionable',
-        bodyPart: injury.type ?? null,
-        notes: injury.description ?? null,
-        practice: null,
-        gameStatus: injury.status ?? null,
-        reportDate: injury.date ?? injury.fetchedAt,
-        week: injury.week ?? week,
-      }))
+      rows = legacyRows
+        // Same rule as the live branch: no stated designation, no row.
+        .filter((injury) => typeof injury.status === 'string' && injury.status.trim().length > 0)
+        .map((injury) => ({
+          sport,
+          playerId: injury.playerId ?? injury.externalId,
+          playerName: injury.playerName,
+          team: injury.team ?? 'FA',
+          status: injury.status as string,
+          bodyPart: injury.type ?? null,
+          notes: injury.description ?? null,
+          practice: null,
+          gameStatus: injury.status,
+          reportDate: injury.date ?? injury.fetchedAt,
+          week: injury.week ?? week,
+        }))
     }
 
     for (const batch of chunk(rows, UPSERT_BATCH_SIZE)) {

@@ -4,52 +4,33 @@ import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { isIdpLeague } from '@/lib/idp'
 import { prisma } from '@/lib/prisma'
-import { getAllPlayers } from '@/lib/sleeper-client'
-import { computeIdpFantasyPoints, getMergedScoringRulesForLeague } from '@/lib/idp/scoringEngine'
-import { generateDeterministicWeeklyStatLine } from '@/lib/idp/statIngestionEngine'
+import { getMergedScoringRulesForLeague } from '@/lib/idp/scoringEngine'
 import { parseIdpRowsFromPlayerData } from '@/lib/idp/idpRouteHelpers'
 
 export const dynamic = 'force-dynamic'
 
 const MAX_IDS = 80
 
-type ScoreEntry = {
-  playerId: string
-  name: string
-  position: string
-  team: string | null
-  stats: ReturnType<typeof generateDeterministicWeeklyStatLine>
-  fantasyPoints: number
-  breakdown: Record<string, number>
-}
-
-async function buildEntries(
-  leagueId: string,
-  week: number,
-  playerIds: string[],
-  playersMap: Record<string, { full_name?: string; first_name?: string; last_name?: string; position?: string; team?: string | null }>,
-): Promise<{ rules: Record<string, number>; entries: ScoreEntry[] }> {
-  const rules = await getMergedScoringRulesForLeague(leagueId)
-  const entries: ScoreEntry[] = []
-  for (const playerId of playerIds) {
-    const line = generateDeterministicWeeklyStatLine(playerId, week)
-    const { total, breakdown } = computeIdpFantasyPoints(line, rules)
-    const sp = playersMap[playerId]
-    const name =
-      sp?.full_name?.trim() ||
-      [sp?.first_name, sp?.last_name].filter(Boolean).join(' ').trim() ||
-      playerId
-    entries.push({
-      playerId,
-      name,
-      position: sp?.position ?? '—',
-      team: sp?.team ?? null,
-      stats: line,
-      fantasyPoints: Math.round(total * 100) / 100,
-      breakdown,
-    })
-  }
-  return { rules, entries }
+/*
+ * ⚠ THIS ROUTE NO LONGER FABRICATES SCORES. It used to score
+ * generateDeterministicWeeklyStatLine — stat lines invented from a hash of
+ * the player id — under the league's real rules and attach them to real
+ * player names. Real PBP-derived rows exist in FantasyStatLine; until this
+ * route is wired to them (planned work), it answers honestly: rules yes,
+ * scores no. No mounted UI calls it today.
+ */
+async function honestEmptyResponse(leagueId: string, week: number, requested: number) {
+  return NextResponse.json({
+    leagueId,
+    week,
+    source: 'unavailable',
+    message:
+      requested > 0
+        ? 'Live IDP stat lines are not wired to this endpoint yet — scores appear when real weekly stats land.'
+        : 'No IDP players found on your roster snapshot.',
+    scoringRules: await getMergedScoringRulesForLeague(leagueId).catch(() => ({})),
+    entries: [],
+  })
 }
 
 /**
@@ -114,16 +95,7 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  const allPlayers = await getAllPlayers()
-  const { rules, entries } = await buildEntries(leagueId, week, playerIds, allPlayers)
-
-  return NextResponse.json({
-    leagueId,
-    week,
-    source: 'deterministic_simulation',
-    scoringRules: rules,
-    entries,
-  })
+  return honestEmptyResponse(leagueId, week, playerIds.length)
 }
 
 export async function POST(req: NextRequest) {
@@ -166,15 +138,6 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const allPlayers = await getAllPlayers()
-  const { rules, entries } = await buildEntries(leagueId, week, playerIds, allPlayers)
-
-  return NextResponse.json({
-    leagueId,
-    week,
-    source: 'deterministic_simulation',
-    scoringRules: rules,
-    entries,
-  })
+  return honestEmptyResponse(leagueId, week, playerIds.length)
 }
 

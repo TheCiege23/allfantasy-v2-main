@@ -341,6 +341,7 @@ export function MyPlayersClient() {
 }
 
 function PlayerCard({ item, onSelect }: { item: CrossLeaguePlayerPortfolioItem; onSelect: () => void }) {
+  const [headshotFailed, setHeadshotFailed] = useState(false)
   const urgent = item.actionSummary.criticalCount > 0 || item.actionSummary.highCount > 0
   return (
     <button
@@ -349,9 +350,14 @@ function PlayerCard({ item, onSelect }: { item: CrossLeaguePlayerPortfolioItem; 
       className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:border-white/20 hover:bg-white/[0.05]"
     >
       <div className="flex items-center gap-3">
-        {item.headshotUrl ? (
+        {item.headshotUrl && !headshotFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.headshotUrl} alt="" className="h-9 w-9 flex-shrink-0 rounded-full object-cover" />
+          <img
+            src={item.headshotUrl}
+            alt=""
+            className="h-9 w-9 flex-shrink-0 rounded-full object-cover"
+            onError={() => setHeadshotFailed(true)}
+          />
         ) : (
           <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white/60">
             {item.displayName.charAt(0)}

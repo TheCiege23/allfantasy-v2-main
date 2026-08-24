@@ -9,6 +9,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { canAccessLeagueDraft } from '@/lib/live-draft-engine/auth'
 import { runAutomationTicksThrottled } from '@/lib/live-draft-engine/draftAutomationTicks'
+import { mirrorSleeperDraftForLeagueThrottled } from '@/lib/draft/mirrorActiveSleeperDrafts'
 import { buildDraftLiveSyncPayload } from '@/lib/draft-room/buildDraftLiveSyncPayload'
 
 export const dynamic = 'force-dynamic'
@@ -32,6 +33,10 @@ export const GET = withTimedRoute('draft_live_sync', async (req: NextRequest, ct
 
   try {
     await runAutomationTicksThrottled(leagueId)
+    // Sleeper-hosted drafts: refresh the mirrored board on the same poll that reads it,
+    // so an open room tracks Sleeper at poll cadence instead of the cron's once a minute.
+    // Throttled per league inside the helper; no-op without a sleeperDraftId; never throws.
+    await mirrorSleeperDraftForLeagueThrottled(leagueId)
 
     const payload = await buildDraftLiveSyncPayload(leagueId, userId, {
       since,

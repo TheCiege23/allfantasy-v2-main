@@ -30,7 +30,13 @@ export function getTeamLogoUrl(teamAbbr: string | null, sport: string = 'nfl'): 
 }
 
 export function buildHeadshotUrl(playerId: string | null): string | null {
-  return playerId ? `${SLEEPER_NFL_HEADSHOT_BASE}/${playerId}.jpg` : null
+  if (!playerId) return null
+  // Team defenses use team codes (e.g. "PHI") — the players CDN 404s those, but
+  // Sleeper serves them as team logos (mirrors lib/sports-data/headshots.ts).
+  if (/^[A-Z]{2,3}$/.test(playerId)) {
+    return `https://sleepercdn.com/images/team_logos/nfl/${playerId.toLowerCase()}.png`
+  }
+  return `${SLEEPER_NFL_HEADSHOT_BASE}/${playerId}.jpg`
 }
 
 /** Returns the best-known CDN headshot URL for a player ID by sport, or null if unsupported. */

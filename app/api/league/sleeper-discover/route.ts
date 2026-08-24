@@ -15,7 +15,14 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const leagues = await getUserLeagues(String(sleeperUsername), 'nfl', '2025');
+    /*
+     * The season was hardcoded '2025' — with the 2026 season starting, League
+     * Sync discovery would list only last year's leagues forever. NFL season
+     * rolls over in August (same convention as chimmy-context's helper).
+     */
+    const now = new Date();
+    const season = now.getUTCMonth() + 1 >= 8 ? now.getUTCFullYear() : now.getUTCFullYear() - 1;
+    const leagues = await getUserLeagues(String(sleeperUsername), 'nfl', String(season));
 
     return NextResponse.json({
       success: true,

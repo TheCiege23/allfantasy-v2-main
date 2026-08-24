@@ -18,6 +18,17 @@ export const PRODUCTION_LANGUAGE_CODES: LanguageCode[] = ['en']
 export const BETA_LANGUAGE_CODES: LanguageCode[] = ['zh', 'fil', 'vi']
 export const FUTURE_LANGUAGE_CODES: LanguageCode[] = ['fr', 'ar']
 
+/**
+ * What the pickers actually OFFER. Future-only languages have zero bundled
+ * strings — selecting one delivered pure English, and Arabic additionally
+ * flipped the whole app RTL with no RTL stylesheet behind it. They stay valid
+ * as STORED values (resolveLanguage still accepts them, so nobody's saved
+ * preference breaks), but they are not offered until real translations exist.
+ */
+export const SELECTABLE_LANGUAGES: LanguageCode[] = SUPPORTED_LANGUAGES.filter(
+  (code) => !FUTURE_LANGUAGE_CODES.includes(code)
+)
+
 export const LANGUAGE_DISPLAY_NAMES: Record<LanguageCode, string> = {
   en: 'English',
   es: 'Espa\u00f1ol',
@@ -79,7 +90,8 @@ export function getLanguageOptionLabel(code: LanguageCode): string {
   const status = getLanguageSupportStatus(code)
   if (status === 'beta') return `${name} (Beta)`
   if (status === 'future-only') return `${name} (Coming Soon)`
-  if (status === 'partial') return `${name} (Partial)`
+  // 'partial' shows the bare name: Spanish is near-complete, and a "(Partial)"
+  // suffix on the one non-English language we're proud of undersells it.
   return name
 }
 

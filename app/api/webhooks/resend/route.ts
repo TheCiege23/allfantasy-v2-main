@@ -145,6 +145,42 @@ async function handleEvent(
     `[webhooks/resend] type=${eventType} messageId=${messageId || "(none)"} to=${masked}`
   )
 
+  /*
+   * ⚠ SUPPRESSION HAPPENS HERE, WHILE WE STILL HOLD THE ADDRESS. The stored
+   * payload deliberately strips recipients (PII policy) — which previously
+   * meant bounce data could never feed the send path, and known-dead
+   * addresses were mailed forever. Instead of persisting the address, act on
+   * it now: a hard bounce or complaint flips the EmailPreference row to
+   * fully unsubscribed, which the trade blast and marketing paths honor.
+   */
+  if (eventType === "email.bounced" || eventType === "email.complained") {
+    for (const addr of recipients) {
+      await prisma.emailPreference
+        .upsert({
+          where: { email: addr },
+          create: {
+            email: addr,
+            productUpdates: false,
+            tradeAlerts: false,
+            weeklyDigest: false,
+            unsubscribedAt: new Date(),
+          },
+          update: {
+            productUpdates: false,
+            tradeAlerts: false,
+            weeklyDigest: false,
+            unsubscribedAt: new Date(),
+          },
+        })
+        .catch((err: unknown) => {
+          console.error(
+            `[webhooks/resend] Failed to suppress ${maskEmail(addr)} after ${eventType}:`,
+            err instanceof Error ? err.message : String(err)
+          )
+        })
+    }
+  }
+
   if (!DURABLE_EVENTS.has(eventType)) {
     // Informational events (sent/delivered) — log only, no DB write needed
     return

@@ -247,6 +247,15 @@ async function loadRosteredPlayers(
 const SLATE_BEFORE_MS = 6 * 60 * 60 * 1000
 const SLATE_AFTER_MS = 18 * 60 * 60 * 1000
 
+/** True when the game starts inside the slate window around `now`. An
+ *  unparseable start time fails the check — a game we cannot place in the
+ *  window cannot honestly be claimed as part of the slate. */
+function isInSlateWindow(row: LiveScoreRow, now: number): boolean {
+  const at = new Date(row.startTime).getTime()
+  if (Number.isNaN(at)) return false
+  return at >= now - SLATE_BEFORE_MS && at <= now + SLATE_AFTER_MS
+}
+
 /**
  * The slate for the sport being viewed.
  *
@@ -273,11 +282,7 @@ async function loadActiveSlate(
    * trims the fallback.
    */
   const now = Date.now()
-  const inWindow = result.scores.filter((row) => {
-    const at = new Date(row.startTime).getTime()
-    if (Number.isNaN(at)) return false
-    return at >= now - SLATE_BEFORE_MS && at <= now + SLATE_AFTER_MS
-  })
+  const inWindow = result.scores.filter((row) => isInSlateWindow(row, now))
   return { scores: inWindow, fetchedAt: result.fetchedAt }
 }
 
@@ -313,7 +318,16 @@ export async function getLivePageData(opts: {
         const result = isActive
           ? await loadActiveSlate(s as LeagueSport)
           : await getCachedLiveScoresForSport({ sport: s as LeagueSport, team: null })
-        return { sport: s, rows: result?.scores ?? [], fetchedAt: result?.fetchedAt ?? null, failed: false }
+        /*
+         * ⚠ EVERY TAB GETS THE SAME SLATE WINDOW. The cached reader returns
+         * whatever `SportsGame` holds — potentially a whole season with no
+         * expiry — so an un-windowed badge counts a months-old "in progress"
+         * row as live forever. (Idempotent for the active sport, whose slate
+         * loadActiveSlate already windows.)
+         */
+        const now = Date.now()
+        const rows = (result?.scores ?? []).filter((row) => isInSlateWindow(row, now))
+        return { sport: s, rows, fetchedAt: result?.fetchedAt ?? null, failed: false }
       } catch (err) {
         // Logged, not swallowed silently — an empty slate that is really an
         // outage should be findable in the server logs too, not just on screen.

@@ -26,7 +26,11 @@ describe('i18n foundation', () => {
   it('classifies incomplete languages without pretending they are production-ready', () => {
     expect(getLanguageSupportStatus('en')).toBe('production-ready')
     expect(getLanguageSupportStatus('es')).toBe('partial')
-    expect(getLanguageOptionLabel('es')).toContain('Partial')
+    // The STATUS still classifies es as partial (the honesty guard above), but
+    // the picker LABEL deliberately shows the bare name: Spanish is
+    // near-complete, and "(Partial)" on the one non-English language we're
+    // proud of undersold it. Beta and future-only keep their suffixes.
+    expect(getLanguageOptionLabel('es')).toBe('Español')
     expect(getLanguageSupportStatus('zh')).toBe('beta')
     expect(getLanguageSupportStatus('fil')).toBe('beta')
     expect(getLanguageSupportStatus('vi')).toBe('beta')

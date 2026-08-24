@@ -383,7 +383,7 @@ export default function OnboardingFunnelClient({
               Create league
             </Link>
             <Link
-              href="/app/discover"
+              href="/discover/leagues"
               data-testid="onboarding-league-discover-link"
               className="min-h-[44px] inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-400/50 px-4 py-2.5 text-sm font-medium text-cyan-200 hover:bg-cyan-500/20 text-center touch-manipulation"
             >

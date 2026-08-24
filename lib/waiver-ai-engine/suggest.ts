@@ -19,7 +19,8 @@ function buildScoringContext(input: WaiverAIEngineInput): WaiverScoringContext {
     )
   }
   const needs = teamNeeds?.weakestSlots?.map((s) => s.position) ?? []
-  const surplus = teamNeeds?.positionalDepth?.filter((d) => d.depthRating > 1.2).map((d) => d.position) ?? []
+  // depthRating is 0-100 with 50 = league median (see computeTeamNeeds); >60 means genuinely deep.
+  const surplus = teamNeeds?.positionalDepth?.filter((d) => d.depthRating > 60).map((d) => d.position) ?? []
 
   return {
     goal: (input.goal ?? 'balanced') as UserGoal,
@@ -29,6 +30,8 @@ function buildScoringContext(input: WaiverAIEngineInput): WaiverScoringContext {
     isTEP: input.leagueSettings.isTEP ?? false,
     numTeams: input.leagueSettings.numTeams ?? 12,
     isDynasty: input.leagueSettings.isDynasty ?? false,
+    faabBudget: input.leagueSettings.faabBudget ?? null,
+    faabRemaining: input.leagueSettings.faabRemaining ?? null,
     rosterPlayers: roster,
     teamNeeds: teamNeeds ?? {
       weakestSlots: [],
@@ -52,6 +55,7 @@ function toWaiverCandidate(
     playerName: (p as { playerName?: string }).playerName ?? (p as { name?: string }).name ?? '',
     position: (p as { position?: string }).position ?? '',
     team: (p as { team?: string | null }).team ?? null,
+    byeWeek: (p as { product?: { byeWeek?: number | null } }).product?.byeWeek ?? null,
     age: (p as { age?: number | null }).age ?? null,
     value,
     assetValue: {

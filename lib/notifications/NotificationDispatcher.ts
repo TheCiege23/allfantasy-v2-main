@@ -8,6 +8,7 @@ import { sendNotificationEmail } from "@/lib/resend-client"
 import { sendSms } from "@/lib/twilio-client"
 import { sendPushToUser, isPushCategory } from "@/lib/push-notifications"
 import { retryWithBackoff } from "@/lib/error-handling"
+import { isUndeliverableEmailDomain } from "@/lib/email/undeliverableDomains"
 import { shouldSuppressTokenMonetizationNotification } from "@/lib/notifications/tokenMonetizationNotificationBypass"
 
 export type DispatchNotificationParams = {
@@ -101,7 +102,15 @@ export async function dispatchNotification(params: DispatchNotificationParams): 
         })
       }
 
-      if (catPrefs.email && availability.email && profile.email && !skipChannels?.email) {
+      // Undeliverable domains (RFC-reserved fixture rows, example.com seeds)
+      // never get a send — they only bounce and burn the sending domain.
+      if (
+        catPrefs.email &&
+        availability.email &&
+        profile.email &&
+        !skipChannels?.email &&
+        !isUndeliverableEmailDomain(profile.email)
+      ) {
         try {
           await retryWithBackoff(
             async () => {

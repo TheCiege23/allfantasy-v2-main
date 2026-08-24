@@ -120,6 +120,11 @@ export async function processExpiredDraftPickForLeague(
     if (!session) {
       return { leagueId, outcome: 'skipped', reason: 'no_session' }
     }
+    if (session.sleeperDraftId) {
+      // Sleeper owns this draft — we only mirror it. See the scan filter in
+      // processExpiredDraftPicks; this guards the per-league entrypoint too.
+      return { leagueId, outcome: 'skipped', reason: 'sleeper_mirrored' }
+    }
     if (session.status !== 'in_progress') {
       return { leagueId, outcome: 'skipped', reason: `status_${session.status}` }
     }
@@ -361,6 +366,11 @@ export async function processExpiredDraftPicks(
       status: 'in_progress',
       draftType: { in: ['snake', 'linear'] },
       timerEndAt: { lte: now },
+      // Sleeper-mirrored drafts are never ours to advance. sleeperSync does not write
+      // timerEndAt, but a session our engine started BEFORE it was linked to Sleeper can
+      // carry a stale one — without this filter, enabling DRAFT_TICK_CRON_ENABLED would
+      // autopick into a board the mirror rewrites every tick, in a league we do not run.
+      sleeperDraftId: null,
     },
     select: { leagueId: true },
     orderBy: { timerEndAt: 'asc' },

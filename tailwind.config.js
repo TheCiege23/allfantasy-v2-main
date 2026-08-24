@@ -143,6 +143,10 @@ const config = {
     '!./app/api/ai/providers/health/route.ts',
     '!./app/api/ai/tools/route.ts',
   ],
+  // dark: variants must follow the app's own toggle (data-mode on <html>), not
+  // the OS prefers-color-scheme default — without this, the files using dark:
+  // ignored the in-app theme switch entirely.
+  darkMode: ['selector', '[data-mode="dark"]'],
   theme: {
     extend: {
       colors: {

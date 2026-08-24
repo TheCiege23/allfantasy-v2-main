@@ -2668,7 +2668,9 @@ function LeagueHeader({
               ['Roster', `/league/${leagueId}?view=team`],
               ['Matchup', `/league/${leagueId}?view=scores`],
               ['Contracts', `/idp/contracts/${leagueId}?rosterId=${encodeURIComponent(capRosterId)}`],
-              ['Defense Hub', `/idp/defense-hub/${leagueId}?rosterId=${encodeURIComponent(capRosterId)}`],
+              // Defense Hub deliberately unlinked: the page renders hardcoded
+              // mock defenders ("Defender 1/2/3"). Relink when it reads real
+              // stat lines (FantasyStatLine wiring, planned work).
               ['Cap Room', `/idp/cap/${leagueId}?rosterId=${encodeURIComponent(capRosterId)}`],
               ['Chat', `/league/${leagueId}`],
             ] as const

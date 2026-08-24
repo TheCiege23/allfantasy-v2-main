@@ -4,7 +4,7 @@ import { Globe } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useOptionalSession } from "@/components/auth/useOptionalSession";
 import { useOptionalLanguage } from "./LanguageProviderClient";
-import { getLanguageDisplayName, SUPPORTED_LANGUAGES, type LanguageCode } from "@/lib/i18n/constants";
+import { getLanguageOptionLabel, SELECTABLE_LANGUAGES, type LanguageCode } from "@/lib/i18n/constants";
 
 export type LanguageToggleVariant = "default" | "compact";
 
@@ -47,6 +47,12 @@ export default function LanguageToggle({
 
   const labelText = t("common.language");
 
+  // A stored future-only preference (fr/ar picked before they were pulled)
+  // stays visible as the current selection; it just can't be newly chosen.
+  const options = SELECTABLE_LANGUAGES.includes(language)
+    ? SELECTABLE_LANGUAGES
+    : [...SELECTABLE_LANGUAGES, language];
+
   if (variant === "compact") {
     return (
       <div
@@ -76,9 +82,9 @@ export default function LanguageToggle({
           className="min-h-8 max-w-full truncate rounded-full border-0 bg-transparent px-1.5 py-0.5 text-xs outline-none cursor-pointer focus:ring-1 focus:ring-cyan-300/40"
           style={{ color: "var(--text)" }}
         >
-          {SUPPORTED_LANGUAGES.map((lang) => (
+          {options.map((lang) => (
             <option key={lang} value={lang}>
-              {getLanguageDisplayName(lang)}
+              {getLanguageOptionLabel(lang)}
             </option>
           ))}
         </select>
@@ -105,9 +111,9 @@ export default function LanguageToggle({
           color: "var(--text)",
         }}
       >
-        {SUPPORTED_LANGUAGES.map((lang) => (
+        {options.map((lang) => (
           <option key={lang} value={lang}>
-            {getLanguageDisplayName(lang)}
+            {getLanguageOptionLabel(lang)}
           </option>
         ))}
       </select>

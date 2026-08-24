@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { listInjuryFacts } from '@/lib/injuries/injuryReadPort'
 import { isSupportedSport, SUPPORTED_SPORTS } from '@/lib/sport-scope'
 
 export const dynamic = 'force-dynamic'
@@ -25,24 +26,25 @@ export async function GET(req: NextRequest) {
         ? { sport: sportParam }
         : { sport: { in: [...SUPPORTED_SPORTS] as unknown as string[] } }
 
-    const sportWherePlayers =
-      sportParam != null
-        ? { sport: sportParam as (typeof SUPPORTED_SPORTS)[number] }
-        : { sport: { in: [...SUPPORTED_SPORTS] } }
-
     const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-
-    const injuryReportWhere =
-      sportParam != null
-        ? { sport: sportParam }
-        : { sport: { in: [...SUPPORTED_SPORTS] as unknown as string[] } }
 
     const digestCacheKeys =
       sportParam != null
         ? [`grok_injury_digest:${sportParam}`]
         : SUPPORTED_SPORTS.map((s) => `grok_injury_digest:${s}`)
 
-    const [newsRows, playerRows, injuryReportRows, digestRows] = await Promise.all([
+    /*
+     * ⚠ INJURIES COME FROM THE CANONICAL READ PORT, nothing else. The two
+     * sources this used to read were both wrong: SportsPlayerRecord.injuryStatus
+     * is ~92% roster designation (INACT/ACT) rendered as if it were an injury,
+     * and injuryReportRecord has no scheduled writer (measured months stale in
+     * prod). The port serves SportsInjury — freshest source wins, staleness
+     * flagged per row.
+     */
+    const portSports =
+      sportParam != null ? [sportParam] : ([...SUPPORTED_SPORTS] as string[])
+
+    const [newsRows, portFactLists, digestRows] = await Promise.all([
       prisma.sportsNews.findMany({
         where: {
           ...sportWhereNews,
@@ -57,22 +59,9 @@ export async function GET(req: NextRequest) {
         orderBy: { publishedAt: 'desc' },
         take: 15,
       }),
-      prisma.sportsPlayerRecord.findMany({
-        where: {
-          ...sportWherePlayers,
-          injuryStatus: { not: null },
-        },
-        orderBy: { lastUpdated: 'desc' },
-        take: 25,
-      }),
-      prisma.injuryReportRecord.findMany({
-        where: {
-          ...injuryReportWhere,
-          reportDate: { gte: since },
-        },
-        orderBy: { reportDate: 'desc' },
-        take: 40,
-      }),
+      Promise.all(
+        portSports.map((s) => listInjuryFacts({ sport: s, limit: 25 }).catch(() => null))
+      ),
       prisma.sportsDataCache.findMany({
         where: {
           cacheKey: { in: digestCacheKeys },
@@ -91,20 +80,23 @@ export async function GET(req: NextRequest) {
       playerName: a.playerName,
     }))
 
-    const playerInjuries = playerRows
-      .filter((p) => p.injuryStatus && p.injuryStatus.length > 0)
+    const playerInjuries = portSports
+      .flatMap((s, i) =>
+        (portFactLists[i]?.facts ?? []).map((f) => ({
+          id: f.id,
+          source: 'injury_feed' as const,
+          sport: s,
+          name: f.playerName,
+          team: f.team ?? null,
+          position: f.position ?? null,
+          injuryStatus: f.status ?? null,
+          injuryNotes: [f.description, f.stale ? `reported ${Math.round(f.ageHours / 24)}d ago` : null]
+            .filter(Boolean)
+            .join(' — ') || null,
+          lastUpdated: new Date(f.fetchedAt).toISOString(),
+        }))
+      )
       .slice(0, 20)
-      .map((p) => ({
-        id: p.id,
-        source: 'sports_player_record' as const,
-        sport: p.sport,
-        name: p.name,
-        team: p.team,
-        position: p.position,
-        injuryStatus: p.injuryStatus,
-        injuryNotes: p.injuryNotes,
-        lastUpdated: p.lastUpdated.toISOString(),
-      }))
 
     const grokInjuryDigests = digestRows
       .map((row) => {
@@ -124,20 +116,12 @@ export async function GET(req: NextRequest) {
       })
       .filter((x) => x.summary.length > 0 || x.bullets.length > 0)
 
-    const injuryReports = injuryReportRows.map((r) => ({
-      id: r.id,
-      source: 'injury_report' as const,
-      sport: r.sport,
-      playerId: r.playerId,
-      name: r.playerName,
-      team: r.team,
-      status: r.status,
-      bodyPart: r.bodyPart,
-      notes: r.notes,
-      practice: r.practice,
-      gameStatus: r.gameStatus,
-      reportDate: r.reportDate.toISOString(),
-    }))
+    /*
+     * Kept as a key for the modal's merge, intentionally empty: its old source
+     * (injuryReportRecord) has no scheduled writer. Everything real is in
+     * playerInjuries above.
+     */
+    const injuryReports: Array<Record<string, never>> = []
 
     return NextResponse.json({
       articles,

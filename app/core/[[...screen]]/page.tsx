@@ -49,6 +49,7 @@ import { RankingsCompare } from '@/components/core-app/screens/RankingsCompare'
 import { getRankingsData, getCompareData, type CompareResult } from '@/lib/core-app/rankings'
 import { getPortfolio } from '@/lib/core-app/portfolio'
 import { getTodayStrip } from '@/lib/core-app/todayStrip'
+import { readPlayByPlayFeed } from '@/lib/live/playByPlayFeed'
 import { getDraftHqAll } from '@/lib/core-app/draftHqAll'
 import { getWeekAll } from '@/lib/core-app/weekAll'
 import YourWeek from '@/components/core-app/screens/YourWeek'
@@ -313,11 +314,17 @@ export default async function AfCorePage({
     activeKey === 'career' && sp.view === 'share' && career ? toShareCard(career) : null
 
   const playerMatches = activeKey === 'players' ? await searchPlayers(playerQuery).catch(() => []) : []
+  /*
+   * playedLeagues, NOT leagues — same reason as the rail and week loaders: the
+   * unfiltered list carries AF Legacy board rows (hasUnifiedRecord: false), and
+   * passing them here inflated "on N of your M leagues" to the 604 count and let
+   * career-import snapshots into the every-platform table.
+   */
   const playerDetail =
     activeKey === 'players' && selectedPlayerId
       ? await getPlayerDetail(
           selectedPlayerId,
-          leagues.map((l) => l.id),
+          playedLeagues.map((l) => l.id),
           userId
         ).catch(() => null)
       : null
@@ -552,7 +559,7 @@ export default async function AfCorePage({
      * "all leagues", so those sections stay placeholders until an aggregator
      * exists.
      */
-    const [careerData, portfolioData, draftData, weekData, stripData] = await Promise.all([
+    const [careerData, portfolioData, draftData, weekData, stripData, playEvents] = await Promise.all([
       getCareerData(userId).catch(() => null),
       getPortfolio(userId).catch(() => null),
       /*
@@ -598,6 +605,12 @@ export default async function AfCorePage({
         })),
         now,
       ).catch(() => null),
+      /*
+       * The live play feed — the same cache the dashboard API's `plays` payload
+       * reads (`getPlayFeed` is this reader plus headshots). [] on a quiet day;
+       * a feed failure must never take down the dashboard.
+       */
+      readPlayByPlayFeed(12).catch(() => []),
     ])
     return (
       <DashboardV2
@@ -608,6 +621,7 @@ export default async function AfCorePage({
         drafts={draftData}
         week={weekData}
         strip={stripData}
+        plays={playEvents}
         nowIso={now.toISOString()}
         planName={plan?.name ?? null}
         syncedLabel={syncAge.stale ? null : syncAge.label}
@@ -793,7 +807,7 @@ export default async function AfCorePage({
           query={playerQuery}
           matches={playerMatches}
           detail={playerDetail}
-          leagueCount={leagues.length}
+          leagueCount={playedLeagues.length}
         />
       ) : activeKey === 'week' ? (
         /*

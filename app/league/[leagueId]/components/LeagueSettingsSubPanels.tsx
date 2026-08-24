@@ -1050,42 +1050,25 @@ function ScoringSubPanel({
   )
 }
 
-const NOTIF_KEYS = [
-  'trade_offers',
-  'waiver_claims',
-  'injury_alerts',
-  'scoring_updates',
-  'draft_reminders',
-  'chat_mentions',
-  'chimmy_recap',
-  'commish_announcements',
-] as const
-
 function NotificationsPanel() {
-  const [toggles, setToggles] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(NOTIF_KEYS.map((k) => [k, true])),
-  )
+  /*
+   * ⚠ THE FAKE PANEL IS GONE ON PURPOSE. This rendered eight toggles and a
+   * primary "Save preferences" button whose onClick was empty — every click a
+   * silent no-op ("stored when wired"; it never was). Real, consumed
+   * notification preferences live on /settings; this panel now just takes the
+   * user there instead of pretending.
+   */
   return (
     <div className="space-y-3">
-      <p className="text-[12px] text-white/45">Stored in Supabase `user_notification_prefs` when wired.</p>
-      {NOTIF_KEYS.map((key) => (
-        <label key={key} className="flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-[#1a1f3a] px-3 py-2">
-          <span className="text-[12px] text-white/85">{key.replace(/_/g, ' ')}</span>
-          <input
-            type="checkbox"
-            checked={toggles[key] ?? false}
-            onChange={(e) => setToggles((s) => ({ ...s, [key]: e.target.checked }))}
-            className="h-4 w-4 accent-[#ff3d81]"
-          />
-        </label>
-      ))}
-      <button
-        type="button"
-        className="w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-[13px] font-bold text-[#ffd7e5]"
-        onClick={() => {}}
+      <p className="text-[12px] text-white/60">
+        Notification preferences are account-wide and live in your settings.
+      </p>
+      <a
+        href="/settings?tab=notifications"
+        className="block w-full rounded-xl bg-[#ff3d81]/20 py-2.5 text-center text-[13px] font-bold text-[#ffd7e5]"
       >
-        Save preferences
-      </button>
+        Open notification settings
+      </a>
     </div>
   )
 }

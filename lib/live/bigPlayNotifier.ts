@@ -51,10 +51,33 @@ async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string
   const out = new Map<string, string[]>()
   if (playerIds.length === 0) return out
 
+  /*
+   * ⚠ THE FEED AND THE ROSTERS SPEAK DIFFERENT ID LANGUAGES. Play events carry
+   * Rolling Insights ids; redraft roster rows carry the draft pick's SLEEPER
+   * id. Both are numeric strings, so joining them directly does not fail — it
+   * silently matches the wrong player, or nobody. Cross through
+   * PlayerIdentityMap once here and share the translation with both branches.
+   * A player with no identity row is skipped, not guessed at.
+   */
+  const identities = await prisma.playerIdentityMap
+    .findMany({
+      where: { rollingInsightsId: { in: playerIds }, sleeperId: { not: null } },
+      select: { rollingInsightsId: true, sleeperId: true },
+    })
+    .catch(() => [])
+
+  const riIdBySleeperId = new Map<string, string>()
+  for (const identity of identities) {
+    if (identity.rollingInsightsId && identity.sleeperId) {
+      riIdBySleeperId.set(identity.sleeperId, identity.rollingInsightsId)
+    }
+  }
+  if (riIdBySleeperId.size === 0) return out
+
   const rows = await prisma.redraftRosterPlayer
     .findMany({
       where: {
-        playerId: { in: playerIds },
+        playerId: { in: [...riIdBySleeperId.keys()] },
         droppedAt: null,
         roster: { season: { status: 'active' } },
       },
@@ -65,11 +88,13 @@ async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string
   for (const row of rows) {
     const owner = row.roster?.ownerId
     if (!owner) continue
-    const list = out.get(row.playerId) ?? []
+    const riId = riIdBySleeperId.get(row.playerId)
+    if (!riId) continue
+    const list = out.get(riId) ?? []
     // One manager can hold the same player in several leagues; one alert is
     // enough, so the owner list is deduped per player.
     if (!list.includes(owner)) list.push(owner)
-    out.set(row.playerId, list)
+    out.set(riId, list)
   }
 
   /*
@@ -84,7 +109,7 @@ async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string
    * so this crosses through PlayerIdentityMap, which carries both spellings on
    * the same row. A player with no identity row is skipped, not guessed at.
    */
-  await addImportedLeagueOwners(playerIds, out)
+  await addImportedLeagueOwners(identities, out)
   return out
 }
 
@@ -96,16 +121,14 @@ async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string
  * without us pulling 914 blobs into memory every poll.
  */
 async function addImportedLeagueOwners(
-  riPlayerIds: string[],
+  identities: Array<{ rollingInsightsId: string | null; sleeperId: string | null }>,
   out: Map<string, string[]>,
 ): Promise<void> {
   try {
-    const identities = await prisma.playerIdentityMap.findMany({
-      where: { rollingInsightsId: { in: riPlayerIds }, sleeperId: { not: null } },
-      select: { rollingInsightsId: true, sleeperId: true },
-    })
     if (identities.length === 0) return
 
+    // riId → the Sleeper user ids rostering that player on imported leagues.
+    const sleeperOwnersByRiId = new Map<string, string[]>()
     for (const identity of identities) {
       const riId = identity.rollingInsightsId
       const sleeperId = identity.sleeperId
@@ -118,16 +141,39 @@ async function addImportedLeagueOwners(
         JSON.stringify([sleeperId]),
       )
 
-      const list = out.get(riId) ?? []
+      const list = sleeperOwnersByRiId.get(riId) ?? []
       for (const row of rosters) {
-        /*
-         * ⚠ platformUserId, NOT our user id. On an imported league this is the
-         * SLEEPER user id — the notification layer resolves it. Treating it as
-         * our own uuid would silently address nobody.
-         */
         if (row.platformUserId && !list.includes(row.platformUserId)) {
           list.push(row.platformUserId)
         }
+      }
+      if (list.length > 0) sleeperOwnersByRiId.set(riId, list)
+    }
+    if (sleeperOwnersByRiId.size === 0) return
+
+    /*
+     * ⚠ platformUserId, NOT our user id. On an imported league this is the
+     * SLEEPER user id, and NOTHING downstream resolves it — the dispatcher
+     * looks profiles up by our user id and silently skips ids it does not
+     * know. Translate here through UserProfile.sleeperUserId. A Sleeper
+     * manager who never linked an AF account has nowhere to receive the
+     * alert and is skipped.
+     */
+    const sleeperUserIds = [...new Set([...sleeperOwnersByRiId.values()].flat())]
+    const profiles = await prisma.userProfile.findMany({
+      where: { sleeperUserId: { in: sleeperUserIds } },
+      select: { userId: true, sleeperUserId: true },
+    })
+    const userIdBySleeperId = new Map<string, string>()
+    for (const profile of profiles) {
+      if (profile.sleeperUserId) userIdBySleeperId.set(profile.sleeperUserId, profile.userId)
+    }
+
+    for (const [riId, sleeperOwners] of sleeperOwnersByRiId) {
+      const list = out.get(riId) ?? []
+      for (const sleeperUserId of sleeperOwners) {
+        const userId = userIdBySleeperId.get(sleeperUserId)
+        if (userId && !list.includes(userId)) list.push(userId)
       }
       if (list.length > 0) out.set(riId, list)
     }
@@ -210,6 +256,13 @@ export async function notifyBigPlays(events: LiveEvent[]): Promise<NotifyResult>
       userIds,
       severity: severityFor(event),
       source: 'live-plays',
+      /*
+       * ⚠ NEVER EMAIL A BIG PLAY. The category default is in-app + email, and
+       * an email per play on a Sunday is an inbox flood that burns the sending
+       * domain. In-app + push (matchup_results is a push category) is the
+       * whole interrupt.
+       */
+      skipChannels: { email: true, sms: true },
       meta: {
         gameId: event.gameId,
         playerId: event.playerId,

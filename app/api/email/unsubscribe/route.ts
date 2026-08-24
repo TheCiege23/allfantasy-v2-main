@@ -33,6 +33,10 @@ export async function GET(request: Request) {
     },
     update: {
       productUpdates: false,
+      // tradeAlerts was missing here — an EXISTING preference row kept
+      // tradeAlerts=true after "unsubscribing", so the trade-grade blast
+      // kept sending. The unsubscribe link must mean what it says.
+      tradeAlerts: false,
       weeklyDigest: false,
       unsubscribedAt: new Date(),
     },
@@ -60,6 +64,10 @@ export async function POST(request: Request) {
     },
     update: {
       productUpdates: false,
+      // tradeAlerts was missing here — an EXISTING preference row kept
+      // tradeAlerts=true after "unsubscribing", so the trade-grade blast
+      // kept sending. The unsubscribe link must mean what it says.
+      tradeAlerts: false,
       weeklyDigest: false,
       unsubscribedAt: new Date(),
     },

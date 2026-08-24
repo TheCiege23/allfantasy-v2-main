@@ -1,0 +1,187 @@
+/* Injury-triage panel on the post-login home (Dash3ATriage.tsx).
+   Token-authored on the af-core palette so it holds in every mode; a separate
+   file because af-dash-3a.css carries another session's in-flight work. */
+
+.af-triage {
+  margin: 0 0 18px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--panel);
+  padding: 14px 16px 10px;
+}
+
+.af-triage-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.af-triage-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.af-triage-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.af-triage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.af-triage-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px 2px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+.af-triage-row:first-child {
+  border-top: none;
+}
+.af-triage-row[data-tone='bad'] {
+  box-shadow: inset 3px 0 0 var(--accent-red, #e5484d);
+  padding-left: 10px;
+}
+
+.af-triage-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--text) 8%, transparent);
+  flex-shrink: 0;
+}
+.af-triage-avatar--initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--muted);
+}
+
+.af-triage-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.af-triage-line1 {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.af-triage-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+}
+.af-triage-name:hover {
+  text-decoration: underline;
+}
+
+.af-triage-meta {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.af-triage-status {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+.af-triage-status[data-tone='bad'] {
+  background: color-mix(in srgb, var(--accent-red, #e5484d) 18%, transparent);
+  color: var(--accent-red-strong, #ff8589);
+}
+.af-triage-status[data-tone='warn'] {
+  background: color-mix(in srgb, var(--accent-amber, #f5a524) 18%, transparent);
+  color: var(--accent-amber-strong, #f5a524);
+}
+
+.af-triage-line2 {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.af-triage-kickoff {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.af-triage-leagues {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.af-triage-league {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 9px;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.af-triage-league:hover {
+  color: var(--text);
+}
+.af-triage-league--more {
+  border-style: dashed;
+}
+
+.af-triage-league-platform {
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: color-mix(in srgb, var(--text) 55%, transparent);
+}
+
+.af-triage-cta {
+  flex-shrink: 0;
+  align-self: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--accent-cyan-strong, var(--text));
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 12px;
+  white-space: nowrap;
+}
+.af-triage-cta:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+@media (max-width: 640px) {
+  .af-triage-cta {
+    display: none;
+  }
+}

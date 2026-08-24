@@ -114,6 +114,19 @@ type WaiverEngineAnalysis = {
   }
 }
 
+type WaiverDecisionOsCard = {
+  decisionId: string
+  card: {
+    title: string
+    subtitle: string
+    detail: string
+    confidence: number
+    legal: boolean
+  }
+  confidence: number
+  legal: boolean
+}
+
 type RosterSnapshotPlayer = {
   id: string
   name: string
@@ -241,6 +254,7 @@ export default function WaiverWirePage({
   const [waiverAiLoading, setWaiverAiLoading] = useState(false)
   const [waiverAiError, setWaiverAiError] = useState("")
   const [waiverAiAnalysis, setWaiverAiAnalysis] = useState<WaiverEngineAnalysis | null>(null)
+  const [waiverAiDecisionOs, setWaiverAiDecisionOs] = useState<WaiverDecisionOsCard | null>(null)
   const [nextRunAt, setNextRunAt] = useState<string | null>(null)
   // Step 3B: per-row action loading + immediate add/drop drawer mode.
   const [actionPlayerId, setActionPlayerId] = useState<string | null>(null)
@@ -845,6 +859,7 @@ export default function WaiverWirePage({
     setWaiverAiLoading(true)
     setWaiverAiError("")
     setWaiverAiAnalysis(null)
+    setWaiverAiDecisionOs(null)
     const candidatePool = (activeTab === "trending" ? trendingPlayers : filteredPlayers).slice(0, 60)
     if (candidatePool.length === 0) {
       setWaiverAiError("No waiver candidates available for analysis.")
@@ -862,6 +877,8 @@ export default function WaiverWirePage({
         leagueSettings: {
           numTeams: 12,
           isDynasty: String(settings?.formatType ?? "").toLowerCase().includes("dynasty"),
+          faabBudget: settings?.faabBudget ?? null,
+          faabRemaining,
         },
         teamNeeds: inferredTeamNeedsPayload,
         roster: rosterSnapshotPlayers,
@@ -898,6 +915,7 @@ export default function WaiverWirePage({
         return
       }
       setWaiverAiAnalysis(json.analysis ?? null)
+      setWaiverAiDecisionOs(json.decisionOs ?? null)
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to analyze waivers with engine."
       setWaiverAiError(message)
@@ -906,10 +924,12 @@ export default function WaiverWirePage({
     }
   }, [
     activeTab,
+    faabRemaining,
     filteredPlayers,
     inferredTeamNeedsPayload,
     leagueId,
     rosterSnapshotPlayers,
+    settings?.faabBudget,
     settings?.formatType,
     settings?.sport,
     trendScoreByPlayerId,
@@ -1371,6 +1391,23 @@ export default function WaiverWirePage({
 
         {waiverAiAnalysis && (
           <div className="mt-3 space-y-3" data-testid="waiver-ai-engine-results">
+            {waiverAiDecisionOs && (
+              <div
+                className="rounded-lg border border-violet-400/30 bg-violet-500/10 px-3 py-2"
+                data-testid="waiver-ai-decision-os-card"
+              >
+                <div className="mb-1 flex flex-wrap items-center justify-between gap-2 text-xs text-white/65">
+                  <span className="font-medium text-violet-200">Decision OS</span>
+                  <span>
+                    Confidence {waiverAiDecisionOs.card.confidence}/100
+                    {!waiverAiDecisionOs.card.legal ? " · Blocked by league rules" : ""}
+                  </span>
+                </div>
+                <p className="text-sm text-white">{waiverAiDecisionOs.card.title}</p>
+                <p className="mt-0.5 text-xs text-white/70">{waiverAiDecisionOs.card.subtitle}</p>
+                <p className="mt-1 text-xs text-[#ffb8d1]">{waiverAiDecisionOs.card.detail}</p>
+              </div>
+            )}
             <div className="rounded-lg border border-white/10 bg-black/30 px-3 py-2">
               <div className="mb-1 flex items-center gap-2 text-xs text-white/65">
                 <span>
@@ -1395,7 +1432,7 @@ export default function WaiverWirePage({
                     </span>
                     <span className="text-[#ffb8d1]">
                       {suggestion.recommendation} · Score {suggestion.compositeScore}
-                      {suggestion.faabBid != null ? ` · FAAB ${suggestion.faabBid}%` : ""}
+                      {suggestion.faabBid != null ? ` · FAAB $${suggestion.faabBid}` : ""}
                     </span>
                   </div>
                   {suggestion.topDrivers.length > 0 && (

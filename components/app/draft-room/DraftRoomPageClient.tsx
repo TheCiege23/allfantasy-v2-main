@@ -4091,8 +4091,11 @@ export function DraftRoomPageClient({
   const safeBoardTeamCount = Math.max(1, session.teamCount ?? 1)
   const totalBoardPicksPlanned = safeBoardRounds * safeBoardTeamCount
   const boardHasOpenPicks = (session.picks?.length ?? 0) < totalBoardPicksPlanned
+  /** Sleeper owns this draft — we only mirror picks. The mirror never writes timerEndAt, so a blank clock is correct, not broken. */
+  const isMirroredFromSleeper = Boolean((session as DraftSessionSnapshot).sleeperDraftId)
   /** DB row occasionally missing timerEndAt — TopBar shows "—"; nudge user to resync rather than implying a dead room. */
   const showPickClockAnchorWarning =
+    !isMirroredFromSleeper &&
     session.status === 'in_progress' &&
     boardHasOpenPicks &&
     session.timer?.status === 'none' &&
@@ -4820,7 +4823,17 @@ export function DraftRoomPageClient({
               </button>
             </div>
           ) : null}
-          {draftRoomState.rosterConfigurationIncomplete ? (
+          {isMirroredFromSleeper && session?.status !== 'completed' ? (
+            <div
+              role="status"
+              aria-live="polite"
+              data-testid="draft-sleeper-mirror-banner"
+              className="flex flex-wrap items-center gap-2 border-b border-cyan-400/30 bg-cyan-950/30 px-3 py-1.5 text-xs text-cyan-50"
+            >
+              <span className="font-semibold uppercase tracking-[0.12em] text-cyan-200/95">Mirrored from Sleeper</span>
+              <span className="text-cyan-100/90">Picks appear as they happen — the pick clock runs on Sleeper.</span>
+            </div>
+          ) : draftRoomState.rosterConfigurationIncomplete ? (
             <div
               role="alert"
               aria-live="assertive"
@@ -4922,8 +4935,8 @@ export function DraftRoomPageClient({
             currentManagerOnClock={currentPick?.displayName ?? null}
             pickLabel={currentPick?.pickLabel ?? null}
             overallPickNumber={currentPick?.overall ?? null}
-            timerStatus={draftRoomState.timerMode === 'blocked' ? 'none' : (session.timer?.status ?? 'none')}
-            timerRemainingSeconds={draftRoomState.timerMode === 'blocked' ? null : (session.timer?.remainingSeconds ?? null)}
+            timerStatus={draftRoomState.timerMode === 'blocked' || isMirroredFromSleeper ? 'none' : (session.timer?.status ?? 'none')}
+            timerRemainingSeconds={draftRoomState.timerMode === 'blocked' || isMirroredFromSleeper ? null : (session.timer?.remainingSeconds ?? null)}
             timerEndAtIso={draftRoomState.timerEndAt}
             timerSeconds={session.timerSeconds ?? null}
             timerPauseReason={session.timer?.pauseReason ?? null}

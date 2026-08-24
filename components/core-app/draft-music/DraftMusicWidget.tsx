@@ -226,28 +226,17 @@ export function DraftMusicWidget({
 
       {state.kind === 'loading' ? <p className="af-dm-msg">Checking your Spotify connection…</p> : null}
 
-      {state.kind === 'disconnected' ? (
+      {/*
+        ⚠ CONNECT IS DELIBERATELY GATED OFF. The Spotify app is in dev mode:
+        only allowlisted accounts can authorize, so these CTAs sent every real
+        user to Spotify's own 403 "User not registered in the Developer
+        Dashboard" page. Matches the SOON treatment on /login and /settings.
+      */}
+      {state.kind === 'disconnected' || state.kind === 'needs-reauth' ? (
         <div className="af-dm-connect">
           <p className="af-dm-msg">
-            Connect Spotify to play the room&apos;s queue on your own account.
+            Spotify connections are coming soon — previews below still play without an account.
           </p>
-          <ul className="af-dm-scopes">
-            <li className="af-dm-scope af-dm-scope--yes">Playback control on your devices</li>
-            <li className="af-dm-scope af-dm-scope--yes">The playlist this room uses</li>
-            <li className="af-dm-scope af-dm-scope--no">Never your library or listening history</li>
-          </ul>
-          <a className="af-dm-btn" href="/api/auth/spotify">
-            Connect Spotify
-          </a>
-        </div>
-      ) : null}
-
-      {state.kind === 'needs-reauth' ? (
-        <div className="af-dm-connect">
-          <p className="af-dm-msg">{state.message}</p>
-          <a className="af-dm-btn" href="/api/auth/spotify">
-            Reconnect Spotify
-          </a>
         </div>
       ) : null}
 
@@ -350,10 +339,10 @@ export function DraftMusicWidget({
           <span className="af-dm-queue-count">{queue.length}</span>
         </div>
         {queuePending ? (
+          /* Internal cause (unapplied queue migration) stays in the code, not
+             in front of users — they just need to know it isn't ready. */
           <p className="af-dm-pending">
-            The shared queue needs a table that is written but not yet applied — see{' '}
-            <code>prisma/migrations/20260823130000_draft_room_music_queue</code>. Adding a track is
-            disabled rather than accepting something that would be dropped.
+            The shared queue isn&apos;t ready yet. Adding tracks is disabled until it is.
           </p>
         ) : queue.length > 1 ? (
           <ul className="af-dm-queue-list">

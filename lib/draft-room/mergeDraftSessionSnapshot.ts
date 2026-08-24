@@ -293,6 +293,9 @@ const VIEWER_SESSION_KEYS = [
   'lotteryLastRunAt',
   'rosterConfigurationIncomplete',
   'rosterConfigurationMessage',
+  // Session-scoped and stable (not viewer-scoped), but partial payloads may omit it —
+  // preserve across merges so the mirrored-from-Sleeper chrome cannot flicker between polls.
+  'sleeperDraftId',
 ] as const
 
 function snapshotRecord(s: DraftSessionSnapshot): Record<string, unknown> {

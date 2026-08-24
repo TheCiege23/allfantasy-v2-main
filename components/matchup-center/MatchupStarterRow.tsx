@@ -7,6 +7,7 @@ import type { MatchupPlayerSlot } from '@/lib/matchup-center/types'
 function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 'right' }) {
   const prevPointsRef = useRef(side.currentPoints)
   const [delta, setDelta] = useState<number | null>(null)
+  const [failedHeadshot, setFailedHeadshot] = useState<string | null>(null)
 
   useEffect(() => {
     const d = side.currentPoints - prevPointsRef.current
@@ -21,9 +22,14 @@ function PlayerCell({ side, align }: { side: MatchupPlayerSlot; align: 'left' | 
   return (
     <div className={`flex min-w-0 flex-1 items-center gap-2 ${align === 'right' ? 'flex-row-reverse text-right' : ''}`}>
       <div className="h-11 w-11 shrink-0 overflow-hidden rounded-full border border-white/10 bg-white/[0.06]">
-        {side.headshotUrl ? (
+        {side.headshotUrl && side.headshotUrl !== failedHeadshot ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={side.headshotUrl} alt="" className="h-full w-full object-cover" />
+          <img
+            src={side.headshotUrl}
+            alt=""
+            className="h-full w-full object-cover"
+            onError={() => setFailedHeadshot(side.headshotUrl)}
+          />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-[11px] font-bold text-white/35">
             {side.name.slice(0, 2).toUpperCase()}

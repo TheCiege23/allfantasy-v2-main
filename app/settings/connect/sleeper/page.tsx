@@ -2,6 +2,7 @@ import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
+import ConnectSleeperForm from "./ConnectSleeperForm"
 
 export default async function ConnectSleeperPage() {
   const session = (await getServerSession(authOptions as never)) as {
@@ -23,15 +24,16 @@ export default async function ConnectSleeperPage() {
         </Link>
         <h1 className="text-xl font-bold">Connect Sleeper</h1>
         <p className="mt-3 text-sm leading-relaxed text-white/55">
-          Link your Sleeper account by importing a league from the dashboard. Your Sleeper username
-          is saved when leagues sync.
+          Enter your Sleeper username and we&apos;ll link it to your AllFantasy account — that link
+          is what lets imports and league sync find your teams.
         </p>
-        <Link
-          href="/dashboard"
-          className="mt-6 inline-flex rounded-xl bg-cyan-500/20 px-4 py-2.5 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/30"
-        >
-          Go to dashboard
-        </Link>
+        {/*
+          ⚠ This page used to say "link your account by importing a league" —
+          while the import gate itself REQUIRED the link. The form below breaks
+          that circle: it validates the handle against Sleeper and stamps the
+          profile in one step.
+        */}
+        <ConnectSleeperForm />
       </div>
     </div>
   )

@@ -88,26 +88,6 @@ export function createDemoRoster(sportKey: string, leagueLabel: string, week: st
   })
 }
 
-export function createDemoInjuries(sportKey: string) {
-  const sk = sportKey === 'all' ? 'nfl' : sportKey
-  return [
-    {
-      player: sk === 'nfl' ? 'Tyreek Hill' : 'Star Player',
-      source: 'Sports ingest',
-      time: '2h ago',
-      severity: 'medium',
-      text: 'Limited practice Thu — track game-time decision.',
-    },
-    {
-      player: 'Team beat',
-      source: 'NewsAPI',
-      time: '5h ago',
-      severity: 'low',
-      text: 'Coach expects full workload barring setback.',
-    },
-  ]
-}
-
 export function createDemoWeather(_sportKey: string) {
   return [
     {
