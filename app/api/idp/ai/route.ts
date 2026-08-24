@@ -74,25 +74,50 @@ export async function POST(req: NextRequest) {
   if (!isIdp) return NextResponse.json({ error: 'Not an IDP league' }, { status: 404 })
 
   /*
-   * ⚠ IDP AI IS DELIBERATELY OFFLINE — this is a paid surface and its data
-   * layer was fabricated: waiver targets from a mock pool of invented "FA
-   * Defender N" players, stats from a hash of the player id
-   * (lib/idp/ai/idpChimmy.ts buildMockWaiverPool /
-   * generateDeterministicWeeklyStatLine), matchup ratings from the same hash.
-   * A subscriber paying for advice about nonexistent players is worse than a
-   * 503. Re-enable action by action as each is rewired to the real player
-   * pool and FantasyStatLine (planned work). ai_prefs stays: it only saves
-   * settings.
+   * ⚠ IDP AI IS STILL GATED OFF while the rewired data layer soaks. The
+   * fabricated layer is gone from the READY actions below — they read real
+   * FantasyStatLine PBP weeks, the league's actual unrostered pool, and real
+   * cap tables. Flipping IDP_AI_OFFLINE to false re-enables exactly those.
+   * Actions NOT in the ready set still touch fabricated or nonexistent inputs
+   * (hash 10-pillar context for player_analysis/defender_eval, hash weekly
+   * lines for cap_efficiency/trade_targets_cap/weekly_recap, and matchup/snap
+   * data with no real source at all for matchup_analysis/snap_analysis) and
+   * stay 503 individually even after the flip. ai_prefs stays on: it only
+   * saves settings.
    */
   // Typed boolean (not literal true) so the early return cannot narrow
   // `action` to 'ai_prefs' — that narrowing made all 17 switch cases below
   // impossible comparisons for the TS ratchet. Flip to false to re-enable.
   const IDP_AI_OFFLINE: boolean = true
+  const IDP_AI_READY_ACTIONS: ReadonlySet<Action> = new Set<Action>([
+    'ai_prefs',
+    'start_sit',
+    'waiver_targets',
+    'trade_eval',
+    'rankings',
+    'sleepers',
+    'scarcity',
+    'power_rankings',
+    'cap_advice',
+    'contract_eval',
+    'cap_burden',
+    'contender_rebuild',
+  ])
   if (IDP_AI_OFFLINE && action !== 'ai_prefs') {
     return NextResponse.json(
       {
         error: 'IDP AI is temporarily offline while we connect it to live defensive stats.',
         code: 'IDP_AI_OFFLINE',
+      },
+      { status: 503 },
+    )
+  }
+  if (!IDP_AI_READY_ACTIONS.has(action)) {
+    return NextResponse.json(
+      {
+        error:
+          'This IDP AI action is offline: its data source is not ingested yet, and serving an invented answer would be worse than none.',
+        code: 'IDP_AI_ACTION_OFFLINE',
       },
       { status: 503 },
     )

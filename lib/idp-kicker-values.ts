@@ -86,6 +86,11 @@ function getTierValue(rank: number, tiers: { maxRank: number; value: number }[])
   return tiers[tiers.length - 1].value
 }
 
+/** Top of the IDP tier curve — for normalizing tier values onto 0–100 scales. */
+export function idpTierValueCeiling(isDynasty: boolean): number {
+  return (isDynasty ? DYNASTY_IDP_TIERS : REDRAFT_IDP_TIERS)[0].value
+}
+
 const IDP_AGE_PEAKS: Record<string, number> = {
   LB: 26,
   DL: 27,

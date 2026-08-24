@@ -1,6 +1,8 @@
 /**
  * IDP Chimmy AI — all entry points call `requireAfSub()` first (wraps `requireAfSubUserIdOrThrow`, same gate as route `requireAfSub`).
- * Uses roster playerData + deterministic synthetic stats when dedicated IDP stat tables are absent.
+ * Profiles and pools read REAL rows only: PBP-derived FantasyStatLine weeks and the
+ * league's actual unrostered player pool. A player with no ingested line is absent —
+ * never given a hash-generated stat line.
  */
 
 import { prisma } from '@/lib/prisma'
@@ -9,7 +11,9 @@ import { isIdpLeague } from '@/lib/idp'
 import { openaiChatText } from '@/lib/openai-client'
 import { isCommissioner } from '@/lib/commissioner/permissions'
 import { computeIdpFantasyPoints, getMergedScoringRulesForLeague } from '@/lib/idp/scoringEngine'
-import { generateDeterministicWeeklyStatLine } from '@/lib/idp/statIngestionEngine'
+import { getLatestIdpStatSeason, getRealIdpLinesForRosterIds } from '@/lib/idp/realStatLines'
+import { getPlayerPoolForLeague } from '@/lib/sport-teams/SportPlayerPoolResolver'
+import { buildIdpKickerValueMap } from '@/lib/idp-kicker-values'
 
 /** Lib equivalent of route `requireAfSub()` — must run before any IDP AI work. */
 async function requireAfSub(): Promise<void> {
@@ -17,7 +21,7 @@ async function requireAfSub(): Promise<void> {
 }
 
 const CHIMMY_IDP_RULE = `You are Chimmy, the AI assistant for IDP fantasy leagues on AllFantasy.
-You explain and recommend using only the deterministic data provided. You never invent scores, injuries, or official playing-time guarantees.
+You explain and recommend using only the real ingested data provided. If a signal is marked unavailable, say so — never invent scores, snap counts, matchup ratings, injuries, or playing-time guarantees.
 Keep answers concise and actionable.`
 
 export type IdPlayerRow = {
@@ -74,13 +78,14 @@ export type SleeperDefender = {
   name: string
   position: string
   team?: string
-  mockOwnershipPct: number
   reasoning: string
 }
 
 export type SnapShareReport = {
   concerns: Array<{ player: string; snap_share: number; trend: string; note: string }>
   positives: Array<{ player: string; snap_share: number; trend: string; note: string }>
+  /** Set when the report is empty because the data source does not exist. */
+  note?: string
 }
 
 export type ScarcityReport = {
@@ -108,53 +113,68 @@ function isIdpPosition(pos: string): boolean {
   return ['DE', 'DT', 'DL', 'LB', 'CB', 'S', 'SS', 'FS', 'DB'].includes(p)
 }
 
-function seedFromString(s: string): number {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0
-  return Math.abs(h) || 1
-}
-
-/** Shape shared by legacy sync sim + league-scored engine profile. */
+/**
+ * Real per-player profile from ingested PBP stat lines. `matchupRating` and
+ * `snapShare` are GONE — neither has a real source (PBP carries stat events,
+ * not snaps, and no defensive matchup-strength feed is ingested). Anything
+ * that used them either dropped the factor or says "no matchup signal".
+ */
 export type IdpAiStatProfile = {
+  /** Mean league-scored points across every ingested week this season. */
   seasonAvg: number
-  snapShare: number
-  matchupRating: number
+  /** League-scored points of the last ingested weeks (≤3, oldest → newest). */
   recent3: number[]
-  trend: 'up' | 'down'
+  /** Ingested weeks behind the numbers — 0 real weeks never reaches a profile. */
+  weeksOfData: number
+  trend: 'up' | 'down' | 'flat'
 }
 
-/** Deterministic synthetic IDP profile (no league context) — fallback when rules are unavailable. */
-export function syntheticIdpProfile(playerId: string, week: number): IdpAiStatProfile {
-  const s = seedFromString(`${playerId}:${week}`)
-  const seasonAvg = 4 + (s % 120) / 10
-  const snapShare = 35 + (s % 55)
-  const matchupRating = 3 + (s % 17) / 2
-  const recent = [0, 1, 2].map((i) => seasonAvg + ((s >> (i * 3)) % 8) - 4)
-  const trend = recent[2] >= recent[0] ? 'up' : 'down'
-  return { seasonAvg, snapShare, matchupRating, recent3: recent, trend }
-}
-
-/** League-aware profile: weekly points from `statIngestionEngine` × `getMergedScoringRulesForLeague`. */
-export async function resolveIdpAiProfile(leagueId: string, playerId: string, week: number): Promise<IdpAiStatProfile> {
+/**
+ * Real profiles for a batch of roster/Sleeper player ids. Players with no
+ * ingested stat line are ABSENT from the map — callers must treat absence as
+ * "no data", never substitute an invented line.
+ */
+export async function resolveIdpAiProfiles(
+  leagueId: string,
+  playerIds: string[],
+  week: number,
+): Promise<Map<string, IdpAiStatProfile>> {
+  const out = new Map<string, IdpAiStatProfile>()
+  if (playerIds.length === 0) return out
+  const season = await getLatestIdpStatSeason()
+  if (!season) return out
   const rules = await getMergedScoringRulesForLeague(leagueId)
-  const w1 = Math.max(1, week - 2)
-  const w2 = Math.max(1, week - 1)
-  const w3 = Math.min(18, Math.max(1, week))
-  const recent3 = [w1, w2, w3].map((w) => {
-    const line = generateDeterministicWeeklyStatLine(playerId, w)
-    return computeIdpFantasyPoints(line, rules).total
+  const { linesByPlayer } = await getRealIdpLinesForRosterIds(playerIds, season, {
+    throughWeek: Math.min(18, Math.max(1, week)),
   })
-  const seasonAvg = recent3.reduce((a, b) => a + b, 0) / recent3.length
-  const trend: 'up' | 'down' = recent3[2] >= recent3[0] ? 'up' : 'down'
-  const seed = seedFromString(`${playerId}:${week}`)
-  const snapShare = 35 + (seed % 55)
-  const matchupRating = 3 + (seed % 17) / 2
-  return { seasonAvg, snapShare, matchupRating, recent3, trend }
+  for (const [pid, weeks] of linesByPlayer) {
+    const pts = weeks.map((w) => computeIdpFantasyPoints(w.stats, rules).total)
+    if (pts.length === 0) continue
+    const seasonAvg = pts.reduce((a, b) => a + b, 0) / pts.length
+    const recent3 = pts.slice(-3)
+    const first = recent3[0] ?? 0
+    const last = recent3[recent3.length - 1] ?? 0
+    const trend: IdpAiStatProfile['trend'] = recent3.length < 2 ? 'flat' : last >= first ? 'up' : 'down'
+    out.set(pid, { seasonAvg, recent3, weeksOfData: pts.length, trend })
+  }
+  return out
+}
+
+/** Single-player profile — null when no ingested lines exist for the player. */
+export async function resolveIdpAiProfile(
+  leagueId: string,
+  playerId: string,
+  week: number,
+): Promise<IdpAiStatProfile | null> {
+  const map = await resolveIdpAiProfiles(leagueId, [playerId], week)
+  return map.get(playerId) ?? null
 }
 
 function startScore(p: IdpAiStatProfile): number {
-  const recentAvg = p.recent3.reduce((a, b) => a + b, 0) / 3
-  return 0.35 * p.seasonAvg + 0.25 * p.matchupRating + 0.2 * (p.snapShare / 100) * 25 + 0.2 * recentAvg
+  const recentAvg = p.recent3.length
+    ? p.recent3.reduce((a, b) => a + b, 0) / p.recent3.length
+    : p.seasonAvg
+  return 0.6 * p.seasonAvg + 0.4 * recentAvg
 }
 
 async function assertIdpLeague(leagueId: string): Promise<void> {
@@ -223,29 +243,34 @@ async function allLeagueRosterPlayerIds(leagueId: string): Promise<Set<string>> 
   return set
 }
 
-/** Mock waiver pool: synthetic defenders not rostered in this league. */
-export async function buildMockWaiverPool(leagueId: string, week: number, limit: number): Promise<IdPlayerRow[]> {
+/**
+ * Real waiver pool: the league's actual unrostered defenders, from the same
+ * sport player pool the offense-side waiver tools read. This replaced
+ * `buildMockWaiverPool`, which invented "FA Defender N" players that do not
+ * exist — advice about them was worthless by construction.
+ */
+export async function buildIdpWaiverPool(leagueId: string, limit: number): Promise<IdPlayerRow[]> {
   const taken = await allLeagueRosterPlayerIds(leagueId)
-  const pool: IdPlayerRow[] = []
-  const positions = ['DE', 'DT', 'LB', 'CB', 'S']
-  const teams = ['BUF', 'DAL', 'SF', 'BAL', 'CLE', 'PIT', 'NYJ', 'MIA']
-  let i = 0
-  while (pool.length < Math.max(limit * 4, 24) && i < 200) {
-    const pid = `waiver-synth-${leagueId.slice(0, 6)}-${i}`
-    if (!taken.has(pid)) {
-      const prof = await resolveIdpAiProfile(leagueId, pid, week)
-      if (prof.snapShare >= 40 || prof.trend === 'up') {
-        pool.push({
-          playerId: pid,
-          name: `FA Defender ${i + 1}`,
-          position: positions[i % positions.length],
-          team: teams[i % teams.length],
-        })
-      }
-    }
-    i++
+  const pool = await getPlayerPoolForLeague(leagueId, 'NFL', {
+    limit: Math.max(limit * 4, 200),
+    position: 'IDP_FLEX',
+  })
+  const out: IdPlayerRow[] = []
+  const seen = new Set<string>()
+  for (const p of pool) {
+    const pid = String(p.external_source_id ?? p.player_id ?? '')
+    if (!pid || taken.has(pid) || seen.has(pid)) continue
+    if (!isIdpPosition(p.position)) continue
+    seen.add(pid)
+    out.push({
+      playerId: pid,
+      name: p.full_name,
+      position: p.position.toUpperCase(),
+      team: p.team_abbreviation ?? undefined,
+    })
+    if (out.length >= limit) break
   }
-  return pool.slice(0, Math.max(limit * 4, 20))
+  return out
 }
 
 export async function getDefenderStartSitRec(
@@ -268,31 +293,45 @@ export async function getDefenderStartSitRec(
     }
   }
 
-  const scored = await Promise.all(
-    defenders.map(async (d) => {
-      const profile = await resolveIdpAiProfile(leagueId, d.playerId, week)
-      return {
-        ...d,
-        profile,
-        score: startScore(profile),
-      }
-    }),
+  const profiles = await resolveIdpAiProfiles(
+    leagueId,
+    defenders.map((d) => d.playerId),
+    week,
   )
+  const scored = defenders.flatMap((d) => {
+    const profile = profiles.get(d.playerId)
+    return profile ? [{ ...d, profile, score: startScore(profile) }] : []
+  })
+  const noData = defenders.filter((d) => !profiles.has(d.playerId))
+  if (scored.length === 0) {
+    return {
+      starters: [],
+      sitters: [],
+      analysis:
+        'No ingested stat lines for your IDP roster yet — recommendations appear once real weekly stats land.',
+      week,
+    }
+  }
   scored.sort((a, b) => b.score - a.score)
   const starters = scored.slice(0, Math.min(4, scored.length)).map((s) => s.name)
   const sitters = scored.slice(Math.min(4, scored.length)).map((s) => s.name)
 
   const lines = scored.map(
     (s) =>
-      `- ${s.name} (${s.position}, ${s.team ?? 'FA'}): avg ${s.profile.seasonAvg.toFixed(1)} IDP pts, opp rank vs pos ~${s.profile.matchupRating.toFixed(1)}, snaps ${s.profile.snapShare}%, last 3: [${s.profile.recent3.map((x) => x.toFixed(1)).join(', ')}]`
+      `- ${s.name} (${s.position}, ${s.team ?? 'FA'}): avg ${s.profile.seasonAvg.toFixed(1)} IDP pts over ${s.profile.weeksOfData} wk, last ${s.profile.recent3.length}: [${s.profile.recent3.map((x) => x.toFixed(1)).join(', ')}]`
   )
+  if (noData.length > 0) {
+    lines.push(
+      `- No ingested stat lines yet (excluded from ranking): ${noData.map((d) => d.name).join(', ')}`,
+    )
+  }
 
   const res = await openaiChatText({
     messages: [
       { role: 'system', content: CHIMMY_IDP_RULE },
       {
         role: 'user',
-        content: `Week ${week} NFL. Analyze these defensive players:\n${lines.join('\n')}\n\nRecommend who to start and who to bench. Format: START: (list), SIT: (list), then brief reasoning (1-2 sentences each group).`,
+        content: `Week ${week} NFL. Analyze these defensive players (real ingested stat lines; no snap-count or matchup data exists — do not invent any):\n${lines.join('\n')}\n\nRecommend who to start and who to bench. Format: START: (list), SIT: (list), then brief reasoning (1-2 sentences each group).`,
       },
     ],
     temperature: 0.45,
@@ -311,30 +350,67 @@ export async function getIDPWaiverTargets(
   await requireAfSub()
   await assertIdpLeague(leagueId)
 
-  const pool = await buildMockWaiverPool(leagueId, week, limit)
-  const ranked = (
-    await Promise.all(
-      pool.map(async (p, idx) => {
-        const pr = await resolveIdpAiProfile(leagueId, p.playerId, week)
-        const score = startScore(pr) + (idx % 3) * 0.1
-        return { ...p, score, pr }
-      }),
-    )
+  const pool = await buildIdpWaiverPool(leagueId, Math.max(limit * 4, 24))
+  if (pool.length === 0) return []
+
+  const profiles = await resolveIdpAiProfiles(
+    leagueId,
+    pool.map((p) => p.playerId),
+    week,
   )
-    .sort((a, b) => b.score - a.score)
+  const league = await prisma.league.findUnique({
+    where: { id: leagueId },
+    select: { isDynasty: true },
+  })
+  const tierValues = await buildIdpKickerValueMap(
+    pool.map((p) => p.playerId),
+    league?.isDynasty ?? false,
+  )
+
+  // Blend in RANK space: real ingested production and the tier-curve market
+  // value have incompatible units, so each contributes an ordering, not points.
+  const prodRank = new Map(
+    [...pool]
+      .sort((a, b) => {
+        const pa = profiles.get(a.playerId)
+        const pb = profiles.get(b.playerId)
+        if (!pa && !pb) return 0
+        if (!pa) return 1
+        if (!pb) return -1
+        return startScore(pb) - startScore(pa)
+      })
+      .map((p, i) => [p.playerId, i] as const),
+  )
+  const tierOf = (pid: string) => {
+    const v = tierValues.get(pid)
+    return v ? Math.max(v.value, v.redraftValue) : 0
+  }
+  const tierRank = new Map(
+    [...pool].sort((a, b) => tierOf(b.playerId) - tierOf(a.playerId)).map((p, i) => [p.playerId, i] as const),
+  )
+
+  const ranked = [...pool]
+    .sort(
+      (a, b) =>
+        (prodRank.get(a.playerId)! + tierRank.get(a.playerId)!) -
+        (prodRank.get(b.playerId)! + tierRank.get(b.playerId)!),
+    )
     .slice(0, limit)
+    .map((p) => ({ ...p, pr: profiles.get(p.playerId) ?? null }))
+
+  const describe = (r: (typeof ranked)[number]) =>
+    r.pr
+      ? `avg ${r.pr.seasonAvg.toFixed(1)} IDP pts over ${r.pr.weeksOfData} wk, trend ${r.pr.trend}`
+      : 'no ingested stat lines yet — ranked on market tier value only'
 
   const res = await openaiChatText({
     messages: [
       { role: 'system', content: CHIMMY_IDP_RULE },
       {
         role: 'user',
-        content: `Top ${limit} defensive waiver pickups for Week ${week}:\n${ranked
-          .map(
-            (r, i) =>
-              `${i + 1}. ${r.name} ${r.position} ${r.team ?? ''} — trend ${r.pr.trend}, snaps ${r.pr.snapShare}%, avg ${r.pr.seasonAvg.toFixed(1)}`
-          )
-          .join('\n')}\n\nOne sentence each: breakout/usage/schedule angle.`,
+        content: `Top ${ranked.length} unrostered defenders in this league for Week ${week} (real ingested stats + market tier value; no snap or schedule data — do not invent any):\n${ranked
+          .map((r, i) => `${i + 1}. ${r.name} ${r.position} ${r.team ?? ''} — ${describe(r)}`)
+          .join('\n')}\n\nOne sentence each on why they are worth a claim, grounded only in the data above.`,
       },
     ],
     temperature: 0.5,
@@ -347,7 +423,7 @@ export async function getIDPWaiverTargets(
     name: r.name,
     position: r.position,
     team: r.team,
-    reasoning: text ? text.split('\n')[i]?.trim() || text : `Strong usage trend (${r.pr.trend}) and snap share ${r.pr.snapShare}%.`,
+    reasoning: text ? text.split('\n')[i]?.trim() || text : describe(r),
   }))
 }
 
@@ -368,21 +444,26 @@ export async function getIDPMatchupAnalysis(
   const oppOff = parseOffensivePlayers(opponent?.playerData)
   const oppLabel = opponent ? `Opponent (${opponent.id.slice(0, 8)})` : 'Opponent'
 
-  const myLines = (
-    await Promise.all(
-      myDef.map(async (d) => {
-        const p = await resolveIdpAiProfile(leagueId, d.playerId, week)
-        return `${d.name} (${d.position}): matchup rating ${p.matchupRating.toFixed(1)}, snaps ${p.snapShare}%`
-      }),
-    )
-  ).join('\n')
+  const myProfiles = await resolveIdpAiProfiles(
+    leagueId,
+    myDef.map((d) => d.playerId),
+    week,
+  )
+  const myLines = myDef
+    .map((d) => {
+      const p = myProfiles.get(d.playerId)
+      return p
+        ? `${d.name} (${d.position}): avg ${p.seasonAvg.toFixed(1)} IDP pts over ${p.weeksOfData} wk, trend ${p.trend}`
+        : `${d.name} (${d.position}): no ingested stat lines yet`
+    })
+    .join('\n')
 
   const res = await openaiChatText({
     messages: [
       { role: 'system', content: CHIMMY_IDP_RULE },
       {
         role: 'user',
-        content: `Week ${week}. My IDP defenders:\n${myLines || '(none parsed)'}\nOpponent: ${oppLabel}. Their offensive skill players (sample): ${oppOff.slice(0, 8).map((o) => `${o.name} (${o.position})`).join(', ') || 'unknown'}\nExplain matchup context: run-heavy vs pass-heavy opponent tendencies (hypothetical from matchup rating), and where my IDP has tackle/sack upside.\nAlso note one way the opponent could outscore me on IDP this week.`,
+        content: `Week ${week}. My IDP defenders (real ingested stats only — no matchup-strength or snap data exists, do not invent any):\n${myLines || '(none parsed)'}\nOpponent: ${oppLabel}. Their offensive skill players (sample): ${oppOff.slice(0, 8).map((o) => `${o.name} (${o.position})`).join(', ') || 'unknown'}\nExplain where my IDP has tackle/sack upside based on their real production, and say plainly that no defensive matchup ranking is available.\nAlso note one way the opponent could outscore me on IDP this week.`,
       },
     ],
     temperature: 0.45,
@@ -467,11 +548,6 @@ Reply with ONLY a JSON object (no markdown) with keys:
   }
 }
 
-function rankingComposite(pr: IdpAiStatProfile): number {
-  const snapTrend = pr.trend === 'up' ? 1 : 0.65
-  return 0.4 * pr.seasonAvg + 0.4 * pr.matchupRating + 0.2 * snapTrend * 12
-}
-
 export async function getWeeklyIDPRankings(
   leagueId: string,
   week: number,
@@ -480,18 +556,19 @@ export async function getWeeklyIDPRankings(
   await requireAfSub()
   await assertIdpLeague(leagueId)
 
-  const pool = await buildMockWaiverPool(leagueId, week, 100)
-  const scored = await Promise.all(
-    pool.map(async (p) => {
-      const pr = await resolveIdpAiProfile(leagueId, p.playerId, week)
-      const proj =
-        0.4 * pr.seasonAvg +
-        0.4 * pr.matchupRating +
-        0.2 * ((pr.snapShare / 100) * 25 + (pr.trend === 'up' ? 2 : 0))
-      return { p, pr, proj, composite: rankingComposite(pr) }
-    }),
+  const pool = await buildIdpWaiverPool(leagueId, 100)
+  const profiles = await resolveIdpAiProfiles(
+    leagueId,
+    pool.map((p) => p.playerId),
+    week,
   )
-  scored.sort((a, b) => b.composite - a.composite)
+  // Only players with real ingested lines are ranked — a "projection" for a
+  // player with no data would be an invented number.
+  const scored = pool.flatMap((p) => {
+    const pr = profiles.get(p.playerId)
+    return pr ? [{ p, pr, proj: startScore(pr) }] : []
+  })
+  scored.sort((a, b) => b.proj - a.proj)
 
   const matchesPos = (pos: string, filter: string) => {
     const u = pos.toUpperCase()
@@ -511,7 +588,7 @@ export async function getWeeklyIDPRankings(
     position: s.p.position,
     team: s.p.team,
     projectedPts: Math.round(s.proj * 10) / 10,
-    reasoning: `Snaps ${s.pr.snapShare}%, matchup ${s.pr.matchupRating.toFixed(1)}, trend ${s.pr.trend}`,
+    reasoning: `Avg ${s.pr.seasonAvg.toFixed(1)} IDP pts over ${s.pr.weeksOfData} wk, trend ${s.pr.trend}`,
   }))
 
   const res = await openaiChatText({
@@ -537,15 +614,18 @@ export async function getSleeperDefenders(leagueId: string, week: number): Promi
   await requireAfSub()
   await assertIdpLeague(leagueId)
 
-  const pool = await buildMockWaiverPool(leagueId, week, 60)
+  const pool = await buildIdpWaiverPool(leagueId, 60)
+  const profiles = await resolveIdpAiProfiles(
+    leagueId,
+    pool.map((p) => p.playerId),
+    week,
+  )
   const posKey = (pos: string) =>
     ['DE', 'DT', 'DL'].includes(pos.toUpperCase()) ? 'DL' : pos.toUpperCase() === 'LB' ? 'LB' : 'DB'
-  const withScores = await Promise.all(
-    pool.map(async (p) => {
-      const pr = await resolveIdpAiProfile(leagueId, p.playerId, week)
-      return { p, pr, score: startScore(pr) }
-    }),
-  )
+  const withScores = pool.flatMap((p) => {
+    const pr = profiles.get(p.playerId)
+    return pr ? [{ p, pr, score: startScore(pr) }] : []
+  })
   const byPos = new Map<string, Array<{ p: IdPlayerRow; score: number }>>()
   for (const row of withScores) {
     const k = posKey(row.p.position)
@@ -562,21 +642,18 @@ export async function getSleeperDefenders(leagueId: string, week: number): Promi
     const idx = arr.findIndex((x) => x.p.playerId === p.playerId)
     return idx < 0 ? 99 : idx + 1
   }
-  const prByPlayer = new Map(withScores.map((r) => [r.p.playerId, r.pr]))
 
+  // "Sleeper" = unrostered in this league with real rising production.
+  // Ownership percentages have no ingested source, so none are claimed.
   const out: SleeperDefender[] = []
-  for (const p of pool) {
-    const pr = prByPlayer.get(p.playerId)
-    if (!pr) continue
-    const own = (seedFromString(p.playerId) % 28) + 1
+  for (const { p, pr } of withScores) {
     const posRank = rankAtPos(p)
-    if (own < 30 && pr.snapShare >= 60 && pr.matchupRating >= 6 && posRank <= 20) {
+    if (pr.weeksOfData >= 2 && pr.trend === 'up' && posRank <= 10) {
       out.push({
         name: p.name,
         position: p.position,
         team: p.team,
-        mockOwnershipPct: own,
-        reasoning: `Hidden gem: ~${own}% ownership, ${pr.snapShare}% snaps, top-${posRank} ${posKey(p.position)} projection in this pool.`,
+        reasoning: `Unrostered here with rising real production: avg ${pr.seasonAvg.toFixed(1)} IDP pts over ${pr.weeksOfData} wk, top-${posRank} ${posKey(p.position)} in this pool.`,
       })
     }
     if (out.length >= 5) break
@@ -585,41 +662,27 @@ export async function getSleeperDefenders(leagueId: string, week: number): Promi
   return out.slice(0, 5)
 }
 
-export async function getSnapShareInsights(leagueId: string, managerId: string): Promise<SnapShareReport> {
+export async function getSnapShareInsights(leagueId: string, _managerId: string): Promise<SnapShareReport> {
   await requireAfSub()
   await assertIdpLeague(leagueId)
 
-  const roster = await getRosterForUser(leagueId, managerId)
-  const defenders = parseIdpPlayers(roster?.playerData)
-  const concerns: SnapShareReport['concerns'] = []
-  const positives: SnapShareReport['positives'] = []
-  const wk = 1
-  for (const d of defenders) {
-    const pr = await resolveIdpAiProfile(leagueId, d.playerId, wk)
-    if (pr.snapShare < 50) {
-      concerns.push({
-        player: d.name,
-        snap_share: pr.snapShare,
-        trend: pr.trend,
-        note: 'Below 50% snaps — role risk in this snapshot.',
-      })
-    } else if (pr.trend === 'up') {
-      positives.push({
-        player: d.name,
-        snap_share: pr.snapShare,
-        trend: pr.trend,
-        note: 'Rising usage trend in recent-week snapshot.',
-      })
-    }
+  /*
+   * Snap counts have NO real source — the PBP feed carries stat events, not
+   * snaps. This used to invent a share from a hash of the player id; an empty
+   * report with the reason beats a fabricated percentage a manager acts on.
+   */
+  return {
+    concerns: [],
+    positives: [],
+    note: 'Snap-count data is not ingested yet — per-player snap shares are unavailable.',
   }
-  return { concerns, positives }
 }
 
-export async function getIDPScarcityReport(leagueId: string, week: number): Promise<ScarcityReport> {
+export async function getIDPScarcityReport(leagueId: string, _week: number): Promise<ScarcityReport> {
   await requireAfSub()
   await assertIdpLeague(leagueId)
 
-  const pool = await buildMockWaiverPool(leagueId, week, 30)
+  const pool = await buildIdpWaiverPool(leagueId, 30)
   const byPos: Record<string, number> = { DL: 0, LB: 0, DB: 0 }
   for (const p of pool) {
     const g = ['DE', 'DT', 'DL'].includes(p.position) ? 'DL' : p.position === 'LB' ? 'LB' : 'DB'
@@ -631,7 +694,7 @@ export async function getIDPScarcityReport(leagueId: string, week: number): Prom
       { role: 'system', content: CHIMMY_IDP_RULE },
       {
         role: 'user',
-        content: `Waiver IDP counts by bucket (synthetic pool): ${JSON.stringify(byPos)}. Explain scarcity for DL vs LB vs DB and actionable add/drop strategy before bye weeks.`,
+        content: `Unrostered IDP counts by bucket in this league: ${JSON.stringify(byPos)}. Explain scarcity for DL vs LB vs DB and actionable add/drop strategy before bye weeks.`,
       },
     ],
     temperature: 0.45,
@@ -641,9 +704,9 @@ export async function getIDPScarcityReport(leagueId: string, week: number): Prom
   return {
     summary: res.ok ? res.text : 'AI unavailable.',
     byPosition: {
-      DL: `${byPos.DL ?? 0} plausible DL streamers in pool snapshot.`,
-      LB: `${byPos.LB ?? 0} LB profiles — often thinnest in IDP.`,
-      DB: `${byPos.DB ?? 0} DB profiles — replaceable in big-play formats.`,
+      DL: `${byPos.DL ?? 0} unrostered DL in this league.`,
+      LB: `${byPos.LB ?? 0} unrostered LB — often thinnest in IDP.`,
+      DB: `${byPos.DB ?? 0} unrostered DB — replaceable in big-play formats.`,
     },
   }
 }
@@ -660,15 +723,23 @@ export async function generateIDPPowerRankings(leagueId: string, week: number): 
   const scored = await Promise.all(
     rosters.map(async (r) => {
       const idps = parseIdpPlayers(r.playerData)
+      const profiles = await resolveIdpAiProfiles(
+        leagueId,
+        idps.map((p) => p.playerId),
+        week,
+      )
       let sum = 0
       for (const p of idps) {
-        const prof = await resolveIdpAiProfile(leagueId, p.playerId, week)
-        sum += startScore(prof)
+        const prof = profiles.get(p.playerId)
+        if (prof) sum += startScore(prof)
       }
       return {
         teamLabel: `Team ${r.id.slice(0, 6)}`,
         sum,
-        blurb: `IDP strength score ~${sum.toFixed(1)} (league scoring rules + deterministic stats).`,
+        blurb:
+          profiles.size > 0
+            ? `IDP strength ~${sum.toFixed(1)} from ${profiles.size} of ${idps.length} defenders with ingested stats.`
+            : `No ingested defensive stats yet for this roster (${idps.length} defenders).`,
       }
     }),
   )
@@ -756,6 +827,7 @@ export async function getIdpPlayerAiAnalysis(
   const p = defenders.find((d) => d.playerId === playerId)
   if (!p) throw new Error('Player not on your IDP roster snapshot')
   const pr = await resolveIdpAiProfile(leagueId, playerId, week)
+  if (!pr) throw new Error('No ingested stat lines for this player yet — analysis needs real weekly stats.')
   const { buildDefenderEvaluationContext, scoreDefender } = await import('@/lib/idp/ai/idpCapChimmy')
   const ctx = await buildDefenderEvaluationContext(leagueId, playerId, week, p)
   const evalModel = scoreDefender(ctx.profile, ctx.stats, ctx.salary, ctx.matchup, ctx.leagueConfig, ctx.formatType)
@@ -765,7 +837,7 @@ export async function getIdpPlayerAiAnalysis(
       {
         role: 'user',
         content: `Start/sit assessment for ${p.name} (${p.position}) Week ${week}.
-Deterministic profile: ${JSON.stringify(pr)}
+Real ingested profile: ${JSON.stringify(pr)}
 10-pillar evaluation (0-100): overall ${evalModel.overallGrade.toFixed(1)}, weekly start ${evalModel.weeklyStartGrade.toFixed(1)}, salary eff ${evalModel.salaryEfficiencyGrade.toFixed(1)}, risk ${evalModel.riskScore.toFixed(1)}.
 Verdict hint: ${evalModel.verdict}. Top pillars: ${evalModel.pillarBreakdown.slice(0, 3).map((x) => `${x.name}=${x.score.toFixed(0)}`).join(', ')}.
 Incorporate contract/salary context in 2-3 sentences when relevant.`,

@@ -358,6 +358,7 @@ export async function processIdpLeagueChatInput(
           'Snap share snapshot:',
           ...s.concerns.map((c) => `⚠️ ${c.player}: ${c.snap_share}% (${c.trend}) — ${c.note}`),
           ...s.positives.map((c) => `✓ ${c.player}: ${c.snap_share}% (${c.trend}) — ${c.note}`),
+          ...(s.note ? [s.note] : []),
         ].join('\n')
         return { outcome: 'suppress_public', privateNotice: `🔒 ${text}` }
       } catch (e) {
@@ -370,7 +371,10 @@ export async function processIdpLeagueChatInput(
     if (low.includes('idp sleepers')) {
       try {
         const sl = await getSleeperDefenders(leagueId, week)
-        const lines = sl.map((x) => `• ${x.name} (${x.position}) ~${x.mockOwnershipPct}% owned — ${x.reasoning}`).join('\n')
+        const lines =
+          sl.length > 0
+            ? sl.map((x) => `• ${x.name} (${x.position}) — ${x.reasoning}`).join('\n')
+            : 'No unrostered defenders with rising ingested production right now.'
         return {
           outcome: 'post_user_and_chimmy',
           chimmyMessages: [{ text: `💎 IDP Sleepers:\n${lines}`, metadata: chimmyMeta({ idpAction: 'sleepers' }) }],
