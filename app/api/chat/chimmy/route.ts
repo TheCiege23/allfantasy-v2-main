@@ -302,7 +302,13 @@ const SPORTS_KEYWORDS = [
   'trade', 'waiver', 'draft', 'player', 'pick', 'roster', 'lineup',
   'start', 'sit', 'drop', 'add', 'quarterback', 'receiver', 'running back',
   'tight end', 'kicker', 'defense', 'fantasy', 'points', 'league', 'playoffs',
-  'standings', 'bench', 'injury', 'bye week', 'matchup', 'projection',
+  // 'injury' -> 'injur': every other entry pluralizes with a plain +s/+es, which
+  // keeps the singular a substring of the plural ("trade" in "trades"). Injury's
+  // plural is irregular (y -> ies), so "injuries" does not contain "injury" and
+  // a completely ordinary question ("any injuries I should know about?") was
+  // silently gated out before ever reaching Chimmy. The stem covers injury,
+  // injuries and injured without the same gap reappearing.
+  'standings', 'bench', 'injur', 'bye week', 'matchup', 'projection',
   'qb', 'rb', 'wr', 'te', 'flex', 'superflex', 'ppr', 'dynasty', 'keeper',
   'faab', 'auction', 'nfl', 'nba', 'mlb', 'basketball', 'baseball', 'football',
   'nhl', 'hockey', 'soccer', 'futbol', 'fútbol', 'ncaab', 'ncaaf',
