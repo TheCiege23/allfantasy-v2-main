@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { requireCronAuth } from '@/app/api/cron/_auth'
 import { resolveCadence } from '@/lib/fantasy-os/sync/season'
-import { runDueSleeperLeagues } from '@/lib/fantasy-os/sync/collector'
+import { runDueSleeperLeagues, runExternalMatchupParity } from '@/lib/fantasy-os/sync/collector'
 import { refreshProfilesForExternalLeagues } from '@/lib/psychological-profiles/ProfileRefreshService'
 import { materializeSleeperDraftSessions } from '@/lib/sleeper/sync/materializeSleeperDraftSessions'
 
@@ -109,7 +109,25 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ...heartbeat, executed: true, summary, profiles, draftSessions })
+    // ESPN/Yahoo weekly-matchup parity rides the same heartbeat. Sleeper
+    // leagues get WeeklyMatchup rows from ensureMatchupsCached inside the
+    // collector above; ESPN and Yahoo leagues had NO writer at all, so every
+    // WeeklyMatchup-backed surface was empty for them. The parity collector
+    // keeps its own 6h per-league cadence in SportsDataCache (full provider
+    // reads are heavier than Sleeper's), tries each importing user's stored
+    // credentials, and skips a league honestly when none work. Bounded and
+    // swallowed — same contract as the profile refresh and draft
+    // materialization above.
+    let externalMatchups: unknown = null
+    try {
+      externalMatchups = await runExternalMatchupParity({ now, maxLeagues: 3 })
+    } catch (externalErr) {
+      externalMatchups = {
+        error: externalErr instanceof Error ? externalErr.message.slice(0, 160) : 'external matchup parity failed',
+      }
+    }
+
+    return NextResponse.json({ ...heartbeat, executed: true, summary, profiles, draftSessions, externalMatchups })
   } catch (err) {
     return NextResponse.json(
       { ...heartbeat, executed: false, error: err instanceof Error ? err.message : 'sync failed' },

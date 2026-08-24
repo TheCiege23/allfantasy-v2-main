@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
-import { sendNotificationEmail } from '@/lib/resend-client'
+import { sendTemplatedEmail } from '@/lib/resend-client'
+import { renderDigestEmail } from '@/lib/notifications/designedEmail'
+import { getBaseUrl } from '@/lib/get-base-url'
 import { getCommandCenter, type CommandCenterPayload } from '@/lib/dashboard-intel/commandCenterService'
 import { withSyncJobRun } from '@/lib/production-health/syncJobRunTelemetry'
 
@@ -109,12 +111,20 @@ async function sendBriefing(userId: string, email: string): Promise<'sent' | 'sk
   if (await alreadySent(key)) return 'skipped'
   const center = await getCommandCenter(userId)
   if (!center || center.leaguesScanned === 0) return 'skipped'
-  const res = await sendNotificationEmail({
+  // sendTemplatedEmail sends the HTML as-is (briefingHtml escapes at the leaf),
+  // so the section markup survives instead of being stripped into one flat
+  // paragraph by sendNotificationEmail's tag strip.
+  const baseUrl = getBaseUrl()
+  const res = await sendTemplatedEmail({
     to: email,
     subject: briefingSubject(center),
-    bodyHtml: briefingHtml(center),
-    actionHref: '/dashboard',
-    actionLabel: 'Open the Command Center',
+    html: renderDigestEmail({
+      eyebrow: 'Morning briefing',
+      title: 'Your AllFantasy morning briefing',
+      bodyHtml: briefingHtml(center),
+      cta: { href: `${baseUrl}/dashboard`, label: 'Open the Command Center' },
+      baseUrl,
+    }),
   }).catch(() => ({ ok: false as const }))
   if (!res.ok) return 'failed'
   await markSent(key)

@@ -145,7 +145,7 @@ export async function getCanonicalPlayer(
       },
     }),
     prisma.fantasyProjection.findMany({
-      where: { playerId, sport: sportKey },
+      where: { playerId, sport: sportKey, source: { not: 'allfantasy' } },
       orderBy: [{ season: 'desc' }, { week: 'desc' }],
       take: projectionLimit,
       select: { season: true, week: true, projectedPoints: true, source: true },

@@ -1044,3 +1044,79 @@ export async function fetchYahooLeagueForImport(
     commissionerTeamKeys,
   }
 }
+
+/**
+ * Lean per-league weekly matchup read for the parity sync. Fetches league
+ * metadata (start/current/end week + season) and team keys, then each team's
+ * matchups — the same verified endpoints the import uses — WITHOUT the
+ * import's rosters, transactions, draft results or previous-season discovery.
+ * Throws `YahooImportConnectionError` when the stored OAuth tokens are absent
+ * or no longer refresh, so the caller can skip the league with an honest note.
+ */
+export async function fetchYahooWeeklyMatchupsForSync(
+  userId: string,
+  leagueKey: string
+): Promise<{ season: number | null; schedule: YahooImportScheduleWeek[] }> {
+  const context = await getYahooAuthForUser(userId)
+
+  let metadataData: any
+  try {
+    metadataData = await yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}?format=json`, context)
+  } catch (error) {
+    if (error instanceof YahooApiResponseError && (error.status === 401 || error.status === 404)) {
+      throw new YahooImportLeagueNotFoundError(
+        `Yahoo league "${leagueKey}" was not found or is not available to your connected Yahoo account.`
+      )
+    }
+    throw error
+  }
+
+  const leagueNode = mergeYahooEntityFragments({ league: metadataData?.fantasy_content?.league }, 'league')
+  const season = parseNumber(leagueNode?.season, null)
+  const startWeek = parseNumber(leagueNode?.start_week, null)
+  const endWeek = parseNumber(leagueNode?.end_week, null)
+  const currentWeek = parseNumber(leagueNode?.current_week, null)
+  const isFinished = parseBoolean(leagueNode?.is_finished)
+  const weeks = buildYahooWeekRange(startWeek, isFinished ? endWeek : (currentWeek ?? endWeek))
+  if (weeks.length === 0) return { season, schedule: [] }
+
+  const teamsData = await yahooApiFetchJson(`${YAHOO_API_BASE}/league/${leagueKey}/teams?format=json`, context)
+  const teamKeys = Array.from(parseYahooTeamsMetadata(teamsData).keys())
+  if (teamKeys.length === 0) return { season, schedule: [] }
+
+  const weekParam = weeks.join(',')
+  const seasonYear = season ?? new Date().getFullYear()
+  const scheduleByWeek = new Map<number, YahooImportScheduleWeek['matchups']>()
+  const matchupResults = await Promise.allSettled(
+    teamKeys.map(async (teamKey) => {
+      const matchupData = await yahooApiFetchJson(
+        `${YAHOO_API_BASE}/team/${teamKey}/matchups;weeks=${weekParam}?format=json`,
+        context
+      )
+      return parseYahooTeamMatchups(matchupData, seasonYear)
+    })
+  )
+  for (const result of matchupResults) {
+    if (result.status !== 'fulfilled') continue
+    for (const week of result.value) {
+      if (!scheduleByWeek.has(week.week)) {
+        scheduleByWeek.set(week.week, [])
+      }
+      const weekEntries = scheduleByWeek.get(week.week)!
+      for (const matchup of week.matchups) {
+        const matchupKey = [matchup.teamKey1, matchup.teamKey2].sort().join('::')
+        const exists = weekEntries.some(
+          (existing) => [existing.teamKey1, existing.teamKey2].sort().join('::') === matchupKey
+        )
+        if (!exists) weekEntries.push(matchup)
+      }
+    }
+  }
+
+  return {
+    season,
+    schedule: Array.from(scheduleByWeek.entries())
+      .sort((a, b) => a[0] - b[0])
+      .map(([week, matchups]) => ({ week, season: seasonYear, matchups })),
+  }
+}

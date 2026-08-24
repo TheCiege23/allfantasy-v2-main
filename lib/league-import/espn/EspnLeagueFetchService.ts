@@ -1230,3 +1230,29 @@ export async function fetchEspnLeagueForImport(
     commissionerTeamIds,
   }
 }
+
+/**
+ * Lean per-league schedule read for the weekly-matchup parity sync: ONE league
+ * request (mMatchup + mScoreboard views) instead of the full import fan-out
+ * (roster, draft, transactions, previous-season probes). Reuses the same
+ * cookie fallback as the import — public leagues need no credentials at all;
+ * a private league whose stored cookies don't unlock it throws
+ * `EspnImportConnectionError` so the caller can skip it with an honest note.
+ */
+export async function fetchEspnScheduleForSync(
+  userId: string,
+  leagueId: string,
+  season: number
+): Promise<EspnImportScheduleWeek[]> {
+  const auth = await getEspnAuthForUser(userId)
+  const raw = await loadEspnLeagueRaw({
+    leagueId,
+    season,
+    auth,
+    views: ['mMatchup', 'mScoreboard'],
+  })
+  const currentWeek =
+    parseNumber(raw?.status?.currentMatchupPeriod, null) ??
+    parseNumber(raw?.scoringPeriodId, null)
+  return parseEspnSchedule(raw, season, currentWeek)
+}

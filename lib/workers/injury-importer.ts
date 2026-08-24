@@ -5,6 +5,7 @@ import { SUPPORTED_SPORTS, normalizeToSupportedSport } from '@/lib/sport-scope'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { apiChain } from '@/lib/workers/api-chain'
 import { ingest, injuryAlert } from '@/lib/notification-engine'
+import { ownersByPlayerId } from '@/lib/live/bigPlayNotifier'
 
 const UPSERT_BATCH_SIZE = 100
 
@@ -146,17 +147,37 @@ export async function runInjuryImporter(options?: {
       )
       imported += batch.length
 
-      // Fire notifications for high-severity injuries (out, IR, suspended)
+      // Fire notifications for high-severity injuries (out, IR, suspended).
+      // Recipients are resolved the way big-play alerts resolve them — through
+      // PlayerIdentityMap to the managers who actually roster the player. An
+      // event with neither userIds nor leagueId is a guaranteed no-op inside
+      // ingest() ('no_target_users'), which is exactly what this loop used to
+      // be. Rows whose playerId has no identity mapping are skipped, not
+      // guessed at. Email/SMS are skipped on purpose: the in-app row (with the
+      // engine's 60-minute per-user cooldown) is the alert; injury email
+      // belongs to the digest, not a per-report blast.
       const highSeverity = batch.filter((r) =>
         ['out', 'ir', 'injured reserve', 'suspended'].includes(r.status.toLowerCase())
       )
-      for (const row of highSeverity.slice(0, 5)) {
-        void ingest(injuryAlert({
-          playerName: row.playerName,
-          team: row.team,
-          status: row.status,
-          sport: row.sport,
-        }))
+      const capped = highSeverity.slice(0, 5)
+      if (capped.length > 0) {
+        const owners = await ownersByPlayerId(
+          Array.from(new Set(capped.map((r) => r.playerId).filter(Boolean)))
+        ).catch(() => new Map<string, string[]>())
+        for (const row of capped) {
+          const userIds = owners.get(row.playerId)
+          if (!userIds || userIds.length === 0) continue
+          void ingest({
+            ...injuryAlert({
+              playerName: row.playerName,
+              team: row.team,
+              status: row.status,
+              sport: row.sport,
+              userIds,
+            }),
+            skipChannels: { email: true, sms: true },
+          })
+        }
       }
     }
   }

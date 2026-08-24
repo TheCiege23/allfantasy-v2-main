@@ -88,11 +88,6 @@ export function DraftMusicWidget({
   const [state, setState] = useState<DraftMusicState>({ kind: 'loading' })
   const [expanded, setExpanded] = useState(variant === 'full')
   const [volume, setVolume] = useState(60)
-  /*
-   * ⚠ NEVER TRUE ON MOUNT. The draft room opening must not start audio. This
-   * only becomes true when a person presses play.
-   */
-  const [playing, setPlaying] = useState(false)
   const [previewTrackId, setPreviewTrackId] = useState<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -287,19 +282,27 @@ export function DraftMusicWidget({
             <span className="af-dm-track">{nowPlaying.trackName}</span>
             <span className="af-dm-artist">{nowPlaying.artistName}</span>
           </div>
+          {/*
+            ⚠ HONESTLY DISABLED, NOT COSMETICALLY LIVE. Play used to toggle a
+            local boolean that controlled nothing, prev/next had no handlers,
+            and the scrubber painted a hardcoded 32%. Until this widget drives
+            the Web Playback SDK for real (see SpotifyMiniPlayer for the
+            plumbing), the controls render disabled with the reason printed
+            below them.
+          */}
           <div className="af-dm-transport">
-            <button type="button" className="af-dm-tbtn" aria-label="Previous track">
+            <button type="button" className="af-dm-tbtn" aria-label="Previous track" disabled>
               ⏮
             </button>
             <button
               type="button"
               className="af-dm-tbtn af-dm-tbtn--main"
-              aria-label={playing ? 'Pause' : 'Play'}
-              onClick={() => setPlaying((p) => !p)}
+              aria-label="Play"
+              disabled
             >
-              {playing ? '⏸' : '▶'}
+              ▶
             </button>
-            <button type="button" className="af-dm-tbtn" aria-label="Next track">
+            <button type="button" className="af-dm-tbtn" aria-label="Next track" disabled>
               ⏭
             </button>
           </div>
@@ -308,16 +311,31 @@ export function DraftMusicWidget({
 
       {state.kind === 'ready' ? (
         <>
+          {nowPlaying ? (
+            <p className="af-dm-msg">
+              Playback controls aren&apos;t wired to Spotify yet, so they&apos;re disabled —{' '}
+              <a
+                href={`https://open.spotify.com/track/${nowPlaying.id}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                open this track in Spotify
+              </a>{' '}
+              to hear it.
+            </p>
+          ) : null}
           <div className="af-dm-scrub">
             <span className="af-dm-time">0:00</span>
             <div className="af-dm-scrub-track" role="presentation">
-              <div className="af-dm-scrub-fill" style={{ width: playing ? '32%' : '0%' }} />
+              {/* 0% is the truth: nothing plays from this widget yet. */}
+              <div className="af-dm-scrub-fill" style={{ width: '0%' }} />
             </div>
             <span className="af-dm-time">{fmt(nowPlaying?.durationMs ?? 0)}</span>
           </div>
 
           <label className="af-dm-vol">
-            {/* Per-user, always. There is no room volume to set. */}
+            {/* Per-user, always. There is no room volume to set. Disabled with
+                the transport: it has nothing to control until playback is wired. */}
             <span className="af-dm-vol-label">Your volume</span>
             <input
               type="range"
@@ -326,6 +344,7 @@ export function DraftMusicWidget({
               value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
               aria-label="Your volume"
+              disabled
             />
             <span className="af-dm-vol-val">{volume}</span>
           </label>

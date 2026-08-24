@@ -19,6 +19,11 @@
  * kind of invented number this module exists to avoid.
  */
 
+import {
+  resolveProviderScoringStatKey,
+  type YahooCapturedStatCategory,
+} from '@/lib/scoring-defaults/ScoringKeyAliasResolver'
+
 /**
  * IDP naming variants — the same stat under two names.
  *
@@ -197,6 +202,107 @@ export function computeLeagueProjectedPoints(
   }
 }
 
+/** Yahoo JSON collections arrive as arrays OR `{0:…,1:…,count}` objects; yield the items either way. */
+function yahooCollectionItems(source: unknown): unknown[] {
+  if (Array.isArray(source)) return source
+  if (source && typeof source === 'object') {
+    return Object.entries(source as Record<string, unknown>)
+      .filter(([k]) => k !== 'count')
+      .map(([, v]) => v)
+  }
+  return []
+}
+
+/** Merge a Yahoo entity that may be a plain object or an array of fragment objects. */
+function mergeYahooFragments(entity: unknown): Record<string, unknown> {
+  if (Array.isArray(entity)) {
+    const fragments = Array.isArray(entity[0]) ? entity[0] : entity
+    const merged: Record<string, unknown> = {}
+    for (const fragment of fragments) {
+      if (fragment && typeof fragment === 'object' && !Array.isArray(fragment)) {
+        Object.assign(merged, fragment)
+      }
+    }
+    return merged
+  }
+  if (entity && typeof entity === 'object') return { ...(entity as Record<string, unknown>) }
+  return {}
+}
+
+/**
+ * Pull `stat_id → {name, displayName, positionType}` out of the RAW Yahoo
+ * settings the import persisted at `settings.yahoo_settings` (see
+ * YahooAdapter). Absent or foreign shapes yield an empty map — the bridge then
+ * simply translates nothing for Yahoo, and the rulebook stays honestly
+ * uncomputable rather than wrong.
+ */
+function extractYahooStatCategories(yahooSettings: unknown): Map<string, YahooCapturedStatCategory> {
+  const out = new Map<string, YahooCapturedStatCategory>()
+  const root = Array.isArray(yahooSettings)
+    ? (yahooSettings as unknown[]).find(
+        (f) => f && typeof f === 'object' && 'stat_categories' in (f as Record<string, unknown>)
+      )
+    : yahooSettings
+  if (!root || typeof root !== 'object') return out
+  const categories = (root as Record<string, unknown>).stat_categories
+  const stats =
+    categories && typeof categories === 'object'
+      ? (categories as Record<string, unknown>).stats
+      : null
+  for (const wrapper of yahooCollectionItems(stats)) {
+    const stat = mergeYahooFragments(
+      wrapper && typeof wrapper === 'object' && 'stat' in (wrapper as Record<string, unknown>)
+        ? (wrapper as Record<string, unknown>).stat
+        : wrapper
+    )
+    const statId = stat.stat_id != null ? String(stat.stat_id) : ''
+    if (!statId) continue
+    out.set(statId, {
+      name: typeof stat.name === 'string' ? stat.name : null,
+      displayName: typeof stat.display_name === 'string' ? stat.display_name : null,
+      positionType: typeof stat.position_type === 'string' ? stat.position_type : null,
+    })
+  }
+  return out
+}
+
+/**
+ * ESPN/Yahoo rulebooks are captured at import under provider-namespaced keys
+ * (`espn_stat_<id>` / `yahoo_stat_<id>`) inside the settings snapshot
+ * (`settings.scoringSettings.rules` — see canonicalImportNormalizer), which no
+ * projection could ever consume: none of those keys matches a projected stat.
+ * This bridge translates the VERIFIABLE ones to Sleeper projection keys.
+ * Untranslatable non-null rules are KEPT under their provider key on purpose —
+ * `computeLeagueProjectedPoints` then reports them in `coverage.unmatched`
+ * instead of silently pretending the league scores fewer stats than it does.
+ * Returns null when nothing translated (no invented rulebook; Sleeper-keyed
+ * and native snapshots fall through to the legacy path unchanged).
+ */
+function bridgeProviderScoringRules(s: Record<string, unknown>): Record<string, unknown> | null {
+  const snapshot = s.scoringSettings
+  const rules =
+    snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)
+      ? (snapshot as Record<string, unknown>).rules
+      : null
+  if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null
+
+  const yahooStatCategoriesById = extractYahooStatCategories(s.yahoo_settings)
+  const bridged: Record<string, unknown> = {}
+  let translated = 0
+  for (const [key, value] of Object.entries(rules as Record<string, unknown>)) {
+    const weight = readNumber(value)
+    if (weight == null) continue
+    const canonical = resolveProviderScoringStatKey(key, { yahooStatCategoriesById })
+    if (canonical) {
+      translated++
+      bridged[canonical] = weight
+    } else {
+      bridged[key] = weight
+    }
+  }
+  return translated > 0 ? bridged : null
+}
+
 /**
  * Pull `scoring_settings` out of a stored `League.settings` snapshot.
  *
@@ -209,6 +315,10 @@ export function extractScoringSettings(
 ): Record<string, unknown> | null {
   if (!leagueSettings || typeof leagueSettings !== 'object') return null
   const s = leagueSettings as Record<string, unknown>
+  // Provider-captured rulebooks (ESPN/Yahoo) translate first; anything else
+  // falls through to the original behavior untouched.
+  const bridged = bridgeProviderScoringRules(s)
+  if (bridged) return bridged
   const scoring = s.scoring_settings ?? s.scoringSettings
   if (!scoring || typeof scoring !== 'object') return null
   const rec = scoring as Record<string, unknown>

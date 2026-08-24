@@ -395,6 +395,9 @@ export function buildCanonicalNflProjection(input: ProjectionSignalInput): Canon
     floor,
     ceiling,
     restOfSeason,
+    // Labeled origin columns — surfaced only because this builder already fetched both.
+    providerWeeklyProjection: input.providerWeeklyProjection ?? null,
+    afWeeklyProjection: input.afWeeklyProjection ?? null,
     confidence,
     confidenceLevel: confidence >= 78 ? 'high' : confidence >= 58 ? 'medium' : confidence > 0 ? 'low' : 'none',
     unavailable,
@@ -740,7 +743,9 @@ async function loadProjectionRows(
   const [provider, af] = await Promise.all([
     (db as any).fantasyProjection
       .findFirst({
-        where: { sport: 'NFL', season: String(season), week, playerId: { in: candidates } },
+        // source filter: this value is the PROVIDER column; the AF mirror (source
+        // 'allfantasy') already reaches this builder via AFProjectionSnapshot below.
+        where: { sport: 'NFL', season: String(season), week, playerId: { in: candidates }, source: { not: 'allfantasy' } },
         orderBy: { fetchedAt: 'desc' },
         select: { projectedPoints: true, fetchedAt: true },
       })

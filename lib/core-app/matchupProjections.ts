@@ -97,7 +97,8 @@ export async function loadSideProjections(args: {
 
   const lookupIds = [...yourIds, ...oppIds].filter(isResolvableId)
   const projections = await prisma.fantasyProjection.findMany({
-    where: { playerId: { in: lookupIds }, season: String(season), week },
+    // AF mirror rows (source 'allfantasy') carry no component stat line to rescore.
+    where: { playerId: { in: lookupIds }, season: String(season), week, source: { not: 'allfantasy' } },
     // `stats` carries the FULL component stat line the import cron preserves so
     // consumers can rescore under league settings (see app/api/cron/
     // import-projections). The generic `projectedPoints` total is deliberately

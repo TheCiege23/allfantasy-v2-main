@@ -1,5 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { prisma } from '@/lib/prisma';
+import { fetchPreviewUrl } from '@/lib/music/preview-url';
 import type { NextRequest } from 'next/server';
 
 // Refresh Spotify access token if expired
@@ -103,13 +104,24 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    const trackArtist = firstTrack.artists?.[0]?.name || 'Unknown';
+    // Spotify deprecated `preview_url` for newer integrations (usually null now),
+    // so without enrichment a CONNECTED user got fewer previews than a guest.
+    // Same Deezer-then-iTunes lookup the unconnected track-info path uses;
+    // null when nothing is found — the UI already labels that state.
+    const previewUrl =
+      (typeof firstTrack.preview_url === 'string' && firstTrack.preview_url) ||
+      (await fetchPreviewUrl(trackArtist, firstTrack.name)) ||
+      null;
+
     const mappedTrack = {
       id: firstTrack.id,
       name: firstTrack.name,
-      artist: firstTrack.artists?.[0]?.name || 'Unknown',
+      artist: trackArtist,
       image: firstTrack.album?.images?.[0]?.url,
       duration: firstTrack.duration_ms,
       spotifyUrl: firstTrack.external_urls?.spotify,
+      previewUrl,
     };
 
     return new Response(JSON.stringify({ track: mappedTrack }), {

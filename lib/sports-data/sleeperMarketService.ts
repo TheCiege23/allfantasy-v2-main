@@ -40,6 +40,8 @@ type WireRow = {
     years_exp?: number | null
   } | null
   stats?: Record<string, number> | null
+  /** Defense faced in the projected week (top-level on api.sleeper.com rows, like stats rows). */
+  opponent?: string | null
 }
 
 function positionQuery(): string {
@@ -88,6 +90,12 @@ export type WeekProjectionRow = {
   name: string
   position: string | null
   team: string | null
+  /**
+   * Defense faced in the projected week, from the same feed row. Optional because boards
+   * cached before this field existed lack it — read with `?? null` and treat absence as
+   * "opponent not on file", never as a bye.
+   */
+  opponent?: string | null
   stats: Record<string, number>
 }
 export type WeekBoard = {
@@ -110,6 +118,8 @@ export async function getWeekBoard(season: string, week: number): Promise<WeekBo
           [r.player?.first_name, r.player?.last_name].filter(Boolean).join(' ').trim() || r.player_id,
         position: r.player?.position?.toUpperCase() ?? null,
         team: r.player?.team ?? null,
+        opponent:
+          typeof r.opponent === 'string' && r.opponent.trim() ? r.opponent.trim().toUpperCase() : null,
         stats: r.stats ?? {},
       }
     }

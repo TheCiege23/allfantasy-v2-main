@@ -5,6 +5,9 @@
 
 import { prisma } from '@/lib/prisma'
 import { dispatchNotification } from '@/lib/notifications/NotificationDispatcher'
+import { buildDraftStartingEmail } from './draftEmails'
+import { loadDraftQueueForUser } from '@/lib/draft-room/loadDraftQueueForUser'
+import { getBaseUrl } from '@/lib/get-base-url'
 import type { DraftNotificationEventType, DraftNotificationPayload } from './types'
 
 const DRAFT_ROOM_PATH = (leagueId: string) => `/league/${leagueId}/draft`
@@ -189,11 +192,14 @@ function resolveCategoryForEvent(eventType: DraftNotificationEventType) {
 
 /**
  * Create a single draft notification (in-app + email/SMS per preferences).
+ * `emailOverride` swaps the plain email body for a designed template
+ * (draftEmails renderer output) behind exactly the same category gates.
  */
 export async function createDraftNotification(
   appUserId: string,
   eventType: DraftNotificationEventType,
-  payload: DraftNotificationPayload
+  payload: DraftNotificationPayload,
+  emailOverride?: { subject: string; html: string }
 ): Promise<boolean> {
   const { title, body, severity } = getTitleAndBody(eventType, payload)
   const href = DRAFT_ROOM_PATH(payload.leagueId)
@@ -208,6 +214,7 @@ export async function createDraftNotification(
     actionLabel: 'Open draft',
     meta: { ...payload, leagueId: payload.leagueId },
     severity,
+    emailOverride,
   })
   return true
 }
@@ -365,15 +372,83 @@ export async function notifyApproachingTimeout(
 
 /**
  * Event trigger: draft start transition.
+ *
+ * Email goes out as the designed 22b "draft starting" template
+ * (`buildDraftStartingEmail`) when it can be built from REAL data — the
+ * member's round-1 slot from `slotOrder` and their actual queue count.
+ * Availability is deliberately empty until a league-history loader exists;
+ * the renderer prints the honest absence rather than a national-ADP guess.
+ * Auction sessions have no pick slot, and a member without a slot entry, a
+ * failed queue read, or an unnamed league keeps the plain dispatcher email.
+ * In-app/SMS behaviour is unchanged; the `draft_alerts` category preference
+ * still gates every channel.
  */
 export async function notifyDraftStartingSoon(leagueId: string): Promise<void> {
   const userIds = await getLeagueMemberAppUserIds(leagueId)
   if (userIds.length === 0) return
   const leagueName = await getLeagueName(leagueId)
-  await createDraftNotificationForUsers(userIds, 'draft_starting_soon', {
-    leagueId,
-    leagueName,
+  const designed = leagueName
+    ? await buildDraftStartingEmailsByUser(leagueId, leagueName).catch(
+        () => new Map<string, { subject: string; html: string }>(),
+      )
+    : new Map<string, { subject: string; html: string }>()
+  for (const userId of userIds) {
+    await createDraftNotification(
+      userId,
+      'draft_starting_soon',
+      { leagueId, leagueName },
+      designed.get(userId),
+    )
+  }
+}
+
+/** Real-data inputs for the designed draft-starting email, keyed by app user id. */
+async function buildDraftStartingEmailsByUser(
+  leagueId: string,
+  leagueName: string,
+): Promise<Map<string, { subject: string; html: string }>> {
+  const out = new Map<string, { subject: string; html: string }>()
+  const session = await prisma.draftSession.findUnique({
+    where: { leagueId },
+    select: { draftType: true, slotOrder: true },
   })
+  if (!session || session.draftType === 'auction') return out
+  const slotOrder = (session.slotOrder as { slot: number; rosterId: string }[] | null) ?? []
+  if (slotOrder.length === 0) return out
+  const slotByRosterId = new Map(slotOrder.map((entry) => [entry.rosterId, entry.slot]))
+  const rosters = await prisma.roster.findMany({
+    where: { leagueId },
+    select: { id: true, platformUserId: true },
+  })
+  const baseUrl = getBaseUrl()
+  for (const roster of rosters) {
+    const userId = roster.platformUserId
+    if (!userId || String(userId).startsWith('orphan-')) continue
+    const slot = slotByRosterId.get(roster.id)
+    if (slot == null) continue
+    // A failed queue read must not render the "your queue is empty" warning
+    // for a queue we simply could not see — that member keeps the plain email.
+    const loaded = await loadDraftQueueForUser(leagueId, userId).catch(() => null)
+    if (!loaded) continue
+    out.set(
+      userId,
+      buildDraftStartingEmail({
+        leagueName,
+        leagueId,
+        pickSlot: `1.${String(slot).padStart(2, '0')}`,
+        // The hook fires at the start transition itself; the renderer says
+        // "starting now" for zero rather than claiming a countdown we lack.
+        minutesUntilStart: 0,
+        queueSize: loaded.queue.length,
+        rosterHoles: [],
+        availability: [],
+        draftsSampled: 0,
+        queueUrl: `${baseUrl}${DRAFT_ROOM_PATH(leagueId)}`,
+        baseUrl,
+      }),
+    )
+  }
+  return out
 }
 
 /**

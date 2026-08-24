@@ -26,6 +26,7 @@ import { NextResponse } from "next/server"
 import { requireCronAuth } from "@/app/api/cron/_auth"
 import { prisma } from "@/lib/prisma"
 import { toPrismaJsonInput } from "@/lib/prisma-json"
+import { scoreProjectionAccuracyForCompletedWeeks } from "@/lib/projections/projectionAccuracy"
 import {
   SleeperWeeklyStatsFetcher,
   acquireRunLock,
@@ -188,6 +189,29 @@ async function handle(req: NextRequest) {
       })
     }
 
+    /*
+     * Projection accuracy retro-scorer (P4-1). Once a week's actuals are proven complete,
+     * rescore that week's stored projections (provider + AF mirror) against the actuals
+     * under one canonical PPR ruler and persist the per-source/per-position error summary
+     * to SportsDataCache — see lib/projections/projectionAccuracy.ts. Only weeks the ledger
+     * already proved complete on a PREVIOUS run are eligible, so a partial ingest is never
+     * scored; capped and budget-bounded so it cannot starve the ingest this cron exists for.
+     */
+    let projectionAccuracy:
+      | Awaited<ReturnType<typeof scoreProjectionAccuracyForCompletedWeeks>>
+      | { error: string }
+      | null = null
+    if (!dryRun && !explicitWeek && plan.completed.length > 0) {
+      try {
+        projectionAccuracy = await scoreProjectionAccuracyForCompletedWeeks(resolved.season, plan.completed, {
+          maxWeeks: 2,
+          budgetMs: Math.max(0, RUN_BUDGET_MS - (Date.now() - startedAt)),
+        })
+      } catch (err) {
+        projectionAccuracy = { error: (err instanceof Error ? err.message : String(err)).slice(0, 200) }
+      }
+    }
+
     return NextResponse.json({
       ok: providerFailures.length === 0,
       dryRun,
@@ -203,6 +227,7 @@ async function handle(req: NextRequest) {
       weeksRemaining,
       providerFailures,
       budgetExhausted,
+      projectionAccuracy,
       ...totals,
       perWeek: reports,
       durationMs: Date.now() - startedAt,

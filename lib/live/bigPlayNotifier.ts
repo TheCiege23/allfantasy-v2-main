@@ -46,8 +46,12 @@ export type NotifyResult = {
  *
  * A dropped player keeps his row until `droppedAt` is set, so filtering on it
  * is what stops a manager being told about someone they cut last week.
+ *
+ * Exported for reuse by the injury importer — same recipients question, same
+ * id-space rules (Rolling Insights ids in, AF user ids out; no identity row,
+ * no guess).
  */
-async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string[]>> {
+export async function ownersByPlayerId(playerIds: string[]): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
   if (playerIds.length === 0) return out
 

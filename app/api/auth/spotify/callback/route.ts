@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth'
 import { cookies } from 'next/headers'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import { Prisma } from '@prisma/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,7 @@ export async function GET(req: NextRequest) {
     access_token: string
     refresh_token: string
     expires_in: number
+    scope?: string
   }
 
   const profileRes = await fetch('https://api.spotify.com/v1/me', {
@@ -71,7 +73,13 @@ export async function GET(req: NextRequest) {
   })
 
   const profile = profileRes.ok
-    ? ((await profileRes.json()) as { display_name?: string; id?: string; images?: Array<{ url: string }> })
+    ? ((await profileRes.json()) as {
+        display_name?: string
+        id?: string
+        images?: Array<{ url: string }>
+        /** 'premium' | 'free' | 'open' — present only when user-read-private was granted. */
+        product?: string
+      })
     : null
   const spotifyProviderAccountId = profile?.id?.trim()
 
@@ -89,6 +97,27 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL('/settings?tab=connected&spotify=error', BASE))
     }
 
+    /*
+     * /api/spotify/token reads `notificationPreferences.spotify.isPremium` to
+     * decide whether the Web Playback SDK can stream — and nothing ever wrote
+     * that field, so every user read as free forever. Persist the real
+     * `product` from GET /v1/me here. An absent product (user-read-private not
+     * granted) is stored as not-Premium: fail closed, never invented.
+     */
+    const existingProfile = await prisma.userProfile.findUnique({
+      where: { userId: session.user.id },
+      select: { notificationPreferences: true },
+    })
+    const prefs = (existingProfile?.notificationPreferences ?? {}) as Record<string, unknown>
+    const mergedPrefs = {
+      ...prefs,
+      spotify: {
+        ...((prefs.spotify ?? {}) as Record<string, unknown>),
+        isPremium: profile?.product === 'premium',
+        displayName: profile?.display_name ?? null,
+      },
+    } as Prisma.InputJsonValue
+
     await prisma.userProfile.upsert({
       where: { userId: session.user.id },
       create: {
@@ -98,6 +127,7 @@ export async function GET(req: NextRequest) {
         spotifyExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
         spotifyDisplayName: profile?.display_name ?? null,
         spotifyConnectedAt: new Date(),
+        notificationPreferences: mergedPrefs,
       },
       update: {
         spotifyAccessToken: tokens.access_token,
@@ -105,6 +135,7 @@ export async function GET(req: NextRequest) {
         spotifyExpiresAt: new Date(Date.now() + tokens.expires_in * 1000),
         spotifyDisplayName: profile?.display_name ?? null,
         spotifyConnectedAt: new Date(),
+        notificationPreferences: mergedPrefs,
       },
     })
 
@@ -117,7 +148,13 @@ export async function GET(req: NextRequest) {
       access_token: tokens.access_token ?? null,
       expires_at: Math.floor((Date.now() + tokens.expires_in * 1000) / 1000),
       token_type: 'Bearer',
-      scope: null,
+      /*
+       * The scope string Spotify actually granted. This was hardcoded null,
+       * which stored every fresh re-auth as playback-incapable —
+       * inspectPlaybackScopes treats null as incapable on purpose — so the
+       * "reconnect Spotify to fix playback" loop could never clear.
+       */
+      scope: tokens.scope ?? null,
       id_token: null,
       session_state: null,
     }
