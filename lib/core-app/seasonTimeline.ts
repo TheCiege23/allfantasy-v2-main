@@ -90,6 +90,25 @@ function weeks(from: number, to: number): string {
   return from === to ? `WK ${from}` : `WK ${from}-${to}`
 }
 
+/**
+ * How many weeks the regular season runs, from the league's own settings.
+ *
+ * Extracted so the week picker and the timeline cannot disagree about where the
+ * season ends. Falls back to the week before the playoffs start, and returns
+ * null rather than guessing 14 — a picker offering weeks a league does not play
+ * is worse than one that offers none.
+ */
+export function regularSeasonWeeks(settings: unknown): number | null {
+  const s = readSettings(settings)
+  const playoffStart = num(
+    s.playoff_start_week ?? s.playoff_week_start ?? s.playoffStartWeek ?? s.playoffWeekStart,
+  )
+  return (
+    num(s.regular_season_length) ??
+    (playoffStart != null && playoffStart > 1 ? playoffStart - 1 : null)
+  )
+}
+
 export function buildSeasonTimeline(args: {
   settings: unknown
   /** The league's current week, when known. */
@@ -126,8 +145,8 @@ export function buildSeasonTimeline(args: {
     s.trade_deadline_week ?? s.trade_deadline ?? s.tradeDeadline ?? s.tradeDeadlineWeek,
   )
   const playoffTeams = num(s.playoff_teams ?? s.playoff_team_count ?? s.playoffTeams)
-  const regularSeasonLength =
-    num(s.regular_season_length) ?? (playoffStart != null && playoffStart > 1 ? playoffStart - 1 : null)
+  // Same rule the week picker uses -- one implementation, so they cannot drift.
+  const regularSeasonLength = regularSeasonWeeks(args.settings)
 
   /*
    * ⚠ 99 MEANS "NO DEADLINE", NOT WEEK 99. It is the platform's sentinel for

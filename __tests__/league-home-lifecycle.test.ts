@@ -209,3 +209,32 @@ describe('league home: FAAB is a column, and a dash when we do not know it', () 
     expect(SRC).toContain('const rosterCountForDraft = rosterRows.length')
   })
 })
+
+describe('league home: the week picker, and what a future week is allowed to claim', () => {
+  it('validates the requested week against this league\u2019s real season length', () => {
+    // A hand-edited ?week=40 must not reach the scoreboard and come back empty,
+    // because empty is indistinguishable from broken ingestion.
+    expect(SRC).toContain('weekOptions.includes(requestedWeek)')
+    expect(SRC).toContain('regularSeasonWeeks(league.settings)')
+  })
+
+  it('withholds the picker entirely when the season length is unknown', () => {
+    expect(SRC).toContain('seasonWeeks != null && seasonWeeks > 0')
+    expect(SRC).toContain('weekOptions != null && viewWeek != null')
+  })
+
+  it('the scoreboard follows the viewed week, not the current one', () => {
+    // Leaving `week: currentWeek` here would render a picker that changes the
+    // label and nothing else — the worst kind of broken, because it looks fine.
+    expect(SRC).toContain('week: viewWeek,')
+    expect(SRC).not.toContain('week: currentWeek,')
+  })
+
+  it('says whether the viewed week is ahead of the league', () => {
+    expect(SRC).toContain('isFuture: currentWeek != null && viewWeek > currentWeek')
+  })
+
+  it('does not keep a second copy of the season-length rule', () => {
+    expect(SRC).not.toContain('regular_season_length')
+  })
+})

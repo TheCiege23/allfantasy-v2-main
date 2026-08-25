@@ -1028,3 +1028,63 @@
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Week picker ─────────────────────────────────────────────────────── */
+
+.af-weekpick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-weekpick-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-weekpick-select {
+  appearance: none;
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+  border-radius: 7px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 3px 22px 3px 8px;
+  cursor: pointer;
+  /* The caret is drawn rather than inherited, because the native one renders
+     as a black-on-black wedge against this surface in several browsers. */
+  background-image: linear-gradient(45deg, transparent 50%, currentcolor 50%),
+    linear-gradient(135deg, currentcolor 50%, transparent 50%);
+  background-position: calc(100% - 12px) 52%, calc(100% - 8px) 52%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+}
+.af-weekpick-select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+/* The options list is drawn by the OS, which does not inherit the panel's
+   palette — set both so a dark theme does not produce white-on-white. */
+.af-weekpick-select option {
+  background: var(--surface);
+  color: var(--text);
+}
+
+/*
+ * The future-week caveat. Deliberately quiet but always present: it is the line
+ * that keeps a projected board from reading as a played one.
+ */
+.af-lh-weeknote {
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--surface2);
+  border: 1px solid var(--line2);
+}

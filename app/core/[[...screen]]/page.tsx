@@ -300,9 +300,27 @@ export default async function AfCorePage({
 
   // Screen 2 is the same route with a league selected — the handoff describes it
   // as the main column becoming "that league's world", not a separate page.
+  /*
+   * The week the viewer is looking at, from the URL.
+   *
+   * A query param rather than client state, for the same reason Player Finder
+   * uses one: no new API route (the repo is at the route ceiling), the server
+   * does the work, and the URL is shareable -- "look at week 6" is a link.
+   *
+   * Nonsense is dropped to null here and validated again against the league's
+   * real season length in the loader, which is the half that knows how long
+   * this league's season is.
+   */
+  const requestedWeekRaw = Array.isArray(sp.week) ? sp.week[0] : sp.week
+  const requestedWeek = requestedWeekRaw != null ? Number.parseInt(requestedWeekRaw, 10) : NaN
+
   const leagueHome =
     activeKey === 'home' && selectedLeagueId
-      ? await getLeagueHomeData(selectedLeagueId, userId).catch(() => null)
+      ? await getLeagueHomeData(
+          selectedLeagueId,
+          userId,
+          Number.isFinite(requestedWeek) ? requestedWeek : null,
+        ).catch(() => null)
       : null
 
   // Player Finder searches and selects entirely through query params — no client

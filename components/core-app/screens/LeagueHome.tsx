@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 /*
  * ⚠ af-core.css FIRST, AND IT IS LOAD BEARING. This screen used to render only
  * inside AfCoreShell, which imports the token layer for everything under it. It
@@ -15,6 +16,50 @@ import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+
+/**
+ * Jump to another week.
+ *
+ * Writes `?week=` and lets the server re-read — no client fetch and no new API
+ * route, which matters because the repo sits at the platform's route ceiling
+ * and a week selector is not worth a route. It also makes the view shareable.
+ *
+ * Every other query param is preserved: this screen is reached with `?league=`
+ * already set, and dropping it would bounce the viewer back to the league list
+ * the moment they changed week.
+ */
+function WeekPicker({
+  picker,
+}: {
+  picker: { weeks: number[]; selected: number; current: number | null; isFuture: boolean }
+}) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const params = useSearchParams()
+
+  return (
+    <label className="af-weekpick">
+      <span className="af-weekpick-label">Week</span>
+      <select
+        className="af-weekpick-select"
+        value={picker.selected}
+        onChange={(e) => {
+          const next = new URLSearchParams(params?.toString() ?? '')
+          next.set('week', e.target.value)
+          router.push(`${pathname}?${next.toString()}`, { scroll: false })
+        }}
+      >
+        {picker.weeks.map((w) => (
+          <option key={w} value={w}>
+            {/* The league's own position is marked, so "now" is findable in a
+                list of eighteen identical numbers. */}
+            {w === picker.current ? `${w} · now` : w}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
 
 /**
  * Screen 3b — Dashboard, one league selected.
@@ -212,15 +257,41 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
         opponent was in trouble.
       */}
       <StatePanel
-        title="This week in the league"
+        title={
+          data.weekPicker && data.weekPicker.isFuture
+            ? `Week ${data.weekPicker.selected} in the league`
+            : 'This week in the league'
+        }
         className="af-lh-scoreboard-panel"
         state={data.scoreboard}
+        help={data.weekPicker ? <WeekPicker picker={data.weekPicker} /> : null}
       >
         {(board) => (
-          <LeagueScoreboardPanel
-            board={board}
-            winProbability={data.matchup.available ? data.matchup.data.winProbability : null}
-          />
+          <>
+            {/*
+              ⚠ A FUTURE WEEK MUST NOT LOOK LIKE A LIVE ONE. Nothing in it has
+              happened, and the projections behind it may not even be for the
+              week on screen -- the feed only holds the week ahead, so asking
+              for week 10 in September prices the right players in the wrong
+              week. That is still the best available answer to "who looks
+              strong in week 10", and it is a different claim from a week-10
+              projection. Saying which is the whole point of this line.
+            */}
+            {data.weekPicker?.isFuture ? (
+              <p className="af-lh-weeknote">
+                Nothing in week {data.weekPicker.selected} has been played. Every number is
+                projected from today&apos;s rosters
+                {board.projectionBasis && !board.projectionBasis.matchesViewedWeek
+                  ? `, using week ${board.projectionBasis.week} projections — the feed does not carry week ${data.weekPicker.selected} yet`
+                  : ''}
+                .
+              </p>
+            ) : null}
+            <LeagueScoreboardPanel
+              board={board}
+              winProbability={data.matchup.available ? data.matchup.data.winProbability : null}
+            />
+          </>
         )}
       </StatePanel>
 

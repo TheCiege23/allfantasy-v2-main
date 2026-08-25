@@ -1,7 +1,12 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
-import { buildSeasonTimeline, leagueWeekFromSettings, type TimelinePhase } from './seasonTimeline'
+import {
+  buildSeasonTimeline,
+  leagueWeekFromSettings,
+  regularSeasonWeeks,
+  type TimelinePhase,
+} from './seasonTimeline'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { getLeagueActivity } from './leagueActivity'
 import { getAllPlayBoard, type AllPlayBoard } from './allPlay'
@@ -139,6 +144,21 @@ export type LeagueHomeData = {
    */
   stage: string | null
   preSeason: boolean
+  /**
+   * The week the scoreboard is showing, and the weeks it could show.
+   *
+   * `selected` is what is on screen; `current` is where the league actually is.
+   * They differ whenever someone has picked a week, and the screen says so —
+   * a future week rendered exactly like the live one is the same failure as a
+   * projected scoreboard that looks played.
+   */
+  weekPicker: {
+    weeks: number[]
+    selected: number
+    current: number | null
+    /** Ahead of where the league is, so nothing here has happened yet. */
+    isFuture: boolean
+  } | null
   standings: SectionState<LeagueStanding[]>
   timeline: SectionState<SeasonStage[]>
   /*
@@ -277,7 +297,13 @@ function settingWeek(settings: unknown, ...keys: string[]): number | null {
 
 export async function getLeagueHomeData(
   leagueId: string,
-  userId: string
+  userId: string,
+  /**
+   * A week the viewer picked, from `?week=`. Ignored unless it is a real week
+   * of this league's regular season — a hand-edited URL must not be able to
+   * ask for week 40 and get an empty scoreboard that looks like missing data.
+   */
+  requestedWeek?: number | null,
 ): Promise<LeagueHomeData | null> {
   const league = await prisma.league.findUnique({
     where: { id: leagueId },
@@ -585,16 +611,36 @@ export async function getLeagueHomeData(
       : null)
 
   /*
+   * Which weeks this league plays, and which one to show.
+   *
+   * The picker is offered only when we know the season's length from the
+   * league's own settings. Offering 1..18 to a 14-week league would invite
+   * someone to select a week that does not exist and read the empty result as
+   * broken ingestion.
+   */
+  const seasonWeeks = regularSeasonWeeks(league.settings)
+  const weekOptions =
+    seasonWeeks != null && seasonWeeks > 0 && seasonWeeks <= 30
+      ? Array.from({ length: seasonWeeks }, (_, i) => i + 1)
+      : null
+
+  const viewWeek =
+    requestedWeek != null && weekOptions != null && weekOptions.includes(requestedWeek)
+      ? requestedWeek
+      : currentWeek
+
+  /*
    * The whole league's games. Scoped to the week the LEAGUE is in, not the NFL
-   * calendar's — see the currentWeek note above.
+   * calendar's — see the currentWeek note above — unless the viewer picked
+   * another one.
    */
   const board =
-    currentWeek != null && league.season != null
+    viewWeek != null && league.season != null
       ? await getLeagueScoreboard({
           leagueId: league.id,
           platformLeagueId: league.platformLeagueId,
           seasonYear: league.season,
-          week: currentWeek,
+          week: viewWeek,
           yourRosterId: yours?.externalId != null ? Number(yours.externalId) : null,
           scoringSettings: extractScoringSettings(league.settings),
           projectionWeek: await latestProjectionWeek().catch(() => null),
@@ -690,6 +736,15 @@ export async function getLeagueHomeData(
       currentWeek,
     },
     yourTeam,
+    weekPicker:
+      weekOptions != null && viewWeek != null
+        ? {
+            weeks: weekOptions,
+            selected: viewWeek,
+            current: currentWeek,
+            isFuture: currentWeek != null && viewWeek > currentWeek,
+          }
+        : null,
     standings,
     /*
      * The timeline marks "you are here" against a week number. Before a draft there is no

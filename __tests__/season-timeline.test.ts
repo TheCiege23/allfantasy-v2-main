@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildSeasonTimeline } from '@/lib/core-app/seasonTimeline'
+import { buildSeasonTimeline, regularSeasonWeeks } from '@/lib/core-app/seasonTimeline'
 
 /**
  * The timeline is a claim about a league's rules. Every phase in it has to come
@@ -200,5 +200,31 @@ describe('buildSeasonTimeline', () => {
     const t = buildSeasonTimeline({ settings: {}, currentWeek: 3, guillotineMode: true })
     expect(find(t, 'last-standing')!.label).toBe('Last one with a head')
     expect(t.notes.join(' ')).not.toContain('If that is wrong')
+  })
+})
+
+describe('regularSeasonWeeks: how many weeks the week picker may offer', () => {
+  it('reads the league\u2019s own length', () => {
+    expect(regularSeasonWeeks({ regular_season_length: 14 })).toBe(14)
+  })
+
+  it('falls back to the week before the playoffs', () => {
+    expect(regularSeasonWeeks({ playoff_start_week: 15 })).toBe(14)
+    // The importer's renamed key and Sleeper's own spelling both work.
+    expect(regularSeasonWeeks({ playoff_week_start: 15 })).toBe(14)
+  })
+
+  it('⚠ returns null rather than guessing 14', () => {
+    /*
+     * A picker offering weeks a league does not play is worse than one that
+     * offers none: selecting week 17 in a 14-week league returns an empty
+     * scoreboard, which is indistinguishable from broken ingestion.
+     */
+    expect(regularSeasonWeeks({})).toBeNull()
+    expect(regularSeasonWeeks(null)).toBeNull()
+  })
+
+  it('does not treat a playoff start of week 1 as a zero-week season', () => {
+    expect(regularSeasonWeeks({ playoff_start_week: 1 })).toBeNull()
   })
 })

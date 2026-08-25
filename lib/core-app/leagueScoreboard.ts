@@ -70,6 +70,20 @@ export type LeagueScoreboard = {
   allUnplayed: boolean
   /** Teams the league recorded with no matchupId — not paired into a game. */
   unpaired: ScoreboardTeam[]
+  /**
+   * WHICH WEEK THE PROJECTIONS ACTUALLY CAME FROM, which is not always the week
+   * on screen.
+   *
+   * ⚠ THE FEED ONLY HOLDS THE WEEK AHEAD. Ask for week 10 in September and
+   * `lookupProjections` returns the newest week it has — so the numbers are a
+   * real projection of the right players in the wrong week. That is still the
+   * best available answer for "who looks strong in week 10", and it is a
+   * genuinely different claim from a week-10 projection. The screen has to be
+   * able to tell them apart, so this says which happened.
+   *
+   * Null when nothing was projected (the week is scored, or the feed is empty).
+   */
+  projectionBasis: { season: string; week: number; matchesViewedWeek: boolean } | null
 }
 
 /**
@@ -319,5 +333,13 @@ export async function getLeagueScoreboard(args: {
     games,
     allUnplayed: !anyScored,
     unpaired: unpairedRows.map((r) => build(r.rosterId, null)),
+    projectionBasis:
+      projections.size > 0 && args.projectionWeek
+        ? {
+            season: args.projectionWeek.season,
+            week: args.projectionWeek.week,
+            matchesViewedWeek: args.projectionWeek.week === week,
+          }
+        : null,
   }
 }
