@@ -8,6 +8,8 @@
  * and testable without a live clock.
  */
 
+import { normalizeGameStatus } from '@/lib/sports/gameStatus'
+
 import {
   LIVE_GAME_STATUSES,
   type LiveGameSnapshot,
@@ -92,12 +94,45 @@ const RAW_STATUS_MAP: Record<string, LiveGameStatus> = {
 
 /**
  * Normalize any provider's raw status string to a canonical {@link LiveGameStatus}.
- * Unknown values default to `scheduled` (safe: the cadence engine will treat it as
- * "not yet live" rather than mistakenly stop or hammer the provider).
+ *
+ * ⚠ THE TABLE ABOVE IS NOT EXHAUSTIVE, AND THE MISSES WERE EXPENSIVE. Measured
+ * against production 2026-08-25, five real statuses were absent and therefore
+ * fell through to `scheduled`: `AP` (128 rows, a game finished after penalties),
+ * `CANC` (89), `POST` (10), `PST` (6) and `IN2` (1). That is **234 games the
+ * cadence engine believed had not kicked off yet** — so it kept polling them and
+ * `allDone` could never become true for a slate containing one.
+ *
+ * Rather than growing a second copy of the same knowledge, anything this table
+ * does not know is now handed to `normalizeGameStatus`, the one raw-status
+ * reader, and only a value IT cannot place falls back.
+ *
+ * ⚠ THE REMAINING FALLBACK IS A CADENCE-SPECIFIC CHOICE, NOT A GENERAL ONE. For
+ * a poller, treating a genuinely unrecognised status as "not yet live" is the
+ * conservative error: it polls once more instead of stopping early on a game that
+ * is still being played. A LINEUP decision must not make that assumption — there,
+ * `normalizeGameStatus` returns `unknown` and callers are expected to say so.
  */
 export function normalizeLiveGameStatus(raw: string | null | undefined): LiveGameStatus {
   const key = String(raw ?? '').trim().toLowerCase().replace(/\s+/g, '_')
-  return RAW_STATUS_MAP[key] ?? 'scheduled'
+  const mapped = RAW_STATUS_MAP[key]
+  if (mapped) return mapped
+
+  switch (normalizeGameStatus(raw)) {
+    case 'final':
+      return 'final'
+    case 'live':
+      return 'in_progress'
+    case 'postponed':
+      return 'postponed'
+    // This vocabulary has no `cancelled`; the table already files `canceled`
+    // under `postponed`, and both mean the same thing to a poller: stop.
+    case 'cancelled':
+      return 'postponed'
+    case 'scheduled':
+      return 'scheduled'
+    default:
+      return 'scheduled'
+  }
 }
 
 export function isLiveStatus(status: LiveGameStatus): boolean {
