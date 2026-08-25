@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import RichMessage from './RichMessage'
 import { notifyMentions } from '@/lib/chat-core/notifyMentions'
+import { isNearBottom, useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
@@ -59,6 +60,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const endRef = useRef<HTMLDivElement | null>(null)
+  const streamRef = useRef<HTMLDivElement | null>(null)
 
   const label = kind === 'dm' ? 'DMs' : 'huddles'
 
@@ -102,9 +104,23 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
     }
   }, [])
 
+  /*
+   * Only follow new messages when the reader is already at the bottom. With
+   * polling on, scrolling unconditionally would yank the view away from somebody
+   * reading back through the thread every few seconds.
+   */
   useEffect(() => {
-    endRef.current?.scrollIntoView({ block: 'end' })
+    if (isNearBottom(streamRef.current)) {
+      endRef.current?.scrollIntoView({ block: 'end' })
+    }
   }, [messages.length])
+
+  // Near-realtime: without this a message only appeared when the thread was reopened.
+  useChatPolling({
+    refresh: () => (openThread ? loadMessages(openThread) : Promise.resolve()),
+    enabled: Boolean(openThread),
+    active: busy,
+  })
 
   const open = useCallback(
     (thread: PlatformThread) => {
@@ -260,7 +276,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           </span>
         </div>
 
-        <div className="af-cm-thread">
+        <div className="af-cm-thread" ref={streamRef}>
           {messages.length === 0 ? (
             <div className="af-cm-empty">
               <p className="af-cm-empty-t">No messages yet.</p>

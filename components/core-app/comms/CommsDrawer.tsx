@@ -4,6 +4,7 @@ import ThreadPanel from './ThreadPanel'
 import RichMessage from './RichMessage'
 import LeagueActivityFeed from './LeagueActivityFeed'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
+import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -606,8 +607,13 @@ function LeaguePanel({
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
-  const load = useCallback(async (leagueId: string) => {
-    setLoading(true)
+  /*
+   * `quiet` exists for polling. Without it every tick would flip the loading flag
+   * and flash "Loading league chat…" over a conversation the reader is already
+   * looking at, several times a minute.
+   */
+  const load = useCallback(async (leagueId: string, quiet = false) => {
+    if (!quiet) setLoading(true)
     setError(null)
     try {
       const res = await fetch(`/api/app/leagues/${encodeURIComponent(leagueId)}/chat?limit=40`)
@@ -643,7 +649,7 @@ function LeaguePanel({
           : "Could not load this league's chat.",
       )
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [])
 
@@ -651,6 +657,17 @@ function LeaguePanel({
     if (scopeId) void load(scopeId)
     else setMessages([])
   }, [scopeId, load])
+
+  /*
+   * Near-realtime. League chat had the same problem as the DM panel: it loaded
+   * once when you picked a league and never again, so a reply arrived only if you
+   * switched leagues and back.
+   */
+  useChatPolling({
+    refresh: () => (scopeId ? load(scopeId, true) : Promise.resolve()),
+    enabled: Boolean(scopeId),
+    active: sending,
+  })
 
   /*
    * Maps the composer's payload onto the metadata shape `/api/league/chat`
