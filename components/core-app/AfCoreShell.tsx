@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { GeoRestrictionNotice } from '@/components/core-app/GeoRestrictionNotice'
 import CommsDock from '@/components/core-app/comms/CommsDock'
+import type { CommsLeague } from '@/components/core-app/comms/CommsDrawer'
 import { AfCrest } from '@/components/core-app/AfCrest'
 import { SUPPORT_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import MiniPlayerImg from '@/components/MiniPlayerImg'
@@ -102,7 +103,7 @@ export type AfCoreShellProps = {
    * have no league context to offer.
    */
   comms?: {
-    leagues: Array<{ id: string; name: string; platform: string }>
+    leagues: CommsLeague[]
     chimmyTokenCost: number | null
     /** Ids+counts the /core home is showing — see lib/core-app/homeSignals.ts. */
     homeSignals?: string | null

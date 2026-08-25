@@ -55,6 +55,12 @@ export type CommsLeague = {
   id: string
   name: string
   platform: string
+  /**
+   * The id the SOURCE PLATFORM knows this league by -- never `id`, which is an
+   * AllFantasy uuid and resolves nowhere off-site. Null when we never recorded
+   * one, which is why the hand-off has an in-app fallback.
+   */
+  platformLeagueId: string | null
 }
 
 export type CommsDrawerProps = {
@@ -109,6 +115,32 @@ function platformHandoff(platform: string): string {
   if (p === 'espn') return 'Open ESPN to set it'
   if (p === 'yahoo') return 'Open Yahoo to set it'
   return 'Open your platform to set it'
+}
+
+/**
+ * Where the hand-off actually points.
+ *
+ * WARNING: SLEEPER DEEP LINKS TAKE `platformLeagueId`, NOT `id`. `id` is the
+ * AllFantasy uuid, so sleeper.com/leagues/<uuid> is a 404 -- a hand-off that
+ * looked live and dead-ended every manager who followed it. Where we hold no
+ * platform id we send the user back into the app rather than emit a URL that
+ * cannot resolve. ESPN and Yahoo take no id here; those are league-picker
+ * landings and are unchanged.
+ */
+function platformHandoffHref(league: CommsLeague): string {
+  const inApp = `/core?league=${encodeURIComponent(league.id)}`
+  switch (league.platform.toLowerCase()) {
+    case 'sleeper':
+      return league.platformLeagueId
+        ? `https://sleeper.com/leagues/${encodeURIComponent(league.platformLeagueId)}`
+        : inApp
+    case 'espn':
+      return 'https://fantasy.espn.com/football/league'
+    case 'yahoo':
+      return 'https://football.fantasysports.yahoo.com/'
+    default:
+      return inApp
+  }
 }
 
 const TABS: Array<{ id: CommsTab; label: string; audience: string }> = [
@@ -359,14 +391,7 @@ function ChimmyPanel({
           recommendsRoster && scope && grounding?.grounded === true
             ? {
                 label: platformHandoff(scope.platform),
-                href:
-                  scope.platform.toLowerCase() === 'sleeper'
-                    ? `https://sleeper.com/leagues/${encodeURIComponent(scope.id)}`
-                    : scope.platform.toLowerCase() === 'espn'
-                      ? 'https://fantasy.espn.com/football/league'
-                      : scope.platform.toLowerCase() === 'yahoo'
-                        ? 'https://football.fantasysports.yahoo.com/'
-                        : `/core?league=${encodeURIComponent(scope.id)}`,
+                href: platformHandoffHref(scope),
               }
             : null
 

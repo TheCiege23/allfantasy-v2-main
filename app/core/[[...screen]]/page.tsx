@@ -945,6 +945,13 @@ export default async function AfCorePage({
           id: l.id,
           name: l.name,
           platform: String(l.platform ?? 'manual').toLowerCase(),
+          /*
+           * The platform's OWN id for the league, which is what a Sleeper deep
+           * link needs. `l.id` is the AllFantasy uuid and 404s off-site; the
+           * drawer falls back to an in-app link where this is null.
+           */
+          platformLeagueId:
+            (l as { platformLeagueId?: string | null }).platformLeagueId ?? null,
         })),
         chimmyTokenCost,
         dockable,
