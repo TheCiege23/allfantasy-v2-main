@@ -565,3 +565,14 @@
 .af-tc-row--button:hover {
   border-color: var(--accent-line);
 }
+
+/* A secondary action that must not compete with Analyze. */
+.af-btn--ghost {
+  background: transparent;
+  border: 1px solid var(--line2);
+  color: var(--text2);
+}
+.af-btn--ghost:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}

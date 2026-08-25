@@ -2,6 +2,8 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
+import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -236,6 +238,40 @@ export function TradeCenter(props: {
   }, [props.league?.id, giveAssets, getAssets])
 
   const intel = result?.tradeIntelligence
+
+  /*
+   * Hand the deal to Chimmy.
+   *
+   * ⚠ PREFILL, NEVER SEND. The comms contract is explicit: a screen that fires a
+   * question off on the user's behalf has spent their request allowance on
+   * something they never typed and cannot take back. The question lands in the
+   * box and they press send.
+   *
+   * The prefill names the actual assets rather than saying "this trade", because
+   * the drawer does not carry the builder's state and a vague question produces
+   * a vague answer.
+   */
+  const askChimmy = useCallback(() => {
+    const side = (label: string, lines: Line[]) =>
+      lines.length > 0 ? `${label}: ${lines.map((l) => l.name).join(', ')}` : null
+
+    const parts = [side('I give', give), side('I get', get)].filter(Boolean).join('. ')
+    const league = props.league?.name ? ` in ${props.league.name}` : ''
+    const verdict = result?.labels?.fairnessLabel
+      ? ` The analyzer says: ${result.labels.fairnessLabel}.`
+      : ''
+
+    window.dispatchEvent(
+      new CustomEvent(COMMS_OPEN_EVENT, {
+        detail: {
+          tab: 'chimmy',
+          prefill: parts
+            ? `Explain this trade${league}. ${parts}.${verdict} What am I missing?`
+            : `Help me think about a trade${league}.`,
+        },
+      }),
+    )
+  }, [give, get, props.league?.name, result])
 
   return (
     <div className="af-tc">
@@ -493,6 +529,8 @@ export function TradeCenter(props: {
         </section>
       ) : null}
 
+      <TradeFinderPanel leagueId={props.league?.id ?? null} />
+
       <div className="af-tc-actions">
         <p className="af-tc-caption">
           Grades here are projected, not realized — they price the deal as it stands today rather
@@ -505,6 +543,9 @@ export function TradeCenter(props: {
           disabled={busy || (giveAssets.length === 0 && getAssets.length === 0)}
         >
           {busy ? 'Analyzing…' : 'Analyze this trade'}
+        </button>
+        <button type="button" className="af-btn af-btn--ghost" onClick={askChimmy}>
+          Ask Chimmy to explain
         </button>
       </div>
     </div>

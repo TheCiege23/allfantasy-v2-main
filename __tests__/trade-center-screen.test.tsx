@@ -184,3 +184,58 @@ describe('the builder holds the deal, not the engine echo', () => {
     expect(SRC).toContain('prev.filter((_, i) => i !== index)')
   })
 })
+
+describe('phase 1 — the seams', () => {
+  const FINDER = readFileSync(
+    resolve(process.cwd(), 'components/core-app/screens/TradeFinderPanel.tsx'),
+    'utf8',
+  )
+
+  it('⚠ Ask Chimmy PREFILLS, it never sends', () => {
+    /*
+     * The comms contract is explicit: a screen that fires a question off on the
+     * user's behalf has spent their request allowance on something they never
+     * typed and cannot take back.
+     */
+    expect(SRC).toContain('PREFILL, NEVER SEND')
+    expect(SRC).toContain('COMMS_OPEN_EVENT')
+    expect(SRC).toContain("tab: 'chimmy'")
+  })
+
+  it('names the actual assets in the question', () => {
+    // The drawer does not carry the builder's state, so "explain this trade"
+    // would produce a vague answer to a vague question.
+    expect(SRC).toContain("side('I give', give)")
+    expect(SRC).toContain("side('I get', get)")
+  })
+
+  it('⚠ Trade Finder keeps its four refusals apart', () => {
+    /*
+     * Unsupported platform, unlinked account, outage, and genuinely nothing to
+     * suggest are different answers. Collapsing them would tell a Yahoo manager
+     * there are no trades available when the truth is we never looked.
+     */
+    expect(FINDER).toContain('FOUR REFUSALS, AND THEY ARE DIFFERENT ANSWERS')
+    expect(FINDER).toContain('supported === false')
+    expect(FINDER).toContain('linked === false')
+    expect(FINDER).toContain('proposals.length === 0')
+  })
+
+  it('says an empty result is a real answer, not a gap', () => {
+    expect(FINDER).toContain('That is a real answer')
+  })
+
+  it('⚠ renders rationale verbatim rather than summarising it', () => {
+    // The service types it as checkable facts only; a paraphrase would turn a
+    // fact into an opinion.
+    expect(FINDER).toContain('would turn a fact into an opinion')
+  })
+
+  it('surfaces what the finder was missing', () => {
+    expect(FINDER).toContain('Working without:')
+  })
+
+  it('uses the existing finder route', () => {
+    expect(FINDER).toContain('/api/league/trade-finder')
+  })
+})
