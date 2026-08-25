@@ -50,8 +50,10 @@ export type Scrutiny = 'shallow' | 'standard' | 'deep' | 'very-deep'
  * (a 4-team 5th is the 17th player off the board, a 12-team 2.05), and depth
  * players are worth close to nothing in trade because the other manager can
  * replace them from a waiver wire holding most of the NFL.
+ *
+ * ⚠ MEASURED IN ROSTERED PLAYERS, NOT TEAMS. Twenty teams on eight-man rosters
+ * is shallower than twelve teams on twenty-five.
  */
-const SHALLOW_MAX_TEAMS = 6
 
 export type LeagueScale = {
   teamCount: number
@@ -86,12 +88,34 @@ export function assessLeagueScale(args: {
     return !PRICED_POSITIONS.has(s)
   })
 
+  /*
+   * ⚠ DEPTH IS ROSTER SPOTS, NOT TEAMS. This branched on team count and was
+   * WRONG, and a real league proved it: a Zombie Universe league has TWENTY
+   * teams and an eight-man roster — 1 superflex, 4 flex, 3 bench. That is 160
+   * players rostered league-wide, FEWER than a normal 12-team league with 25
+   * spots, so the waiver pool is enormous and replacement is trivial. Calling it
+   * "very deep" on team count alone would have inverted every conclusion:
+   * telling a manager that starters are irreplaceable in the one format where
+   * you can add a free agent mid-game.
+   *
+   * Team count still drives the PICK conversion, because a round really is
+   * teamCount picks. The two questions want different numbers.
+   */
+  const leagueWideRosterSpots = teamCount * args.starters.length
+
+  /*
+   * Calibrated against real leagues rather than round numbers:
+   *   12 x 25 = 300   a normal league          -> standard
+   *   32 x 21 = 672   deep IDP                 -> very-deep
+   *   20 x  8 = 160   Zombie Universe          -> shallow
+   *    4 x 13 =  52   four-manager league      -> shallow
+   */
   const scrutiny: Scrutiny =
-    teamCount >= 20
+    leagueWideRosterSpots >= 600
       ? 'very-deep'
-      : teamCount >= 15
+      : leagueWideRosterSpots >= 400
         ? 'deep'
-        : teamCount <= SHALLOW_MAX_TEAMS
+        : leagueWideRosterSpots <= 250
           ? 'shallow'
           : 'standard'
 
@@ -103,7 +127,7 @@ export function assessLeagueScale(args: {
   }
   if (scrutiny === 'deep' || scrutiny === 'very-deep') {
     notes.push(
-      `${teamCount} teams start ${slots.length} each — ${teamCount * slots.length} startable slots across the league. Replacement is far worse here than the market assumes, so a starter is harder to replace and a pick is worth less than its round suggests.`,
+      `${teamCount} teams hold ${args.starters.length} players each — ${leagueWideRosterSpots} rostered league-wide. Replacement is far worse here than the market assumes, so a starter is harder to replace and a pick is worth less than its round suggests.`,
     )
   }
 
@@ -123,7 +147,7 @@ export function assessLeagueScale(args: {
       )} player off the board — still an early-second in the 12-team terms our prices use. Late-round picks are worth far more here than their round name suggests.`,
     )
     notes.push(
-      `Replacement is abundant at ${teamCount} teams: most of the league is unrostered. Depth players cost their market price on paper and close to nothing in practice, because the other side can replace them off waivers.`,
+      `Only ${leagueWideRosterSpots} players are rostered across the whole league (${teamCount} teams × ${args.starters.length} spots), so most of the NFL is unrostered. Depth players cost their market price on paper and close to nothing in practice, because the other side can replace them from free agency.`,
     )
   }
   if (unpriced.length > 0) {

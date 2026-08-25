@@ -14,7 +14,13 @@
  * the whole game in a keeper league and nothing prices it.
  */
 
-export type LeagueConcept = 'redraft' | 'keeper' | 'dynasty' | 'guillotine' | 'other'
+export type LeagueConcept =
+  | 'redraft'
+  | 'keeper'
+  | 'dynasty'
+  | 'guillotine'
+  | 'zombie'
+  | 'other'
 
 export type FormatRules = {
   concept: LeagueConcept
@@ -58,18 +64,20 @@ export function readFormatRules(league: {
   const keeperCount = league.keeperCount ?? 0
 
   const concept: LeagueConcept =
-    raw === 'guillotine'
-      ? 'guillotine'
-      : raw === 'dynasty' || (raw === '' && league.isDynasty)
-        ? 'dynasty'
-        : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
-          ? 'keeper'
-          : raw === 'redraft' || raw === ''
-            ? 'redraft'
-            : /* survivor, zombie and friends are their own thing and are NOT
-                 silently treated as redraft — a caller that does not know how to
-                 price them should be able to tell. */
-              'other'
+    raw === 'zombie'
+      ? 'zombie'
+      : raw === 'guillotine'
+        ? 'guillotine'
+        : raw === 'dynasty' || (raw === '' && league.isDynasty)
+          ? 'dynasty'
+          : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+            ? 'keeper'
+            : raw === 'redraft' || raw === ''
+              ? 'redraft'
+              : /* survivor and friends are their own thing and are NOT silently
+                   treated as redraft — a caller that does not know how to price
+                   them should be able to tell. */
+                'other'
 
   const notes: string[] = []
   let futurePicksTradeable: boolean | null = null
@@ -91,6 +99,17 @@ export function readFormatRules(league: {
     futurePicksTradeable = false
     notes.push(
       'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
+    )
+  } else if (concept === 'zombie') {
+    /*
+     * ⚠ PICK TRADING IS EXPLICITLY ENCOURAGED HERE — "allowed, awesome, and
+     * encouraged" per the rules document — but only between teams that are not
+     * Zombies. The counterparty restriction is the real constraint, not the
+     * asset type, and it is reported by lib/trade-intel/zombie.ts.
+     */
+    futurePicksTradeable = true
+    notes.push(
+      'Zombie Universe: there are no waivers at all, only free agents you can add at will — even during games. Replacement is close to free, so depth players carry little trade value here. Zombie teams cannot trade, so the pool of legal partners only ever shrinks.',
     )
   } else if (concept === 'keeper') {
     /*

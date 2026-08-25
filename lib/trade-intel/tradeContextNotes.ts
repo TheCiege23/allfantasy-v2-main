@@ -16,6 +16,7 @@ import {
   floorOverCeilingNote,
   guillotineHorizon,
 } from './guillotine'
+import { serumValue, tradeWindow, vetoRiskNote } from './zombie'
 import {
   impossiblePickWarning,
   keeperDriftNote,
@@ -160,6 +161,8 @@ export async function buildTradeContextNotes(args: {
   /** The console's own priced lines, for unpriced exposure. */
   pricedGive?: Array<{ name: string; marketValue: number | null }>
   pricedGet?: Array<{ name: string; marketValue: number | null }>
+  /** The console's own one-sidedness figure, used only for the veto warning. */
+  percentDiff?: number | null
 }): Promise<TradeContextNotes> {
   const { leagueId, userId, give, get } = args
   if (get.length === 0) return EMPTY
@@ -410,9 +413,47 @@ export async function buildTradeContextNotes(args: {
         .filter((x): x is readonly [string, string] => x != null),
     ),
     pickCount: (args.picksToMe?.length ?? 0) + (args.picksToThem?.length ?? 0),
+    percentDiff: args.percentDiff ?? null,
   }).catch(() => [])
 
   return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes, scaleNotes, formatNotes }
+}
+
+/**
+ * What a Zombie league's own state says about this trade.
+ *
+ * The two facts that decide a deal here are how many teams can still legally
+ * trade, and how infected the league is — the first only ever falls and the
+ * second makes serums appreciate. Both are read, not assumed.
+ */
+async function zombieNotesFor(leagueId: string, percentDiff: number | null): Promise<string[]> {
+  const notes: string[] = []
+
+  const teams = await prisma.zombieLeagueTeam
+    .findMany({ where: { leagueId }, select: { status: true } })
+    .catch((): Array<{ status: string }> => [])
+  if (teams.length >= 2) {
+    const norm = (t: { status: string }) => (t.status ?? '').toLowerCase()
+    const survivors = teams.filter((t) => norm(t) === 'survivor').length
+    const whispererActive = teams.some((t) => norm(t) === 'whisperer')
+    const zombies = teams.length - survivors - (whispererActive ? 1 : 0)
+
+    const window = tradeWindow({ survivors, whispererActive, teamCount: teams.length })
+    if (window) notes.push(window.basis)
+
+    const serum = serumValue({ zombieCount: zombies, teamCount: teams.length })
+    if (serum) notes.push(serum.basis)
+  }
+
+  /*
+   * The veto warning is procedural rather than a fairness opinion: a manager
+   * should know the deal may simply not stand, which is different information
+   * from "you are winning this".
+   */
+  const veto = vetoRiskNote({ percentDiff })
+  if (veto) notes.push(veto)
+
+  return notes
 }
 
 /**
@@ -520,6 +561,8 @@ async function buildFormatNotes(args: {
   incomingIds: string[]
   incomingNames: Map<string, string>
   pickCount: number
+  /** How one-sided the console judged this deal, for the veto warning. */
+  percentDiff: number | null
 }): Promise<string[]> {
   const rules = readFormatRules(args.league)
   const notes = [...rules.notes]
@@ -533,6 +576,11 @@ async function buildFormatNotes(args: {
    * as the field shrinks and FAAB is the acquisition market rather than a
    * tiebreaker. See lib/trade-intel/guillotine.ts.
    */
+  if (rules.concept === 'zombie') {
+    notes.push(...(await zombieNotesFor(args.leagueId, args.percentDiff).catch(() => [])))
+    return notes
+  }
+
   if (rules.concept === 'guillotine') {
     notes.push(...(await guillotineNotes(args.leagueId).catch(() => [])))
     return notes

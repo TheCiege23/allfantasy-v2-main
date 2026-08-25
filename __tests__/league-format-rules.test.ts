@@ -70,8 +70,11 @@ describe('readFormatRules', () => {
   it('⚠ does not quietly treat an unknown format as redraft', () => {
     // A caller that does not know how to price a format should be able to tell
     // that it is looking at one, rather than getting redraft rules by default.
+    // Zombie and guillotine now have real rules, so they are their own concepts.
+    // Survivor does not, and must stay visibly unpriced rather than inheriting
+    // redraft behaviour it was never checked against.
     expect(readFormatRules({ leagueType: 'survivor' }).concept).toBe('other')
-    expect(readFormatRules({ leagueType: 'zombie' }).concept).toBe('other')
+    expect(readFormatRules({ leagueType: 'best-ball' }).concept).toBe('other')
   })
 
   it('falls back to isDynasty only when leagueType says nothing', () => {

@@ -234,6 +234,9 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
                 name: l.name,
                 marketValue: l.marketValue,
               })),
+              /* Only used for the Zombie veto warning: a lopsided deal there
+                 goes to an 8-hour poll and two thirds can reverse it. */
+              percentDiff: out.percentDiff ?? null,
             }).catch(() => EMPTY_CONTEXT)
           : EMPTY_CONTEXT
 

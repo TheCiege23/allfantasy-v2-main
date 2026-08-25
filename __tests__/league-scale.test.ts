@@ -81,9 +81,13 @@ describe('assessLeagueScale', () => {
   })
 
   it('a normal league is standard and says nothing about size', () => {
+    // 12 x 25 spots = 300 rostered, which is the normal-league baseline.
     const s = assessLeagueScale({
       teamCount: 12,
-      starters: ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'BN'],
+      starters: [
+        'QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF',
+        ...Array<string>(16).fill('BN'),
+      ],
     })!
     expect(s.scrutiny).toBe('standard')
     expect(s.notes.join(' ')).not.toContain('12-team price')
@@ -276,7 +280,7 @@ describe('the shallow end: 4 teams, huge rosters', () => {
     const s = assessLeagueScale({ teamCount: 4, starters: FOUR_TEAM })!
     expect(s.scrutiny).toBe('shallow')
     const text = s.notes.join(' ')
-    expect(text).toContain('Replacement is abundant')
+    expect(text).toContain('players are rostered across the whole league')
     expect(text).toContain('worth far more here than their round name suggests')
   })
 
@@ -286,7 +290,10 @@ describe('the shallow end: 4 teams, huge rosters', () => {
      * the exact opposite. A model that only knew about deep leagues would be
      * wrong in the other direction here and just as confidently.
      */
-    const deep = assessLeagueScale({ teamCount: 32, starters: FOUR_TEAM })!
+    const deep = assessLeagueScale({
+      teamCount: 32,
+      starters: [...Array<string>(21).fill('FLEX')],
+    })!
     const shallow = assessLeagueScale({ teamCount: 4, starters: FOUR_TEAM })!
     expect(deep.notes.join(' ')).toContain('worth less than its round suggests')
     expect(shallow.notes.join(' ')).toContain('worth far more here')
