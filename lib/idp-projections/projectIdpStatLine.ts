@@ -17,6 +17,26 @@
  * under 0.03 in every case, so those constants are deliberately left at round, explainable
  * values rather than tuned to the third decimal of a single season.
  *
+ * ⚠ TWO MATCHUP LAYERS WERE MEASURED AND NEITHER EARNED ITS PLACE. On the same 5,291
+ * player-weeks:
+ *
+ *   control (snap basis only)          MAE 4.673
+ *   + opponent pace                    MAE 4.674   inert
+ *   + opponent pass rate & own blitz   MAE 4.681 at half strength, 4.696 at full
+ *
+ * Both are football-plausible and both are real data — the blitz rates are correct enough
+ * that Brian Flores' Minnesota and Todd Bowles' Tampa Bay come out top in 2024, which is
+ * exactly right. They still do not predict a WEEK. A season-level tendency applied to every
+ * game is too coarse: what a defense does on average across seventeen opponents says little
+ * about the one it faces on Sunday, and a player's own recent snap share already carries most
+ * of what the schedule did to him.
+ *
+ * So `context.strength` defaults to 0 and the layer is inert unless a caller asks for it. It
+ * is kept, wired and documented rather than deleted because the alternative is that the next
+ * person builds it again from the same plausible reasoning and re-learns the same result.
+ * Opponent pace stays live: it is neutral rather than harmful, and it is the one of the two
+ * that still has a mechanism worth revisiting on per-week rather than per-season inputs.
+ *
  * ⚠ THE NEGATIVE BIAS IS EXPECTED AND MUST NOT BE "CORRECTED" WITH A MULTIPLIER. Weekly IDP
  * scoring is right-skewed — a defensive touchdown or a three-sack game is worth many points
  * and is genuinely unpredictable. Minimising absolute error targets the MEDIAN week, and for
@@ -105,6 +125,16 @@ export interface ProjectIdpStatLineInput {
   history: readonly IdpGameObservation[]
   /** Opponent offensive pace for the week being projected. Omit when unknown. */
   opponentPace?: OpponentPace | null
+  /**
+   * Matchup and scheme context for the week being projected.
+   *
+   * ⚠ `strength` EXISTS SO THIS CAN BE TURNED OFF AND MEASURED. Every one of these signals is
+   * plausible — a defender facing a pass-heavy offense really does see more coverage snaps,
+   * and a blitz-heavy defense really does create more pressure chances. Plausible is not the
+   * same as predictive, and the backtest runs strength 0 as a control against strength 0.5
+   * and 1 so the multiplier has to earn its place.
+   */
+  context?: IdpMatchupContext | null
   /** Cohort means for this position group. Omit to skip regression (and say so). */
   priors?: CohortPriors | null
   /** Depth-chart ordinal (`LB2` -> 2). Coverage/confidence signal only — see below. */
@@ -140,6 +170,40 @@ export interface ProjectIdpStatLineInput {
    */
   regressionPriorGames?: number
 }
+
+/**
+ * Opponent and own-scheme context, all optional and all league-relative.
+ *
+ * Each value is paired with its league mean rather than being an absolute, because a ratio is
+ * the only form that survives a season where the whole league throws more.
+ */
+export interface IdpMatchupContext {
+  /** How much the opponent's OFFENSE passes, and the league mean to read it against. */
+  opponentPassRate?: number | null
+  leagueMeanPassRate?: number | null
+  /** How often the player's OWN defense blitzes, and the league mean. */
+  ownBlitzRate?: number | null
+  leagueMeanBlitzRate?: number | null
+  /** 0 disables every adjustment below. 1 applies the raw ratio. */
+  strength?: number
+}
+
+/** Coverage and turnover work follows how often the opponent throws. */
+const PASS_CONTEXT_KEYS: ReadonlySet<IdpStatKey> = new Set<IdpStatKey>([
+  'idp_pass_def',
+  'idp_int',
+])
+/** Pressure work follows how often the opponent throws AND how often this defense blitzes. */
+const RUSH_CONTEXT_KEYS: ReadonlySet<IdpStatKey> = new Set<IdpStatKey>(['idp_sack', 'idp_qb_hit'])
+/** Tackle volume follows the run game, so it moves the OTHER way from opponent pass rate. */
+const RUN_CONTEXT_KEYS: ReadonlySet<IdpStatKey> = new Set<IdpStatKey>([
+  'idp_tkl_solo',
+  'idp_tkl_ast',
+])
+
+/** Context multipliers are clamped hard: a matchup nudges a projection, it does not rewrite it. */
+const CONTEXT_CLAMP_MIN = 0.8
+const CONTEXT_CLAMP_MAX = 1.25
 
 const DEFAULT_MIN_GAMES = 3
 const DEFAULT_HALF_LIFE = 4
@@ -450,6 +514,32 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
     return den > 0 ? num / den : null
   }
 
+  /*
+   * --- matchup and scheme context -------------------------------------------------------
+   *
+   * Ratios against the league mean, clamped, and raised to `strength` so the whole layer can
+   * be dialled to nothing for the control arm of the backtest.
+   */
+  const ctx = input.context ?? null
+  const ctxStrength = ctx?.strength ?? 0
+  const ratio = (value: number | null | undefined, mean: number | null | undefined): number => {
+    if (ctxStrength <= 0) return 1
+    if (value == null || mean == null || !(mean > 0) || !(value > 0)) return 1
+    const raw = Math.pow(value / mean, ctxStrength)
+    return Math.min(CONTEXT_CLAMP_MAX, Math.max(CONTEXT_CLAMP_MIN, raw))
+  }
+
+  const passContext = ratio(ctx?.opponentPassRate, ctx?.leagueMeanPassRate)
+  const blitzContext = ratio(ctx?.ownBlitzRate, ctx?.leagueMeanBlitzRate)
+  /*
+   * The run share is the complement, not the reciprocal. A league that passes 57% of the time
+   * runs 43%; an opponent at 62% runs 38%, which is a 12% drop in run plays, not a 9% one.
+   */
+  const runContext =
+    ctxStrength > 0 && ctx?.opponentPassRate != null && ctx?.leagueMeanPassRate != null
+      ? ratio(1 - ctx.opponentPassRate, 1 - ctx.leagueMeanPassRate)
+      : 1
+
   // --- assemble the line --------------------------------------------------------------
   const priors = input.priors ?? null
   const k = input.regressionPriorGames ?? DEFAULT_REGRESSION_PRIOR_GAMES
@@ -497,6 +587,10 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
       value *= paceMultiplier
     }
 
+    if (PASS_CONTEXT_KEYS.has(key)) value *= passContext
+    else if (RUSH_CONTEXT_KEYS.has(key)) value *= passContext * blitzContext
+    else if (RUN_CONTEXT_KEYS.has(key)) value *= runContext
+
     if (value > 0) statLine[key] = round3(value)
   }
 
@@ -541,6 +635,23 @@ export function projectIdpStatLine(input: ProjectIdpStatLineInput): IdpProjectio
     notes.push(SNAP_BASIS_NOTE + sharePart)
   } else {
     notes.push(NO_SNAP_DATA_NOTE)
+  }
+
+  if (ctxStrength > 0 && (passContext !== 1 || blitzContext !== 1 || runContext !== 1)) {
+    const parts: string[] = []
+    if (passContext !== 1) {
+      parts.push(
+        `opponent passes on ${Math.round((ctx?.opponentPassRate ?? 0) * 100)}% of neutral plays ` +
+          `against a league mean of ${Math.round((ctx?.leagueMeanPassRate ?? 0) * 100)}%`,
+      )
+    }
+    if (blitzContext !== 1) {
+      parts.push(
+        `his defense blitzes on ${Math.round((ctx?.ownBlitzRate ?? 0) * 100)}% of dropbacks ` +
+          `against a league mean of ${Math.round((ctx?.leagueMeanBlitzRate ?? 0) * 100)}%`,
+      )
+    }
+    if (parts.length) notes.push(`Matchup context applied: ${parts.join('; ')}.`)
   }
 
   // --- confidence, derived from coverage rather than asserted -------------------------

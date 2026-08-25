@@ -307,6 +307,74 @@ describe('projectIdpStatLine — the projected line', () => {
   })
 })
 
+describe('projectIdpStatLine — matchup context is off unless asked for', () => {
+  const CONTEXT = {
+    opponentPassRate: 0.62,
+    leagueMeanPassRate: 0.538,
+    ownBlitzRate: 0.297,
+    leagueMeanBlitzRate: 0.178,
+  }
+
+  it('is completely inert at strength 0, which is the default', () => {
+    /*
+     * Measured on 5,291 out-of-sample player-weeks, this layer made accuracy WORSE — MAE
+     * 4.681 at half strength and 4.696 at full against a 4.673 control. It stays wired and
+     * documented rather than deleted so the next person does not rebuild it from the same
+     * plausible reasoning, but it must cost nothing while switched off.
+     */
+    const plain = projectIdpStatLine({ position: 'LB', history: STARTER_LB })
+    const withCtx = projectIdpStatLine({ position: 'LB', history: STARTER_LB, context: CONTEXT })
+    const explicitZero = projectIdpStatLine({
+      position: 'LB',
+      history: STARTER_LB,
+      context: { ...CONTEXT, strength: 0 },
+    })
+    expect(plain.ok && withCtx.ok && explicitZero.ok).toBe(true)
+    if (!plain.ok || !withCtx.ok || !explicitZero.ok) return
+
+    expect(withCtx.statLine).toEqual(plain.statLine)
+    expect(explicitZero.statLine).toEqual(plain.statLine)
+    expect(withCtx.notes.some((n) => n.includes('Matchup context'))).toBe(false)
+  })
+
+  it('moves coverage up and run tackles down against a pass-heavy opponent', () => {
+    const out = projectIdpStatLine({
+      position: 'LB',
+      history: STARTER_LB,
+      context: { ...CONTEXT, strength: 1 },
+    })
+    const plain = projectIdpStatLine({ position: 'LB', history: STARTER_LB })
+    expect(out.ok && plain.ok).toBe(true)
+    if (!out.ok || !plain.ok) return
+
+    // An opponent throwing 62% against a 53.8% mean runs less, so tackle volume falls...
+    expect(out.statLine.idp_tkl_solo!).toBeLessThan(plain.statLine.idp_tkl_solo!)
+    // ...while pressure work rises on both the extra dropbacks and a blitz-heavy defense.
+    expect(out.statLine.idp_sack!).toBeGreaterThan(plain.statLine.idp_sack!)
+    expect(out.notes.some((n) => n.includes('Matchup context applied'))).toBe(true)
+  })
+
+  it('clamps context so a matchup nudges a projection rather than rewriting it', () => {
+    const extreme = projectIdpStatLine({
+      position: 'LB',
+      history: STARTER_LB,
+      context: {
+        opponentPassRate: 0.95,
+        leagueMeanPassRate: 0.3,
+        ownBlitzRate: 0.9,
+        leagueMeanBlitzRate: 0.05,
+        strength: 1,
+      },
+    })
+    const plain = projectIdpStatLine({ position: 'LB', history: STARTER_LB })
+    expect(extreme.ok && plain.ok).toBe(true)
+    if (!extreme.ok || !plain.ok) return
+    // Sacks take both the pass and blitz multipliers, so 1.25 x 1.25 is the ceiling. The
+    // epsilon is the output's own 3-decimal rounding, not slack in the clamp.
+    expect(extreme.statLine.idp_sack!).toBeLessThanOrEqual(plain.statLine.idp_sack! * 1.25 * 1.25 + 1e-3)
+  })
+})
+
 describe('end to end — an honest linebacker number through computeLeagueProjectedPoints', () => {
   it('prices a starting LB in his own league instead of the generic 0.3', () => {
     const projected = projectIdpStatLine({
