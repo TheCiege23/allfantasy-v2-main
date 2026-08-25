@@ -14,6 +14,7 @@ import { fetchFantasyCalcValues, FantasyCalcPlayer, FantasyCalcSettings, getValu
 import { prisma } from '../prisma'
 import { getWeekStatsFromCache } from './sleeper-matchup-cache'
 import { buildIdpKickerValueMap, detectIdpLeague, detectKickerLeague } from '../idp-kicker-values'
+import { loadLeagueIdpVorp } from '@/lib/idp-projections/leagueIdpVorp'
 import { getPlayerAnalyticsBatch } from '@/lib/player-analytics'
 import { getCompositeWeightConfig, resolveWeightProfile, computeCompositeFromWeights, type CompositeWeightConfig } from './composite-weights'
 import { getActiveCompositeParams, type LearnedCompositeParams } from './composite-param-learning'
@@ -2962,7 +2963,28 @@ export async function computeLeagueRankingsV2(
         allRosterPlayerIds.push(pid)
       }
     }
-    const idpKickerValues = await buildIdpKickerValueMap(allRosterPlayerIds, isDynasty)
+    /*
+     * Rank defenders by what THIS league projects them to score above its own replacement
+     * level, rather than by how often Sleeper users search for them. Returns an empty map for
+     * any league it cannot price, in which case the popularity ranking is kept unchanged.
+     */
+    const idpVorp = isIdpLeague
+      ? await loadLeagueIdpVorp({
+          prisma,
+          leagueId,
+          rosterPositions,
+          rosterPlayerIds: allRosterPlayerIds,
+          numTeams: rosters.length,
+        }).catch(() => null)
+      : null
+
+    const idpKickerValues = await buildIdpKickerValueMap(
+      allRosterPlayerIds,
+      isDynasty,
+      idpVorp && idpVorp.vorpBySleeperId.size > 0
+        ? { vorpBySleeperId: idpVorp.vorpBySleeperId }
+        : null,
+    )
     for (const [pid, pv] of idpKickerValues) {
       valueMap.set(pid, pv)
     }
