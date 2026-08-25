@@ -1023,6 +1023,25 @@ export function TradeValueModal({
             one unstartable Sunday. The point is that they decide on purpose.
           */}
           {/*
+            League shape. Every stored price is a 12-team price -- in a 32-team
+            league that is wrong in both directions at once: picks are
+            overvalued by a multiple and starters are undervalued because
+            replacement has collapsed. Also carries roster crunch, deadline
+            runway, unpriced exposure, and whether the deal concentrates the
+            roster or spreads it.
+          */}
+          {Array.isArray(result?.scaleNotes) && (result.scaleNotes as string[]).length > 0 ? (
+            <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.06] px-3 py-2 text-[11px] text-cyan-100/90">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-cyan-200/80">
+                League and roster shape
+              </div>
+              {(result.scaleNotes as string[]).map((n) => (
+                <div key={n} className="mb-0.5 last:mb-0">{n}</div>
+              ))}
+            </div>
+          ) : null}
+
+          {/*
             Where each side stands. A trade is not good or bad in the abstract:
             a 3-7 team sending its quarterback out for picks is doing the right
             thing, and a grader that prices the assets and stops tells them they

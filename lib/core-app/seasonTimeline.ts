@@ -122,6 +122,23 @@ export function playoffSpots(settings: unknown): number | null {
   return num(s.playoff_teams ?? s.playoff_team_count ?? s.playoffTeams)
 }
 
+/**
+ * The league's own trade deadline week, or null when trades stay open.
+ *
+ * ⚠ 99 IS THE PLATFORM'S SENTINEL FOR "NO DEADLINE", NOT WEEK 99, and four
+ * production leagues carry it against regular seasons of 14 and 18 weeks. So is
+ * any value past the end of the regular season. Both collapse to null here so a
+ * caller cannot render "deadline WK 99" or count 87 weeks of runway.
+ */
+export function tradeDeadlineWeek(settings: unknown): number | null {
+  const s = readSettings(settings)
+  const raw = num(s.trade_deadline_week ?? s.trade_deadline ?? s.tradeDeadline ?? s.tradeDeadlineWeek)
+  if (raw == null || raw >= 99) return null
+  const length = regularSeasonWeeks(settings)
+  if (length != null && raw > length) return null
+  return raw
+}
+
 export function buildSeasonTimeline(args: {
   settings: unknown
   /** The league's current week, when known. */

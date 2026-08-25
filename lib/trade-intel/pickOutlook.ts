@@ -21,6 +21,8 @@
  * string so a manager can discount it rather than discovering it.
  */
 
+import { toBaselinePick } from './leagueScale'
+
 /**
  * How much today's standings are allowed to move the estimate, by how many
  * offseasons away the pick is.
@@ -32,6 +34,11 @@
 const HORIZON_WEIGHT = [0.7, 0.35, 0.1]
 
 export type PickOutlook = {
+  /**
+   * The 12-team pick this is equivalent to, because every stored price is a
+   * 12-team price. Null when the league already IS twelve teams.
+   */
+  baselineEquivalent: { round: number; slot: number; overall: number } | null
   season: number
   round: number
   /** 1 = first pick of the round. Null when there is no signal at all. */
@@ -66,10 +73,14 @@ export function projectPickSlot(args: {
   const weight = senderRank == null ? 0 : (HORIZON_WEIGHT[offseasonsOut] ?? 0)
 
   if (weight === 0 || senderRank == null) {
+    const eq = toBaselinePick({ round, slot: Math.round(mid), teamCount })
     return {
       season,
       round,
       projectedSlot: Math.round(mid),
+      baselineEquivalent: eq.unchanged
+        ? null
+        : { round: eq.baselineRound, slot: eq.baselineSlot, overall: eq.overall },
       standingWeight: 0,
       isRoundAverage: true,
       basis:
@@ -85,16 +96,33 @@ export function projectPickSlot(args: {
   const fromStanding = teamCount - senderRank + 1
   const slot = weight * fromStanding + (1 - weight) * mid
   const who = args.senderName ? args.senderName : `their ${ordinal(senderRank)}-place team`
+  const eq = toBaselinePick({ round, slot: Math.round(slot), teamCount })
+
+  /*
+   * TWO SEPARATE CORRECTIONS, AND A DEEP LEAGUE NEEDS BOTH. The first says WHERE
+   * in the round the pick lands, from the sender's record. The second says what
+   * that position is actually worth, because every stored price is a 12-team
+   * price and "1.28 of 32" is a third-rounder in those terms. Applying only the
+   * first still overvalues every pick in a big league by a multiple.
+   */
+  const scale = eq.unchanged
+    ? ''
+    : ` — which is the ${ordinal(eq.overall)} player off the board, priced as a ${
+        eq.baselineRound
+      }.${String(eq.baselineSlot).padStart(2, '0')} in the 12-team terms our values use`
 
   return {
     season,
     round,
     projectedSlot: Math.round(slot),
+    baselineEquivalent: eq.unchanged
+      ? null
+      : { round: eq.baselineRound, slot: eq.baselineSlot, overall: eq.overall },
     standingWeight: weight,
     isRoundAverage: false,
     basis: `${who} is ${ordinal(senderRank)} of ${teamCount} right now, so this ${season} ${ordinalRound(
       round,
-    )} projects around ${round}.${String(Math.round(slot)).padStart(2, '0')} rather than the middle of the round (assumes reverse-standings order)`,
+    )} projects around ${round}.${String(Math.round(slot)).padStart(2, '0')} rather than the middle of the round (assumes reverse-standings order)${scale}`,
   }
 }
 

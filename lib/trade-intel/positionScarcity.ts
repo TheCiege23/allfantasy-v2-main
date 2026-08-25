@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { isRuledOut } from '@/lib/core-app/injuryStatus'
+import { replaceableThreshold } from './leagueScale'
 import type { Scarcity } from './rosterNeed'
 
 /**
@@ -26,17 +27,6 @@ import type { Scarcity } from './rosterNeed'
  * and is not ruled out. That is the same evidence the lineup screen uses to
  * decide someone is playing.
  */
-
-/**
- * At or above this many startable free agents, the position is simply
- * replaceable and need carries no premium worth naming.
- *
- * One per team: if every manager in the league could claim one and there would
- * still be enough, nobody has to trade for it.
- */
-function replaceableThreshold(teamCount: number): number {
-  return Math.max(4, teamCount)
-}
 
 export type ScarcityBoard = Map<string, NonNullable<Scarcity>>
 

@@ -8,7 +8,15 @@ import {
   leagueWeekFromSettings,
   playoffSpots,
   regularSeasonWeeks,
+  tradeDeadlineWeek,
 } from '@/lib/core-app/seasonTimeline'
+import { assessLeagueScale } from './leagueScale'
+import {
+  assessConcentration,
+  assessDeadline,
+  assessRosterCrunch,
+  assessUnpriced,
+} from './rosterShape'
 import { assessContention, postureNote } from './contention'
 import { pickInflationWarning, projectPickSlot } from './pickOutlook'
 import { getPositionScarcity } from './positionScarcity'
@@ -83,6 +91,17 @@ export type TradeContextNotes = {
    * in the deal is a late first.
    */
   pickNotes: string[]
+  /**
+   * What the SHAPE of this league and this roster does to the deal, independent
+   * of who is in it.
+   *
+   * ⚠ EVERY STORED PRICE IS A 12-TEAM PRICE. In a 32-team league that is wrong
+   * in both directions at once: picks are overvalued by a multiple and starters
+   * are undervalued because replacement has collapsed. These are the notes that
+   * say so, along with roster crunch, deadline runway, unpriced exposure and
+   * whether the deal concentrates or spreads the roster.
+   */
+  scaleNotes: string[]
 }
 
 const EMPTY: TradeContextNotes = {
@@ -91,6 +110,7 @@ const EMPTY: TradeContextNotes = {
   leverageNotes: [],
   postureNotes: [],
   pickNotes: [],
+  scaleNotes: [],
 }
 
 /** A future pick in the deal, and which side it is coming from. */
@@ -115,6 +135,9 @@ export async function buildTradeContextNotes(args: {
    * the best asset lands later than their record suggests.
    */
   bestPlayerGoesTo?: 'me' | 'them' | null
+  /** The console's own priced lines, for unpriced exposure. */
+  pricedGive?: Array<{ name: string; marketValue: number | null }>
+  pricedGet?: Array<{ name: string; marketValue: number | null }>
 }): Promise<TradeContextNotes> {
   const { leagueId, userId, give, get } = args
   if (get.length === 0) return EMPTY
@@ -310,7 +333,109 @@ export async function buildTradeContextNotes(args: {
     bestPlayerGoesTo: args.bestPlayerGoesTo ?? null,
   }).catch(() => ({ postureNotes: [], pickNotes: [] }))
 
-  return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes }
+  const scaleNotes = await buildScaleNotes({
+    leagueId,
+    settings: league.settings,
+    starters: league.starters,
+    rosterIds,
+    format: null,
+    incoming: get.length + (args.picksToMe?.length ?? 0),
+    outgoing: give.length + (args.picksToThem?.length ?? 0),
+    futureLean: (args.picksToMe?.length ?? 0) - (args.picksToThem?.length ?? 0),
+    pricedGive: args.pricedGive ?? [],
+    pricedGet: args.pricedGet ?? [],
+  }).catch(() => [])
+
+  return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes, scaleNotes }
+}
+
+/**
+ * League shape, roster shape, and the calendar.
+ *
+ * None of these are about the players in the deal, which is exactly why a value
+ * chart cannot hold them and why they are worth saying out loud.
+ */
+async function buildScaleNotes(args: {
+  leagueId: string
+  settings: unknown
+  starters: unknown
+  rosterIds: string[]
+  format: string | null
+  incoming: number
+  outgoing: number
+  futureLean: number
+  pricedGive: Array<{ name: string; marketValue: number | null }>
+  pricedGet: Array<{ name: string; marketValue: number | null }>
+}): Promise<string[]> {
+  const notes: string[] = []
+
+  const teamCount = await prisma.leagueTeam
+    .count({ where: { leagueId: args.leagueId } })
+    .catch(() => 0)
+
+  if (teamCount >= 2) {
+    const scale = assessLeagueScale({ teamCount, starters: args.starters })
+    if (scale) notes.push(...scale.notes)
+  }
+
+  /*
+   * Roster size is the FULL `roster_positions` list, bench and IR included —
+   * that is what the platform enforces. Using only the starting slots would
+   * report every legal roster as illegal.
+   */
+  const rosterSize = Array.isArray(args.starters) ? args.starters.length : null
+  const crunch = assessRosterCrunch({
+    rosterSize,
+    held: args.rosterIds.length,
+    incoming: args.incoming,
+    outgoing: args.outgoing,
+  })
+  if (crunch.basis) notes.push(crunch.basis)
+
+  const deadline = assessDeadline({
+    currentWeek: leagueWeekFromSettings(args.settings),
+    seasonWeeks: regularSeasonWeeks(args.settings),
+    deadlineWeek: tradeDeadlineWeek(args.settings),
+    futureLean: args.futureLean,
+  })
+  if (deadline.basis) notes.push(deadline.basis)
+
+  const unpriced = assessUnpriced({ give: args.pricedGive, get: args.pricedGet })
+  if (unpriced.basis) notes.push(unpriced.basis)
+
+  /*
+   * Concentration needs the roster's own prices. One read, and it is skipped
+   * entirely when the deal carries no priced players either way — there is
+   * nothing to compare against.
+   */
+  const dealValues = [...args.pricedGive, ...args.pricedGet].filter((x) => x.marketValue != null)
+  if (dealValues.length > 0 && args.rosterIds.length >= 3) {
+    const rows = await prisma.playerValueSnapshot
+      .findMany({
+        where: { sleeperId: { in: args.rosterIds }, source: 'FANTASYCALC' },
+        orderBy: { capturedAt: 'desc' },
+        select: { sleeperId: true, value: true },
+      })
+      .catch(() => [])
+    const seen = new Set<string>()
+    const rosterValues: Array<number | null> = []
+    for (const r of rows) {
+      if (seen.has(r.sleeperId)) continue
+      seen.add(r.sleeperId)
+      rosterValues.push(r.value)
+    }
+    /* Unpriced roster players are nulls, never zeros — see assessConcentration. */
+    for (const id of args.rosterIds) if (!seen.has(id)) rosterValues.push(null)
+
+    const conc = assessConcentration({
+      rosterValues,
+      incoming: args.pricedGet.map((x) => x.marketValue),
+      outgoing: args.pricedGive.map((x) => x.marketValue),
+    })
+    if (conc.basis) notes.push(conc.basis)
+  }
+
+  return notes
 }
 
 /**

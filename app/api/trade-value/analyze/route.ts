@@ -18,6 +18,7 @@ const EMPTY_CONTEXT = {
   leverageNotes: [] as string[],
   postureNotes: [] as string[],
   pickNotes: [] as string[],
+  scaleNotes: [] as string[],
 }
 import {
   compareConsoleVerdictWithCanonicalGrade,
@@ -221,6 +222,17 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
                 .filter((a) => a.kind === 'pick')
                 .map((a) => ({ season: a.year, round: a.round })),
               bestPlayerGoesTo: bestPlayerSide,
+              /* The console's own prices, so unpriced exposure is measured
+                 against what it actually managed to value rather than a guess
+                 about which positions the feed covers. */
+              pricedGive: out.players.give.map((l) => ({
+                name: l.name,
+                marketValue: l.marketValue,
+              })),
+              pricedGet: out.players.get.map((l) => ({
+                name: l.name,
+                marketValue: l.marketValue,
+              })),
             }).catch(() => EMPTY_CONTEXT)
           : EMPTY_CONTEXT
 
@@ -229,7 +241,8 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         context.needNotes.length > 0 ||
         context.leverageNotes.length > 0 ||
         context.postureNotes.length > 0 ||
-        context.pickNotes.length > 0
+        context.pickNotes.length > 0 ||
+        context.scaleNotes.length > 0
 
       return NextResponse.json(hasContext ? { ...out, ...context } : out)
     } catch (e) {
