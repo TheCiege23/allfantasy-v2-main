@@ -671,3 +671,95 @@
   font-size: 12.5px;
   color: var(--text2);
 }
+
+/* ── Inbox & Sent ────────────────────────────────────────────────────── */
+
+/*
+ * Two columns that mirror the builder's grid, so the page reads as one
+ * surface rather than a panel bolted above another panel. The note about
+ * AF-native proposals spans both, because it is about the league, not a side.
+ */
+.af-tc-inbox {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+.af-tc-inbox-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-tc-inbox-note {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.af-tc-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.af-tc-offer-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-tc-offer-partner {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-offer-sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+/*
+ * "You send" is already the builder's red label; the receiving column gets the
+ * accent so the two directions are separable at a glance without reading.
+ */
+.af-tc-offer-sides > div:last-child .af-tc-sends {
+  color: var(--accent);
+}
+.af-tc-offer-asset {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--text2);
+}
+.af-tc-offer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.af-tc-offer-link {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--accent-line);
+}
+.af-tc-offer-link:hover,
+.af-tc-offer-link:focus-visible {
+  border-bottom-color: var(--accent);
+}
+
+@media (max-width: 720px) {
+  .af-tc-inbox {
+    grid-template-columns: 1fr;
+  }
+  /* The two sides of an offer stay side by side — that pairing IS the trade. */
+  .af-tc-offer-actions .af-btn {
+    min-height: 44px;
+  }
+}

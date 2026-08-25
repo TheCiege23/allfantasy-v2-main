@@ -8,9 +8,10 @@ import { isElevatedCommissioner } from '@/server/services/permissionService'
 import { getLeagueContext } from '@/lib/league-context/leagueContextService'
 import { getMarketValues } from '@/lib/trade-intel/marketValueService'
 import {
-  scanPendingSleeperTradesForLeague,
+  scanPendingSleeperTrades,
   type PendingProviderTrade,
   type PendingTradeAsset,
+  type PendingTradeScan,
 } from '@/lib/provider-trades/scanPendingSleeperTrades'
 
 export const dynamic = 'force-dynamic'
@@ -140,6 +141,41 @@ function mapProviderTrades(pending: PendingProviderTrade[]): LeagueTradeHistoryI
 }
 
 /**
+ * The same pending offers, in the shape a trade BUILDER can reload.
+ *
+ * ⚠ WHY NOT REUSE `activeTrades`. That array is `LeagueTradeHistoryItem`, whose
+ * assets are `{ label, sublabel }` — display strings. Turning "2027 1st round
+ * pick" back into `{ year: 2027, round: 1 }` means parsing prose, and the first
+ * reword of that label silently breaks the reload. This carries the fields the
+ * builder needs and leaves the panel's shape alone.
+ *
+ * `give` and `get` are from the VIEWER's side in both directions: an offer they
+ * sent and an offer they received both list what leaves their roster under
+ * `give`. Flipping on direction would show their own outgoing offer backwards.
+ */
+function builderOffers(pending: PendingProviderTrade[]) {
+  const asset = (a: PendingTradeAsset) => ({
+    playerId: a.playerId,
+    name: a.playerName,
+    position: a.position === '—' ? null : a.position,
+    team: a.team === '—' ? null : a.team,
+    isPick: Boolean(a.isPick),
+    pickYear: a.pickYear ?? null,
+    pickRound: a.pickRoundNumber ?? null,
+    faabAmount: a.faabAmount ?? null,
+  })
+
+  return pending.map((t) => ({
+    transactionId: t.transactionId,
+    direction: t.proposedByViewer ? ('outgoing' as const) : ('incoming' as const),
+    partnerName: t.proposedByViewer ? 'Awaiting response' : t.proposedBy,
+    proposedAt: t.proposedAt,
+    give: t.assetsGiven.map(asset),
+    get: t.assetsReceived.map(asset),
+  }))
+}
+
+/**
  * Trade hub data for the league Trades tab: trade block entries synced to `TradeBlockEntry`, plus active trade count (future).
  */
 export async function GET(req: NextRequest) {
@@ -182,6 +218,20 @@ export async function GET(req: NextRequest) {
       activeTrades,
       activeCount: activeTrades.length,
       source: 'native' as const,
+      /*
+       * ⚠ NOT SCANNED, AND THE ENVELOPE SAYS SO. Only Sleeper exposes pending
+       * offers to a read-only client. On every other platform we have not
+       * looked, and an inbox that renders empty here would be claiming a fact
+       * about the manager's league that we never checked.
+       */
+      pending: {
+        scanned: false,
+        reason: `pending offers are only readable on Sleeper today — this league is on ${String(league.platform ?? 'another platform')}`,
+        platform: String(league.platform ?? 'manual').toLowerCase(),
+        leagueUrl: null as string | null,
+        weeksUnanswered: 0,
+      },
+      pendingOffers: [] as ReturnType<typeof builderOffers>,
     })
   }
 
@@ -232,19 +282,32 @@ export async function GET(req: NextRequest) {
     return profile?.sleeperUserId?.trim() || null
   })()
 
-  const [nativeTrades, providerPending] = await Promise.all([
+  const [nativeTrades, pendingScan] = await Promise.all([
     buildNativeActiveTrades(leagueId, userId).catch((err) => {
       console.error('[trades-panel] native trades for imported league failed', { leagueId, err })
       return [] as LeagueTradeHistoryItem[]
     }),
     viewerSleeperId
-      ? scanPendingSleeperTradesForLeague({
+      ? scanPendingSleeperTrades({
           platformLeagueId: sleeperLeagueId,
           ownerSleeperId: viewerSleeperId,
           sport: league.sport,
         })
-      : Promise.resolve([] as PendingProviderTrade[]),
+      : Promise.resolve<PendingTradeScan>({
+          trades: [],
+          scanned: false,
+          /*
+           * The viewer is in the league but nothing links them to a Sleeper
+           * account, so there is no roster to scan FOR. Distinct from "Sleeper
+           * refused" and from "nothing pending", and the copy has to keep them
+           * apart — this one the manager can fix themselves.
+           */
+          reason: 'link your Sleeper account, or claim your team, so we know whose offers to read',
+          weeksUnanswered: 0,
+        }),
   ])
+
+  const providerPending: PendingProviderTrade[] = pendingScan.trades
 
   // Native first (the viewer can act on those); provider proposals follow.
   const activeTrades = [...nativeTrades, ...mapProviderTrades(providerPending)]
@@ -286,5 +349,19 @@ export async function GET(req: NextRequest) {
     // rather than offering actions AF cannot perform.
     providerPendingCount: providerPending.length,
     providerLeagueUrl: `https://sleeper.com/leagues/${encodeURIComponent(sleeperLeagueId)}`,
+    /*
+     * ⚠ THE SCAN'S OUTCOME, NOT JUST ITS RESULT. `providerPendingCount: 0` is
+     * true whether nothing is pending or nothing was read, and a consumer that
+     * only sees the count cannot tell those apart. Everything needed to say
+     * which one it was rides here.
+     */
+    pending: {
+      scanned: pendingScan.scanned,
+      reason: pendingScan.reason,
+      platform: 'sleeper' as const,
+      leagueUrl: `https://sleeper.com/leagues/${encodeURIComponent(sleeperLeagueId)}`,
+      weeksUnanswered: pendingScan.weeksUnanswered,
+    },
+    pendingOffers: builderOffers(providerPending),
   })
 }

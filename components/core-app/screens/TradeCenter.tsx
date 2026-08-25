@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from 'react'
 import { TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
+import { TradeInbox } from '@/components/core-app/screens/TradeInbox'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 import { projectedLetterFor, type GradeLetter } from '@/lib/trade-intel/gradeScale'
 import { TradeFinderPanel } from '@/components/core-app/screens/TradeFinderPanel'
@@ -195,6 +196,29 @@ export function TradeCenter(props: {
     setter((prev) => prev.filter((_, i) => i !== index))
   }, [])
 
+  /**
+   * Take a pending offer from the inbox and make it the deal under
+   * construction.
+   *
+   * ⚠ REPLACES, NEVER APPENDS. Merging an incoming offer into whatever was
+   * already on the board would produce a deal nobody proposed, and the verdict
+   * would be about that invented deal.
+   *
+   * ⚠ CLEARS THE VERDICT. The score on screen belongs to the previous deal.
+   * Leaving it up while the assets change underneath is the one way this page
+   * can state something false.
+   */
+  const loadOffer = useCallback(
+    (give: PickedAsset[], get: PickedAsset[], note: string | null) => {
+      setGiveAssets(give)
+      setGetAssets(get)
+      setResult(null)
+      setError(null)
+      setDraftNote(note ?? 'Offer loaded — analyse it to get a verdict.')
+    },
+    [],
+  )
+
   /*
    * ⚠ THE BLOCKED STATE LEADS AND SUPPRESSES THE VERDICT. When the format says
    * this deal cannot happen, a fairness score is arithmetic about an impossible
@@ -221,6 +245,20 @@ export function TradeCenter(props: {
         body: JSON.stringify({
           sportFilter: 'ALL',
           leagueId: props.league?.id ?? null,
+          /*
+           * ⚠ BOTH OF THESE ARE REQUIRED BY THE ROUTE'S SCHEMA, NOT OPTIONAL
+           * EXTRAS. `strategy` and `teamContext` carry no `.default()` in
+           * app/api/trade-value/analyze/route.ts, so omitting them fails zod
+           * and the request comes back 400 before any analysis runs — the
+           * button looked wired and never was.
+           *
+           * 'neutral' is the honest posture: this page does not ask the manager
+           * whether they are contending, and guessing one would tilt the
+           * narrative on an assumption they never made. 'my_team' is a fact,
+           * not a guess — the give side IS the viewer's roster.
+           */
+          strategy: 'neutral',
+          teamContext: 'my_team',
           sideGive: giveAssets.map(toInput),
           sideGet: getAssets.map(toInput),
         }),
@@ -409,6 +447,13 @@ export function TradeCenter(props: {
           {draftNote ? <span className="af-tc-row-sub">{draftNote}</span> : null}
         </div>
       ) : null}
+
+      {/*
+        Inbox and Sent sit ABOVE the builder because that is the order of the
+        job: read what was offered, then price it. Below the builder they would
+        be a footnote to a deal the manager had already hand-built.
+      */}
+      <TradeInbox leagueId={props.league?.id ?? null} onLoad={loadOffer} />
 
       <div className="af-tc-builder">
         {([
