@@ -1136,7 +1136,15 @@ export async function getDash34Data(
            */
           nextGameSlate === 'pre' ? 'Preseason' : nextGameSlate === 'post' ? 'Postseason' : null,
           nextGameWeek != null ? `Week ${nextGameWeek}` : null,
-          nextGame.startTime.toUTCString().slice(0, 22) + ' UTC',
+          /*
+           * ⚠ THE INSTANT IS NOT IN THIS STRING ANY MORE. It was rendered as a
+           * raw UTC stamp — on the one line a reader sets an alarm by, beside
+           * bands that localise to the reader's own zone, so the same screen
+           * printed a kickoff in three different zones. The instant already
+           * travels as `countdownTo`; the card localises that after hydration,
+           * because the server cannot know the reader's zone and a server
+           * paint would be a hydration mismatch.
+           */
         ]
           .filter(Boolean)
           .join(' · '),

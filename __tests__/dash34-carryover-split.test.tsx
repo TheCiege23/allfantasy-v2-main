@@ -64,6 +64,35 @@ describe('Dash34Carryover', () => {
   })
 })
 
+describe('the first-kickoff line', () => {
+  const LOCK = {
+    countdown: 'in 3d 2h',
+    countdownTo: '2026-09-04T00:20:00.000Z',
+    countdownLabel: 'FIRST KICKOFF',
+    kickoffLabel: 'NFL · Week 1',
+    headline: 'Steelers at Bills',
+    slots: [],
+    awayClub: null,
+    homeClub: null,
+    openHref: '/league/l1',
+    openLabel: 'Check Bla bla bla',
+  } as unknown as NonNullable<Dash34Data['firstLock']>
+
+  it('carries no raw UTC stamp in its label', () => {
+    // Three zones on one screen was the bug: this line printed UTC while the
+    // bands around it localised, on the one number someone sets an alarm by.
+    const { container } = render(<Dash34Carryover data={data({ firstLock: LOCK })} />)
+    expect(container.textContent).not.toMatch(/UTC/)
+    expect(container.textContent).toContain('NFL · Week 1')
+  })
+
+  it('still renders the fixture and the coarse countdown', () => {
+    const { container } = render(<Dash34Carryover data={data({ firstLock: LOCK })} />)
+    expect(container.textContent).toContain('Steelers at Bills')
+    expect(container.textContent).toMatch(/in \d/)
+  })
+})
+
 describe('Dash34Coverage', () => {
   it('renders the disclosure, collapsed, with its count', () => {
     const { container } = render(

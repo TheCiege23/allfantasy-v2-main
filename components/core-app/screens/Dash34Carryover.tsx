@@ -69,7 +69,22 @@ export function Dash34Carryover({ data }: { data: Dash34Data | null }) {
             <span className="af-carry-count-v af-num">
               {coarseCountdown(firstLock.countdownTo, firstLock.countdown)}
             </span>
-            <span className="af-carry-kick">{firstLock.kickoffLabel}</span>
+            <span className="af-carry-kick">
+              {firstLock.kickoffLabel}
+              {/*
+                The instant, in the READER'S zone. It used to be baked into the
+                label above as a raw UTC stamp, on the one line someone sets an
+                alarm by, while the bands around it localised — three zones on
+                one screen. Dash34When paints UTC on the server and swaps in the
+                local rendering after hydration, so the two passes agree.
+              */}
+              {firstLock.countdownTo ? (
+                <>
+                  {' · '}
+                  <Dash34When iso={firstLock.countdownTo} />
+                </>
+              ) : null}
+            </span>
           </div>
           <div className="af-carry-lockbody">
             <h2 className="af-carry-lockh">
