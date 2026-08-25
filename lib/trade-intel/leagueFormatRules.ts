@@ -22,6 +22,7 @@ export type LeagueConcept =
   | 'zombie'
   | 'survivor'
   | 'tournament'
+  | 'pirate'
   | 'other'
 
 export type FormatRules = {
@@ -66,24 +67,26 @@ export function readFormatRules(league: {
   const keeperCount = league.keeperCount ?? 0
 
   const concept: LeagueConcept =
-    raw === 'tournament'
-      ? 'tournament'
-      : raw === 'survivor'
-        ? 'survivor'
-        : raw === 'zombie'
-          ? 'zombie'
-          : raw === 'guillotine'
-            ? 'guillotine'
-            : raw === 'dynasty' || (raw === '' && league.isDynasty)
-              ? 'dynasty'
-              : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
-                ? 'keeper'
-                : raw === 'redraft' || raw === ''
-                  ? 'redraft'
-                  : /* Anything still unrecognised is NOT silently treated as
-                       redraft — a caller that does not know how to price a
-                       format should be able to tell. */
-                    'other'
+    raw === 'pirate'
+      ? 'pirate'
+      : raw === 'tournament'
+        ? 'tournament'
+        : raw === 'survivor'
+          ? 'survivor'
+          : raw === 'zombie'
+            ? 'zombie'
+            : raw === 'guillotine'
+              ? 'guillotine'
+              : raw === 'dynasty' || (raw === '' && league.isDynasty)
+                ? 'dynasty'
+                : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+                  ? 'keeper'
+                  : raw === 'redraft' || raw === ''
+                    ? 'redraft'
+                    : /* Anything still unrecognised is NOT silently treated as
+                         redraft — a caller that does not know how to price a
+                         format should be able to tell. */
+                      'other'
 
   const notes: string[] = []
   let futurePicksTradeable: boolean | null = null
@@ -105,6 +108,22 @@ export function readFormatRules(league: {
     futurePicksTradeable = false
     notes.push(
       'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
+    )
+  } else if (concept === 'pirate') {
+    /*
+     * ⚠ THREE PROTECTION SLOTS ARE THE WHOLE SHIELD. Winning a matchup takes a
+     * player off the loser, and anyone unprotected — starter, bench or IR — is
+     * takeable. So a player's value here depends on whether you can actually
+     * keep him, which is a question no value chart asks.
+     *
+     * The trade window differs per player: protected players freeze from TNF to
+     * Wednesday midnight, everyone else trades freely. See
+     * lib/trade-intel/pirate.ts, which also documents where the existing
+     * house-rule advice inverts under a protection cap.
+     */
+    futurePicksTradeable = null
+    notes.push(
+      'Pirate: winning a matchup takes a player off the loser, and only your 3 protected players are safe. Anything you acquire beyond those 3 can be stolen the first week you lose — and the tradeable pool shrinks all season, because every result moves a player and none come back.',
     )
   } else if (concept === 'tournament') {
     /*
