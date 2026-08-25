@@ -168,13 +168,29 @@
 
 /* ── Lineup rows ─────────────────────────────────────────────────────── */
 
+/*
+ * ⚠ A GRID, NOT A FLEX ROW, and that is the "everything is at a different
+ * level" fix. The row was flex with a variable-width status chip in the middle:
+ * "QUESTIONABLE" is nearly three times the width of "ACTIVE", so the player
+ * column ended somewhere different on every line and the numbers after it
+ * followed. Sixteen starters rendered sixteen indents.
+ *
+ * Fixed tracks mean slot, status and the three numbers form actual columns.
+ * Only the player name flexes, which is the one thing that should.
+ */
 .af-mt-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 104px auto;
   align-items: center;
   gap: 12px;
   min-height: 52px;
-  padding: 8px 8px;
+  padding: 8px;
   border-bottom: 1px solid var(--line);
+}
+/* An empty or unresolved slot spans the columns the missing player would fill. */
+.af-mt-row[data-empty='true'] .af-mt-empty-text,
+.af-mt-row .af-mt-unresolved {
+  grid-column: 2 / -1;
 }
 .af-mt-row:last-child {
   border-bottom: 0;
@@ -269,6 +285,12 @@
 /* ── Status ──────────────────────────────────────────────────────────── */
 
 .af-mt-status {
+  /* Its own column now — a long designation must not move the numbers. */
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   flex: 0 0 auto;
   padding: 3px 9px;
   border-radius: 999px;
@@ -406,8 +428,6 @@
   ragged digits in a column are the fastest way to make a comparison unreadable.
 */
 .af-mt-projpair {
-  flex: 0 0 auto;
-  margin-left: auto;
   display: grid;
   grid-template-columns: 52px 52px 44px;
   align-items: center;
@@ -436,7 +456,6 @@
 
 /* Column headings, aligned to the same grid as the values below them. */
 .af-mt-projhead {
-  flex: 0 0 auto;
   margin-left: auto;
   display: grid;
   grid-template-columns: 52px 52px 44px;
@@ -840,3 +859,65 @@
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+
+/* ── Consistent type scale across the roster ─────────────────────────── */
+/*
+ * One scale, so a roster does not read as six different designs stacked. Every
+ * number that can be compared to another number is tabular, and every number
+ * that sits in a column is right-aligned. Those two rules are most of what
+ * "crisp" means on a screen made of figures.
+ */
+.af-mt-player-name { font-size: 13.5px; font-weight: 700; line-height: 1.3; }
+.af-mt-player-meta { font-size: 11px; line-height: 1.4; }
+.af-mt-slot { font-size: 10.5px; line-height: 1; }
+.af-mt-status { font-size: 10px; line-height: 1.4; }
+
+.af-num,
+.af-mt-proj,
+.af-mt-share,
+.af-mt-tile-value,
+.af-mt-lock-time {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+
+/* Header tiles line up on one baseline whatever their value's length. */
+.af-mt-tile {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 3px;
+}
+.af-mt-tile-value { font-size: 21px; font-weight: 800; line-height: 1.15; }
+.af-mt-tile-why { font-size: 10.5px; line-height: 1.45; }
+
+@media (max-width: 860px) {
+  /* Status folds under the name before the numbers give up any room. */
+  .af-mt-row { grid-template-columns: 40px minmax(0, 1fr) auto; }
+  .af-mt-status { grid-column: 2; justify-self: start; margin-top: 2px; }
+}
+
+/* ── Position colours in light mode ──────────────────────────────────── */
+/*
+ * ⚠ THE DARK PALETTE ABOVE IS PASTELS ON A DARK GROUND, and pastel-on-white is
+ * unreadable. This repo themes on `html[data-mode="dark|light|af"]`, so light
+ * gets its own set: the same hue family, but the tint drops and the text goes
+ * dark. Same identity, legible ground.
+ *
+ * `af` mode inherits the dark set deliberately — it is a dark theme with a
+ * different accent, not a third palette to maintain.
+ */
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='qb']   { background: rgba(190,24,93,.10);  border-color: rgba(190,24,93,.32);  color: #9d174d; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='rb']   { background: rgba(13,148,136,.10); border-color: rgba(13,148,136,.32); color: #0f766e; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='wr']   { background: rgba(37,99,235,.10);  border-color: rgba(37,99,235,.32);  color: #1d4ed8; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='te']   { background: rgba(194,65,12,.10);  border-color: rgba(194,65,12,.32);  color: #9a3412; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='k']    { background: rgba(109,40,217,.10); border-color: rgba(109,40,217,.32); color: #5b21b6; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='def']  { background: rgba(71,85,105,.10);  border-color: rgba(71,85,105,.32);  color: #334155; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='flex'] { background: rgba(9,109,142,.10);  border-color: rgba(9,109,142,.32);  color: #075c78; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='dl']   { background: rgba(185,28,28,.10);  border-color: rgba(185,28,28,.32);  color: #991b1b; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='lb']   { background: rgba(67,56,202,.10);  border-color: rgba(67,56,202,.32);  color: #3730a3; }
+html[data-mode='light'] .af-core .af-mt-slot[data-pos='db']   { background: rgba(5,150,105,.10);  border-color: rgba(5,150,105,.32);  color: #047857; }
+
+/* The preseason and bye chips are already token-driven, so they follow the
+   mode on their own — but the temperature beside a weather glyph is not. */
+html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
