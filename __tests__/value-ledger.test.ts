@@ -6,7 +6,10 @@ import {
   classifyMicrostructure,
   leagueFitRatio,
   priceByAdjustedRank,
+  priceForCounterparty,
+  type ValueLedger,
 } from '@/lib/trade-intel/valueLedger'
+import { computeRosterNeed, readSlotRequirements } from '@/lib/trade-intel/rosterNeed'
 
 /**
  * The ledger's whole claim is that FantasyCalc is the anchor and not the answer.
@@ -265,5 +268,52 @@ describe('the ledger is wired, not just built', () => {
     const end = call.indexOf('})')
     expect(call.slice(0, end)).toContain('scoringSettings')
     expect(call.slice(0, end)).toContain('projectionWeek')
+  })
+})
+
+describe('priceForCounterparty: the third dimension', () => {
+  const ledger = {
+    sleeperId: 'x',
+    name: 'A Back',
+    position: 'RB',
+    baseline: null,
+    leagueFit: { factor: null, basis: '' },
+    microstructure: {
+      stdDev: null,
+      tradeFrequency: null,
+      trend30d: null,
+      liquidity: null,
+      agreement: null,
+    },
+    value: 5000,
+    gaps: [],
+  } as unknown as ValueLedger
+
+  const need = computeRosterNeed({
+    requirements: readSlotRequirements(['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'FLEX', 'K', 'DEF'])!,
+    rostered: ['QB', 'WR', 'WR', 'WR', 'TE', 'K', 'DEF'],
+  })
+
+  it('a team that cannot fill the slot pays more', () => {
+    const { price, delta } = priceForCounterparty(ledger, need)
+    expect(price).toBeGreaterThan(5000)
+    expect(delta.factor).toBeGreaterThan(1)
+  })
+
+  it('⚠ an unreadable roster leaves the price alone and says so', () => {
+    /*
+     * Not a silent 1.0 and not a refusal to price at all: the league-wide value
+     * is still the best answer available, and the delta reports that the
+     * counterparty layer did not run.
+     */
+    const { price, delta } = priceForCounterparty(ledger, null)
+    expect(price).toBe(5000)
+    expect(delta.factor).toBeNull()
+    expect(delta.basis).toContain('cannot read')
+  })
+
+  it('carries a null value through rather than inventing one', () => {
+    const unpriced = { ...ledger, value: null } as ValueLedger
+    expect(priceForCounterparty(unpriced, need).price).toBeNull()
   })
 })

@@ -23,7 +23,7 @@
  *   2  trajectory         GAP     age curve, recency, snap share, depth chart
  *   3  situation          GAP     pace, coordinator, weather splits, durability
  *   4  microstructure     BUILT   disagreement, liquidity, momentum
- *   5  counterparty       GAP     per-trade, needs both rosters — not per player
+ *   5  counterparty       BUILT   per-trade, via priceForCounterparty()
  *
  * ⚠ EVERY LAYER THAT CANNOT COMPUTE RETURNS NULL AND NAMES ITSELF IN `gaps`. It
  * must never return 1.0, which is a silent claim that the layer ran and found no
@@ -37,6 +37,7 @@ import { prisma } from '@/lib/prisma'
 import { lookupProjections } from '@/lib/core-app/playerProjections'
 import { computeLeagueProjectedPoints } from '@/lib/projections/leagueScoring'
 import { valueAtRankFrom } from './afValue'
+import { counterpartyPriceDelta, type RosterNeed } from './rosterNeed'
 
 /**
  * The scoring the market baseline is priced on.
@@ -450,4 +451,38 @@ export async function buildValueLedger(args: {
   }
 
   return out
+}
+
+/**
+ * The third dimension: what this player is worth TO ONE SPECIFIC TEAM.
+ *
+ * ⚠ THIS IS A PRICE, NOT A VALUE, AND IT MUST NOT BE STORED OR RANKED. It is
+ * true of one deal between two teams and false everywhere else. Writing it back
+ * onto a player page or a roster grade would corrupt a league-wide fact with a
+ * one-off preference.
+ *
+ * Kept out of `buildValueLedger` deliberately: that function answers
+ * value(player, league) and is cacheable per league. This one is not cacheable
+ * at all, because its second argument is a roster that changes every waiver run.
+ */
+export function priceForCounterparty(
+  ledger: ValueLedger,
+  need: RosterNeed | null,
+): { price: number | null; delta: LedgerLayer } {
+  const d = counterpartyPriceDelta({ position: ledger.position, need })
+
+  if (!d) {
+    return {
+      price: ledger.value,
+      delta: {
+        factor: null,
+        basis: 'we cannot read that roster’s starting lineup, so need does not move this price',
+      },
+    }
+  }
+
+  return {
+    price: ledger.value == null ? null : Math.round(ledger.value * d.factor),
+    delta: { factor: d.factor, basis: d.basis },
+  }
 }
