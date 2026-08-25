@@ -14,6 +14,7 @@ import '@/components/core-app/af-league-home.css'
 import type { LeagueHomeData, SectionState } from '@/lib/core-app/leagueHome'
 import type { CoreIssue } from '@/lib/core-app/outstandingIssues'
 import { LeagueScoreboardPanel } from '@/components/core-app/screens/LeagueScoreboardPanel'
+import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 
 /**
  * Screen 3b — Dashboard, one league selected.
@@ -396,15 +397,47 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
             CHIMMY INTELLIGENCE, ship it as ASK CHIMMY to match the rest of the
             product.
 
-            The card carries the read-only posture rather than a verdict.
-            Chimmy's advice on this screen would have to be built on the matchup
-            and lineup data the panel above just said we do not have.
+            ⚠ THIS CARD SAID THE LINEUP AND MATCHUP READS "ARE NOT INGESTED FOR
+            THIS LEAGUE", AND THAT STOPPED BEING TRUE. The panel it was pointing
+            at is now the scoreboard, which resolves every game in the week and
+            prices both lineups under the league's own scoring. Repeating the
+            old sentence beneath a working scoreboard is the same failure as the
+            buzz panel blaming the data for a query nobody had written.
+
+            So the card now offers the question when there is something to
+            reason about, and says what is missing when there is not.
           */}
           <Panel title="Ask Chimmy" help={<span className="af-lh-scope">This league only</span>}>
-            <p className="af-lh-chimmy-note">
-              Chimmy reasons about this league only from here. There is no verdict to show yet —
-              the lineup and matchup reads it would be built on are not ingested for this league.
-            </p>
+            {data.scoreboard.available ? (
+              <>
+                <p className="af-lh-chimmy-note">
+                  Chimmy reasons about this league only from here — this week&rsquo;s games,
+                  your lineup and the league&rsquo;s own scoring.
+                </p>
+                <button
+                  type="button"
+                  className="af-btn af-lh-ask"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent(COMMS_OPEN_EVENT, {
+                        detail: {
+                          tab: 'chimmy',
+                          // Seeded, never sent — see the note on COMMS_OPEN_EVENT.
+                          prefill: `Walk me through week ${data.scoreboard.available ? data.scoreboard.data.week : ''} in ${league.name}: which matchups are closest, who is most likely to be upset, and what should I be watching in my own game?`,
+                        },
+                      }),
+                    )
+                  }
+                >
+                  Ask about this week
+                </button>
+              </>
+            ) : (
+              <p className="af-lh-chimmy-note">
+                Chimmy reasons about this league only from here. {data.scoreboard.reason} — so
+                there is nothing to reason about this week yet.
+              </p>
+            )}
             <p className="af-lh-readonly-note">
               Make changes in {platformLabel} — AllFantasy only reads your league.
             </p>

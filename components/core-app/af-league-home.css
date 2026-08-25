@@ -821,3 +821,11 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* The ask, under the scope note. Full width so it reads as the card's action
+   rather than an afterthought floated beside prose. */
+.af-lh-ask {
+  margin-top: 10px;
+  width: 100%;
+  justify-content: center;
+}
