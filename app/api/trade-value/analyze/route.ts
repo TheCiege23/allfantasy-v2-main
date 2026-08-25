@@ -19,6 +19,7 @@ const EMPTY_CONTEXT = {
   postureNotes: [] as string[],
   pickNotes: [] as string[],
   scaleNotes: [] as string[],
+  formatNotes: [] as string[],
 }
 import {
   compareConsoleVerdictWithCanonicalGrade,
@@ -242,7 +243,8 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
         context.leverageNotes.length > 0 ||
         context.postureNotes.length > 0 ||
         context.pickNotes.length > 0 ||
-        context.scaleNotes.length > 0
+        context.scaleNotes.length > 0 ||
+        context.formatNotes.length > 0
 
       return NextResponse.json(hasContext ? { ...out, ...context } : out)
     } catch (e) {

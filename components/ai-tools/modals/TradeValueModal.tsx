@@ -1023,6 +1023,25 @@ export function TradeValueModal({
             one unstartable Sunday. The point is that they decide on purpose.
           */}
           {/*
+            Format. A future pick in a redraft trade is not a cheap asset, it is
+            a nonexistent one, and grading around it is arithmetic on something
+            that does not exist -- so that warning leads. In a keeper league the
+            interesting number is not a player's value but his value against
+            what he costs to keep: the same receiver kept at a 2nd and at a 7th
+            is two different assets and one player on every chart in the world.
+          */}
+          {Array.isArray(result?.formatNotes) && (result.formatNotes as string[]).length > 0 ? (
+            <div className="rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2 text-[11px] text-amber-50/90">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-amber-200/80">
+                League format
+              </div>
+              {(result.formatNotes as string[]).map((n) => (
+                <div key={n} className="mb-0.5 last:mb-0">{n}</div>
+              ))}
+            </div>
+          ) : null}
+
+          {/*
             League shape. Every stored price is a 12-team price -- in a 32-team
             league that is wrong in both directions at once: picks are
             overvalued by a multiple and starters are undervalued because

@@ -12,6 +12,11 @@ import {
 } from '@/lib/core-app/seasonTimeline'
 import { assessLeagueScale } from './leagueScale'
 import {
+  impossiblePickWarning,
+  keeperDriftNote,
+  readFormatRules,
+} from './leagueFormatRules'
+import {
   assessConcentration,
   assessDeadline,
   assessRosterCrunch,
@@ -102,6 +107,17 @@ export type TradeContextNotes = {
    * whether the deal concentrates or spreads the roster.
    */
   scaleNotes: string[]
+  /**
+   * What this league's FORMAT does to the deal.
+   *
+   * ⚠ A FUTURE PICK IN A REDRAFT TRADE IS NOT A CHEAP ASSET, IT IS A
+   * NONEXISTENT ONE, and grading around it is arithmetic on something that does
+   * not exist. In a keeper league the interesting number is not a player's
+   * value, it is his value against what he costs to keep — a receiver kept at a
+   * 2nd is a worse asset than the same receiver kept at a 7th, and they are the
+   * same player on every chart in the world.
+   */
+  formatNotes: string[]
 }
 
 const EMPTY: TradeContextNotes = {
@@ -111,6 +127,7 @@ const EMPTY: TradeContextNotes = {
   postureNotes: [],
   pickNotes: [],
   scaleNotes: [],
+  formatNotes: [],
 }
 
 /** A future pick in the deal, and which side it is coming from. */
@@ -145,7 +162,18 @@ export async function buildTradeContextNotes(args: {
   const league = await prisma.league
     .findUnique({
       where: { id: leagueId },
-      select: { id: true, starters: true, season: true, sport: true, settings: true },
+      select: {
+        id: true,
+        starters: true,
+        season: true,
+        sport: true,
+        settings: true,
+        leagueType: true,
+        isDynasty: true,
+        keeperCount: true,
+        keeperCostSystem: true,
+        keeperRoundPenalty: true,
+      },
     })
     .catch(() => null)
 
@@ -362,7 +390,107 @@ export async function buildTradeContextNotes(args: {
     pricedGet: args.pricedGet ?? [],
   }).catch(() => [])
 
-  return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes, scaleNotes }
+  const formatNotes = await buildFormatNotes({
+    league,
+    leagueId,
+    incomingIds: get
+      .map((g) => players.find((p) => p.name?.toLowerCase() === g.name.toLowerCase())?.sleeperId)
+      .filter((x): x is string => Boolean(x)),
+    incomingNames: new Map(
+      get
+        .map((g) => {
+          const hit = players.find((p) => p.name?.toLowerCase() === g.name.toLowerCase())
+          return hit?.sleeperId ? ([hit.sleeperId, g.name] as const) : null
+        })
+        .filter((x): x is readonly [string, string] => x != null),
+    ),
+    pickCount: (args.picksToMe?.length ?? 0) + (args.picksToThem?.length ?? 0),
+  }).catch(() => [])
+
+  return { byeNotes, needNotes, leverageNotes, postureNotes, pickNotes, scaleNotes, formatNotes }
+}
+
+/**
+ * Format rules, and — in a keeper league — what the incoming players actually
+ * cost to hold.
+ */
+async function buildFormatNotes(args: {
+  league: {
+    leagueType: string | null
+    isDynasty: boolean | null
+    keeperCount: number | null
+    keeperCostSystem: string | null
+    keeperRoundPenalty: number | null
+  }
+  leagueId: string
+  incomingIds: string[]
+  incomingNames: Map<string, string>
+  pickCount: number
+}): Promise<string[]> {
+  const rules = readFormatRules(args.league)
+  const notes = [...rules.notes]
+
+  const impossible = impossiblePickWarning({ rules, pickCount: args.pickCount })
+  /* Leads, because it is a correctness problem rather than a nuance. */
+  if (impossible) notes.unshift(impossible)
+
+  if (rules.concept !== 'keeper' || args.incomingIds.length === 0) return notes
+
+  /*
+   * ⚠ THE DRIFT IS COMPUTED IN ROUNDS, NOT IN VALUE, AND THAT IS WHY IT WORKS.
+   * Pick prices are not in our database at all — `ingestPlayerValues` filters
+   * picks out of the snapshot table — so there is no chart here to price a 2nd
+   * against a player. But a player's overall market RANK divided by the league
+   * size is exactly the round his talent is worth, and that is enough to say
+   * whether his keeper price has drifted away from what he is.
+   */
+  const teamCount = await prisma.leagueTeam
+    .count({ where: { leagueId: args.leagueId } })
+    .catch(() => 0)
+  if (teamCount < 2) return notes
+
+  const keepers = await prisma.keeperRecord
+    .findMany({
+      where: { leagueId: args.leagueId, playerId: { in: args.incomingIds } },
+      orderBy: { originalDraftYear: 'desc' },
+      select: { playerId: true, costRound: true, originalDraftRound: true, yearsKept: true },
+    })
+    .catch(() => [])
+  if (keepers.length === 0) return notes
+
+  const values = await prisma.playerValueSnapshot
+    .findMany({
+      where: { sleeperId: { in: args.incomingIds }, source: 'FANTASYCALC' },
+      orderBy: { capturedAt: 'desc' },
+      select: { sleeperId: true, overallRank: true },
+    })
+    .catch(() => [])
+
+  const rankBy = new Map<string, number>()
+  for (const v of values) {
+    if (v.overallRank != null && !rankBy.has(v.sleeperId)) rankBy.set(v.sleeperId, v.overallRank)
+  }
+
+  const seen = new Set<string>()
+  for (const k of keepers) {
+    if (seen.has(k.playerId)) continue
+    seen.add(k.playerId)
+
+    /* His cost next season, or what he was drafted at if no cost is recorded. */
+    const previousRound = k.costRound ?? k.originalDraftRound
+    const rank = rankBy.get(k.playerId)
+    if (previousRound == null || rank == null) continue
+
+    const impliedRoundNow = Math.max(1, Math.ceil(rank / teamCount))
+    const note = keeperDriftNote({
+      playerName: args.incomingNames.get(k.playerId) ?? 'This player',
+      previousRound,
+      impliedRoundNow,
+    })
+    if (note) notes.push(note)
+  }
+
+  return notes
 }
 
 /**
