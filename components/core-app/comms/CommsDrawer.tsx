@@ -5,6 +5,8 @@ import RichMessage from './RichMessage'
 import LeagueActivityFeed from './LeagueActivityFeed'
 import { MessageTime } from './MessageTime'
 import { PresenceStrip, type PresentViewer } from './PresenceStrip'
+import { MessageReactions } from './MessageReactions'
+import { readReactions, toggleReactionLocally, type ViewerReaction } from '@/lib/chat-core/messageReactions'
 import { notifyMentions, leagueMentionRoomId } from '@/lib/chat-core/notifyMentions'
 import { useChatPolling } from '@/lib/chat-core/useChatPolling'
 import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
@@ -607,6 +609,14 @@ function LeaguePanel({
   const [sending, setSending] = useState(false)
   const [askChimmy, setAskChimmy] = useState(false)
   const [presence, setPresence] = useState<PresentViewer[]>([])
+  const [viewerUserId, setViewerUserId] = useState<string | null>(null)
+  /*
+   * In-flight reaction toggles win over whatever the server last said. Without
+   * this the 4-8s poll would land mid-request and snap the chip back to its old
+   * state, then forward again a tick later.
+   */
+  const [reactionOverride, setReactionOverride] = useState<Record<string, ViewerReaction[]>>({})
+  const [reactionBusy, setReactionBusy] = useState<string | null>(null)
 
   const scope = useMemo(() => leagues.find((l) => l.id === scopeId) ?? null, [leagues, scopeId])
 
@@ -628,6 +638,7 @@ function LeaguePanel({
        * wrongly pointed at (and 403'd every fantasy league).
        */
       const data = (await res.json()) as {
+        viewerUserId?: string | null
         presence?: PresentViewer[]
         messages?: Array<{
           id: string
@@ -638,6 +649,7 @@ function LeaguePanel({
         }>
       }
       setPresence(Array.isArray(data.presence) ? data.presence : [])
+      setViewerUserId(typeof data.viewerUserId === 'string' ? data.viewerUserId : null)
       setMessages(
         (data.messages ?? []).map((m) => ({
           id: m.id,
@@ -664,6 +676,7 @@ function LeaguePanel({
       setMessages([])
       setPresence([])
     }
+    setReactionOverride({})
   }, [scopeId, load])
 
   /*
@@ -676,6 +689,59 @@ function LeaguePanel({
     enabled: Boolean(scopeId),
     active: sending,
   })
+
+  /*
+   * Reactions. The POST and DELETE behind this have been written, access-checked
+   * and live for a long time with no caller anywhere in the app; for a fantasy
+   * league they store into `LeagueChatMessage.metadata.reactions`, which is the
+   * same metadata this panel already renders GIFs and polls from.
+   *
+   * ⚠ The endpoint gates on `canAccessLeagueDraft`, which is NOT the predicate
+   * the chat GET used to let this reader in. If those two ever disagree, a
+   * member can read the thread and get a 403 reacting to it — so a failure says
+   * so plainly and puts the chip back, rather than leaving a tap that silently
+   * did nothing.
+   */
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string, current: ViewerReaction[]) => {
+      if (!scopeId || reactionBusy) return
+
+      const next = toggleReactionLocally(current, emoji)
+      const adding = next.some((r) => r.emoji === emoji && r.mine)
+
+      setReactionOverride((prev) => ({ ...prev, [messageId]: next }))
+      setReactionBusy(messageId)
+
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(`league:${scopeId}`)}/messages/${encodeURIComponent(messageId)}/reactions`,
+          {
+            method: adding ? 'POST' : 'DELETE',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ emoji }),
+          },
+        )
+        if (!res.ok) {
+          throw new Error(res.status === 403 ? 'you cannot react in this league' : `server said ${res.status}`)
+        }
+        await load(scopeId, true)
+      } catch (e) {
+        setError(
+          e instanceof Error ? `Reaction did not save — ${e.message}.` : 'Reaction did not save.',
+        )
+      } finally {
+        /* Server state wins from here, right or wrong — the override was only
+           ever meant to cover the round trip. */
+        setReactionOverride((prev) => {
+          const rest = { ...prev }
+          delete rest[messageId]
+          return rest
+        })
+        setReactionBusy(null)
+      }
+    },
+    [scopeId, reactionBusy, load],
+  )
 
   /*
    * Maps the composer's payload onto the metadata shape `/api/league/chat`
@@ -879,6 +945,17 @@ function LeaguePanel({
               </span>
               <p className="af-cm-msg-text">{m.message}</p>
               <RichMessage metadata={m.metadata} />
+              <MessageReactions
+                reactions={reactionOverride[m.id] ?? readReactions(m.metadata, viewerUserId)}
+                disabled={reactionBusy === m.id}
+                onToggle={(emoji) =>
+                  void toggleReaction(
+                    m.id,
+                    emoji,
+                    reactionOverride[m.id] ?? readReactions(m.metadata, viewerUserId),
+                  )
+                }
+              />
             </div>
           ))
         )}

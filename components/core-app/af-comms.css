@@ -670,6 +670,70 @@
   color: var(--faint);
 }
 
+/*
+ * Reactions. The chip row only exists once somebody has reacted; the add button
+ * is quiet enough to sit under every message without becoming furniture.
+ */
+.af-cm-rx {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.af-cm-rx-chip,
+.af-cm-rx-add,
+.af-cm-rx-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 6px;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text2);
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+
+.af-cm-rx-chip[data-mine='true'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.af-cm-rx-n {
+  font-size: 9.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.af-cm-rx-add {
+  border-style: dashed;
+  color: var(--faint);
+  font-size: 10px;
+}
+
+.af-cm-rx-chip:disabled,
+.af-cm-rx-add:disabled,
+.af-cm-rx-opt:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.af-cm-rx-chip:focus-visible,
+.af-cm-rx-add:focus-visible,
+.af-cm-rx-opt:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.af-cm-rx-pick {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
 .af-cm-msg-head {
   display: flex;
   align-items: baseline;

@@ -163,6 +163,12 @@ export async function GET(req: NextRequest) {
   const presence = await readChatPresence(presenceScope)
 
   return NextResponse.json({
+    /*
+     * So the client can tell which reactions are the viewer's own. The stored
+     * entry lists user ids and the drawer has never known who it is rendering
+     * for; without this a reaction could be displayed but not un-done.
+     */
+    viewerUserId: userId,
     presence,
     messages: filteredMessages.map((message) =>
       toClientMessage({
