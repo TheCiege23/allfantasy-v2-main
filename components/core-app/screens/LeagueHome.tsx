@@ -218,6 +218,91 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
         {(board) => <LeagueScoreboardPanel board={board} />}
       </StatePanel>
 
+      {/* ── Power board: all-play + movement ────────────────────────── */}
+      {/*
+        ⚠ STANDINGS LIE EARLY. A team can post the second-highest score in the
+        league and be 0-2 because it drew the top scorer twice. All-play asks
+        what the record would be against EVERYONE every week, and the gap
+        between that and the real record is the schedule's contribution —
+        measured rather than argued about.
+      */}
+      <StatePanel
+        title="Power board"
+        help={
+          data.powerBoard.available ? (
+            <span className="af-lh-here">
+              through {data.powerBoard.data.weeksCounted}{' '}
+              {data.powerBoard.data.weeksCounted === 1 ? 'week' : 'weeks'}
+            </span>
+          ) : undefined
+        }
+        className="af-lh-power-panel"
+        state={data.powerBoard}
+      >
+        {(pb) => (
+          <ol className="af-pb-list">
+            {pb.rows.map((r) => (
+              <li key={r.rosterId} className="af-pb-row">
+                <span className="af-pb-rank af-num">{r.powerRank}</span>
+                {/*
+                  Null movement renders as nothing at all. "Unchanged" for a
+                  team that has never been ranked is an invented history.
+                */}
+                {r.powerRankChange != null && r.powerRankChange !== 0 ? (
+                  <span
+                    className="af-pb-move af-num"
+                    data-dir={r.powerRankChange > 0 ? 'up' : 'down'}
+                    title={`${Math.abs(r.powerRankChange)} place${
+                      Math.abs(r.powerRankChange) === 1 ? '' : 's'
+                    } ${r.powerRankChange > 0 ? 'up' : 'down'} since last week`}
+                  >
+                    {r.powerRankChange > 0 ? '▲' : '▼'}
+                    {Math.abs(r.powerRankChange)}
+                  </span>
+                ) : (
+                  <span className="af-pb-move af-pb-move--none" aria-hidden />
+                )}
+                <span className="af-pb-name">
+                  {r.teamName ?? r.managerName ?? `Roster ${r.rosterId}`}
+                </span>
+                <span className="af-pb-rec af-num" title="Real head-to-head record">
+                  {r.wins}-{r.losses}
+                  {r.ties > 0 ? `-${r.ties}` : ''}
+                </span>
+                <span
+                  className="af-pb-allplay af-num"
+                  title="What the record would be playing everyone every week"
+                >
+                  {r.allPlayWins}-{r.allPlayLosses}
+                  {r.allPlayTies > 0 ? `-${r.allPlayTies}` : ''}
+                </span>
+                {/*
+                  Luck in WINS, because that is the unit people argue in.
+                  Rounded to a tenth and only shown when it is worth a mention —
+                  a 0.2-win swing is noise dressed as an insight.
+                */}
+                {Math.abs(r.luckWins) >= 0.5 ? (
+                  <span
+                    className="af-pb-luck af-num"
+                    data-dir={r.luckWins > 0 ? 'lucky' : 'unlucky'}
+                    title={
+                      r.luckWins > 0
+                        ? `${r.luckWins.toFixed(1)} wins better than they have played`
+                        : `${Math.abs(r.luckWins).toFixed(1)} wins worse than they have played`
+                    }
+                  >
+                    {r.luckWins > 0 ? '+' : ''}
+                    {r.luckWins.toFixed(1)}
+                  </span>
+                ) : (
+                  <span className="af-pb-luck af-pb-move--none" aria-hidden />
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+      </StatePanel>
+
       {/* ── Main / side ─────────────────────────────────────────────── */}
       <div className="af-lh-grid">
         <div className="af-lh-main">

@@ -688,3 +688,78 @@
 .af-lh-scoreboard-panel {
   grid-column: 1 / -1;
 }
+
+/* ── Power board: all-play + movement ────────────────────────────────── */
+.af-lh-power-panel {
+  grid-column: 1 / -1;
+}
+.af-pb-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.af-pb-row {
+  display: grid;
+  grid-template-columns: 26px 34px 1fr 56px 64px 46px;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.af-pb-row:nth-child(odd) {
+  background: var(--surface2);
+}
+.af-pb-rank {
+  font-weight: 800;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.af-pb-move {
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.af-pb-move[data-dir='up'] { color: var(--good); }
+.af-pb-move[data-dir='down'] { color: var(--bad); }
+/* Reserves the column so names stay aligned whether or not a team moved. */
+.af-pb-move--none { visibility: hidden; }
+
+.af-pb-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text2);
+}
+.af-pb-rec,
+.af-pb-allplay {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* The all-play record is the one this panel exists for, so it reads brighter
+   than the head-to-head record beside it. */
+.af-pb-allplay {
+  color: var(--accent);
+  font-weight: 700;
+}
+.af-pb-rec { color: var(--muted); }
+
+.af-pb-luck {
+  text-align: right;
+  font-size: 11.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.af-pb-luck[data-dir='lucky'] { color: var(--warn); }
+.af-pb-luck[data-dir='unlucky'] { color: var(--accent); }
+
+@media (max-width: 720px) {
+  /* Head-to-head goes first: it is the number already visible in standings. */
+  .af-pb-row { grid-template-columns: 24px 30px 1fr 64px 44px; }
+  .af-pb-rec { display: none; }
+}

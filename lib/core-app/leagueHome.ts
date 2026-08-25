@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma'
 import { buildSeasonTimeline, leagueWeekFromSettings, type TimelinePhase } from './seasonTimeline'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 import { getLeagueActivity } from './leagueActivity'
+import { getAllPlayBoard, type AllPlayBoard } from './allPlay'
 import { getLeagueScoreboard, type LeagueScoreboard } from './leagueScoreboard'
 import { extractScoringSettings } from '@/lib/projections/leagueScoring'
 import { latestProjectionWeek } from './playerProjections'
@@ -154,6 +155,15 @@ export type LeagueHomeData = {
    * subject is the league. The other games were invisible.
    */
   scoreboard: SectionState<LeagueScoreboard>
+  /**
+   * All-play records and power rankings.
+   *
+   * ⚠ THE STANDINGS PANEL ALONE CANNOT TELL A GOOD TEAM FROM A LUCKY ONE. A
+   * 12-team league plays one opponent a week, so a team can post the
+   * second-highest score in the league and lose. All-play removes the schedule
+   * and the gap between the two is luck — measured, not felt.
+   */
+  powerBoard: SectionState<AllPlayBoard>
   /*
    * 3b draws a "Rivalry radar · this league" panel: head-to-head record against
    * each opponent, plus when that manager is usually active. Neither is stored.
@@ -303,6 +313,15 @@ export async function getLeagueHomeData(
         at: i.occurredAt,
       }
     })
+
+  const powerBoard =
+    league.season != null
+      ? await getAllPlayBoard({
+          leagueId: league.id,
+          platformLeagueId: league.platformLeagueId,
+          seasonYear: league.season,
+        }).catch(() => null)
+      : null
 
   const buzzRows = recentTrades.map((t) => ({
     id: t.id,
@@ -556,6 +575,12 @@ export async function getLeagueHomeData(
       return { available: true as const, data: t.phases }
     })(),
     matchup: resolvedMatchup,
+    powerBoard: powerBoard
+      ? { available: true, data: powerBoard }
+      : {
+          available: false,
+          reason: 'no week has been scored yet, so there is nothing to rank on',
+        },
     scoreboard: board
       ? { available: true, data: board }
       : {
