@@ -147,7 +147,16 @@ export type LeagueHomeData = {
   }>
   draftHq: SectionState<{ headline: string; detail: string }>
   commissioner: SectionState<{ openCount: number }>
-  buzz: SectionState<Array<{ id: string; actor: string; text: string; at: Date | null }>>
+  buzz: SectionState<
+    Array<{
+      id: string
+      actor: string
+      text: string
+      at: Date | null
+      /** The manager's own avatar, so the feed reads as people not rows. */
+      avatarUrl?: string | null
+    }>
+  >
   /**
    * Every game in the league this week.
    *
@@ -308,9 +317,16 @@ export async function getLeagueHomeData(
         .join(' · ')
       return {
         id: i.id,
+        /*
+         * The team name is what people call each other in a league; the
+         * manager's handle is the fallback. "A manager" is the last resort and
+         * now genuinely rare — it used to be EVERY row, because the attribution
+         * joined on a column the writer hardcodes to null.
+         */
         actor: i.teamName ?? i.managerName ?? 'A manager',
         text: moved || (i.kind === 'waiver' ? 'a waiver claim' : 'a roster move'),
         at: i.occurredAt,
+        avatarUrl: i.avatarUrl,
       }
     })
 

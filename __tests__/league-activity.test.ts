@@ -22,8 +22,14 @@ const T = (iso: string) => new Date(iso)
 beforeEach(() => {
   activityFindMany.mockReset()
   teamFindMany.mockResolvedValue([
-    { externalId: '1', teamName: 'Yours', ownerName: 'chxnk', avatarUrl: null },
-    { externalId: '2', teamName: 'Theirs', ownerName: 'Hustead', avatarUrl: null },
+    {
+      externalId: '1', teamName: 'Yours', ownerName: 'chxnk', avatarUrl: 'https://cdn/a.png',
+      platformUserId: 'sleeperU1', claimedByUserId: 'af-user-1',
+    },
+    {
+      externalId: '2', teamName: 'Theirs', ownerName: 'Hustead', avatarUrl: null,
+      platformUserId: 'sleeperU2', claimedByUserId: null,
+    },
   ])
   playerFindMany.mockResolvedValue([
     { sleeperId: 'p1', name: 'Darren Waller', position: 'TE', team: 'CAR' },
@@ -44,7 +50,7 @@ describe('getLeagueActivity', () => {
         id: 'a1',
         activityType: 'waiver',
         occurredAt: T('2026-08-24T10:00:00Z'),
-        rosterId: '1',
+        rosterId: null,
         payload: { adds: ['p2'], drops: [] },
       },
     ])
@@ -74,8 +80,8 @@ describe('getLeagueActivity', () => {
      */
     const shared = { adds: ['p1'], drops: [] }
     activityFindMany.mockResolvedValue([
-      { id: 'a1', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: '1', payload: shared },
-      { id: 'a2', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: '2', payload: shared },
+      { id: 'a1', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: null, payload: shared },
+      { id: 'a2', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: null, payload: shared },
     ])
 
     const out = await getLeagueActivity(ARGS)
@@ -83,8 +89,14 @@ describe('getLeagueActivity', () => {
   })
 
   it('names the manager the move belongs to', async () => {
+    // Real rows carry no rosterId — the writer hardcodes it to null — so the
+    // fixture reflects that and supplies the key the writer actually stores.
     activityFindMany.mockResolvedValue([
-      { id: 'a1', activityType: 'waiver', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: '2', payload: { adds: ['p2'] } },
+      {
+        id: 'a1', activityType: 'waiver', occurredAt: T('2026-08-24T10:00:00Z'),
+        rosterId: null, payload: { adds: ['p2'] },
+        normalized: { managerKeys: ['sleeper:manager:sleeperU2'] },
+      },
     ])
     const out = await getLeagueActivity(ARGS)
     expect(out!.items[0].managerName).toBe('Hustead')
@@ -93,7 +105,7 @@ describe('getLeagueActivity', () => {
 
   it('counts rows it cannot attribute rather than hiding them', async () => {
     activityFindMany.mockResolvedValue([
-      { id: 'a1', activityType: 'waiver', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: '99', payload: { adds: ['p2'] } },
+      { id: 'a1', activityType: 'waiver', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: null, payload: { adds: ['p2'] } },
     ])
     const out = await getLeagueActivity(ARGS)
     expect(out!.unattributed).toBe(1)
@@ -105,7 +117,7 @@ describe('getLeagueActivity', () => {
     // Silently omitting an unresolvable player turns a 2-for-1 into a 1-for-1.
     playerFindMany.mockResolvedValue([])
     activityFindMany.mockResolvedValue([
-      { id: 'a1', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: '1', payload: { adds: ['zz'] } },
+      { id: 'a1', activityType: 'trade', occurredAt: T('2026-08-24T10:00:00Z'), rosterId: null, payload: { adds: ['zz'] } },
     ])
     const out = await getLeagueActivity(ARGS)
     expect(out!.items[0].adds).toEqual(['player zz'])
@@ -117,7 +129,7 @@ describe('getLeagueActivity', () => {
         id: 'a1',
         activityType: 'waiver',
         occurredAt: T('2026-08-24T10:00:00Z'),
-        rosterId: '1',
+        rosterId: null,
         payload: { adds: { p2: 1 }, drops: { p1: 1 } },
       },
     ])
@@ -132,7 +144,7 @@ describe('getLeagueActivity', () => {
         id: 'a1',
         activityType: 'trade',
         occurredAt: T('2026-08-24T10:00:00Z'),
-        rosterId: '1',
+        rosterId: null,
         payload: { adds: [], draftPicks: [{ season: 2027, round: 4 }, { season: 2028, round: 1 }] },
       },
     ])
@@ -149,5 +161,67 @@ describe('getLeagueActivity', () => {
   it('survives a database error without taking the panel down', async () => {
     activityFindMany.mockRejectedValueOnce(new Error('db down'))
     await expect(getLeagueActivity(ARGS)).resolves.toBeNull()
+  })
+
+  it('⚠ names the manager from managerKeys, because rosterId is ALWAYS null', async () => {
+    /*
+     * THE "A MANAGER" BUG. `prismaImportedActivityStore` writes
+     * `rosterId: null` on every row — it is hardcoded. Joining on it meant no
+     * row ever resolved, so every line in League Buzz read "A manager". The
+     * writer's own comment calls `normalized.managerKeys` authoritative.
+     */
+    activityFindMany.mockResolvedValue([
+      {
+        id: 'a1',
+        activityType: 'waiver',
+        occurredAt: T('2026-08-24T10:00:00Z'),
+        rosterId: null,
+        payload: { adds: ['p2'] },
+        normalized: { managerKeys: ['sleeper:manager:sleeperU2'] },
+      },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    expect(out!.items[0].managerName).toBe('Hustead')
+    expect(out!.unattributed).toBe(0)
+  })
+
+  it('resolves an AF user id as a manager key too', async () => {
+    // A claimed team is identified by our own id, not the platform's.
+    activityFindMany.mockResolvedValue([
+      {
+        id: 'a1', activityType: 'waiver', occurredAt: T('2026-08-24T10:00:00Z'),
+        rosterId: null, payload: { adds: ['p2'] },
+        normalized: { managerKeys: ['af-user-1'] },
+      },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    expect(out!.items[0].teamName).toBe('Yours')
+    expect(out!.items[0].avatarUrl).toBe('https://cdn/a.png')
+  })
+
+  it('falls back to the key tail for a provider prefix it does not know', async () => {
+    activityFindMany.mockResolvedValue([
+      {
+        id: 'a1', activityType: 'waiver', occurredAt: T('2026-08-24T10:00:00Z'),
+        rosterId: null, payload: { adds: ['p2'] },
+        normalized: { managerKeys: ['espn:manager:sleeperU2'] },
+      },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    expect(out!.items[0].managerName).toBe('Hustead')
+  })
+
+  it('still counts a row it genuinely cannot attribute', async () => {
+    activityFindMany.mockResolvedValue([
+      {
+        id: 'a1', activityType: 'waiver', occurredAt: T('2026-08-24T10:00:00Z'),
+        rosterId: null, payload: { adds: ['p2'] },
+        normalized: { managerKeys: ['sleeper:manager:someone-else'] },
+      },
+    ])
+    const out = await getLeagueActivity(ARGS)
+    expect(out!.unattributed).toBe(1)
+    // Shown anyway — an unnamed manager is not a reason to drop the move.
+    expect(out!.items).toHaveLength(1)
   })
 })

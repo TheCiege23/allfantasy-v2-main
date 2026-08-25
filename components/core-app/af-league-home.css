@@ -380,16 +380,43 @@
   flex-direction: column;
   gap: 6px;
 }
+/*
+ * avatar | manager | what they did — a grid, so a long manager name cannot
+ * push the text out of alignment with the row above it. The actor column is
+ * capped rather than sized to content for the same reason.
+ */
 .af-buzz-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 22px minmax(52px, 86px) minmax(0, 1fr);
+  align-items: baseline;
   gap: 8px;
   font-size: 12.5px;
   line-height: 1.45;
   color: var(--muted);
 }
-.af-buzz-actor {
+.af-buzz-av {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  object-fit: cover;
+  /* Nudged onto the text baseline — the row aligns on baseline, not centre. */
+  transform: translateY(4px);
+}
+.af-buzz-av--none {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 10px;
   font-weight: 800;
+}
+.af-buzz-actor {
+  font-weight: 700;
   color: var(--text2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .af-buzz-text {
   min-width: 0;
@@ -549,26 +576,34 @@
 }
 
 /* ── League scoreboard — every game, not just yours ──────────────────── */
+/*
+ * ⚠ EVERY ROW IS THE SAME GRID, and that is the whole fix. Each side was a
+ * flex row with `margin-left:auto` on the score, so where the score landed
+ * depended on how long the team name was and whether a coverage badge followed
+ * it. Sixteen games rendered sixteen slightly different layouts: numbers at
+ * different indents, badges floating as superscripts, margins hanging off the
+ * right at whatever height the row happened to end.
+ *
+ * Fixed columns make the numbers an actual column. Tabular figures keep them
+ * one when the digits change.
+ */
 .af-sb-head {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
-/*
-  ⚠ ONE LOUD FLAG, NOT A FOOTNOTE PER ROW. When the week is unplayed every
-  number below is a projection, and a projected board that reads like a live one
-  invites someone to celebrate a game nobody has played.
-*/
 .af-sb-proj-flag {
   font-size: 11px;
+  font-weight: 600;
   color: var(--warn);
   background: var(--warn-soft);
   border: 1px solid var(--warn);
-  border-radius: 5px;
-  padding: 2px 6px;
+  border-radius: 6px;
+  padding: 3px 8px;
+  white-space: nowrap;
 }
 
 .af-sb-list {
@@ -581,32 +616,33 @@
 }
 
 .af-sb-game {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 78px;
   align-items: center;
-  gap: 10px;
-  padding: 8px 10px;
-  border-radius: 10px;
+  gap: 12px;
+  padding: 9px 12px;
+  border-radius: 12px;
   background: var(--surface2);
   border: 1px solid transparent;
 }
-/* Your own game keeps the accent — it is still the one you came for. */
 .af-sb-game[data-yours='true'] {
   border-color: var(--accent-line);
   background: var(--accent-soft);
 }
 
 .af-sb-teams {
-  flex: 1 1 auto;
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
+/* avatar | name | points | coverage — one grid for every side on the page. */
 .af-sb-side {
-  display: flex;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) 66px 34px;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
 }
 .af-sb-side[data-you='true'] .af-sb-name {
@@ -615,10 +651,9 @@
 }
 
 .af-sb-av {
-  flex: 0 0 auto;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
   object-fit: cover;
 }
 .af-sb-av--none {
@@ -632,9 +667,9 @@
 }
 
 .af-sb-name {
-  flex: 1 1 auto;
   min-width: 0;
-  font-size: 12.5px;
+  font-size: 13px;
+  line-height: 1.3;
   color: var(--text2);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -642,51 +677,63 @@
 }
 
 .af-sb-pts {
-  flex: 0 0 auto;
-  font-size: 13.5px;
+  text-align: right;
+  font-size: 14px;
   font-weight: 700;
+  line-height: 1.2;
   color: var(--text);
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
-/* A projection is set back from a result, so the two never read alike. */
+/* A projection sits back from a result, so the two never read alike. */
 .af-sb-pts[data-projected='true'] {
   color: var(--muted);
   font-weight: 600;
 }
 
+/*
+ * Coverage keeps its own column so it can be present or absent without moving
+ * the number it qualifies. It was a superscript that shifted every score.
+ */
 .af-sb-cov {
-  flex: 0 0 auto;
-  font-size: 9.5px;
+  text-align: right;
+  font-size: 10px;
+  line-height: 1.2;
   color: var(--faint);
   font-variant-numeric: tabular-nums;
   cursor: help;
+  white-space: nowrap;
 }
 
+/* One column, centred on the pair it describes. */
 .af-sb-margin {
-  flex: 0 0 auto;
+  text-align: right;
   font-size: 11px;
+  line-height: 1.3;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
 .af-sb-unpaired {
-  margin-top: 8px;
-  padding-top: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
   border-top: 1px solid var(--line2);
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 .af-sb-unpaired-who {
   font-size: 11.5px;
+  line-height: 1.5;
   color: var(--muted);
 }
 
-/* The scoreboard spans the full width, like the timeline above it — the
-   league's games are the subject of the page, not a sidebar item. */
-.af-lh-scoreboard-panel {
-  grid-column: 1 / -1;
+@media (max-width: 640px) {
+  /* Coverage is the first thing to go — the scores must stay aligned. */
+  .af-sb-side { grid-template-columns: 22px minmax(0, 1fr) 58px; }
+  .af-sb-cov { display: none; }
+  .af-sb-game { grid-template-columns: 1fr 60px; padding: 8px 10px; }
 }
 
 /* ── Power board: all-play + movement ────────────────────────────────── */

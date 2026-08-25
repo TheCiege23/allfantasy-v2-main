@@ -113,21 +113,65 @@ export async function getLeagueActivity(args: {
         occurredAt: true,
         rosterId: true,
         payload: true,
+        /*
+         * ⚠ `rosterId` IS HARDCODED NULL BY THE WRITER, on every row. Joining
+         * on it is why every line in League Buzz read "A manager". The real
+         * attribution is `normalized.managerKeys`, which the writer's own
+         * comment calls authoritative.
+         */
+        normalized: true,
       },
     })
     .catch(() => [])
 
   if (rows.length === 0) return null
 
-  // Name the managers. rosterId here is the platform's roster id as a string,
-  // which is what LeagueTeam.externalId holds.
   const teams = await prisma.leagueTeam
     .findMany({
       where: { leagueId: args.leagueId },
-      select: { externalId: true, teamName: true, ownerName: true, avatarUrl: true },
+      select: {
+        externalId: true,
+        teamName: true,
+        ownerName: true,
+        avatarUrl: true,
+        platformUserId: true,
+        claimedByUserId: true,
+      },
     })
     .catch(() => [])
-  const teamBy = new Map(teams.map((t) => [t.externalId, t]))
+
+  type Team = (typeof teams)[number]
+
+  /*
+   * A manager key is either our own user id, or the provider's stable key in
+   * the form `provider:manager:<sourceId>` — for Sleeper, the source id IS the
+   * platform user id. Both spellings are indexed so a row resolves whichever
+   * way its manager was identified at ingest time.
+   */
+  const byKey = new Map<string, Team>()
+  for (const t of teams) {
+    if (t.platformUserId) {
+      byKey.set(t.platformUserId, t)
+      byKey.set(`sleeper:manager:${t.platformUserId}`, t)
+    }
+    if (t.claimedByUserId) byKey.set(t.claimedByUserId, t)
+    // Kept as a last resort for any writer that does populate rosterId.
+    byKey.set(t.externalId, t)
+  }
+
+  /** The last segment of a stable key, for any provider prefix we did not index. */
+  function resolveTeam(keys: string[], rosterId: string | null): Team | undefined {
+    for (const k of [...keys, rosterId].filter(Boolean) as string[]) {
+      const direct = byKey.get(k)
+      if (direct) return direct
+      const tail = k.includes(':') ? k.slice(k.lastIndexOf(':') + 1) : null
+      if (tail) {
+        const viaTail = byKey.get(tail)
+        if (viaTail) return viaTail
+      }
+    }
+    return undefined
+  }
 
   // Resolve player ids to names in one read rather than per row.
   const everyPlayerId = new Set<string>()
@@ -164,7 +208,11 @@ export async function getLeagueActivity(args: {
     else if (kind === 'waiver') counts.waiver += 1
     else counts.rosterMove += 1
 
-    const team = r.rosterId ? teamBy.get(String(r.rosterId)) : undefined
+    const norm = (r.normalized ?? {}) as { managerKeys?: unknown }
+    const keys = Array.isArray(norm.managerKeys)
+      ? (norm.managerKeys as unknown[]).map((k) => String(k)).filter(Boolean)
+      : []
+    const team = resolveTeam(keys, r.rosterId)
     if (!team) unattributed += 1
 
     return {

@@ -205,6 +205,17 @@ export type MyTeamData = {
     afTotal: number | null
     /** How many starters the league-scored total was built from. */
     afProjected: number
+    /**
+     * Whether the standard total is worth showing at all.
+     *
+     * ⚠ IN AN IDP LEAGUE IT IS NOT. The generic line does not score defenders,
+     * so their contribution is null and the standard total is summed over only
+     * the offensive half of the lineup. On a real 16-slot IDP roster that
+     * printed 53.0 beside a league total of 166.7 — two numbers that look
+     * comparable, measured over different players. The tile shows an em dash
+     * and says why instead.
+     */
+    standardComparable: boolean
   }>
   /**
    * Why the two totals differ, in the league's own terms — the answer to the
@@ -340,7 +351,20 @@ async function resolvePlayers(
     wanted.size > 0 && week
       ? await prisma.sportsGame
           .findMany({
-            where: { sport, season: week.season, week: week.week },
+            where: {
+              sport,
+              season: week.season,
+              week: week.week,
+              /*
+               * ⚠ WITHOUT THIS, PRESEASON WEEK 1 AND REGULAR WEEK 1 ARE THE
+               * SAME QUERY. They share a season and a week number, so the
+               * lookup returned both and the `startTime asc` ordering picked
+               * the exhibition game every time. Every starter was badged
+               * PRESEASON and the lineup lock read "Locked" against a date in
+               * mid-August, for a week that had not been played.
+               */
+              seasonType: week.seasonType,
+            },
             orderBy: { startTime: 'asc' },
             take: 400,
             select: {
@@ -901,6 +925,9 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
               week: projectionWeek.week,
               afTotal: afProjected > 0 ? Math.round(afTotal * 100) / 100 : null,
               afProjected,
+              // Comparable only when both totals were built from the same
+              // players. IDP suppression is what breaks that.
+              standardComparable: !hasIdpScoring(scoringSettings),
             },
           }
         : {

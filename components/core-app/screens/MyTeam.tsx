@@ -611,11 +611,27 @@ export function MyTeam({ data }: MyTeamProps) {
 
             {/* ── Both weekly totals, at the top where they belong ──── */}
             <div className="af-mt-tiles">
-              <div className="af-mt-tile af-mt-tile--proj">
+              {/*
+                ⚠ WITHHELD WHEN IT IS NOT COMPARABLE. In an IDP league the
+                generic line does not score defenders, so this total covers only
+                the offensive half of the lineup — 53.0 sitting beside a league
+                total of 166.7, two numbers that look like a pair and are
+                measured over different players.
+              */}
+              <div
+                className="af-mt-tile af-mt-tile--proj"
+                data-missing={proj ? !proj.standardComparable : undefined}
+              >
                 <div className="af-mt-tile-value af-num">
-                  {proj ? proj.total.toFixed(1) : '—'}
+                  {proj && proj.standardComparable ? proj.total.toFixed(1) : '—'}
                 </div>
                 <div className="af-label">Projected · standard</div>
+                {proj && !proj.standardComparable ? (
+                  <div className="af-mt-tile-why">
+                    Standard scoring does not price defenders, so there is no
+                    like-for-like total in an IDP league.
+                  </div>
+                ) : null}
               </div>
               <div className="af-mt-tile af-mt-tile--proj af-mt-tile--af">
                 <div className="af-mt-tile-value af-num">

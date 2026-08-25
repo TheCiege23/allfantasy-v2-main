@@ -538,10 +538,14 @@
 
 /* ── Launcher ─────────────────────────────────────────────────────── */
 
+/*
+ * Slot 0 — the corner itself. Higher than anything else parked there, lower
+ * than the drawer and its scrim so an open panel still covers it.
+ */
 .af-cm-launch {
   position: fixed;
-  right: 18px;
-  bottom: 18px;
+  right: var(--af-fab-inset, 18px);
+  bottom: var(--af-fab-inset, 18px);
   z-index: 59;
   display: grid;
   place-items: center;

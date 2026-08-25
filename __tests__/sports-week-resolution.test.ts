@@ -146,4 +146,31 @@ describe('resolveSportsWeek', () => {
     // than one that renders the roster and omits kickoff times.
     await expect(resolveSportsWeek('NFL', NOW)).resolves.toBeNull()
   })
+
+  it('⚠ reports the seasonType, because season+week is NOT a unique key', async () => {
+    /*
+     * THE COLLISION. Preseason week 1 and regular week 1 of the same year share
+     * a season and a week number. A caller filtering on those two alone gets
+     * both and takes whichever kicks off first — in August, always the
+     * exhibition game. That is how a lineup lock read "Locked" against a date
+     * in mid-August and every starter was badged PRESEASON for week 1.
+     */
+    const w1 = { season: 2026, week: 1, seasonType: 'regular', startTime: D('2026-09-10T00:20:00Z') }
+    queue(w1, { startTime: D('2026-09-10T00:20:00Z') })
+
+    const out = await resolveSportsWeek('NFL', NOW)
+    expect(out!.seasonType).toBe('regular')
+  })
+
+  it('scopes the week opener by seasonType too', async () => {
+    const preseason = { season: 2026, week: 1, seasonType: 'pre', startTime: D('2026-08-14T23:00:00Z') }
+    const regularW1 = { season: 2026, week: 1, seasonType: 'regular', startTime: D('2026-09-10T00:20:00Z') }
+    queue(preseason, regularW1, { startTime: D('2026-09-10T00:20:00Z') })
+
+    await resolveSportsWeek('NFL', NOW)
+    // The opener query must carry the season type, or it finds the exhibition
+    // game that shares the week number.
+    const openerCall = findFirst.mock.calls[findFirst.mock.calls.length - 1][0]
+    expect(openerCall.where.seasonType).toBe('regular')
+  })
 })

@@ -441,6 +441,20 @@ export function LeagueHome({ data, otherLeagueIssueCount, issues = [] }: LeagueH
               <ul className="af-buzz">
                 {items.map((b) => (
                   <li key={b.id} className="af-buzz-row">
+                    {/*
+                      The manager's own avatar. A feed of league activity should
+                      read as people, not as rows — and until the attribution
+                      was fixed every line here said "A manager", because it
+                      joined on a column the writer hardcodes to null.
+                    */}
+                    {b.avatarUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img className="af-buzz-av" src={b.avatarUrl} alt="" width={22} height={22} />
+                    ) : (
+                      <span className="af-buzz-av af-buzz-av--none" aria-hidden>
+                        {b.actor.charAt(0)}
+                      </span>
+                    )}
                     <span className="af-buzz-actor">{b.actor}</span>
                     <span className="af-buzz-text">{b.text}</span>
                   </li>

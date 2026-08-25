@@ -58,14 +58,24 @@ export function TimeEngineClientSync() {
     void run()
   }, [status])
 
-  if (!notice) return null
-
-  return (
-    <div
-      role="status"
-      className="pointer-events-none fixed bottom-16 left-1/2 z-[60] max-w-md -translate-x-1/2 rounded-lg border border-amber-500/25 bg-[#0a1228]/95 px-3 py-2 text-center text-[11px] leading-snug text-amber-100/95 shadow-lg backdrop-blur-sm md:bottom-6"
-    >
-      {notice}
-    </div>
-  )
+  /*
+   * ⚠ RENDERS NOTHING, ON PURPOSE. THE SYNC ABOVE STILL RUNS.
+   *
+   * This used to float a pill over the bottom of every authenticated page —
+   * "Device clock may differ from official server time". It sat above the
+   * content on every screen, competed with the chat launcher for the same
+   * corner, and asked the reader to do nothing: every deadline on the site is
+   * already computed from server time, which is exactly what the notice said.
+   *
+   * The POST that records device time is the part that earns its keep, and it
+   * is untouched — the skew is still measured and still available to anything
+   * that needs it. What is gone is telling the user about a discrepancy they
+   * cannot act on and that we have already handled for them.
+   *
+   * `notice` is deliberately still computed rather than deleted: it is the
+   * signal a future surface would use to say something USEFUL, like "this
+   * deadline is shown in league time, not yours".
+   */
+  void notice
+  return null
 }

@@ -519,3 +519,24 @@ html[data-mode='af'] .af-core {
   font-size: 10px;
   color: var(--faint);
 }
+
+/* ── The bottom-right corner is a STACK, not a free-for-all ──────────────
+ *
+ * ⚠ THREE FIXED ELEMENTS WERE CLAIMING THE SAME SPOT. The comms launcher sits
+ * at right:18/bottom:18 with z-index 59; two legacy dash34 chat FABs sat at
+ * right:22/bottom:22 and right:16/bottom:84 with z-index 60. They overlapped
+ * and the higher z-index won, so whichever button a screen actually wanted was
+ * the one hidden underneath.
+ *
+ * These variables are the shared geometry. Anything anchored to that corner
+ * positions off them and takes the next slot up, so a new button can be added
+ * without discovering the collision in a screenshot.
+ */
+:root {
+  --af-fab-inset: 18px;
+  --af-fab-size: 48px;
+  --af-fab-gap: 12px;
+  /* Slot 0 is the comms launcher. Each slot above it clears the last. */
+  --af-fab-slot-1: calc(var(--af-fab-inset) + var(--af-fab-size) + var(--af-fab-gap));
+  --af-fab-slot-2: calc(var(--af-fab-slot-1) + 60px + var(--af-fab-gap));
+}

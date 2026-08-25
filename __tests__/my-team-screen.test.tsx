@@ -72,6 +72,7 @@ function data(over: Partial<MyTeamData> = {}): MyTeamData {
         week: 1,
         afTotal: 131.7,
         afProjected: 8,
+        standardComparable: true,
       },
     },
     projectionBasis: { notes: ['Tight ends get an extra 0.5 per catch on top.'], scoringKnown: true },
@@ -244,7 +245,7 @@ describe('My Team — the reported problems', () => {
             available: true,
             data: {
               total: 118.4, projected: 8, unprojected: 0, season: '2026', week: 1,
-              afTotal: null, afProjected: 0,
+              afTotal: null, afProjected: 0, standardComparable: true,
             },
           },
         })}
@@ -569,7 +570,7 @@ describe('My Team — the reported problems', () => {
             available: true,
             data: {
               total: 50, projected: 2, unprojected: 0, season: '2026', week: 1,
-              afTotal: 20, afProjected: 1,
+              afTotal: 20, afProjected: 1, standardComparable: true,
             },
           },
         })}

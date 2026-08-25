@@ -32,6 +32,17 @@ const REGULAR = 'regular'
 export type SportsWeek = {
   season: number
   week: number
+  /**
+   * The season type of the week this resolved to.
+   *
+   * ⚠ CALLERS MUST FILTER ON THIS. `season + week` is NOT a unique key —
+   * preseason week 1 and regular-season week 1 of the same year are the same
+   * pair, and the schema says so in as many words. A lookup without it returns
+   * both and takes whichever kicks off first, which in August is always the
+   * exhibition game. That is how a lineup lock ended up reading "Locked" against
+   * a date in the middle of the preseason.
+   */
+  seasonType: string
   /** Kickoff of the first game of that week. The honest lineup-lock anchor. */
   firstKickoff: Date
   /**
@@ -130,7 +141,14 @@ export async function resolveSportsWeek(
   // week's opener.
   const opener = await prisma.sportsGame
     .findFirst({
-      where: { sport, season: anchor.season, week: anchor.week, startTime: { not: null } },
+      where: {
+        sport,
+        season: anchor.season,
+        week: anchor.week,
+        // Same collision: without this the "opener" can be a preseason kickoff.
+        seasonType: anchor.seasonType,
+        startTime: { not: null },
+      },
       orderBy: { startTime: 'asc' },
       select: { startTime: true },
     })
@@ -141,6 +159,7 @@ export async function resolveSportsWeek(
   return {
     season: anchor.season,
     week: anchor.week,
+    seasonType: anchor.seasonType ?? REGULAR,
     firstKickoff,
     preseasonFirst: !isRegularSeason(next.seasonType) && next.startTime < firstKickoff,
     daysUntilFirstKickoff: Math.round(
