@@ -59,10 +59,19 @@ describe('readFormatRules', () => {
     expect(flat.notes.join(' ')).toContain('same round every year')
   })
 
-  it('⚠ does not quietly treat guillotine as redraft', () => {
+  it('⚠ guillotine is its own concept, with no next season to trade into', () => {
+    const r = readFormatRules({ leagueType: 'guillotine' })
+    expect(r.concept).toBe('guillotine')
+    expect(r.futurePicksTradeable).toBe(false)
+    expect(r.notes.join(' ')).toContain('worth less every week')
+    expect(r.notes.join(' ')).toContain('FAAB')
+  })
+
+  it('⚠ does not quietly treat an unknown format as redraft', () => {
     // A caller that does not know how to price a format should be able to tell
     // that it is looking at one, rather than getting redraft rules by default.
-    expect(readFormatRules({ leagueType: 'guillotine' }).concept).toBe('other')
+    expect(readFormatRules({ leagueType: 'survivor' }).concept).toBe('other')
+    expect(readFormatRules({ leagueType: 'zombie' }).concept).toBe('other')
   })
 
   it('falls back to isDynasty only when leagueType says nothing', () => {

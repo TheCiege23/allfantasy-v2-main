@@ -14,7 +14,7 @@
  * the whole game in a keeper league and nothing prices it.
  */
 
-export type LeagueConcept = 'redraft' | 'keeper' | 'dynasty' | 'other'
+export type LeagueConcept = 'redraft' | 'keeper' | 'dynasty' | 'guillotine' | 'other'
 
 export type FormatRules = {
   concept: LeagueConcept
@@ -58,16 +58,18 @@ export function readFormatRules(league: {
   const keeperCount = league.keeperCount ?? 0
 
   const concept: LeagueConcept =
-    raw === 'dynasty' || (raw === '' && league.isDynasty)
-      ? 'dynasty'
-      : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
-        ? 'keeper'
-        : raw === 'redraft' || raw === ''
-          ? 'redraft'
-          : /* guillotine, survivor, zombie and friends are their own thing and
-               are NOT silently treated as redraft — a caller that does not know
-               how to price them should be able to tell. */
-            'other'
+    raw === 'guillotine'
+      ? 'guillotine'
+      : raw === 'dynasty' || (raw === '' && league.isDynasty)
+        ? 'dynasty'
+        : raw === 'keeper' || (raw === 'redraft' && keeperCount > 0)
+          ? 'keeper'
+          : raw === 'redraft' || raw === ''
+            ? 'redraft'
+            : /* survivor, zombie and friends are their own thing and are NOT
+                 silently treated as redraft — a caller that does not know how to
+                 price them should be able to tell. */
+              'other'
 
   const notes: string[] = []
   let futurePicksTradeable: boolean | null = null
@@ -78,6 +80,17 @@ export function readFormatRules(league: {
     futurePicksTradeable = false
     notes.push(
       'Redraft: there are no future picks to trade, so this deal is decided entirely on players. Nothing here carries into next season.',
+    )
+  } else if (concept === 'guillotine') {
+    /*
+     * ⚠ SEASONAL FORMAT: there is no next year to trade into. And the whole
+     * valuation curve is different — see lib/trade-intel/guillotine.ts, where a
+     * trade decays toward zero as the field shrinks and FAAB is the real
+     * acquisition currency rather than a tiebreaker.
+     */
+    futurePicksTradeable = false
+    notes.push(
+      'Guillotine: one team is chopped every week and its whole roster hits waivers. There is no next season to trade into, a trade is worth less every week the field shrinks, and FAAB is the currency that actually converts into starters here.',
     )
   } else if (concept === 'keeper') {
     /*
