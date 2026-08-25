@@ -76,6 +76,7 @@ import { buildDescribedTradeContext } from '@/lib/chimmy-trade/describedTradeEva
 import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
+import { buildCommissionerContext } from '@/lib/chimmy/commissionerGrounding'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
@@ -2005,6 +2006,24 @@ ${draftCtx}`
 
 ${waiverCtx}`
                   : waiverCtx
+              }
+            } catch { /* non-fatal */ }
+            try {
+              /*
+               * League-wide facts, and ONLY for a commissioner — the adapter
+               * gates itself on `resolveLeagueMembership` and returns null for
+               * everyone else, because everything in it is other managers' data.
+               */
+              const commishCtx = await buildCommissionerContext(
+                planInput.leagueId,
+                planInput.userId,
+              )
+              if (commishCtx) {
+                legacyEnrichmentContext = legacyEnrichmentContext
+                  ? `${legacyEnrichmentContext}
+
+${commishCtx}`
+                  : commishCtx
               }
             } catch { /* non-fatal */ }
           }
