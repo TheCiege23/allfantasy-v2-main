@@ -38,7 +38,20 @@ const NON_PLAYING = new Set(['BN', 'IR', 'TAXI', 'RES', 'BENCH'])
 /** The league size every stored price and pick chart is denominated in. */
 export const BASELINE_TEAM_COUNT = 12
 
-export type Scrutiny = 'standard' | 'deep' | 'very-deep'
+export type Scrutiny = 'shallow' | 'standard' | 'deep' | 'very-deep'
+
+/**
+ * At or below this many teams, the league is shallow enough that replacement
+ * stops being a constraint at all.
+ *
+ * ⚠ THE ERRORS INVERT AT THIS END, THEY DO NOT DISAPPEAR. Deep leagues
+ * overvalue picks and undervalue starters. Shallow leagues do the exact
+ * opposite: late-round picks are far better than their round name suggests
+ * (a 4-team 5th is the 17th player off the board, a 12-team 2.05), and depth
+ * players are worth close to nothing in trade because the other manager can
+ * replace them from a waiver wire holding most of the NFL.
+ */
+const SHALLOW_MAX_TEAMS = 6
 
 export type LeagueScale = {
   teamCount: number
@@ -73,7 +86,14 @@ export function assessLeagueScale(args: {
     return !PRICED_POSITIONS.has(s)
   })
 
-  const scrutiny: Scrutiny = teamCount >= 20 ? 'very-deep' : teamCount >= 15 ? 'deep' : 'standard'
+  const scrutiny: Scrutiny =
+    teamCount >= 20
+      ? 'very-deep'
+      : teamCount >= 15
+        ? 'deep'
+        : teamCount <= SHALLOW_MAX_TEAMS
+          ? 'shallow'
+          : 'standard'
 
   const notes: string[] = []
   if (teamCount !== BASELINE_TEAM_COUNT) {
@@ -81,9 +101,29 @@ export function assessLeagueScale(args: {
       `Every stored price is a ${BASELINE_TEAM_COUNT}-team price. This is a ${teamCount}-team league, so picks are converted to their ${BASELINE_TEAM_COUNT}-team equivalent before they are valued.`,
     )
   }
-  if (scrutiny !== 'standard') {
+  if (scrutiny === 'deep' || scrutiny === 'very-deep') {
     notes.push(
       `${teamCount} teams start ${slots.length} each — ${teamCount * slots.length} startable slots across the league. Replacement is far worse here than the market assumes, so a starter is harder to replace and a pick is worth less than its round suggests.`,
+    )
+  }
+
+  if (scrutiny === 'shallow') {
+    /*
+     * ⚠ THE SAME ERROR, RUNNING THE OTHER WAY. With this few teams the waiver
+     * wire holds most of the league, so depth is close to free and the round
+     * number on a pick understates it badly — a round here is only a handful of
+     * players, so picks stay valuable far deeper into the draft than the label
+     * suggests.
+     */
+    const perRound = teamCount
+    const fifthOverall = 4 * perRound + 1
+    notes.push(
+      `Only ${teamCount} teams, so a round is ${perRound} picks. A ${teamCount}-team 5th is the ${ordinal(
+        fifthOverall,
+      )} player off the board — still an early-second in the 12-team terms our prices use. Late-round picks are worth far more here than their round name suggests.`,
+    )
+    notes.push(
+      `Replacement is abundant at ${teamCount} teams: most of the league is unrostered. Depth players cost their market price on paper and close to nothing in practice, because the other side can replace them off waivers.`,
     )
   }
   if (unpriced.length > 0) {

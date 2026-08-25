@@ -277,12 +277,13 @@ export async function buildTradeContextNotes(args: {
   })
 
   const positions = [...new Set(get.map((g) => g.position).filter((p): p is string => Boolean(p)))]
-  const scarcity = await getPositionScarcity({
+  const scarcityForGet = await getPositionScarcity({
     leagueId,
     sport: league.sport ?? 'NFL',
     projectionWeek: await latestProjectionWeek().catch(() => null),
     positions,
   }).catch(() => new Map())
+  const scarcity = scarcityForGet
 
   const needNotes: string[] = []
   for (const g of get) {
@@ -333,7 +334,22 @@ export async function buildTradeContextNotes(args: {
     bestPlayerGoesTo: args.bestPlayerGoesTo ?? null,
   }).catch(() => ({ postureNotes: [], pickNotes: [] }))
 
+  /*
+   * ⚠ IN A SHALLOW LEAGUE A MARKET PRICE IS NOT A REPLACEMENT COST. Every
+   * stored value is a 12-team price and assumes the player is hard to replace.
+   * With four teams and large rosters most of the NFL is unrostered, so the
+   * other side can swap in something comparable for free — and a depth piece
+   * that "costs" 2,000 on the chart costs approximately nothing in practice.
+   *
+   * Gated on measured abundance rather than on league size alone: it is the
+   * empty-or-not wire that decides this, and positionScarcity already counted it.
+   */
+  const abundant = [...scarcityForGet.entries()]
+    .filter(([, v]) => v.scarcity === 0 && v.freeAgents >= 20)
+    .map(([pos, v]) => ({ pos, freeAgents: v.freeAgents }))
+
   const scaleNotes = await buildScaleNotes({
+    abundantPositions: abundant,
     leagueId,
     settings: league.settings,
     starters: league.starters,
@@ -356,6 +372,7 @@ export async function buildTradeContextNotes(args: {
  * chart cannot hold them and why they are worth saying out loud.
  */
 async function buildScaleNotes(args: {
+  abundantPositions: Array<{ pos: string; freeAgents: number }>
   leagueId: string
   settings: unknown
   starters: unknown
@@ -402,6 +419,19 @@ async function buildScaleNotes(args: {
 
   const unpriced = assessUnpriced({ give: args.pricedGive, get: args.pricedGet })
   if (unpriced.basis) notes.push(unpriced.basis)
+
+  /*
+   * Only in a shallow league, and only for positions the wire actually holds in
+   * quantity. Saying this in a 12-team league would be wrong, and saying it for
+   * a position with four spare bodies would be noise.
+   */
+  if (teamCount >= 2 && teamCount <= 8) {
+    for (const a of args.abundantPositions) {
+      notes.push(
+        `${a.freeAgents} startable ${a.pos}s are unrostered in this league. Any ${a.pos} in this deal is priced as though he were scarce — here he is a waiver claim, so treat his market value as a ceiling.`,
+      )
+    }
+  }
 
   /*
    * Concentration needs the roster's own prices. One read, and it is skipped

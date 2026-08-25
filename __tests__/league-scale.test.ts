@@ -241,3 +241,59 @@ describe('pickOutlook applies BOTH corrections in a deep league', () => {
     expect(p.basis).not.toContain('12-team terms')
   })
 })
+
+describe('the shallow end: 4 teams, huge rosters', () => {
+  const FOUR_TEAM = ['QB', 'QB', 'RB', 'RB', 'RB', 'WR', 'WR', 'WR', 'TE', 'FLEX', 'FLEX', 'K', 'DEF']
+
+  it('⚠ a 4-team 2nd is picks 5-8 — still a first in the prices we hold', () => {
+    /*
+     * The manager's own framing, and the conversion already produces it: round
+     * two of a four-team draft is the 5th through 8th player off the board,
+     * which is a 12-team 1.05 through 1.08. A chart that reads "2nd-round pick"
+     * and prices it as a second is wrong by an entire round.
+     */
+    expect(toBaselinePick({ round: 2, slot: 1, teamCount: 4 })).toMatchObject({
+      overall: 5,
+      baselineRound: 1,
+      baselineSlot: 5,
+    })
+    expect(toBaselinePick({ round: 2, slot: 4, teamCount: 4 })).toMatchObject({
+      overall: 8,
+      baselineRound: 1,
+      baselineSlot: 8,
+    })
+  })
+
+  it('⚠ picks stay valuable far deeper than their round name suggests', () => {
+    // A 4-team 5th is overall 17 — an early second. In a 12-team league a 5th is
+    // overall 49+ and close to worthless. Same label, nothing like the same asset.
+    const p = toBaselinePick({ round: 5, slot: 1, teamCount: 4 })
+    expect(p.overall).toBe(17)
+    expect(p.baselineRound).toBe(2)
+  })
+
+  it('classifies it shallow and says replacement is abundant', () => {
+    const s = assessLeagueScale({ teamCount: 4, starters: FOUR_TEAM })!
+    expect(s.scrutiny).toBe('shallow')
+    const text = s.notes.join(' ')
+    expect(text).toContain('Replacement is abundant')
+    expect(text).toContain('worth far more here than their round name suggests')
+  })
+
+  it('⚠ the errors invert at this end — they do not disappear', () => {
+    /*
+     * Deep leagues overvalue picks and undervalue starters. Shallow leagues do
+     * the exact opposite. A model that only knew about deep leagues would be
+     * wrong in the other direction here and just as confidently.
+     */
+    const deep = assessLeagueScale({ teamCount: 32, starters: FOUR_TEAM })!
+    const shallow = assessLeagueScale({ teamCount: 4, starters: FOUR_TEAM })!
+    expect(deep.notes.join(' ')).toContain('worth less than its round suggests')
+    expect(shallow.notes.join(' ')).toContain('worth far more here')
+  })
+
+  it('still flags the 12-team price caveat, because 4 is not 12 either', () => {
+    const s = assessLeagueScale({ teamCount: 4, starters: FOUR_TEAM })!
+    expect(s.notes.join(' ')).toContain('12-team price')
+  })
+})
