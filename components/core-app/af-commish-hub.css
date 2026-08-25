@@ -1,0 +1,492 @@
+/*
+ * AF Core — Commissioner Hub (38a·9).
+ *
+ * Scoped under `.af-ch`, inside `.af-core`, so every value resolves from
+ * af-core.css tokens. No literal colours: this screen has a blocked state and a
+ * "never measured" banner, and both have to stay legible in the light-mode
+ * clamp as well as the dark default.
+ */
+
+.af-ch {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 1200px;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-ch-head {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+.af-ch-title-row {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  flex-wrap: wrap;
+}
+.af-ch-title {
+  margin: 0;
+  font-size: 26px;
+  letter-spacing: -0.035em;
+}
+.af-ch-role {
+  padding: 5px 9px;
+  border-radius: 6px;
+}
+.af-ch-role[data-role='commissioner'] {
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+  color: var(--warn);
+}
+.af-ch-role[data-role='co_commissioner'] {
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+}
+.af-ch-lede {
+  margin: 0;
+  max-width: 68ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Blocked state ───────────────────────────────────────────────────── */
+
+.af-ch-blocked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 13px;
+  padding: 60px 30px;
+  border-radius: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  text-align: center;
+}
+.af-ch-blocked-mark {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--chip);
+  display: grid;
+  place-items: center;
+  font-size: 18px;
+  color: var(--faint);
+}
+.af-ch-blocked-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+.af-ch-blocked-body,
+.af-ch-blocked-role {
+  margin: 0;
+  max-width: 52ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+.af-ch-blocked-role {
+  color: var(--text2);
+}
+
+/* ── Never-measured banner ───────────────────────────────────────────── */
+
+.af-ch-unread {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn);
+}
+.af-ch-unread .af-label {
+  color: var(--warn);
+}
+.af-ch-unread p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text2);
+}
+
+/* ── Tiles ───────────────────────────────────────────────────────────── */
+
+.af-ch-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.af-ch-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 16px 17px;
+  border-radius: 13px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-ch-tile-value {
+  font-size: 27px;
+  font-weight: 900;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.af-ch-tile[data-tone='good'] .af-ch-tile-value {
+  color: var(--good);
+}
+.af-ch-tile[data-tone='warn'] .af-ch-tile-value {
+  color: var(--warn);
+}
+.af-ch-tile[data-tone='warn'] {
+  border-color: var(--warn-soft);
+}
+.af-ch-tile[data-tone='bad'] .af-ch-tile-value {
+  color: var(--bad);
+}
+.af-ch-tile[data-tone='bad'] {
+  border-color: var(--bad-soft);
+}
+.af-ch-tile[data-missing='true'] .af-ch-tile-value {
+  color: var(--faint);
+}
+.af-ch-tile .af-label {
+  color: var(--faint);
+}
+.af-ch-tile-sub {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.af-ch-tile-why {
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--faint);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────── */
+
+/* Also prefixed: `.af-core .af-card` sets its own padding and radius and this
+   element carries both classes. */
+.af-core .af-ch-section {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  padding: 18px;
+  border-radius: 15px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+}
+.af-ch-section-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.af-ch-section-head h2 {
+  margin: 0;
+  color: var(--text2);
+}
+.af-ch-section-note {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.af-ch-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+/* ── Queue ───────────────────────────────────────────────────────────── */
+
+.af-ch-queue {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.af-ch-queue-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 14px;
+  border-radius: 12px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-ch-queue-row[data-severity='bad'] {
+  border-color: var(--bad-soft);
+}
+.af-ch-queue-row[data-severity='warn'] {
+  border-color: var(--warn-soft);
+}
+.af-ch-queue-mark {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--chip);
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+.af-ch-queue-row[data-severity='bad'] .af-ch-queue-mark {
+  background: var(--bad-soft);
+  color: var(--bad);
+}
+.af-ch-queue-row[data-severity='warn'] .af-ch-queue-mark {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-ch-queue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.af-ch-queue-title {
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
+.af-ch-queue-detail {
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+/*
+ * ⚠ `.af-core`-PREFIXED ON PURPOSE. `.af-core .af-btn` in af-core.css is
+ * specificity (0,2,0) and sets `min-height: 36px`; a bare `.af-ch-queue-action`
+ * is (0,1,0) and loses regardless of source order, which silently dropped this
+ * button below the 44px touch floor. Same trap as the nav item's active border.
+ */
+.af-core .af-ch-queue-action {
+  flex: none;
+  /* 44px so the queue is operable on a phone, where a commissioner is most
+     likely to be reading it. */
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* ── Settings ────────────────────────────────────────────────────────── */
+
+.af-ch-settings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+}
+.af-ch-settings li {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+.af-ch-settings li:last-child {
+  border-bottom: none;
+}
+.af-ch-setting-key {
+  flex: none;
+  width: 120px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+}
+.af-ch-setting-value {
+  flex: 1 1 auto;
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: right;
+}
+.af-ch-setting-why {
+  flex: 1 1 auto;
+  font-size: 11.5px;
+  line-height: 1.4;
+  color: var(--faint);
+  text-align: right;
+}
+
+.af-ch-disputes {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 12px 13px;
+  border-radius: 10px;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+}
+.af-ch-disputes .af-label {
+  color: var(--faint);
+}
+.af-ch-disputes p {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ── Access ──────────────────────────────────────────────────────────── */
+
+.af-ch-access {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.af-ch-access li {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+.af-ch-access-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--chip);
+  border: 1px solid var(--chip-line);
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--text2);
+}
+.af-ch-access-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-ch-access-you {
+  color: var(--faint);
+  font-weight: 500;
+}
+.af-ch-access-role {
+  flex: none;
+  padding: 4px 7px;
+  border-radius: 5px;
+}
+.af-ch-access-role[data-role='commissioner'] {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+.af-ch-access-role[data-role='co_commissioner'] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.af-ch-boundary {
+  margin: 0;
+  padding-top: 11px;
+  border-top: 1px solid var(--line);
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+/* ── Empty + footnote ────────────────────────────────────────────────── */
+
+.af-ch-empty {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 18px 16px;
+  border-radius: 12px;
+  background: var(--surface2);
+}
+.af-ch-empty-mark {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--faint);
+  line-height: 1;
+}
+.af-ch-empty p {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.af-ch-footnote {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+.af-ch-footnote a {
+  color: var(--accent);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+
+@media (max-width: 960px) {
+  .af-ch-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .af-ch-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .af-ch-title {
+    font-size: 22px;
+  }
+  .af-ch-tiles {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /*
+   * The queue row's action sat beside a two-line block of text at 390px and
+   * squeezed the title to a couple of words. Stacked, the button spans the row
+   * and stays a comfortable target.
+   */
+  .af-ch-queue-row {
+    flex-wrap: wrap;
+  }
+  .af-core .af-ch-queue-action {
+    width: 100%;
+    justify-content: center;
+    margin-left: 40px;
+  }
+  .af-ch-settings li {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+  }
+  .af-ch-setting-key {
+    width: auto;
+  }
+  .af-ch-setting-value,
+  .af-ch-setting-why {
+    text-align: left;
+  }
+  .af-ch-blocked {
+    padding: 40px 20px;
+  }
+}

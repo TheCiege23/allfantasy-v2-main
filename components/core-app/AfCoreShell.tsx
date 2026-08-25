@@ -278,16 +278,34 @@ function navItems(props: AfCoreShellProps): NavItem[] {
       // Only shown when a level actually exists — never a placeholder "LVL 1".
       badge: props.rankingsLevel != null ? { text: `LVL ${props.rankingsLevel}`, tone: 'level' } : undefined,
     },
-    {
-      key: 'commissioner',
-      label: 'Commissioner',
-      glyph: '⚑',
-      href: '/core/commissioner',
-      badge:
-        props.commissionerCount && props.commissionerCount > 0
-          ? { text: String(props.commissionerCount), tone: 'count' }
-          : undefined,
-    },
+    /*
+     * 38a·9 — ABSENT for anyone who commissions nothing, not disabled.
+     *
+     * ⚠ THIS ENTRY USED TO RENDER FOR EVERY USER AND LAND ON "this screen has
+     * not been built yet". Now that it lands on a real admin surface, showing
+     * it to a plain member would advertise a feature they cannot open — and a
+     * greyed-out control leaks the same information a drawn one does. The
+     * handoff's rule is absence over disabled state, so the item is simply not
+     * built when the count is zero.
+     *
+     * The count is "leagues you run", which is what a global nav item can
+     * honestly reflect. Whether you run the league currently selected is a
+     * different question, decided server-side by `getCommissionerHub` on every
+     * render — this is a nav affordance, never the gate.
+     */
+    ...(props.commissionerCount && props.commissionerCount > 0
+      ? [
+          {
+            key: 'commissioner' as const,
+            label: 'Commissioner',
+            glyph: '⚑',
+            href: props.selectedLeagueId
+              ? `/core/commissioner?league=${encodeURIComponent(props.selectedLeagueId)}`
+              : '/core/commissioner',
+            badge: { text: String(props.commissionerCount), tone: 'count' as const },
+          },
+        ]
+      : []),
     {
       key: 'notifications',
       label: 'Notifications',

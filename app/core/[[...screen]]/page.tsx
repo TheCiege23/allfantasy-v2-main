@@ -59,6 +59,8 @@ import SeasonOutlook from '@/components/core-app/screens/SeasonOutlook'
 import { getSeasonOutlook } from '@/lib/core-app/seasonOutlook'
 import LiveScores from '@/components/core-app/screens/LiveScores'
 import { getLivePageData } from '@/lib/live/liveScoresPage'
+import CommissionerHub from '@/components/core-app/screens/CommissionerHub'
+import { getCommissionerHub } from '@/lib/core-app/commissionerHub'
 import NotificationsCenter from '@/components/core-app/screens/NotificationsCenter'
 import { getNotificationsCenter } from '@/lib/core-app/notificationsCenter'
 import CareerShare from '@/components/core-app/screens/CareerShare'
@@ -472,6 +474,28 @@ export default async function AfCorePage({
       : null
 
   const now = new Date()
+
+  /*
+   * ── 38a·9 Commissioner Hub ─────────────────────────────────────────
+   *
+   * ⚠ THIS KEY HAD NO RENDER BRANCH AND FELL THROUGH TO "has not been built
+   * yet". It is a real screen now, and the gate that decides whether you see it
+   * runs inside `getCommissionerHub`, server-side, before any league figure is
+   * read — not in the component, and not in the browser.
+   *
+   * The issue list is passed in rather than re-derived so the queue on this
+   * screen and the badge in the nav cannot disagree about what "needs
+   * attention" means. It is computed below, so this resolves after it.
+   */
+  const commissionerHub =
+    activeKey === 'commissioner' && segment !== 'discord' && selectedLeagueId
+      ? await getCommissionerHub({
+          leagueId: selectedLeagueId,
+          userId,
+          issues: issues.filter((i) => i.leagueId === selectedLeagueId),
+          now,
+        }).catch(() => null)
+      : null
 
   /*
    * ── 24a / 24b / 26b / 22c / 26a ────────────────────────────────────
@@ -936,6 +960,30 @@ export default async function AfCorePage({
             <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
               We could not read this week&apos;s matchups just now. This is a read failure on our
               side, not a week with no games.
+            </p>
+          </div>
+        )
+      ) : activeKey === 'commissioner' ? (
+        /*
+         * 38a·9. `segment === 'discord'` also maps to this nav key and is
+         * handled above, so this branch is only ever the hub itself.
+         *
+         * ⚠ THE SCREEN DECIDES NOTHING ABOUT ACCESS. `getCommissionerHub`
+         * already returned either the data or a denial, server-side; the
+         * component renders whichever it was handed. There is no client-side
+         * role check to bypass because there is no client-side role check.
+         */
+        commissionerHub ? (
+          <CommissionerHub data={commissionerHub} />
+        ) : (
+          <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
+            <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>
+              Commissioner
+            </h1>
+            <p style={{ marginTop: 8, fontSize: 13, lineHeight: 1.5, color: 'var(--muted)' }}>
+              {selectedLeagueId
+                ? 'We could not read this league just now. This is a read failure on our side, not a sign that you do not run it.'
+                : 'Pick a league you commission from the rail. Health, disputes and settings all belong to one league.'}
             </p>
           </div>
         )
