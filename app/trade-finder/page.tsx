@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { ManagerRoleBadge } from '@/components/ManagerRoleBadge'
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 
 // ─── TYPES ────────────────────────────────────────────────────────
 
@@ -172,9 +173,18 @@ function LeagueGate({ onSelect, requestedLeagueId }: { onSelect: (l: UserLeague)
   const autoSelectedRef = useRef(false)
 
   useEffect(() => {
+    /*
+     * ⚠ Everything this picker leads to is keyed on the `leagues` table —
+     * `/api/league/roster?leagueId=` and `/api/trade-partner-match?leagueId=` both resolve the id
+     * there. AF Legacy rows and tournament hubs carry ids from other tables, so a card for one is
+     * a dead end. `resolvesToLeagueRecord` covers both; `hasUnifiedRecord` alone would not, since
+     * tournament rows set it true.
+     */
+    const onlyResolvable = (rows: unknown) =>
+      (Array.isArray(rows) ? rows : []).filter((l) => resolvesToLeagueRecord(l as LeagueRecordPolicyInput)) as UserLeague[]
     fetch('/api/league/list')
       .then(r => r.ok ? r.json() : Promise.reject())
-      .then(d => setLeagues(Array.isArray(d.leagues ?? d.data ?? d) ? (d.leagues ?? d.data ?? d) : []))
+      .then(d => setLeagues(onlyResolvable(d.leagues ?? d.data ?? d)))
       .catch(() =>
         fetch('/api/league/sleeper-user-leagues')
           .then(r => r.ok ? r.json() : Promise.reject())

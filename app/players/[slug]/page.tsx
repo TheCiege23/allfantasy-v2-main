@@ -4,6 +4,7 @@ import { getServerSession } from 'next-auth'
 
 import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import { getPlayerDetail, getRelatedPlayers, resolvePublicPlayer } from '@/lib/core-app/playerFinder'
 import { parsePlayerSlug, playerPath, playerSlug } from '@/lib/core-app/playerSlug'
 import { getPublicSiteOrigin } from '@/lib/site-public-origin'
@@ -199,10 +200,13 @@ export default async function PublicPlayerPage({ params }: Params) {
      * `hasUnifiedRecord: false` rows are AF Legacy board snapshots from the
      * career import, not leagues you play — 543 of them on one production
      * account. Same filter /core and /dashboard apply, for the same reason.
+     *
+     * `resolvesToLeagueRecord` also drops tournament hubs, whose `id` is a
+     * `LegacyTournament` key: `getPlayerDetail` scopes ownership and roster
+     * context by `leagueId` against the `leagues` table, so a tournament id
+     * contributes nothing and only widens the query.
      */
-    leagueIds = leagues
-      .filter((l) => (l as { hasUnifiedRecord?: boolean }).hasUnifiedRecord !== false)
-      .map((l) => l.id)
+    leagueIds = leagues.filter((l) => resolvesToLeagueRecord(l)).map((l) => l.id)
   }
 
   const detail = await getPlayerDetail(identity.playerReference, leagueIds, userId).catch(() => null)

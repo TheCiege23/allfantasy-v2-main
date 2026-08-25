@@ -19,6 +19,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import { resolveCommissionerCommandCenterSnapshot } from '@/lib/decision-os/commissionerCommandCenter'
 
 export const dynamic = 'force-dynamic'
@@ -28,13 +29,24 @@ const DRAFT_APPROACHING_WINDOW_DAYS = 14
 interface DashboardLeagueRow {
   id?: unknown
   isCommissioner?: unknown
+  kind?: 'league' | 'tournament' | 'legacy' | null
+  hasUnifiedRecord?: boolean | null
+  league_variant?: string | null
 }
 
+/**
+ * ⚠ `resolvesToLeagueRecord`, not `isCommissioner` alone. Tournament-hub rows in the dashboard list
+ * are hardcoded `isCommissioner: true` and carry a `LegacyTournament` id, so an unfiltered
+ * commissioner filter fed every tournament the viewer has ever created into
+ * `resolveCommissionerCommandCenterSnapshot` — where each one resolves to nothing and is counted as
+ * `unavailableLeagueCount`, silently inflating the "leagues we can't read" number with rows that were
+ * never leagues.
+ */
 async function resolveCommissionerLeagueIds(userId: string): Promise<string[]> {
   const payload = await getDashboardLeagueListForUser(userId).catch(() => null)
   const leagues = (payload?.leagues ?? []) as DashboardLeagueRow[]
   return leagues
-    .filter((l) => l.isCommissioner === true && typeof l.id === 'string')
+    .filter((l) => l.isCommissioner === true && typeof l.id === 'string' && resolvesToLeagueRecord(l))
     .map((l) => l.id as string)
 }
 

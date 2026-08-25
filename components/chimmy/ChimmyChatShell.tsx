@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Send, Image as ImageIcon, Loader2, X, RefreshCw, Volume2, History, Save } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 import { type ChimmyVoicePreset } from '@/lib/chimmy-interface'
 import {
   getAIThreadStorageKey,
@@ -251,6 +252,14 @@ export default function ChimmyChatShell({
             const o = row as Record<string, unknown>
             const id = typeof o.id === 'string' ? o.id : ''
             if (!id) return null
+            /*
+             * ⚠ Chimmy grounds on the `leagues` table. `/api/league/list` also carries AF Legacy
+             * board rows and tournament hubs, whose ids come from `LegacyLeague` and
+             * `LegacyTournament` — `loadLeagueSnapshotForUser` finds neither, and the assistant
+             * correctly refuses with `not_found`. Offering them in the picker turns that honest
+             * refusal into a dead menu entry, so they never reach the picker in the first place.
+             */
+            if (!resolvesToLeagueRecord(o as LeagueRecordPolicyInput)) return null
             return {
               id,
               name: typeof o.name === 'string' ? o.name : null,

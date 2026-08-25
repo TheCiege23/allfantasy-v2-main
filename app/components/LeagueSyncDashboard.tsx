@@ -6,6 +6,7 @@ import { Plus, RefreshCw, AlertCircle, CheckCircle, Loader2, X, Shield, External
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
 import { groupLeaguesBySport } from '@/lib/dashboard/DashboardSportGroupingService';
+import { resolveLeagueHomeHrefFromListRow, type LeagueListNavInput } from '@/lib/dashboard/league-list-destination';
 import { useUserTimezone } from '@/hooks/useUserTimezone';
 
 interface League {
@@ -249,9 +250,16 @@ export default function LeagueSyncDashboard() {
   };
 
   const openLeague = async (league: League) => {
+    /*
+     * ⚠ VIA THE SHARED DESTINATION RESOLVER, NOT `\`/league/${unifiedLeagueId}\`` DIRECTLY.
+     * A tournament-hub row sets `unifiedLeagueId` to its own `LegacyTournament` id, so the direct
+     * push sent "Open League" to `/league/<tournamentId>`, which has no `leagues` row behind it.
+     * `resolveLeagueHomeHrefFromListRow` is the one place that knows a tournament opens at
+     * `/tournament/[id]`, and it falls through to `/league/<canonicalId>` for everything else.
+     */
     const targetLeagueId = league.unifiedLeagueId ?? league.navigationLeagueId;
     if (targetLeagueId) {
-      router.push(`/league/${targetLeagueId}`);
+      router.push(resolveLeagueHomeHrefFromListRow(league as LeagueListNavInput));
       return;
     }
 

@@ -18,6 +18,7 @@ import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import { isSportsDataEnabled } from '@/lib/fantasy-os/sports-runtime/gates'
 import { CertifiedIntelligenceIntegrationService } from '@/lib/fantasy-os/sports-runtime/intelligenceIntegration'
 import { resolveManagerCommandCenterSnapshot } from '@/lib/decision-os/managerCommandCenter'
@@ -28,12 +29,23 @@ const DRAFT_APPROACHING_WINDOW_DAYS = 14
 
 interface DashboardLeagueRow {
   id?: unknown
+  kind?: 'league' | 'tournament' | 'legacy' | null
+  hasUnifiedRecord?: boolean | null
+  league_variant?: string | null
 }
 
+/**
+ * Every league the viewer belongs to — but only rows whose `id` actually names a `leagues` row.
+ * `resolvesToLeagueRecord` drops both id-space escapes in this list: AF Legacy board rows
+ * (`LegacyLeague.id`) and tournament hubs (`LegacyTournament.id`). Manager OS resolves every id
+ * against `leagues`, so either kind would be counted as an unreadable league rather than skipped.
+ */
 async function resolveMemberLeagueIds(userId: string): Promise<string[]> {
   const payload = await getDashboardLeagueListForUser(userId).catch(() => null)
   const leagues = (payload?.leagues ?? []) as DashboardLeagueRow[]
-  return leagues.filter((l) => typeof l.id === 'string').map((l) => l.id as string)
+  return leagues
+    .filter((l) => typeof l.id === 'string' && resolvesToLeagueRecord(l))
+    .map((l) => l.id as string)
 }
 
 async function countDraftsApproaching(leagueIds: string[], now: Date): Promise<number> {

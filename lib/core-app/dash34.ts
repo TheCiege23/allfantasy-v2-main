@@ -3,6 +3,7 @@ import 'server-only'
 import { unstable_cache } from 'next/cache'
 
 import { prisma } from '@/lib/prisma'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import { buildNameIndex, resolveVerifiedMatch } from '@/lib/player-match/verifiedNameMatch'
 import { getTeamInfo } from '@/lib/team-abbrev'
 import { leagueDisplayName } from './leagueHome'
@@ -108,6 +109,9 @@ export type Dash34LeagueRow = {
   platformLeagueId?: string | null
   sleeperLeagueId?: string | null
   hasUnifiedRecord?: boolean | null
+  /** Which table `id` came from — see `resolvesToLeagueRecord` in lib/dashboard/league-card-fetch-policy.ts. */
+  kind?: 'league' | 'tournament' | 'legacy' | null
+  league_variant?: string | null
 }
 
 export type Dash34Result = Dash34Data & {
@@ -565,8 +569,13 @@ export async function getDash34Data(
    * Historical board rows out of the list first, before anything expensive keys
    * off them. These are the 543-row tail; fanning roster and injury reads across
    * them would be the same fan-out that took production Postgres to a 53200 OOM.
+   *
+   * ⚠ `resolvesToLeagueRecord`, not `hasUnifiedRecord !== false`: tournament-hub rows carry a
+   * `LegacyTournament` id with the flag set TRUE, so the old predicate let them into every roster,
+   * injury and matchup read below — all keyed on `leagues`. Kept here as well as at the callers,
+   * because this is the function that decides what the expensive fan-out runs over.
    */
-  const active = leagueRows.filter((l) => l.hasUnifiedRecord !== false)
+  const active = leagueRows.filter((l) => resolvesToLeagueRecord(l))
   const legacyCount = leagueRows.length - active.length
 
   if (active.length === 0) {

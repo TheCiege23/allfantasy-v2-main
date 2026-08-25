@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import type { UserLeague } from '@/app/dashboard/types'
 import { resolveTenantBrand } from '@/lib/white-label'
 import FantasyOsGateway from './FantasyOsGateway'
@@ -31,8 +32,13 @@ export default async function FantasyOsPage() {
 
   const payload = isAuthenticated ? await getDashboardLeagueListForUser(userId).catch(() => null) : null
   const leaguesRaw = (payload?.leagues ?? []) as UserLeague[]
+  /*
+   * Tournament hubs would arrive here as `isCommissioner: true` rows whose `id` is a
+   * `LegacyTournament` key — an executive surface listing them as commissioned leagues that no
+   * `leagues`-keyed OS module can resolve. `resolvesToLeagueRecord` also covers AF Legacy rows.
+   */
   const leagues = leaguesRaw
-    .filter((l) => typeof l?.id === 'string' && typeof l?.name === 'string')
+    .filter((l) => typeof l?.id === 'string' && typeof l?.name === 'string' && resolvesToLeagueRecord(l))
     .map((l) => ({
       id: l.id,
       name: l.name,

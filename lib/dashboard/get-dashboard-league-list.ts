@@ -222,6 +222,7 @@ export async function getLegacyLeagueBoardItems(legacyUserId: string): Promise<u
   return rows
     .map((lg) => ({
       id: lg.id,
+      kind: 'legacy' as const,
       name: lg.name,
       sport: (lg.sport || 'nfl').toUpperCase(),
       sport_type: (lg.sport || 'nfl').toUpperCase(),
@@ -266,9 +267,14 @@ export async function getLegacyLeagueBoardItems(legacyUserId: string): Promise<u
  * league series reuses its logo. Collapsing on either would hide a league
  * somebody actually plays in, which is a worse failure than the one this fixes.
  *
- * Rows with no provider identity (AF-native, tournaments) pass through
- * untouched: they have nothing to group on and must never be grouped with each
- * other.
+ * Rows with no provider identity (AF-native) pass through untouched: they have
+ * nothing to group on and must never be grouped with each other.
+ *
+ * ⚠ TOURNAMENTS DO NOT PASS THROUGH — they fabricate a provider id
+ * (`platformLeagueId: \`tournament-${t.id}\``), so they take the keyed path like
+ * any other row. That is harmless only because the key embeds a primary key and
+ * is therefore unique per tournament; nothing here would stop two rows sharing a
+ * synthetic id from collapsing into one.
  */
 export function collapseLeagueSeasons<T extends Record<string, unknown>>(rows: T[]): T[] {
   const byLeague = new Map<string, T>()
@@ -541,6 +547,7 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
 
     return {
       ...lgCore,
+      kind: 'league' as const,
       season: seasonDisplay,
       sport_type: lgCore.sport ?? DEFAULT_SPORT,
       league_variant: lgCore.leagueVariant ?? null,
@@ -564,6 +571,7 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
       const unifiedLeagueId = unifiedSleeperLeagueIdMap.get(lg.sleeperLeagueId) ?? null
       return {
         id: lg.id,
+        kind: 'league' as const,
         name: lg.name,
         sport: DEFAULT_SPORT,
         sport_type: DEFAULT_SPORT,
@@ -611,7 +619,24 @@ export async function getDashboardLeagueListForUser(userId: string): Promise<Das
         ? settings.participantPoolSize
         : Math.max(12, (Array.isArray(t.leagues) ? t.leagues.length : 1) * 12)
     return {
+      /*
+       * ⚠ `id` IS A `LegacyTournament` PRIMARY KEY, NOT A `League.id`. Nothing in the `leagues`
+       * table has this id, so `prisma.league.findUnique({ where: { id } })` returns null for every
+       * row emitted here — and `unifiedLeagueId`/`navigationLeagueId` below are the same key, so
+       * they are no escape either.
+       *
+       * `hasUnifiedRecord: true` is kept because the board and `league-list-destination.ts` read it
+       * as "this row opens to something real" — and a tournament does, at `/tournament/[id]`. That
+       * makes it the WRONG field to filter id-resolution on: `hasUnifiedRecord !== false` lets these
+       * rows into every `leagues`-keyed query in the codebase.
+       *
+       * `kind: 'tournament'` is the discriminator consumers must branch on. Gate any
+       * `prisma.league.*` / `leagueId: { in: [...] }` / league-scoped fetch on
+       * `resolvesToLeagueRecord` (lib/dashboard/league-card-fetch-policy.ts), never on
+       * `hasUnifiedRecord` alone.
+       */
       id: t.id,
+      kind: 'tournament' as const,
       name: t.name,
       sport: t.sport ?? DEFAULT_SPORT,
       sport_type: t.sport ?? DEFAULT_SPORT,

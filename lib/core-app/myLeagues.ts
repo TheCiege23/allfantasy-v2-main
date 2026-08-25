@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { isTournamentHubRow, resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import { getDash34Data, type Dash34LeagueRow } from './dash34'
 import type { Dash34League } from '@/components/core-app/screens/Dashboard34'
 
@@ -146,9 +147,18 @@ export async function getMyLeaguesData(userId: string, now: Date = new Date()): 
    * native rows, where `undefined` means "this is a real league" rather than
    * "unknown". `=== true` would drop every AllFantasy-native league from the
    * screen, which is the inverse of the bug this filter exists to fix.
+   *
+   * ⚠ AND NOT `hasUnifiedRecord` ALONE, EITHER — THIS SCREEN HAS TWO TIERS AND
+   * A TOURNAMENT BELONGS TO NEITHER. Tournament-hub rows carry a
+   * `LegacyTournament` id with `hasUnifiedRecord: true`, so they landed in
+   * `played` and went through `getDash34Data`, whose every query keys on
+   * `leagues`: the tournament ranked as a league with no roster, no matchup and
+   * no chips. Flipping the flag would only move the lie — `legacy` is rendered
+   * as career-import History, and a tournament you are running is not history.
+   * They are dropped from both tiers; `/tournament/[id]` is where they live.
    */
-  const played = rows.filter((r) => r.hasUnifiedRecord !== false)
-  const legacy = rows.filter((r) => r.hasUnifiedRecord === false)
+  const played = rows.filter((r) => resolvesToLeagueRecord(r))
+  const legacy = rows.filter((r) => r.hasUnifiedRecord === false && !isTournamentHubRow(r))
 
   const dash = await getDash34Data(userId, played as Dash34LeagueRow[], now).catch(() => null)
 

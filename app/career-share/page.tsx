@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from 'next-auth/react'
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 import { ChevronDown, ChevronUp, Sparkles } from 'lucide-react'
 import { LandingToolVisitTracker } from '@/components/landing/LandingToolVisitTracker'
 import EngagementEventTracker from '@/components/engagement/EngagementEventTracker'
@@ -484,6 +485,14 @@ export default function CareerSharePage() {
           const mapped = leaguePayload.leagues
             .map((league) => {
               if (!league.id || !league.name) return null
+              /*
+               * ⚠ The first league here is AUTO-SELECTED, and `selectedLeagueId` is POSTed as
+               * `{ leagueId }` to the reward + share endpoints, which resolve it against the
+               * `leagues` table. Tournament-hub rows are prepended to `/api/league/list` and set
+               * `hasUnifiedRecord: true`, so an unfiltered list could auto-select an id that
+               * resolves to nothing before the user touches anything.
+               */
+              if (!resolvesToLeagueRecord(league as LeagueRecordPolicyInput)) return null
               return {
                 id: league.id,
                 name: league.name,

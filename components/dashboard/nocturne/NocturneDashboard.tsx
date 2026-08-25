@@ -36,6 +36,7 @@ import {
   Sun, Moon, Monitor, Search, Lightbulb, Info, Settings, MessageCircle, Swords, Check,
 } from 'lucide-react'
 import { useAccessTier } from '@/hooks/useAccessTier'
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy'
 import { useTokenBalance } from '@/hooks/useTokenBalance'
 import { useEntitlements } from '@/hooks/useEntitlements'
 import { useOptionalLanguage } from '@/components/i18n/LanguageProviderClient'
@@ -194,7 +195,10 @@ function mapLeagues(payload: LeagueListPayload): DisplayLeague[] {
       status: str(r.status) ?? str(r.lifecycleState) ?? 'Active',
       // Only leagues with a unified record resolve on /league/[id]; AF-Legacy board
       // rows (hasUnifiedRecord=false) 404 there — they open the detail popup instead.
-      unified: r.hasUnifiedRecord === true,
+      // ⚠ Tournament hubs 404 there too, while setting hasUnifiedRecord TRUE — their id is a
+      // `LegacyTournament` key. `resolvesToLeagueRecord` is the predicate that covers both, so a
+      // tournament no longer lands in the Live tab (`scopeFilter === 'live'` reads this flag).
+      unified: resolvesToLeagueRecord(r as LeagueRecordPolicyInput),
       season: seasonYear(r.season),
       teamCount: num(r.teamCount) ?? num(r.leagueSize),
       format: str(r.format) ?? str(r.leagueType),
@@ -231,7 +235,14 @@ function toUserLeague(raw: unknown): UserLeague | null {
     logoUrl: str(r.logoUrl),
     leagueType: str(r.leagueType),
     leagueVariant: str(r.leagueVariant),
-    hasUnifiedRecord: r.hasUnifiedRecord === true,
+    /*
+     * ⚠ NOT `r.hasUnifiedRecord === true`. This flag gates the whole team panel below
+     * (`activeTeamLeague.hasUnifiedRecord ? <TeamThisWeek/> …`), and every component behind it
+     * resolves the id against `leagues`. A tournament hub sets the raw flag true while carrying a
+     * `LegacyTournament` id, so picking one rendered the full team panel for a league that does not
+     * exist. `resolvesToLeagueRecord` covers both that and the AF-Legacy case.
+     */
+    hasUnifiedRecord: resolvesToLeagueRecord(r as LeagueRecordPolicyInput),
     isCommissioner: r.isCommissioner === true || r.userRole === 'commissioner',
     userRole: role,
     lifecycleState: str(r.lifecycleState),

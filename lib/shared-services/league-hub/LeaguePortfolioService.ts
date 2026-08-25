@@ -25,6 +25,7 @@
  */
 import { prisma } from '@/lib/prisma'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
 import { deriveProviderCapabilities, deriveImportType } from './providerCapabilities'
 import { deriveSyncFreshness } from './syncFreshness'
 import { getEmptyRecommendationBundle } from './recommendationContract'
@@ -48,6 +49,8 @@ interface RawDashboardLeagueRow {
   navigationLeagueId?: string | null
   unifiedLeagueId?: string | null
   hasUnifiedRecord?: boolean
+  kind?: 'league' | 'tournament' | 'legacy' | null
+  league_variant?: string | null
 }
 
 function toSettingsRecord(settings: unknown): Record<string, unknown> | null {
@@ -62,9 +65,17 @@ function toProvider(platform: string | null | undefined): LeagueHubProvider {
 }
 
 /** Real `League.id` when this row has one — never the legacy `SleeperLeague.id`, which no
- *  downstream OS module (Trade/Waiver/Lineup) can resolve. */
+ *  downstream OS module (Trade/Waiver/Lineup) can resolve.
+ *
+ *  ⚠ `hasUnifiedRecord && unifiedLeagueId` IS NOT SUFFICIENT. A tournament-hub row satisfies both
+ *  — it sets `hasUnifiedRecord: true` and points `unifiedLeagueId` at its own `LegacyTournament`
+ *  id — so it used to claim `hasCanonicalRecord: true` and be fed into the `leagueTeam` /
+ *  `seasonForecastSnapshot` queries below. Those are `findMany` with `leagueId: { in: [...] }`, so
+ *  nothing threw: the portfolio entry just asserted it had a canonical record and then reported a
+ *  null team, null record and null playoff probability, which is indistinguishable from a league we
+ *  hold no forecast for. `resolvesToLeagueRecord` is the gate that tells those two apart. */
 function resolveCanonicalLeagueId(row: RawDashboardLeagueRow): { id: string; hasCanonicalRecord: boolean } {
-  if (row.hasUnifiedRecord && row.unifiedLeagueId) {
+  if (resolvesToLeagueRecord(row) && row.hasUnifiedRecord && row.unifiedLeagueId) {
     return { id: row.unifiedLeagueId, hasCanonicalRecord: true }
   }
   return { id: row.id, hasCanonicalRecord: false }

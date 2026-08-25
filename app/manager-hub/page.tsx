@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { getServerSession } from 'next-auth'
 import { authOptions } from '@/lib/auth'
 import { getDashboardLeagueListForUser } from '@/lib/dashboard/get-dashboard-league-list'
+import { resolvesToLeagueRecord } from '@/lib/dashboard/league-card-fetch-policy'
+import type { UserLeague } from '@/app/dashboard/types'
 import { resolveTenantBrand } from '@/lib/white-label'
 import ManagerHubPageClient from './ManagerHubPageClient'
 
@@ -33,9 +35,15 @@ export default async function ManagerHubPage() {
   const isAuthenticated = userId.length > 0
 
   const payload = isAuthenticated ? await getDashboardLeagueListForUser(userId).catch(() => null) : null
-  const leagues = ((payload?.leagues ?? []) as { id: string; name: string }[]).filter(
-    (l) => typeof l?.id === 'string' && typeof l?.name === 'string',
-  )
+  /*
+   * The ids handed to the client become Manager OS league-scoped calls, all keyed on `leagues`.
+   * `resolvesToLeagueRecord` drops AF Legacy rows and tournament hubs — the latter set
+   * `hasUnifiedRecord: true` but carry a `LegacyTournament` id, so filtering on that flag alone
+   * would still let them through.
+   */
+  const leagues = ((payload?.leagues ?? []) as UserLeague[])
+    .filter((l) => typeof l?.id === 'string' && typeof l?.name === 'string' && resolvesToLeagueRecord(l))
+    .map((l) => ({ id: l.id, name: l.name }))
 
   return <ManagerHubPageClient leagues={leagues} isAuthenticated={isAuthenticated} />
 }

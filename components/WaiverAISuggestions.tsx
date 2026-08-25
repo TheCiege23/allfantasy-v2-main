@@ -4,12 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAI } from '@/hooks/useAI';
+import { resolvesToLeagueRecord, type LeagueRecordPolicyInput } from '@/lib/dashboard/league-card-fetch-policy';
 import { toast } from 'sonner';
 import { Loader2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/legacy-ui';
 
 type Suggestion = { playerName: string; position: string; team: string; reason: string; priority: number };
-type League = { id: string; name: string; platform?: string; scoring?: string };
+type League = { id: string; name: string; platform?: string; scoring?: string } & LeagueRecordPolicyInput;
 
 export default function WaiverAISuggestions() {
   const { callAI, loading } = useAI<{ suggestions: Suggestion[] }>();
@@ -25,7 +26,14 @@ export default function WaiverAISuggestions() {
         const res = await fetch('/api/league/list');
         if (res.ok) {
           const data = await res.json();
-          setLeagues(data.leagues || []);
+          /*
+           * ⚠ `/api/waiver-ai-suggest` resolves `leagueId` against the `leagues` table. The list
+           * also carries AF Legacy rows and tournament hubs, whose ids live in other tables —
+           * picking one produces a request that cannot be answered. Filtered here rather than at
+           * submit, so the dropdown only offers leagues the engine can actually read.
+           */
+          const rows = (Array.isArray(data.leagues) ? data.leagues : []) as League[];
+          setLeagues(rows.filter((l) => resolvesToLeagueRecord(l as LeagueRecordPolicyInput)));
         }
       } catch {
       } finally {
