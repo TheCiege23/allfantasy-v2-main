@@ -32,6 +32,7 @@ import { getMyTeamData } from '@/lib/core-app/myTeam'
 import Matchup from '@/components/core-app/screens/Matchup'
 import { getMatchupData } from '@/lib/core-app/matchup'
 import Trades from '@/components/core-app/screens/Trades'
+import { TradeCenter } from '@/components/core-app/screens/TradeCenter'
 import { getTradesData } from '@/lib/core-app/trades'
 import Waivers from '@/components/core-app/screens/Waivers'
 import { getWaiversData } from '@/lib/core-app/waivers'
@@ -1044,7 +1045,31 @@ export default async function AfCorePage({
         )
       ) : activeKey === 'trades' ? (
         trades ? (
-          <Trades data={trades} />
+          <>
+            {/*
+              Screen 36a. The builder leads and the existing history sits under
+              it — additive rather than a replacement, so nothing that already
+              works is lost while the new surface settles.
+            */}
+            <TradeCenter
+              league={{
+                id: trades.league.id,
+                name: trades.league.name,
+                format: trades.gradingContext.available
+                  ? trades.gradingContext.data.format
+                  : null,
+                teamCount: trades.gradingContext.available
+                  ? trades.gradingContext.data.teamCount
+                  : null,
+              }}
+              deadlineLabel={
+                trades.deadline.available && trades.deadline.data.week != null
+                  ? `Deadline · week ${trades.deadline.data.week}`
+                  : null
+              }
+            />
+            <Trades data={trades} />
+          </>
         ) : (
           <div className="af-frame" style={{ padding: 24, maxWidth: 720 }}>
             <h1 className="af-display" style={{ margin: 0, fontSize: 22, letterSpacing: '-0.03em' }}>

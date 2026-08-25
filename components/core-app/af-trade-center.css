@@ -1,0 +1,498 @@
+/*
+ * AF Core — Trade Center (36a).
+ *
+ * Tokens are the handoff's, scoped under `.af-tc` so they cannot leak into the
+ * rest of /core. Where the design's literal matches an existing core token the
+ * core token is used instead, so a future theme change moves both together.
+ */
+
+.af-tc {
+  --tc-violet: #a78bfa;
+  --tc-orange: #fb923c;
+  --tc-good: #34d399;
+  --tc-warn: #fbbf24;
+  --tc-bad: #fb5b78;
+
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.af-tc-head h1 {
+  margin: 4px 0 6px;
+  font-size: 34px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+.af-tc-lede {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── League context bar ──────────────────────────────────────────────── */
+
+.af-tc-context {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-tc-context-name {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-context-meta {
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-tc-spacer {
+  flex: 1 1 auto;
+}
+.af-tc-chip {
+  padding: 4px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  font-size: 11.5px;
+  color: var(--text2);
+  white-space: nowrap;
+}
+.af-tc-chip--deadline {
+  border-color: rgba(251, 191, 36, 0.4);
+  background: rgba(251, 191, 36, 0.08);
+  color: var(--tc-warn);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 10.5px;
+}
+
+/* ── Asset legend ────────────────────────────────────────────────────── */
+
+.af-tc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--surface);
+}
+.af-tc-legend-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-right: 2px;
+}
+.af-tc-asset-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px 5px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  font-size: 12px;
+  color: var(--text2);
+}
+.af-tc-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 900;
+  color: #04050c;
+}
+
+/* ── Banners ─────────────────────────────────────────────────────────── */
+
+.af-tc-banner {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+  border-radius: 13px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+/*
+ * The blocked banner leads the page. It is not styled like the note cards on
+ * purpose — a format that forbids this trade is a correctness statement, not
+ * another piece of advice.
+ */
+.af-tc-banner--blocked {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.07);
+}
+.af-tc-banner-glyph {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  background: rgba(251, 191, 36, 0.18);
+  color: var(--tc-warn);
+}
+.af-tc-banner-title {
+  margin: 0 0 6px;
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-banner p {
+  margin: 0 0 4px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+
+/* ── Trade builder ───────────────────────────────────────────────────── */
+
+.af-tc-builder {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 14px;
+}
+.af-tc-team {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.af-tc-team-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.af-tc-team-name {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text);
+}
+.af-tc-team-handle {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+.af-tc-you {
+  padding: 2px 7px;
+  border-radius: 5px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-line);
+  color: var(--accent);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.af-tc-sends {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--tc-bad);
+}
+.af-tc-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-tc-row-body {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.af-tc-row-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.af-tc-row-sub {
+  font-size: 11px;
+  color: var(--muted);
+}
+/*
+ * ⚠ AN UNPRICED ASSET RENDERS AN EM DASH, NEVER A ZERO. Half the point of the
+ * unpriced-exposure work is that a defender we cannot price must not read as
+ * worthless.
+ */
+.af-tc-row-value {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.af-tc-row-value[data-unpriced='true'] {
+  color: var(--faint);
+}
+.af-tc-remove {
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.af-tc-remove:hover {
+  color: var(--tc-bad);
+}
+.af-tc-add {
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  padding: 9px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.af-tc-add:hover {
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.af-tc-total {
+  display: flex;
+  justify-content: space-between;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+}
+.af-tc-total b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Verdict ─────────────────────────────────────────────────────────── */
+
+.af-tc-verdict {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-tc-grade-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.af-tc-grade {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 13px;
+  border-radius: 11px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+}
+.af-tc-grade-letter {
+  font-size: 24px;
+  font-weight: 900;
+  line-height: 1;
+}
+.af-tc-grade-for {
+  font-size: 11px;
+  color: var(--muted);
+}
+.af-tc-track {
+  position: relative;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-tc-dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--accent);
+  transform: translateY(-50%);
+}
+.af-tc-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text2);
+}
+.af-tc-conf {
+  color: var(--muted);
+}
+/*
+ * ⚠ THE NO-SIGNAL CALLOUT. gradeScale.ts warns that C spans a wide band, so a
+ * trade we know nothing about lands mid-C and looks identical to a genuinely
+ * even one. A letter never renders without this or the confidence label beside
+ * it.
+ */
+.af-tc-nosignal {
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 91, 120, 0.4);
+  background: rgba(251, 91, 120, 0.08);
+  color: #ffd7de;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+.af-tc-gaps {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+/* ── Note groups ─────────────────────────────────────────────────────── */
+
+/*
+ * ⚠ VISUALLY SEPARATE FROM THE VERDICT, ALWAYS. These are additive context and
+ * must never read as part of the score — that separation is product logic, not
+ * decoration.
+ */
+.af-tc-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 12px;
+}
+.af-tc-note {
+  padding: 13px 15px;
+  border-radius: 13px;
+  border: 1px solid var(--line2);
+  background: var(--surface);
+}
+.af-tc-note-title {
+  margin: 0 0 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.af-tc-note p {
+  margin: 0 0 5px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--text2);
+}
+.af-tc-note p:last-child {
+  margin-bottom: 0;
+}
+
+.af-tc-note[data-tone='scale'] { border-color: var(--accent-line); background: var(--accent-soft); }
+.af-tc-note[data-tone='scale'] .af-tc-note-title { color: var(--accent); }
+.af-tc-note[data-tone='posture'] .af-tc-note-title { color: var(--muted); }
+.af-tc-note[data-tone='pick'] { border-color: rgba(251, 146, 60, 0.3); background: rgba(251, 146, 60, 0.06); }
+.af-tc-note[data-tone='pick'] .af-tc-note-title { color: var(--tc-orange); }
+.af-tc-note[data-tone='leverage'] { border-color: rgba(167, 139, 250, 0.3); background: rgba(167, 139, 250, 0.06); }
+.af-tc-note[data-tone='leverage'] .af-tc-note-title { color: var(--tc-violet); }
+.af-tc-note[data-tone='need'] { border-color: rgba(52, 211, 153, 0.3); background: rgba(52, 211, 153, 0.06); }
+.af-tc-note[data-tone='need'] .af-tc-note-title { color: var(--tc-good); }
+.af-tc-note[data-tone='bye'] { border-color: rgba(251, 91, 120, 0.3); background: rgba(251, 91, 120, 0.06); }
+.af-tc-note[data-tone='bye'] .af-tc-note-title { color: var(--tc-bad); }
+
+/* ── Decision OS ─────────────────────────────────────────────────────── */
+
+.af-tc-dos {
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.af-tc-why {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text);
+}
+.af-tc-pairs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+.af-tc-pair {
+  padding: 10px 12px;
+  border-radius: 11px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+}
+.af-tc-pair-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+.af-tc-pair-value {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--text);
+  margin-top: 2px;
+}
+.af-tc-list {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text2);
+}
+.af-tc-list--warn li {
+  color: #ffe6b8;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────── */
+
+.af-tc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+.af-tc-caption {
+  flex: 1 1 240px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+@media (max-width: 720px) {
+  .af-tc-head h1 { font-size: 26px; }
+  .af-tc-builder,
+  .af-tc-notes { grid-template-columns: 1fr; }
+}
