@@ -1,5 +1,6 @@
 'use client'
 
+import ThreadPanel from './ThreadPanel'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import '@/components/core-app/af-comms.css'
@@ -779,30 +780,6 @@ function LeaguePanel({
  * The privacy copy is rendered anyway, because it is the load-bearing part of
  * both designs and it is what the eventual implementation must carry.
  */
-function UnbuiltPanel({
-  title,
-  privacy,
-  missing,
-}: {
-  title: string
-  privacy: string
-  missing: string
-}) {
-  return (
-    <div className="af-cm-panel">
-      <div className="af-cm-privacy">{privacy}</div>
-      <div className="af-cm-empty af-cm-empty--grow">
-        <p className="af-cm-empty-t">{title} is not built yet.</p>
-        <p className="af-cm-empty-b">{missing}</p>
-        <p className="af-cm-empty-b">
-          The tab is here because the drawer&apos;s four audiences are the design, and hiding one
-          would make the other three harder to understand. It says so rather than showing you
-          invented posts.
-        </p>
-      </div>
-    </div>
-  )
-}
 
 // ── Discord panel ──────────────────────────────────────────────────────
 
@@ -1126,17 +1103,9 @@ export function CommsDrawer({
             initialDraft={initialDraft}
           />
         ) : tab === 'huddle' ? (
-          <UnbuiltPanel
-            title="Huddle"
-            privacy={HUDDLE_PRIVACY}
-            missing="There is no cross-league social feed in this codebase yet — the only feed endpoint is tournament-scoped and needs a tournament id, so it cannot back a global one."
-          />
+          <ThreadPanel kind="group" privacy={HUDDLE_PRIVACY} />
         ) : tab === 'dms' ? (
-          <UnbuiltPanel
-            title="DMs"
-            privacy={DM_PRIVACY}
-            missing="There is no direct-message store in this codebase yet. When it lands, each thread has to carry the league it came from — at 61 leagues a name on its own is not enough context to know who you are talking to."
-          />
+          <ThreadPanel kind="dm" privacy={DM_PRIVACY} />
         ) : (
           <DiscordPanel leagues={leagues} scopeId={scopeId} onScope={setScopeId} />
         )}

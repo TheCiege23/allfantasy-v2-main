@@ -434,6 +434,76 @@
   color: var(--faint);
 }
 
+/* ── Thread list and open thread (DMs, Huddle) ─────────────────────── */
+
+.af-cm-threadhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.af-cm-back {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.af-cm-threadtitle {
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* A whole row is the hit target: a title alone is a small tap on a phone. */
+.af-cm-threadrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 8px;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+}
+
+.af-cm-threadrow:hover { background: var(--line); }
+
+.af-cm-threadrow-title {
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Only rendered when the count is above zero — a badge with nothing behind it is
+ * an invented notification, the same standing rule the launcher badge follows.
+ */
+.af-cm-threadrow-unread {
+  flex: none;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+  text-align: center;
+}
+
 .af-cm-cost {
   display: block;
   margin-top: 5px;

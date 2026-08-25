@@ -31,7 +31,17 @@ export async function POST(req: NextRequest) {
   let memberUserIds: string[] = []
   let resolvedFromUsernames = 0
 
-  if (threadType === 'group' && Array.isArray(body?.usernames)) {
+  /*
+   * Usernames resolve for DMs too, not just groups.
+   *
+   * `createPlatformThread` takes member USER IDS, and a UI that lets you start a
+   * conversation has a username — nobody types a uuid. Group already resolved
+   * them; DM did not, so "message this person" was unreachable from any surface
+   * without a people-picker that hands over an id. The dedupe inside
+   * `createPlatformThread` still applies, so resolving a username you already
+   * have a thread with reopens it rather than creating a second one.
+   */
+  if ((threadType === 'group' || threadType === 'dm') && Array.isArray(body?.usernames)) {
     const usernames = (body.usernames as unknown[]).map((u) => String(u).trim()).filter(Boolean)
     if (usernames.length > 0) {
       const users = await prisma.appUser.findMany({
@@ -51,13 +61,32 @@ export async function POST(req: NextRequest) {
     memberUserIds = body.memberUserIds.map((v: unknown) => String(v)).filter(Boolean)
   }
 
-  if (threadType === 'group') {
+  if (threadType === 'group' || threadType === 'dm') {
     const uniqueMembers = Array.from(new Set(memberUserIds.filter(Boolean))).filter((id) => id !== user.appUserId)
     if (Array.isArray(body?.usernames) && body.usernames.length > 0 && resolvedFromUsernames === 0) {
       return NextResponse.json({ error: 'No valid participants found for those usernames' }, { status: 400 })
     }
     if (uniqueMembers.length === 0) {
-      return NextResponse.json({ error: 'At least one participant is required to create a group' }, { status: 400 })
+      return NextResponse.json(
+        {
+          error:
+            threadType === 'dm'
+              ? 'A direct message needs one other person'
+              : 'At least one participant is required to create a group',
+        },
+        { status: 400 },
+      )
+    }
+    /*
+     * A DM is exactly two people. `createPlatformThread` returns null for any
+     * other count, which would surface as a bare "Unable to create thread"; say
+     * what is wrong instead.
+     */
+    if (threadType === 'dm' && uniqueMembers.length > 1) {
+      return NextResponse.json(
+        { error: 'A direct message is one-to-one. Start a group for more than two people.' },
+        { status: 400 },
+      )
     }
     memberUserIds = uniqueMembers
   }
