@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { jitterSleep, runWithConcurrency, sleep } from '@/lib/async-utils'
 import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { normalizeSportForPsych } from './SportBehaviorResolver'
 
@@ -25,6 +26,15 @@ import { normalizeSportForPsych } from './SportBehaviorResolver'
  */
 
 const SLEEPER = 'https://api.sleeper.app/v1'
+
+/**
+ * Rate-limited requests in the current sweep.
+ *
+ * Reported rather than swallowed: a run that was throttled saw less of the provider than it
+ * thinks it did, and a caller reading `tradesFound` without knowing that would treat a partial
+ * sweep as a complete one.
+ */
+let rateLimitHits = 0
 const MAX_WEEKS = 18
 /** Dynasty leagues chain back a season at a time; six covers every league here. */
 const MAX_PRIOR_SEASONS = 6
@@ -35,6 +45,8 @@ export type SleeperTradeIngestResult = {
   tradesFound: number
   factsWritten: number
   feedUnavailable: number
+  /** Requests that stayed rate-limited after every retry. Non-zero ⇒ this sweep is partial. */
+  rateLimited: number
   errors: string[]
 }
 
@@ -102,14 +114,75 @@ export function buildTradeFactPayload(
   }
 }
 
+/**
+ * Requests in flight at once, across the whole sweep.
+ *
+ * ⚠ THIS USED TO BE EIGHTEEN. Every week of a season was fired with one `Promise.all`, which
+ * is rude at one league and indefensible at eighty — the full sweep is on the order of ten
+ * thousand requests against a free endpoint. Four keeps the run polite and still finishes a
+ * league in seconds.
+ */
+const MAX_CONCURRENT_REQUESTS = 4
+/** Attempts per request before a rate-limited week is reported as rate-limited. */
+const MAX_ATTEMPTS = 3
+
+/** Statuses worth trying again: rate limiting and transient upstream failures. */
+const RETRYABLE = new Set([408, 429, 500, 502, 503, 504])
+
+type FetchOutcome<T> =
+  | { status: 'ok'; value: T }
+  | { status: 'rate_limited' }
+  | { status: 'unavailable' }
+
+/**
+ * One throttled, retrying GET against Sleeper.
+ *
+ * ⚠ A 429 IS NOT AN EMPTY WEEK, AND CONFLATING THEM IS A CORRECTNESS BUG, NOT A POLITENESS
+ * ONE. The previous version returned null for any non-OK response, so a rate-limited week was
+ * indistinguishable from a week with no trades in it — and the caller's `anyFeed` check would
+ * then record a perfectly healthy league as having no trade feed at all. Under a sweep large
+ * enough to actually get throttled, that failure mode writes silence into the warehouse and
+ * looks like data.
+ *
+ * `Retry-After` is honoured when the server sends it, because a server that has told us how
+ * long to wait should not be guessed at.
+ */
+async function fetchSleeper<T>(url: string): Promise<FetchOutcome<T>> {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    try {
+      // db-first-exception: trade ingestion writer — provider fetch -> dw_transaction_facts, not a read path
+      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) })
+      if (res.ok) return { status: 'ok', value: (await res.json()) as T }
+
+      if (!RETRYABLE.has(res.status)) return { status: 'unavailable' }
+      if (attempt === MAX_ATTEMPTS) {
+        return { status: res.status === 429 ? 'rate_limited' : 'unavailable' }
+      }
+      const retryAfter = Number(res.headers.get('retry-after'))
+      const backoff = Number.isFinite(retryAfter) && retryAfter > 0
+        ? retryAfter * 1000
+        : 500 * 2 ** (attempt - 1)
+      await sleep(backoff)
+    } catch {
+      if (attempt === MAX_ATTEMPTS) return { status: 'unavailable' }
+      await sleep(500 * 2 ** (attempt - 1))
+    }
+  }
+  return { status: 'unavailable' }
+}
+
 async function getWeek(leagueId: string, week: number): Promise<SleeperTransaction[] | null> {
   try {
-    // db-first-exception: trade ingestion writer — provider fetch -> dw_transaction_facts, not a read path
     const url = `${SLEEPER}/league/${leagueId}/transactions/${week}`
-    const res = await fetch(url, { signal: AbortSignal.timeout(15_000) })
-    if (!res.ok) return null
-    const json = (await res.json()) as unknown
-    return Array.isArray(json) ? (json as SleeperTransaction[]) : []
+    // Polite spacing on top of the concurrency cap, so a burst does not arrive as a spike.
+    await jitterSleep(40, 120)
+    const out = await fetchSleeper<unknown>(url)
+    if (out.status === 'rate_limited') {
+      rateLimitHits += 1
+      return null
+    }
+    if (out.status !== 'ok') return null
+    return Array.isArray(out.value) ? (out.value as SleeperTransaction[]) : []
   } catch {
     return null
   }
@@ -132,11 +205,15 @@ async function resolveSeasonChain(
   let id: string | null = currentId
   for (let depth = 0; id && depth <= MAX_PRIOR_SEASONS; depth += 1) {
     try {
-      // db-first-exception: trade ingestion writer — provider fetch -> dw_transaction_facts, not a read path
       const url = `${SLEEPER}/league/${id}`
-      const res = await fetch(url, { signal: AbortSignal.timeout(15_000) })
-      if (!res.ok) break
-      const league = (await res.json()) as {
+      const out = await fetchSleeper<{
+        league_id?: string
+        season?: string
+        previous_league_id?: string | null
+      }>(url)
+      if (out.status === 'rate_limited') rateLimitHits += 1
+      if (out.status !== 'ok') break
+      const league = out.value as {
         league_id?: string
         season?: string
         previous_league_id?: string | null
@@ -163,8 +240,10 @@ export async function ingestSleeperTradeFacts(input?: {
     tradesFound: 0,
     factsWritten: 0,
     feedUnavailable: 0,
+    rateLimited: 0,
     errors: [],
   }
+  rateLimitHits = 0
 
   const leagues = await prisma.league.findMany({
     where: {
@@ -192,8 +271,10 @@ export async function ingestSleeperTradeFacts(input?: {
     let anyFeed = false
 
     for (const link of chain) {
-      const weeks = await Promise.all(
-        Array.from({ length: MAX_WEEKS }, (_, i) => getWeek(link.leagueId, i + 1))
+      const weeks = await runWithConcurrency(
+        Array.from({ length: MAX_WEEKS }, (_, i) => i + 1),
+        MAX_CONCURRENT_REQUESTS,
+        (week) => getWeek(link.leagueId, week),
       )
       if (weeks.some((w) => w != null)) anyFeed = true
       const linkSeason = link.season ?? season
@@ -251,5 +332,7 @@ export async function ingestSleeperTradeFacts(input?: {
     if (leagueTrades > 0) result.leaguesWithTrades += 1
   }
 
+  // Carried out of the module counter so a throttled sweep announces itself.
+  result.rateLimited = rateLimitHits
   return result
 }
