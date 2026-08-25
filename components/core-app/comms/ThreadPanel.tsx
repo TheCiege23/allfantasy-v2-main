@@ -1,6 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import RichMessage from './RichMessage'
+import { ChatComposer, type LeagueComposerPayload } from '@/app/dashboard/components/chat/ChatComposer'
 
 /**
  * DMs and Huddle, on the platform chat threads that already exist.
@@ -43,6 +45,8 @@ type PlatformMessage = {
   senderUsername?: string | null
   body: string
   createdAt: string
+  /** GIFs, media and polls. The endpoint returns it; dropping it hid them. */
+  metadata?: Record<string, unknown> | null
 }
 
 export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: string }) {
@@ -50,7 +54,6 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
   const [openThread, setOpenThread] = useState<PlatformThread | null>(null)
   const [messages, setMessages] = useState<PlatformMessage[]>([])
   const [hiddenBlocked, setHiddenBlocked] = useState(0)
-  const [draft, setDraft] = useState('')
   const [invite, setInvite] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -112,30 +115,85 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
     [loadMessages],
   )
 
-  const send = useCallback(async () => {
-    const text = draft.trim()
-    if (!text || !openThread || busy) return
-    setBusy(true)
-    setError(null)
-    setDraft('')
-    try {
-      const res = await fetch(
-        `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ body: text }),
-        },
-      )
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) throw new Error(data.error ?? 'Message not sent.')
-      await loadMessages(openThread)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Message not sent.')
-    } finally {
-      setBusy(false)
-    }
-  }, [draft, openThread, busy, loadMessages])
+  /*
+   * Same payload-to-metadata mapping the league panel uses. Kept identical on
+   * purpose: two shapes for one feature is how a GIF ends up rendering in one
+   * surface and not another.
+   */
+  const sendPayload = useCallback(
+    async (payload: LeagueComposerPayload) => {
+      if (!openThread || busy) return
+      const text = payload.text.trim()
+      const metadata: Record<string, unknown> = {}
+
+      if (payload.gifUrl || payload.giphyId) {
+        if (payload.gifId) metadata.gifId = payload.gifId
+        if (payload.giphyId) metadata.giphyId = payload.giphyId
+        if (payload.gifUrl) metadata.gifUrl = payload.gifUrl
+        if (payload.previewUrl) metadata.previewUrl = payload.previewUrl
+        if (payload.gifTitle) metadata.gifTitle = payload.gifTitle
+        metadata.gif = {
+          previewUrl: payload.previewUrl ?? payload.gifUrl ?? '',
+          url: payload.gifUrl ?? '',
+          title: payload.gifTitle ?? 'GIF',
+        }
+      }
+
+      if (payload.attachments?.length) {
+        metadata.attachments = payload.attachments.map((a) => ({
+          type: a.type,
+          url: a.url,
+          duration: a.duration,
+          mimeType: a.mimeType,
+        }))
+      }
+
+      if (payload.poll) {
+        metadata.poll = {
+          question: payload.poll.question,
+          options: payload.poll.options.map((t, i) => ({
+            id: `opt-${i}-${Date.now()}`,
+            text: t,
+            votes: [] as string[],
+          })),
+          closeAt: payload.poll.closeAt.toISOString(),
+          allowMultiple: payload.poll.allowMultiple,
+        }
+      }
+
+      const displayText =
+        text ||
+        (payload.gifUrl || payload.giphyId ? '🎬 GIF' : '') ||
+        (payload.poll ? `📊 ${payload.poll.question}` : '') ||
+        (payload.attachments?.length ? '📎 Media' : '')
+
+      if (!displayText && Object.keys(metadata).length === 0) return
+
+      setBusy(true)
+      setError(null)
+      try {
+        const res = await fetch(
+          `/api/shared/chat/threads/${encodeURIComponent(openThread.id)}/messages`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              body: displayText,
+              ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+            }),
+          },
+        )
+        const data = (await res.json().catch(() => ({}))) as { error?: string }
+        if (!res.ok) throw new Error(data.error ?? 'Message not sent.')
+        await loadMessages(openThread)
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Message not sent.')
+      } finally {
+        setBusy(false)
+      }
+    },
+    [openThread, busy, loadMessages],
+  )
 
   const start = useCallback(async () => {
     const names = invite
@@ -200,6 +258,7 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
               <div key={m.id} className="af-cm-msg">
                 <span className="af-cm-msg-author">{m.senderName}</span>
                 <span className="af-cm-msg-text">{m.body}</span>
+                <RichMessage metadata={m.metadata} />
               </div>
             ))
           )}
@@ -213,24 +272,19 @@ export function ThreadPanel({ kind, privacy }: { kind: 'dm' | 'group'; privacy: 
           <div ref={endRef} />
         </div>
 
-        <form
-          className="af-cm-composer"
-          onSubmit={(e) => {
-            e.preventDefault()
-            void send()
-          }}
-        >
-          <input
-            className="af-cm-input"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            placeholder="Message"
-            aria-label="Message"
-          />
-          <button type="submit" className="af-cm-send" disabled={busy || !draft.trim()}>
-            Send
-          </button>
-        </form>
+        {/*
+          The same composer the league chat uses. `leagueId` is empty because a
+          DM has none: the mention hook then offers only its static suggestions
+          (and correctly withholds @all from a one-to-one), and uploads authorise
+          against `threadId` instead.
+        */}
+        <ChatComposer
+          leagueId=""
+          threadId={openThread.id}
+          chatType={kind === 'dm' ? 'dm' : 'huddle'}
+          placeholder="Message"
+          onSend={sendPayload}
+        />
       </div>
     )
   }

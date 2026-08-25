@@ -43,6 +43,13 @@ type ChatComposerProps = {
   /** When set, fetches IDP @Chimmy autocomplete for this league (mutually exclusive with BB in practice). */
   idpAutocompleteLeagueId?: string | null
   chatType?: 'league' | 'huddle' | 'dm' | 'chimmy' | 'draft'
+  /**
+   * The platform chat thread this composer posts into, for DMs and huddles.
+   * Uploads are authorised against EITHER a league or a thread — a DM has no
+   * league, and without this the upload endpoint answered "leagueId required",
+   * which is a message about a concept these chats do not have.
+   */
+  threadId?: string | null
   isCommissioner?: boolean
   commissionerLeagues?: { id: string; name: string; teamCount: number }[]
   currentUserId?: string
@@ -60,6 +67,7 @@ export function ChatComposer({
   c2cAutocompleteLeagueId = null,
   idpAutocompleteLeagueId = null,
   chatType = 'league',
+  threadId = null,
   isCommissioner = false,
   commissionerLeagues = [],
   currentUserId,
@@ -199,7 +207,9 @@ export function ChatComposer({
       const fd = new FormData()
       fd.append('file', file)
       fd.append('type', type)
-      fd.append('leagueId', leagueId)
+      // One of the two is always present; the endpoint authorises against whichever it gets.
+      if (leagueId) fd.append('leagueId', leagueId)
+      if (threadId) fd.append('threadId', threadId)
       const res = await fetch('/api/chat/upload', { method: 'POST', body: fd })
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string; mimeType?: string }
       if (!res.ok || !data.url) {
@@ -208,7 +218,7 @@ export function ChatComposer({
       }
       return { url: data.url, mimeType: data.mimeType ?? file.type }
     },
-    [leagueId]
+    [leagueId, threadId]
   )
 
   const onImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
