@@ -69,7 +69,7 @@ describe('DashGameDayBand', () => {
 
   it("says so when plays are landing but none of the user's matchups are scored", () => {
     const { container } = render(<DashGameDayBand strip={strip()} plays={[play()]} now={NOW} regularSeasonUnderway />)
-    expect(container.textContent).toContain('no matchup of yours is scored yet')
+    expect(container.textContent).toContain('none of your matchups have scored yet')
     // Never a 0–0, which reads as a day played and lost.
     expect(container.textContent).not.toContain('0–0')
   })
@@ -136,7 +136,9 @@ describe('DashGameDayBand', () => {
     const { container } = render(
       <DashGameDayBand strip={strip()} plays={[play()]} now={NOW} regularSeasonUnderway />,
     )
-    expect(container.textContent).toContain('not filtered to your rosters')
+    // Asserted on meaning, not on the exact sentence: the band must
+    // disclaim that these plays are league-wide, however that is worded.
+    expect(container.textContent).toMatch(/not only your players|not filtered to your rosters/)
   })
 
   it('caps the feed rather than printing an entire slate', () => {

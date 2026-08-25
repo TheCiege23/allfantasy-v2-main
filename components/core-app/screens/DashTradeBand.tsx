@@ -35,6 +35,24 @@ import type { RecentTrade } from '@/lib/core-app/recentTrades'
 
 const VISIBLE_ASSETS = 4
 
+/**
+ * The verdict, in names rather than the engine's A/B.
+ *
+ * A reader cannot act on "Slightly favors A" — they do not know which side the
+ * engine called A, and nothing on the card tells them. The verdict already
+ * carries the roster it favours, so the sentence can name the manager.
+ */
+function verdictSentence(t: RecentTrade): string {
+  const v = t.verdict
+  if (!v) return ''
+  if (v.favoursRosterId == null) return 'An even deal on paper'
+  const side = t.sides.find((s) => s.rosterId === v.favoursRosterId)
+  const who = side ? side.teamName || side.managerName : null
+  const strength = v.verdict.toLowerCase().includes('strongly') ? 'Clearly favours' : 'Slightly favours'
+  /* No name resolved: say the shape of the verdict, never a placeholder. */
+  return who ? `${strength} ${who}` : 'One side comes out ahead'
+}
+
 function agoLabel(iso: string, now: Date): string | null {
   const t = new Date(iso).getTime()
   if (!Number.isFinite(t)) return null
@@ -100,31 +118,30 @@ export function DashTradeBand({ trades, now }: { trades: RecentTrade[]; now: Dat
 
               {t.verdict ? (
                 <p className="af-trade-verdict">
+                  {/*
+                    ⚠ THE ENGINE SAYS "favors A" AND A READER HAS NO IDEA WHO A
+                    IS. Its vocabulary is positional — team A versus team B —
+                    and that leaked straight onto the card. The manager's own
+                    name is the only version of this sentence anyone can act on,
+                    and the roster id needed to say it was already on the
+                    verdict.
+                  */}
                   <span
                     className="af-trade-verdict-word"
                     data-fair={t.verdict.favoursRosterId == null ? 'true' : 'false'}
                   >
-                    {t.verdict.verdict}
+                    {verdictSentence(t)}
                   </span>
-                  {t.verdict.fairness != null ? (
-                    <span className="af-trade-fair af-num"> · {t.verdict.fairness}/100 balance</span>
-                  ) : null}
-                  {/*
-                    The engine's own confidence in its inputs, printed beside
-                    the verdict rather than hidden behind it — a balanced-looking
-                    number drawn from thin prices is worth less than the same
-                    number drawn from liquid ones, and the reader should be able
-                    to see which they are looking at.
-                  */}
                   <span className="af-trade-conf af-num">
                     {' '}
-                    · {t.verdict.confidence}% confidence · market value on the day
+                    · valued the day it was made
+                    {t.verdict.confidence > 0 ? ` · ${t.verdict.confidence}% confidence` : ''}
                   </span>
                 </p>
               ) : null}
 
               <Link className="af-trade-open" href={`/league/${t.leagueId}?view=legacy`}>
-                Open the trade ledger
+                See the full trade history
               </Link>
             </article>
           )

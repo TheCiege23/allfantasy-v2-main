@@ -118,12 +118,12 @@ export function DashGameDayBand({
            * beats an absent tile, which reads as a broken scoreboard, and beats
            * a 0–0, which reads as a day played and lost.
            */
-          <span className="af-gd-recmeta">no matchup of yours is scored yet</span>
+          <span className="af-gd-recmeta">none of your matchups have scored yet</span>
         )}
       </div>
 
       {visible.length > 0 ? (
-        <p className="af-gd-scope">Scoring plays across the NFL — not filtered to your rosters</p>
+        <p className="af-gd-scope">Every NFL scoring play — not only your players</p>
       ) : null}
 
       {visible.length > 0 ? (

@@ -98,7 +98,7 @@ describe('DashScheduleBand', () => {
     const { container } = render(
       <DashScheduleBand board={board({ withoutSchedule: 55 })} syncLabel={null} />,
     )
-    expect(container.textContent).toContain('55 leagues have no schedule on file yet')
+    expect(container.textContent).toContain('no schedule yet for your other 55 leagues')
   })
 
   it('renders nothing when the read failed or no league has a schedule', () => {

@@ -59,9 +59,9 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
   it('splits the slots instead of only counting lineups', () => {
     const { container } = render(<Dash3ATriage book={[row()]} now={NOW} valueBasis={BASIS} />)
     const text = container.textContent ?? ''
-    expect(text).toContain('starter in 1')
-    expect(text).toContain('bench in 1')
-    expect(text).toContain('IR in 1')
+    expect(text).toContain('starting in 1')
+    expect(text).toContain('benched in 1')
+    expect(text).toContain('on IR in 1')
     // Zero counts are omitted, not printed as "taxi in 0".
     expect(text).not.toContain('taxi in')
   })
@@ -118,7 +118,9 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
   it('states the price basis once, and only when a row is actually priced', () => {
     const priced = render(<Dash3ATriage book={[row()]} now={NOW} valueBasis={BASIS} />)
     const basis = priced.container.textContent ?? ''
-    expect(basis).toContain('not adjusted for your scoring')
+    // The caveat must survive rewording — what matters is that the reader
+    // is told these prices are not their league's.
+    expect(basis).toMatch(/[Nn]ot (tuned|adjusted) to|[Nn]ot adjusted for/)
     expect(basis).toContain('NFL only')
     expect(priced.container.querySelectorAll('.af-triage-basis').length).toBe(1)
 
@@ -131,7 +133,7 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
   describe('replacement cover', () => {
     it('names bench cover you already own, inside the league it applies to', () => {
       const { container } = render(<Dash3ATriage book={[row()]} now={NOW} valueBasis={BASIS} />)
-      expect(container.textContent).toContain('cover: Tyjae Spears')
+      expect(container.textContent).toContain('swap in Tyjae Spears')
     })
 
     it('offers no cover for a league where he is benched — nothing to decide there', () => {
@@ -158,7 +160,7 @@ describe('Dash3ATriage — the facts the ordering is built on', () => {
         ],
       })
       const { container } = render(<Dash3ATriage book={[noCover]} now={NOW} valueBasis={BASIS} />)
-      expect(container.textContent).not.toContain('cover:')
+      expect(container.textContent).not.toContain('swap in')
     })
 
     it('sends you to free agents, not to a search for the injured player', () => {

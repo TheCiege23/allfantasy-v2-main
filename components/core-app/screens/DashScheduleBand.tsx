@@ -149,9 +149,9 @@ export function DashScheduleBand({
            * than as a claim that the other 55 have no games.
            */
           board.withoutSchedule > 0
-            ? `${board.withoutSchedule} ${
-                board.withoutSchedule === 1 ? 'league has' : 'leagues have'
-              } no schedule on file yet`
+            ? `no schedule yet for your other ${board.withoutSchedule} ${
+                board.withoutSchedule === 1 ? 'league' : 'leagues'
+              }`
             : null,
           syncLabel,
         ]

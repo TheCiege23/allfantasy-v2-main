@@ -92,13 +92,13 @@ const SLOT_LABEL: Record<TriageSlot, string> = {
 /** "starter in 3 · bench in 5 · IR in 1" — only the counts that are non-zero. */
 function slotSummary(p: TriageBookRow): string {
   return [
-    p.startingIn > 0 ? `starter in ${p.startingIn}` : null,
-    (p.benchIn ?? 0) > 0 ? `bench in ${p.benchIn}` : null,
-    (p.irIn ?? 0) > 0 ? `IR in ${p.irIn}` : null,
-    (p.taxiIn ?? 0) > 0 ? `taxi in ${p.taxiIn}` : null,
+    p.startingIn > 0 ? `starting in ${p.startingIn}` : null,
+    (p.benchIn ?? 0) > 0 ? `benched in ${p.benchIn}` : null,
+    (p.irIn ?? 0) > 0 ? `on IR in ${p.irIn}` : null,
+    (p.taxiIn ?? 0) > 0 ? `on taxi in ${p.taxiIn}` : null,
   ]
     .filter(Boolean)
-    .join(' · ')
+    .join(', ')
 }
 
 export function Dash3ATriage({
@@ -134,7 +134,7 @@ export function Dash3ATriage({
       <div className="af-triage-head">
         <h2 className="af-triage-title">Starters in doubt</h2>
         <span className="af-triage-sub">
-          in your lineups but may not play — most urgent first
+          may not play this week · most valuable first
         </span>
       </div>
       <ul className="af-triage-list">
@@ -170,8 +170,15 @@ export function Dash3ATriage({
                 </div>
                 <div className="af-triage-line2">
                   <span className="af-triage-exposure">
-                    {p.exposure} leagues
-                    {slotSummary(p) ? ` · ${slotSummary(p)}` : ''}
+                    {/*
+                      One sentence, not two overlapping ones. It read
+                      "7 of 61 leagues · starter in 3 · bench in 3 · IR in 1",
+                      which states the total and then its own parts as though
+                      they were separate facts, and leaves the reader adding up
+                      to check.
+                    */}
+                    In {p.exposure} leagues
+                    {slotSummary(p) ? `: ${slotSummary(p)}` : ''}
                   </span>
                   {p.value ? (
                     /*
@@ -181,11 +188,16 @@ export function Dash3ATriage({
                      * look like a player priced at nothing.
                      */
                     <span className="af-triage-value af-num">
-                      {p.value.overallRank != null ? `#${p.value.overallRank} overall` : null}
-                      {p.value.overallRank != null && p.value.positionRank != null ? ' · ' : ''}
+                      {/*
+                        "#14 overall · RB4" made the reader guess what the
+                        number ranked. Naming the thing costs three words.
+                      */}
+                      Trade value:{' '}
                       {p.value.positionRank != null && p.position
                         ? `${p.position}${p.value.positionRank}`
                         : null}
+                      {p.value.positionRank != null && p.value.overallRank != null ? ', ' : ''}
+                      {p.value.overallRank != null ? `#${p.value.overallRank} overall` : null}
                     </span>
                   ) : null}
                   {p.reportedAgo ? (
@@ -230,7 +242,7 @@ export function Dash3ATriage({
                         {l.slot === 'starter' && (l.bench?.length ?? 0) > 0 ? (
                           <span className="af-triage-bench">
                             {' '}
-                            cover: {l.bench!.map((b) => b.name).join(', ')}
+                            swap in {l.bench!.map((b) => b.name).join(' or ')}
                           </span>
                         ) : null}
                       </Link>
@@ -267,8 +279,9 @@ export function Dash3ATriage({
          * exists to avoid.
          */
         <p className="af-triage-basis">
-          Ranks are FantasyCalc {valueBasis.format.toLowerCase()} {valueBasis.qbFormat === 'ONE_QB' ? '1QB' : 'superflex'} prices at
-          12 teams, full PPR — not adjusted for your scoring. NFL only.
+          Values from FantasyCalc ({valueBasis.format.toLowerCase()},{' '}
+          {valueBasis.qbFormat === 'ONE_QB' ? '1QB' : 'superflex'}, 12-team PPR). Not tuned to
+          your league&rsquo;s settings, and NFL only.
         </p>
       ) : null}
     </section>
