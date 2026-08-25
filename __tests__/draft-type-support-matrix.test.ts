@@ -110,7 +110,20 @@ describe('draft type support matrix', () => {
   })
 
   it('isDraftTypeAllowedForConceptAndSport mirrors getDraftTypesForConceptAndSport', () => {
-    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'slow_draft')).toBe(false)
+    /*
+     * ⚠ This asserted `('NFL', 'redraft', 'slow_draft') === false`, which stopped being true when
+     * `595959f64` (2026-06-12) added `slow_draft` and `mock_draft` to the redraft concept matrix.
+     * It is the CONCEPT matrix — what may be persisted — not the wizard menu; redraft's wizard
+     * hides `slow_draft` separately, via `NON_PICKABLE_REDFRAFT_DRAFT_IDS`. See
+     * `draft-type-startup-allowlist.test.ts` for both halves stated together.
+     *
+     * The mirror claim in this test's name is now asserted rather than asserted-by-example, so the
+     * pair cannot drift apart again without failing here.
+     */
+    for (const id of getDraftTypesForConceptAndSport('NFL', 'redraft')) {
+      expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', id), id).toBe(true)
+    }
+    expect(isDraftTypeAllowedForConceptAndSport('NFL', 'redraft', 'devy_snake')).toBe(false)
     expect(isDraftTypeAllowedForConceptAndSport('NFL', 'salary_cap', 'snake')).toBe(false)
   })
 })
