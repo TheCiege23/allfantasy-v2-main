@@ -7,9 +7,19 @@ import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
 import {
   leagueWeekFromSettings,
   playoffSpots,
+  playoffStartWeek,
   regularSeasonWeeks,
   tradeDeadlineWeek,
 } from '@/lib/core-app/seasonTimeline'
+import { crownValue, dethroneNote } from './kingOfTheHill'
+import { attritionNote as pirateAttritionNote, concentrationCorrectionNote } from './pirate'
+import { mergeInversionNote } from './survivor'
+import {
+  idolExpiryNote,
+  lineupAt,
+  superflexInflectionNote,
+} from './survivorGuillotine'
+import { bracketHorizon, rosterHorizon, tradingPolicy } from './tournament'
 import { assessLeagueScale } from './leagueScale'
 import {
   faabPurchasingPower,
@@ -612,6 +622,8 @@ async function buildFormatNotes(args: {
     keeperCount: number | null
     keeperCostSystem: string | null
     keeperRoundPenalty: number | null
+    /** Needed for every week-driven format note below. */
+    settings?: unknown
   }
   leagueId: string
   incomingIds: string[]
@@ -634,6 +646,92 @@ async function buildFormatNotes(args: {
    * as the field shrinks and FAAB is the acquisition market rather than a
    * tiebreaker. See lib/trade-intel/guillotine.ts.
    */
+  /*
+   * ⚠ EVERY FORMAT BELOW WAS BUILT, TESTED, MERGED AND NEVER CALLED. That is the
+   * failure this repo keeps repeating, and it is worth naming at the call site
+   * rather than only in a commit message: a module nothing invokes is not a
+   * feature, it is a file.
+   *
+   * Each branch surfaces only what is derivable from the league's own settings
+   * and the current week. Where a format needs state we hold no schema for —
+   * pirate protections, who currently wears the KOTH crown, tribe membership —
+   * the note SAYS what it would need rather than guessing at it.
+   */
+  const week = leagueWeekFromSettings(args.league.settings ?? null)
+
+  if (rules.concept === 'tournament') {
+    /*
+     * The policy line leads and is free: most tournaments bar trading outright,
+     * and that answer needs nothing but the format.
+     */
+    notes.unshift(tradingPolicy({ tradesEnabled: null }).basis)
+
+    const seasonWeeks = regularSeasonWeeks(args.league.settings ?? null)
+    if (week != null && seasonWeeks != null) {
+      const horizon = rosterHorizon({ currentWeek: week, nextRedraftWeek: seasonWeeks + 1 })
+      if (horizon) notes.push(horizon.basis)
+
+      /*
+       * Rounds remaining is inferred from the weeks left, which assumes one
+       * round a week. True of the King Buffalo shape; stated because a
+       * multi-week round would make it wrong.
+       */
+      const bracket = bracketHorizon({ roundsRemaining: Math.max(1, seasonWeeks - week + 1) })
+      if (bracket) notes.push(bracket.basis)
+    }
+    return notes
+  }
+
+  if (rules.concept === 'king_of_the_hill') {
+    const crown = crownValue({
+      currentWeek: week ?? 1,
+      playoffStartWeek: playoffStartWeek(args.league.settings ?? null),
+    })
+    if (crown) notes.push(crown.basis)
+
+    /*
+     * ⚠ WE DO NOT KNOW WHO WEARS THE CROWN. Nothing in the schema tracks it, so
+     * the note is written for the challenger — the larger audience, and the one
+     * whose action item (hold FAAB for the week the King looks beatable) does
+     * not depend on knowing their own status.
+     */
+    notes.push(dethroneNote({ viewerIsKing: false }))
+    return notes
+  }
+
+  if (rules.concept === 'pirate') {
+    /*
+     * Protections are not in any schema, so the two notes that need them are
+     * omitted rather than guessed. What remains is week-driven and real: the
+     * pool shrinks all season, and the concentration rule inverts here.
+     */
+    const attrition = pirateAttritionNote({
+      currentWeek: week ?? 1,
+      seasonWeeks: regularSeasonWeeks(args.league.settings ?? null),
+    })
+    if (attrition) notes.push(attrition)
+    notes.push(concentrationCorrectionNote({}))
+    return notes
+  }
+
+  if (rules.concept === 'survivor') {
+    /*
+     * The merge week is a league setting we do not read, so the inversion note
+     * only fires when the season length gives us something to measure against.
+     * Tribe membership is likewise unmodelled — the tribemate-vs-rival note,
+     * which is the single largest factor here, needs it and is therefore absent.
+     */
+    const seasonWeeks = regularSeasonWeeks(args.league.settings ?? null)
+    if (week != null && seasonWeeks != null) {
+      const merge = mergeInversionNote({ weeksToMerge: Math.max(0, Math.round(seasonWeeks / 2) - week) })
+      if (merge) notes.push(merge)
+    }
+    notes.push(
+      'We do not read tribe membership for this league, so the biggest factor in a Survivor trade is missing from this verdict: a deal with a TRIBEMATE can be worth making at a loss, because your tribe attends Tribal only if it scores lowest.',
+    )
+    return notes
+  }
+
   if (rules.concept === 'zombie') {
     notes.push(
       ...(await zombieNotesFor(args.leagueId, args.userId, args.percentDiff).catch(() => [])),
@@ -643,6 +741,23 @@ async function buildFormatNotes(args: {
 
   if (rules.concept === 'guillotine') {
     notes.push(...(await guillotineNotes(args.leagueId).catch(() => [])))
+
+    /*
+     * The Survivor All-Stars variant runs on a guillotine chassis but adds a
+     * GROWING lineup and dated idol expiries. Both are week-driven, and both are
+     * silent in a plain guillotine league because the schedule simply will not
+     * match — lineupAt only reports an expansion that is genuinely ahead.
+     */
+    if (week != null) {
+      const lineup = lineupAt(week)
+      if (lineup?.nextAt != null) notes.push(lineup.basis)
+
+      const sf = superflexInflectionNote({ currentWeek: week })
+      if (sf) notes.push(sf)
+
+      const idol = idolExpiryNote({ currentWeek: week, kind: 'standard' })
+      if (idol) notes.push(idol)
+    }
     return notes
   }
 

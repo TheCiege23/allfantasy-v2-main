@@ -139,6 +139,23 @@ export function tradeDeadlineWeek(settings: unknown): number | null {
   return raw
 }
 
+/**
+ * The first playoff week, when the league states one.
+ *
+ * Several formats stop at the playoffs rather than at the end of the season —
+ * King of the Hill's crown, for one — so this is the horizon those models need
+ * and it must come from the league rather than a guess.
+ */
+export function playoffStartWeek(settings: unknown): number | null {
+  const s = readSettings(settings)
+  const direct = num(
+    s.playoff_start_week ?? s.playoff_week_start ?? s.playoffStartWeek ?? s.playoffWeekStart,
+  )
+  if (direct != null && direct > 1) return direct
+  const length = regularSeasonWeeks(settings)
+  return length != null ? length + 1 : null
+}
+
 export function buildSeasonTimeline(args: {
   settings: unknown
   /** The league's current week, when known. */

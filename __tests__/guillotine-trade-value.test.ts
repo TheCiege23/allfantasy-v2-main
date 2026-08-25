@@ -176,7 +176,14 @@ describe('the guillotine notes are actually reachable', () => {
   })
 
   it('returns early rather than falling through to keeper logic', () => {
+    /*
+     * The window is generous because the branch now also carries the Survivor
+     * All-Stars variant's growing-lineup and idol-expiry notes. What is being
+     * pinned is that the branch RETURNS — falling through to keeper logic would
+     * price a guillotine roster against keeper costs and still produce a
+     * confident number.
+     */
     const block = SRC.slice(SRC.indexOf("rules.concept === 'guillotine'"))
-    expect(block.slice(0, 300)).toContain('return notes')
+    expect(block.slice(0, 1400)).toContain('return notes')
   })
 })
