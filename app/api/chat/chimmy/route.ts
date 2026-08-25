@@ -19,7 +19,11 @@ import {
 import { getInsightBundle } from '@/lib/ai-simulation-integration'
 import type { InsightType } from '@/lib/ai-simulation-integration'
 import { DEFAULT_SPORT, normalizeToSupportedSport, type SupportedSport } from '@/lib/sport-scope'
-import { loadLeagueSnapshotForUser } from '@/lib/chimmy/chimmy-league-snapshot'
+import {
+  loadLeagueGroundingForUser,
+  type ChimmyLeagueGroundingFailure,
+  type ChimmyLeagueSnapshot,
+} from '@/lib/chimmy/chimmy-league-snapshot'
 import { buildPsychologyGroundingLines } from '@/lib/psychological-profiles/ProfileAccess'
 import { resolveNormalizedLeagueContext } from '@/lib/league-context-engine'
 import type { NormalizedLeagueContext } from '@/lib/league-context-engine/types'
@@ -557,6 +561,27 @@ function requiresLeagueGrounding(args: {
   return false
 }
 
+/**
+ * What to tell the user when Chimmy cannot see the league they selected.
+ *
+ * Each reason gets its own sentence on purpose. "You are not in this league" and
+ * "I could not reach the league right now" call for different next actions, and
+ * collapsing them into one message trains people to ignore the message.
+ */
+function describeLeagueGroundingFailure(reason: ChimmyLeagueGroundingFailure): string {
+  switch (reason) {
+    case 'not_member':
+      return 'I can see that league exists, but your account is not a member of it, so I cannot read its rosters. If you just imported it, claim your team and ask again.'
+    case 'not_found':
+      return 'I could not find that league. If you picked it from the league list, it may be a tournament or a legacy board rather than a synced league — pick a synced league and ask again.'
+    case 'anonymous':
+      return 'I could not confirm who you are signed in as, so I cannot read that league.'
+    case 'error':
+    default:
+      return 'I could not reach that league just now, so I will not guess about your roster. Try again in a moment.'
+  }
+}
+
 function buildLeagueGroundingErrorPayload() {
   return {
     error:
@@ -821,8 +846,10 @@ function isLeagueDataUsageQuestion(message: string): boolean {
 const NEWLINE = String.fromCharCode(10)
 
 function buildLeagueGroundingLine(args: {
-  leagueSnapshot: Awaited<ReturnType<typeof loadLeagueSnapshotForUser>>
+  leagueSnapshot: ChimmyLeagueSnapshot | null
   leagueNameHint?: string
+  /** Set when a league WAS selected but could not be grounded. */
+  groundingFailure?: ChimmyLeagueGroundingFailure | null
 }): string | undefined {
   if (args.leagueSnapshot) {
     const s = args.leagueSnapshot
@@ -839,8 +866,26 @@ function buildLeagueGroundingLine(args: {
       .filter(Boolean)
       .join(' | ')
   }
-  if (args.leagueNameHint?.trim()) {
-    return `Selected league (label): ${args.leagueNameHint.trim()}`
+  /*
+   * ⚠ NO BARE-LABEL FALLBACK. This used to return
+   * `Selected league (label): <name>` when the snapshot was missing, which is
+   * strictly worse than saying nothing: it asserts that a specific league IS in
+   * scope while supplying zero facts about it, and a model handed a named league
+   * and no roster fills the gap from general knowledge in the same confident
+   * voice it uses for grounded answers. The caller refuses instead — see the
+   * `leagueGrounding` handling in POST.
+   *
+   * For the questions that do NOT require league facts we still answer, but the
+   * absence is stated OUT LOUD rather than left blank. Silence reads to the model
+   * as "nothing worth mentioning"; an explicit negative is the only version that
+   * reliably stops it from describing a roster it was never given.
+   */
+  if (args.groundingFailure) {
+    return [
+      'League: NOT AVAILABLE.',
+      'You have NO roster, standings, matchup or transaction data for the league the user selected.',
+      'Answer only what is true without it, and say plainly that you cannot see their league rather than inferring its contents.',
+    ].join(' ')
   }
   return undefined
 }
@@ -1021,8 +1066,39 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     }
   }
 
-  const leagueSnapshot =
-    leagueId && userId ? await loadLeagueSnapshotForUser(userId, leagueId).catch(() => null) : null
+  /*
+   * ⚠ A FAILED LOOKUP IS AN OUTCOME, NOT A ZERO. This was
+   * `loadLeagueSnapshotForUser(...).catch(() => null)`, so every way of having no
+   * league — not a member, not a League row, query threw — collapsed into the
+   * same `null` that "no league was selected" produces, and the route answered
+   * anyway. `loadLeagueGroundingForUser` keeps the reason so we can refuse and
+   * say which one it was.
+   */
+  const leagueGrounding =
+    leagueId && userId
+      ? await loadLeagueGroundingForUser(userId, leagueId)
+      : ({ ok: false, reason: 'not_found' } as const)
+  const leagueSnapshot = leagueGrounding.ok ? leagueGrounding.snapshot : null
+
+  /*
+   * The user named a league and we cannot see it. If the question needs league
+   * facts, refusing is the answer — a wrong lineup call on someone's real roster
+   * costs more trust than an empty one. Deliberately BEFORE the token spend
+   * below: a refusal must not bill.
+   */
+  if (leagueId && !leagueGrounding.ok && leagueGroundingRequired) {
+    return NextResponse.json(
+      {
+        ...buildLeagueGroundingErrorPayload(),
+        details: {
+          message: describeLeagueGroundingFailure(leagueGrounding.reason),
+          leagueId,
+          groundingReason: leagueGrounding.reason,
+        },
+      },
+      { status: leagueGrounding.reason === 'error' ? 503 : 412 }
+    )
+  }
 
   // How the managers in this league have actually behaved. Entitlement is checked
   // inside, so an unentitled user grounds exactly as before; and the block names
@@ -1396,6 +1472,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       buildLeagueGroundingLine({
         leagueSnapshot,
         leagueNameHint: leagueNameHint ?? undefined,
+        groundingFailure: leagueId && !leagueGrounding.ok ? leagueGrounding.reason : null,
       }),
       ...(psychologyGroundingLines.length > 0
         ? [psychologyGroundingLines.join(NEWLINE)]
@@ -2135,6 +2212,28 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const meta = {
       assistant: 'Chimmy',
       conversationId,
+      /*
+       * What this answer was actually grounded on. The drawer renders it, so a
+       * "Chimmy is answering blind" state is VISIBLE rather than something you
+       * can only detect by knowing the roster yourself and noticing it is wrong.
+       */
+      leagueGrounding: leagueId
+        ? leagueGrounding.ok
+          ? {
+              grounded: true as const,
+              leagueId: leagueGrounding.snapshot.id,
+              leagueName: leagueGrounding.snapshot.name,
+              platform: leagueGrounding.snapshot.platform,
+              season: leagueGrounding.snapshot.season,
+              lastSyncedAt: leagueGrounding.snapshot.lastSyncedAt?.toISOString() ?? null,
+            }
+          : {
+              grounded: false as const,
+              leagueId,
+              reason: leagueGrounding.reason,
+              message: describeLeagueGroundingFailure(leagueGrounding.reason),
+            }
+        : { grounded: false as const, leagueId: null, reason: 'no_league_selected' as const },
       mode: selectedAssistantMode,
       agent: specialistAgent,
       answerContract,

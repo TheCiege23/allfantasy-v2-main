@@ -23,6 +23,16 @@ const prismaUserProfileFindUniqueMock = vi.fn()
 const prismaUserProfileUpsertMock = vi.fn()
 const prismaAppUserFindUniqueMock = vi.fn()
 const prismaAiCustomRuleFindManyMock = vi.fn()
+/*
+ * League grounding. These were absent, so `prisma.league` was `undefined`, the
+ * snapshot loader threw, and the route swallowed it and answered anyway — which
+ * is exactly the production bug this fixture now has to be able to express. With
+ * the models present, "grounded" and "not grounded" are both reachable states.
+ */
+const prismaLeagueFindUniqueMock = vi.fn()
+const prismaRedraftMemberFindUniqueMock = vi.fn()
+const prismaRosterCountMock = vi.fn()
+const prismaLeagueTeamFindFirstMock = vi.fn()
 const previewSpendMock = vi.fn()
 const spendTokensForRuleMock = vi.fn()
 const refundSpendByLedgerMock = vi.fn()
@@ -122,6 +132,10 @@ vi.mock("@/lib/prisma", () => ({
       upsert: prismaUserProfileUpsertMock,
     },
     aICustomRule: { findMany: prismaAiCustomRuleFindManyMock },
+    league: { findUnique: prismaLeagueFindUniqueMock },
+    redraftLeagueMember: { findUnique: prismaRedraftMemberFindUniqueMock },
+    roster: { count: prismaRosterCountMock },
+    leagueTeam: { findFirst: prismaLeagueTeamFindFirstMock },
   },
 }))
 
@@ -174,6 +188,32 @@ describe("POST /api/chat/chimmy contract", () => {
     })
     prismaUserProfileFindUniqueMock.mockResolvedValue(null)
     prismaAiCustomRuleFindManyMock.mockResolvedValue([])
+    /*
+     * `user-1` OWNS `league-1`, so membership resolves on the first check. One
+     * mock serves both reads: `resolveLeagueMembership` selects {id, sport,
+     * userId} and the snapshot selects the descriptive columns.
+     */
+    prismaLeagueFindUniqueMock.mockResolvedValue({
+      id: "league-1",
+      userId: "user-1",
+      name: "Kings League",
+      sport: "nfl",
+      platform: "sleeper",
+      platformLeagueId: "1234567890",
+      season: 2026,
+      leagueSize: 12,
+      scoring: "ppr",
+      leagueVariant: null,
+      isDynasty: false,
+      status: "in_season",
+      timezone: "America/New_York",
+      lastSyncedAt: new Date("2026-08-25T00:00:00.000Z"),
+      importBatchId: null,
+      importedAt: null,
+    })
+    prismaRedraftMemberFindUniqueMock.mockResolvedValue(null)
+    prismaRosterCountMock.mockResolvedValue(0)
+    prismaLeagueTeamFindFirstMock.mockResolvedValue(null)
     previewSpendMock.mockResolvedValue({
       ruleCode: "ai_chimmy_chat_message",
       tokenCost: 15,
@@ -356,6 +396,79 @@ describe("POST /api/chat/chimmy contract", () => {
       confidence: {
         level: expect.any(String),
       },
+    })
+  })
+
+  /*
+   * The regression these exist for: the drawer sends a `leagueId` for a league
+   * the user can SEE in the scope picker but is not a member of. Grounding
+   * returned null, the route answered from general knowledge, and the user got a
+   * confident call about a roster nobody had read. A refusal is the correct
+   * answer to a question we cannot ground.
+   */
+  it("refuses instead of answering when the selected league cannot be grounded", async () => {
+    // Exists, but owned by somebody else and unclaimed by this user.
+    prismaLeagueFindUniqueMock.mockResolvedValue({
+      id: "league-1",
+      userId: "someone-else",
+      sport: "nfl",
+    })
+
+    const formData = new FormData()
+    formData.append("message", "Should I trade this player?")
+    formData.append("leagueId", "league-1")
+
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(formData) as any)
+
+    expect(res.status).toBe(412)
+    const body = await res.json()
+    expect(body.details?.groundingReason).toBe("not_member")
+    expect(body.details?.message).toMatch(/not a member/i)
+    // A refusal must not bill.
+    expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+  })
+
+  it("does not bill or answer when the league lookup fails outright", async () => {
+    prismaLeagueFindUniqueMock.mockRejectedValue(new Error("connection lost"))
+
+    const formData = new FormData()
+    formData.append("message", "Should I trade this player?")
+    formData.append("leagueId", "league-1")
+
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(formData) as any)
+
+    // 503, not 412: "I could not read it" is a different claim from "you are
+    // not in it", and only one of them is worth retrying.
+    expect(res.status).toBe(503)
+    const body = await res.json()
+    expect(body.details?.groundingReason).toBe("error")
+    expect(spendTokensForRuleMock).not.toHaveBeenCalled()
+  })
+
+  it("reports what it grounded on so the UI can show it", async () => {
+    previewSpendMock.mockResolvedValueOnce({
+      ruleCode: "ai_chimmy_chat_message",
+      tokenCost: 0,
+      canSpend: true,
+      currentBalance: 999999999,
+      requiresConfirmation: false,
+    })
+
+    const formData = new FormData()
+    formData.append("message", "Should I trade this player?")
+    formData.append("leagueId", "league-1")
+
+    const { POST } = await import("@/app/api/chat/chimmy/route")
+    const res = await POST(buildMultipartRequest(formData) as any)
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.meta?.leagueGrounding).toMatchObject({
+      grounded: true,
+      leagueId: "league-1",
+      leagueName: "Kings League",
     })
   })
 

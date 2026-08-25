@@ -129,7 +129,18 @@ type ChatTurn = {
   handoff?: { label: string; href: string } | null
   /** Charged tokens, shown alongside the answer rather than hidden. */
   cost?: number | null
+  /**
+   * What the answer was grounded on, straight from the route's `meta`. Rendered
+   * so an ungrounded answer LOOKS ungrounded — otherwise the only way to notice
+   * Chimmy cannot see your league is to already know the roster and spot that
+   * the answer is wrong.
+   */
+  grounding?: ChimmyGrounding | null
 }
+
+type ChimmyGrounding =
+  | { grounded: true; leagueName?: string | null; lastSyncedAt?: string | null }
+  | { grounded: false; reason?: string; message?: string }
 
 // ── Chimmy panel ───────────────────────────────────────────────────────
 
@@ -214,11 +225,57 @@ function ChimmyPanel({
         )
 
         const res = await fetch('/api/chat/chimmy', { method: 'POST', body: form })
+        /*
+         * ⚠ READ THE WHOLE ENVELOPE. This used to destructure `response` and
+         * `error` alone and drop the rest, so `meta.leagueGrounding` — the only
+         * signal saying whether Chimmy could actually see this league — was
+         * thrown away before it could be rendered. A grounding bug is invisible
+         * from the UI if the UI never looks.
+         */
         const payload = (await res.json().catch(() => ({}))) as {
           response?: string
           error?: string
+          details?: { message?: string }
+          meta?: { leagueGrounding?: ChimmyGrounding }
         }
-        if (!res.ok) throw new Error(payload.error ?? 'Chimmy could not answer that.')
+        if (!res.ok) {
+          /*
+           * A refusal is a first-class answer, not a crash. The route returns 412
+           * when it will not guess about a league it cannot read; `details.message`
+           * says which case it was, and it belongs in the transcript where the
+           * question was asked rather than in the generic error strip.
+           */
+          const refusal = payload.details?.message
+          if (refusal) {
+            setTurns((t) => [
+              ...t,
+              {
+                id: `chimmy-${t.length}`,
+                role: 'chimmy',
+                text: refusal,
+                isPublic: publicMode,
+                handoff: null,
+                cost: null,
+                grounding: { grounded: false, reason: 'refused' },
+              },
+            ])
+            return
+          }
+          throw new Error(payload.error ?? 'Chimmy could not answer that.')
+        }
+
+        /*
+         * Only meaningful when the user actually picked a league. On a GLOBAL
+         * question the route reports `no_league_selected`, which is not a
+         * grounding failure — rendering it as one would put "could not read your
+         * league" under every cross-league answer and teach people to ignore the
+         * line that matters.
+         */
+        const reported = payload.meta?.leagueGrounding ?? null
+        const grounding =
+          reported && !(reported.grounded === false && reported.reason === 'no_league_selected')
+            ? reported
+            : null
 
         const answer = payload.response ?? 'Chimmy did not return a message.'
 
@@ -228,8 +285,15 @@ function ChimmyPanel({
          * an in-app "Set lineup" — we hold no write access.
          */
         const recommendsRoster = /\b(start|sit|flex|bench|lineup|claim|drop|add)\b/i.test(answer)
+        /*
+         * Only ever under a GROUNDED answer. "Go make this change on Sleeper" is
+         * the most action-shaped thing the drawer renders, and pointing someone
+         * at their real roster on the strength of an answer Chimmy gave without
+         * reading that roster is the exact trust failure the grounding work here
+         * exists to close.
+         */
         const handoff =
-          recommendsRoster && scope
+          recommendsRoster && scope && grounding?.grounded === true
             ? {
                 label: platformHandoff(scope.platform),
                 href:
@@ -252,6 +316,7 @@ function ChimmyPanel({
             isPublic: publicMode,
             handoff,
             cost: tokenCost,
+            grounding,
           },
         ])
       } catch (e) {
@@ -324,6 +389,27 @@ function ChimmyPanel({
               {/* Contract 1: a public answer says so. */}
               {t.role === 'chimmy' && t.isPublic ? (
                 <p className="af-cm-public">{PUBLIC_ANSWER_NOTICE}</p>
+              ) : null}
+
+              {/*
+                Contract: an answer says what it could see. Grounded names the
+                league; ungrounded says so in as many words. There is deliberately
+                no third "unknown" rendering — if the route did not report, that is
+                the ungrounded case and it should read like one.
+              */}
+              {t.role === 'chimmy' && t.grounding ? (
+                t.grounding.grounded ? (
+                  <p className="af-cm-grounding" data-grounded="true">
+                    Read from {t.grounding.leagueName ?? 'your league'}
+                    {t.grounding.lastSyncedAt
+                      ? ` · synced ${new Date(t.grounding.lastSyncedAt).toLocaleString()}`
+                      : ' · never synced'}
+                  </p>
+                ) : (
+                  <p className="af-cm-grounding" data-grounded="false">
+                    Chimmy could not read your league for this answer.
+                  </p>
+                )
               ) : null}
 
               {t.role === 'chimmy' && t.handoff ? (
