@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { BASELINE_SCORING, buildValueLedger } from '@/lib/trade-intel/valueLedger'
 
 /**
  * How your roster stacks up against the other teams in YOUR league.
@@ -47,7 +48,17 @@ export type RosterGrade = {
   pricedPlayers: number
   totalPlayers: number
   /** The market these prices came from, so the number can be argued with. */
-  basis: { format: string; qbFormat: string; capturedAt: string | null }
+  basis: {
+    format: string
+    qbFormat: string
+    capturedAt: string | null
+    /**
+     * Whether the totals were repriced under this league's scoring, or are raw
+     * 12-team full-PPR market prices. Both are honest; they are not the same
+     * claim, and the screen should not present them as though they were.
+     */
+    leagueScored: boolean
+  }
 }
 
 function asIds(v: unknown): string[] {
@@ -83,6 +94,15 @@ export async function getRosterGrade(args: {
   myPlatformUserIds: string[]
   isDynasty: boolean
   starters: unknown
+  /**
+   * The league's own scoring map, so the ranking is a ranking IN THIS LEAGUE.
+   *
+   * Null falls back to raw market prices, which is what this did before and is
+   * still honest — it is just a weaker claim, and `basis.leagueScored` says
+   * which one was made.
+   */
+  scoringSettings?: Record<string, unknown> | null
+  projectionWeek?: { season: string; week: number } | null
 }): Promise<RosterGrade | null> {
   const { leagueId, myPlatformUserIds, isDynasty, starters } = args
   if (myPlatformUserIds.length === 0) return null
@@ -144,6 +164,47 @@ export async function getRosterGrade(args: {
    */
   if (priced.size < everyId.length * 0.5) return null
 
+  /*
+   * ⚠ A MARKET PRICE IS NOT A PRICE IN THIS LEAGUE, and a roster grade that
+   * ignores the difference ranks a TE-premium roster as though tight ends were
+   * ordinary. The snapshots are all fetched at ppr=1 and 12 teams with only the
+   * QB format varying, so a half-PPR league, a TE premium, six-point passing
+   * touchdowns and IDP weights are all unpriced by the baseline.
+   *
+   * The ledger reorders this league's own rostered players by what they
+   * actually score here, then prices the new order off the same curve — so the
+   * totals stay in the units the rest of the product already uses.
+   *
+   * Bounded to this league's players on purpose: the comparison is between
+   * these twelve rosters, so the field to rank within is the assets in play.
+   */
+  let leagueScored = false
+  if (args.scoringSettings) {
+    const ledger = await buildValueLedger({
+      sleeperIds: everyId,
+      format,
+      qbFormat,
+      leagueScoring: args.scoringSettings,
+      baselineScoring: BASELINE_SCORING,
+      projectionWeek: args.projectionWeek ?? null,
+      populationIds: everyId,
+    }).catch(() => new Map())
+
+    /*
+     * Only when the layer actually ran for a real share of the league. A
+     * handful of repriced players among a hundred and eighty would reorder the
+     * board on partial information, which is worse than not reordering it.
+     */
+    const applied = [...ledger.values()].filter((l) => l.leagueFit.factor != null)
+    if (applied.length >= priced.size * 0.5) {
+      leagueScored = true
+      for (const [id, entry] of ledger) {
+        const p = priced.get(id)
+        if (p && entry.value != null) priced.set(id, { ...p, value: entry.value })
+      }
+    }
+  }
+
   const totals: Array<{ key: string; total: number }> = []
   const positionTotals = new Map<string, Array<{ key: string; total: number }>>()
 
@@ -202,6 +263,6 @@ export async function getRosterGrade(args: {
     weakest: strengths.length > 1 ? strengths[strengths.length - 1] : null,
     pricedPlayers: mine.filter((id) => priced.has(id)).length,
     totalPlayers: mine.length,
-    basis: { format, qbFormat, capturedAt: newest?.toISOString() ?? null },
+    basis: { format, qbFormat, capturedAt: newest?.toISOString() ?? null, leagueScored },
   }
 }

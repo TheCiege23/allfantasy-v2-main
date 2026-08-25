@@ -943,6 +943,15 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     myPlatformUserIds: candidates,
     isDynasty: Boolean(league.isDynasty),
     starters: league.starters,
+    /*
+     * The same scoring map that produces the AF column on every roster row, so
+     * the grade is a ranking IN THIS LEAGUE rather than against a 12-team
+     * full-PPR market this league may look nothing like. Without these two the
+     * ledger layer cannot run and the grade silently falls back to raw market
+     * prices — honest, but a weaker claim, and `basis.leagueScored` says which.
+     */
+    scoringSettings,
+    projectionWeek,
   }).catch(() => null)
 
   const matchup = leagueWeek
