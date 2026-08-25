@@ -10,6 +10,7 @@ import { isPreseason, resolveSportsWeek, type SportsWeek } from './sportsWeek'
 import { describeScoringDifferences } from './scoringNotes'
 import { getTaxiTenure, type TaxiTenure } from './taxiTenure'
 import { getNextMatchup, type NextMatchup } from './nextMatchup'
+import { getRosterGrade, type RosterGrade } from './rosterGrade'
 import { resolveCurrentWeekForLeague } from './currentWeek'
 
 /**
@@ -203,7 +204,7 @@ export type MyTeamData = {
    * exactly the moment people look at their roster most.
    */
   nextMatchup: SectionState<NextMatchup>
-  rosterGrade: UnavailableSection
+  rosterGrade: SectionState<RosterGrade>
   liveScore: UnavailableSection
 }
 
@@ -464,6 +465,9 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
        * an empty result instead of an error.
        */
       platformLeagueId: true,
+      // Superflex and dynasty both change which value market applies.
+      isDynasty: true,
+      starters: true,
     },
   })
   if (!league) return null
@@ -493,7 +497,7 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     },
     rosterGrade: {
       available: false as const,
-      reason: 'a roster grade needs projections and positional replacement levels we do not compute yet',
+      reason: 'no roster found to grade',
     },
     liveScore: { available: false as const, reason: 'no live scoring ingested for imported leagues' },
   }
@@ -734,6 +738,13 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     ? await resolveCurrentWeekForLeague(league.platformLeagueId)
     : null
 
+  const grade = await getRosterGrade({
+    leagueId,
+    myPlatformUserIds: candidates,
+    isDynasty: Boolean(league.isDynasty),
+    starters: league.starters,
+  }).catch(() => null)
+
   const matchup = leagueWeek
     ? await getNextMatchup({
         leagueId,
@@ -750,6 +761,19 @@ export async function getMyTeamData(leagueId: string, userId: string): Promise<M
     ...base,
     team,
     projectionBasis: { notes: scoringNotes, scoringKnown: scoringSettings != null },
+    rosterGrade: grade
+      ? { available: true, data: grade }
+      : {
+          available: false,
+          /*
+           * One reason, and it names the input that is missing. The old copy
+           * said we "do not compute positional replacement levels", which
+           * stopped being true and would have gone on claiming a limitation
+           * that no longer existed.
+           */
+          reason:
+            'we need prices for most of this league’s rosters to rank yours against them, and we do not have them yet',
+        },
     nextMatchup: matchup
       ? { available: true, data: matchup }
       : {

@@ -685,3 +685,15 @@
     margin-right: 0;
   }
 }
+
+/* ── Roster value rank ───────────────────────────────────────────────── */
+/* A rank, never a letter — see gradeSubtitle in MyTeam.tsx for why. */
+.af-mt-tile--grade .af-mt-tile-value {
+  color: var(--accent-ink);
+}
+.af-mt-grade-of {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-left: 2px;
+}

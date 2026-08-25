@@ -89,7 +89,16 @@ function data(over: Partial<MyTeamData> = {}): MyTeamData {
         bye: false,
       },
     },
-    rosterGrade: { available: false, reason: 'a roster grade needs projections we do not compute yet' },
+    rosterGrade: {
+      available: true,
+      data: {
+        rank: 3, outOf: 12, value: 41200, median: 38000,
+        strongest: { position: 'WR', value: 18400, rank: 2, outOf: 12, playerCount: 7 },
+        weakest: { position: 'TE', value: 2100, rank: 11, outOf: 12, playerCount: 2 },
+        pricedPlayers: 24, totalPlayers: 26,
+        basis: { format: 'DYNASTY', qbFormat: 'ONE_QB', capturedAt: '2026-08-22T00:00:00.000Z' },
+      },
+    },
     liveScore: { available: false, reason: 'no live scoring' },
     ...over,
   } as MyTeamData
@@ -430,5 +439,39 @@ describe('My Team — the reported problems', () => {
       />,
     )
     expect(t).toContain('Opponent not set')
+  })
+
+  it('⚠ grades the roster as a RANK inside the league, never a letter', () => {
+    /*
+     * A "C" trade grade in this repo turned out to mean "we priced nothing",
+     * and it was indistinguishable from a considered verdict. A rank names the
+     * comparison it is making; a letter invents a scale and hides its inputs.
+     */
+    const t = text(<MyTeam data={data()} />)
+    expect(t).toContain('3rd')
+    expect(t).toContain('of 12')
+    expect(t).toContain('Roster value in this league')
+    expect(t).not.toMatch(/grade: [A-F][+-]?/i)
+  })
+
+  it('names the strongest and thinnest position, which is the actionable half', () => {
+    const t = text(<MyTeam data={data()} />)
+    expect(t).toContain('WR is your best')
+    expect(t).toContain('TE your thinnest')
+  })
+
+  it('states partial pricing rather than folding it into the rank', () => {
+    expect(text(<MyTeam data={data()} />)).toContain('priced 24 of your 26')
+  })
+
+  it('says why there is no rank instead of showing a neutral one', () => {
+    const t = text(
+      <MyTeam
+        data={data({
+          rosterGrade: { available: false, reason: 'we need prices for most of this league' },
+        } as never)}
+      />,
+    )
+    expect(t).toContain('we need prices for most of this league')
   })
 })

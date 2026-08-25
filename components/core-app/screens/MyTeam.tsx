@@ -6,6 +6,7 @@ import '@/components/core-app/af-my-team.css'
 import type { LineupPlayer, LineupSlot, MyTeamData } from '@/lib/core-app/myTeam'
 import type { TaxiTenure } from '@/lib/core-app/taxiTenure'
 import type { MatchupSide, NextMatchup } from '@/lib/core-app/nextMatchup'
+import type { RosterGrade } from '@/lib/core-app/rosterGrade'
 import { buildProjectionQuestion } from '@/lib/core-app/scoringNotes'
 import { COMMS_OPEN_EVENT } from '@/components/core-app/comms/commsEvents'
 
@@ -106,6 +107,38 @@ function VenueMark({ indoors }: { indoors: boolean | null }) {
       ☁
     </span>
   )
+}
+
+function ordinal(n: number): string {
+  const s = ['th', 'st', 'nd', 'rd']
+  const v = n % 100
+  return `${n}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`
+}
+
+/**
+ * The line under the roster rank.
+ *
+ * ⚠ NO LETTER GRADE. This repo shipped a "C" trade grade that meant "we priced
+ * nothing", and nobody could tell it apart from a considered verdict. A rank
+ * names its comparison; a letter invents a scale and hides its inputs. When
+ * coverage is partial that is stated here rather than folded into the number.
+ */
+function gradeSubtitle(g: RosterGrade): string {
+  const parts: string[] = []
+  const vsMedian = g.value - g.median
+  parts.push(
+    Math.abs(vsMedian) < g.median * 0.03
+      ? 'right on the league median'
+      : `${Math.abs(vsMedian).toLocaleString()} ${vsMedian > 0 ? 'above' : 'below'} the median`,
+  )
+  if (g.strongest) parts.push(`${g.strongest.position} is your best (${ordinal(g.strongest.rank)})`)
+  if (g.weakest && g.weakest.position !== g.strongest?.position) {
+    parts.push(`${g.weakest.position} your thinnest (${ordinal(g.weakest.rank)})`)
+  }
+  if (g.pricedPlayers < g.totalPlayers) {
+    parts.push(`priced ${g.pricedPlayers} of your ${g.totalPlayers}`)
+  }
+  return parts.join(' · ')
 }
 
 /** One side of the projected matchup. */
@@ -472,11 +505,24 @@ export function MyTeam({ data }: MyTeamProps) {
                 <div className="af-mt-tile-value af-num">{data.team.data.record}</div>
                 <div className="af-label">Record</div>
               </div>
-              <div className="af-mt-tile" data-missing="true">
-                <div className="af-mt-tile-value af-num">—</div>
-                <div className="af-label">Roster grade</div>
-                <div className="af-mt-tile-why">{data.rosterGrade.reason}</div>
-              </div>
+              {data.rosterGrade.available ? (
+                <div className="af-mt-tile af-mt-tile--grade">
+                  <div className="af-mt-tile-value af-num">
+                    {ordinal(data.rosterGrade.data.rank)}
+                    <span className="af-mt-grade-of"> of {data.rosterGrade.data.outOf}</span>
+                  </div>
+                  <div className="af-label">Roster value in this league</div>
+                  <div className="af-mt-tile-why">
+                    {gradeSubtitle(data.rosterGrade.data)}
+                  </div>
+                </div>
+              ) : (
+                <div className="af-mt-tile" data-missing="true">
+                  <div className="af-mt-tile-value af-num">—</div>
+                  <div className="af-label">Roster value</div>
+                  <div className="af-mt-tile-why">{data.rosterGrade.reason}</div>
+                </div>
+              )}
             </div>
           </>
         ) : (
