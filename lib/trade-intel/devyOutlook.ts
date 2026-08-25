@@ -18,14 +18,23 @@
  * FantasyCalc units that no trade has ever tested — the exact failure this
  * module exists to prevent.
  *
- * ⚠ AND THE OPTION CANNOT BE PRICED EITHER. The correct model for a devy asset
- * is an option — P(reaches NFL relevance) x value on arrival x time discount —
- * but P has never been OBSERVED. `graduatedToNFL` is false for all 1,718
- * players and `devy_rookie_transitions` holds zero rows, so not one college
- * player in this database has ever been seen reaching the NFL. A probability
- * fitted to zero events is an assumption wearing a number's clothes. This module
- * therefore reports `pReachesRelevance: null` and says so, rather than shipping
- * a prior that would look measured.
+ * ⚠ AND THE OPTION CANNOT BE PRICED EITHER — YET. The correct model for a devy
+ * asset is an option: P(reaches NFL relevance) x value on arrival x time
+ * discount. But P has never been OBSERVED, and the reason is structural rather
+ * than a broken job. Every one of the 1,718 rows is draft-eligible 2026-2029 —
+ * the table holds only FORWARD-LOOKING cohorts, so `graduatedToNFL` being false
+ * for all of them is CORRECT, not a bug. None of them has had the chance to be
+ * drafted. `devy_rookie_transitions` is empty for the same reason.
+ *
+ * A probability fitted to zero events is an assumption wearing a number's
+ * clothes, so this module reports `pReachesRelevance: null` and says why.
+ *
+ * ⚠ THIS IS FIXABLE, AND THE PIPELINE IS MOST OF THE WAY THERE. CFBD exposes
+ * `/draft/picks?year=`, and `lib/devy-classification.ts` already fetches it and
+ * writes `graduatedToNFL` — but only for `[currentYear, currentYear - 1]`.
+ * Backfilling historical draft classes against the college rosters of those
+ * years would produce the outcome cohort P needs. Until that exists, calibrating
+ * P means inventing it.
  *
  * ── What IS honest, and is what this returns ───────────────────────────────
  *
