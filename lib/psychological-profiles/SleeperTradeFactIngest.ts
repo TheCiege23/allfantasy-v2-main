@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { prisma } from '@/lib/prisma'
+import { toPrismaJsonInput } from '@/lib/prisma-json'
 import { normalizeSportForPsych } from './SportBehaviorResolver'
 
 /**
@@ -46,6 +47,59 @@ type SleeperTransaction = {
   adds?: Record<string, number> | null
   drops?: Record<string, number> | null
   draft_picks?: Array<Record<string, unknown>> | null
+}
+
+/**
+ * The payload for one side of one trade.
+ *
+ * ⚠ THE PLAYER IDS USED TO BE COUNTED AND THROWN AWAY. `playersIn: 1, playersOut: 1` records
+ * that a trade happened and nothing about what was in it, which makes every downstream
+ * question about VALUE unanswerable — what a manager actually paid, what the market inside a
+ * league says a position is worth, whether a deal was lopsided. The counts stay for the
+ * readers that already depend on them; the ids are now kept beside them.
+ *
+ * ⚠ AND THEY GO IN THE PAYLOAD, NOT INTO NEW ROWS. `TransactionFact` has a `playerId` column
+ * and it is tempting to write one row per player, but three readers count this table
+ * UNFILTERED by type — `LeagueHistoryAggregator`, `WarehouseQueryService` and
+ * `AnalyticsQueryLayer` — so a four-player trade would silently triple a league's reported
+ * transaction volume. Enriching the payload adds no rows and changes no count.
+ *
+ * Sleeper's convention: `adds` maps a player id to the roster that RECEIVED him, `drops` to
+ * the roster that gave him up. Read from this roster's side, that is in and out respectively.
+ *
+ * Pure, so the mapping is testable without a network or a database.
+ */
+export function buildTradeFactPayload(
+  tx: SleeperTransaction,
+  rosterId: number,
+  transactionId: string,
+  rosterIds: number[],
+): Record<string, unknown> {
+  const idsFor = (map: Record<string, number> | null | undefined) =>
+    Object.entries(map ?? {})
+      .filter(([, r]) => r === rosterId)
+      .map(([playerId]) => playerId)
+
+  const playersInIds = idsFor(tx.adds)
+  const playersOutIds = idsFor(tx.drops)
+
+  return {
+    sleeperTransactionId: transactionId,
+    rosterIds,
+    // Kept identical to the pre-enrichment shape — existing readers consume these.
+    playersIn: playersInIds.length,
+    playersOut: playersOutIds.length,
+    picks: (tx.draft_picks ?? []).length,
+    playersInIds,
+    playersOutIds,
+    /*
+     * Verbatim, and deliberately not interpreted. Naming the fields inside a draft-pick object
+     * would be asserting a shape nobody here has verified; storing the provider's own record
+     * keeps the information without inventing a schema for it.
+     */
+    pickDetail: tx.draft_picks ?? [],
+    source: 'sleeper_transactions',
+  }
 }
 
 async function getWeek(leagueId: string, week: number): Promise<SleeperTransaction[] | null> {
@@ -163,14 +217,9 @@ export async function ingestSleeperTradeFacts(input?: {
             rosterId: managerId,
             season: linkSeason,
             weekOrPeriod: week,
-            payload: {
-              sleeperTransactionId: transactionId,
-              rosterIds,
-              playersIn: Object.values(tx.adds ?? {}).filter((r) => r === rosterId).length,
-              playersOut: Object.values(tx.drops ?? {}).filter((r) => r === rosterId).length,
-              picks: (tx.draft_picks ?? []).length,
-              source: 'sleeper_transactions',
-            },
+            payload: toPrismaJsonInput(
+              buildTradeFactPayload(tx, rosterId, transactionId, rosterIds),
+            ),
           }
           try {
             await prisma.transactionFact.upsert({
