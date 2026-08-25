@@ -77,6 +77,7 @@ import { buildDraftContext } from '@/lib/chimmy/draftGrounding'
 import { buildWaiverContext } from '@/lib/chimmy/waiverGrounding'
 import { buildPlayerNewsContext } from '@/lib/chimmy/playerNewsGrounding'
 import { buildCommissionerContext } from '@/lib/chimmy/commissionerGrounding'
+import { buildLiveSlateContext } from '@/lib/chimmy/liveSlateGrounding'
 import { buildChimmyPlayerCards } from '@/lib/chimmy/chimmyPlayerCards'
 import { resolveImagesByPlayerName } from '@/lib/players/sleeperPlayerCrosswalk'
 import { CHIMMY_GENERIC_ERROR_MESSAGE } from '@/lib/chimmy-chat/response-copy'
@@ -2027,6 +2028,26 @@ ${commishCtx}`
               }
             } catch { /* non-fatal */ }
           }
+
+          try {
+            /*
+             * Which starters have already played. The single most checkable claim
+             * Chimmy makes during a game week, which is why it refuses to guess.
+             */
+            const slateCtx = await buildLiveSlateContext({
+              rosters: leagueSportsGrounding?.packet.rosters ?? null,
+              sport,
+              season: season ?? null,
+              week: week ?? null,
+            })
+            if (slateCtx) {
+              legacyEnrichmentContext = legacyEnrichmentContext
+                ? `${legacyEnrichmentContext}
+
+${slateCtx}`
+                : slateCtx
+            }
+          } catch { /* non-fatal */ }
 
           try {
             /*
