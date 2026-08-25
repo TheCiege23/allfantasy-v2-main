@@ -2,6 +2,7 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { leagueDisplayName, type SectionState, type UnavailableSection } from './leagueHome'
+import { isRuledOut } from './injuryStatus'
 import { latestProjectionWeek, lookupProjections, summariseLineup } from './playerProjections'
 import { normalizeTeamAbbrev } from '@/lib/team-abbrev'
 import { computeLeagueProjectedPoints, extractScoringSettings } from '@/lib/projections/leagueScoring'
@@ -290,22 +291,6 @@ function formatKickoff(d: Date | null): string | null {
   return `${DAYS[d.getUTCDay()]} ${h12}:${String(mins).padStart(2, '0')}${ampm}`
 }
 
-/**
- * Statuses that mean "he will not play", as distinct from "he might".
- *
- * ⚠ QUESTIONABLE AND DOUBTFUL ARE DELIBERATELY ABSENT. They keep their real
- * projection, because those players often do play and zeroing them would tell
- * a manager to bench someone on a designation that means uncertainty, not
- * absence. Only a declaration of absence produces a zero.
- */
-const RULED_OUT = ['out', ' ir', 'ir ', 'injured reserve', 'suspend', 'pup', 'nfi', 'did not play']
-
-function isRuledOut(status: string | null): boolean {
-  if (!status) return false
-  const t = ` ${status.trim().toLowerCase()} `
-  if (t.trim() === 'ir') return true
-  return RULED_OUT.some((needle) => t.includes(needle))
-}
 
 async function resolvePlayers(
   ids: string[],

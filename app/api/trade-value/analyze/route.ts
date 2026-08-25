@@ -9,7 +9,7 @@ import { SUPPORTED_SPORTS } from '@/lib/sport-scope'
 import type { TradeConsoleAnalyzeInput } from '@/lib/trade-value-console/types'
 import { httpStatusForLeagueToolCode } from '@/lib/ai-tools/league-tool-access-messages'
 import { recordTradeSurfaceShadow } from '@/lib/decision-os/trade/surfaceShadow'
-import { buildTradeByeNotes } from '@/lib/trade-intel/tradeByeNotes'
+import { buildTradeContextNotes } from '@/lib/trade-intel/tradeContextNotes'
 import {
   compareConsoleVerdictWithCanonicalGrade,
   type ConsoleComparableAsset,
@@ -159,9 +159,9 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
        * simply absent, because a trade screen that guesses at bye collisions
        * trains managers to ignore the warning.
        */
-      const byeNotes =
+      const context =
         parsed.data.leagueId && userId
-          ? await buildTradeByeNotes({
+          ? await buildTradeContextNotes({
               leagueId: parsed.data.leagueId,
               userId,
               give: out.players.give.map((l) => ({
@@ -174,10 +174,14 @@ export const POST = withApiUsage({ endpoint: '/api/trade-value/analyze', tool: '
                 position: l.position,
                 team: l.team,
               })),
-            }).catch(() => [])
-          : []
+            }).catch(() => ({ byeNotes: [], needNotes: [] }))
+          : { byeNotes: [], needNotes: [] }
 
-      return NextResponse.json(byeNotes.length > 0 ? { ...out, byeNotes } : out)
+      return NextResponse.json(
+        context.byeNotes.length > 0 || context.needNotes.length > 0
+          ? { ...out, byeNotes: context.byeNotes, needNotes: context.needNotes }
+          : out,
+      )
     } catch (e) {
       console.error('[trade-value/analyze]', e)
       return NextResponse.json({ error: 'Analysis failed.' }, { status: 500 })

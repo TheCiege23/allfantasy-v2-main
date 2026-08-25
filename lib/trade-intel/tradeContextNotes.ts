@@ -2,10 +2,18 @@ import 'server-only'
 
 import { prisma } from '@/lib/prisma'
 import { getByeWeeks } from '@/lib/core-app/byeWeeks'
-import { byeCollisionDelta, readSlotRequirements } from './rosterNeed'
+import { isRuledOut } from '@/lib/core-app/injuryStatus'
+import { latestProjectionWeek } from '@/lib/core-app/playerProjections'
+import { getPositionScarcity } from './positionScarcity'
+import {
+  byeCollisionDelta,
+  computeRosterNeed,
+  counterpartyPriceDelta,
+  readSlotRequirements,
+} from './rosterNeed'
 
 /**
- * The bye-week sentence on a trade.
+ * The two sentences a trade screen can say that the value maths cannot.
  *
  * ⚠ ADVISORY, AND IT DOES NOT TOUCH THE VERDICT. The console's own value maths
  * decides whether a trade is fair. This adds what the maths cannot see: that
@@ -25,16 +33,32 @@ const SEASON_HORIZON = 18
 
 type Line = { name: string; position: string | null; team: string | null }
 
-export async function buildTradeByeNotes(args: {
+export type TradeContextNotes = {
+  /** Bye-week collisions this deal creates or fails to relieve. */
+  byeNotes: string[]
+  /**
+   * What this deal is worth to THIS roster over the market price, and why.
+   *
+   * ⚠ THE SCARCITY HALF IS THE POINT. A hole at a position with a dozen free
+   * agents behind it is a waiver claim, not a need. The same hole with an empty
+   * wire can only be filled by trading, and that is when a replacement-level
+   * player is genuinely worth more here than his market price.
+   */
+  needNotes: string[]
+}
+
+const EMPTY: TradeContextNotes = { byeNotes: [], needNotes: [] }
+
+export async function buildTradeContextNotes(args: {
   leagueId: string
   userId: string
   /** Players leaving the viewer's roster. */
   give: Line[]
   /** Players arriving on the viewer's roster. */
   get: Line[]
-}): Promise<string[]> {
+}): Promise<TradeContextNotes> {
   const { leagueId, userId, give, get } = args
-  if (get.length === 0) return []
+  if (get.length === 0) return EMPTY
 
   const league = await prisma.league
     .findUnique({
@@ -44,7 +68,7 @@ export async function buildTradeByeNotes(args: {
     .catch(() => null)
 
   const requirements = readSlotRequirements(league?.starters)
-  if (!league || !requirements || league.season == null) return []
+  if (!league || !requirements || league.season == null) return EMPTY
 
   /*
    * The viewer's own roster in this league. Matched through LeagueTeam because
@@ -57,7 +81,7 @@ export async function buildTradeByeNotes(args: {
       select: { platformUserId: true, externalId: true },
     })
     .catch(() => null)
-  if (!team?.platformUserId) return []
+  if (!team?.platformUserId) return EMPTY
 
   const roster = await prisma.roster
     .findFirst({
@@ -65,13 +89,13 @@ export async function buildTradeByeNotes(args: {
       select: { playerData: true },
     })
     .catch(() => null)
-  if (!roster) return []
+  if (!roster) return EMPTY
 
   const pd = (roster.playerData ?? {}) as Record<string, unknown>
   const rosterIds = Array.isArray(pd.players)
     ? pd.players.map((x) => String(x)).filter((x) => x && x !== '0')
     : []
-  if (rosterIds.length === 0) return []
+  if (rosterIds.length === 0) return EMPTY
 
   const players = await prisma.sportsPlayer
     .findMany({
@@ -90,6 +114,24 @@ export async function buildTradeByeNotes(args: {
   for (const id of rosterIds) playerTeams.set(id, byId.get(id)?.team ?? null)
   get.forEach((g, i) => playerTeams.set(`in:${i}`, g.team ?? null))
 
+  /*
+   * Who on this roster is actually available. A kicker on IR does not fill the
+   * kicker slot, and a need model that counts bodies cannot see the case the
+   * manager most needs pricing for.
+   */
+  const rosterInjuries = await prisma.sportsInjury
+    .findMany({
+      where: { sport: league.sport ?? 'NFL', playerName: { in: players.map((p) => p.name) } },
+      orderBy: { fetchedAt: 'desc' },
+      select: { playerName: true, status: true },
+    })
+    .catch(() => [])
+  const statusByName = new Map<string, string | null>()
+  for (const i of rosterInjuries) {
+    const k = i.playerName.toLowerCase()
+    if (!statusByName.has(k)) statusByName.set(k, i.status)
+  }
+
   const byes = await getByeWeeks({
     sport: league.sport ?? 'NFL',
     season: league.season,
@@ -98,7 +140,7 @@ export async function buildTradeByeNotes(args: {
     fromWeek: 1,
     horizon: SEASON_HORIZON,
   }).catch(() => null)
-  if (!byes) return []
+  if (!byes) return EMPTY
 
   /** id -> the week they are off, inverted from the week-keyed map. */
   const byeOf = new Map<string, number>()
@@ -122,7 +164,7 @@ export async function buildTradeByeNotes(args: {
     })
     .filter((x): x is string => Boolean(x))
 
-  const notes: string[] = []
+  const byeNotes: string[] = []
   get.forEach((g, i) => {
     const d = byeCollisionDelta({
       requirements,
@@ -132,9 +174,54 @@ export async function buildTradeByeNotes(args: {
     })
     if (!d) return
     if (d.created.length > 0 || d.unrelieved.length > 0) {
-      notes.push(`${g.name}: ${d.basis}`)
+      byeNotes.push(`${g.name}: ${d.basis}`)
     }
   })
 
-  return notes
+  /*
+   * The need half. Computed on the roster AFTER the outgoing side leaves —
+   * sending your only tight end away is exactly how a trade creates the hole it
+   * is supposed to fill, and a need read on the pre-trade roster cannot see it.
+   */
+  const outgoing = new Set(outgoingIds)
+  const need = computeRosterNeed({
+    requirements,
+    rostered: rosterIds
+      .filter((id) => !outgoing.has(id))
+      .map((id) => ({
+        position: byId.get(id)?.position ?? '',
+        unavailable: isRuledOut(statusByName.get((byId.get(id)?.name ?? '').toLowerCase()) ?? null),
+      })),
+  })
+
+  const positions = [...new Set(get.map((g) => g.position).filter((p): p is string => Boolean(p)))]
+  const scarcity = await getPositionScarcity({
+    leagueId,
+    sport: league.sport ?? 'NFL',
+    projectionWeek: await latestProjectionWeek().catch(() => null),
+    positions,
+  }).catch(() => new Map())
+
+  const needNotes: string[] = []
+  for (const g of get) {
+    if (!g.position) continue
+    const pos = g.position.toUpperCase().trim()
+    const d = counterpartyPriceDelta({
+      position: pos,
+      need,
+      scarcity: scarcity.get(pos) ?? null,
+    })
+    /*
+     * Only when it moves the price. "Their K slots are exactly filled" is true
+     * and worth nothing on screen, and a panel full of non-findings is one
+     * managers stop reading.
+     */
+    if (!d || d.factor === 1) continue
+    const pct = Math.round((d.factor - 1) * 100)
+    needNotes.push(
+      `${g.name} is worth about ${Math.abs(pct)}% ${pct > 0 ? 'more' : 'less'} to you than his market price — ${d.basis}`,
+    )
+  }
+
+  return { byeNotes, needNotes }
 }

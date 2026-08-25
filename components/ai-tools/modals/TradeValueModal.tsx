@@ -1022,6 +1022,26 @@ export function TradeValueModal({
             deal anyway, because two years of a player of that calibre is worth
             one unstartable Sunday. The point is that they decide on purpose.
           */}
+          {/*
+            What this deal is worth to THIS roster, over the market price.
+            The scarcity half is the point: a hole at a position with a dozen
+            free agents behind it is a waiver claim, not a need. The same hole
+            with an empty wire can only be filled by trading, and that is when a
+            replacement-level player is genuinely worth more here than his
+            market price. Two identical teams can be quoted different numbers,
+            and the difference is entirely what is sitting unrostered.
+          */}
+          {Array.isArray(result?.needNotes) && (result.needNotes as string[]).length > 0 ? (
+            <div className="rounded-xl border border-[#00d4aa]/20 bg-[#00d4aa]/[0.06] px-3 py-2 text-[11px] text-[#c9f5ec]">
+              <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-[#00d4aa]/80">
+                Worth to your roster
+              </div>
+              {(result.needNotes as string[]).map((n) => (
+                <div key={n}>{n}</div>
+              ))}
+            </div>
+          ) : null}
+
           {Array.isArray(result?.byeNotes) && (result.byeNotes as string[]).length > 0 ? (
             <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-3 py-2 text-[11px] text-sky-100/90">
               <div className="mb-1 font-semibold uppercase tracking-wide text-[10px] text-sky-200/80">

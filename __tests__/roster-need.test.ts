@@ -252,3 +252,98 @@ describe('byeCollisionDelta: the Josh Allen case', () => {
     expect(d.unrelieved).toEqual([])
   })
 })
+
+describe('the injured-kicker case: identical rosters, different prices', () => {
+  const K_LEAGUE = readSlotRequirements(['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'K', 'DEF'])!
+  const HEALTHY = ['QB', 'RB', 'RB', 'WR', 'WR', 'TE', 'K', 'DEF']
+
+  it('⚠ a kicker on IR does not fill the kicker slot', () => {
+    /*
+     * Counting bodies rather than AVAILABLE bodies reports the team whose only
+     * kicker is on injured reserve as having no kicker need — the exact case
+     * where the need is most real.
+     */
+    const healthy = computeRosterNeed({ requirements: K_LEAGUE, rostered: HEALTHY })
+    expect(healthy.holes).toEqual([])
+
+    const injured = computeRosterNeed({
+      requirements: K_LEAGUE,
+      rostered: [
+        ...HEALTHY.filter((p) => p !== 'K'),
+        { position: 'K', unavailable: true },
+      ],
+    })
+    expect(injured.holes).toContain('K')
+  })
+
+  it('⚠ the SAME need is priced differently by what sits on waivers', () => {
+    /*
+     * The manager's own scenario. Two identical teams, identical scoring,
+     * identical slots. One kicker is hurt. If a dozen kickers are unrostered
+     * that manager has a waiver claim, not a problem. If the wire is empty a
+     * trade is the only route, and the same kicker is worth far more to them.
+     * The need is identical in both branches; only the alternative differs.
+     */
+    const need = computeRosterNeed({
+      requirements: K_LEAGUE,
+      rostered: [...HEALTHY.filter((p) => p !== 'K'), { position: 'K', unavailable: true }],
+    })
+
+    const plentiful = counterpartyPriceDelta({
+      position: 'K',
+      need,
+      scarcity: { position: 'K', freeAgents: 14, scarcity: 0 },
+    })!
+    const barren = counterpartyPriceDelta({
+      position: 'K',
+      need,
+      scarcity: { position: 'K', freeAgents: 0, scarcity: 1 },
+    })!
+
+    expect(barren.factor).toBeGreaterThan(plentiful.factor)
+    expect(barren.basis).toContain('no K available on waivers')
+    expect(plentiful.basis).toContain('claim away')
+  })
+
+  it('⚠ unknown scarcity uses the replaceable band, not the scarce one', () => {
+    /*
+     * We have not checked the wire, so we must not price as though it were
+     * empty. Understating is the safe direction: it can leave a manager
+     * slightly under-charged, where overstating invents leverage that does not
+     * exist.
+     */
+    const need = computeRosterNeed({
+      requirements: K_LEAGUE,
+      rostered: [...HEALTHY.filter((p) => p !== 'K'), { position: 'K', unavailable: true }],
+    })
+    const unknown = counterpartyPriceDelta({ position: 'K', need })!
+    expect(unknown.factor).toBeLessThanOrEqual(1.15)
+  })
+
+  it('a healthy roster gets no premium however barren the wire', () => {
+    // Scarcity without a hole is not a need. A team with a working kicker does
+    // not care that nobody else has one.
+    const need = computeRosterNeed({ requirements: K_LEAGUE, rostered: HEALTHY })
+    const d = counterpartyPriceDelta({
+      position: 'K',
+      need,
+      scarcity: { position: 'K', freeAgents: 0, scarcity: 1 },
+    })!
+    expect(d.factor).toBe(1)
+  })
+
+  it('⚠ even a total-scarcity premium cannot manufacture a star', () => {
+    // The premium multiplies the player's OWN value. Sixty percent of a kicker
+    // is still a kicker: it reorders a close deal, it does not invent leverage.
+    const need = computeRosterNeed({
+      requirements: K_LEAGUE,
+      rostered: [...HEALTHY.filter((p) => p !== 'K'), { position: 'K', unavailable: true }],
+    })
+    const d = counterpartyPriceDelta({
+      position: 'K',
+      need,
+      scarcity: { position: 'K', freeAgents: 0, scarcity: 1 },
+    })!
+    expect(d.factor).toBeLessThanOrEqual(1.6)
+  })
+})

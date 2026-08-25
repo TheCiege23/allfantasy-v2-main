@@ -106,21 +106,38 @@ export type RosterNeed = {
   holes: string[]
 }
 
+/** One rostered player, as the need model sees him. */
+export type RosteredSlot = {
+  position: string
+  /**
+   * Declared absent — out, IR, suspended, PUP. NOT questionable or doubtful.
+   *
+   * ⚠ A BODY ON IR DOES NOT FILL A SLOT. Counting him would report a team whose
+   * only kicker is on injured reserve as having no kicker need, which is the
+   * exact case where the need is most real and most expensive.
+   */
+  unavailable?: boolean
+}
+
 /**
  * What this roster cannot start.
  *
- * `rostered` is a position per player — the whole roster, not the lineup, since
- * the question is what they COULD start.
+ * `rostered` is the whole roster, not the lineup, since the question is what
+ * they COULD start. Plain strings are accepted for the common case where
+ * availability is unknown; they are treated as available, because inventing
+ * absence out of missing data overstates need.
  */
 export function computeRosterNeed(args: {
   requirements: SlotRequirements
-  rostered: string[]
+  rostered: Array<string | RosteredSlot>
 }): RosterNeed {
   const { requirements, rostered } = args
 
   const counts = new Map<string, number>()
   for (const raw of rostered) {
-    const pos = String(raw).toUpperCase().trim()
+    const slot: RosteredSlot = typeof raw === 'string' ? { position: raw } : raw
+    if (slot.unavailable) continue
+    const pos = String(slot.position).toUpperCase().trim()
     if (!pos) continue
     counts.set(pos, (counts.get(pos) ?? 0) + 1)
   }
@@ -176,22 +193,45 @@ export function computeRosterNeed(args: {
  * How much more this team should be willing to pay for a player at this
  * position, over the market price.
  *
- * ⚠ A DELIBERATELY NARROW BAND, AND IT IS A PREFERENCE, NOT A MEASUREMENT.
- * Nothing in this repo measures what managers actually overpay for need, so the
- * honest thing is a small stated premium that breaks ties and never overturns a
- * real value gap. A 40% "need multiplier" would let the engine recommend giving
- * up a materially better player, dressed as arithmetic.
+ * ⚠ A NEED IS ONLY EXPENSIVE IF THE REPLACEMENT IS SCARCE. Two identical
+ * rosters, identical scoring, identical slots — one manager's kicker is on IR.
+ * If a dozen kickers sit on waivers, that manager's "need" costs them a waiver
+ * claim and nothing else, and a trade for one should be priced accordingly. If
+ * the wire is empty, a trade is the ONLY way to fill the slot, and the same
+ * kicker is worth a great deal more to them than to the manager beside them
+ * whose kicker is healthy. The need is identical in both cases; the price is
+ * not, and the difference is entirely the availability of the alternative.
+ *
+ * ⚠ STILL A PREFERENCE, NOT A MEASUREMENT. Nothing here measures what managers
+ * actually overpay. What scarcity does is decide WHICH stated band applies, and
+ * that decision is made on counted free agents rather than on a feeling.
+ *
+ * The premium is a multiplier on the player's OWN value, which is what keeps it
+ * safe. Sixty percent of a kicker is still a kicker; it can reorder a close
+ * deal and it cannot manufacture a star.
  *
  * Returns null when the need could not be computed, so callers report absence
  * rather than a neutral 1.0 that looks like a finding.
  */
 export const NEED_PREMIUM_PER_DEFICIT = 0.06
+/** Cap when the position can simply be replaced off waivers. */
 export const NEED_PREMIUM_CAP = 0.15
+/** Cap when nothing at the position is available anywhere. */
+export const SCARCE_PREMIUM_CAP = 0.6
 export const SURPLUS_DISCOUNT = 0.04
+
+/**
+ * How hard this position is to fill without trading, from 0 (walk to the waiver
+ * wire) to 1 (nothing exists). Null means we did not look — callers then use
+ * the replaceable band, which is the conservative direction.
+ */
+export type Scarcity = { position: string; freeAgents: number; scarcity: number } | null
 
 export function counterpartyPriceDelta(args: {
   position: string | null | undefined
   need: RosterNeed | null
+  /** Availability at this position in this league. Omitted = assume replaceable. */
+  scarcity?: Scarcity
 }): { factor: number; basis: string } | null {
   const { position, need } = args
   if (!need || !position) return null
@@ -215,11 +255,27 @@ export function counterpartyPriceDelta(args: {
   }
 
   if (row && row.deficit > 0) {
-    const factor = 1 + Math.min(NEED_PREMIUM_CAP, row.deficit * NEED_PREMIUM_PER_DEFICIT)
-    return {
-      factor,
-      basis: `they cannot fill ${row.deficit} ${pos} slot${row.deficit > 1 ? 's' : ''}, so a ${pos} is worth more to them`,
-    }
+    /*
+     * Scarcity picks the band. Unknown scarcity uses the replaceable cap, which
+     * understates rather than overstates — the safe direction when we have not
+     * actually checked the waiver wire.
+     */
+    const sc = args.scarcity && args.scarcity.position === pos ? args.scarcity.scarcity : null
+    const cap =
+      sc == null ? NEED_PREMIUM_CAP : NEED_PREMIUM_CAP + (SCARCE_PREMIUM_CAP - NEED_PREMIUM_CAP) * sc
+    const raw = row.deficit * NEED_PREMIUM_PER_DEFICIT * (sc == null ? 1 : 0.5 + sc * 2)
+    const factor = 1 + Math.min(cap, raw)
+
+    const slots = `${row.deficit} ${pos} slot${row.deficit > 1 ? 's' : ''}`
+    const where =
+      sc == null
+        ? ''
+        : args.scarcity!.freeAgents === 0
+          ? ` and there is no ${pos} available on waivers, so a trade is the only way to fill it`
+          : sc > 0.5
+            ? ` and only ${args.scarcity!.freeAgents} ${pos}${args.scarcity!.freeAgents === 1 ? ' is' : ' are'} unrostered`
+            : ` — though ${args.scarcity!.freeAgents} are on waivers, so this is a claim away`
+    return { factor, basis: `they cannot fill ${slots}${where}` }
   }
 
   if (row && row.surplus > 0) {
