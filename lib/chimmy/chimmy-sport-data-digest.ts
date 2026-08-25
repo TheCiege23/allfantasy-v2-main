@@ -59,15 +59,33 @@ export async function buildChimmySportDataDigest(args: {
   const sports: SupportedSport[] =
     args.sport === 'all' ? [...SUPPORTED_SPORTS] : [args.sport]
 
+  /*
+   * ⚠ A DECISION QUESTION NEEDS GAMES AND STATS EVEN WITHOUT SAYING SO. These
+   * gates keep the digest from bloating every prompt, but they were purely
+   * literal: "who should I flex?" contains none of `game|schedule|score|...`, so
+   * kickoff times, opponents, final results and player stats were all withheld
+   * from exactly the questions that turn on them. A start/sit call made without
+   * knowing whether the game has already finished is the worst kind of wrong —
+   * confident and checkable.
+   *
+   * Keep this in sync with `requiresLeagueGrounding` in the chat route, which
+   * recognises the same class of question for a different purpose.
+   */
+  const DECISION_INTENT =
+    /\b(start|sit|flex|bench|lineup|play|accept|reject|counter|trade|drop|add|claim|waiver|pickup|injur\w*|matchup|opponent|week|bye|roster)\b/
+
   const wantsGames =
     questionLower.length === 0 ||
+    DECISION_INTENT.test(questionLower) ||
     /\b(game|games|tonight|today|schedule|scores?|final|playoff|series|record|standing|standings|draft)\b/.test(
       questionLower
     )
   const wantsTransactions =
     questionLower.length === 0 || /\b(trade|signed|signing|waived|waiver|released|transaction)\b/.test(questionLower)
   const wantsPlayerStats =
-    questionLower.length === 0 || /\b(points?|stats?|yards?|rebounds?|assists?|goals?|historic|history)\b/.test(questionLower)
+    questionLower.length === 0 ||
+    DECISION_INTENT.test(questionLower) ||
+    /\b(points?|stats?|yards?|rebounds?|assists?|goals?|historic|history)\b/.test(questionLower)
 
   const formatEt = (date: Date | null | undefined): string => {
     if (!date) return 'TBD'
