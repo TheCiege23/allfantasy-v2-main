@@ -32,9 +32,13 @@ import type { SectionState } from '@/lib/core-app/leagueHome'
  *   - INJURY TIMELINE (WED DNP / THU LP / FRI FP). No provider we ingest carries
  *     practice participation; `sportsInjury` holds a status and a description and
  *     nothing else. The status we DO have renders as a single chip instead.
- *   - SNAP SHARE. `snapShare` is a hardcoded unavailable section — "snap share is
- *     not ingested by any current provider". Its tile is removed rather than
- *     shown permanently empty.
+ *   - SNAP SHARE. ⚠ THIS ENTRY WAS WRONG AND THE TILE IS STILL MISSING BECAUSE OF IT.
+ *     `snapShare` was a hardcoded unavailable section reading "snap share is not
+ *     ingested by any current provider", so the tile was removed as permanently
+ *     empty. The columns were on disk the whole time — `off_snp` on 77% of game
+ *     rows and `tm_off_snp` on 89%, `def_snp` on 58% and `tm_def_snp` on 70% —
+ *     and `getPlayerDetail` now returns a real share with its own coverage.
+ *     Nothing renders it yet: the tile has to come back.
  *   - RECENTLY SEARCHED. Nothing persists a per-user search history, so there is
  *     no list to render.
  *

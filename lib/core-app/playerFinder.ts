@@ -5,6 +5,7 @@ import { describeAge } from '@/lib/sports-data/freshnessPolicy'
 import type { SectionState, UnavailableSection } from './leagueHome'
 import { latestProjectionWeek, lookupProjections, positionRanks } from './playerProjections'
 import { normalizePosition } from './positionNormalization'
+import { isIdpPosition } from './scoringNotes'
 import { getPlayerImpact, type LeagueImpact } from './playerImpact'
 export type { LeagueImpact, ReplacementOption } from './playerImpact'
 // Re-exported so server callers keep one import site; the definitions live in a
@@ -109,7 +110,17 @@ export type PlayerDetail = {
    * the copy says "standard scoring".
    */
   projection: SectionState<{ points: number; season: string; week: number }>
-  snapShare: UnavailableSection
+  /**
+   * Share of his team's snaps, offensive or defensive as the position requires.
+   *
+   * ⚠ THIS WAS AN `UnavailableSection` AND ITS REASON WAS FALSE. It read "snap share is not
+   * ingested by any current provider" on a page rendering real projections, real injuries and
+   * real season stats beside it. The columns were on disk the whole time: `off_snp` on 77% of
+   * game rows and `tm_off_snp` on 89%, `def_snp` on 58% and `tm_def_snp` on 70%. Nobody had
+   * looked — the same miss that had the IDP projector telling every reader defensive snap data
+   * did not exist.
+   */
+  snapShare: SectionState<{ share: number; snaps: number; teamSnaps: number; games: number; basis: 'offense' | 'defense' }>
   /**
    * ⚠ `outOf` IS PART OF THE ANSWER. "WR12" sounds absolute and is not — it means
    * twelfth among the WRs this feed projected, not among every WR alive. Shipping
@@ -513,6 +524,64 @@ export async function getPlayerDetail(
    * the feed never priced would place him last among everyone it did — a confident
    * "WR143 of 143" built entirely from his absence.
    */
+  /*
+   * Snap share, from the game logs rather than from a provider feed.
+   *
+   * Totals are summed and divided once — a mean of per-game shares would let a two-snap
+   * cameo count as much as a sixty-snap start. Defenders are read off the defensive columns,
+   * everyone else off the offensive ones, because a linebacker's `off_snp` is noise.
+   */
+  const snapShare: PlayerDetail['snapShare'] = await (async () => {
+    if (!row.sleeperId) {
+      return {
+        available: false as const,
+        reason: 'we hold no Sleeper id for this player, and the game logs are keyed by one',
+      }
+    }
+    const logs = await prisma.playerGameStat
+      .findMany({
+        where: { sportType: row.sport ?? 'NFL', playerId: row.sleeperId },
+        select: { normalizedStatMap: true },
+        orderBy: [{ season: 'desc' }, { weekOrRound: 'desc' }],
+        take: 40,
+      })
+      .catch(() => [])
+
+    const defensive = isIdpPosition(row.position)
+    const playerKey = defensive ? 'def_snp' : 'off_snp'
+    const teamKey = defensive ? 'tm_def_snp' : 'tm_off_snp'
+
+    let snaps = 0
+    let teamSnaps = 0
+    let games = 0
+    for (const log of logs) {
+      const m = (log.normalizedStatMap ?? {}) as Record<string, unknown>
+      const p = m[playerKey]
+      const t = m[teamKey]
+      if (typeof p !== 'number' || typeof t !== 'number' || !(t > 0)) continue
+      snaps += p
+      teamSnaps += t
+      games += 1
+    }
+
+    if (games === 0 || teamSnaps <= 0) {
+      return {
+        available: false as const,
+        reason: `no game on file carries both ${playerKey} and ${teamKey} for this player`,
+      }
+    }
+    return {
+      available: true as const,
+      data: {
+        share: Math.round((snaps / teamSnaps) * 1000) / 1000,
+        snaps,
+        teamSnaps,
+        games,
+        basis: defensive ? ('defense' as const) : ('offense' as const),
+      },
+    }
+  })()
+
   const rankRow = projRow ? (await positionRanks([projKey], projectionWeek)).get(projKey) : undefined
   const rank: PlayerDetail['positionRank'] = rankRow
     ? {
@@ -544,9 +613,7 @@ export async function getPlayerDetail(
     leagues,
     impact,
     projection,
-    // Still genuinely absent: no current provider gives us snap counts, so this
-    // stays an honest gap rather than being approximated from targets.
-    snapShare: { available: false, reason: 'snap share is not ingested by any current provider' },
+    snapShare,
     positionRank: rank,
     recommendedMoves,
     freshness: { label: age.label, stale: age.stale },

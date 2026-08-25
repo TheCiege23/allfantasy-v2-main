@@ -87,7 +87,31 @@ const MARKET_DECAY_REDRAFT: ReadonlyArray<{ rank: number; share: number }> = [
   { rank: 60, share: 0.022 },
 ]
 
-/** The ceiling each board is anchored to. Unchanged: this is the product decision. */
+/**
+ * What the best defender in a league is worth against the offensive board.
+ *
+ * ⚠ THIS IS THE ONE NUMBER IN THE IDP STACK THAT IS NOT MEASURED, AND IT CANNOT BE. Everything
+ * beneath it is: who outranks whom comes from value over replacement against the league's own
+ * starting slots, the decay down the board comes from the FantasyCalc curve, the projections
+ * underneath are backtested. This sets the exchange rate between defence and offence, and no
+ * market prices defenders — three independent routes to measuring it were tried and closed
+ * (no vendor sells it; VORP ranks but does not price; and revealed preference explains 0.1% of
+ * trade imbalance). It is a product decision, and as of 2026-08-25 it is a MADE one rather
+ * than an inherited default.
+ *
+ * DYNASTY 5500 — confirmed deliberately. On the board of 2026-08-25 that puts the top defender
+ * beside Josh Allen and James Cook, overall #17-19 of 398, above 95% of offensive assets. The
+ * stance: in an IDP league with real defensive starting requirements, an elite defender IS a
+ * core asset.
+ *
+ * ⚠ REDRAFT 3500 HAS NOT BEEN CONFIRMED, AND THE TWO CURRENTLY DISAGREE. It sits above only
+ * 79% of its own board — beside Garrett Wilson and Zay Flowers, roughly overall #42 of 194 —
+ * so this codebase presently values defenders MORE generously in dynasty than in redraft,
+ * which is backwards from how most markets treat them. Matching the dynasty stance would put
+ * it near 7,800 (James Cook, overall #10). Left alone rather than moved on inference: nobody
+ * has made this call, and changing it silently would be exactly the unexamined default the
+ * dynasty side just stopped being.
+ */
 const IDP_CEILING_DYNASTY = 5500
 const IDP_CEILING_REDRAFT = 3500
 
