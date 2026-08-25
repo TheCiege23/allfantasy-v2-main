@@ -156,10 +156,31 @@ export async function scanSleeperLeagueLineup(args: SleeperLineupScanArgs): Prom
     const startersRaw = matchup?.starters ?? roster?.starters ?? []
     const starters = Array.isArray(startersRaw) ? startersRaw : []
 
+    /*
+     * ⚠ SLEEPER MARKS AN UNFILLED STARTING SLOT WITH THE STRING "0", AND THAT
+     * SENTINEL USED TO SURVIVE THIS LOOP. `"0".length > 0` is true, so an
+     * empty slot was pushed through as a real player id — and every check
+     * downstream then treated the slot as filled:
+     *
+     *   - the empty-slot detector below does `if (pid) continue`, so it never
+     *     fired for a genuinely empty slot. That detector is the engine's most
+     *     important one, and it was dead.
+     *   - "0" resolves to no player, so position comes back null, and the
+     *     legality check treats an unknown position as legal — no illegal_slot
+     *     either.
+     *   - no status, so no injured/doubtful/questionable row.
+     *
+     * The net effect was an engine that returned almost nothing while paying
+     * its full cost, most visibly in preseason when lineups are unset. Every
+     * consumer of `starterIds` below reads '' as empty, so normalising here is
+     * the whole fix.
+     */
+    const EMPTY_SLOT = '0'
     const starterIds: string[] = []
     for (let i = 0; i < starterSlots.length; i++) {
       const slot = starters[i]
-      starterIds.push(typeof slot === 'string' && slot.length > 0 ? slot : '')
+      const id = typeof slot === 'string' ? slot : ''
+      starterIds.push(id.length > 0 && id !== EMPTY_SLOT ? id : '')
     }
 
     // Empty starter slots (aligned to expected starter count)
