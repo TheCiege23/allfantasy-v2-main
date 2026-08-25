@@ -232,6 +232,12 @@ export function profileForRoster(
     playoffSeed: team.rank,
     leagueSize: world.teams.length,
     positions,
+    /*
+     * The league's own starting requirement, so "weak at QB" means weak against THIS league
+     * rather than against a standard-redraft assumption. A canonical-world fact, so no new
+     * source is introduced.
+     */
+    rosterSlots: world.league.rosterSettings.starterSlots,
   })
   return { profile, positionsResolved: playerIds.length === 0 || positions.length > 0 }
 }

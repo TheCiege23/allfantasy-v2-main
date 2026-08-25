@@ -140,3 +140,90 @@ export function detectQbFormat(starters: unknown): 'ONE_QB' | 'SUPERFLEX' {
   }
   return slots.filter((s) => s === 'QB').length > 1 ? 'SUPERFLEX' : 'ONE_QB'
 }
+
+/**
+ * Which positions can fill each starting slot, for deriving what a league actually requires.
+ *
+ * One table, covering offence and defence, because "what does this league make me start" is one
+ * question. A slot with more than one eligible position is a flex and is counted separately —
+ * it creates a requirement without naming a position to satisfy it.
+ */
+const SLOT_POSITIONS: Record<string, readonly string[]> = {
+  QB: ['QB'],
+  RB: ['RB'],
+  WR: ['WR'],
+  TE: ['TE'],
+  K: ['K'],
+  DEF: ['DEF'],
+  DST: ['DEF'],
+  FLEX: ['RB', 'WR', 'TE'],
+  WRRB_FLEX: ['RB', 'WR'],
+  REC_FLEX: ['WR', 'TE'],
+  WRRB_WRT: ['RB', 'WR', 'TE'],
+  SUPER_FLEX: ['QB', 'RB', 'WR', 'TE'],
+  SUPERFLEX: ['QB', 'RB', 'WR', 'TE'],
+  SF: ['QB', 'RB', 'WR', 'TE'],
+  // Individual defenders. Specific slots collapse onto the group that fills them.
+  LB: ['LB'],
+  ILB: ['LB'],
+  OLB: ['LB'],
+  DL: ['DL'],
+  DE: ['DL'],
+  DT: ['DL'],
+  DB: ['DB'],
+  CB: ['DB'],
+  S: ['DB'],
+  SS: ['DB'],
+  FS: ['DB'],
+  IDP_FLEX: ['LB', 'DL', 'DB'],
+}
+
+export interface StarterNeeds {
+  /** Positions this league forces a team to start, and how many of each. */
+  needs: Record<string, number>
+  /** Slots any of several positions can fill. A requirement without an address. */
+  flex: number
+  /** True when a quarterback can fill a flex, or a second dedicated QB slot exists. */
+  superflex: boolean
+}
+
+/**
+ * What a league actually requires, read from its own `roster_positions`.
+ *
+ * ⚠ THE HARDCODED ALTERNATIVE IS WRONG IN EXACTLY THE FORMATS WHERE NEED MATTERS MOST.
+ * `trade-value/teamProfile` assumes `{ QB: 1, RB: 2, WR: 2, TE: 1 }` and
+ * `engine/team-context-adjustment` assumes `{ QB: 1, RB: 2, WR: 3, TE: 1 }` — they do not even
+ * agree with each other on wide receivers. Both are standard-redraft shapes, so a superflex
+ * team holding one quarterback is never flagged weak at the position that decides that format,
+ * and an IDP league's defensive requirements are invisible to both.
+ *
+ * Flex slots are counted, never distributed. Assigning a share of them to each position would
+ * be inventing a number, and the honest statement is that the league requires two more starters
+ * from a pool rather than two more of anything in particular.
+ */
+export function starterNeedsFromSlots(
+  rosterSlots: readonly string[] | null | undefined,
+): StarterNeeds {
+  const needs: Record<string, number> = {}
+  let flex = 0
+  let superflex = false
+  let dedicatedQb = 0
+
+  for (const raw of rosterSlots ?? []) {
+    const slot = String(raw ?? '').trim().toUpperCase()
+    const eligible = SLOT_POSITIONS[slot]
+    if (!eligible) continue
+    if (eligible.length > 1) {
+      flex++
+      if (eligible.includes('QB')) superflex = true
+      continue
+    }
+    needs[eligible[0]] = (needs[eligible[0]] ?? 0) + 1
+    if (eligible[0] === 'QB') dedicatedQb++
+  }
+
+  // Two dedicated QB slots is a 2QB league, which prices quarterbacks like superflex does.
+  if (dedicatedQb > 1) superflex = true
+
+  return { needs, flex, superflex }
+}
