@@ -496,3 +496,72 @@
   .af-tc-builder,
   .af-tc-notes { grid-template-columns: 1fr; }
 }
+
+/* ── Asset picker ────────────────────────────────────────────────────── */
+
+.af-tc-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 12px;
+  background: var(--accent-soft);
+}
+.af-tc-picker-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.af-tc-picker-tab {
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--muted);
+  border-radius: 7px;
+  padding: 4px 11px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.af-tc-picker-tab[data-on='true'] {
+  border-color: var(--accent-line);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.af-tc-input {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 9px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+.af-tc-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.af-tc-picker-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.af-tc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 92px;
+}
+/* A search result is a button but must read as a row, not a control. */
+.af-tc-row--button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.af-tc-row--button:hover {
+  border-color: var(--accent-line);
+}

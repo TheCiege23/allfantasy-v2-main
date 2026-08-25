@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useMemo, useState } from 'react'
+import { TradeAssetPicker, type PickedAsset } from '@/components/core-app/screens/TradeAssetPicker'
 import '@/components/core-app/af-core.css'
 import '@/components/core-app/af-trade-center.css'
 
@@ -102,6 +103,28 @@ const NOTE_GROUPS: Array<{ key: keyof AnalyzeResult; tone: string; title: string
   { key: 'byeNotes', tone: 'bye', title: 'Bye-week collisions' },
 ]
 
+/**
+ * Into the shape `TradeConsoleAnalyzeInput` accepts.
+ *
+ * ⚠ A PLAYER WITHOUT AN ID GOES BY NAME, which is what the engine's own schema
+ * allows — the FantasyCalc search path returns no id, so requiring one would
+ * make the most common search result unusable.
+ */
+function toInput(a: PickedAsset) {
+  if (a.kind === 'player') {
+    return {
+      kind: 'player' as const,
+      ...(a.playerId ? { playerId: a.playerId } : {}),
+      name: a.name,
+      ...(a.sportHint ? { sportHint: a.sportHint } : {}),
+    }
+  }
+  if (a.kind === 'pick') {
+    return { kind: 'pick' as const, year: a.year, round: a.round, label: a.label }
+  }
+  return { kind: 'faab' as const, amount: a.amount }
+}
+
 export function TradeCenter(props: {
   league: { id: string; name: string; format: string | null; teamCount: number | null } | null
   /** Opponent label, when the caller knows one. */
@@ -112,8 +135,60 @@ export function TradeCenter(props: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const give = result?.players?.give ?? []
-  const get = result?.players?.get ?? []
+  /*
+   * The deal under construction, which is the source of truth for what gets
+   * analysed. The engine's echo of it (`result.players`) is used only for the
+   * prices it resolved — a line the manager added must not disappear because
+   * the feed could not price it.
+   */
+  const [giveAssets, setGiveAssets] = useState<PickedAsset[]>([])
+  const [getAssets, setGetAssets] = useState<PickedAsset[]>([])
+  const [picking, setPicking] = useState<'give' | 'get' | null>(null)
+
+  /** Prices the engine resolved, keyed by name, merged onto what was added. */
+  const pricedBy = useMemo(() => {
+    const m = new Map<string, number | null>()
+    for (const l of [...(result?.players?.give ?? []), ...(result?.players?.get ?? [])]) {
+      m.set(l.name.toLowerCase(), l.marketValue ?? null)
+    }
+    return m
+  }, [result])
+
+  const toLines = useCallback(
+    (assets: PickedAsset[]): Line[] =>
+      assets.map((a) =>
+        a.kind === 'player'
+          ? {
+              name: a.name,
+              position: a.position,
+              team: a.team,
+              /* Engine price wins; the search value is the fallback. */
+              marketValue: pricedBy.get(a.name.toLowerCase()) ?? a.value ?? null,
+            }
+          : a.kind === 'pick'
+            ? { name: a.label, position: 'PICK', team: null, marketValue: null }
+            : { name: `$${a.amount} FAAB`, position: 'FAAB', team: null, marketValue: null },
+      ),
+    [pricedBy],
+  )
+
+  const give = toLines(giveAssets)
+  const get = toLines(getAssets)
+
+  const addAsset = useCallback(
+    (side: 'give' | 'get', asset: PickedAsset) => {
+      const setter = side === 'give' ? setGiveAssets : setGetAssets
+      /* Immutable update — never write into the existing array. */
+      setter((prev) => [...prev, asset])
+      setPicking(null)
+    },
+    [],
+  )
+
+  const removeAsset = useCallback((side: 'give' | 'get', index: number) => {
+    const setter = side === 'give' ? setGiveAssets : setGetAssets
+    setter((prev) => prev.filter((_, i) => i !== index))
+  }, [])
 
   /*
    * ⚠ THE BLOCKED STATE LEADS AND SUPPRESSES THE VERDICT. When the format says
@@ -141,8 +216,8 @@ export function TradeCenter(props: {
         body: JSON.stringify({
           sportFilter: 'ALL',
           leagueId: props.league?.id ?? null,
-          sideGive: [],
-          sideGet: [],
+          sideGive: giveAssets.map(toInput),
+          sideGet: getAssets.map(toInput),
         }),
       })
       const j = (await r.json().catch(() => ({}))) as AnalyzeResult & { error?: string }
@@ -158,7 +233,7 @@ export function TradeCenter(props: {
     } finally {
       setBusy(false)
     }
-  }, [props.league?.id])
+  }, [props.league?.id, giveAssets, getAssets])
 
   const intel = result?.tradeIntelligence
 
@@ -220,10 +295,16 @@ export function TradeCenter(props: {
       ) : null}
 
       <div className="af-tc-builder">
-        {[
-          { label: 'Your team', handle: '@you', isYou: true, lines: give },
-          { label: props.opponentLabel ?? 'Their team', handle: '', isYou: false, lines: get },
-        ].map((side) => (
+        {([
+          { side: 'give' as const, label: 'Your team', handle: '@you', isYou: true, lines: give },
+          {
+            side: 'get' as const,
+            label: props.opponentLabel ?? 'Their team',
+            handle: '',
+            isYou: false,
+            lines: get,
+          },
+        ]).map((side) => (
           <div key={side.label} className="af-tc-team">
             <div className="af-tc-team-head">
               <span className="af-tc-team-name">{side.label}</span>
@@ -235,8 +316,8 @@ export function TradeCenter(props: {
             {side.lines.length === 0 ? (
               <p className="af-tc-row-sub">Nothing added yet.</p>
             ) : (
-              side.lines.map((l) => (
-                <div key={`${side.label}-${l.name}`} className="af-tc-row">
+              side.lines.map((l, i) => (
+                <div key={`${side.label}-${l.name}-${i}`} className="af-tc-row">
                   <span className="af-tc-glyph" style={{ background: ASSET_TYPES[0]!.color }}>
                     P
                   </span>
@@ -252,8 +333,32 @@ export function TradeCenter(props: {
                   >
                     {money(l.marketValue)}
                   </span>
+                  <button
+                    type="button"
+                    className="af-tc-remove"
+                    onClick={() => removeAsset(side.side, i)}
+                    aria-label={`Remove ${l.name}`}
+                  >
+                    ×
+                  </button>
                 </div>
               ))
+            )}
+
+            {picking === side.side ? (
+              <TradeAssetPicker
+                sport={null}
+                onClose={() => setPicking(null)}
+                onPick={(a) => addAsset(side.side, a)}
+              />
+            ) : (
+              <button
+                type="button"
+                className="af-tc-add"
+                onClick={() => setPicking(side.side)}
+              >
+                + Add asset
+              </button>
             )}
 
             <div className="af-tc-total">
@@ -393,7 +498,12 @@ export function TradeCenter(props: {
           Grades here are projected, not realized — they price the deal as it stands today rather
           than how it turns out.
         </p>
-        <button type="button" className="af-btn" onClick={analyze} disabled={busy}>
+        <button
+          type="button"
+          className="af-btn"
+          onClick={analyze}
+          disabled={busy || (giveAssets.length === 0 && getAssets.length === 0)}
+        >
           {busy ? 'Analyzing…' : 'Analyze this trade'}
         </button>
       </div>

@@ -113,3 +113,74 @@ describe('⚠ what was deliberately NOT built', () => {
     expect(SRC).toContain('THE THREE STATES ARE ORGANIC, NOT A PREVIEW SWITCHER')
   })
 })
+
+describe('the asset picker', () => {
+  const PICKER = readFileSync(
+    resolve(process.cwd(), 'components/core-app/screens/TradeAssetPicker.tsx'),
+    'utf8',
+  )
+
+  it('⚠ uses the EXISTING player-search route', () => {
+    // It was already built for exactly this and returns name/position/team/value.
+    expect(PICKER).toContain('/api/trade-value/player-search')
+    expect(PICKER).toContain('NO NEW API ROUTE')
+  })
+
+  it('offers only the three asset kinds the engine accepts', () => {
+    expect(PICKER).toContain("'player' | 'pick' | 'faab'")
+  })
+
+  it('⚠ NAMES idols, weapons and serums rather than offering them', () => {
+    /*
+     * They are real assets in Survivor and Zombie leagues and they appear in the
+     * legend — but TradeConsoleAnalyzeInput accepts player, pick and faab only.
+     * A control that built one would produce an asset the engine rejects.
+     */
+    expect(PICKER).toContain('THE FORMAT-SPECIFIC CLASSES ARE NAMED, NOT OFFERED')
+    expect(PICKER).toContain('cannot be added')
+  })
+
+  it('⚠ does not ask the manager to guess a pick slot', () => {
+    /*
+     * The slot is projected from the sending team's record. A field here would
+     * let a hunch override a computed answer.
+     */
+    expect(PICKER).toContain('NO SLOT FIELD ON PURPOSE')
+  })
+
+  it('⚠ shows an em dash for an unpriced search result here too', () => {
+    // The picker must not imply zero any more than the deal rows do.
+    expect(PICKER).toContain("r.value == null ? '—'")
+  })
+
+  it('debounces rather than firing a request per keystroke', () => {
+    expect(PICKER).toContain('DEBOUNCE_MS')
+  })
+})
+
+describe('the builder holds the deal, not the engine echo', () => {
+  it('⚠ a line the manager added survives the feed failing to price it', () => {
+    /*
+     * The engine's echo is used only for the prices it resolved. Rendering FROM
+     * that echo would make an unpriced player vanish from the deal he is part of.
+     */
+    expect(SRC).toContain('a line the manager added must not disappear because')
+    expect(SRC).toContain('const give = toLines(giveAssets)')
+  })
+
+  it('sends the real deal to the analyzer', () => {
+    expect(SRC).toContain('sideGive: giveAssets.map(toInput)')
+    expect(SRC).toContain('sideGet: getAssets.map(toInput)')
+  })
+
+  it('⚠ allows a player with no id, by name', () => {
+    // The FantasyCalc search path returns no id, so requiring one would make the
+    // most common search result unusable.
+    expect(SRC).toContain('A PLAYER WITHOUT AN ID GOES BY NAME')
+  })
+
+  it('updates immutably, which the design brief called out by name', () => {
+    expect(SRC).toContain('Immutable update')
+    expect(SRC).toContain('prev.filter((_, i) => i !== index)')
+  })
+})
