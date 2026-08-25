@@ -42,6 +42,16 @@ export type ScoreboardTeam = {
 export type ScoreboardGame = {
   matchupId: number | null
   teams: ScoreboardTeam[]
+  /**
+   * Chance the FIRST team listed wins, 0–1. Null when either side could not be
+   * measured the same way as the other.
+   *
+   * ⚠ NOT A POINTS RATIO. Dividing one projection by the sum of both produces a
+   * number that looks like a probability and is not one: two teams projected
+   * 100 and 90 are nowhere near 53/47 in reality, because a fantasy week has
+   * enormous variance. This is a normal model on the MARGIN — see winProb().
+   */
+  winProbability: number | null
   /** Neither side has a score yet. */
   unplayed: boolean
   /** Points between the two sides, once both are known. Null while unplayed. */
@@ -60,6 +70,43 @@ export type LeagueScoreboard = {
   allUnplayed: boolean
   /** Teams the league recorded with no matchupId — not paired into a game. */
   unpaired: ScoreboardTeam[]
+}
+
+/**
+ * Weekly scoring standard deviation for one fantasy lineup, in points.
+ *
+ * ⚠ AN ASSUMPTION, STATED RATHER THAN HIDDEN. Weekly fantasy totals scatter
+ * enormously around their projection — a starting lineup routinely lands 25
+ * points either side of it. This is the value the win probability rests on, and
+ * changing it changes every percentage on the board, so it lives here with a
+ * name instead of inline in a formula.
+ *
+ * A larger sigma pulls every game toward 50/50, which is the honest direction
+ * to be wrong in: fantasy weeks really are closer to coin flips than point
+ * projections suggest.
+ */
+const WEEKLY_SIGMA = 26
+
+/** Normal CDF, Abramowitz & Stegun 7.1.26 — accurate to ~1e-7, no dependency. */
+function normalCdf(z: number): number {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z))
+  const d = 0.3989422804014327 * Math.exp((-z * z) / 2)
+  const p =
+    d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))))
+  return z >= 0 ? 1 - p : p
+}
+
+/**
+ * Probability the first score beats the second.
+ *
+ * Both lineups are modelled as normal around their projection with the same
+ * spread, so the margin is normal with sigma·sqrt(2). Clamped away from 0 and 1
+ * because no fantasy matchup is ever actually certain, and a rendered "100%"
+ * is a promise the model cannot keep.
+ */
+function winProb(a: number, b: number): number {
+  const p = normalCdf((a - b) / (WEEKLY_SIGMA * Math.SQRT2))
+  return Math.min(0.97, Math.max(0.03, p))
 }
 
 function asIds(v: unknown): string[] {
@@ -110,6 +157,8 @@ export async function getLeagueScoreboard(args: {
         ownerName: true,
         avatarUrl: true,
         platformUserId: true,
+        // Needed for the roster join below — see the note there.
+        claimedByUserId: true,
       },
     })
     .catch(() => [])
@@ -121,11 +170,35 @@ export async function getLeagueScoreboard(args: {
     .catch(() => [])
   const rosterBy = new Map(rosters.map((r) => [r.platformUserId, r]))
 
+  /**
+   * Find a team's roster across the three id spellings it can be stored under.
+   *
+   * ⚠ THIS IS WHY YOUR OWN TEAM WAS THE ONE SHOWING "—". The join used
+   * `LeagueTeam.platformUserId` alone, and that column is NULLABLE — it is most
+   * often null on the CLAIMED team, which is yours. Every other team in the
+   * league resolved and priced; the viewer's own did not, which is the worst
+   * possible row to lose.
+   *
+   * `myTeam.ts` already solved this and recorded the measurement: with only
+   * the first two candidates, 38 of 106 claimed teams joined to a roster and
+   * just 11 had a lineup. `Roster.platformUserId` sometimes holds OUR user
+   * uuid rather than the platform's id, which is what the third candidate is
+   * for.
+   */
+  function rosterFor(team: { platformUserId: string | null; claimedByUserId: string | null; externalId: string }) {
+    for (const key of [team.platformUserId, team.claimedByUserId, team.externalId]) {
+      if (!key) continue
+      const hit = rosterBy.get(key)
+      if (hit) return hit
+    }
+    return null
+  }
+
   // Starters for every team, so the whole board can be projected in one read.
   const startersBy = new Map<number, string[]>()
   for (const r of rows) {
     const t = teamBy.get(String(r.rosterId))
-    const roster = t?.platformUserId ? rosterBy.get(t.platformUserId) : null
+    const roster = t ? rosterFor(t) : null
     const pd = (roster?.playerData ?? {}) as Record<string, unknown>
     startersBy.set(
       r.rosterId,
@@ -216,10 +289,17 @@ export async function getLeagueScoreboard(args: {
           b!.projectedFrom === b!.starterCount)
 
       let margin: number | null = null
+      let winProbability: number | null = null
       if (comparable && built.length === 2) {
         const av = a!.points ?? a!.projected ?? 0
         const bv = b!.points ?? b!.projected ?? 0
         margin = Math.round(Math.abs(av - bv) * 100) / 100
+        /*
+         * Only while the week is unplayed. Once real points exist the game is
+         * being decided in front of you and a pre-game probability is noise —
+         * worse, it reads as a live win chance it is not.
+         */
+        if (!anyScored) winProbability = winProb(av, bv)
       }
 
       // Your game first — it is still the one you came to see.
@@ -228,6 +308,7 @@ export async function getLeagueScoreboard(args: {
         teams: built,
         unplayed: !anyScored,
         margin,
+        winProbability,
       }
     })
     .sort((x, y) => Number(y.teams.some((t) => t.isYou)) - Number(x.teams.some((t) => t.isYou)))

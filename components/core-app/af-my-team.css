@@ -3,11 +3,20 @@
  * Scoped under `.af-core` via the shell; see af-core.css for why.
  */
 
+/*
+ * WHY THERE WAS A BAND OF EMPTY SPACE DOWN THE RIGHT ON DESKTOP. This carried
+ * `max-width: 1020px` while the league home fills its shell, so the two screens
+ * disagreed about how wide the app is and My Team looked truncated beside it.
+ *
+ * A reading column is the right instinct for prose. This screen is not prose —
+ * it is a sixteen-row table of figures, and the columns it was squeezing are
+ * the ones carrying the information.
+ */
 .af-mt {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  max-width: 1020px;
+  width: 100%;
 }
 
 /* ── Lock banner ─────────────────────────────────────────────────────── */
@@ -952,4 +961,60 @@ html[data-mode='light'] .af-core .af-mt-temp { color: var(--muted); }
   color: var(--muted);
   font-weight: 500;
   font-size: 12.5px;
+}
+
+/* ── Portrait: headshot with the crest riding its corner ─────────────── */
+/*
+ * One mark instead of two. The crest used to be a separate image in its own
+ * column, which read as two unrelated things and cost horizontal room the
+ * numbers needed. Overlapped it becomes a single object — the player, and who
+ * he plays for.
+ *
+ * The ring around the crest is what keeps it legible against whatever is behind
+ * it in the headshot; without it a dark logo on a dark jersey disappears.
+ */
+.af-mt-portrait {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 36px;
+  height: 36px;
+}
+.af-mt-portrait .af-mt-avatar {
+  width: 36px;
+  height: 36px;
+  display: block;
+}
+.af-mt-portrait .af-mt-teamlogo {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 50%;
+  background: var(--surface2);
+  box-shadow: 0 0 0 1.5px var(--surface2);
+  opacity: 1;
+}
+
+/* ── Designations, abbreviated ───────────────────────────────────────── */
+/*
+ * A fixed square so Q, O, DNP and IR all occupy the same footprint — the whole
+ * point of abbreviating was that the chip stopped resizing the row.
+ */
+.af-mt-status {
+  min-width: 34px;
+  text-align: center;
+  padding: 3px 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  cursor: help;
+}
+
+@media (max-width: 860px) {
+  .af-mt-portrait,
+  .af-mt-portrait .af-mt-avatar { width: 30px; height: 30px; }
+  .af-mt-portrait .af-mt-teamlogo { width: 14px; height: 14px; }
 }

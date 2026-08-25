@@ -31,6 +31,7 @@ function board(over: Partial<LeagueScoreboard> = {}): LeagueScoreboard {
         matchupId: 1,
         unplayed: false,
         margin: 16.8,
+        winProbability: null,
         teams: [
           team({ rosterId: 1, teamName: 'Yours', points: 118.2, isYou: true }),
           team({ rosterId: 2, teamName: 'DynastyDan', points: 101.4 }),
@@ -40,6 +41,7 @@ function board(over: Partial<LeagueScoreboard> = {}): LeagueScoreboard {
         matchupId: 2,
         unplayed: false,
         margin: 37.7,
+        winProbability: null,
         teams: [
           team({ rosterId: 3, teamName: 'Third', points: 96.0 }),
           team({ rosterId: 4, teamName: 'Fourth', points: 133.7 }),
@@ -82,6 +84,7 @@ describe('LeagueScoreboardPanel', () => {
             matchupId: 1,
             unplayed: true,
             margin: null,
+            winProbability: null,
             teams: [
               team({ rosterId: 1, projected: 118.2, isYou: true }),
               team({ rosterId: 2, teamName: 'DynastyDan', projected: 101.4 }),
@@ -122,6 +125,7 @@ describe('LeagueScoreboardPanel', () => {
             matchupId: 1,
             unplayed: true,
             margin: null,
+            winProbability: null,
             teams: [
               team({ projected: 80, projectedFrom: 5, starterCount: 9 }),
               team({ rosterId: 2, projected: 101.4 }),
@@ -144,6 +148,7 @@ describe('LeagueScoreboardPanel', () => {
             matchupId: 1,
             unplayed: true,
             margin: null,
+            winProbability: null,
             teams: [team({ projected: null }), team({ rosterId: 2, projected: null })],
           },
         ],
@@ -173,6 +178,7 @@ describe('LeagueScoreboardPanel', () => {
             matchupId: 1,
             unplayed: false,
             margin: 0,
+            winProbability: null,
             teams: [team({ points: 100 }), team({ rosterId: 2, points: 100 })],
           },
         ],
@@ -189,6 +195,7 @@ describe('LeagueScoreboardPanel', () => {
             matchupId: 1,
             unplayed: false,
             margin: null,
+            winProbability: null,
             teams: [
               team({ rosterId: 9, teamName: null, managerName: null, points: 100 }),
               team({ rosterId: 2, points: 90 }),
@@ -198,5 +205,60 @@ describe('LeagueScoreboardPanel', () => {
       }),
     )
     expect(t).toContain('Roster 9')
+  })
+
+  it('⚠ labels the columns, which none of them were', () => {
+    // Four numbers per row and no header saying which was which. A column of
+    // figures with no heading is a puzzle, not information.
+    const t = text(board())
+    expect(t).toContain('PTS')
+    expect(t).toContain('WIN')
+    expect(t).toContain('MARGIN')
+  })
+
+  it('says PROJ rather than PTS while the week is unplayed', () => {
+    const t = text(board({ allUnplayed: true }))
+    expect(t).toContain('PROJ')
+  })
+
+  it('shows a win chance on each side, and they complement to 100', () => {
+    const c = render(
+      <LeagueScoreboardPanel
+        board={board({
+          allUnplayed: true,
+          games: [
+            {
+              matchupId: 1,
+              unplayed: true,
+              margin: 12,
+              winProbability: 0.62,
+              teams: [team({ projected: 118 }), team({ rosterId: 2, projected: 106 })],
+            },
+          ],
+        })}
+      />,
+    ).container
+    const pcts = [...c.querySelectorAll('.af-sb-win')]
+      .map((e) => e.textContent ?? '')
+      .filter((x) => x.includes('%'))
+      .map((x) => Number(x.replace('%', '')))
+    expect(pcts).toEqual([62, 38])
+    expect(pcts[0] + pcts[1]).toBe(100)
+  })
+
+  it('marks home and away so the same team holds the same line', () => {
+    const c = render(<LeagueScoreboardPanel board={board()} />).container
+    expect(c.querySelector('.af-sb-side[data-side="home"]')).toBeTruthy()
+    expect(c.querySelector('.af-sb-side[data-side="away"]')).toBeTruthy()
+  })
+
+  it('shows no win chance at all once a week has real points', () => {
+    // A pre-game probability beside a live score reads as a live win chance,
+    // which it is not.
+    const c = render(<LeagueScoreboardPanel board={board()} />).container
+    const shown = [...c.querySelectorAll('.af-sb-win')].filter((e) =>
+      (e.textContent ?? '').includes('%'),
+    )
+    expect(shown).toHaveLength(0)
   })
 })

@@ -280,9 +280,23 @@
   display: flex;
   gap: 10px;
   overflow-x: auto;
+  /*
+   * WHY A VERTICAL SCROLLBAR APPEARED ON A SINGLE-ROW TIMELINE. Per spec, when
+   * one axis is set to something other than `visible` and the other is left at
+   * `visible`, the second computes to `auto` -- so `overflow-x: auto` quietly
+   * switched on a vertical scrollbar as well, and it showed the moment the
+   * content was a pixel taller than the box. Pinning it costs nothing: this is
+   * one row with no vertical overflow to reveal.
+   */
+  overflow-y: hidden;
   /* The current stage and the next deadline stay in frame when this scrolls. */
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
+}
+/* Horizontal scroll is a mobile affordance. At desktop width every phase fits,
+   so the bar is noise there too. */
+@media (min-width: 900px) {
+  .af-timeline { overflow-x: visible; }
 }
 
 .af-timeline-stage {
@@ -637,14 +651,49 @@
   gap: 6px;
 }
 
-/* avatar | name | points | coverage — one grid for every side on the page. */
+/*
+ * h/a | avatar | name | points | coverage | win% — one grid for every side, and
+ * the header row below uses the SAME track list so the labels sit over the
+ * columns they name. Two grids that drift apart is how a labelled table starts
+ * lying.
+ */
 .af-sb-side {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) 66px 34px;
+  grid-template-columns: 16px 26px minmax(0, 1fr) 66px 34px 46px;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
+.af-sb-cols {
+  display: grid;
+  grid-template-columns: 16px 26px minmax(0, 1fr) 66px 34px 46px;
+  gap: 10px;
+  padding: 0 12px 6px;
+  /* The margin column lives outside the side grid, so it is added here. */
+  margin-right: 90px;
+}
+.af-sb-cols .af-label { text-align: right; font-size: 9.5px; opacity: 0.7; }
+
+/* Home / away. Quiet — it is an anchor for the eye, not a fact about scoring. */
+.af-sb-ha {
+  font-family: var(--font-jetbrains-mono, ui-monospace, monospace);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--faint);
+  text-align: center;
+}
+.af-sb-side[data-side='home'] .af-sb-ha { color: var(--accent); }
+
+.af-sb-win {
+  text-align: right;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+/* The favourite reads brighter; the underdog stays quiet. */
+.af-sb-win[data-fav='true'] { color: var(--good); }
+.af-sb-win--none { visibility: hidden; }
 .af-sb-side[data-you='true'] .af-sb-name {
   font-weight: 700;
   color: var(--text);
@@ -731,7 +780,8 @@
 
 @media (max-width: 640px) {
   /* Coverage is the first thing to go — the scores must stay aligned. */
-  .af-sb-side { grid-template-columns: 22px minmax(0, 1fr) 58px; }
+  .af-sb-side { grid-template-columns: 14px 22px minmax(0, 1fr) 58px 42px; }
+  .af-sb-cols { display: none; }
   .af-sb-cov { display: none; }
   .af-sb-game { grid-template-columns: 1fr 60px; padding: 8px 10px; }
 }

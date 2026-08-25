@@ -136,8 +136,21 @@ describe('My Team — the reported problems', () => {
         })}
       />,
     )
-    expect(t).toContain('Out')
+    // Abbreviated on screen now — "O" — with the full designation preserved as
+    // the title, so nothing is lost for a screen reader or an unfamiliar code.
     expect(t).toContain('0.0')
+    const chip = render(
+      <MyTeam
+        data={data({
+          starters: {
+            available: true,
+            data: [{ slotLabel: 'RB', player: out, empty: false, unresolvedId: null }],
+          },
+        })}
+      />,
+    ).container.querySelector('.af-mt-status')
+    expect(chip?.textContent).toBe('O')
+    expect(chip?.getAttribute('title')).toBe('Out')
   })
 
   it('keeps the em dash for a player we simply cannot price', () => {
@@ -667,5 +680,72 @@ describe('My Team — the reported problems', () => {
     const first = c.querySelector('.af-mt-tile')
     expect(first?.className).toContain('af-mt-tile--af')
     expect(first?.textContent).toContain('131.7')
+  })
+
+  it('abbreviates every designation to a fixed-width code', () => {
+    /*
+     * The full words were the widest thing on the row — "NO DESIGNATION" is
+     * fourteen characters carrying one bit — and they pushed the numbers
+     * around on every line.
+     */
+    const cases: Array<[string, string]> = [
+      ['Questionable', 'Q'],
+      ['Doubtful', 'D'],
+      ['Out', 'O'],
+      ['Injured Reserve', 'IR'],
+      ['Did Not Practice', 'DNP'],
+      ['Active', 'H'],
+    ]
+    for (const [full, short] of cases) {
+      const c = render(
+        <MyTeam
+          data={data({
+            starters: {
+              available: true,
+              data: [
+                {
+                  slotLabel: 'RB',
+                  player: player({ injuryStatus: full }),
+                  empty: false,
+                  unresolvedId: null,
+                },
+              ],
+            },
+            bench: { available: false, reason: 'none' },
+          })}
+        />,
+      ).container
+      expect(c.querySelector('.af-mt-status')?.textContent).toBe(short)
+    }
+  })
+
+  it('shows an unfamiliar designation as-is rather than inventing a letter', () => {
+    // A wrong abbreviation is worse than a long one.
+    const c = render(
+      <MyTeam
+        data={data({
+          starters: {
+            available: true,
+            data: [
+              {
+                slotLabel: 'RB',
+                player: player({ injuryStatus: 'Reserve/COVID' }),
+                empty: false,
+                unresolvedId: null,
+              },
+            ],
+          },
+          bench: { available: false, reason: 'none' },
+        })}
+      />,
+    ).container
+    expect(c.querySelector('.af-mt-status')?.getAttribute('title')).toBe('Reserve/COVID')
+  })
+
+  it('rides the team crest on the headshot rather than beside it', () => {
+    const c = render(<MyTeam data={data()} />).container
+    const portrait = c.querySelector('.af-mt-portrait')
+    expect(portrait).toBeTruthy()
+    expect(portrait?.querySelector('.af-mt-teamlogo')).toBeTruthy()
   })
 })

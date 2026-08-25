@@ -31,10 +31,10 @@ const BASE = {
 /** Four teams, two games. */
 function fourTeams() {
   teamFindMany.mockResolvedValue([
-    { externalId: '1', teamName: 'Yours', ownerName: 'chxnk', avatarUrl: null, platformUserId: 'u1' },
-    { externalId: '2', teamName: 'DynastyDan', ownerName: 'dan', avatarUrl: null, platformUserId: 'u2' },
-    { externalId: '3', teamName: 'Third', ownerName: 'c', avatarUrl: null, platformUserId: 'u3' },
-    { externalId: '4', teamName: 'Fourth', ownerName: 'd', avatarUrl: null, platformUserId: 'u4' },
+    { externalId: '1', teamName: 'Yours', ownerName: 'chxnk', avatarUrl: null, platformUserId: 'u1', claimedByUserId: null },
+    { externalId: '2', teamName: 'DynastyDan', ownerName: 'dan', avatarUrl: null, platformUserId: 'u2', claimedByUserId: null },
+    { externalId: '3', teamName: 'Third', ownerName: 'c', avatarUrl: null, platformUserId: 'u3', claimedByUserId: null },
+    { externalId: '4', teamName: 'Fourth', ownerName: 'd', avatarUrl: null, platformUserId: 'u4', claimedByUserId: null },
   ])
   rosterFindMany.mockResolvedValue(
     ['u1', 'u2', 'u3', 'u4'].map((u) => ({
@@ -151,8 +151,8 @@ describe('getLeagueScoreboard', () => {
       { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
     ])
     teamFindMany.mockResolvedValue([
-      { externalId: '1', teamName: 'Yours', ownerName: 'a', avatarUrl: null, platformUserId: 'u1' },
-      { externalId: '2', teamName: 'Them', ownerName: 'b', avatarUrl: null, platformUserId: 'u2' },
+      { externalId: '1', teamName: 'Yours', ownerName: 'a', avatarUrl: null, platformUserId: 'u1', claimedByUserId: null },
+      { externalId: '2', teamName: 'Them', ownerName: 'b', avatarUrl: null, platformUserId: 'u2', claimedByUserId: null },
     ])
     rosterFindMany.mockResolvedValue([
       { platformUserId: 'u1', playerData: { starters: ['x1', 'x2'] } },
@@ -202,5 +202,64 @@ describe('getLeagueScoreboard', () => {
     matchupFindMany.mockResolvedValue([])
     expect(await getLeagueScoreboard(BASE)).toBeNull()
     expect(await getLeagueScoreboard({ ...BASE, platformLeagueId: null })).toBeNull()
+  })
+
+  it('⚠ prices the CLAIMED team, whose platformUserId is null', async () => {
+    /*
+     * THE BUG. `LeagueTeam.platformUserId` is nullable and is most often null
+     * on the claimed team — the viewer's own. The roster join used that column
+     * alone, so every other team in the league priced and yours showed "—".
+     * The worst possible row to lose.
+     */
+    matchupFindMany.mockResolvedValue([
+      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+    ])
+    teamFindMany.mockResolvedValue([
+      {
+        externalId: '1', teamName: 'Yours', ownerName: 'you', avatarUrl: null,
+        // Claimed team: no platform id, only our own user id.
+        platformUserId: null, claimedByUserId: 'af-user-1',
+      },
+      {
+        externalId: '2', teamName: 'Them', ownerName: 'them', avatarUrl: null,
+        platformUserId: 'u2', claimedByUserId: null,
+      },
+    ])
+    rosterFindMany.mockResolvedValue([
+      { platformUserId: 'af-user-1', playerData: { starters: ['a', 'b'] } },
+      { platformUserId: 'u2', playerData: { starters: ['c', 'd'] } },
+    ])
+    pricedAll()
+
+    const sb = await getLeagueScoreboard(BASE)
+    const yours = sb!.games[0].teams.find((t) => t.rosterId === 1)!
+    expect(yours.projected).not.toBeNull()
+    expect(yours.starterCount).toBe(2)
+  })
+
+  it('falls back to the external id when a roster is stored under it', async () => {
+    matchupFindMany.mockResolvedValue([
+      { rosterId: 1, matchupId: 1, pointsFor: 0, win: 0 },
+      { rosterId: 2, matchupId: 1, pointsFor: 0, win: 0 },
+    ])
+    teamFindMany.mockResolvedValue([
+      {
+        externalId: '1', teamName: 'Yours', ownerName: 'you', avatarUrl: null,
+        platformUserId: null, claimedByUserId: null,
+      },
+      {
+        externalId: '2', teamName: 'Them', ownerName: 'them', avatarUrl: null,
+        platformUserId: 'u2', claimedByUserId: null,
+      },
+    ])
+    rosterFindMany.mockResolvedValue([
+      { platformUserId: '1', playerData: { starters: ['a', 'b'] } },
+      { platformUserId: 'u2', playerData: { starters: ['c', 'd'] } },
+    ])
+    pricedAll()
+
+    const sb = await getLeagueScoreboard(BASE)
+    expect(sb!.games[0].teams.find((t) => t.rosterId === 1)!.projected).not.toBeNull()
   })
 })

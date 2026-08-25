@@ -16,12 +16,32 @@ import type { LeagueScoreboard, ScoreboardTeam } from '@/lib/core-app/leagueScor
  * it invites someone to celebrate or panic over a game nobody has played.
  */
 
-function Side({ team, unplayed }: { team: ScoreboardTeam; unplayed: boolean }) {
+function Side({
+  team,
+  unplayed,
+  side,
+  winPct,
+}: {
+  team: ScoreboardTeam
+  unplayed: boolean
+  /** Which half of the fixture this is. Cosmetic, and useful. */
+  side: 'home' | 'away'
+  /** This side's chance of winning, 0–100, or null while unmeasurable. */
+  winPct: number | null
+}) {
   const value = team.points ?? team.projected
   const partial = unplayed && team.projected != null && team.projectedFrom < team.starterCount
 
   return (
-    <div className="af-sb-side" data-you={team.isYou}>
+    <div className="af-sb-side" data-you={team.isYou} data-side={side}>
+      {/*
+        Home and away carry no scoring meaning in fantasy, but they give the eye
+        a fixed anchor per row — the same team is always on the same line —
+        which is most of what makes a scoreboard scannable.
+      */}
+      <span className="af-sb-ha" aria-hidden>
+        {side === 'home' ? 'H' : 'A'}
+      </span>
       {team.avatarUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="af-sb-av" src={team.avatarUrl} alt="" width={24} height={24} />
@@ -45,7 +65,20 @@ function Side({ team, unplayed }: { team: ScoreboardTeam; unplayed: boolean }) {
         <span className="af-sb-cov" title="Projected from only part of this lineup">
           {team.projectedFrom}/{team.starterCount}
         </span>
-      ) : null}
+      ) : (
+        <span className="af-sb-cov" aria-hidden />
+      )}
+      {winPct != null ? (
+        <span
+          className="af-sb-win af-num"
+          data-fav={winPct >= 50}
+          title="Chance of winning, from both projected totals and the spread of a real fantasy week"
+        >
+          {winPct}%
+        </span>
+      ) : (
+        <span className="af-sb-win af-sb-win--none" aria-hidden />
+      )}
     </div>
   )
 }
@@ -80,12 +113,38 @@ export function LeagueScoreboardPanel({
         ) : null}
       </div>
 
+      {/*
+        ⚠ NOTHING ON THIS PANEL WAS LABELLED. Four numbers per row — score,
+        coverage, win chance, margin — and no header saying which was which.
+        A column of figures with no heading is a puzzle, not information.
+      */}
+      <div className="af-sb-cols" aria-hidden>
+        <span />
+        <span />
+        <span className="af-label">{board.allUnplayed ? 'PROJ' : 'PTS'}</span>
+        <span className="af-label">FROM</span>
+        <span className="af-label">WIN</span>
+        <span className="af-label">MARGIN</span>
+      </div>
+
       <ul className="af-sb-list">
         {board.games.map((g) => (
           <li key={g.matchupId ?? 'x'} className="af-sb-game" data-yours={g.teams.some((t) => t.isYou)}>
             <div className="af-sb-teams">
-              {g.teams.map((t) => (
-                <Side key={t.rosterId} team={t} unplayed={g.unplayed} />
+              {g.teams.map((t, i) => (
+                <Side
+                  key={t.rosterId}
+                  team={t}
+                  unplayed={g.unplayed}
+                  side={i === 0 ? 'home' : 'away'}
+                  winPct={
+                    g.winProbability == null
+                      ? null
+                      : // The stored probability is the FIRST team's, so the
+                        // second side is its complement.
+                        Math.round((i === 0 ? g.winProbability : 1 - g.winProbability) * 100)
+                  }
+                />
               ))}
             </div>
             {g.teams.some((t) => t.isYou) && winProbability ? (

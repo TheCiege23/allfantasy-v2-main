@@ -269,14 +269,33 @@ function edge(m: NextMatchup): string | null {
 function PlayerCell({ player }: { player: LineupPlayer }) {
   return (
     <div className="af-mt-player">
-      {player.imageUrl ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img className="af-mt-avatar" src={player.imageUrl} alt="" width={34} height={34} />
-      ) : (
-        <div className="af-mt-avatar af-mt-avatar--none" aria-hidden>
-          {player.name.charAt(0)}
-        </div>
-      )}
+      {/*
+        ONE MARK, NOT TWO. The crest used to sit beside the headshot as a
+        separate image, costing a whole column and reading as two unrelated
+        things. Overlapped at the corner it becomes one object -- the player,
+        and who he plays for -- which is how every sports app does it.
+      */}
+      <span className="af-mt-portrait">
+        {player.imageUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img className="af-mt-avatar" src={player.imageUrl} alt="" width={36} height={36} />
+        ) : (
+          <span className="af-mt-avatar af-mt-avatar--none" aria-hidden>
+            {player.name.charAt(0)}
+          </span>
+        )}
+        {player.team && teamLogoUrl(player.team, player.sport ?? 'NFL') ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            className="af-mt-teamlogo"
+            src={teamLogoUrl(player.team, player.sport ?? 'NFL')}
+            alt=""
+            width={16}
+            height={16}
+            loading="lazy"
+          />
+        ) : null}
+      </span>
       {/*
         The NFL team crest, beside the headshot. Two images that mean different
         things — who he is, and who he plays for — and the second is how a
@@ -286,17 +305,6 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
         different CDN per sport and returns '' for one it does not know, which
         renders nothing rather than a broken image.
       */}
-      {player.team && teamLogoUrl(player.team, player.sport ?? 'NFL') ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          className="af-mt-teamlogo"
-          src={teamLogoUrl(player.team, player.sport ?? 'NFL')}
-          alt=""
-          width={18}
-          height={18}
-          loading="lazy"
-        />
-      ) : null}
       <div className="af-mt-player-text">
         <div className="af-mt-player-name">
           {player.name}
@@ -332,24 +340,48 @@ function PlayerCell({ player }: { player: LineupPlayer }) {
   )
 }
 
+/**
+ * The designation, in the shorthand managers actually use.
+ *
+ * THE FULL WORDS WERE THE WIDEST THING ON THE ROW. "NO DESIGNATION" is fourteen
+ * characters carrying one bit of information, and it sat mid-row pushing every
+ * number around it. Nobody says "questionable" out loud.
+ *
+ * The full word survives as the title and the aria-label, so nothing is lost
+ * for anyone who does not know the shorthand or is using a screen reader.
+ */
+function abbreviate(status: string): { short: string; tone: string; full: string } {
+  const t = status.trim().toLowerCase()
+  if (t.includes('did not practice') || t === 'dnp') return { short: 'DNP', tone: 'warn', full: status }
+  if (t.includes('injured reserve') || t === 'ir') return { short: 'IR', tone: 'bad', full: status }
+  if (t.includes('suspend')) return { short: 'SUS', tone: 'bad', full: status }
+  if (t.includes('pup')) return { short: 'PUP', tone: 'bad', full: status }
+  if (t.includes('doubt')) return { short: 'D', tone: 'bad', full: status }
+  if (t.includes('question')) return { short: 'Q', tone: 'warn', full: status }
+  if (t.includes('out')) return { short: 'O', tone: 'bad', full: status }
+  if (t.includes('probable')) return { short: 'P', tone: 'ok', full: status }
+  if (t.includes('active') || t.includes('healthy')) return { short: 'H', tone: 'ok', full: 'Healthy' }
+  /* An unfamiliar designation is shown as-is rather than given an invented
+     letter, because a wrong abbreviation is worse than a long one. */
+  return { short: status.slice(0, 3).toUpperCase(), tone: 'none', full: status }
+}
+
 function StatusChip({ status }: { status: string | null }) {
   if (!status) {
     return (
-      <span className="af-mt-status" data-tone="none">
-        no designation
+      <span
+        className="af-mt-status"
+        data-tone="none"
+        title="No injury designation reported, which is not the same as confirmed healthy"
+      >
+        &mdash;
       </span>
     )
   }
-  const t = status.toLowerCase()
-  const tone =
-    t.includes('out') || t.includes('ir')
-      ? 'bad'
-      : t.includes('question') || t.includes('doubt')
-        ? 'warn'
-        : 'ok'
+  const { short, tone, full } = abbreviate(status)
   return (
-    <span className="af-mt-status" data-tone={tone}>
-      {status}
+    <span className="af-mt-status" data-tone={tone} title={full} aria-label={full}>
+      {short}
     </span>
   )
 }
